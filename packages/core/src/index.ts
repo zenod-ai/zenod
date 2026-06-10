@@ -26,3 +26,5 @@ export { githubUrl, type VaultLocation } from "./vault/github.js";
 export { searchVault } from "./ops/search.js";
 export { getNote, NoteNotFoundError } from "./ops/get.js";
 export { checkEvidenceImmutability, type FileChange } from "./vault/immutability.js";
+export { WriteQueue } from "./git/queue.js";
+export { VaultRepo, type VaultRepoOptions } from "./git/vaultRepo.js";
