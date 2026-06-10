@@ -28,3 +28,17 @@ export { getNote, NoteNotFoundError } from "./ops/get.js";
 export { checkEvidenceImmutability, type FileChange } from "./vault/immutability.js";
 export { WriteQueue } from "./git/queue.js";
 export { VaultRepo, type VaultRepoOptions } from "./git/vaultRepo.js";
+export { createEngine, type EngineOptions } from "./engine/engine.js";
+export { appendEvidence, todayString, type EvidenceEntry } from "./engine/evidence.js";
+export { SqliteStateStore } from "./state/sqlite.js";
+export { AnthropicBrainLlm, type AnthropicLlmOptions } from "./llm/anthropic.js";
+export type {
+  AnswerInput,
+  AnswerResult,
+  BrainLlm,
+  Classification,
+  ClassificationPage,
+  ClassifyInput,
+  ComposePageInput,
+  VaultReadTools,
+} from "./llm/types.js";

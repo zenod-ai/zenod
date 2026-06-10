@@ -28,6 +28,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "simple-git": "^3.36.0",
     "yaml": "^2.9.0"
   }

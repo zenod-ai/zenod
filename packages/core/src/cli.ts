@@ -1,9 +1,15 @@
 #!/usr/bin/env node
+import { join } from "node:path";
 import { VERSION } from "./index.js";
 import { getNote, NoteNotFoundError } from "./ops/get.js";
 import { searchVault } from "./ops/search.js";
 import { lintVault } from "./vault/lint.js";
 import type { VaultLocation } from "./vault/github.js";
+import { createEngine } from "./engine/engine.js";
+import { VaultRepo } from "./git/vaultRepo.js";
+import { AnthropicBrainLlm } from "./llm/anthropic.js";
+import { SqliteStateStore } from "./state/sqlite.js";
+import type { BrainEngine } from "./types.js";
 
 const COMMANDS = ["store", "ask", "chat", "search", "get", "lint"] as const;
 type Command = (typeof COMMANDS)[number];
@@ -40,6 +46,29 @@ function vaultPath(): string {
 function location(): VaultLocation {
   const repo = process.env.VAULT_REPO;
   return repo ? { repo, branch: process.env.VAULT_BRANCH ?? "main" } : {};
+}
+
+/** Full engine bootstrap from env — used by store/ask/chat. */
+async function buildEngine(): Promise<BrainEngine> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const repoName = process.env.VAULT_REPO;
+  if (!apiKey || !repoName) {
+    console.error("store/ask/chat need ANTHROPIC_API_KEY and VAULT_REPO (and GITHUB_TOKEN to push)");
+    process.exit(2);
+  }
+  const dataDir = process.env.ZENOD_DATA_DIR ?? join(process.env.HOME ?? ".", ".zenod");
+  const repo = await VaultRepo.open({
+    workdir: process.env.ZENOD_WORKDIR ?? join(dataDir, "vault"),
+    repo: repoName,
+    ...(process.env.GITHUB_TOKEN ? { token: process.env.GITHUB_TOKEN } : {}),
+  });
+  const llm = new AnthropicBrainLlm({
+    apiKey,
+    ...(process.env.ZENOD_MODEL_ASK ? { askModel: process.env.ZENOD_MODEL_ASK } : {}),
+    ...(process.env.ZENOD_MODEL_CLASSIFY ? { classifyModel: process.env.ZENOD_MODEL_CLASSIFY } : {}),
+  });
+  const state = new SqliteStateStore(join(dataDir, "state.sqlite"));
+  return createEngine({ repo, llm, state, location: location() });
 }
 
 async function main(): Promise<number> {
@@ -112,12 +141,50 @@ async function main(): Promise<number> {
       return report.ok ? 0 : 1;
     }
 
-    case "store":
-    case "ask":
-    case "chat":
-      // Wired up phase by phase — see docs/M0-PLAN.md.
-      console.error(`zenod ${cmd}: not implemented yet (M0 in progress)`);
-      return 1;
+    case "store": {
+      const content = args.join(" ").trim();
+      if (!content) {
+        console.error("usage: zenod store <text>");
+        return 1;
+      }
+      const engine = await buildEngine();
+      const result = await engine.store({ content, source: "cli" });
+      if (result.question) console.log(`? ${result.question}`);
+      console.log(`evidence: ${result.evidenceRef}`);
+      for (const page of result.pagesTouched) console.log(`filed: ${page}`);
+      console.log(`commit: ${result.commitSha}`);
+      for (const url of result.githubUrls) console.log(url);
+      return 0;
+    }
+
+    case "ask": {
+      const question = args.join(" ").trim();
+      if (!question) {
+        console.error("usage: zenod ask <question>");
+        return 1;
+      }
+      const engine = await buildEngine();
+      const answer = await engine.ask(question);
+      console.log(answer.text);
+      if (answer.sources.length > 0) {
+        console.log("\nSources:");
+        for (const s of answer.sources) console.log(`- ${s.path}${s.githubUrl ? `  ${s.githubUrl}` : ""}`);
+      }
+      return 0;
+    }
+
+    case "chat": {
+      const message = args.join(" ").trim();
+      if (!message) {
+        console.error("usage: zenod chat <message>");
+        return 1;
+      }
+      const engine = await buildEngine();
+      const reply = await engine.chat(message, "cli");
+      console.log(reply.text);
+      if (reply.stored) console.log(`\n(stored: ${reply.stored.evidenceRef})`);
+      return 0;
+    }
   }
 }
 
