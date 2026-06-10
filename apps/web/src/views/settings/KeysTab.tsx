@@ -177,42 +177,43 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
               onStatusChange={handleAppStatus}
               onRepoPicked={handleRepoPicked}
             />
-            <Field>
-              <FieldLabel htmlFor="keys-github-token">GitHub token</FieldLabel>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="keys-github-token"
-                  type="password"
-                  autoComplete="off"
-                  placeholder="github_pat_…"
-                  value={form.github_token}
-                  onChange={(event) =>
-                    update("github_token", event.target.value)
-                  }
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="shrink-0"
-                  disabled={testingGithub}
-                  onClick={handleTestGithub}
-                >
-                  {testingGithub ? (
-                    <Spinner />
-                  ) : (
-                    <PlugZapIcon data-icon="inline-start" />
-                  )}
-                  Test
-                </Button>
-              </div>
-              {appInstalled && (
+            {!appInstalled && (
+              <Field>
+                <FieldLabel htmlFor="keys-github-token">
+                  GitHub token
+                </FieldLabel>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="keys-github-token"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="github_pat_…"
+                    value={form.github_token}
+                    onChange={(event) =>
+                      update("github_token", event.target.value)
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={testingGithub}
+                    onClick={handleTestGithub}
+                  >
+                    {testingGithub ? (
+                      <Spinner />
+                    ) : (
+                      <PlugZapIcon data-icon="inline-start" />
+                    )}
+                    Test
+                  </Button>
+                </div>
                 <FieldDescription>
-                  Optional — the connected GitHub App is used instead when
-                  present.
+                  Used only when the GitHub App above isn&apos;t connected.
                 </FieldDescription>
-              )}
-              {githubResult !== null && <TestNote result={githubResult} />}
-            </Field>
+                {githubResult !== null && <TestNote result={githubResult} />}
+              </Field>
+            )}
             <Field>
               <FieldLabel htmlFor="keys-anthropic-key">
                 Anthropic API key

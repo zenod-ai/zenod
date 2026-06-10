@@ -230,9 +230,8 @@ function VaultStep({ onDone }: { onDone: () => void }) {
       <CardHeader>
         <CardTitle>Connect your vault</CardTitle>
         <CardDescription>
-          Zenod stores memory as Markdown in a GitHub repository. Use a
-          fine-grained personal access token with contents read/write on that
-          repo.
+          Zenod stores memory as Markdown in a GitHub repository. Connect with
+          the GitHub App in one click, or paste a fine-grained token manually.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
@@ -243,64 +242,91 @@ function VaultStep({ onDone }: { onDone: () => void }) {
             setAppRepoPicked(true)
           }}
         />
-        <div className="flex items-center gap-3">
-          <Separator className="flex-1" />
-          <span className="text-xs text-muted-foreground">
-            or paste a token manually
-          </span>
-          <Separator className="flex-1" />
-        </div>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="vault-token">
-              GitHub personal access token
-            </FieldLabel>
-            <Input
-              id="vault-token"
-              type="password"
-              autoComplete="off"
-              placeholder="github_pat_…"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="vault-repo">Vault repository</FieldLabel>
-            <Input
-              id="vault-repo"
-              placeholder="owner/name"
-              autoComplete="off"
-              value={repo}
-              onChange={(event) => setRepo(event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="vault-branch">Branch</FieldLabel>
-            <Input
-              id="vault-branch"
-              placeholder="main"
-              autoComplete="off"
-              value={branch}
-              onChange={(event) => setBranch(event.target.value)}
-            />
-            <FieldDescription>Optional — defaults to main.</FieldDescription>
-          </Field>
-          {testResult !== null && <TestResultNote result={testResult} />}
-          {error !== null && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
-        </FieldGroup>
+        {appRepoPicked ? (
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="vault-repo-app">Vault repository</FieldLabel>
+              <Input
+                id="vault-repo-app"
+                readOnly
+                value={`${repo}${branch && branch !== "main" ? ` (${branch})` : ""}`}
+                className="font-mono text-xs"
+              />
+              <FieldDescription>
+                Authenticated via the connected GitHub App. Use “Choose vault
+                repo” above to change it.
+              </FieldDescription>
+            </Field>
+            {error !== null && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
+          </FieldGroup>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">
+                or paste a token manually
+              </span>
+              <Separator className="flex-1" />
+            </div>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="vault-token">
+                  GitHub personal access token
+                </FieldLabel>
+                <Input
+                  id="vault-token"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="github_pat_…"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="vault-repo">Vault repository</FieldLabel>
+                <Input
+                  id="vault-repo"
+                  placeholder="owner/name"
+                  autoComplete="off"
+                  value={repo}
+                  onChange={(event) => setRepo(event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="vault-branch">Branch</FieldLabel>
+                <Input
+                  id="vault-branch"
+                  placeholder="main"
+                  autoComplete="off"
+                  value={branch}
+                  onChange={(event) => setBranch(event.target.value)}
+                />
+                <FieldDescription>
+                  Optional — defaults to main.
+                </FieldDescription>
+              </Field>
+              {testResult !== null && <TestResultNote result={testResult} />}
+              {error !== null && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
+            </FieldGroup>
+          </>
+        )}
       </CardContent>
-      <CardFooter className="justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={testing || repo.length === 0 || token.length === 0}
-          onClick={handleTest}
-        >
-          {testing ? <Spinner /> : <PlugZapIcon data-icon="inline-start" />}
-          Test connection
-        </Button>
+      <CardFooter className={cn(appRepoPicked ? "justify-end" : "justify-between")}>
+        {!appRepoPicked && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={testing || repo.length === 0 || token.length === 0}
+            onClick={handleTest}
+          >
+            {testing ? <Spinner /> : <PlugZapIcon data-icon="inline-start" />}
+            Test connection
+          </Button>
+        )}
         <Button type="submit" disabled={saving || !complete}>
           {saving ? <Spinner /> : null}
           Save &amp; continue
