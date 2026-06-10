@@ -119,6 +119,28 @@ export type LintResult = {
   checkedFiles: number
 }
 
+export type GithubAppStatus = {
+  created: boolean
+  installed: boolean
+  slug: string | null
+  installationId: string | null
+}
+
+export type GithubAppStart = {
+  action: string
+  manifest: Record<string, unknown>
+}
+
+export type GithubRepo = {
+  fullName: string
+  private: boolean
+  defaultBranch: string
+}
+
+export type GithubReposResponse = {
+  repositories: GithubRepo[]
+}
+
 export function isMaskedSecret(value: string): boolean {
   return value.startsWith("•")
 }

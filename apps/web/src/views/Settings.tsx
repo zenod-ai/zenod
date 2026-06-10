@@ -12,9 +12,11 @@ import { VaultTab } from "@/views/settings/VaultTab"
 
 export function Settings({
   initialSettings,
+  initialTab,
   onLoggedOut,
 }: {
   initialSettings: SettingsValues
+  initialTab?: "vault" | "keys" | "connections"
   onLoggedOut: () => void
 }) {
   const [loggingOut, setLoggingOut] = React.useState(false)
@@ -50,7 +52,7 @@ export function Settings({
         </Button>
       </header>
 
-      <Tabs defaultValue="vault">
+      <Tabs defaultValue={initialTab ?? "vault"}>
         <TabsList>
           <TabsTrigger value="vault">Vault</TabsTrigger>
           <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>

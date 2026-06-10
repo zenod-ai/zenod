@@ -5,11 +5,13 @@ import { toast } from "sonner"
 import {
   api,
   errorMessage,
+  type GithubAppStatus,
   type SettingsResponse,
   type SettingsValues,
   type TestResult,
 } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { GithubConnect } from "@/components/github-connect"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -67,10 +69,23 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
   )
   const [anthropicResult, setAnthropicResult] =
     React.useState<TestResult | null>(null)
+  const [appInstalled, setAppInstalled] = React.useState(false)
 
   function update<K extends keyof FormState>(key: K, value: string) {
     setForm((previous) => ({ ...previous, [key]: value }))
   }
+
+  const handleAppStatus = React.useCallback((status: GithubAppStatus) => {
+    setAppInstalled(status.installed)
+  }, [])
+
+  const handleRepoPicked = React.useCallback((repo: string, branch: string) => {
+    setForm((previous) => ({
+      ...previous,
+      vault_repo: repo,
+      vault_branch: branch,
+    }))
+  }, [])
 
   async function handleTestGithub() {
     setTestingGithub(true)
@@ -157,6 +172,11 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
                 onChange={(event) => update("vault_branch", event.target.value)}
               />
             </Field>
+            <GithubConnect
+              compact
+              onStatusChange={handleAppStatus}
+              onRepoPicked={handleRepoPicked}
+            />
             <Field>
               <FieldLabel htmlFor="keys-github-token">GitHub token</FieldLabel>
               <div className="flex items-center gap-2">
@@ -185,6 +205,12 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
                   Test
                 </Button>
               </div>
+              {appInstalled && (
+                <FieldDescription>
+                  Optional — the connected GitHub App is used instead when
+                  present.
+                </FieldDescription>
+              )}
               {githubResult !== null && <TestNote result={githubResult} />}
             </Field>
             <Field>

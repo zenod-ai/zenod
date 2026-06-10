@@ -16,6 +16,7 @@ import {
 } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { CodeSnippet, CopyButton } from "@/components/copy-button"
+import { GithubConnect } from "@/components/github-connect"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -180,10 +181,13 @@ function VaultStep({ onDone }: { onDone: () => void }) {
   const [token, setToken] = React.useState("")
   const [repo, setRepo] = React.useState("")
   const [branch, setBranch] = React.useState("")
+  const [appRepoPicked, setAppRepoPicked] = React.useState(false)
   const [testResult, setTestResult] = React.useState<TestResult | null>(null)
   const [testing, setTesting] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+
+  const complete = repo.length > 0 && (token.length > 0 || appRepoPicked)
 
   async function handleTest() {
     setTesting(true)
@@ -206,14 +210,14 @@ function VaultStep({ onDone }: { onDone: () => void }) {
     setSaving(true)
     setError(null)
     try {
-      await api("/api/settings", {
-        method: "PUT",
-        body: {
-          vault_repo: repo,
-          vault_branch: branch.length > 0 ? branch : "main",
-          github_token: token,
-        },
-      })
+      const body: Record<string, string> = {
+        vault_repo: repo,
+        vault_branch: branch.length > 0 ? branch : "main",
+      }
+      if (token.length > 0) {
+        body.github_token = token
+      }
+      await api("/api/settings", { method: "PUT", body })
       onDone()
     } catch (err) {
       setError(errorMessage(err))
@@ -231,7 +235,21 @@ function VaultStep({ onDone }: { onDone: () => void }) {
           repo.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-6">
+        <GithubConnect
+          onRepoPicked={(pickedRepo, pickedBranch) => {
+            setRepo(pickedRepo)
+            setBranch(pickedBranch)
+            setAppRepoPicked(true)
+          }}
+        />
+        <div className="flex items-center gap-3">
+          <Separator className="flex-1" />
+          <span className="text-xs text-muted-foreground">
+            or paste a token manually
+          </span>
+          <Separator className="flex-1" />
+        </div>
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="vault-token">
@@ -283,10 +301,7 @@ function VaultStep({ onDone }: { onDone: () => void }) {
           {testing ? <Spinner /> : <PlugZapIcon data-icon="inline-start" />}
           Test connection
         </Button>
-        <Button
-          type="submit"
-          disabled={saving || repo.length === 0 || token.length === 0}
-        >
+        <Button type="submit" disabled={saving || !complete}>
           {saving ? <Spinner /> : null}
           Save &amp; continue
           <ArrowRightIcon data-icon="inline-end" />

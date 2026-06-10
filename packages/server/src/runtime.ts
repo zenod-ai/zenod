@@ -8,6 +8,7 @@ import {
   VaultRepo,
   type BrainEngine,
 } from "zenod";
+import { installationToken } from "./githubApp.js";
 import { Settings } from "./settings.js";
 
 export class NotConfiguredError extends Error {
@@ -45,8 +46,14 @@ export class Runtime {
     if (this.repo) return this.repo;
     const repoName = this.settings.get("vault_repo");
     const token = this.settings.get("github_token");
-    if (!repoName || !token) throw new NotConfiguredError();
-    const repo = await VaultRepo.open({ workdir: this.workdir, repo: repoName, token });
+    const hasApp = this.settings.hasGithubApp();
+    if (!repoName || (!token && !hasApp)) throw new NotConfiguredError();
+    const repo = await VaultRepo.open({
+      workdir: this.workdir,
+      repo: repoName,
+      // GitHub App installation tokens (short-lived, repo-scoped) win over a PAT
+      ...(hasApp ? { tokenProvider: () => installationToken(this.settings) } : { token: token! }),
+    });
     const created = await ensureSchemaV1(repo.path);
     if (created.length > 0) {
       await repo.commitAndPush(`schema: v1 — add ${created.join(", ")}`);

@@ -47,6 +47,16 @@ export class Settings {
     else this.store.setSetting(key, value);
   }
 
+  /** Internal keys (e.g. GitHub App credentials) — not part of the UI-editable set. */
+  getRaw(key: string): string | null {
+    return this.store.getSetting(key);
+  }
+
+  setRaw(key: string, value: string): void {
+    if (value === "") this.store.deleteSetting(key);
+    else this.store.setSetting(key, value);
+  }
+
   /** All settings with secrets masked — safe for the UI. */
   masked(): Record<string, string | null> {
     const out: Record<string, string | null> = {};
@@ -61,9 +71,18 @@ export class Settings {
     return SECRET_KEYS.has(key);
   }
 
+  /** A connected GitHub App can stand in for a PAT. */
+  hasGithubApp(): boolean {
+    return Boolean(
+      this.getRaw("github_app_id") && this.getRaw("github_app_private_key") && this.getRaw("github_app_installation_id"),
+    );
+  }
+
   /** Engine can run only when these are present. */
   configured(): boolean {
-    return Boolean(this.get("vault_repo") && this.get("github_token") && this.get("anthropic_api_key"));
+    return Boolean(
+      this.get("vault_repo") && this.get("anthropic_api_key") && (this.get("github_token") || this.hasGithubApp()),
+    );
   }
 
   // --- admin password ---

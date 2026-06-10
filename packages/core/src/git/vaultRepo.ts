@@ -10,10 +10,19 @@ export interface VaultRepoOptions {
   repo?: string;
   /** GitHub PAT; embedded in the remote URL. */
   token?: string;
+  /**
+   * Short-lived credential source (e.g. GitHub App installation tokens).
+   * Called before remote operations; takes precedence over `token`.
+   */
+  tokenProvider?: () => Promise<string>;
   /** Full remote URL override — used by tests with local bare repos. */
   remoteUrl?: string;
   authorName?: string;
   authorEmail?: string;
+}
+
+function remoteUrlFor(repo: string, token: string): string {
+  return `https://x-access-token:${token}@github.com/${repo}.git`;
 }
 
 const PUSH_RETRIES = 3;
@@ -28,15 +37,19 @@ export class VaultRepo {
     readonly path: string,
     private readonly git: SimpleGit,
     readonly branch: string,
+    private readonly repo?: string,
+    private readonly tokenProvider?: () => Promise<string>,
   ) {}
 
   static async open(options: VaultRepoOptions): Promise<VaultRepo> {
     const remoteUrl =
       options.remoteUrl ??
       (options.repo
-        ? options.token
-          ? `https://x-access-token:${options.token}@github.com/${options.repo}.git`
-          : `https://github.com/${options.repo}.git`
+        ? options.tokenProvider
+          ? remoteUrlFor(options.repo, await options.tokenProvider())
+          : options.token
+            ? remoteUrlFor(options.repo, options.token)
+            : `https://github.com/${options.repo}.git`
         : undefined);
 
     const isClone = await access(join(options.workdir, ".git"))
@@ -56,10 +69,18 @@ export class VaultRepo {
       await git.remote(["set-url", "origin", remoteUrl]);
     }
     const branch = (await git.revparse(["--abbrev-ref", "HEAD"])).trim();
-    return new VaultRepo(options.workdir, git, branch);
+    return new VaultRepo(options.workdir, git, branch, options.repo, options.tokenProvider);
+  }
+
+  /** Refresh the remote URL with a fresh short-lived token before remote ops. */
+  private async ensureFreshRemote(): Promise<void> {
+    if (!this.tokenProvider || !this.repo) return;
+    const token = await this.tokenProvider();
+    await this.git.remote(["set-url", "origin", remoteUrlFor(this.repo, token)]);
   }
 
   async pull(): Promise<void> {
+    await this.ensureFreshRemote();
     await this.git.pull("origin", this.branch, { "--rebase": "true" });
   }
 
@@ -101,6 +122,7 @@ export class VaultRepo {
    * by pull --rebase and retried up to 3 times, then surfaced.
    */
   async commitAndPush(message: string): Promise<string> {
+    await this.ensureFreshRemote();
     await this.git.add(["-A"]);
     await this.git.commit(message);
     const sha = await this.headSha();

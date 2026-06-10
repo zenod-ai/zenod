@@ -1,5 +1,6 @@
 import * as React from "react"
 import { TriangleAlertIcon } from "lucide-react"
+import { toast } from "sonner"
 
 import {
   api,
@@ -24,8 +25,30 @@ type View =
   | { kind: "settings"; settings: SettingsValues }
   | { kind: "error"; message: string }
 
+function consumeGithubReturn(): boolean {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get("github") !== "connected") {
+    return false
+  }
+  params.delete("github")
+  const query = params.toString()
+  window.history.replaceState(
+    null,
+    "",
+    window.location.pathname + (query.length > 0 ? `?${query}` : "")
+  )
+  return true
+}
+
 export function App() {
   const [view, setView] = React.useState<View>({ kind: "loading" })
+  const [githubReturn] = React.useState(consumeGithubReturn)
+
+  React.useEffect(() => {
+    if (githubReturn) {
+      toast.success("GitHub connected")
+    }
+  }, [githubReturn])
 
   const loadSettings = React.useCallback(() => {
     api<SettingsResponse>("/api/settings")
@@ -91,6 +114,11 @@ export function App() {
       {view.kind === "settings" && (
         <Settings
           initialSettings={view.settings}
+          initialTab={
+            githubReturn && view.settings.anthropic_api_key === null
+              ? "keys"
+              : undefined
+          }
           onLoggedOut={() => setView({ kind: "login" })}
         />
       )}

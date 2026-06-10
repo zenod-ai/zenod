@@ -7,6 +7,14 @@ import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { NoteNotFoundError, VERSION } from "zenod";
 import { clearSession, issueSession, requireAuth } from "./auth.js";
+import {
+  appStatus,
+  buildManifest,
+  disconnectApp,
+  exchangeManifestCode,
+  installationToken,
+  listInstallationRepos,
+} from "./githubApp.js";
 import { buildMcpServer } from "./mcp.js";
 import { NotConfiguredError, Runtime, testAnthropic, testGithub } from "./runtime.js";
 import { SETTING_KEYS, type SettingKey } from "./settings.js";
@@ -89,8 +97,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/settings/test-github", async (c) => {
     const body = await c.req.json<{ repo?: string; token?: string }>().catch(() => ({}) as Record<string, string>);
     const repo = body.repo || settings.get("vault_repo");
-    const token = (body.token && !body.token.includes("••••") ? body.token : null) || settings.get("github_token");
-    if (!repo || !token) return c.json({ ok: false, message: "repo and token are required" });
+    let token = (body.token && !body.token.includes("••••") ? body.token : null) || settings.get("github_token");
+    if (!token && settings.hasGithubApp()) {
+      token = await installationToken(settings).catch(() => null);
+    }
+    if (!repo || !token) return c.json({ ok: false, message: "repo and token (or a connected GitHub App) are required" });
     return c.json(await testGithub(repo, token));
   });
 
@@ -137,6 +148,47 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.get("/api/vault/lint", async (c) => {
     const engine = await runtime.getEngine();
     return c.json(await engine.lint());
+  });
+
+  // --- GitHub App connect flow (manifest) ---
+
+  /** Public base URL as seen through the reverse proxy. */
+  const baseUrl = (c: { req: { header: (n: string) => string | undefined; url: string } }): string => {
+    const proto = c.req.header("x-forwarded-proto") ?? new URL(c.req.url).protocol.replace(":", "");
+    const host = c.req.header("x-forwarded-host") ?? c.req.header("host") ?? new URL(c.req.url).host;
+    return `${proto}://${host}`;
+  };
+
+  app.get("/api/github/app/status", (c) => c.json(appStatus(settings)));
+
+  app.get("/api/github/app/start", (c) => c.json(buildManifest(baseUrl(c))));
+
+  // GitHub redirects the user's browser here after creating the app
+  app.get("/api/github/app/callback", async (c) => {
+    const code = c.req.query("code");
+    if (!code) return c.json({ error: "missing code" }, 400);
+    const application = await exchangeManifestCode(code, settings);
+    runtime.invalidate();
+    // continue straight into the install step (repo picker on GitHub's side)
+    return c.redirect(`https://github.com/apps/${application.slug}/installations/new`);
+  });
+
+  // ...and here after choosing which repos to grant
+  app.get("/api/github/app/setup", (c) => {
+    const installationId = c.req.query("installation_id");
+    if (installationId) {
+      settings.setRaw("github_app_installation_id", installationId);
+      runtime.invalidate();
+    }
+    return c.redirect("/?github=connected");
+  });
+
+  app.get("/api/github/repos", async (c) => c.json({ repositories: await listInstallationRepos(settings) }));
+
+  app.post("/api/github/app/disconnect", (c) => {
+    disconnectApp(settings);
+    runtime.invalidate();
+    return c.json({ ok: true });
   });
 
   // --- engine ops ---

@@ -14,6 +14,7 @@ import {
   type LintResult,
   type VaultStatus,
 } from "@/lib/api"
+import { GithubConnect } from "@/components/github-connect"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -72,22 +73,14 @@ export function VaultTab() {
   const [linting, setLinting] = React.useState(false)
   const [lintResult, setLintResult] = React.useState<LintResult | null>(null)
 
-  React.useEffect(() => {
-    let cancelled = false
+  const load = React.useCallback(() => {
     api<VaultStatus>("/api/vault")
       .then((result) => {
-        if (cancelled) {
-          return
-        }
         setStatus(result)
-        if (!result.configured) {
-          setNotConfigured(true)
-        }
+        setNotConfigured(!result.configured)
+        setLoadError(null)
       })
       .catch((err: unknown) => {
-        if (cancelled) {
-          return
-        }
         if (isNotConfigured(err)) {
           setNotConfigured(true)
         } else {
@@ -95,14 +88,20 @@ export function VaultTab() {
         }
       })
       .finally(() => {
-        if (!cancelled) {
-          setLoading(false)
-        }
+        setLoading(false)
       })
-    return () => {
-      cancelled = true
-    }
   }, [])
+
+  React.useEffect(() => {
+    load()
+  }, [load])
+
+  function reload() {
+    setLoading(true)
+    setNotConfigured(false)
+    setLoadError(null)
+    load()
+  }
 
   async function handleSync() {
     setSyncing(true)
@@ -176,14 +175,17 @@ export function VaultTab() {
 
   if (notConfigured) {
     return (
-      <Alert>
-        <TriangleAlertIcon />
-        <AlertTitle>Vault not configured</AlertTitle>
-        <AlertDescription>
-          Add your GitHub token and vault repository in the Keys &amp; models
-          tab first, then come back here to sync.
-        </AlertDescription>
-      </Alert>
+      <div className="flex flex-col gap-4">
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>Vault not configured</AlertTitle>
+          <AlertDescription>
+            Connect GitHub below and pick a vault repository, or add a GitHub
+            token and repository in the Keys &amp; models tab.
+          </AlertDescription>
+        </Alert>
+        <GithubConnect onRepoPicked={() => reload()} />
+      </div>
     )
   }
 
