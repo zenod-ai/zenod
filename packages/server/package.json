@@ -1,0 +1,24 @@
+{
+  "name": "@zenod/server",
+  "version": "0.0.1",
+  "description": "Zenod HTTP server: REST API, remote MCP endpoint, settings UI host",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "node --watch --experimental-strip-types src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.0",
+    "hono": "^4.7.0",
+    "zenod": "*"
+  }
+}
