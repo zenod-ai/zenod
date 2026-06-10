@@ -1,0 +1,116 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AddressInfo } from "node:net";
+import { serve, type ServerType } from "@hono/node-server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { BrainEngine } from "zenod";
+import { createApp } from "../src/app.js";
+import { Runtime } from "../src/runtime.js";
+
+const fakeEngine: BrainEngine = {
+  async store(input) {
+    return {
+      evidenceRef: "Log/2026-06-11.md#^e-abc123",
+      pagesTouched: ["Areas/Insurance.md"],
+      commitSha: "0".repeat(40),
+      githubUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
+      ...(input.content.includes("cryptic") ? { question: "Where does this belong?" } : {}),
+    };
+  },
+  async ask(question) {
+    return { text: `Answer to: ${question}`, sources: [{ path: "Areas/Insurance.md", githubUrl: "" }] };
+  },
+  async chat(message) {
+    return { text: `Re: ${message}`, sources: [] };
+  },
+  async search(query) {
+    return [{ path: "Areas/Insurance.md", snippet: `about ${query}`, score: 9, githubUrl: "" }];
+  },
+  async get(path) {
+    return { path, frontmatter: { title: "Insurance" }, body: "# Insurance", githubUrl: "" };
+  },
+  async lint() {
+    return { ok: true, errors: [], checkedFiles: 1 };
+  },
+};
+
+describe("MCP endpoint", () => {
+  let dir: string;
+  let runtime: Runtime;
+  let server: ServerType;
+  let url: URL;
+  let token: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), "zenod-mcp-"));
+    runtime = new Runtime(dir);
+    runtime.getEngine = async () => fakeEngine;
+    token = runtime.settings.apiToken();
+    const app = createApp(runtime);
+    server = serve({ fetch: app.fetch, port: 0 });
+    const { port } = server.address() as AddressInfo;
+    url = new URL(`http://127.0.0.1:${port}/mcp`);
+  });
+
+  afterAll(async () => {
+    server.close();
+    runtime.state.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  function connect() {
+    const transport = new StreamableHTTPClientTransport(url, {
+      requestInit: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+    return client.connect(transport).then(() => client);
+  }
+
+  it("rejects connections without the bearer token", async () => {
+    const transport = new StreamableHTTPClientTransport(url);
+    const client = new Client({ name: "anon", version: "0.0.0" });
+    await expect(client.connect(transport)).rejects.toThrow(/401|unauthorized/i);
+  });
+
+  it("lists the four Zenod tools", async () => {
+    const client = await connect();
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name).sort()).toEqual(["ask_brain", "get_memory", "search_memory", "store_memory"]);
+    await client.close();
+  });
+
+  it("search_memory and store_memory round-trip", async () => {
+    const client = await connect();
+
+    const search = await client.callTool({ name: "search_memory", arguments: { query: "insurance" } });
+    expect(JSON.stringify(search.structuredContent)).toContain("Areas/Insurance.md");
+
+    const store = await client.callTool({
+      name: "store_memory",
+      arguments: { content: "I renewed my insurance" },
+    });
+    const stored = store.structuredContent as { commitSha: string; question?: string };
+    expect(stored.commitSha).toBe("0".repeat(40));
+    expect(stored.question).toBeUndefined();
+
+    const unsure = await client.callTool({
+      name: "store_memory",
+      arguments: { content: "something cryptic" },
+    });
+    expect((unsure.structuredContent as { question?: string }).question).toBeTruthy();
+
+    await client.close();
+  });
+
+  it("ask_brain returns a synthesized answer with sources", async () => {
+    const client = await connect();
+    const result = await client.callTool({ name: "ask_brain", arguments: { question: "what insurance do I have?" } });
+    const answer = result.structuredContent as { text: string; sources: Array<{ path: string }> };
+    expect(answer.text).toContain("what insurance do I have?");
+    expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
+    await client.close();
+  });
+});

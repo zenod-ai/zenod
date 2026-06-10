@@ -1,18 +1,214 @@
+import { access } from "node:fs/promises";
+import { join } from "node:path";
 import { Hono } from "hono";
-import { VERSION } from "zenod";
+import type { HttpBindings } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
+import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { NoteNotFoundError, VERSION } from "zenod";
+import { clearSession, issueSession, requireAuth } from "./auth.js";
+import { buildMcpServer } from "./mcp.js";
+import { NotConfiguredError, Runtime, testAnthropic, testGithub } from "./runtime.js";
+import { SETTING_KEYS, type SettingKey } from "./settings.js";
 
-/**
- * The Zenod HTTP app. Grows phase by phase (docs/M0-PLAN.md):
- * - /api/*  REST routes (phase 7)
- * - /mcp    Streamable HTTP MCP endpoint (phase 7)
- * - /*      built settings UI from apps/web (phase 8)
- */
-export function createApp(): Hono {
-  const app = new Hono();
+export interface AppOptions {
+  /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
+  webDist?: string;
+}
 
-  app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: "zenod", version: VERSION }),
+export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
+  const app = new Hono<{ Bindings: HttpBindings }>();
+  const { settings } = runtime;
+
+  app.onError((err, c) => {
+    if (err instanceof NotConfiguredError) return c.json({ error: err.message, code: "not_configured" }, 409);
+    if (err instanceof NoteNotFoundError) return c.json({ error: err.message }, 404);
+    console.error(err);
+    return c.json({ error: err.message }, 500);
+  });
+
+  // --- public ---
+
+  app.get("/api/health", (c) => c.json({ status: "ok", name: "zenod", version: VERSION }));
+
+  app.get("/api/auth/status", (c) =>
+    c.json({
+      needsSetup: !settings.hasAdminPassword(),
+      configured: settings.configured(),
+    }),
   );
+
+  app.post("/api/auth/setup", async (c) => {
+    if (settings.hasAdminPassword()) return c.json({ error: "already set up" }, 403);
+    const { password } = await c.req.json<{ password?: string }>();
+    if (!password || password.length < 8) return c.json({ error: "password must be at least 8 characters" }, 400);
+    settings.setAdminPassword(password);
+    issueSession(c, settings);
+    return c.json({ ok: true });
+  });
+
+  app.post("/api/auth/login", async (c) => {
+    const { password } = await c.req.json<{ password?: string }>();
+    if (!password || !settings.verifyAdminPassword(password)) {
+      return c.json({ error: "wrong password" }, 401);
+    }
+    issueSession(c, settings);
+    return c.json({ ok: true });
+  });
+
+  app.post("/api/auth/logout", (c) => {
+    clearSession(c);
+    return c.json({ ok: true });
+  });
+
+  // --- authenticated API ---
+
+  const auth = requireAuth(settings);
+  app.use("/api/*", async (c, next) => {
+    const path = c.req.path;
+    if (path === "/api/health" || path.startsWith("/api/auth/")) return next();
+    return auth(c, next);
+  });
+
+  app.get("/api/settings", (c) =>
+    c.json({ settings: settings.masked(), configured: settings.configured() }),
+  );
+
+  app.put("/api/settings", async (c) => {
+    const body = await c.req.json<Record<string, string>>();
+    for (const key of SETTING_KEYS) {
+      if (!(key in body)) continue;
+      const value = body[key] ?? "";
+      if (settings.isSecret(key) && value.includes("••••")) continue; // masked echo — unchanged
+      settings.set(key as SettingKey, value);
+    }
+    runtime.invalidate();
+    return c.json({ settings: settings.masked(), configured: settings.configured() });
+  });
+
+  app.post("/api/settings/test-github", async (c) => {
+    const body = await c.req.json<{ repo?: string; token?: string }>().catch(() => ({}) as Record<string, string>);
+    const repo = body.repo || settings.get("vault_repo");
+    const token = (body.token && !body.token.includes("••••") ? body.token : null) || settings.get("github_token");
+    if (!repo || !token) return c.json({ ok: false, message: "repo and token are required" });
+    return c.json(await testGithub(repo, token));
+  });
+
+  app.post("/api/settings/test-anthropic", async (c) => {
+    const body = await c.req.json<{ api_key?: string }>().catch(() => ({}) as Record<string, string>);
+    const key = (body.api_key && !body.api_key.includes("••••") ? body.api_key : null) || settings.get("anthropic_api_key");
+    if (!key) return c.json({ ok: false, message: "API key is required" });
+    return c.json(await testAnthropic(key));
+  });
+
+  app.get("/api/token", (c) =>
+    c.json({ token: settings.apiToken(), mcpPath: "/mcp" }),
+  );
+
+  app.post("/api/token/regenerate", (c) => c.json({ token: settings.regenerateApiToken() }));
+
+  app.get("/api/vault", async (c) => {
+    const cloned = await access(join(runtime.workdir, ".git")).then(() => true).catch(() => false);
+    let headSha: string | null = null;
+    if (cloned && settings.configured()) {
+      headSha = await runtime.getRepo().then((r) => r.headSha()).catch(() => null);
+    }
+    return c.json({
+      repo: settings.get("vault_repo"),
+      branch: settings.get("vault_branch") ?? "main",
+      configured: settings.configured(),
+      cloned,
+      headSha,
+    });
+  });
+
+  app.post("/api/vault/sync", async (c) => {
+    const repo = await runtime.getRepo();
+    await repo.pull();
+    return c.json({ ok: true, headSha: await repo.headSha() });
+  });
+
+  app.post("/api/vault/reclone", async (c) => {
+    await runtime.reclone();
+    const repo = await runtime.getRepo();
+    return c.json({ ok: true, headSha: await repo.headSha() });
+  });
+
+  app.get("/api/vault/lint", async (c) => {
+    const engine = await runtime.getEngine();
+    return c.json(await engine.lint());
+  });
+
+  // --- engine ops ---
+
+  app.post("/api/store", async (c) => {
+    const body = await c.req.json<{ content?: string; hints?: string[]; verbatim?: boolean }>();
+    if (!body.content) return c.json({ error: "content is required" }, 400);
+    const engine = await runtime.getEngine();
+    return c.json(
+      await engine.store({
+        content: body.content,
+        source: "web",
+        ...(body.hints ? { hints: body.hints } : {}),
+        ...(body.verbatim !== undefined ? { verbatim: body.verbatim } : {}),
+      }),
+    );
+  });
+
+  app.post("/api/ask", async (c) => {
+    const { question } = await c.req.json<{ question?: string }>();
+    if (!question) return c.json({ error: "question is required" }, 400);
+    const engine = await runtime.getEngine();
+    return c.json(await engine.ask(question));
+  });
+
+  app.post("/api/chat", async (c) => {
+    const { message } = await c.req.json<{ message?: string }>();
+    if (!message) return c.json({ error: "message is required" }, 400);
+    const engine = await runtime.getEngine();
+    return c.json(await engine.chat(message, "web"));
+  });
+
+  app.get("/api/search", async (c) => {
+    const query = c.req.query("q") ?? "";
+    if (!query) return c.json({ error: "q is required" }, 400);
+    const engine = await runtime.getEngine();
+    return c.json({ hits: await engine.search(query) });
+  });
+
+  app.get("/api/note", async (c) => {
+    const path = c.req.query("path") ?? "";
+    if (!path) return c.json({ error: "path is required" }, 400);
+    const engine = await runtime.getEngine();
+    return c.json(await engine.get(path));
+  });
+
+  // --- MCP (Streamable HTTP, stateless: fresh transport+server per request) ---
+
+  app.all("/mcp", auth, async (c) => {
+    const { incoming, outgoing } = c.env;
+    const server = buildMcpServer(() => runtime.getEngine());
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    outgoing.on("close", () => {
+      void transport.close();
+      void server.close();
+    });
+    await server.connect(transport);
+    const body = c.req.method === "POST" ? await c.req.json().catch(() => undefined) : undefined;
+    await transport.handleRequest(incoming, outgoing, body);
+    return RESPONSE_ALREADY_SENT;
+  });
+
+  // --- static settings UI ---
+
+  if (options.webDist) {
+    const root = options.webDist;
+    app.use("/*", serveStatic({ root }));
+    app.get("*", serveStatic({ root, path: "index.html" })); // SPA fallback
+  }
 
   return app;
 }
