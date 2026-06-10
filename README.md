@@ -28,9 +28,22 @@ Agents never get raw file CRUD. The write path is the product.
 
 ## Status
 
-**Pre-alpha. Milestone 0 in progress** — see [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/M0-PLAN.md](docs/M0-PLAN.md).
+**Pre-alpha. Milestone 0 built** — engine, REST API, remote MCP endpoint, settings UI, and Docker image are all in place; see [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/M0-PLAN.md](docs/M0-PLAN.md). We are user #1.
 
-M0 ships a single self-hostable container: the brain engine, an HTTP API + remote MCP endpoint, a settings web UI (React + Vite + shadcn/ui), and a Dockerfile — deployed on our own VPS and used daily for our own vault. We are user #1.
+## Quick start (self-host)
+
+```sh
+docker build -t zenod .
+docker run -d --name zenod -p 8080:8080 -v zenod-data:/data zenod
+```
+
+Open `http://localhost:8080` and the setup wizard takes it from there: create an admin password, connect your vault repo with a GitHub fine-grained PAT (Contents: read & write), add your Anthropic API key, and copy the MCP connection snippet. All state — settings, conversation history, and the vault clone — lives on the single `/data` volume. If your vault is a plain Obsidian vault, Zenod adds the machine schema (`.brain/config.yml`, `Areas/`, templates) on first connect with a `schema: v1` commit.
+
+Connect Claude Code to the deployed instance:
+
+```sh
+claude mcp add --transport http zenod https://your-host/mcp --header "Authorization: Bearer <token from settings>"
+```
 
 ## Architecture at a glance
 
