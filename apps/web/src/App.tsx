@@ -1,20 +1,101 @@
+import * as React from "react"
+import { TriangleAlertIcon } from "lucide-react"
+
+import {
+  api,
+  errorMessage,
+  isUnauthorized,
+  type AuthStatus,
+  type SettingsResponse,
+  type SettingsValues,
+} from "@/lib/api"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
+import { Toaster } from "@/components/ui/sonner"
+import { Login } from "@/views/Login"
+import { Settings } from "@/views/Settings"
+import { SetupWizard } from "@/views/SetupWizard"
+
+type View =
+  | { kind: "loading" }
+  | { kind: "setup" }
+  | { kind: "login" }
+  | { kind: "settings"; settings: SettingsValues }
+  | { kind: "error"; message: string }
 
 export function App() {
+  const [view, setView] = React.useState<View>({ kind: "loading" })
+
+  const loadSettings = React.useCallback(() => {
+    api<SettingsResponse>("/api/settings")
+      .then((result) => {
+        setView({ kind: "settings", settings: result.settings })
+      })
+      .catch((err: unknown) => {
+        if (isUnauthorized(err)) {
+          setView({ kind: "login" })
+        } else {
+          setView({ kind: "error", message: errorMessage(err) })
+        }
+      })
+  }, [])
+
+  const boot = React.useCallback(() => {
+    api<AuthStatus>("/api/auth/status")
+      .then((status) => {
+        if (status.needsSetup) {
+          setView({ kind: "setup" })
+        } else {
+          loadSettings()
+        }
+      })
+      .catch((err: unknown) => {
+        setView({ kind: "error", message: errorMessage(err) })
+      })
+  }, [loadSettings])
+
+  React.useEffect(() => {
+    boot()
+  }, [boot])
+
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
+    <>
+      {view.kind === "loading" && (
+        <div className="flex min-h-svh items-center justify-center">
+          <Spinner className="size-6 text-muted-foreground" />
         </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
+      )}
+      {view.kind === "error" && (
+        <div className="flex min-h-svh items-center justify-center p-6">
+          <div className="flex w-full max-w-sm flex-col gap-4">
+            <Alert variant="destructive">
+              <TriangleAlertIcon />
+              <AlertTitle>Cannot reach the Zenod server</AlertTitle>
+              <AlertDescription>{view.message}</AlertDescription>
+            </Alert>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setView({ kind: "loading" })
+                boot()
+              }}
+            >
+              Retry
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+      {view.kind === "setup" && <SetupWizard onComplete={loadSettings} />}
+      {view.kind === "login" && <Login onSuccess={loadSettings} />}
+      {view.kind === "settings" && (
+        <Settings
+          initialSettings={view.settings}
+          onLoggedOut={() => setView({ kind: "login" })}
+        />
+      )}
+      <Toaster />
+    </>
   )
 }
 
