@@ -3,6 +3,7 @@ import { rm } from "node:fs/promises";
 import {
   AnthropicBrainLlm,
   createEngine,
+  ensureSchemaV1,
   SqliteStateStore,
   VaultRepo,
   type BrainEngine,
@@ -45,7 +46,12 @@ export class Runtime {
     const repoName = this.settings.get("vault_repo");
     const token = this.settings.get("github_token");
     if (!repoName || !token) throw new NotConfiguredError();
-    this.repo = await VaultRepo.open({ workdir: this.workdir, repo: repoName, token });
+    const repo = await VaultRepo.open({ workdir: this.workdir, repo: repoName, token });
+    const created = await ensureSchemaV1(repo.path);
+    if (created.length > 0) {
+      await repo.commitAndPush(`schema: v1 — add ${created.join(", ")}`);
+    }
+    this.repo = repo;
     return this.repo;
   }
 

@@ -22,6 +22,7 @@ export { parseNote, serializeNote, type ParsedNote } from "./vault/frontmatter.j
 export { listMarkdownFiles, tierOf, basenameOf, isIndexFile, MEANING_FOLDERS, type Tier, type MeaningType } from "./vault/files.js";
 export { scanVault, extractPageLinks, extractCitations, type PageIndexEntry, type VaultSnapshot } from "./vault/pages.js";
 export { lintVault } from "./vault/lint.js";
+export { ensureSchemaV1 } from "./vault/migrate.js";
 export { githubUrl, type VaultLocation } from "./vault/github.js";
 export { searchVault } from "./ops/search.js";
 export { getNote, NoteNotFoundError } from "./ops/get.js";

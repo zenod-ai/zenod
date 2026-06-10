@@ -6,6 +6,7 @@ import { searchVault } from "./ops/search.js";
 import { lintVault } from "./vault/lint.js";
 import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
+import { ensureSchemaV1 } from "./vault/migrate.js";
 import { VaultRepo } from "./git/vaultRepo.js";
 import { AnthropicBrainLlm } from "./llm/anthropic.js";
 import { SqliteStateStore } from "./state/sqlite.js";
@@ -62,6 +63,8 @@ async function buildEngine(): Promise<BrainEngine> {
     repo: repoName,
     ...(process.env.GITHUB_TOKEN ? { token: process.env.GITHUB_TOKEN } : {}),
   });
+  const created = await ensureSchemaV1(repo.path);
+  if (created.length > 0) await repo.commitAndPush(`schema: v1 — add ${created.join(", ")}`);
   const llm = new AnthropicBrainLlm({
     apiKey,
     ...(process.env.ZENOD_MODEL_ASK ? { askModel: process.env.ZENOD_MODEL_ASK } : {}),
