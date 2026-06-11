@@ -49,6 +49,10 @@ export interface ComposePageInput {
   classification: Classification;
   tagVocabulary: string[];
   today: string;
+  /** The exact `type` value required for this page's folder (project|area|note). */
+  requiredType: string;
+  /** Ready-to-use wikilinks to existing pages/indexes — the page must include ≥1 (no orphans). */
+  linkHints: string[];
   /** Lint errors from the previous attempt, for validate-with-retry. */
   previousErrors?: LintError[];
 }

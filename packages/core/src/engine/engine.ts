@@ -159,11 +159,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const touched: string[] = [];
       try {
         for (const page of classification.pages) {
-          if (!Object.keys(MEANING_FOLDERS).includes(page.path.split("/")[0] ?? "")) {
+          const folder = page.path.split("/")[0] ?? "";
+          const requiredType = MEANING_FOLDERS[folder];
+          if (!requiredType) {
             throw new Error(`classifier proposed a non-meaning path: ${page.path}`);
           }
           const absolute = join(vaultPath, page.path);
           const currentContent = await readFile(absolute, "utf8").catch(() => null);
+
+          // Give the composer valid wikilink targets (no orphans): the folder
+          // index first, then a few existing meaning pages.
+          const indexPath = `${folder}/${folder} Index.md`;
+          const linkHints: string[] = [];
+          if (snapshot.files.includes(indexPath)) {
+            linkHints.push(`[[${folder}/${folder} Index|${folder}]]`);
+          }
+          for (const p of snapshot.pages) {
+            if (p.path === page.path) continue;
+            linkHints.push(`[[${p.path.replace(/\.md$/, "")}|${p.title}]]`);
+            if (linkHints.length >= 4) break;
+          }
 
           let lastErrors = undefined as import("../types.js").LintError[] | undefined;
           let composed = false;
@@ -177,6 +192,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
               classification,
               tagVocabulary: config.tags,
               today: todayString(now()),
+              requiredType,
+              linkHints,
               ...(lastErrors ? { previousErrors: lastErrors } : {}),
             });
             await mkdir(dirname(absolute), { recursive: true });
