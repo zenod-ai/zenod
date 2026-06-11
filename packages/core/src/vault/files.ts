@@ -31,6 +31,22 @@ export async function listMarkdownFiles(vaultPath: string): Promise<string[]> {
   return out.sort();
 }
 
+/** All raw artifacts under _attachments/ (any extension), vault-relative. */
+export async function listAttachmentFiles(vaultPath: string): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(rel: string): Promise<void> {
+    const entries = await readdir(join(vaultPath, rel), { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const relPath = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) await walk(relPath);
+      else if (entry.isFile()) out.push(relPath);
+    }
+  }
+  await walk("_attachments");
+  return out.sort();
+}
+
 export function tierOf(relPath: string): Tier {
   const top = relPath.split("/")[0] ?? "";
   if (top === "Log" || top === "_attachments") return "evidence";

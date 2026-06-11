@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm, readFile } from "node:fs/promises";
+import { cp, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -169,6 +169,43 @@ describe("BrainEngine", () => {
     const memories = log.all.filter((c) => c.message.startsWith("memory:"));
     expect(memories.length).toBe(2);
     expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("read path pulls from origin: a search sees pages pushed by another clone", async () => {
+    const e = createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" }, readSyncTtlMs: 0 });
+
+    // someone else (laptop, another Zenod) pushes a new page to the vault remote
+    const other = join(dir, "other");
+    await simpleGit().clone(join(dir, "origin.git"), other);
+    const otherGit = simpleGit(other);
+    await otherGit.addConfig("user.name", "other").addConfig("user.email", "other@test");
+    await writeFile(
+      join(other, "Notes/Padel.md"),
+      "---\ntitle: Padel\ntype: note\ntags: []\ncreated: 2026-06-11\nupdated: 2026-06-11\nsummary: Padel racket research.\n---\n\n# Padel\n\nBought a padel racket.\n",
+    );
+    await otherGit.add(["-A"]);
+    await otherGit.commit("add padel note");
+    await otherGit.push("origin", "main");
+
+    const hits = await e.search("padel");
+    expect(hits.map((h) => h.path)).toContain("Notes/Padel.md");
+  });
+
+  it("read sync is throttled: within the TTL no pull happens", async () => {
+    const e = createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" }, readSyncTtlMs: 60_000 });
+    await e.search("insurance"); // first read syncs
+
+    const other = join(dir, "other");
+    await simpleGit().clone(join(dir, "origin.git"), other);
+    const otherGit = simpleGit(other);
+    await otherGit.addConfig("user.name", "other").addConfig("user.email", "other@test");
+    await writeFile(join(other, "Notes/Squash.md"), "---\ntitle: Squash\ntype: note\ntags: []\ncreated: 2026-06-11\nupdated: 2026-06-11\nsummary: Squash gear.\n---\n\n# Squash\n\nSquash racket.\n");
+    await otherGit.add(["-A"]);
+    await otherGit.commit("add squash note");
+    await otherGit.push("origin", "main");
+
+    const hits = await e.search("squash");
+    expect(hits.map((h) => h.path)).not.toContain("Notes/Squash.md");
   });
 
   it("answers with citations from the read paths (DoD #2 shape)", async () => {

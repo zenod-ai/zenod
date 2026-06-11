@@ -20,6 +20,18 @@ describe("searchVault", () => {
     expect(hits.map((h) => h.path)).toContain("Log/2026-06-10.md");
   });
 
+  it("finds evidence Log files by path terms (date in the query)", async () => {
+    const hits = await searchVault(FIXTURE, "2026-06-10");
+    expect(hits.map((h) => h.path)).toContain("Log/2026-06-10.md");
+  });
+
+  it("finds attachment artifacts by filename", async () => {
+    const hits = await searchVault(FIXTURE, "policy scan");
+    const hit = hits.find((h) => h.path === "_attachments/insurance/2026-06-10 Axa policy scan.pdf");
+    expect(hit).toBeDefined();
+    expect(hit!.snippet).toBe("(attachment artifact)");
+  });
+
   it("returns nothing for nonsense queries", async () => {
     expect(await searchVault(FIXTURE, "xyzzy-nonexistent-9000")).toEqual([]);
   });

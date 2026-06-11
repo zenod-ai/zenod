@@ -165,12 +165,13 @@ export class AiSdkBrainLlm implements BrainLlm {
       tools: {
         search_vault: tool({
           description:
-            "Search the vault. Call this first for any question about the user's knowledge — returns ranked paths with snippets.",
+            "Search the vault. Call this first for any question about the user's knowledge — returns ranked paths with snippets. Covers meaning pages, Log/ evidence files (verbatim transcripts, source links), and _attachments/ artifact filenames. If the first query misses, retry with different terms before giving up.",
           inputSchema: z.object({ query: z.string() }),
           execute: ({ query }) => tools.searchVault(query),
         }),
         read_note: tool({
-          description: "Read the full content of one note by its vault-relative path.",
+          description:
+            "Read the full content of one note by its vault-relative path. Works on meaning pages and Log/ evidence files. Always read the top search hits in full before concluding the vault lacks an answer — bodies hold details (transcripts, source links, '## Sources' sections) that summaries omit.",
           inputSchema: z.object({ path: z.string() }),
           execute: async ({ path }) => {
             readPaths.add(path);

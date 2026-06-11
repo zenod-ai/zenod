@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Hit } from "../types.js";
-import { listMarkdownFiles } from "../vault/files.js";
+import { listAttachmentFiles, listMarkdownFiles, tierOf } from "../vault/files.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 
@@ -40,6 +40,23 @@ export async function searchVault(vaultPath: string, query: string, location: Va
       if (page.tags.some((t) => t.toLowerCase() === term)) bump(page.path, 4, page.summary);
       if (summary.includes(term)) bump(page.path, 2, page.summary);
       if (base.includes(term)) bump(page.path, 3, page.summary);
+    }
+  }
+
+  // Pass 1b: evidence tier — Log files by path (e.g. a date in the query) and
+  // raw artifacts by filename. Bodies of Log files are covered by pass 2;
+  // attachments are binary, so their filename is all there is to match.
+  for (const file of snapshot.files) {
+    if (tierOf(file) !== "evidence") continue;
+    const lower = file.toLowerCase();
+    for (const term of terms) {
+      if (lower.includes(term)) bump(file, 3, "(evidence log)");
+    }
+  }
+  for (const file of await listAttachmentFiles(vaultPath)) {
+    const lower = file.toLowerCase();
+    for (const term of terms) {
+      if (lower.includes(term)) bump(file, 3, "(attachment artifact)");
     }
   }
 

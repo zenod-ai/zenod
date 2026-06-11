@@ -23,7 +23,7 @@ import { WriteQueue } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, Classification } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
-import { MEANING_FOLDERS } from "../vault/files.js";
+import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
 
 export interface EngineOptions {
   repo: VaultRepo;
@@ -32,9 +32,16 @@ export interface EngineOptions {
   location?: VaultLocation;
   /** Override for tests. */
   now?: () => Date;
+  /**
+   * Max staleness the read path tolerates before pulling from origin.
+   * Writes always pull; without this, reads could serve a stale snapshot
+   * indefinitely. 0 = pull on every read (tests).
+   */
+  readSyncTtlMs?: number;
 }
 
 const COMPOSE_RETRIES = 2;
+const DEFAULT_READ_SYNC_TTL_MS = 60_000;
 
 const DEFAULT_TEMPLATE = `---
 title: "{{title}}"
@@ -54,6 +61,23 @@ export function createEngine(options: EngineOptions): BrainEngine {
   const location = options.location ?? {};
   const now = options.now ?? (() => new Date());
   const queue = new WriteQueue();
+  const readSyncTtl = options.readSyncTtlMs ?? DEFAULT_READ_SYNC_TTL_MS;
+  let lastSyncMs = Number.NEGATIVE_INFINITY;
+
+  /**
+   * Keep the read path fresh: pull from origin (throttled by readSyncTtl)
+   * before serving a read. Runs through the write queue so a pull never
+   * rebases over a store's half-written working tree. Offline is fine —
+   * reads then serve the local clone, same as store's pull fallback.
+   */
+  async function syncForRead(): Promise<void> {
+    if (now().getTime() - lastSyncMs < readSyncTtl) return;
+    await queue.run(async () => {
+      if (now().getTime() - lastSyncMs < readSyncTtl) return; // a queued turn already synced
+      await repo.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+    });
+  }
 
   async function vaultBriefing(): Promise<string> {
     const agents = await readFile(join(vaultPath, "AGENTS.md"), "utf8").catch(() => "");
@@ -61,12 +85,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const index = snapshot.pages
       .map((p) => `${p.path} — ${p.title} [${p.tags.join(",")}]: ${p.summary}`)
       .join("\n");
+    const logs = snapshot.files.filter((f) => f.startsWith("Log/")).join("\n");
+    const attachments = (await listAttachmentFiles(vaultPath)).join("\n");
     return [
       "You are Zeno, the user's personal memory agent. Answer questions about their knowledge vault.",
       "Search before answering; read the notes you cite; never invent vault content.",
+      "The vault has two tiers. Meaning pages (Projects/, Areas/, Notes/) hold distilled knowledge. The evidence tier holds the originals: Log/ daily files contain immutable receipts — verbatim transcripts, quotes, and source links (e.g. Google Drive URLs) — and _attachments/ holds raw artifacts (images, documents).",
+      "For provenance questions (where is the original / audio / transcript / source?), read the Log file bodies and the '## Sources' section of meaning pages — that is where artifact locations live.",
+      "Summaries are lossy. Before concluding something is not in the vault, read the full bodies of the top search hits, and search again with different terms.",
       "Cite sources inline as vault paths. Be direct and concise.",
       agents ? `Vault doctrine:\n${agents}` : "",
       `Meaning pages:\n${index || "(none yet)"}`,
+      `Evidence logs:\n${logs || "(none yet)"}`,
+      `Attachments:\n${attachments || "(none yet)"}`,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -115,6 +146,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       await repo.pull().catch(() => {
         // offline or empty remote — proceed against the local clone
       });
+      lastSyncMs = now().getTime();
 
       const config = await loadBrainConfig(vaultPath);
       const verbatim = input.verbatim ?? /verbatim|exact words/i.test(input.content);
@@ -249,6 +281,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   async function ask(question: string): Promise<Answer> {
+    await syncForRead();
     const result = await llm.answer(
       { question, vaultBriefing: await vaultBriefing(), conversation: [] },
       readTools(),
@@ -260,6 +293,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   async function chat(message: string, surface: Surface): Promise<Reply> {
+    await syncForRead();
     const conversationId = `default:${surface}`;
     const window = await state.recentWindow(conversationId);
     await state.appendMessage(conversationId, "user", message, surface);
@@ -291,8 +325,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
     store,
     ask,
     chat,
-    search: (query: string): Promise<Hit[]> => searchVault(vaultPath, query, location),
-    get: (path: string): Promise<Note> => getNote(vaultPath, path, location),
-    lint: (): Promise<LintReport> => lintVault(vaultPath),
+    search: async (query: string): Promise<Hit[]> => {
+      await syncForRead();
+      return searchVault(vaultPath, query, location);
+    },
+    get: async (path: string): Promise<Note> => {
+      await syncForRead();
+      return getNote(vaultPath, path, location);
+    },
+    lint: async (): Promise<LintReport> => {
+      await syncForRead();
+      return lintVault(vaultPath);
+    },
   };
 }
