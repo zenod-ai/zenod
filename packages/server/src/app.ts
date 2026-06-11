@@ -6,7 +6,16 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { NoteNotFoundError, VERSION } from "zenod";
-import { clearSession, issueSession, requireAuth } from "./auth.js";
+import { clearSession, issueSession, requireAuth, requireMcpAuth } from "./auth.js";
+import {
+  authServerMetadata,
+  handleAuthorizeDecision,
+  handleAuthorizeGet,
+  handleRegister,
+  handleToken,
+  protectedResourceMetadata,
+  publicBaseUrl,
+} from "./oauth.js";
 import {
   appStatus,
   buildManifest,
@@ -38,6 +47,21 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // --- public ---
 
   app.get("/api/health", (c) => c.json({ status: "ok", name: "zenod", version: VERSION }));
+
+  // --- OAuth 2.1 provider (public — discovery + flow endpoints) ---
+
+  // RFC 9728 protected-resource metadata (bare + path-suffixed variants clients probe)
+  app.get("/.well-known/oauth-protected-resource", (c) => c.json(protectedResourceMetadata(publicBaseUrl(c))));
+  app.get("/.well-known/oauth-protected-resource/mcp", (c) => c.json(protectedResourceMetadata(publicBaseUrl(c))));
+
+  // RFC 8414 authorization-server metadata (bare + OIDC-style suffix)
+  app.get("/.well-known/oauth-authorization-server", (c) => c.json(authServerMetadata(publicBaseUrl(c))));
+  app.get("/.well-known/oauth-authorization-server/mcp", (c) => c.json(authServerMetadata(publicBaseUrl(c))));
+
+  app.post("/oauth/register", (c) => handleRegister(c, runtime.oauth));
+  app.get("/oauth/authorize", (c) => handleAuthorizeGet(c, runtime.oauth, settings));
+  app.post("/oauth/authorize/decision", (c) => handleAuthorizeDecision(c, runtime.oauth, settings));
+  app.post("/oauth/token", (c) => handleToken(c, runtime.oauth));
 
   app.get("/api/auth/status", (c) =>
     c.json({
@@ -127,8 +151,16 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       token: settings.apiToken(),
       mcpPath: "/mcp",
       clients: runtime.state.listMcpClients(),
+      grants: runtime.oauth.listTokens(),
     }),
   );
+
+  app.post("/api/connections/revoke", async (c) => {
+    const { clientId } = await c.req.json<{ clientId?: string }>().catch(() => ({}) as { clientId?: string });
+    if (!clientId) return c.json({ error: "clientId is required" }, 400);
+    runtime.oauth.revokeClient(clientId);
+    return c.json({ ok: true });
+  });
 
   app.get("/api/vault", async (c) => {
     const vaultConfigured = settings.vaultConfigured();
@@ -259,7 +291,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   // --- MCP (Streamable HTTP, stateless: fresh transport+server per request) ---
 
-  app.all("/mcp", auth, async (c) => {
+  app.all("/mcp", requireMcpAuth(settings, runtime.oauth), async (c) => {
     const { incoming, outgoing } = c.env;
     const server = buildMcpServer(() => runtime.getEngine());
     const transport = new StreamableHTTPServerTransport({

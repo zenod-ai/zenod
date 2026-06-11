@@ -162,7 +162,22 @@ export function ConnectionsTab() {
 
   const mcpUrl = window.location.origin + data.mcpPath
   const claudeCodeCommand = `claude mcp add --transport http zenod ${mcpUrl} --header "Authorization: Bearer ${data.token}"`
+  const claudeCodeOauthCommand = `claude mcp add --transport http zenod ${mcpUrl}\n# then: /mcp  →  Authenticate`
   const codexCommand = `export ZENOD_MCP_TOKEN="${data.token}"\ncodex mcp add zenod --url ${mcpUrl} --bearer-token-env-var ZENOD_MCP_TOKEN`
+
+  async function handleRevoke(clientId: string) {
+    try {
+      await api("/api/connections/revoke", { method: "POST", body: { clientId } })
+      setData((previous) =>
+        previous === null
+          ? previous
+          : { ...previous, grants: previous.grants.filter((g) => g.clientId !== clientId) }
+      )
+      toast.success("Access revoked")
+    } catch (err) {
+      toast.error("Could not revoke access", { description: errorMessage(err) })
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -257,8 +272,10 @@ export function ConnectionsTab() {
           <CodeSnippet code={claudeCodeCommand} />
           <p className="text-sm text-muted-foreground">
             Then run <span className="font-mono">/mcp</span> inside Claude Code
-            to verify the tools are available.
+            to verify the tools are available. Or connect without a token and
+            approve in the browser:
           </p>
+          <CodeSnippet code={claudeCodeOauthCommand} />
         </CardContent>
       </Card>
 
@@ -312,11 +329,11 @@ export function ConnectionsTab() {
           </div>
           <Alert>
             <InfoIcon />
-            <AlertTitle>Bearer tokens aren&apos;t supported yet</AlertTitle>
+            <AlertTitle>Paste the URL, then approve in the browser</AlertTitle>
             <AlertDescription>
-              Claude.ai connectors require OAuth — pasting a bearer token
-              isn&apos;t supported yet. One-click browser sign-in is coming in a
-              Zenod update; for now use Claude Code or Codex above.
+              In Claude.ai → Settings → Connectors → Add custom connector, paste
+              the URL above. Claude opens a Zenod sign-in page — approve with
+              your admin password and it&apos;s connected. No token to copy.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -385,6 +402,81 @@ export function ConnectionsTab() {
             Refresh
           </Button>
         </CardFooter>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Authorized apps</CardTitle>
+          <CardDescription>
+            Apps you signed into Zenod via the browser (OAuth). Revoking
+            disconnects them immediately.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {data.grants.length === 0 ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <GlobeIcon />
+                </EmptyMedia>
+                <EmptyTitle>No authorized apps</EmptyTitle>
+                <EmptyDescription>
+                  When you connect Claude.ai (or Claude Code via browser
+                  sign-in), it appears here.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {data.grants.map((grant) => (
+                <div
+                  key={grant.clientId}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">
+                      {grant.clientName}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      authorized {timeAgo(grant.createdAt)}
+                    </span>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                      >
+                        Revoke
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Revoke {grant.clientName}?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          It will lose access to your vault immediately and need
+                          to sign in again to reconnect.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          variant="destructive"
+                          onClick={() => handleRevoke(grant.clientId)}
+                        >
+                          Revoke
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
       </Card>
     </div>
   )

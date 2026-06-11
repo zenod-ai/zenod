@@ -109,10 +109,18 @@ export type ConnectedClient = {
   connections: number
 }
 
+export type OAuthGrant = {
+  clientName: string
+  clientId: string
+  createdAt: number
+  expiresAt: number
+}
+
 export type ConnectionsResponse = {
   token: string
   mcpPath: string
   clients: ConnectedClient[]
+  grants: OAuthGrant[]
 }
 
 export type VaultStatus = {

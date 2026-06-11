@@ -11,6 +11,7 @@ import {
   type LintReport,
 } from "zenod";
 import { installationToken } from "./githubApp.js";
+import { OAuthStore } from "./oauthStore.js";
 import { Settings, type Provider } from "./settings.js";
 
 export class NotConfiguredError extends Error {
@@ -26,11 +27,13 @@ export class NotConfiguredError extends Error {
 export class Runtime {
   readonly settings: Settings;
   readonly state: SqliteStateStore;
+  readonly oauth: OAuthStore;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
 
   constructor(readonly dataDir: string) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
+    this.oauth = new OAuthStore(join(dataDir, "oauth.sqlite"));
     this.settings = new Settings(this.state);
     this.settings.seedFromEnv();
   }
