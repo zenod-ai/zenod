@@ -163,7 +163,8 @@ export function ConnectionsTab() {
   const mcpUrl = window.location.origin + data.mcpPath
   const claudeCodeCommand = `claude mcp add --transport http zenod ${mcpUrl} --header "Authorization: Bearer ${data.token}"`
   const claudeCodeOauthCommand = `claude mcp add --transport http zenod ${mcpUrl}\n# then: /mcp  →  Authenticate`
-  const codexCommand = `export ZENOD_MCP_TOKEN="${data.token}"\ncodex mcp add zenod --url ${mcpUrl} --bearer-token-env-var ZENOD_MCP_TOKEN`
+  const codexCommand = `codex mcp add zenod --url ${mcpUrl}\ncodex mcp login zenod   # opens a browser to approve`
+  const codexTokenCommand = `export ZENOD_MCP_TOKEN="${data.token}"\ncodex mcp add zenod --url ${mcpUrl} --bearer-token-env-var ZENOD_MCP_TOKEN`
 
   async function handleRevoke(clientId: string) {
     try {
@@ -288,8 +289,11 @@ export function ConnectionsTab() {
         <CardContent className="flex flex-col gap-2">
           <CodeSnippet code={codexCommand} />
           <p className="text-sm text-muted-foreground">
-            Codex reads the token from the env var at runtime.
+            The <span className="font-mono">login</span> command opens a browser
+            — approve with your admin password, no token needed. Or use a token
+            instead:
           </p>
+          <CodeSnippet code={codexTokenCommand} />
         </CardContent>
       </Card>
 
