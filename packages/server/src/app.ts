@@ -5,7 +5,7 @@ import type { HttpBindings } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { NoteNotFoundError, VERSION } from "zenod";
+import { conversationId, NoteNotFoundError, VERSION } from "zenod";
 import { clearSession, issueSession, requireAuth, requireMcpAuth } from "./auth.js";
 import {
   authServerMetadata,
@@ -273,6 +273,18 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     if (!message) return c.json({ error: "message is required" }, 400);
     const engine = await runtime.getEngine();
     return c.json(await engine.chat(message, "web"));
+  });
+
+  // History and clear touch only the conversation store — no engine, repo, or LLM,
+  // so opening the chat tab never triggers a vault clone.
+  app.get("/api/chat/history", async (c) => {
+    const window = await runtime.state.recentWindow(conversationId("web"));
+    return c.json({ messages: window.map((m) => ({ role: m.role, text: m.text })) });
+  });
+
+  app.delete("/api/chat", async (c) => {
+    await runtime.state.clearConversation(conversationId("web"));
+    return c.json({ ok: true });
   });
 
   app.post("/api/work", async (c) => {

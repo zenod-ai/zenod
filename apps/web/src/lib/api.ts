@@ -167,6 +167,15 @@ export type ChatReply = {
   stored?: ChatStored
 }
 
+export type ChatHistoryMessage = {
+  role: "user" | "assistant"
+  text: string
+}
+
+export type ChatHistoryResponse = {
+  messages: ChatHistoryMessage[]
+}
+
 export type GithubAppStatus = {
   created: boolean
   installed: boolean

@@ -79,6 +79,10 @@ export class SqliteStateStore implements StateStore {
     return rows.reverse().map((r) => ({ role: r.role, text: r.text, surface: r.surface, at: new Date(r.at) }));
   }
 
+  async clearConversation(conversationId: string): Promise<void> {
+    this.db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(conversationId);
+  }
+
   /** Simple key-value settings — used by the server for runtime configuration. */
   getSetting(key: string): string | null {
     const row = this.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as

@@ -29,7 +29,7 @@ export { getNote, NoteNotFoundError } from "./ops/get.js";
 export { checkEvidenceImmutability, type FileChange } from "./vault/immutability.js";
 export { WriteQueue } from "./git/queue.js";
 export { VaultRepo, type VaultRepoOptions } from "./git/vaultRepo.js";
-export { createEngine, type EngineOptions } from "./engine/engine.js";
+export { createEngine, conversationId, type EngineOptions } from "./engine/engine.js";
 export { appendEvidence, todayString, type EvidenceEntry } from "./engine/evidence.js";
 export { SqliteStateStore } from "./state/sqlite.js";
 export {

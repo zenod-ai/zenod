@@ -27,6 +27,14 @@ import type { BrainLlm, Classification } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
 
+/**
+ * The conversation key for a surface. One continuous thread per surface today;
+ * the `default:` prefix leaves room for multi-session later.
+ */
+export function conversationId(surface: Surface): string {
+  return `default:${surface}`;
+}
+
 export interface EngineOptions {
   repo: VaultRepo;
   llm: BrainLlm;
@@ -405,9 +413,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   async function chat(message: string, surface: Surface): Promise<Reply> {
     await syncForRead();
-    const conversationId = `default:${surface}`;
-    const window = await state.recentWindow(conversationId);
-    await state.appendMessage(conversationId, "user", message, surface);
+    const cid = conversationId(surface);
+    const window = await state.recentWindow(cid);
+    await state.appendMessage(cid, "user", message, surface);
 
     const wantsStore = /\b(remember|store|save|capture|log) (this|that|it)\b/i.test(message);
     let stored: StoreResult | undefined;
@@ -440,7 +448,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       readTools(),
       taskTools,
     );
-    await state.appendMessage(conversationId, "assistant", result.text, surface);
+    await state.appendMessage(cid, "assistant", result.text, surface);
 
     return {
       text: result.text,

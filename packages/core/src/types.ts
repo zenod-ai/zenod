@@ -128,6 +128,8 @@ export interface StateStore {
   appendMessage(conversationId: string, role: "user" | "assistant", text: string, surface: Surface): Promise<void>;
   /** Most recent window: last 20 messages or 48h, whichever is smaller. */
   recentWindow(conversationId: string): Promise<ConversationMessage[]>;
+  /** Delete every message in a conversation. */
+  clearConversation(conversationId: string): Promise<void>;
 }
 
 export interface ConversationMessage {

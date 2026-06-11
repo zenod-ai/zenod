@@ -1,5 +1,5 @@
 import * as React from "react"
-import { BrainIcon, ExternalLinkIcon, SendIcon } from "lucide-react"
+import { BrainIcon, ExternalLinkIcon, SendIcon, Trash2Icon } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -7,6 +7,7 @@ import {
   api,
   errorMessage,
   isNotConfigured,
+  type ChatHistoryResponse,
   type ChatReply,
   type ChatSource,
   type ChatStored,
@@ -101,12 +102,43 @@ export function ChatTab() {
   const [messages, setMessages] = React.useState<Message[]>([])
   const [input, setInput] = React.useState("")
   const [busy, setBusy] = React.useState(false)
+  const [clearing, setClearing] = React.useState(false)
   const endRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+
+  // Rehydrate the thread from the server so navigating away and back keeps context.
+  React.useEffect(() => {
+    let cancelled = false
+    void api<ChatHistoryResponse>("/api/chat/history")
+      .then((history) => {
+        if (cancelled) return
+        setMessages(history.messages.map((m) => ({ role: m.role, text: m.text })))
+      })
+      .catch(() => {
+        // No history yet, or not configured — start with an empty thread.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [messages, busy])
+
+  async function clearThread() {
+    if (busy || clearing) return
+    setClearing(true)
+    try {
+      await api("/api/chat", { method: "DELETE" })
+      setMessages([])
+    } catch {
+      // Leave the thread in place if the clear failed.
+    } finally {
+      setClearing(false)
+      textareaRef.current?.focus()
+    }
+  }
 
   async function send() {
     const message = input.trim()
@@ -148,6 +180,21 @@ export function ChatTab() {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4">
+        {messages.length > 0 && (
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              disabled={busy || clearing}
+              onClick={() => void clearThread()}
+            >
+              <Trash2Icon className="size-3.5" />
+              Clear conversation
+            </Button>
+          </div>
+        )}
         <div className="flex max-h-[60svh] min-h-[40svh] flex-col gap-4 overflow-y-auto pr-1">
           {messages.length === 0 && !busy && (
             <Empty className="my-auto border-none">
