@@ -34,10 +34,19 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
+import {
+  MODEL_CATALOG,
+  PROVIDER_DEFAULT_MODEL,
+  costLong,
+  costShort,
+  findModel,
+} from "@/lib/model-catalog"
 
 type FormState = {
   vault_repo: string
@@ -78,14 +87,93 @@ const KEY_PLACEHOLDER: Record<Provider, string> = {
   openai: "sk-…",
 }
 
-const ASK_PLACEHOLDER: Record<Provider, string> = {
-  anthropic: "claude-sonnet-4-6",
-  openai: "gpt-4o",
-}
+const CUSTOM = "__custom__"
+const DEFAULT = "__default__"
 
-const CLASSIFY_PLACEHOLDER: Record<Provider, string> = {
-  anthropic: "claude-haiku-4-5",
-  openai: "gpt-4o-mini",
+/**
+ * Model picker for a single role (Ask/Classify). The stored value is a plain
+ * model-ID string; "" means "use the provider default". Catalog entries show
+ * their cost; a "Custom model ID…" option falls back to a free-text input so
+ * any model the backend accepts can still be entered.
+ */
+function ModelSelect({
+  id,
+  provider,
+  value,
+  defaultModelId,
+  onChange,
+}: {
+  id: string
+  provider: Provider
+  value: string
+  defaultModelId: string
+  onChange: (value: string) => void
+}) {
+  const catalog = MODEL_CATALOG[provider]
+  const known = value !== "" && catalog.some((m) => m.id === value)
+  const isCustomValue = value !== "" && !known
+  const [customMode, setCustomMode] = React.useState(isCustomValue)
+
+  // A non-empty value that isn't in the catalog is always custom.
+  React.useEffect(() => {
+    if (isCustomValue) setCustomMode(true)
+  }, [isCustomValue])
+
+  const selectValue = customMode ? CUSTOM : value === "" ? DEFAULT : value
+
+  function handleSelect(next: string) {
+    if (next === DEFAULT) {
+      setCustomMode(false)
+      onChange("")
+    } else if (next === CUSTOM) {
+      setCustomMode(true)
+      onChange("")
+    } else {
+      setCustomMode(false)
+      onChange(next)
+    }
+  }
+
+  const defaultModel = findModel(provider, defaultModelId)
+  const selected = known ? findModel(provider, value) : undefined
+
+  return (
+    <>
+      <Select value={selectValue} onValueChange={handleSelect}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={DEFAULT}>
+            Provider default
+            {defaultModel ? ` — ${defaultModel.label}` : ` (${defaultModelId})`}
+          </SelectItem>
+          <SelectSeparator />
+          <SelectLabel>{provider === "openai" ? "OpenAI" : "Anthropic"} models</SelectLabel>
+          {catalog.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {m.label}
+              {m.note ? ` · ${m.note}` : ""} — {costShort(m)}
+            </SelectItem>
+          ))}
+          <SelectSeparator />
+          <SelectItem value={CUSTOM}>Custom model ID…</SelectItem>
+        </SelectContent>
+      </Select>
+      {customMode && (
+        <Input
+          className="mt-2"
+          placeholder={`${defaultModelId} (or any model ID)`}
+          autoComplete="off"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+      {selected && (
+        <FieldDescription>Cost: {costLong(selected)}.</FieldDescription>
+      )}
+    </>
+  )
 }
 
 function TestNote({ result }: { result: TestResult }) {
@@ -307,12 +395,12 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
             <FieldSeparator />
             <Field>
               <FieldLabel htmlFor="keys-model-ask">Ask model</FieldLabel>
-              <Input
+              <ModelSelect
                 id="keys-model-ask"
-                placeholder={ASK_PLACEHOLDER[form.provider]}
-                autoComplete="off"
+                provider={form.provider}
                 value={form.model_ask}
-                onChange={(event) => update("model_ask", event.target.value)}
+                defaultModelId={PROVIDER_DEFAULT_MODEL[form.provider].ask}
+                onChange={(value) => update("model_ask", value)}
               />
               <FieldDescription>
                 Used to answer questions over the vault.
@@ -322,14 +410,12 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
               <FieldLabel htmlFor="keys-model-classify">
                 Classify model
               </FieldLabel>
-              <Input
+              <ModelSelect
                 id="keys-model-classify"
-                placeholder={CLASSIFY_PLACEHOLDER[form.provider]}
-                autoComplete="off"
+                provider={form.provider}
                 value={form.model_classify}
-                onChange={(event) =>
-                  update("model_classify", event.target.value)
-                }
+                defaultModelId={PROVIDER_DEFAULT_MODEL[form.provider].classify}
+                onChange={(value) => update("model_classify", value)}
               />
               <FieldDescription>
                 Used to classify incoming evidence.
