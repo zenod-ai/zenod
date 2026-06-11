@@ -35,6 +35,17 @@ const fakeEngine: BrainEngine = {
   async lint() {
     return { ok: true, errors: [], checkedFiles: 1 };
   },
+  async work(input) {
+    if (!input.plan) return { mode: "proposal" as const, text: `PLAN for: ${input.objective}`, committed: false };
+    return {
+      mode: "executed" as const,
+      text: "swept",
+      committed: true,
+      commitSha: "1".repeat(40),
+      changedPaths: ["Notes/Swept.md"],
+      githubUrls: [],
+    };
+  },
 };
 
 describe("MCP endpoint", () => {
@@ -75,10 +86,10 @@ describe("MCP endpoint", () => {
     await expect(client.connect(transport)).rejects.toThrow(/401|unauthorized/i);
   });
 
-  it("lists the four Zenod tools", async () => {
+  it("lists the five Zenod tools", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["ask_brain", "get_memory", "search_memory", "store_memory"]);
+    expect(tools.map((t) => t.name).sort()).toEqual(["ask_brain", "get_memory", "run_task", "search_memory", "store_memory"]);
     await client.close();
   });
 
@@ -101,6 +112,26 @@ describe("MCP endpoint", () => {
       arguments: { content: "something cryptic" },
     });
     expect((unsure.structuredContent as { question?: string }).question).toBeTruthy();
+
+    await client.close();
+  });
+
+  it("run_task proposes without a plan and executes with one", async () => {
+    const client = await connect();
+
+    const propose = await client.callTool({ name: "run_task", arguments: { objective: "sweep the Inbox" } });
+    const proposal = propose.structuredContent as { mode: string; committed: boolean; text: string };
+    expect(proposal.mode).toBe("proposal");
+    expect(proposal.committed).toBe(false);
+
+    const execute = await client.callTool({
+      name: "run_task",
+      arguments: { objective: "sweep the Inbox", approvedPlan: proposal.text },
+    });
+    const executed = execute.structuredContent as { mode: string; committed: boolean; commitSha?: string };
+    expect(executed.mode).toBe("executed");
+    expect(executed.committed).toBe(true);
+    expect(executed.commitSha).toBe("1".repeat(40));
 
     await client.close();
   });

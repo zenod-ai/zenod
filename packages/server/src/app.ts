@@ -275,6 +275,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json(await engine.chat(message, "web"));
   });
 
+  app.post("/api/work", async (c) => {
+    const { objective, plan } = await c.req.json<{ objective?: string; plan?: string }>();
+    if (!objective) return c.json({ error: "objective is required" }, 400);
+    const engine = await runtime.getEngine();
+    return c.json(await engine.work({ objective, ...(plan ? { plan } : {}) }));
+  });
+
   app.get("/api/search", async (c) => {
     const query = c.req.query("q") ?? "";
     if (!query) return c.json({ error: "q is required" }, 400);

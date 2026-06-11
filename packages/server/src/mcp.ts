@@ -113,5 +113,37 @@ export function buildMcpServer(getEngine: () => Promise<BrainEngine>): McpServer
     },
   );
 
+  server.registerTool(
+    "run_task",
+    {
+      title: "Run a vault task",
+      description:
+        "Give the librarian an objective that requires reorganizing the vault (sweep the Inbox, merge duplicate pages, refile or archive notes, fix structure). Two-step contract: call WITHOUT approvedPlan first — the librarian surveys read-only and returns a concrete plan; show that plan to the user. Once the user approves, call again with the (possibly user-edited) plan as approvedPlan — the librarian executes it on the vault working tree, the engine validates (lint + evidence immutability) and lands everything as ONE commit, or rolls back fully. Log/ and _attachments/ are immutable and can never be changed by this tool. NEVER pass approvedPlan without explicit user approval of that plan.",
+      inputSchema: {
+        objective: z.string().min(1).describe("What to accomplish, e.g. 'sweep the Inbox: file, archive, or delete each item'"),
+        approvedPlan: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("The user-approved plan from the propose step. Only pass after the user said yes."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ objective, approvedPlan }) => {
+      const engine = await getEngine();
+      const result = await engine.work({ objective, ...(approvedPlan ? { plan: approvedPlan } : {}) });
+      const lines =
+        result.mode === "proposal"
+          ? [`PLAN (relay to the user for approval, then call run_task again with approvedPlan):`, result.text]
+          : [
+              result.mode === "failed" ? "FAILED (rolled back, nothing committed)" : result.committed ? "EXECUTED" : "EXECUTED (no changes were needed)",
+              result.text,
+              ...(result.commitSha ? [`commit: ${result.commitSha}`] : []),
+              ...(result.changedPaths?.length ? [`changed: ${result.changedPaths.join(", ")}`] : []),
+            ];
+      return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
+    },
+  );
+
   return server;
 }

@@ -15,6 +15,9 @@ import type {
   ClassifyInput,
   ComposePageInput,
   VaultReadTools,
+  VaultWriteTools,
+  WorkLoopInput,
+  WorkLoopResult,
 } from "../src/llm/types.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/vault", import.meta.url));
@@ -65,6 +68,19 @@ class FakeLlm implements BrainLlm {
     await tools.searchVault(input.question);
     const note = await tools.readNote("Areas/Insurance.md");
     return { text: `You have travel insurance with Axa. (${note.length} chars read)`, readPaths: ["Areas/Insurance.md"] };
+  }
+
+  /** Scripted work behavior, set per test. */
+  workScript: ((tools: VaultReadTools, writeTools: VaultWriteTools) => Promise<string>) | null = null;
+  workCalls = 0;
+
+  async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {
+    this.workCalls++;
+    if (!writeTools) {
+      return { text: `PLAN for "${input.objective}":\n- delete Inbox/junk.md — test scratch` };
+    }
+    const text = this.workScript ? await this.workScript(tools, writeTools) : "did nothing";
+    return { text };
   }
 }
 
@@ -213,6 +229,81 @@ describe("BrainEngine", () => {
     expect(answer.text).toContain("Axa");
     expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
     expect(answer.sources[0]?.githubUrl).toContain("github.com/zenod-ai/fixture");
+  });
+
+  it("work without a plan proposes and commits nothing", async () => {
+    const before = await repo.headSha();
+    const result = await engine().work({ objective: "sweep the Inbox" });
+
+    expect(result.mode).toBe("proposal");
+    expect(result.committed).toBe(false);
+    expect(result.text).toContain("PLAN");
+    expect(await repo.headSha()).toBe(before);
+  });
+
+  it("work with an approved plan executes, validates, and lands one commit", async () => {
+    // seed a junk file the librarian will sweep
+    await writeFile(join(repo.path, "Inbox/junk.md"), "scratch\n");
+    await simpleGit(repo.path).add(["-A"]).commit("seed junk").push("origin", "main");
+
+    llm.workScript = async (_tools, writeTools) => {
+      await writeTools.deleteNote("Inbox/junk.md");
+      await writeTools.writeNote(
+        "Notes/Swept.md",
+        "---\ntitle: Swept\ntype: note\ntags: []\ncreated: 2026-06-11\nupdated: 2026-06-11\nsummary: Filed from the Inbox sweep.\n---\n\n# Swept\n\nContent rescued from junk. Related: [[Notes/Axa|Axa]]\n",
+      );
+      return "sweep the Inbox: deleted junk.md, filed Swept.md\ndetails...";
+    };
+    const result = await engine().work({ objective: "sweep the Inbox", plan: "- delete Inbox/junk.md\n- file Notes/Swept.md" });
+
+    expect(result.mode).toBe("executed");
+    expect(result.committed).toBe(true);
+    expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(result.changedPaths).toContain("Notes/Swept.md");
+    await expect(readFile(join(repo.path, "Inbox/junk.md"), "utf8")).rejects.toThrow();
+    expect((await engine().lint()).errors).toEqual([]);
+
+    // one commit, pushed, message from the loop summary
+    const log = await simpleGit(repo.path).log();
+    expect(log.latest?.message).toBe("work: sweep the Inbox: deleted junk.md, filed Swept.md");
+    const verify = await VaultRepo.open({ workdir: join(dir, "verify-work"), remoteUrl: join(dir, "origin.git") });
+    expect(await verify.headSha()).toBe(result.commitSha);
+  });
+
+  it("work tools reject the evidence tier and path escapes", async () => {
+    const errors: string[] = [];
+    llm.workScript = async (_tools, writeTools) => {
+      for (const attempt of [
+        () => writeTools.deleteNote("Log/2026-06-10.md"),
+        () => writeTools.writeNote("Log/2026-06-10.md", "tampered"),
+        () => writeTools.moveNote("Log/2026-06-10.md", "Notes/Stolen.md"),
+        () => writeTools.writeNote("../outside.md", "escape"),
+      ]) {
+        await attempt().catch((err: Error) => errors.push(err.message));
+      }
+      return "could not touch evidence";
+    };
+    const result = await engine().work({ objective: "tamper", plan: "tamper with the log" });
+
+    expect(errors.length).toBe(4);
+    expect(result.mode).toBe("executed");
+    expect(result.committed).toBe(false); // nothing changed, nothing committed
+    const log = await readFile(join(repo.path, "Log/2026-06-10.md"), "utf8");
+    expect(log).not.toContain("tampered");
+  });
+
+  it("work rolls back fully when validation keeps failing", async () => {
+    llm.workScript = async (_tools, writeTools) => {
+      await writeTools.writeNote("Notes/Broken.md", "# no frontmatter at all\n");
+      return "wrote a broken page";
+    };
+    const result = await engine().work({ objective: "break things", plan: "write a broken page" });
+
+    expect(result.mode).toBe("failed");
+    expect(result.committed).toBe(false);
+    expect(llm.workCalls).toBe(3); // initial + 2 retries
+    await expect(readFile(join(repo.path, "Notes/Broken.md"), "utf8")).rejects.toThrow();
+    expect((await engine().lint()).errors).toEqual([]);
   });
 
   it("chat persists the conversation window and can trigger a store", async () => {

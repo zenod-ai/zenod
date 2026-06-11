@@ -12,6 +12,12 @@ export interface BrainLlm {
   composePage(input: ComposePageInput): Promise<string>;
   /** Read-only agent loop over the vault; returns the synthesized answer. */
   answer(input: AnswerInput, tools: VaultReadTools): Promise<AnswerResult>;
+  /**
+   * Librarian work loop. Without writeTools it surveys and returns a plan
+   * (propose mode); with writeTools it executes against the working tree
+   * (execute mode). The engine validates and commits — never this loop.
+   */
+  work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult>;
 }
 
 export interface ClassifyInput {
@@ -70,6 +76,33 @@ export interface VaultReadTools {
   searchVault(query: string): Promise<string>;
   readNote(path: string): Promise<string>;
   listPages(): Promise<string>;
+}
+
+/**
+ * Mutating tool callbacks for the work loop. All operate on the local
+ * working tree only; the engine commits. Implementations must reject paths
+ * that escape the vault or touch the immutable evidence tier.
+ */
+export interface VaultWriteTools {
+  /** Every file in the vault (markdown and attachments), one per line. */
+  listFiles(): Promise<string>;
+  writeNote(path: string, content: string): Promise<string>;
+  moveNote(from: string, to: string): Promise<string>;
+  deleteNote(path: string): Promise<string>;
+}
+
+export interface WorkLoopInput {
+  objective: string;
+  vaultBriefing: string;
+  /** The approved plan, in execute mode. */
+  plan?: string;
+  /** Validation errors from the previous execute attempt (validate-with-retry). */
+  previousErrors?: LintError[];
+}
+
+export interface WorkLoopResult {
+  /** Propose mode: the plan. Execute mode: one-line summary first (commit message), then details. */
+  text: string;
 }
 
 export interface AnswerResult {

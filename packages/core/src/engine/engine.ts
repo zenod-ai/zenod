@@ -1,5 +1,5 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, normalize } from "node:path";
 import type {
   Answer,
   BrainEngine,
@@ -11,6 +11,8 @@ import type {
   StoreInput,
   StoreResult,
   Surface,
+  WorkInput,
+  WorkResult,
 } from "../types.js";
 import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
@@ -41,6 +43,7 @@ export interface EngineOptions {
 }
 
 const COMPOSE_RETRIES = 2;
+const WORK_RETRIES = 2;
 const DEFAULT_READ_SYNC_TTL_MS = 60_000;
 
 const DEFAULT_TEMPLATE = `---
@@ -120,6 +123,114 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return snapshot.pages.map((p) => `${p.path} — ${p.title}: ${p.summary}`).join("\n") || "(none)";
       },
     };
+  }
+
+  /** Vault-relative path guard for the work tools: no escapes, no evidence-tier writes. */
+  function guardedPath(rel: string): string {
+    const clean = normalize(rel).replaceAll("\\", "/");
+    if (isAbsolute(clean) || clean.startsWith("..") || clean.startsWith(".git/")) {
+      throw new Error(`path escapes the vault: ${rel}`);
+    }
+    if (clean.startsWith("Log/") || clean.startsWith("_attachments/")) {
+      throw new Error(`evidence tier is immutable — ${clean} cannot be written, moved, or deleted`);
+    }
+    return clean;
+  }
+
+  function writeTools() {
+    return {
+      listFiles: async () => {
+        const snapshot = await scanVault(vaultPath);
+        const attachments = await listAttachmentFiles(vaultPath);
+        return [...snapshot.files, ...attachments].sort().join("\n") || "(empty vault)";
+      },
+      writeNote: async (path: string, content: string) => {
+        const clean = guardedPath(path);
+        await mkdir(dirname(join(vaultPath, clean)), { recursive: true });
+        await writeFile(join(vaultPath, clean), content.endsWith("\n") ? content : `${content}\n`);
+        return `wrote ${clean}`;
+      },
+      moveNote: async (from: string, to: string) => {
+        const cleanFrom = guardedPath(from);
+        const cleanTo = guardedPath(to);
+        await mkdir(dirname(join(vaultPath, cleanTo)), { recursive: true });
+        await rename(join(vaultPath, cleanFrom), join(vaultPath, cleanTo));
+        return `moved ${cleanFrom} -> ${cleanTo}`;
+      },
+      deleteNote: async (path: string) => {
+        const clean = guardedPath(path);
+        await rm(join(vaultPath, clean));
+        return `deleted ${clean}`;
+      },
+    };
+  }
+
+  /**
+   * The librarian work loop — propose (read-only plan) then execute (approved
+   * plan, validated, one commit per objective). The model arranges the working
+   * tree; this function guarantees what lands: lint + evidence immutability,
+   * commit-and-push or full rollback. Same contract as store, wider verbs.
+   */
+  async function work(input: WorkInput): Promise<WorkResult> {
+    if (!input.plan) {
+      await syncForRead();
+      const result = await llm.work(
+        { objective: input.objective, vaultBriefing: await vaultBriefing() },
+        readTools(),
+      );
+      return { mode: "proposal", text: result.text, committed: false };
+    }
+
+    return queue.run(async (): Promise<WorkResult> => {
+      await repo.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+
+      let loopInput = {
+        objective: input.objective,
+        plan: input.plan,
+        vaultBriefing: await vaultBriefing(),
+      } as import("../llm/types.js").WorkLoopInput;
+
+      for (let attempt = 0; attempt <= WORK_RETRIES; attempt++) {
+        const result = await llm.work(loopInput, readTools(), writeTools());
+
+        const changes = await repo.pendingChanges();
+        if (changes.length === 0) {
+          return { mode: "executed", text: result.text, committed: false, changedPaths: [] };
+        }
+
+        const lintTargets = changes.filter((c) => c.path.endsWith(".md") && c.after !== null).map((c) => c.path);
+        const report = await lintVault(vaultPath, lintTargets);
+        const errors = [...report.errors, ...checkEvidenceImmutability(changes)];
+
+        if (errors.length === 0) {
+          const summary = result.text.split("\n")[0]?.slice(0, 120) || input.objective.slice(0, 120);
+          const sha = await repo.commitAndPush(`work: ${summary}`);
+          const changedPaths = changes.map((c) => c.path);
+          return {
+            mode: "executed",
+            text: result.text,
+            committed: true,
+            commitSha: sha,
+            changedPaths,
+            githubUrls: changedPaths.map((p) => githubUrl(location, p)).filter(Boolean),
+          };
+        }
+
+        if (attempt === WORK_RETRIES) {
+          await repo.discardChanges();
+          return {
+            mode: "failed",
+            text: `rolled back — validation failed after ${WORK_RETRIES + 1} attempts: ${errors
+              .map((e) => `${e.path} [${e.rule}] ${e.message}`)
+              .join("; ")}`,
+            committed: false,
+          };
+        }
+        loopInput = { ...loopInput, previousErrors: errors };
+      }
+      throw new Error("unreachable");
+    });
   }
 
   async function writeInboxStub(content: string, question: string, evidenceRef: string): Promise<string> {
@@ -325,6 +436,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     store,
     ask,
     chat,
+    work,
     search: async (query: string): Promise<Hit[]> => {
       await syncForRead();
       return searchVault(vaultPath, query, location);

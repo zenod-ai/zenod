@@ -82,6 +82,27 @@ export interface LintReport {
   checkedFiles: number;
 }
 
+export interface WorkInput {
+  /** What to accomplish, e.g. "sweep the Inbox: file, archive, or delete each item". */
+  objective: string;
+  /**
+   * The approved plan from a previous propose run. Absent → propose mode
+   * (read-only survey, returns a plan, commits nothing). Present → execute
+   * mode (write loop, validated, one commit).
+   */
+  plan?: string;
+}
+
+export interface WorkResult {
+  mode: "proposal" | "executed" | "failed";
+  /** Proposal: the plan to relay for approval. Executed: summary. Failed: why. */
+  text: string;
+  committed: boolean;
+  commitSha?: string;
+  changedPaths?: string[];
+  githubUrls?: string[];
+}
+
 export interface BrainEngine {
   /** The librarian pipeline — the only write path. */
   store(input: StoreInput): Promise<StoreResult>;
@@ -89,6 +110,8 @@ export interface BrainEngine {
   ask(question: string): Promise<Answer>;
   /** Full conversational turn: ask + optional store, with conversation memory. */
   chat(message: string, surface: Surface): Promise<Reply>;
+  /** Librarian work loop: propose (no plan) then execute (approved plan) vault maintenance. */
+  work(input: WorkInput): Promise<WorkResult>;
   /** Deterministic two-pass search. No LLM. */
   search(query: string): Promise<Hit[]>;
   /** Deterministic note fetch. No LLM. */

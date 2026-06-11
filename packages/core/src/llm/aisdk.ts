@@ -10,6 +10,9 @@ import type {
   ClassifyInput,
   ComposePageInput,
   VaultReadTools,
+  VaultWriteTools,
+  WorkLoopInput,
+  WorkLoopResult,
 } from "./types.js";
 
 export type Provider = "anthropic" | "openai";
@@ -30,6 +33,12 @@ export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string
 };
 
 const MAX_STEPS = 15;
+const MAX_WORK_STEPS = 40;
+
+/** Tool callbacks may fail (bad path, immutable tier); surface the error to the model instead of aborting the loop. */
+function caught(run: () => Promise<string>): Promise<string> {
+  return run().catch((err: unknown) => `ERROR: ${(err as Error).message}`);
+}
 
 /**
  * Classification schema. Every field is REQUIRED — optional fields are
@@ -187,6 +196,94 @@ export class AiSdkBrainLlm implements BrainLlm {
     });
 
     return { text, readPaths: [...readPaths] };
+  }
+
+  async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {
+    const executing = writeTools !== undefined;
+
+    const system = [
+      input.vaultBriefing,
+      executing
+        ? [
+            "MODE: EXECUTE. Carry out the approved plan below against the vault, using the write tools.",
+            "Hard rules:",
+            "- Log/ and _attachments/ are immutable evidence — never write, move, or delete there (tools will reject it).",
+            "- Meaning pages (Projects/, Areas/, Notes/) need valid frontmatter: title, type (project|area|note matching the folder), tags, created, updated, summary.",
+            "- When you move or rename a page, update wikilinks that point to it by full path.",
+            "- Stay within the plan; skip a step (and say so) rather than improvising a different change.",
+            "- The engine validates and commits when you finish — do not narrate git operations.",
+            "When done, reply with ONE LINE summarizing what you did (it becomes the commit message), then the details.",
+          ].join("\n")
+        : [
+            "MODE: PROPOSE. Survey the vault and produce a concrete, reviewable plan for the objective — do NOT describe generic advice.",
+            "List every operation explicitly, one per line: move/delete/write with exact vault-relative paths and a one-line rationale each.",
+            "Log/ and _attachments/ are immutable evidence — never plan changes there.",
+            "If an item's fate is genuinely ambiguous, put it under an 'ASK THE USER' heading with the question.",
+          ].join("\n"),
+    ].join("\n\n");
+
+    const readToolSet = {
+      search_vault: tool({
+        description: "Search the vault — ranked paths with snippets.",
+        inputSchema: z.object({ query: z.string() }),
+        execute: ({ query }) => caught(() => tools.searchVault(query)),
+      }),
+      read_note: tool({
+        description: "Read the full content of one note by its vault-relative path.",
+        inputSchema: z.object({ path: z.string() }),
+        execute: ({ path }) => caught(() => tools.readNote(path)),
+      }),
+      list_pages: tool({
+        description: "List all meaning pages with titles, tags, and summaries.",
+        inputSchema: z.object({}),
+        execute: () => caught(() => tools.listPages()),
+      }),
+    };
+
+    const writeToolSet = writeTools
+      ? {
+          list_files: tool({
+            description: "List every file in the vault (markdown and attachments), one path per line.",
+            inputSchema: z.object({}),
+            execute: () => caught(() => writeTools.listFiles()),
+          }),
+          write_note: tool({
+            description: "Create or fully rewrite one file in the working tree (vault-relative path).",
+            inputSchema: z.object({ path: z.string(), content: z.string() }),
+            execute: ({ path, content }) => caught(() => writeTools.writeNote(path, content)),
+          }),
+          move_note: tool({
+            description: "Move/rename one file in the working tree. Update inbound full-path wikilinks afterwards.",
+            inputSchema: z.object({ from: z.string(), to: z.string() }),
+            execute: ({ from, to }) => caught(() => writeTools.moveNote(from, to)),
+          }),
+          delete_note: tool({
+            description: "Delete one file from the working tree.",
+            inputSchema: z.object({ path: z.string() }),
+            execute: ({ path }) => caught(() => writeTools.deleteNote(path)),
+          }),
+        }
+      : {};
+
+    const { text } = await generateText({
+      model: this.model(this.askModelId),
+      system,
+      prompt: [
+        `Objective: ${input.objective}`,
+        input.plan ? `Approved plan:\n${input.plan}` : "",
+        input.previousErrors?.length
+          ? `Your previous attempt failed validation — fix ALL of these in the working tree:\n${input.previousErrors
+              .map((e) => `- ${e.path} [${e.rule}] ${e.message}`)
+              .join("\n")}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      stopWhen: stepCountIs(MAX_WORK_STEPS),
+      tools: { ...readToolSet, ...writeToolSet },
+    });
+
+    return { text };
   }
 }
 
