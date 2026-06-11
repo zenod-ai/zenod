@@ -151,6 +151,28 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* Connector lines in the memory diagram — dashes flow toward the librarian. */
+.flow-line {
+  fill: none;
+  stroke: var(--rust);
+  stroke-width: 1.25;
+  stroke-dasharray: 5 5;
+  opacity: 0.55;
+  animation: flow-dash 1.4s linear infinite;
+}
+
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-line {
+    animation: none;
+  }
+}
+
 /* Duotone treatment for the engraving — ink lines on parchment. */
 .duotone {
   filter: grayscale(1) sepia(0.38) contrast(0.92) brightness(1.06);

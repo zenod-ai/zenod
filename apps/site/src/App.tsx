@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { MemoryDiagram } from "@/components/memory-diagram"
 import { cn } from "@/lib/utils"
 import alexandria from "@/assets/alexandria.jpg"
 
@@ -289,6 +290,15 @@ export default function App() {
               </Button>
             </div>
           </div>
+        </section>
+
+        {/* ───────────────────────── use case ───────────────────────── */}
+        <section className="border-b border-border px-6 py-20 sm:px-12">
+          <SectionHeading
+            kicker="The use case"
+            title="Your memory, defragmented."
+          />
+          <MemoryDiagram />
         </section>
 
         {/* ───────────────────────── pillars ───────────────────────── */}
