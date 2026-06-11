@@ -30,7 +30,30 @@ export class SqliteStateStore implements StateStore {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS mcp_clients (
+        name TEXT PRIMARY KEY,
+        version TEXT,
+        last_seen INTEGER NOT NULL,
+        connections INTEGER NOT NULL DEFAULT 1
+      );
     `);
+  }
+
+  /** Record an MCP client handshake (from the initialize request's clientInfo). */
+  recordMcpClient(name: string, version: string | null): void {
+    this.db
+      .prepare(
+        `INSERT INTO mcp_clients (name, version, last_seen, connections) VALUES (?, ?, ?, 1)
+         ON CONFLICT(name) DO UPDATE SET version = excluded.version, last_seen = excluded.last_seen,
+           connections = mcp_clients.connections + 1`,
+      )
+      .run(name, version, Date.now());
+  }
+
+  listMcpClients(): Array<{ name: string; version: string | null; lastSeen: number; connections: number }> {
+    return this.db
+      .prepare("SELECT name, version, last_seen AS lastSeen, connections FROM mcp_clients ORDER BY last_seen DESC")
+      .all() as Array<{ name: string; version: string | null; lastSeen: number; connections: number }>;
   }
 
   async appendMessage(conversationId: string, role: "user" | "assistant", text: string, surface: Surface): Promise<void> {

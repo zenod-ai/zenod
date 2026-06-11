@@ -115,6 +115,24 @@ describe("server API", () => {
     expect((await res.json()).code).toBe("not_configured");
   });
 
+  it("tracks MCP clients and lists them via /api/connections", async () => {
+    runtime.state.recordMcpClient("Claude Code", "1.0.0");
+    runtime.state.recordMcpClient("Codex", null);
+    runtime.state.recordMcpClient("Claude Code", "1.0.1"); // reconnect bumps count + version
+
+    const res = await app.request("/api/connections", {
+      headers: { Authorization: `Bearer ${runtime.settings.apiToken()}` },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.mcpPath).toBe("/mcp");
+    expect(body.token).toBe(runtime.settings.apiToken());
+    const claude = body.clients.find((x: { name: string }) => x.name === "Claude Code");
+    expect(claude.version).toBe("1.0.1");
+    expect(claude.connections).toBe(2);
+    expect(body.clients.map((x: { name: string }) => x.name)).toContain("Codex");
+  });
+
   it("token regeneration invalidates the old token", async () => {
     const old = runtime.settings.apiToken();
     const res = await app.request("/api/token/regenerate", {

@@ -102,6 +102,19 @@ export type TokenResponse = {
   mcpPath: string
 }
 
+export type ConnectedClient = {
+  name: string
+  version: string | null
+  lastSeen: number
+  connections: number
+}
+
+export type ConnectionsResponse = {
+  token: string
+  mcpPath: string
+  clients: ConnectedClient[]
+}
+
 export type VaultStatus = {
   repo: string | null
   branch: string | null

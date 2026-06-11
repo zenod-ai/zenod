@@ -122,6 +122,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.post("/api/token/regenerate", (c) => c.json({ token: settings.regenerateApiToken() }));
 
+  app.get("/api/connections", (c) =>
+    c.json({
+      token: settings.apiToken(),
+      mcpPath: "/mcp",
+      clients: runtime.state.listMcpClients(),
+    }),
+  );
+
   app.get("/api/vault", async (c) => {
     const vaultConfigured = settings.vaultConfigured();
     let cloned = await access(join(runtime.workdir, ".git")).then(() => true).catch(() => false);
@@ -264,6 +272,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     });
     await server.connect(transport);
     const body = c.req.method === "POST" ? await c.req.json().catch(() => undefined) : undefined;
+
+    // Record the connecting client from the initialize handshake (for the UI status).
+    const init = Array.isArray(body) ? body.find((m) => m?.method === "initialize") : body;
+    const clientInfo = init?.method === "initialize" ? init?.params?.clientInfo : undefined;
+    if (clientInfo?.name) {
+      runtime.state.recordMcpClient(String(clientInfo.name), clientInfo.version ? String(clientInfo.version) : null);
+    }
+
     await transport.handleRequest(incoming, outgoing, body);
     return RESPONSE_ALREADY_SENT;
   });
