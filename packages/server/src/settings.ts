@@ -78,11 +78,14 @@ export class Settings {
     );
   }
 
-  /** Engine can run only when these are present. */
+  /** The vault is reachable: a repo plus some GitHub auth. Independent of the LLM key. */
+  vaultConfigured(): boolean {
+    return Boolean(this.get("vault_repo") && (this.get("github_token") || this.hasGithubApp()));
+  }
+
+  /** The full engine can run: a reachable vault plus an Anthropic key. */
   configured(): boolean {
-    return Boolean(
-      this.get("vault_repo") && this.get("anthropic_api_key") && (this.get("github_token") || this.hasGithubApp()),
-    );
+    return this.vaultConfigured() && Boolean(this.get("anthropic_api_key"));
   }
 
   // --- admin password ---

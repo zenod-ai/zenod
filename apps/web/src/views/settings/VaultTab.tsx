@@ -77,7 +77,7 @@ export function VaultTab() {
     api<VaultStatus>("/api/vault")
       .then((result) => {
         setStatus(result)
-        setNotConfigured(!result.configured)
+        setNotConfigured(!result.vaultConfigured)
         setLoadError(null)
       })
       .catch((err: unknown) => {
@@ -201,6 +201,23 @@ export function VaultTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      {!status.anthropicReady && (
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>Add your Anthropic API key</AlertTitle>
+          <AlertDescription>
+            The vault is connected, but storing and asking need an Anthropic API
+            key. Add it in the Keys &amp; models tab to finish setup.
+          </AlertDescription>
+        </Alert>
+      )}
+      {status.cloneError !== null && (
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>Could not reach the vault repository</AlertTitle>
+          <AlertDescription>{status.cloneError}</AlertDescription>
+        </Alert>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Vault</CardTitle>

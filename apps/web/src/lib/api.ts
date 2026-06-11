@@ -101,9 +101,12 @@ export type TokenResponse = {
 export type VaultStatus = {
   repo: string | null
   branch: string | null
+  vaultConfigured: boolean
   configured: boolean
+  anthropicReady: boolean
   cloned: boolean
   headSha: string | null
+  cloneError: string | null
 }
 
 export type LintIssue = {

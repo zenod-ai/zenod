@@ -84,6 +84,20 @@ describe("GitHub App flow", () => {
     expect(settings.configured()).toBe(true); // no PAT needed
   });
 
+  it("vault is configured with repo + app even before the Anthropic key", () => {
+    const settings = runtime.settings;
+    settings.set("vault_repo", "owner/vault");
+    settings.setRaw("github_app_id", "99");
+    settings.setRaw("github_app_private_key", "pem");
+    settings.setRaw("github_app_installation_id", "777");
+
+    expect(settings.vaultConfigured()).toBe(true);
+    expect(settings.configured()).toBe(false); // engine still needs the LLM key
+
+    settings.set("anthropic_api_key", "sk-ant-x");
+    expect(settings.configured()).toBe(true);
+  });
+
   it("setup endpoint stores the installation id and redirects to the UI", async () => {
     const app = createApp(runtime);
     const token = runtime.settings.apiToken();

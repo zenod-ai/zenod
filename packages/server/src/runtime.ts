@@ -4,9 +4,11 @@ import {
   AnthropicBrainLlm,
   createEngine,
   ensureSchemaV1,
+  lintVault,
   SqliteStateStore,
   VaultRepo,
   type BrainEngine,
+  type LintReport,
 } from "zenod";
 import { installationToken } from "./githubApp.js";
 import { Settings } from "./settings.js";
@@ -82,6 +84,12 @@ export class Runtime {
       },
     });
     return this.engine;
+  }
+
+  /** Lint the vault — deterministic, needs only the repo (no Anthropic key). */
+  async lint(): Promise<LintReport> {
+    const repo = await this.getRepo();
+    return lintVault(repo.path);
   }
 
   /** Drop the local clone and re-clone on next use. */

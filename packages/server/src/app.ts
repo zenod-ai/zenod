@@ -119,17 +119,29 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/token/regenerate", (c) => c.json({ token: settings.regenerateApiToken() }));
 
   app.get("/api/vault", async (c) => {
-    const cloned = await access(join(runtime.workdir, ".git")).then(() => true).catch(() => false);
+    const vaultConfigured = settings.vaultConfigured();
+    let cloned = await access(join(runtime.workdir, ".git")).then(() => true).catch(() => false);
     let headSha: string | null = null;
-    if (cloned && settings.configured()) {
-      headSha = await runtime.getRepo().then((r) => r.headSha()).catch(() => null);
+    let cloneError: string | null = null;
+    if (vaultConfigured) {
+      // getRepo clones on first use (and runs the schema-v1 migration)
+      try {
+        const repo = await runtime.getRepo();
+        headSha = await repo.headSha();
+        cloned = true;
+      } catch (err) {
+        cloneError = (err as Error).message;
+      }
     }
     return c.json({
       repo: settings.get("vault_repo"),
       branch: settings.get("vault_branch") ?? "main",
+      vaultConfigured,
       configured: settings.configured(),
+      anthropicReady: Boolean(settings.get("anthropic_api_key")),
       cloned,
       headSha,
+      cloneError,
     });
   });
 
@@ -145,10 +157,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ ok: true, headSha: await repo.headSha() });
   });
 
-  app.get("/api/vault/lint", async (c) => {
-    const engine = await runtime.getEngine();
-    return c.json(await engine.lint());
-  });
+  app.get("/api/vault/lint", async (c) => c.json(await runtime.lint()));
 
   // --- GitHub App connect flow (manifest) ---
 
