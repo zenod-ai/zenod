@@ -15,6 +15,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { MemoryDiagram } from "@/components/memory-diagram"
+import { ModelDiagram } from "@/components/model-diagram"
 import { cn } from "@/lib/utils"
 import alexandria from "@/assets/alexandria.jpg"
 
@@ -364,49 +365,7 @@ export default function App() {
             kicker="The model"
             title="Two parts to every memory. Two roles in one engine."
           />
-          <div className="grid gap-px border border-border bg-border md:grid-cols-2">
-            <div className="bg-background p-8">
-              <p className="label-caps text-muted-foreground">Part one</p>
-              <h3 className="font-display mt-3 text-2xl font-semibold">The evidence</h3>
-              <p className="mt-4 leading-relaxed text-muted-foreground">
-                The verbatim artifact: what was said, the voice note, the
-                document. Date-stamped, filed, immutable — append-only and
-                never edited. A receipt.
-              </p>
-            </div>
-            <div className="bg-background p-8">
-              <p className="label-caps text-muted-foreground">Part two</p>
-              <h3 className="font-display mt-3 text-2xl font-semibold">The meaning</h3>
-              <p className="mt-4 leading-relaxed text-muted-foreground">
-                What the evidence tells us, incorporated into living pages —
-                projects, lines of thinking, life areas. Every claim links back
-                to its receipt:{" "}
-                <em>
-                  "leaning toward the south-facing flat (see voice note, June
-                  3)."
-                </em>
-              </p>
-            </div>
-            <div className="bg-background p-8">
-              <p className="label-caps text-muted-foreground">Role one</p>
-              <h3 className="font-display mt-3 text-2xl font-semibold">The librarian</h3>
-              <p className="mt-4 leading-relaxed text-muted-foreground">
-                Runs on every message. Files the evidence, updates the meaning
-                pages it touches, commits, pushes. When unsure where something
-                belongs, it asks instead of guessing.
-              </p>
-            </div>
-            <div className="bg-background p-8">
-              <p className="label-caps text-muted-foreground">Role two</p>
-              <h3 className="font-display mt-3 text-2xl font-semibold">The compactor</h3>
-              <p className="mt-4 leading-relaxed text-muted-foreground">
-                Runs periodically. Merges duplicates, connects pages that
-                should know about each other, tightens bloat. Adds no
-                information — organizes it, so your memory compounds instead of
-                rotting.
-              </p>
-            </div>
-          </div>
+          <ModelDiagram />
         </section>
 
         {/* ───────────────────────── philosophy ───────────────────────── */}
