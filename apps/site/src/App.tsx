@@ -363,7 +363,7 @@ export default function App() {
         <section className="border-b border-border px-6 py-20 sm:px-12">
           <SectionHeading
             kicker="The model"
-            title="Two parts to every memory. Two roles in one engine."
+            title="Ingest. Curate. Retrieve."
           />
           <ModelDiagram />
         </section>
