@@ -11,6 +11,7 @@ import {
   api,
   errorMessage,
   isNotConfigured,
+  providerLabel,
   type LintResult,
   type VaultStatus,
 } from "@/lib/api"
@@ -201,13 +202,14 @@ export function VaultTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      {!status.anthropicReady && (
+      {!status.llmReady && (
         <Alert>
           <TriangleAlertIcon />
-          <AlertTitle>Add your Anthropic API key</AlertTitle>
+          <AlertTitle>Add your {providerLabel(status.provider)} API key</AlertTitle>
           <AlertDescription>
-            The vault is connected, but storing and asking need an Anthropic API
-            key. Add it in the Keys &amp; models tab to finish setup.
+            The vault is connected, but storing and asking need your{" "}
+            {providerLabel(status.provider)} API key. Add it in the Keys &amp;
+            models tab to finish setup.
           </AlertDescription>
         </Alert>
       )}

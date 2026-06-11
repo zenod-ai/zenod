@@ -74,11 +74,15 @@ export type AuthStatus = {
   configured: boolean
 }
 
+export type Provider = "anthropic" | "openai"
+
 export type SettingsValues = {
   vault_repo: string | null
   vault_branch: string | null
   github_token: string | null
+  provider: Provider
   anthropic_api_key: string | null
+  openai_api_key: string | null
   model_ask: string | null
   model_classify: string | null
 }
@@ -103,7 +107,8 @@ export type VaultStatus = {
   branch: string | null
   vaultConfigured: boolean
   configured: boolean
-  anthropicReady: boolean
+  provider: Provider
+  llmReady: boolean
   cloned: boolean
   headSha: string | null
   cloneError: string | null
@@ -146,4 +151,8 @@ export type GithubReposResponse = {
 
 export function isMaskedSecret(value: string): boolean {
   return value.startsWith("•")
+}
+
+export function providerLabel(provider: Provider): string {
+  return provider === "openai" ? "OpenAI" : "Anthropic"
 }

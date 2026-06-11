@@ -115,7 +115,10 @@ export function App() {
         <Settings
           initialSettings={view.settings}
           initialTab={
-            githubReturn && view.settings.anthropic_api_key === null
+            githubReturn &&
+            (view.settings.provider === "openai"
+              ? view.settings.openai_api_key
+              : view.settings.anthropic_api_key) === null
               ? "keys"
               : undefined
           }

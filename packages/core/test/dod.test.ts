@@ -14,7 +14,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { simpleGit } from "simple-git";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AnthropicBrainLlm } from "../src/llm/anthropic.js";
+import { createBrainLlm } from "../src/llm/aisdk.js";
 import { createEngine } from "../src/engine/engine.js";
 import { ensureSchemaV1 } from "../src/vault/migrate.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
@@ -72,7 +72,7 @@ describe.skipIf(!API_KEY)("M0 Definition of Done (live)", () => {
     state = new SqliteStateStore(":memory:");
     engine = createEngine({
       repo,
-      llm: new AnthropicBrainLlm({ apiKey: API_KEY! }),
+      llm: createBrainLlm({ provider: "anthropic", apiKey: API_KEY! }),
       state,
       location: { repo: "AlfaBlok/obsidian-brain" },
     });

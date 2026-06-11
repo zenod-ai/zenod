@@ -11,6 +11,7 @@ import {
 import {
   api,
   errorMessage,
+  type Provider,
   type TestResult,
   type TokenResponse,
 } from "@/lib/api"
@@ -34,11 +35,28 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 
-const STEPS = ["Password", "Vault", "Anthropic", "Connect"] as const
+const STEPS = ["Password", "Vault", "Model", "Connect"] as const
+
+const KEY_LABEL: Record<Provider, string> = {
+  anthropic: "Anthropic API key",
+  openai: "OpenAI API key",
+}
+
+const KEY_PLACEHOLDER: Record<Provider, string> = {
+  anthropic: "sk-ant-…",
+  openai: "sk-…",
+}
 
 function Stepper({ current }: { current: number }) {
   return (
@@ -337,7 +355,8 @@ function VaultStep({ onDone }: { onDone: () => void }) {
   )
 }
 
-function AnthropicStep({ onDone }: { onDone: () => void }) {
+function ModelStep({ onDone }: { onDone: () => void }) {
+  const [provider, setProvider] = React.useState<Provider>("anthropic")
   const [apiKey, setApiKey] = React.useState("")
   const [testResult, setTestResult] = React.useState<TestResult | null>(null)
   const [testing, setTesting] = React.useState(false)
@@ -348,9 +367,9 @@ function AnthropicStep({ onDone }: { onDone: () => void }) {
     setTesting(true)
     setTestResult(null)
     try {
-      const result = await api<TestResult>("/api/settings/test-anthropic", {
+      const result = await api<TestResult>("/api/settings/test-llm", {
         method: "POST",
-        body: { api_key: apiKey },
+        body: { provider, api_key: apiKey },
       })
       setTestResult(result)
     } catch (err) {
@@ -365,9 +384,11 @@ function AnthropicStep({ onDone }: { onDone: () => void }) {
     setSaving(true)
     setError(null)
     try {
+      const keyField =
+        provider === "openai" ? "openai_api_key" : "anthropic_api_key"
       await api("/api/settings", {
         method: "PUT",
-        body: { anthropic_api_key: apiKey },
+        body: { provider, [keyField]: apiKey },
       })
       onDone()
     } catch (err) {
@@ -379,21 +400,36 @@ function AnthropicStep({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={handleSubmit}>
       <CardHeader>
-        <CardTitle>Anthropic API key</CardTitle>
+        <CardTitle>Model provider</CardTitle>
         <CardDescription>
-          Zenod uses Claude to classify and answer questions about your
-          memories.
+          Zenod uses an LLM to classify and answer questions about your
+          memories. Choose a provider and paste its API key.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="anthropic-key">API key</FieldLabel>
+            <FieldLabel htmlFor="model-provider">Model provider</FieldLabel>
+            <Select
+              value={provider}
+              onValueChange={(value) => setProvider(value as Provider)}
+            >
+              <SelectTrigger id="model-provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anthropic">Anthropic</SelectItem>
+                <SelectItem value="openai">OpenAI</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="model-key">{KEY_LABEL[provider]}</FieldLabel>
             <Input
-              id="anthropic-key"
+              id="model-key"
               type="password"
               autoComplete="off"
-              placeholder="sk-ant-…"
+              placeholder={KEY_PLACEHOLDER[provider]}
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
             />
@@ -528,7 +564,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
       <Card className="w-full max-w-lg">
         {step === 0 && <PasswordStep onDone={() => setStep(1)} />}
         {step === 1 && <VaultStep onDone={() => setStep(2)} />}
-        {step === 2 && <AnthropicStep onDone={() => setStep(3)} />}
+        {step === 2 && <ModelStep onDone={() => setStep(3)} />}
         {step === 3 && <DoneStep onDone={onComplete} />}
       </Card>
     </div>

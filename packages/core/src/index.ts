@@ -32,7 +32,13 @@ export { VaultRepo, type VaultRepoOptions } from "./git/vaultRepo.js";
 export { createEngine, type EngineOptions } from "./engine/engine.js";
 export { appendEvidence, todayString, type EvidenceEntry } from "./engine/evidence.js";
 export { SqliteStateStore } from "./state/sqlite.js";
-export { AnthropicBrainLlm, type AnthropicLlmOptions } from "./llm/anthropic.js";
+export {
+  AiSdkBrainLlm,
+  createBrainLlm,
+  PROVIDER_DEFAULTS,
+  type AiLlmOptions,
+  type Provider,
+} from "./llm/aisdk.js";
 export type {
   AnswerInput,
   AnswerResult,

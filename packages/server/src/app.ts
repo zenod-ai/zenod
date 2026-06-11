@@ -16,8 +16,8 @@ import {
   listInstallationRepos,
 } from "./githubApp.js";
 import { buildMcpServer } from "./mcp.js";
-import { NotConfiguredError, Runtime, testAnthropic, testGithub } from "./runtime.js";
-import { SETTING_KEYS, type SettingKey } from "./settings.js";
+import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
+import { SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
@@ -105,11 +105,15 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json(await testGithub(repo, token));
   });
 
-  app.post("/api/settings/test-anthropic", async (c) => {
-    const body = await c.req.json<{ api_key?: string }>().catch(() => ({}) as Record<string, string>);
-    const key = (body.api_key && !body.api_key.includes("••••") ? body.api_key : null) || settings.get("anthropic_api_key");
+  app.post("/api/settings/test-llm", async (c) => {
+    const body = await c.req
+      .json<{ provider?: Provider; api_key?: string }>()
+      .catch(() => ({}) as Record<string, string>);
+    const provider: Provider = body.provider === "openai" ? "openai" : body.provider === "anthropic" ? "anthropic" : settings.provider();
+    const storedKey = provider === "openai" ? settings.get("openai_api_key") : settings.get("anthropic_api_key");
+    const key = (body.api_key && !body.api_key.includes("••••") ? body.api_key : null) || storedKey;
     if (!key) return c.json({ ok: false, message: "API key is required" });
-    return c.json(await testAnthropic(key));
+    return c.json(await testProviderKey(provider, key));
   });
 
   app.get("/api/token", (c) =>
@@ -138,7 +142,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       branch: settings.get("vault_branch") ?? "main",
       vaultConfigured,
       configured: settings.configured(),
-      anthropicReady: Boolean(settings.get("anthropic_api_key")),
+      provider: settings.provider(),
+      llmReady: Boolean(settings.activeApiKey()),
       cloned,
       headSha,
       cloneError,

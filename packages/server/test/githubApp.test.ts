@@ -84,6 +84,37 @@ describe("GitHub App flow", () => {
     expect(settings.configured()).toBe(true); // no PAT needed
   });
 
+  it("selects the active provider's key for configured()", () => {
+    const settings = runtime.settings;
+    settings.set("vault_repo", "owner/vault");
+    settings.set("github_token", "ghp_x");
+    expect(settings.provider()).toBe("anthropic"); // default
+    expect(settings.configured()).toBe(false);
+
+    settings.set("openai_api_key", "sk-openai");
+    expect(settings.configured()).toBe(false); // openai key set but provider is anthropic
+
+    settings.set("provider", "openai");
+    expect(settings.provider()).toBe("openai");
+    expect(settings.activeApiKey()).toBe("sk-openai");
+    expect(settings.configured()).toBe(true);
+
+    settings.set("provider", "anthropic");
+    expect(settings.configured()).toBe(false); // back to anthropic, no anthropic key
+    settings.set("anthropic_api_key", "sk-ant");
+    expect(settings.configured()).toBe(true);
+  });
+
+  it("masks both provider keys independently", () => {
+    const settings = runtime.settings;
+    settings.set("anthropic_api_key", "sk-ant-secret1234");
+    settings.set("openai_api_key", "sk-openai-secret5678");
+    const masked = settings.masked();
+    expect(masked.anthropic_api_key).toBe("••••1234");
+    expect(masked.openai_api_key).toBe("••••5678");
+    expect(masked.provider).toBe("anthropic");
+  });
+
   it("vault is configured with repo + app even before the Anthropic key", () => {
     const settings = runtime.settings;
     settings.set("vault_repo", "owner/vault");

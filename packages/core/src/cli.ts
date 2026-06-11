@@ -8,7 +8,7 @@ import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
 import { ensureSchemaV1 } from "./vault/migrate.js";
 import { VaultRepo } from "./git/vaultRepo.js";
-import { AnthropicBrainLlm } from "./llm/anthropic.js";
+import { createBrainLlm, type Provider } from "./llm/aisdk.js";
 import { SqliteStateStore } from "./state/sqlite.js";
 import type { BrainEngine } from "./types.js";
 
@@ -51,10 +51,12 @@ function location(): VaultLocation {
 
 /** Full engine bootstrap from env — used by store/ask/chat. */
 async function buildEngine(): Promise<BrainEngine> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const provider: Provider = process.env.ZENOD_PROVIDER === "openai" ? "openai" : "anthropic";
+  const apiKey = provider === "openai" ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
   const repoName = process.env.VAULT_REPO;
   if (!apiKey || !repoName) {
-    console.error("store/ask/chat need ANTHROPIC_API_KEY and VAULT_REPO (and GITHUB_TOKEN to push)");
+    const keyVar = provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
+    console.error(`store/ask/chat need ${keyVar} and VAULT_REPO (and GITHUB_TOKEN to push)`);
     process.exit(2);
   }
   const dataDir = process.env.ZENOD_DATA_DIR ?? join(process.env.HOME ?? ".", ".zenod");
@@ -65,7 +67,8 @@ async function buildEngine(): Promise<BrainEngine> {
   });
   const created = await ensureSchemaV1(repo.path);
   if (created.length > 0) await repo.commitAndPush(`schema: v1 — add ${created.join(", ")}`);
-  const llm = new AnthropicBrainLlm({
+  const llm = createBrainLlm({
+    provider,
     apiKey,
     ...(process.env.ZENOD_MODEL_ASK ? { askModel: process.env.ZENOD_MODEL_ASK } : {}),
     ...(process.env.ZENOD_MODEL_CLASSIFY ? { classifyModel: process.env.ZENOD_MODEL_CLASSIFY } : {}),

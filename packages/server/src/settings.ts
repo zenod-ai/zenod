@@ -6,19 +6,29 @@ export const SETTING_KEYS = [
   "vault_repo",
   "vault_branch",
   "github_token",
+  "provider",
   "anthropic_api_key",
+  "openai_api_key",
   "model_ask",
   "model_classify",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
-const SECRET_KEYS: ReadonlySet<string> = new Set(["github_token", "anthropic_api_key"]);
+export type Provider = "anthropic" | "openai";
+
+const SECRET_KEYS: ReadonlySet<string> = new Set([
+  "github_token",
+  "anthropic_api_key",
+  "openai_api_key",
+]);
 
 const ENV_SEEDS: Record<SettingKey, string> = {
   vault_repo: "VAULT_REPO",
   vault_branch: "VAULT_BRANCH",
   github_token: "GITHUB_TOKEN",
+  provider: "ZENOD_PROVIDER",
   anthropic_api_key: "ANTHROPIC_API_KEY",
+  openai_api_key: "OPENAI_API_KEY",
   model_ask: "ZENOD_MODEL_ASK",
   model_classify: "ZENOD_MODEL_CLASSIFY",
 };
@@ -32,6 +42,7 @@ export class Settings {
       const envValue = env[ENV_SEEDS[key]];
       if (envValue && this.get(key) === null) this.store.setSetting(key, envValue);
     }
+    if (this.get("provider") === null) this.store.setSetting("provider", "anthropic");
     if (this.store.getSetting("api_token") === null) this.regenerateApiToken();
     if (this.store.getSetting("session_secret") === null) {
       this.store.setSetting("session_secret", randomBytes(32).toString("hex"));
@@ -78,14 +89,24 @@ export class Settings {
     );
   }
 
+  /** Active model provider — defaults to Anthropic. */
+  provider(): Provider {
+    return this.get("provider") === "openai" ? "openai" : "anthropic";
+  }
+
+  /** The API key for the active provider. */
+  activeApiKey(): string | null {
+    return this.provider() === "openai" ? this.get("openai_api_key") : this.get("anthropic_api_key");
+  }
+
   /** The vault is reachable: a repo plus some GitHub auth. Independent of the LLM key. */
   vaultConfigured(): boolean {
     return Boolean(this.get("vault_repo") && (this.get("github_token") || this.hasGithubApp()));
   }
 
-  /** The full engine can run: a reachable vault plus an Anthropic key. */
+  /** The full engine can run: a reachable vault plus the active provider's key. */
   configured(): boolean {
-    return this.vaultConfigured() && Boolean(this.get("anthropic_api_key"));
+    return this.vaultConfigured() && Boolean(this.activeApiKey());
   }
 
   // --- admin password ---

@@ -6,6 +6,7 @@ import {
   api,
   errorMessage,
   type GithubAppStatus,
+  type Provider,
   type SettingsResponse,
   type SettingsValues,
   type TestResult,
@@ -29,13 +30,22 @@ import {
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 
 type FormState = {
   vault_repo: string
   vault_branch: string
   github_token: string
+  provider: Provider
   anthropic_api_key: string
+  openai_api_key: string
   model_ask: string
   model_classify: string
 }
@@ -45,10 +55,37 @@ function toFormState(settings: SettingsValues): FormState {
     vault_repo: settings.vault_repo ?? "",
     vault_branch: settings.vault_branch ?? "",
     github_token: settings.github_token ?? "",
+    provider: settings.provider,
     anthropic_api_key: settings.anthropic_api_key ?? "",
+    openai_api_key: settings.openai_api_key ?? "",
     model_ask: settings.model_ask ?? "",
     model_classify: settings.model_classify ?? "",
   }
+}
+
+const KEY_FIELD: Record<Provider, "anthropic_api_key" | "openai_api_key"> = {
+  anthropic: "anthropic_api_key",
+  openai: "openai_api_key",
+}
+
+const KEY_LABEL: Record<Provider, string> = {
+  anthropic: "Anthropic API key",
+  openai: "OpenAI API key",
+}
+
+const KEY_PLACEHOLDER: Record<Provider, string> = {
+  anthropic: "sk-ant-…",
+  openai: "sk-…",
+}
+
+const ASK_PLACEHOLDER: Record<Provider, string> = {
+  anthropic: "claude-sonnet-4-6",
+  openai: "gpt-4o",
+}
+
+const CLASSIFY_PLACEHOLDER: Record<Provider, string> = {
+  anthropic: "claude-haiku-4-5",
+  openai: "gpt-4o-mini",
 }
 
 function TestNote({ result }: { result: TestResult }) {
@@ -63,15 +100,17 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
   const [form, setForm] = React.useState<FormState>(() => toFormState(initial))
   const [saving, setSaving] = React.useState(false)
   const [testingGithub, setTestingGithub] = React.useState(false)
-  const [testingAnthropic, setTestingAnthropic] = React.useState(false)
+  const [testingLlm, setTestingLlm] = React.useState(false)
   const [githubResult, setGithubResult] = React.useState<TestResult | null>(
     null
   )
-  const [anthropicResult, setAnthropicResult] =
-    React.useState<TestResult | null>(null)
+  const [llmResult, setLlmResult] = React.useState<TestResult | null>(null)
   const [appInstalled, setAppInstalled] = React.useState(false)
 
-  function update<K extends keyof FormState>(key: K, value: string) {
+  const keyField = KEY_FIELD[form.provider]
+  const apiKeyValue = form[keyField]
+
+  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }))
   }
 
@@ -103,19 +142,19 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
     }
   }
 
-  async function handleTestAnthropic() {
-    setTestingAnthropic(true)
-    setAnthropicResult(null)
+  async function handleTestLlm() {
+    setTestingLlm(true)
+    setLlmResult(null)
     try {
-      const result = await api<TestResult>("/api/settings/test-anthropic", {
+      const result = await api<TestResult>("/api/settings/test-llm", {
         method: "POST",
-        body: { api_key: form.anthropic_api_key },
+        body: { provider: form.provider, api_key: apiKeyValue },
       })
-      setAnthropicResult(result)
+      setLlmResult(result)
     } catch (err) {
-      setAnthropicResult({ ok: false, message: errorMessage(err) })
+      setLlmResult({ ok: false, message: errorMessage(err) })
     } finally {
-      setTestingAnthropic(false)
+      setTestingLlm(false)
     }
   }
 
@@ -215,28 +254,47 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
               </Field>
             )}
             <Field>
-              <FieldLabel htmlFor="keys-anthropic-key">
-                Anthropic API key
+              <FieldLabel htmlFor="keys-provider">Model provider</FieldLabel>
+              <Select
+                value={form.provider}
+                onValueChange={(value) =>
+                  update("provider", value as Provider)
+                }
+              >
+                <SelectTrigger id="keys-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="anthropic">Anthropic</SelectItem>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Switching provider — clear the model fields to use that
+                provider&apos;s defaults, or set explicit model IDs.
+              </FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="keys-llm-key">
+                {KEY_LABEL[form.provider]}
               </FieldLabel>
               <div className="flex items-center gap-2">
                 <Input
-                  id="keys-anthropic-key"
+                  id="keys-llm-key"
                   type="password"
                   autoComplete="off"
-                  placeholder="sk-ant-…"
-                  value={form.anthropic_api_key}
-                  onChange={(event) =>
-                    update("anthropic_api_key", event.target.value)
-                  }
+                  placeholder={KEY_PLACEHOLDER[form.provider]}
+                  value={apiKeyValue}
+                  onChange={(event) => update(keyField, event.target.value)}
                 />
                 <Button
                   type="button"
                   variant="outline"
                   className="shrink-0"
-                  disabled={testingAnthropic}
-                  onClick={handleTestAnthropic}
+                  disabled={testingLlm}
+                  onClick={handleTestLlm}
                 >
-                  {testingAnthropic ? (
+                  {testingLlm ? (
                     <Spinner />
                   ) : (
                     <PlugZapIcon data-icon="inline-start" />
@@ -244,16 +302,14 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
                   Test
                 </Button>
               </div>
-              {anthropicResult !== null && (
-                <TestNote result={anthropicResult} />
-              )}
+              {llmResult !== null && <TestNote result={llmResult} />}
             </Field>
             <FieldSeparator />
             <Field>
               <FieldLabel htmlFor="keys-model-ask">Ask model</FieldLabel>
               <Input
                 id="keys-model-ask"
-                placeholder="claude-sonnet-4-6"
+                placeholder={ASK_PLACEHOLDER[form.provider]}
                 autoComplete="off"
                 value={form.model_ask}
                 onChange={(event) => update("model_ask", event.target.value)}
@@ -268,7 +324,7 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
               </FieldLabel>
               <Input
                 id="keys-model-classify"
-                placeholder="claude-haiku-4-5"
+                placeholder={CLASSIFY_PLACEHOLDER[form.provider]}
                 autoComplete="off"
                 value={form.model_classify}
                 onChange={(event) =>

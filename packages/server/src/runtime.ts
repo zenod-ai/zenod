@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import {
-  AnthropicBrainLlm,
+  createBrainLlm,
   createEngine,
   ensureSchemaV1,
   lintVault,
@@ -11,7 +11,7 @@ import {
   type LintReport,
 } from "zenod";
 import { installationToken } from "./githubApp.js";
-import { Settings } from "./settings.js";
+import { Settings, type Provider } from "./settings.js";
 
 export class NotConfiguredError extends Error {
   constructor() {
@@ -69,8 +69,9 @@ export class Runtime {
     if (!this.settings.configured()) throw new NotConfiguredError();
 
     const repo = await this.getRepo();
-    const llm = new AnthropicBrainLlm({
-      apiKey: this.settings.get("anthropic_api_key")!,
+    const llm = createBrainLlm({
+      provider: this.settings.provider(),
+      apiKey: this.settings.activeApiKey()!,
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
       ...(this.settings.get("model_classify") ? { classifyModel: this.settings.get("model_classify")! } : {}),
     });
@@ -117,15 +118,24 @@ export async function testGithub(repo: string, token: string): Promise<{ ok: boo
   }
 }
 
-/** Verify an Anthropic API key. */
-export async function testAnthropic(apiKey: string): Promise<{ ok: boolean; message: string }> {
+/** Verify the API key for a given provider against its models endpoint. */
+export async function testProviderKey(
+  provider: Provider,
+  apiKey: string,
+): Promise<{ ok: boolean; message: string }> {
+  const config =
+    provider === "openai"
+      ? { url: "https://api.openai.com/v1/models", headers: { Authorization: `Bearer ${apiKey}` }, name: "OpenAI" }
+      : {
+          url: "https://api.anthropic.com/v1/models",
+          headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+          name: "Anthropic",
+        };
   try {
-    const response = await fetch("https://api.anthropic.com/v1/models", {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-    });
+    const response = await fetch(config.url, { headers: config.headers });
     if (response.ok) return { ok: true, message: "key accepted" };
-    if (response.status === 401) return { ok: false, message: "key rejected by Anthropic" };
-    return { ok: false, message: `Anthropic returned ${response.status}` };
+    if (response.status === 401) return { ok: false, message: `key rejected by ${config.name}` };
+    return { ok: false, message: `${config.name} returned ${response.status}` };
   } catch (err) {
     return { ok: false, message: `network error: ${(err as Error).message}` };
   }
