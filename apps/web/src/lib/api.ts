@@ -148,6 +148,25 @@ export type LintResult = {
   checkedFiles: number
 }
 
+export type ChatSource = {
+  path: string
+  githubUrl: string
+}
+
+export type ChatStored = {
+  evidenceRef: string
+  pagesTouched: string[]
+  commitSha: string
+  githubUrls: string[]
+  question?: string
+}
+
+export type ChatReply = {
+  text: string
+  sources: ChatSource[]
+  stored?: ChatStored
+}
+
 export type GithubAppStatus = {
   created: boolean
   installed: boolean

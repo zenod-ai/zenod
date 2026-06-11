@@ -6,6 +6,7 @@ import { api, errorMessage, type SettingsValues } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ChatTab } from "@/views/ChatTab"
 import { ConnectionsTab } from "@/views/settings/ConnectionsTab"
 import { KeysTab } from "@/views/settings/KeysTab"
 import { VaultTab } from "@/views/settings/VaultTab"
@@ -16,7 +17,7 @@ export function Settings({
   onLoggedOut,
 }: {
   initialSettings: SettingsValues
-  initialTab?: "vault" | "keys" | "connections"
+  initialTab?: "chat" | "vault" | "keys" | "connections"
   onLoggedOut: () => void
 }) {
   const [loggingOut, setLoggingOut] = React.useState(false)
@@ -52,12 +53,16 @@ export function Settings({
         </Button>
       </header>
 
-      <Tabs defaultValue={initialTab ?? "vault"}>
+      <Tabs defaultValue={initialTab ?? "chat"}>
         <TabsList>
+          <TabsTrigger value="chat">Chat</TabsTrigger>
           <TabsTrigger value="vault">Vault</TabsTrigger>
           <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>
           <TabsTrigger value="connections">Connections</TabsTrigger>
         </TabsList>
+        <TabsContent value="chat" className="mt-4">
+          <ChatTab />
+        </TabsContent>
         <TabsContent value="vault" className="mt-4">
           <VaultTab />
         </TabsContent>
