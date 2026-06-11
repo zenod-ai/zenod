@@ -32,6 +32,12 @@ describe("searchVault", () => {
     expect(hit!.snippet).toBe("(attachment artifact)");
   });
 
+  it("matches any term in multi-word queries (OR, not phrase)", async () => {
+    // no note contains this exact phrase; each term appears somewhere
+    const hits = await searchVault(FIXTURE, "insurance xyzzy-nonexistent-9000");
+    expect(hits.map((h) => h.path)).toContain("Areas/Insurance.md");
+  });
+
   it("returns nothing for nonsense queries", async () => {
     expect(await searchVault(FIXTURE, "xyzzy-nonexistent-9000")).toEqual([]);
   });

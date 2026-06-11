@@ -61,7 +61,7 @@ export async function searchVault(vaultPath: string, query: string, location: Va
   }
 
   // Pass 2: bodies.
-  const bodyHits = await grepBodies(vaultPath, query).catch(() => scanBodies(vaultPath, terms));
+  const bodyHits = await grepBodies(vaultPath, terms).catch(() => scanBodies(vaultPath, terms));
   for (const hit of bodyHits) bump(hit.path, 1, hit.line.trim().slice(0, 200));
 
   return [...scores.entries()]
@@ -80,12 +80,22 @@ interface BodyHit {
   line: string;
 }
 
-/** ripgrep pass: case-insensitive fixed-string match over markdown bodies. */
-function grepBodies(vaultPath: string, query: string): Promise<BodyHit[]> {
+/** ripgrep pass: case-insensitive fixed-string match over markdown bodies, any term matches (OR — same semantics as scanBodies). */
+function grepBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
   return new Promise((resolve, reject) => {
     const rg = spawn(
       "rg",
-      ["--json", "-i", "--fixed-strings", "--glob", "*.md", "--glob", "!.obsidian/**", query, "."],
+      [
+        "--json",
+        "-i",
+        "--fixed-strings",
+        "--glob",
+        "*.md",
+        "--glob",
+        "!.obsidian/**",
+        ...terms.flatMap((t) => ["-e", t]),
+        ".",
+      ],
       { cwd: vaultPath },
     );
     const hits: BodyHit[] = [];
