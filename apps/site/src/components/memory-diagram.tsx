@@ -1,10 +1,28 @@
-import { DatabaseIcon, LandmarkIcon } from "lucide-react"
+import { FolderIcon, LandmarkIcon, LockIcon } from "lucide-react"
+
+const agents = ["Claude", "Codex", "Hermes", "Your laptop"]
 
 const silos = [
-  { name: "Claude", note: "its own memory" },
-  { name: "Codex", note: "another memory" },
-  { name: "Hermes", note: "a third memory" },
-  { name: "Your laptop", note: "scattered files" },
+  {
+    icon: LockIcon,
+    title: "Claude's memory of you",
+    note: "locked in their cloud — can't open it, can't export it",
+  },
+  {
+    icon: LockIcon,
+    title: "Codex's memory of you",
+    note: "a different story — and it never talks to the others",
+  },
+  {
+    icon: LockIcon,
+    title: "Hermes' memory of you",
+    note: "a third version, drifting further out of sync",
+  },
+  {
+    icon: FolderIcon,
+    title: "Loose files",
+    note: "notes and documents with no librarian at all",
+  },
 ]
 
 const doors = [
@@ -13,6 +31,18 @@ const doors = [
   { name: "Hermes", via: "via MCP", line: "“pull the notes from last week's call.”" },
   { name: "Your laptop", via: "direct", line: "open the vault in Obsidian — it's just markdown." },
 ]
+
+/* Four parallel dead-end lines — every agent feeds its own silo. Static on purpose. */
+function DeadEndLines() {
+  return (
+    <svg viewBox="0 0 800 44" preserveAspectRatio="none" aria-hidden className="h-11 w-full">
+      <path d="M100 0 L100 44" className="dead-line" />
+      <path d="M300 0 L300 44" className="dead-line" />
+      <path d="M500 0 L500 44" className="dead-line" />
+      <path d="M700 0 L700 44" className="dead-line" />
+    </svg>
+  )
+}
 
 /* Four paths converging from the door columns into the Zenod node. */
 function ConvergingLines() {
@@ -45,19 +75,36 @@ export function MemoryDiagram() {
       {/* ── before ── */}
       <p className="label-caps text-muted-foreground">Without Zenod</p>
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {silos.map((s) => (
-          <div key={s.name} className="border border-dashed border-border p-4 opacity-80">
-            <p className="label-caps text-muted-foreground">{s.name}</p>
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground/70">
-              <DatabaseIcon className="size-3 shrink-0" /> {s.note}
+        {agents.map((name) => (
+          <div key={name} className="border border-dashed border-border p-4 opacity-80">
+            <p className="label-caps text-muted-foreground">{name}</p>
+          </div>
+        ))}
+      </div>
+      <DeadEndLines />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {silos.map(({ icon: Icon, title, note }) => (
+          <div
+            key={title}
+            className="border border-dashed border-border bg-muted/40 p-4 opacity-80"
+          >
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Icon className="size-3 shrink-0" /> {title}
+            </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground/70">
+              {note}
             </p>
           </div>
         ))}
       </div>
-      <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-        Four agents, four memories — each remembering a different you, none of
-        them complete, none of them yours. Fragments rot in silos you can't
-        open, diff, or take with you.
+      <p className="mt-5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+        Four agents, four contradictory memories of you — each one partial,
+        none of them shared.{" "}
+        <span className="text-foreground">
+          And none of them yours: you can't open them, diff them, or take them
+          with you.
+        </span>{" "}
+        Your own context, locked in somebody else's database.
       </p>
 
       {/* ── after ── */}
@@ -94,7 +141,9 @@ export function MemoryDiagram() {
       <div className="mx-auto max-w-md border border-border bg-card p-5 text-center">
         <p className="flex items-center justify-center gap-2">
           <LandmarkIcon className="size-4 text-rust" strokeWidth={1.5} />
-          <span className="font-display text-xl font-semibold">Your vault</span>
+          <span className="font-display text-xl font-semibold">
+            Your one Obsidian vault
+          </span>
         </p>
         <p className="label-caps mt-2 text-muted-foreground">
           markdown · git · your GitHub account

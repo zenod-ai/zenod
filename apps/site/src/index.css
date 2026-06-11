@@ -167,6 +167,15 @@
   }
 }
 
+/* Dead-end lines in the "without Zenod" panel — static and grey on purpose. */
+.dead-line {
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1;
+  stroke-dasharray: 4 6;
+  opacity: 0.4;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flow-line {
     animation: none;

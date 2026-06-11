@@ -36,6 +36,11 @@ const GITHUB_URL = "https://github.com/zenod-ai/zenod"
 const DOCS_URL = "https://github.com/zenod-ai/zenod/tree/main/docs"
 const DOCTRINE_URL =
   "https://github.com/zenod-ai/zenod/blob/main/docs/LIBRARIAN-DOCTRINE.md"
+const HOSTED_URL = `${GITHUB_URL}/issues/new?title=${encodeURIComponent(
+  "Hosted Zenod — request access"
+)}&body=${encodeURIComponent(
+  "I'd like access to the hosted version of Zenod when it ships.\n\nHow I plan to use it: "
+)}`
 
 const INSTALL_CMD = `git clone ${GITHUB_URL}.git && cd zenod
 docker build -t zenod . && docker run -d -p 8080:8080 -v zenod-data:/data zenod`
@@ -288,7 +293,15 @@ export default function App() {
                   <ArrowUpRightIcon data-icon="inline-end" />
                 </a>
               </Button>
+              <Button asChild size="lg" variant="outline" className="rounded-none px-5">
+                <a href={HOSTED_URL} target="_blank" rel="noreferrer">
+                  Hosted version — request access
+                </a>
+              </Button>
             </div>
+            <p className="label-caps mt-4 text-muted-foreground/70">
+              Self-host free forever · hosted version coming
+            </p>
           </div>
         </section>
 
