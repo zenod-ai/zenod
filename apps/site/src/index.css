@@ -167,6 +167,14 @@
   }
 }
 
+/* Read channel — open, unguarded, solid grey. */
+.read-line {
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1.25;
+  opacity: 0.45;
+}
+
 /* Dead-end lines in the "without Zenod" panel — static and grey on purpose. */
 .dead-line {
   fill: none;

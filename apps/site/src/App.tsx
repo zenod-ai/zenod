@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { BetDiagram } from "@/components/bet-diagram"
 import { MemoryDiagram } from "@/components/memory-diagram"
 import { ModelDiagram } from "@/components/model-diagram"
 import { cn } from "@/lib/utils"
@@ -37,10 +38,12 @@ const GITHUB_URL = "https://github.com/zenod-ai/zenod"
 const DOCS_URL = "https://github.com/zenod-ai/zenod/tree/main/docs"
 const DOCTRINE_URL =
   "https://github.com/zenod-ai/zenod/blob/main/docs/LIBRARIAN-DOCTRINE.md"
+const ROADMAP_URL =
+  "https://github.com/zenod-ai/zenod/blob/main/docs/ROADMAP.md"
 const HOSTED_URL = `${GITHUB_URL}/issues/new?title=${encodeURIComponent(
-  "Hosted Zenod — request access"
+  "Hosted Zenod — alpha access request"
 )}&body=${encodeURIComponent(
-  "I'd like access to the hosted version of Zenod when it ships.\n\nHow I plan to use it: "
+  "I'd like to join the waitlist for the hosted Zenod alpha (first 100 users free).\n\nHow I plan to use it: "
 )}`
 
 const INSTALL_CMD = `git clone ${GITHUB_URL}.git && cd zenod
@@ -296,12 +299,12 @@ export default function App() {
               </Button>
               <Button asChild size="lg" variant="outline" className="rounded-none px-5">
                 <a href={HOSTED_URL} target="_blank" rel="noreferrer">
-                  Hosted version — request access
+                  Request alpha access
                 </a>
               </Button>
             </div>
             <p className="label-caps mt-4 text-muted-foreground/70">
-              Self-host free forever · hosted version coming
+              Self-host free forever · hosted alpha — first 100 users free
             </p>
           </div>
         </section>
@@ -366,6 +369,60 @@ export default function App() {
             title="Ingest. Curate. Retrieve."
           />
           <ModelDiagram />
+        </section>
+
+        {/* ───────────────────────── the bet ───────────────────────── */}
+        <section className="border-b border-border px-6 py-20 sm:px-12">
+          <SectionHeading
+            kicker="The bet"
+            title="Everybody reads. One writes."
+          />
+          <p className="-mt-4 mb-10 max-w-2xl leading-relaxed text-muted-foreground">
+            Zenod is an opinionated bet on structure. You won't be married to
+            one agent — you'll use ten, each good at something different. What
+            can't survive that world is scattered context. So: one library,
+            open to every reader, with a single gatekeeper holding the pen.
+          </p>
+          <BetDiagram />
+          <div className="mt-12 grid gap-px border border-border bg-border sm:grid-cols-2">
+            {[
+              {
+                title: "Your data, period.",
+                body: "The library is a private repo in your GitHub account. It exists with or without us, readable by anything you authorize. The engine is open source (AGPL) — nothing funny going on.",
+              },
+              {
+                title: "A librarian you hire, not a landlord.",
+                body: "Zenod is a memory manager you hire to keep that repo tidy. Switch managers any time and the library stays — every book, every index. We're betting you'll stay because we're good at the job.",
+              },
+              {
+                title: "Ten agents, zero retraining.",
+                body: "Don't teach ten agents your filing system and hope they comply. They all talk to the gatekeeper; the gatekeeper enforces the rules. Your context stays whole, no matter what's on the other end.",
+              },
+              {
+                title: "Tidiness is what intelligence grows on.",
+                body: "Keep the dots filed and cited, and higher structure emerges from connecting them — areas, ideas, lines of thinking. A tidy library compounds; a junk drawer just accumulates.",
+              },
+            ].map((t) => (
+              <div key={t.title} className="bg-background p-6">
+                <h3 className="font-display text-lg font-semibold">{t.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {t.body}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
+            And this librarian is just getting started —{" "}
+            <a
+              href={ROADMAP_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-rust underline-offset-4 hover:underline"
+            >
+              see the roadmap
+            </a>
+            .
+          </p>
         </section>
 
         {/* ───────────────────────── philosophy ───────────────────────── */}
@@ -558,6 +615,14 @@ export default function App() {
                 className="flex items-center gap-1.5 transition-colors hover:text-rust"
               >
                 <BookOpenIcon className="size-3.5" /> Docs
+              </a>
+              <a
+                href={ROADMAP_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="transition-colors hover:text-rust"
+              >
+                Roadmap
               </a>
               <a
                 href={`${GITHUB_URL}/blob/main/LICENSE`}
