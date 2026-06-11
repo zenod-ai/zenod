@@ -31,6 +31,13 @@ export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string
 
 const MAX_STEPS = 15;
 
+/**
+ * Classification schema. Every field is REQUIRED — optional fields are
+ * expressed as `.nullable()`, never `.optional()`. OpenAI's strict structured
+ * outputs reject a `required` array that omits any property key, so an
+ * `.optional()` field there is a 400. nullable-but-required works on both
+ * OpenAI and Anthropic. (Regression-tested in test/schema-llm.test.ts.)
+ */
 const classificationSchema = z.object({
   confidence: z.number().min(0).max(1).describe("how sure you are about where this memory belongs"),
   summary: z.string().describe("one line, imperative, for the commit message"),
@@ -46,9 +53,12 @@ const classificationSchema = z.object({
     .describe("meaning pages this memory touches (1-3)"),
   question: z
     .string()
-    .optional()
-    .describe("when confidence is low: one concrete question for the user about where this belongs"),
+    .nullable()
+    .describe("when confidence is low: one concrete question for the user about where this belongs; null otherwise"),
 });
+
+/** Exposed for regression testing the OpenAI-strict constraint. */
+export { classificationSchema };
 
 /**
  * The single LLM implementation, provider-agnostic via the Vercel AI SDK.
