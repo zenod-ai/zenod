@@ -10,8 +10,12 @@ export interface BrainLlm {
   classify(input: ClassifyInput): Promise<Classification>;
   /** Compose the full new content of one meaning page, integrating the evidence. */
   composePage(input: ComposePageInput): Promise<string>;
-  /** Read-only agent loop over the vault; returns the synthesized answer. */
-  answer(input: AnswerInput, tools: VaultReadTools): Promise<AnswerResult>;
+  /**
+   * Agent loop over the vault; returns the synthesized answer. Read-only,
+   * unless taskTools is given (chat surface) — then the loop may also
+   * propose and, after explicit user approval, execute vault work.
+   */
+  answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult>;
   /**
    * Librarian work loop. Without writeTools it surveys and returns a plan
    * (propose mode); with writeTools it executes against the working tree
@@ -103,6 +107,16 @@ export interface WorkLoopInput {
 export interface WorkLoopResult {
   /** Propose mode: the plan. Execute mode: one-line summary first (commit message), then details. */
   text: string;
+}
+
+/**
+ * Vault-work callbacks for the chat loop — thin wrappers over engine.work().
+ * proposeTask returns the plan to relay; executeTask must only be called with
+ * a plan the user explicitly approved in the conversation.
+ */
+export interface VaultTaskTools {
+  proposeTask(objective: string): Promise<string>;
+  executeTask(objective: string, plan: string): Promise<string>;
 }
 
 export interface AnswerResult {

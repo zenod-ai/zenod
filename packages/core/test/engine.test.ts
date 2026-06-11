@@ -15,6 +15,7 @@ import type {
   ClassifyInput,
   ComposePageInput,
   VaultReadTools,
+  VaultTaskTools,
   VaultWriteTools,
   WorkLoopInput,
   WorkLoopResult,
@@ -64,7 +65,11 @@ class FakeLlm implements BrainLlm {
     ].join("\n");
   }
 
-  async answer(input: AnswerInput, tools: VaultReadTools): Promise<AnswerResult> {
+  async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult> {
+    if (taskTools && input.question.startsWith("EXEC:")) {
+      const text = await taskTools.executeTask(input.question.slice(5).trim(), "approved plan");
+      return { text, readPaths: [] };
+    }
     await tools.searchVault(input.question);
     const note = await tools.readNote("Areas/Insurance.md");
     return { text: `You have travel insurance with Axa. (${note.length} chars read)`, readPaths: ["Areas/Insurance.md"] };
@@ -303,6 +308,22 @@ describe("BrainEngine", () => {
     expect(result.committed).toBe(false);
     expect(llm.workCalls).toBe(3); // initial + 2 retries
     await expect(readFile(join(repo.path, "Notes/Broken.md"), "utf8")).rejects.toThrow();
+    expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("chat can execute approved vault work through its task tools", async () => {
+    await writeFile(join(repo.path, "Inbox/junk.md"), "scratch\n");
+    await simpleGit(repo.path).add(["-A"]).commit("seed junk").push("origin", "main");
+    llm.workScript = async (_tools, writeTools) => {
+      await writeTools.deleteNote("Inbox/junk.md");
+      return "sweep: deleted Inbox/junk.md";
+    };
+
+    const reply = await engine().chat("EXEC: sweep the junk", "web");
+
+    expect(reply.text).toContain("DONE");
+    expect(reply.text).toMatch(/commit: [0-9a-f]{40}/);
+    await expect(readFile(join(repo.path, "Inbox/junk.md"), "utf8")).rejects.toThrow();
     expect((await engine().lint()).errors).toEqual([]);
   });
 

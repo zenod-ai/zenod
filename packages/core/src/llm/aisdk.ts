@@ -10,6 +10,7 @@ import type {
   ClassifyInput,
   ComposePageInput,
   VaultReadTools,
+  VaultTaskTools,
   VaultWriteTools,
   WorkLoopInput,
   WorkLoopResult,
@@ -159,19 +160,44 @@ export class AiSdkBrainLlm implements BrainLlm {
     return text.replace(/^```(?:markdown|md)?\n/, "").replace(/\n```\s*$/, "").trimEnd() + "\n";
   }
 
-  async answer(input: AnswerInput, tools: VaultReadTools): Promise<AnswerResult> {
+  async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult> {
     const readPaths = new Set<string>();
     const messages: ModelMessage[] = [
       ...input.conversation.map((m): ModelMessage => ({ role: m.role, content: m.text })),
       { role: "user", content: input.question },
     ];
 
+    const taskToolSet = taskTools
+      ? {
+          propose_vault_task: tool({
+            description:
+              "Plan vault maintenance/reorganization (sweep the Inbox, merge or refile pages, restructure folders). The librarian surveys the vault read-only and returns a concrete operation-by-operation plan. NOTHING is changed. Relay the returned plan to the user verbatim and ask for approval. Use whenever the user asks to clean up, move, reorganize, or restructure.",
+            inputSchema: z.object({
+              objective: z.string().describe("what to accomplish, in the user's terms"),
+            }),
+            execute: ({ objective }) => caught(() => taskTools.proposeTask(objective)),
+          }),
+          execute_vault_task: tool({
+            description:
+              "Execute a previously proposed vault plan. ONLY call this after the user has explicitly approved that plan in this conversation ('yes', 'go ahead', 'do it'). Pass the approved plan exactly as it was shown (minus any parts the user rejected). Changes are validated and land as one git commit; evidence (Log/, _attachments/) can never be touched.",
+            inputSchema: z.object({
+              objective: z.string().describe("the original objective"),
+              plan: z.string().describe("the user-approved plan, verbatim"),
+            }),
+            execute: ({ objective, plan }) => caught(() => taskTools.executeTask(objective, plan)),
+          }),
+        }
+      : {};
+
     const { text } = await generateText({
       model: this.model(this.askModelId),
-      system: input.vaultBriefing,
+      system: taskTools
+        ? `${input.vaultBriefing}\n\nYou CAN reorganize the vault: propose_vault_task plans the work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute without showing the plan and getting an explicit yes first.`
+        : input.vaultBriefing,
       messages,
       stopWhen: stepCountIs(MAX_STEPS),
       tools: {
+        ...taskToolSet,
         search_vault: tool({
           description:
             "Search the vault. Call this first for any question about the user's knowledge — returns ranked paths with snippets. Covers meaning pages, Log/ evidence files (verbatim transcripts, source links), and _attachments/ artifact filenames. If the first query misses, retry with different terms before giving up.",

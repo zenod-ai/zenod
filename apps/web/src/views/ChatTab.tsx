@@ -1,5 +1,7 @@
 import * as React from "react"
 import { BrainIcon, ExternalLinkIcon, SendIcon } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 
 import {
   api,
@@ -21,6 +23,40 @@ import {
 } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+
+function AssistantMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: (props) => <p className="my-1.5 first:mt-0 last:mb-0" {...props} />,
+        ul: (props) => <ul className="my-1.5 list-disc pl-5" {...props} />,
+        ol: (props) => <ol className="my-1.5 list-decimal pl-5" {...props} />,
+        li: (props) => <li className="my-0.5" {...props} />,
+        h1: (props) => <p className="mt-2 mb-1 font-semibold" {...props} />,
+        h2: (props) => <p className="mt-2 mb-1 font-semibold" {...props} />,
+        h3: (props) => <p className="mt-2 mb-1 font-semibold" {...props} />,
+        a: (props) => (
+          <a className="underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />
+        ),
+        code: (props) => (
+          <code className="rounded bg-background/60 px-1 py-0.5 font-mono text-[0.85em]" {...props} />
+        ),
+        pre: (props) => (
+          <pre className="my-1.5 overflow-x-auto rounded-md bg-background/60 p-2 font-mono text-xs" {...props} />
+        ),
+        blockquote: (props) => (
+          <blockquote className="my-1.5 border-l-2 border-border pl-3 text-muted-foreground" {...props} />
+        ),
+        table: (props) => <table className="my-1.5 w-full text-left text-xs" {...props} />,
+        th: (props) => <th className="border-b border-border px-2 py-1 font-medium" {...props} />,
+        td: (props) => <td className="border-b border-border/50 px-2 py-1" {...props} />,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  )
+}
 
 type Message = {
   role: "user" | "assistant"
@@ -141,10 +177,10 @@ export function ChatTab() {
                   className={
                     message.error
                       ? "rounded-xl bg-destructive/10 px-3 py-2 text-sm whitespace-pre-wrap text-destructive"
-                      : "rounded-xl bg-muted px-3 py-2 text-sm whitespace-pre-wrap"
+                      : "rounded-xl bg-muted px-3 py-2 text-sm"
                   }
                 >
-                  {message.text}
+                  {message.error ? message.text : <AssistantMarkdown text={message.text} />}
                 </div>
                 {message.stored && <StoredReceipt stored={message.stored} />}
                 {message.sources && <SourceLinks sources={message.sources} />}
@@ -154,7 +190,7 @@ export function ChatTab() {
           {busy && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Spinner className="size-4" />
-              Reading the vault…
+              Working — reads are seconds, reorganizations can take a few minutes…
             </div>
           )}
           <div ref={endRef} />

@@ -415,6 +415,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
       stored = await store({ content: message, source: surface });
     }
 
+    const taskTools = {
+      proposeTask: async (objective: string) => {
+        const proposal = await work({ objective });
+        return proposal.text;
+      },
+      executeTask: async (objective: string, plan: string) => {
+        const executed = await work({ objective, plan });
+        return [
+          executed.mode === "failed" ? "FAILED (rolled back, nothing committed)" : "DONE",
+          executed.text,
+          ...(executed.commitSha ? [`commit: ${executed.commitSha}`] : []),
+          ...(executed.changedPaths?.length ? [`changed: ${executed.changedPaths.join(", ")}`] : []),
+        ].join("\n");
+      },
+    };
+
     const result = await llm.answer(
       {
         question: message,
@@ -422,6 +438,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
       },
       readTools(),
+      taskTools,
     );
     await state.appendMessage(conversationId, "assistant", result.text, surface);
 
