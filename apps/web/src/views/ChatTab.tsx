@@ -5,10 +5,10 @@ import remarkGfm from "remark-gfm"
 
 import {
   api,
+  chatStream,
   errorMessage,
   isNotConfigured,
   type ChatHistoryResponse,
-  type ChatReply,
   type ChatSource,
   type ChatStored,
 } from "@/lib/api"
@@ -140,37 +140,38 @@ export function ChatTab() {
     }
   }
 
+  // Update the streaming assistant message — always the last in the list while busy.
+  function patchStreaming(patch: (last: Message) => Message) {
+    setMessages((current) => {
+      const next = current.slice()
+      const last = next[next.length - 1]
+      if (last && last.role === "assistant") next[next.length - 1] = patch(last)
+      return next
+    })
+  }
+
   async function send() {
     const message = input.trim()
     if (!message || busy) return
     setInput("")
-    setMessages((current) => [...current, { role: "user", text: message }])
+    // Append the user turn plus an empty assistant bubble to stream into.
+    setMessages((current) => [
+      ...current,
+      { role: "user", text: message },
+      { role: "assistant", text: "" },
+    ])
     setBusy(true)
     try {
-      const reply = await api<ChatReply>("/api/chat", {
-        method: "POST",
-        body: { message },
+      await chatStream(message, {
+        onDelta: (text) => patchStreaming((last) => ({ ...last, text: last.text + text })),
+        onDone: ({ sources, stored }) =>
+          patchStreaming((last) => ({ ...last, sources, ...(stored ? { stored } : {}) })),
       })
-      setMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          text: reply.text,
-          sources: reply.sources,
-          ...(reply.stored ? { stored: reply.stored } : {}),
-        },
-      ])
     } catch (err) {
-      setMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          text: isNotConfigured(err)
-            ? "Zenod is not fully configured yet — set the vault and API key in the other tabs first."
-            : errorMessage(err),
-          error: true,
-        },
-      ])
+      const text = isNotConfigured(err)
+        ? "Zenod is not fully configured yet — set the vault and API key in the other tabs first."
+        : errorMessage(err)
+      patchStreaming(() => ({ role: "assistant", text, error: true }))
     } finally {
       setBusy(false)
       textareaRef.current?.focus()
@@ -218,6 +219,11 @@ export function ChatTab() {
               >
                 {message.text}
               </div>
+            ) : message.text === "" && !message.error ? (
+              <div key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner className="size-4" />
+                Working — reads are seconds, reorganizations can take a few minutes…
+              </div>
             ) : (
               <div key={i} className="flex max-w-[85%] flex-col gap-2">
                 <div
@@ -233,12 +239,6 @@ export function ChatTab() {
                 {message.sources && <SourceLinks sources={message.sources} />}
               </div>
             )
-          )}
-          {busy && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner className="size-4" />
-              Working — reads are seconds, reorganizations can take a few minutes…
-            </div>
           )}
           <div ref={endRef} />
         </div>

@@ -189,7 +189,13 @@ function TestNote({ result }: { result: TestResult }) {
   )
 }
 
-export function KeysTab({ initial }: { initial: SettingsValues }) {
+export function KeysTab({
+  initial,
+  onSaved,
+}: {
+  initial: SettingsValues
+  onSaved?: (settings: SettingsValues) => void
+}) {
   const [form, setForm] = React.useState<FormState>(() => toFormState(initial))
   const [saving, setSaving] = React.useState(false)
   const [testingGithub, setTestingGithub] = React.useState(false)
@@ -260,6 +266,7 @@ export function KeysTab({ initial }: { initial: SettingsValues }) {
         body: form,
       })
       setForm(toFormState(result.settings))
+      onSaved?.(result.settings)
       toast.success("Settings saved")
     } catch (err) {
       toast.error("Could not save settings", {

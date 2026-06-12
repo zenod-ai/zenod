@@ -72,7 +72,14 @@ class FakeLlm implements BrainLlm {
     }
     await tools.searchVault(input.question);
     const note = await tools.readNote("Areas/Insurance.md");
-    return { text: `You have travel insurance with Axa. (${note.length} chars read)`, readPaths: ["Areas/Insurance.md"] };
+    const text = `You have travel insurance with Axa. (${note.length} chars read)`;
+    if (input.onTextDelta) {
+      // Emit in two chunks to mirror a real streaming response.
+      const mid = Math.floor(text.length / 2);
+      input.onTextDelta(text.slice(0, mid));
+      input.onTextDelta(text.slice(mid));
+    }
+    return { text, readPaths: ["Areas/Insurance.md"] };
   }
 
   /** Scripted work behavior, set per test. */
@@ -337,6 +344,19 @@ describe("BrainEngine", () => {
     expect(window.length).toBe(2);
     expect(window[0]?.role).toBe("user");
     expect(window[1]?.role).toBe("assistant");
+  });
+
+  it("chat streams deltas to onDelta and the joined text equals reply.text", async () => {
+    const deltas: string[] = [];
+    const reply = await engine().chat("what about my insurance?", "web", (d) => deltas.push(d));
+
+    expect(deltas.length).toBeGreaterThan(1); // streamed in chunks, not one blob
+    expect(deltas.join("")).toBe(reply.text); // no tokens dropped or duplicated
+    expect(reply.sources[0]?.path).toBe("Areas/Insurance.md"); // sources still resolve at the end
+
+    // The streamed turn is persisted just like a non-streamed one.
+    const window = await state.recentWindow("default:web");
+    expect(window[window.length - 1]?.text).toBe(reply.text);
   });
 });
 

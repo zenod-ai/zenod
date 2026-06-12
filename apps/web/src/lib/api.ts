@@ -85,6 +85,16 @@ export type SettingsValues = {
   openai_api_key: string | null
   model_ask: string | null
   model_classify: string | null
+  google_service_account_json: string | null
+  google_drive_folder_id: string | null
+  groq_api_key: string | null
+}
+
+export type DriveStatus = {
+  configured: boolean
+  clientEmail: string | null
+  folderId: string | null
+  transcriptionProvider: "groq" | "openai" | null
 }
 
 export type SettingsResponse = {
@@ -165,6 +175,71 @@ export type ChatReply = {
   text: string
   sources: ChatSource[]
   stored?: ChatStored
+}
+
+export type ChatStreamHandlers = {
+  onDelta: (text: string) => void
+  onDone: (done: { sources: ChatSource[]; stored?: ChatStored }) => void
+}
+
+/**
+ * POST a chat message and consume the newline-delimited JSON stream from
+ * /api/chat/stream, dispatching text deltas as they arrive. Resolves when the
+ * stream ends; throws ApiError on a non-OK response or a server "error" event.
+ */
+export async function chatStream(
+  message: string,
+  handlers: ChatStreamHandlers
+): Promise<void> {
+  const response = await fetch("/api/chat/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  })
+
+  if (!response.ok || !response.body) {
+    let payload: { error?: string; code?: string } | null = null
+    try {
+      payload = await response.json()
+    } catch {
+      // no JSON body
+    }
+    throw new ApiError(
+      response.status,
+      payload?.error ?? response.statusText,
+      payload?.code
+    )
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    const event = JSON.parse(trimmed) as
+      | { type: "delta"; text: string }
+      | { type: "done"; sources: ChatSource[]; stored?: ChatStored }
+      | { type: "error"; message: string }
+    if (event.type === "delta") handlers.onDelta(event.text)
+    else if (event.type === "done")
+      handlers.onDone({ sources: event.sources, ...(event.stored ? { stored: event.stored } : {}) })
+    else if (event.type === "error") throw new ApiError(500, event.message)
+  }
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let newline: number
+    while ((newline = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, newline)
+      buffer = buffer.slice(newline + 1)
+      handleLine(line)
+    }
+  }
+  if (buffer.trim()) handleLine(buffer)
 }
 
 export type ChatHistoryMessage = {
