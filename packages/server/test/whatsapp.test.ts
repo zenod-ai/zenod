@@ -22,10 +22,6 @@ import { WhatsAppStore } from "../src/whatsappStore.js";
 class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
   readonly sent: Array<{ jid: string; text: string }> = [];
-  readonly readKeys: unknown[] = [];
-  readonly receipts: Array<{ keys: unknown[]; type: "read" }> = [];
-  readonly presence: Array<{ type: "composing" | "paused"; jid?: string }> = [];
-  readonly presenceSubscriptions: string[] = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
   onWhatsApp?: SocketLike["onWhatsApp"];
   ev = {
@@ -37,22 +33,6 @@ class FakeSocket implements SocketLike {
   async sendMessage(jid: string, content: { text: string }) {
     this.sent.push({ jid, text: content.text });
     return { key: { id: `sent_${this.sent.length}` } };
-  }
-
-  async readMessages(keys: Parameters<NonNullable<SocketLike["readMessages"]>>[0]) {
-    this.readKeys.push(...keys);
-  }
-
-  async sendReceipts(keys: Parameters<NonNullable<SocketLike["sendReceipts"]>>[0], type: "read") {
-    this.receipts.push({ keys, type });
-  }
-
-  async sendPresenceUpdate(type: "composing" | "paused", jid?: string) {
-    this.presence.push({ type, jid });
-  }
-
-  async presenceSubscribe(jid: string) {
-    this.presenceSubscriptions.push(jid);
   }
 
   end() {
@@ -200,7 +180,6 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine(calls),
       socketFactory: async () => socket,
-      typingMinimumMs: 0,
     });
 
     try {
@@ -217,15 +196,6 @@ describe("WhatsAppGateway", () => {
 
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
-      expect(socket.readKeys).toHaveLength(0);
-      expect(socket.receipts).toHaveLength(1);
-      expect(socket.receipts[0]?.type).toBe("read");
-      expect(socket.receipts[0]?.keys).toHaveLength(1);
-      expect(socket.presenceSubscriptions).toEqual(["34611111111@s.whatsapp.net"]);
-      expect(socket.presence).toEqual([
-        { type: "composing", jid: "34611111111@s.whatsapp.net" },
-        { type: "paused", jid: "34611111111@s.whatsapp.net" },
-      ]);
       expect(runtime.whatsappStore.countMessages()).toBe(2);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(1);
       expect(gateway.status().diagnostics.store.processingCounts.replied).toBe(1);
@@ -246,7 +216,6 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine([]),
       socketFactory: async () => socket,
-      typingMinimumMs: 0,
     });
 
     try {
@@ -282,7 +251,6 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine(calls),
       socketFactory: async () => socket,
-      typingMinimumMs: 0,
     });
 
     try {
@@ -319,7 +287,6 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine(calls),
       socketFactory: async () => socket,
-      typingMinimumMs: 0,
     });
 
     try {
@@ -343,17 +310,6 @@ describe("WhatsAppGateway", () => {
 
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
-      expect(socket.readKeys).toHaveLength(0);
-      expect(socket.receipts).toHaveLength(1);
-      expect(socket.receipts[0]?.type).toBe("read");
-      expect(socket.receipts[0]?.keys).toHaveLength(2);
-      expect(socket.presenceSubscriptions).toEqual(["34611111111@s.whatsapp.net", "123456789012345@lid"]);
-      expect(socket.presence).toEqual([
-        { type: "composing", jid: "34611111111@s.whatsapp.net" },
-        { type: "composing", jid: "123456789012345@lid" },
-        { type: "paused", jid: "34611111111@s.whatsapp.net" },
-        { type: "paused", jid: "123456789012345@lid" },
-      ]);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
     } finally {
       runtime.close();
@@ -373,7 +329,6 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine([]),
       socketFactory: async () => sockets[created++]!,
-      typingMinimumMs: 0,
     });
 
     try {
