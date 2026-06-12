@@ -1,4 +1,4 @@
-import { generateObject, generateText, stepCountIs, tool, type ModelMessage } from "ai";
+import { generateObject, generateText, stepCountIs, streamText, tool, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import type {
   Classification,
   ClassifyInput,
   ComposePageInput,
+  DriveSourceTools,
   VaultReadTools,
   VaultTaskTools,
   VaultWriteTools,
@@ -160,7 +161,12 @@ export class AiSdkBrainLlm implements BrainLlm {
     return text.replace(/^```(?:markdown|md)?\n/, "").replace(/\n```\s*$/, "").trimEnd() + "\n";
   }
 
-  async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult> {
+  async answer(
+    input: AnswerInput,
+    tools: VaultReadTools,
+    taskTools?: VaultTaskTools,
+    driveTools?: DriveSourceTools,
+  ): Promise<AnswerResult> {
     const readPaths = new Set<string>();
     const messages: ModelMessage[] = [
       ...input.conversation.map((m): ModelMessage => ({ role: m.role, content: m.text })),
@@ -189,15 +195,48 @@ export class AiSdkBrainLlm implements BrainLlm {
         }
       : {};
 
-    const { text } = await generateText({
+    const driveToolSet = driveTools
+      ? {
+          list_drive_files: tool({
+            description:
+              "List files in the user's connected Google Drive folder, newest first. Optional query filters by file name. Returns one file per line: name, file ID, type, size, modified date. Use when the user mentions files, recordings, or voice notes they dropped in Drive.",
+            inputSchema: z.object({
+              query: z.string().nullable().describe("filter by file name (substring); null lists everything"),
+            }),
+            execute: ({ query }) => caught(() => driveTools.listDriveFiles(query ?? undefined)),
+          }),
+          ingest_drive_file: tool({
+            description:
+              "Download one Google Drive file by its file ID (from list_drive_files) and ingest it into the vault through the librarian pipeline: audio voice notes (m4a, mp3, ogg, wav) are transcribed first; the transcript lands as immutable evidence with a link back to the Drive file, then gets filed onto the right meaning page(s) and committed. Returns a filing report (evidence ref, pages touched, commit). Ingest ONE file per call; report each result to the user as you go.",
+            inputSchema: z.object({
+              fileId: z.string().describe("the Drive file ID"),
+              hints: z
+                .array(z.string())
+                .nullable()
+                .describe("optional filing hints, e.g. 'belongs to the housing project'; null for none"),
+            }),
+            execute: ({ fileId, hints }) => caught(() => driveTools.ingestDriveFile(fileId, hints ?? undefined)),
+          }),
+        }
+      : {};
+
+    const briefingExtras = [
+      taskTools
+        ? "You CAN reorganize the vault: propose_vault_task plans the work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute without showing the plan and getting an explicit yes first."
+        : "",
+      driveTools
+        ? "The user's Google Drive is connected: list_drive_files shows what is there; ingest_drive_file downloads one file (transcribing audio voice notes) and files it into the vault as evidence + meaning. When the user asks to ingest their Drive files or voice notes, list first, then ingest each relevant file and report the filing results."
+        : "",
+    ].filter(Boolean);
+
+    const config = {
       model: this.model(this.askModelId),
-      system: taskTools
-        ? `${input.vaultBriefing}\n\nYou CAN reorganize the vault: propose_vault_task plans the work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute without showing the plan and getting an explicit yes first.`
-        : input.vaultBriefing,
+      system: briefingExtras.length > 0 ? `${input.vaultBriefing}\n\n${briefingExtras.join("\n\n")}` : input.vaultBriefing,
       messages,
       stopWhen: stepCountIs(MAX_STEPS),
       tools: {
         ...taskToolSet,
+        ...driveToolSet,
         search_vault: tool({
           description:
             "Search the vault. Call this first for any question about the user's knowledge — returns ranked paths with snippets. Covers meaning pages, Log/ evidence files (verbatim transcripts, source links), and _attachments/ artifact filenames. If the first query misses, retry with different terms before giving up.",
@@ -219,8 +258,16 @@ export class AiSdkBrainLlm implements BrainLlm {
           execute: () => tools.listPages(),
         }),
       },
-    });
+    };
 
+    if (input.onTextDelta) {
+      // Stream deltas as they arrive; the loop still runs the full tool chain.
+      const result = streamText(config);
+      for await (const delta of result.textStream) input.onTextDelta(delta);
+      return { text: await result.text, readPaths: [...readPaths] };
+    }
+
+    const { text } = await generateText(config);
     return { text, readPaths: [...readPaths] };
   }
 

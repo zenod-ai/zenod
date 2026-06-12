@@ -11,6 +11,9 @@ export const SETTING_KEYS = [
   "openai_api_key",
   "model_ask",
   "model_classify",
+  "google_service_account_json",
+  "google_drive_folder_id",
+  "groq_api_key",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -20,6 +23,8 @@ const SECRET_KEYS: ReadonlySet<string> = new Set([
   "github_token",
   "anthropic_api_key",
   "openai_api_key",
+  "google_service_account_json",
+  "groq_api_key",
 ]);
 
 const ENV_SEEDS: Record<SettingKey, string> = {
@@ -31,6 +36,9 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   openai_api_key: "OPENAI_API_KEY",
   model_ask: "ZENOD_MODEL_ASK",
   model_classify: "ZENOD_MODEL_CLASSIFY",
+  google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
+  google_drive_folder_id: "GOOGLE_DRIVE_FOLDER_ID",
+  groq_api_key: "GROQ_API_KEY",
 };
 
 export class Settings {
@@ -97,6 +105,23 @@ export class Settings {
   /** The API key for the active provider. */
   activeApiKey(): string | null {
     return this.provider() === "openai" ? this.get("openai_api_key") : this.get("anthropic_api_key");
+  }
+
+  /** Google Drive is connected: a service account to read with. */
+  driveConfigured(): boolean {
+    return Boolean(this.get("google_service_account_json"));
+  }
+
+  /**
+   * The key that powers audio transcription, by preference: Groq (free
+   * whisper-large-v3-turbo tier), else the OpenAI key. Null = no transcription.
+   */
+  transcriptionKey(): { provider: "groq" | "openai"; apiKey: string } | null {
+    const groq = this.get("groq_api_key");
+    if (groq) return { provider: "groq", apiKey: groq };
+    const openai = this.get("openai_api_key");
+    if (openai) return { provider: "openai", apiKey: openai };
+    return null;
   }
 
   /** The vault is reachable: a repo plus some GitHub auth. Independent of the LLM key. */

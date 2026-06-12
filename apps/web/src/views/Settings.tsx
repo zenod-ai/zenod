@@ -21,6 +21,9 @@ export function Settings({
   onLoggedOut: () => void
 }) {
   const [loggingOut, setLoggingOut] = React.useState(false)
+  // Source of truth for settings: lives here so it survives tab switches (Radix
+  // unmounts inactive TabsContent). KeysTab re-seeds from this on remount.
+  const [settings, setSettings] = React.useState(initialSettings)
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -67,7 +70,7 @@ export function Settings({
           <VaultTab />
         </TabsContent>
         <TabsContent value="keys" className="mt-4">
-          <KeysTab initial={initialSettings} />
+          <KeysTab initial={settings} onSaved={setSettings} />
         </TabsContent>
         <TabsContent value="connections" className="mt-4">
           <ConnectionsTab />

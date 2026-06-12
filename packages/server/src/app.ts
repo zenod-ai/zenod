@@ -25,6 +25,8 @@ import {
   listInstallationRepos,
 } from "./githubApp.js";
 import { buildMcpServer } from "./mcp.js";
+import { parseServiceAccount, testDrive } from "./drive.js";
+import { buildDriveTools } from "./driveTools.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 
@@ -138,6 +140,38 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const key = (body.api_key && !body.api_key.includes("••••") ? body.api_key : null) || storedKey;
     if (!key) return c.json({ ok: false, message: "API key is required" });
     return c.json(await testProviderKey(provider, key));
+  });
+
+  app.post("/api/settings/test-drive", async (c) => {
+    const body = await c.req
+      .json<{ service_account_json?: string; folder_id?: string }>()
+      .catch(() => ({}) as Record<string, string>);
+    const json =
+      (body.service_account_json && !body.service_account_json.includes("••••") ? body.service_account_json : null) ||
+      settings.get("google_service_account_json");
+    const folderId = body.folder_id ?? settings.get("google_drive_folder_id") ?? undefined;
+    if (!json) return c.json({ ok: false, message: "paste the service account JSON key first" });
+    return c.json(await testDrive(json, folderId || undefined));
+  });
+
+  // Drive connection status for the UI: which service account, and whether
+  // audio transcription has a key to run on. Never returns the secret itself.
+  app.get("/api/drive/status", (c) => {
+    const json = settings.get("google_service_account_json");
+    let clientEmail: string | null = null;
+    if (json) {
+      try {
+        clientEmail = parseServiceAccount(json).client_email;
+      } catch {
+        clientEmail = null;
+      }
+    }
+    return c.json({
+      configured: settings.driveConfigured(),
+      clientEmail,
+      folderId: settings.get("google_drive_folder_id"),
+      transcriptionProvider: settings.transcriptionKey()?.provider ?? null,
+    });
   });
 
   app.get("/api/token", (c) =>
@@ -275,6 +309,32 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json(await engine.chat(message, "web"));
   });
 
+  // Streaming twin of /api/chat: newline-delimited JSON events
+  // ({type:"delta"|"done"|"error"}). getEngine() runs first so a config error
+  // surfaces as a normal 409 before the stream opens.
+  app.post("/api/chat/stream", async (c) => {
+    const { message } = await c.req.json<{ message?: string }>();
+    if (!message) return c.json({ error: "message is required" }, 400);
+    const engine = await runtime.getEngine();
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: unknown) => controller.enqueue(enc.encode(JSON.stringify(event) + "\n"));
+        try {
+          const reply = await engine.chat(message, "web", (delta) => send({ type: "delta", text: delta }));
+          send({ type: "done", sources: reply.sources, ...(reply.stored ? { stored: reply.stored } : {}) });
+        } catch (err) {
+          send({ type: "error", message: err instanceof Error ? err.message : "chat failed" });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+    return new Response(body, {
+      headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache" },
+    });
+  });
+
   // History and clear touch only the conversation store — no engine, repo, or LLM,
   // so opening the chat tab never triggers a vault clone.
   app.get("/api/chat/history", async (c) => {
@@ -312,7 +372,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.all("/mcp", requireMcpAuth(settings, runtime.oauth), async (c) => {
     const { incoming, outgoing } = c.env;
-    const server = buildMcpServer(() => runtime.getEngine());
+    const server = buildMcpServer(
+      () => runtime.getEngine(),
+      () => buildDriveTools(settings, () => runtime.getEngine()),
+    );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

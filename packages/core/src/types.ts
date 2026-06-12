@@ -3,7 +3,7 @@
  * (later) the WhatsApp gateway are all thin adapters over `BrainEngine`.
  */
 
-export type Surface = "cli" | "mcp" | "whatsapp" | "web";
+export type Surface = "cli" | "mcp" | "whatsapp" | "web" | "drive";
 
 export interface StoreInput {
   /** The memory to store: a message, a fact, a capture. */
@@ -108,8 +108,8 @@ export interface BrainEngine {
   store(input: StoreInput): Promise<StoreResult>;
   /** Read-only agent loop: synthesized answer with citations. */
   ask(question: string): Promise<Answer>;
-  /** Full conversational turn: ask + optional store, with conversation memory. */
-  chat(message: string, surface: Surface): Promise<Reply>;
+  /** Full conversational turn: ask + optional store, with conversation memory. Pass onDelta to stream the answer. */
+  chat(message: string, surface: Surface, onDelta?: (delta: string) => void): Promise<Reply>;
   /** Librarian work loop: propose (no plan) then execute (approved plan) vault maintenance. */
   work(input: WorkInput): Promise<WorkResult>;
   /** Deterministic two-pass search. No LLM. */

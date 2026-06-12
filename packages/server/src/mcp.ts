@@ -1,12 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { VERSION, type BrainEngine } from "zenod";
+import { VERSION, type BrainEngine, type DriveSourceTools } from "zenod";
 
 /**
- * The Zenod MCP tool surface (docs/M0-SPEC.md): four tools, no raw file CRUD.
- * Built fresh per request — the transport is stateless Streamable HTTP.
+ * The Zenod MCP tool surface (docs/M0-SPEC.md): no raw file CRUD. Drive tools
+ * appear only while a Google Drive connection is configured. Built fresh per
+ * request — the transport is stateless Streamable HTTP.
  */
-export function buildMcpServer(getEngine: () => Promise<BrainEngine>): McpServer {
+export function buildMcpServer(
+  getEngine: () => Promise<BrainEngine>,
+  getDriveTools?: () => DriveSourceTools | undefined,
+): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
   server.registerTool(
@@ -144,6 +148,40 @@ export function buildMcpServer(getEngine: () => Promise<BrainEngine>): McpServer
       return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
     },
   );
+
+  const driveTools = getDriveTools?.();
+  if (driveTools) {
+    server.registerTool(
+      "list_drive_files",
+      {
+        title: "List Google Drive files",
+        description:
+          "List the files in the user's connected Google Drive folder, newest first — one per line with name, file ID, type, size, and modified date. Optional query filters by name. Use the file IDs with ingest_drive_file.",
+        inputSchema: { query: z.string().optional().describe("Filter by file name (substring)") },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async ({ query }) => ({
+        content: [{ type: "text", text: await driveTools.listDriveFiles(query) }],
+      }),
+    );
+
+    server.registerTool(
+      "ingest_drive_file",
+      {
+        title: "Ingest a Google Drive file",
+        description:
+          "Download one Google Drive file by ID and ingest it into the vault through the librarian pipeline. Audio voice notes (m4a, mp3, ogg, wav) are transcribed first; the transcript is recorded as immutable evidence with a link back to the Drive original, then filed onto meaning page(s) and committed. Returns the filing report. Ingest one file per call.",
+        inputSchema: {
+          fileId: z.string().min(1).describe("The Drive file ID from list_drive_files"),
+          hints: z.array(z.string()).optional().describe("Optional filing hints"),
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      },
+      async ({ fileId, hints }) => ({
+        content: [{ type: "text", text: await driveTools.ingestDriveFile(fileId, hints) }],
+      }),
+    );
+  }
 
   return server;
 }

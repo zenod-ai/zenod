@@ -50,6 +50,8 @@ A Baileys-based WhatsApp adapter over the same engine: text in, voice notes tran
 
 ### M1.5 — Google Drive ingestion connector
 
+**Status: first slice shipped — conversational ingestion.** Drive connects in the settings UI (service-account JSON + optional folder ID + a Groq or OpenAI key for transcription); the chat loop and the MCP endpoint expose `list_drive_files` / `ingest_drive_file`, which download a file, transcribe audio (Groq `whisper-large-v3-turbo` or OpenAI `whisper-1`, with an ffmpeg downsample for oversize files), and run it through the librarian store pipeline with the Drive link recorded as evidence provenance. Still open from the plan below: the poller (auto-ingest with no chat in the loop), the processed-ID dedup table, raw-artifact copies in `_attachments/`, and move/label-after-ingest.
+
 A Zenod-level connector that watches a Google Drive folder and auto-ingests new files into the vault, no chat app in the loop. Same downstream path as the WhatsApp gateway (voice notes transcribed, documents filed into `_attachments/`, facts extracted) but the source channel is a Drive folder you drop things into.
 
 Design center — cheapest durable path, single-user:

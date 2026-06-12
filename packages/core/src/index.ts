@@ -47,5 +47,6 @@ export type {
   ClassificationPage,
   ClassifyInput,
   ComposePageInput,
+  DriveSourceTools,
   VaultReadTools,
 } from "./llm/types.js";

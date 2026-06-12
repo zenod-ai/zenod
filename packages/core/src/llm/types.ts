@@ -13,9 +13,16 @@ export interface BrainLlm {
   /**
    * Agent loop over the vault; returns the synthesized answer. Read-only,
    * unless taskTools is given (chat surface) — then the loop may also
-   * propose and, after explicit user approval, execute vault work.
+   * propose and, after explicit user approval, execute vault work. With
+   * driveTools the loop can also list and ingest files from the user's
+   * connected Google Drive.
    */
-  answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult>;
+  answer(
+    input: AnswerInput,
+    tools: VaultReadTools,
+    taskTools?: VaultTaskTools,
+    driveTools?: DriveSourceTools,
+  ): Promise<AnswerResult>;
   /**
    * Librarian work loop. Without writeTools it surveys and returns a plan
    * (propose mode); with writeTools it executes against the working tree
@@ -73,6 +80,11 @@ export interface AnswerInput {
   vaultBriefing: string;
   /** Prior conversation turns (chat mode); empty for one-shot ask. */
   conversation: Array<{ role: "user" | "assistant"; text: string }>;
+  /**
+   * If set, the loop streams the answer: each text chunk is delivered as it
+   * arrives. The full text is still returned in AnswerResult when the loop ends.
+   */
+  onTextDelta?: (delta: string) => void;
 }
 
 /** Read-only tool callbacks the agent loop may invoke. */
@@ -117,6 +129,17 @@ export interface WorkLoopResult {
 export interface VaultTaskTools {
   proposeTask(objective: string): Promise<string>;
   executeTask(objective: string, plan: string): Promise<string>;
+}
+
+/**
+ * External-source callbacks for the chat loop — implemented by the server
+ * (Google Drive today). listDriveFiles returns a formatted listing;
+ * ingestDriveFile downloads one file, transcribes it when it is audio, and
+ * runs it through the librarian store pipeline, returning a filing report.
+ */
+export interface DriveSourceTools {
+  listDriveFiles(query?: string): Promise<string>;
+  ingestDriveFile(fileId: string, hints?: string[]): Promise<string>;
 }
 
 export interface AnswerResult {

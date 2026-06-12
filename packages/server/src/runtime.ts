@@ -11,6 +11,7 @@ import {
   type LintReport,
 } from "zenod";
 import { installationToken } from "./githubApp.js";
+import { buildDriveTools } from "./driveTools.js";
 import { OAuthStore } from "./oauthStore.js";
 import { Settings, type Provider } from "./settings.js";
 
@@ -78,6 +79,9 @@ export class Runtime {
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
       ...(this.settings.get("model_classify") ? { classifyModel: this.settings.get("model_classify")! } : {}),
     });
+    // Lazy getter: the tools resolve the engine at call time (it is cached by
+    // then), so Drive ingestion can run through the same store pipeline.
+    const driveTools = buildDriveTools(this.settings, () => this.getEngine());
     this.engine = createEngine({
       repo,
       llm,
@@ -86,6 +90,7 @@ export class Runtime {
         repo: this.settings.get("vault_repo")!,
         branch: this.settings.get("vault_branch") ?? "main",
       },
+      ...(driveTools ? { driveTools } : {}),
     });
     return this.engine;
   }

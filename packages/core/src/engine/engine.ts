@@ -23,7 +23,7 @@ import { getNote } from "../ops/get.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
-import type { BrainLlm, Classification } from "../llm/types.js";
+import type { BrainLlm, Classification, DriveSourceTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
 
@@ -40,6 +40,12 @@ export interface EngineOptions {
   llm: BrainLlm;
   state: StateStore;
   location?: VaultLocation;
+  /**
+   * External-source tools (Google Drive) exposed to the chat loop. Provided
+   * by the server when a Drive connection is configured; the engine itself
+   * stays source-agnostic.
+   */
+  driveTools?: DriveSourceTools;
   /** Override for tests. */
   now?: () => Date;
   /**
@@ -411,7 +417,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
-  async function chat(message: string, surface: Surface): Promise<Reply> {
+  async function chat(message: string, surface: Surface, onDelta?: (delta: string) => void): Promise<Reply> {
     await syncForRead();
     const cid = conversationId(surface);
     const window = await state.recentWindow(cid);
@@ -444,9 +450,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
         question: message,
         vaultBriefing: await vaultBriefing(),
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
+        ...(onDelta ? { onTextDelta: onDelta } : {}),
       },
       readTools(),
       taskTools,
+      options.driveTools,
     );
     await state.appendMessage(cid, "assistant", result.text, surface);
 

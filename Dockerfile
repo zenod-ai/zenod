@@ -19,7 +19,8 @@ RUN npm prune --omit=dev
 
 # ---- runtime ----
 FROM node:22-alpine
-RUN apk add --no-cache git ripgrep
+# ffmpeg shrinks large voice notes before transcription (Drive ingestion)
+RUN apk add --no-cache git ripgrep ffmpeg
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=8080 \
