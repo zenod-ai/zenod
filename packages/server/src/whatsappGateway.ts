@@ -165,8 +165,13 @@ export function eventFromBaileysMessage(message: WAMessage): WhatsAppInboundEven
   if (chatId.includes("status")) return null;
   if (message.key.fromMe) return null;
 
-  const keyWithSenderPn = message.key as typeof message.key & { senderPn?: string | null };
-  const senderId = normalizedJid(keyWithSenderPn.senderPn || message.key.participant || chatId);
+  // Baileys v7 exposes the phone-number identity for a @lid chat via the alt
+  // key fields (remoteJidAlt for DMs, participantAlt for groups). Prefer those
+  // so we reply to the @s.whatsapp.net JID and avoid the @lid "waiting for this
+  // message" decryption bug. (v6's message.key.senderPn was removed in v7.)
+  const senderId = normalizedJid(
+    message.key.participantAlt || message.key.remoteJidAlt || message.key.participant || chatId,
+  );
   const content = contentFromMessage(message);
   const extracted = extractBodyAndMedia(content);
   if (!extracted) return null;

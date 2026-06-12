@@ -104,13 +104,13 @@ describe("WhatsApp helpers", () => {
     );
   });
 
-  it("prefers Baileys senderPn over LID remote ids for direct senders", () => {
+  it("prefers Baileys remoteJidAlt (phone JID) over LID remote ids for direct senders", () => {
     const event = eventFromBaileysMessage(
       textMessage({
         key: {
           id: "m_lid",
           remoteJid: "123456789012345@lid",
-          senderPn: "34611111111@s.whatsapp.net",
+          remoteJidAlt: "34611111111@s.whatsapp.net",
           fromMe: false,
         },
       }),
@@ -276,7 +276,7 @@ describe("WhatsAppGateway", () => {
     }
   });
 
-  it("sends direct replies to senderPn when WhatsApp provides a LID chat id", async () => {
+  it("sends direct replies to the phone JID (remoteJidAlt) when WhatsApp provides a LID chat id", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-senderpn-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
@@ -300,7 +300,7 @@ describe("WhatsAppGateway", () => {
             key: {
               id: "msg_senderpn",
               remoteJid: "123456789012345@lid",
-              senderPn: "34611111111@s.whatsapp.net",
+              remoteJidAlt: "34611111111@s.whatsapp.net",
               fromMe: false,
             },
           }),

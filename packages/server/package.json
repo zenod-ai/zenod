@@ -19,7 +19,7 @@
   "dependencies": {
     "@hono/node-server": "^1.14.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@whiskeysockets/baileys": "^6.7.23",
+    "@whiskeysockets/baileys": "7.0.0-rc13",
     "hono": "^4.7.0",
     "pino": "^9.6.0",
     "zenod": "*",
