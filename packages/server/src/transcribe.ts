@@ -44,8 +44,12 @@ function modelPath(): string {
   return join(MODEL_DIR, `ggml-${MODEL_NAME}.bin`);
 }
 
-// One in-flight download shared across concurrent ingests.
+// One in-flight download shared across concurrent ingests, plus status the
+// setup UI can poll so the model is fetched at setup, not on the first chat.
 let modelDownload: Promise<void> | null = null;
+let modelReady = false;
+let modelDownloading = false;
+let modelError: string | null = null;
 
 async function fileExists(path: string): Promise<boolean> {
   return stat(path).then(() => true).catch(() => false);
@@ -54,15 +58,57 @@ async function fileExists(path: string): Promise<boolean> {
 /** Ensure the ggml model is present on the volume, downloading it once. */
 async function ensureModel(): Promise<string> {
   const dest = modelPath();
-  if (await fileExists(dest)) return dest;
+  if (modelReady) return dest;
+  if (await fileExists(dest)) {
+    modelReady = true;
+    return dest;
+  }
   if (!modelDownload) {
-    modelDownload = downloadModel(dest).catch((err) => {
-      modelDownload = null; // let a later ingest retry
-      throw err;
-    });
+    modelDownloading = true;
+    modelError = null;
+    modelDownload = downloadModel(dest)
+      .then(() => {
+        modelReady = true;
+        modelDownloading = false;
+      })
+      .catch((err) => {
+        modelDownloading = false;
+        modelError = (err as Error).message;
+        modelDownload = null; // let a later attempt retry
+        throw err;
+      });
   }
   await modelDownload;
   return dest;
+}
+
+/**
+ * Kick off the model download outside any chat turn — call on boot and when
+ * Drive is connected so the (one-time, ~1.5 GB) fetch to the /data volume
+ * happens during setup rather than surprising the first ingest. Fire-and-forget.
+ */
+export async function prepareModel(): Promise<void> {
+  // Never auto-download in fake/test mode (vitest sets VITEST) — a 1.5 GB
+  // fetch has no place in a unit run.
+  if (process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT || process.env.VITEST) return;
+  try {
+    await ensureModel();
+  } catch {
+    // already recorded in modelError and logged; a later ingest retries
+  }
+}
+
+export interface TranscriptionStatus {
+  model: string;
+  ready: boolean;
+  downloading: boolean;
+  error: string | null;
+}
+
+export async function transcriptionStatus(): Promise<TranscriptionStatus> {
+  const ready = modelReady || (await fileExists(modelPath()));
+  if (ready) modelReady = true;
+  return { model: MODEL_NAME, ready, downloading: modelDownloading, error: modelError };
 }
 
 async function downloadModel(dest: string): Promise<void> {

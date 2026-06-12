@@ -97,6 +97,13 @@ export type DriveStatus = {
   transcriptionProvider: string | null
 }
 
+export type TranscriptionStatus = {
+  model: string
+  ready: boolean
+  downloading: boolean
+  error: string | null
+}
+
 export type WhatsAppStatus = {
   enabled: boolean
   state: "disabled" | "disconnected" | "pairing" | "connected" | "error"

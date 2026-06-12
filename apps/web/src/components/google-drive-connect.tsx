@@ -13,6 +13,7 @@ import {
   type DriveStatus,
   type SettingsResponse,
   type TestResult,
+  type TranscriptionStatus,
 } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { CopyButton } from "@/components/copy-button"
@@ -108,6 +109,30 @@ export function GoogleDriveConnect() {
   const [testing, setTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<TestResult | null>(null)
   const [disconnecting, setDisconnecting] = React.useState(false)
+  const [model, setModel] = React.useState<TranscriptionStatus | null>(null)
+
+  // Poll the transcription model while it downloads, so "preparing model" shows
+  // as setup progress. The fetch is cheap; we stop once it's ready or errors.
+  React.useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = () => {
+      void api<TranscriptionStatus>("/api/transcription/status")
+        .then((result) => {
+          if (cancelled) return
+          setModel(result)
+          if (!result.ready && !result.error) timer = setTimeout(tick, 4000)
+        })
+        .catch(() => {
+          /* status is decorative */
+        })
+    }
+    tick()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [])
 
   const loadStatus = React.useCallback(() => {
     return api<DriveStatus>("/api/drive/status")
@@ -224,6 +249,30 @@ export function GoogleDriveConnect() {
               {status?.transcriptionProvider ?? "local whisper.cpp"} — no API
               key, no per-minute cost.
             </FieldDescription>
+            {model && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {model.error ? (
+                  <span className="text-destructive">
+                    Transcription model failed to download: {model.error}
+                  </span>
+                ) : model.ready ? (
+                  <>
+                    <CheckIcon className="size-3.5 text-emerald-500" />
+                    Transcription model ({model.model}) ready
+                  </>
+                ) : model.downloading ? (
+                  <>
+                    <Spinner className="size-3.5" />
+                    Downloading transcription model ({model.model}) — one-time
+                    setup, ~1.5 GB…
+                  </>
+                ) : (
+                  <span>
+                    Transcription model ({model.model}) downloads on first use.
+                  </span>
+                )}
+              </div>
+            )}
           </Field>
         )}
 

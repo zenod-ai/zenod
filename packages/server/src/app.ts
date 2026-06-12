@@ -27,6 +27,7 @@ import {
 import { buildMcpServer } from "./mcp.js";
 import { parseServiceAccount, testDrive } from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";
+import { prepareModel, transcriptionStatus } from "./transcribe.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 
@@ -42,6 +43,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   void runtime.whatsapp.startIfEnabled().catch((err: unknown) => {
     console.error("[whatsapp] startup failed:", err);
   });
+
+  // Pre-fetch the whisper model on boot when Drive is set up, so the one-time
+  // ~1.5 GB download to the /data volume happens during setup — not inside the
+  // user's first chat ingest. The /data volume persists across redeploys, so
+  // this is genuinely one-time.
+  if (settings.driveConfigured()) void prepareModel();
 
   app.onError((err, c) => {
     if (err instanceof NotConfiguredError) return c.json({ error: err.message, code: "not_configured" }, 409);
@@ -121,6 +128,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       settings.set(key as SettingKey, value);
     }
     runtime.invalidate();
+    // Connecting Drive is the moment to start fetching the transcription model.
+    if (settings.driveConfigured()) void prepareModel();
     return c.json({ settings: settings.masked(), configured: settings.configured() });
   });
 
@@ -178,6 +187,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       // available, no key required.
       transcriptionProvider: "whisper.cpp (local)",
     });
+  });
+
+  // Whisper model readiness — the setup UI polls this so the one-time model
+  // download shows as setup progress instead of stalling the first ingest.
+  app.get("/api/transcription/status", async (c) => {
+    return c.json(await transcriptionStatus());
   });
 
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
