@@ -42,6 +42,13 @@ function caught(run: () => Promise<string>): Promise<string> {
   return run().catch((err: unknown) => `ERROR: ${(err as Error).message}`);
 }
 
+/** Pull a readable message out of a provider error part (shapes vary by SDK/provider). */
+function extractErrorMessage(err: unknown): string {
+  if (typeof err === "string") return err;
+  const e = err as { error?: { message?: string; code?: string }; message?: string } | null;
+  return e?.error?.message ?? e?.message ?? "the model provider returned an error";
+}
+
 /** Human-facing label for the "calling a tool…" indicator in the chat UI. */
 function toolLabel(toolName: string, input: unknown): string {
   const args = (input ?? {}) as Record<string, unknown>;
@@ -300,6 +307,13 @@ export class AiSdkBrainLlm implements BrainLlm {
           input.onToolEvent?.({ phase: "end", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
         } else if (part.type === "tool-error") {
           input.onToolEvent?.({ phase: "error", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
+        } else if (part.type === "error") {
+          // The provider failed mid-stream (bad key, out of quota, rate limit).
+          // fullStream surfaces this as a part rather than throwing — re-throw
+          // so the turn ends with a visible error instead of hanging on an
+          // empty "Working…" bubble.
+          const err = (part as { error?: unknown }).error;
+          throw err instanceof Error ? err : new Error(extractErrorMessage(err));
         }
       }
       return { text, readPaths: [...readPaths] };
