@@ -22,6 +22,8 @@ import { WhatsAppStore } from "../src/whatsappStore.js";
 class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
   readonly sent: Array<{ jid: string; text: string }> = [];
+  readonly readKeys: unknown[] = [];
+  readonly presence: Array<{ type: "composing" | "paused"; jid?: string }> = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
   onWhatsApp?: SocketLike["onWhatsApp"];
   ev = {
@@ -33,6 +35,14 @@ class FakeSocket implements SocketLike {
   async sendMessage(jid: string, content: { text: string }) {
     this.sent.push({ jid, text: content.text });
     return { key: { id: `sent_${this.sent.length}` } };
+  }
+
+  async readMessages(keys: Parameters<NonNullable<SocketLike["readMessages"]>>[0]) {
+    this.readKeys.push(...keys);
+  }
+
+  async sendPresenceUpdate(type: "composing" | "paused", jid?: string) {
+    this.presence.push({ type, jid });
   }
 
   end() {
@@ -196,6 +206,11 @@ describe("WhatsAppGateway", () => {
 
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
+      expect(socket.readKeys).toHaveLength(1);
+      expect(socket.presence).toEqual([
+        { type: "composing", jid: "34611111111@s.whatsapp.net" },
+        { type: "paused", jid: "34611111111@s.whatsapp.net" },
+      ]);
       expect(runtime.whatsappStore.countMessages()).toBe(2);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(1);
       expect(gateway.status().diagnostics.store.processingCounts.replied).toBe(1);
@@ -310,6 +325,11 @@ describe("WhatsAppGateway", () => {
 
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
+      expect(socket.readKeys).toHaveLength(1);
+      expect(socket.presence).toEqual([
+        { type: "composing", jid: "34611111111@s.whatsapp.net" },
+        { type: "paused", jid: "34611111111@s.whatsapp.net" },
+      ]);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
     } finally {
       runtime.close();

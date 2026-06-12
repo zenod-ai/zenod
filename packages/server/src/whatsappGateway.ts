@@ -7,6 +7,7 @@ import {
   makeWASocket,
   useMultiFileAuthState,
   type WAMessage,
+  type WAMessageKey,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { pino } from "pino";
@@ -57,6 +58,8 @@ export interface SocketLike {
   };
   user?: { id?: string | null } | null;
   sendMessage(jid: string, content: { text: string }): Promise<{ key?: { id?: string | null } } | undefined>;
+  readMessages?(keys: WAMessageKey[]): Promise<void>;
+  sendPresenceUpdate?(type: "composing" | "paused", toJid?: string): Promise<void>;
   onWhatsApp?(...jids: string[]): Promise<Array<{ jid?: string; exists?: unknown; lid?: unknown }> | undefined>;
   end?(error?: Error): void;
   flushCredentials?(): Promise<void>;
@@ -203,6 +206,11 @@ function skipReasonForBaileysMessage(message: WAMessage): string {
   if (!extracted) return "unsupported_message_type";
   if (!extracted.body && !extracted.hasMedia) return "empty_message";
   return "unknown";
+}
+
+function inboundMessageKey(event: WhatsAppInboundEvent): WAMessageKey | null {
+  const raw = event.raw as WAMessage | undefined;
+  return raw?.key ?? null;
 }
 
 async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
@@ -487,6 +495,26 @@ export class WhatsAppGateway {
     return normalized !== "" && this.allowedSenderAliases.has(normalized);
   }
 
+  private recipientJidForEvent(event: WhatsAppInboundEvent): string {
+    return event.isGroup ? event.chatId : event.senderId || event.chatId;
+  }
+
+  private async markEventRead(event: WhatsAppInboundEvent): Promise<void> {
+    const key = inboundMessageKey(event);
+    if (!key || !this.socket?.readMessages) return;
+    await this.socket.readMessages([key]).catch((err: unknown) => {
+      console.warn("[whatsapp] could not mark message read:", err);
+    });
+  }
+
+  private async setTyping(event: WhatsAppInboundEvent, typing: boolean): Promise<void> {
+    const recipientJid = this.recipientJidForEvent(event);
+    if (!recipientJid || !this.socket?.sendPresenceUpdate) return;
+    await this.socket.sendPresenceUpdate(typing ? "composing" : "paused", recipientJid).catch((err: unknown) => {
+      console.warn("[whatsapp] could not update typing state:", err);
+    });
+  }
+
   private bindSocket(socket: SocketLike): void {
     socket.ev.on("connection.update", (update) => {
       if (this.socket !== socket) return;
@@ -579,13 +607,15 @@ export class WhatsAppGateway {
       return;
     }
 
-    const input = await this.engineInputForEvent(event, settings);
-    if (input.kind === "fixed-reply") {
-      await this.sendReply(event, input.text, "unsupported_media");
-      return;
-    }
-
+    await this.markEventRead(event);
+    await this.setTyping(event, true);
     try {
+      const input = await this.engineInputForEvent(event, settings);
+      if (input.kind === "fixed-reply") {
+        await this.sendReply(event, input.text, "unsupported_media");
+        return;
+      }
+
       this.options.store.markMessageStatus(event.messageId, "processing");
       const engine = await this.options.getEngine();
       const reply = await engine.chat(input.text, "whatsapp", {
@@ -604,6 +634,8 @@ export class WhatsAppGateway {
         errorText: message,
       });
       throw err;
+    } finally {
+      await this.setTyping(event, false);
     }
   }
 
@@ -649,7 +681,7 @@ export class WhatsAppGateway {
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
     if (!text) return;
-    const recipientJid = event.isGroup ? event.chatId : event.senderId || event.chatId;
+    const recipientJid = this.recipientJidForEvent(event);
     try {
       const sent = await this.socket?.sendMessage(recipientJid, { text });
       this.options.store.recordOutboundAudit({
