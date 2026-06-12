@@ -1,4 +1,4 @@
-import type { BrainEngine, DriveSourceTools } from "zenod";
+import type { BrainEngine, DriveSourceTools, IngestProgress } from "zenod";
 import { DriveClient, type DriveFile } from "./drive.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 import type { Settings } from "./settings.js";
@@ -55,18 +55,35 @@ export function buildDriveTools(
       return files.map(describe).join("\n");
     },
 
-    async ingestDriveFile(fileId: string, hints?: string[]): Promise<string> {
+    async ingestDriveFile(
+      fileId: string,
+      hints?: string[],
+      onProgress?: (event: IngestProgress) => void,
+    ): Promise<string> {
       const file = await client.getFile(fileId);
       const sourceLink = file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
       const sizeMb = file.size ? (Number(file.size) / (1024 * 1024)).toFixed(1) : "?";
       console.log(`[drive] ingest start: ${file.name} (${file.mimeType}, ${sizeMb} MB)`);
 
+      // Each phase is a start/✓ pair so the chat shows download → transcribe →
+      // file as distinct progress steps.
+      const step = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
+        onProgress?.({ phase: "start", label });
+        try {
+          return await run();
+        } finally {
+          onProgress?.({ phase: "end", label });
+        }
+      };
+
       let body: string;
       let transcribedBy: string | undefined;
       if (isAudioMimeType(file.mimeType)) {
-        const data = await client.download(file.id);
-        console.log(`[drive] transcribing ${file.name} locally with whisper.cpp…`);
-        const result = await transcribeAudio(data, file.name);
+        const data = await step(`Downloading ${file.name}`, () => client.download(file.id));
+        const result = await step(`Transcribing ${file.name} (local whisper)`, async () => {
+          console.log(`[drive] transcribing ${file.name} locally with whisper.cpp…`);
+          return transcribeAudio(data, file.name);
+        });
         if (!result.success) {
           console.error(`[drive] transcription failed for ${file.name}: ${result.error}`);
           throw new Error(`could not transcribe ${file.name}: ${result.error}`);
@@ -75,12 +92,12 @@ export function buildDriveTools(
         transcribedBy = result.provider;
         console.log(`[drive] transcribed ${file.name} via ${transcribedBy} (${body.length} chars)`);
       } else if (GOOGLE_DOC_MIMES.has(file.mimeType)) {
-        body = await client.exportText(file.id);
+        body = await step(`Downloading ${file.name}`, () => client.exportText(file.id));
       } else if (
         TEXT_MIME_PREFIXES.some((p) => file.mimeType.startsWith(p)) ||
         TEXT_MIME_EXACT.has(file.mimeType)
       ) {
-        body = (await client.download(file.id)).toString("utf8");
+        body = await step(`Downloading ${file.name}`, async () => (await client.download(file.id)).toString("utf8"));
       } else {
         throw new Error(`unsupported file type ${file.mimeType} — audio, text, and Google Docs are supported today`);
       }
@@ -92,12 +109,14 @@ export function buildDriveTools(
       ].join("\n");
 
       const engine = await getEngine();
-      const result = await engine.store({
-        content: `${header}\n\n${body}`,
-        source: "drive",
-        verbatim: true,
-        ...(hints && hints.length > 0 ? { hints } : {}),
-      });
+      const result = await step(`Filing ${file.name} into the vault`, () =>
+        engine.store({
+          content: `${header}\n\n${body}`,
+          source: "drive",
+          verbatim: true,
+          ...(hints && hints.length > 0 ? { hints } : {}),
+        }),
+      );
 
       // Archive after the store landed: the Drive link in the evidence is by
       // file ID, so it survives the move. A view-only share just skips this.

@@ -242,6 +242,8 @@ export async function chatStream(
       | { type: "tool"; phase: ChatToolEvent["phase"]; tool: string; label: string }
       | { type: "done"; sources: ChatSource[]; stored?: ChatStored }
       | { type: "error"; message: string }
+      | { type: "ping" }
+    if (event.type === "ping") return // keep-alive; nothing to render
     if (event.type === "delta") handlers.onDelta(event.text)
     else if (event.type === "tool")
       handlers.onTool?.({ phase: event.phase, tool: event.tool, label: event.label })

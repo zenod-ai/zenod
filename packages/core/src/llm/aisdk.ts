@@ -245,7 +245,15 @@ export class AiSdkBrainLlm implements BrainLlm {
                 .nullable()
                 .describe("optional filing hints, e.g. 'belongs to the housing project'; null for none"),
             }),
-            execute: ({ fileId, hints }) => caught(() => driveTools.ingestDriveFile(fileId, hints ?? undefined)),
+            execute: ({ fileId, hints }) =>
+              caught(() =>
+                driveTools.ingestDriveFile(fileId, hints ?? undefined, (event) =>
+                  // Sub-step progress (download → transcribe → file) surfaced as
+                  // its own tool events; the generic ingest_drive_file event is
+                  // suppressed below so these replace it.
+                  input.onToolEvent?.({ phase: event.phase, tool: "ingest_drive_file", label: event.label }),
+                ),
+              ),
           }),
         }
       : {};
@@ -302,9 +310,14 @@ export class AiSdkBrainLlm implements BrainLlm {
           input.onTextDelta?.(part.text);
         } else if (part.type === "tool-call") {
           // readPaths is tracked by the read_note tool's execute wrapper below.
-          input.onToolEvent?.({ phase: "start", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
+          // ingest_drive_file emits its own download/transcribe/file sub-steps.
+          if (part.toolName !== "ingest_drive_file") {
+            input.onToolEvent?.({ phase: "start", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
+          }
         } else if (part.type === "tool-result") {
-          input.onToolEvent?.({ phase: "end", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
+          if (part.toolName !== "ingest_drive_file") {
+            input.onToolEvent?.({ phase: "end", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
+          }
         } else if (part.type === "tool-error") {
           input.onToolEvent?.({ phase: "error", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
         } else if (part.type === "error") {

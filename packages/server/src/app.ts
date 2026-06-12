@@ -366,7 +366,19 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const enc = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const send = (event: unknown) => controller.enqueue(enc.encode(JSON.stringify(event) + "\n"));
+        let open = true;
+        const send = (event: unknown) => {
+          if (!open) return;
+          try {
+            controller.enqueue(enc.encode(JSON.stringify(event) + "\n"));
+          } catch {
+            open = false; // client disconnected mid-stream
+          }
+        };
+        // Keep-alive: a long tool call (model download, whisper transcription)
+        // can run minutes with no output. Without a heartbeat the reverse proxy
+        // (Cloudflare/Traefik ~100s idle) drops the connection → "network error".
+        const heartbeat = setInterval(() => send({ type: "ping" }), 15_000);
         try {
           const reply = await engine.chat(message, "web", {
             onDelta: (delta) => send({ type: "delta", text: delta }),
@@ -382,6 +394,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           console.error("[chat] stream failed:", err);
           send({ type: "error", message: err instanceof Error ? err.message : "chat failed" });
         } finally {
+          clearInterval(heartbeat);
+          open = false;
           controller.close();
         }
       },

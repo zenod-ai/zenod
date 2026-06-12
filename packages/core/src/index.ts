@@ -50,5 +50,6 @@ export type {
   ChatToolEvent,
   ComposePageInput,
   DriveSourceTools,
+  IngestProgress,
   VaultReadTools,
 } from "./llm/types.js";
