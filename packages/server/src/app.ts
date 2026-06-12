@@ -237,8 +237,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       ...(typeof body.groupsEnabled === "boolean" ? { groupsEnabled: body.groupsEnabled } : {}),
       ...(typeof body.acceptAll === "boolean" ? { acceptAll: body.acceptAll } : {}),
     });
-    if (next.enabled) await runtime.whatsapp.startIfEnabled();
-    else await runtime.whatsapp.disconnect();
+    if (next.enabled) {
+      await runtime.whatsapp.startIfEnabled();
+      await runtime.whatsapp.refreshAllowedSenderAliases();
+    } else {
+      await runtime.whatsapp.disconnect();
+    }
     return c.json(runtime.whatsapp.status());
   });
 

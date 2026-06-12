@@ -250,6 +250,9 @@ describe("WhatsAppGateway", () => {
       expect(calls).toEqual(["123456789012345:hello"]);
       expect(socket.sent).toEqual([{ jid: "123456789012345@lid", text: "Re: hello" }]);
       expect(gateway.status().diagnostics.allowedSenderAliasCount).toBeGreaterThan(1);
+      expect(gateway.status().diagnostics.lastAliasRefreshAllowedCount).toBe(1);
+      expect(gateway.status().diagnostics.lastAliasRefreshResultCount).toBe(1);
+      expect(gateway.status().diagnostics.lastAliasRefreshError).toBeNull();
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
     } finally {
       runtime.close();

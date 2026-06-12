@@ -174,6 +174,10 @@ export type WhatsAppStatus = {
     lastIgnoredAt: number | null
     lastIgnoredReason: string | null
     allowedSenderAliasCount: number
+    lastAliasRefreshAt: number | null
+    lastAliasRefreshError: string | null
+    lastAliasRefreshAllowedCount: number
+    lastAliasRefreshResultCount: number
     store: {
       inboundMessages: number
       outboundAudits: number

@@ -43,6 +43,10 @@ export interface WhatsAppDiagnostics {
   lastIgnoredAt: number | null;
   lastIgnoredReason: string | null;
   allowedSenderAliasCount: number;
+  lastAliasRefreshAt: number | null;
+  lastAliasRefreshError: string | null;
+  lastAliasRefreshAllowedCount: number;
+  lastAliasRefreshResultCount: number;
   store: WhatsAppStoreDiagnostics;
 }
 
@@ -250,6 +254,10 @@ export class WhatsAppGateway {
   private lastIgnoredReason: string | null = null;
   private allowedSenderAliases = new Set<string>();
   private aliasRefresh: Promise<void> | null = null;
+  private lastAliasRefreshAt: number | null = null;
+  private lastAliasRefreshError: string | null = null;
+  private lastAliasRefreshAllowedCount = 0;
+  private lastAliasRefreshResultCount = 0;
 
   constructor(
     private readonly options: {
@@ -285,6 +293,10 @@ export class WhatsAppGateway {
         lastIgnoredAt: this.lastIgnoredAt,
         lastIgnoredReason: this.lastIgnoredReason,
         allowedSenderAliasCount: this.allowedSenderAliases.size,
+        lastAliasRefreshAt: this.lastAliasRefreshAt,
+        lastAliasRefreshError: this.lastAliasRefreshError,
+        lastAliasRefreshAllowedCount: this.lastAliasRefreshAllowedCount,
+        lastAliasRefreshResultCount: this.lastAliasRefreshResultCount,
         store: this.options.store.diagnostics(),
       },
     };
@@ -428,12 +440,16 @@ export class WhatsAppGateway {
     this.lastIgnoredReason = reason;
   }
 
-  private async refreshAllowedSenderAliases(): Promise<void> {
+  async refreshAllowedSenderAliases(): Promise<void> {
     if (this.aliasRefresh) return this.aliasRefresh;
     const socket = this.socket;
     const allowed = this.options.settings.whatsappSettings().allowedSenders.filter((sender) => sender !== "*");
+    this.lastAliasRefreshAt = Date.now();
+    this.lastAliasRefreshAllowedCount = allowed.length;
+    this.lastAliasRefreshResultCount = 0;
+    this.lastAliasRefreshError = null;
     if (!socket?.onWhatsApp || allowed.length === 0) {
-      this.allowedSenderAliases = new Set();
+      this.allowedSenderAliases = new Set(allowed);
       return;
     }
 
@@ -442,7 +458,9 @@ export class WhatsAppGateway {
       .then((results) => {
         const aliases = new Set<string>();
         for (const sender of allowed) aliases.add(sender);
-        for (const result of results ?? []) {
+        const resolved = results ?? [];
+        this.lastAliasRefreshResultCount = resolved.length;
+        for (const result of resolved) {
           const jid = typeof result.jid === "string" ? result.jid : "";
           const lid = typeof result.lid === "string" ? result.lid : "";
           const normalizedJid = normalizeWhatsAppIdentifier(jid);
@@ -453,6 +471,7 @@ export class WhatsAppGateway {
         this.allowedSenderAliases = aliases;
       })
       .catch((err: unknown) => {
+        this.lastAliasRefreshError = err instanceof Error ? err.message : String(err);
         console.warn("[whatsapp] could not resolve allowlist LID aliases:", err);
       })
       .finally(() => {
