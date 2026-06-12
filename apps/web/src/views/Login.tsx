@@ -1,5 +1,5 @@
 import * as React from "react"
-import { LogInIcon } from "lucide-react"
+import { BrainIcon, LogInIcon } from "lucide-react"
 
 import { api, errorMessage, isUnauthorized } from "@/lib/api"
 import { Button } from "@/components/ui/button"
@@ -44,6 +44,9 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
       <Card className="w-full max-w-sm">
         <form onSubmit={handleSubmit}>
           <CardHeader>
+            <div className="mb-1 flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+              <BrainIcon className="size-4.5" />
+            </div>
             <CardTitle>Zenod</CardTitle>
             <CardDescription>
               Enter your admin password to manage this server.

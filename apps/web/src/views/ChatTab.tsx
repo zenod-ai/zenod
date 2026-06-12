@@ -82,7 +82,7 @@ function SourceLinks({ sources }: { sources: ChatSource[] }) {
           href={source.githubUrl || undefined}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
         >
           {source.path}
           {source.githubUrl && <ExternalLinkIcon className="size-3" />}
@@ -230,12 +230,12 @@ export function ChatTab() {
             message.role === "user" ? (
               <div
                 key={i}
-                className="ml-auto max-w-[85%] rounded-xl bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground"
+                className="ml-auto max-w-[85%] animate-in fade-in slide-in-from-bottom-1 rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-sm whitespace-pre-wrap text-primary-foreground shadow-sm duration-300"
               >
                 {message.text}
               </div>
             ) : (
-              <div key={i} className="flex max-w-[85%] flex-col gap-2">
+              <div key={i} className="flex max-w-[85%] animate-in fade-in slide-in-from-bottom-1 flex-col gap-2 duration-300">
                 {/* Trail of tools that already finished this turn. */}
                 {message.steps && message.steps.length > 0 && (
                   <div className="flex flex-col gap-1">
@@ -261,8 +261,8 @@ export function ChatTab() {
                   <div
                     className={
                       message.error
-                        ? "rounded-xl bg-destructive/10 px-3 py-2 text-sm whitespace-pre-wrap text-destructive"
-                        : "rounded-xl bg-muted px-3 py-2 text-sm"
+                        ? "rounded-2xl rounded-bl-md bg-destructive/10 px-3.5 py-2 text-sm whitespace-pre-wrap text-destructive"
+                        : "rounded-2xl rounded-bl-md bg-muted px-3.5 py-2 text-sm"
                     }
                   >
                     {message.error ? message.text : <AssistantMarkdown text={message.text} />}
@@ -295,7 +295,7 @@ export function ChatTab() {
             value={input}
             placeholder="Ask your vault, or say 'remember this: …'"
             rows={1}
-            className="min-h-9 resize-none"
+            className="min-h-9 resize-none rounded-xl border-transparent bg-muted/60 px-3.5 focus-visible:border-transparent focus-visible:bg-muted focus-visible:ring-0 dark:bg-input/30 dark:focus-visible:bg-input/50"
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -304,7 +304,12 @@ export function ChatTab() {
               }
             }}
           />
-          <Button type="submit" size="icon" disabled={busy || input.trim() === ""}>
+          <Button
+            type="submit"
+            size="icon"
+            className="rounded-full transition-all active:scale-95"
+            disabled={busy || input.trim() === ""}
+          >
             <SendIcon />
             <span className="sr-only">Send</span>
           </Button>
