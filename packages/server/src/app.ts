@@ -50,6 +50,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // this is genuinely one-time.
   if (settings.driveConfigured()) void prepareModel();
 
+  // Resume any ingest jobs left queued before the last restart.
+  runtime.ingestQueue.resume();
+
   app.onError((err, c) => {
     if (err instanceof NotConfiguredError) return c.json({ error: err.message, code: "not_configured" }, 409);
     if (err instanceof NoteNotFoundError) return c.json({ error: err.message }, 404);
@@ -193,6 +196,16 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // download shows as setup progress instead of stalling the first ingest.
   app.get("/api/transcription/status", async (c) => {
     return c.json(await transcriptionStatus());
+  });
+
+  // Background ingest jobs — the Ingestion panel polls this so a long
+  // transcription is visible from any tab and survives navigation/refresh.
+  app.get("/api/ingest/jobs", (c) => c.json({ jobs: runtime.ingestStore.recent() }));
+
+  app.post("/api/ingest/jobs/:id/retry", (c) => {
+    const job = runtime.ingestQueue.retry(c.req.param("id"));
+    if (!job) return c.json({ error: "job not found" }, 404);
+    return c.json({ job });
   });
 
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
@@ -459,7 +472,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const { incoming, outgoing } = c.env;
     const server = buildMcpServer(
       () => runtime.getEngine(),
-      () => buildDriveTools(settings, () => runtime.getEngine()),
+      () => buildDriveTools(settings, runtime.ingestQueue),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

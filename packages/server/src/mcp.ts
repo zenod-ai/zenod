@@ -170,7 +170,7 @@ export function buildMcpServer(
       {
         title: "Ingest a Google Drive file",
         description:
-          "Download one Google Drive file by ID and ingest it into the vault through the librarian pipeline. Audio voice notes (m4a, mp3, ogg, wav) are transcribed first; the transcript is recorded as immutable evidence with a link back to the Drive original, then filed onto meaning page(s) and committed. After a successful ingest the file moves from the inbox to its Archive/ subfolder in Drive (the link stays valid). Returns the filing report. Ingest one file per call.",
+          "Queue one Google Drive file (by ID) for background ingestion: it downloads, transcribes audio locally with whisper, files the transcript into the vault as evidence + meaning, commits, and archives the original — in a background worker. Returns immediately with the job id/status; it does not wait for completion. Queue one file per call.",
         inputSchema: {
           fileId: z.string().min(1).describe("The Drive file ID from list_drive_files"),
           hints: z.array(z.string()).optional().describe("Optional filing hints"),

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrainEngine, StoreInput } from "zenod";
 import { DriveClient, parseServiceAccount, testDrive } from "../src/drive.js";
 import { buildDriveTools } from "../src/driveTools.js";
+import { IngestQueue } from "../src/ingestQueue.js";
 import { transcribeAudio } from "../src/transcribe.js";
 import { Runtime } from "../src/runtime.js";
 import { createApp } from "../src/app.js";
@@ -27,6 +28,17 @@ const FILES = [
     webViewLink: "https://drive.google.com/file/d/file-1/view",
   },
 ];
+
+async function waitFor<T>(read: () => T, done: (value: T) => boolean): Promise<T> {
+  const started = Date.now();
+  let value = read();
+  while (!done(value)) {
+    if (Date.now() - started > 2_000) throw new Error("timed out waiting for async work");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    value = read();
+  }
+  return value;
+}
 
 /** fetch stub: token exchange + Drive list/get/download/archive + whisper endpoint. */
 function stubFetch(moves: string[] = []): typeof fetch {
@@ -129,7 +141,7 @@ describe("drive tools + API", () => {
   });
 
   it("buildDriveTools is undefined until a service account is saved", () => {
-    expect(buildDriveTools(runtime.settings, () => Promise.reject(new Error("unused")))).toBeUndefined();
+    expect(buildDriveTools(runtime.settings, runtime.ingestQueue)).toBeUndefined();
   });
 
   it("ingests an audio file: download, transcribe, store, archive in Drive", async () => {
@@ -152,15 +164,22 @@ describe("drive tools + API", () => {
       },
     } as unknown as BrainEngine;
 
-    const tools = buildDriveTools(runtime.settings, async () => fakeEngine)!;
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
     const listing = await tools.listDriveFiles();
     expect(listing).toContain("Zenod voice note.m4a");
     expect(listing).toContain("id: file-1");
 
     const report = await tools.ingestDriveFile("file-1", ["insurance"]);
-    expect(report).toContain("Ingested Zenod voice note.m4a");
-    expect(report).toContain("Areas/Insurance.md");
-    expect(report).toContain("archived: moved to Archive/");
+    expect(report).toContain('Queued "Zenod voice note.m4a" for ingestion');
+
+    const done = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "done",
+    );
+    expect(done?.evidenceRef).toBe("Log/2026-06-12.md#^e-abc123");
+    expect(done?.pages).toEqual(["Areas/Insurance.md"]);
+    expect(done?.archived).toBe(true);
     expect(moves).toEqual(["archive-folder-1"]); // moved into the auto-created Archive/
     expect(stored).toHaveLength(1);
     expect(stored[0]!.source).toBe("drive");

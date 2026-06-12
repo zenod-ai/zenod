@@ -12,6 +12,8 @@ import {
 } from "zenod";
 import { installationToken } from "./githubApp.js";
 import { buildDriveTools } from "./driveTools.js";
+import { IngestStore } from "./ingestStore.js";
+import { IngestQueue } from "./ingestQueue.js";
 import { OAuthStore } from "./oauthStore.js";
 import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
@@ -33,6 +35,8 @@ export class Runtime {
   readonly oauth: OAuthStore;
   readonly whatsappStore: WhatsAppStore;
   readonly whatsapp: WhatsAppGateway;
+  readonly ingestStore: IngestStore;
+  readonly ingestQueue: IngestQueue;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
 
@@ -48,6 +52,10 @@ export class Runtime {
       store: this.whatsappStore,
       getEngine: () => this.getEngine(),
     });
+    // The IngestStore constructor marks any job left mid-flight by a restart
+    // as "interrupted"; resume() then drains anything still queued.
+    this.ingestStore = new IngestStore(join(dataDir, "ingest.sqlite"));
+    this.ingestQueue = new IngestQueue(this.ingestStore, this.settings, () => this.getEngine());
   }
 
   get workdir(): string {
@@ -90,9 +98,8 @@ export class Runtime {
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
       ...(this.settings.get("model_classify") ? { classifyModel: this.settings.get("model_classify")! } : {}),
     });
-    // Lazy getter: the tools resolve the engine at call time (it is cached by
-    // then), so Drive ingestion can run through the same store pipeline.
-    const driveTools = buildDriveTools(this.settings, () => this.getEngine());
+    // The chat/MCP Drive tools enqueue onto the background ingest queue.
+    const driveTools = buildDriveTools(this.settings, this.ingestQueue);
     this.engine = createEngine({
       repo,
       llm,
@@ -119,8 +126,10 @@ export class Runtime {
   }
 
   close(): void {
+    this.whatsapp.close();
     this.state.close();
     this.whatsappStore.close();
+    this.ingestStore.close();
   }
 }
 

@@ -127,11 +127,22 @@ async function downloadModel(dest: string): Promise<void> {
   console.log(`[whisper] model ready at ${dest}`);
 }
 
-function run(command: string, args: string[]): Promise<void> {
+function run(command: string, args: string[], onStderrLine?: (line: string) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
-    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    let lineBuf = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      stderr += text;
+      if (!onStderrLine) return;
+      lineBuf += text;
+      let nl: number;
+      while ((nl = lineBuf.indexOf("\n")) >= 0) {
+        onStderrLine(lineBuf.slice(0, nl));
+        lineBuf = lineBuf.slice(nl + 1);
+      }
+    });
     child.on("error", (err) =>
       reject(
         (err as NodeJS.ErrnoException).code === "ENOENT"
@@ -145,13 +156,24 @@ function run(command: string, args: string[]): Promise<void> {
   });
 }
 
+/** whisper-cli with --print-progress emits "... progress = N%" on stderr. */
+function parseWhisperProgress(line: string): number | null {
+  const m = /progress\s*=\s*(\d+)\s*%/.exec(line);
+  return m ? Number(m[1]) : null;
+}
+
 /**
  * Transcribe an audio buffer locally. ffmpeg normalizes to the 16 kHz mono
  * WAV whisper.cpp expects (any size — it's local, no upload cap), then
  * whisper-cli writes a .txt we read back.
  */
-export async function transcribeAudio(data: Buffer, filename: string): Promise<TranscriptionEnvelope> {
+export async function transcribeAudio(
+  data: Buffer,
+  filename: string,
+  onProgress?: (percent: number) => void,
+): Promise<TranscriptionEnvelope> {
   if ((process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT) {
+    onProgress?.(100);
     return {
       success: true,
       transcript: process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT,
@@ -173,7 +195,16 @@ export async function transcribeAudio(data: Buffer, filename: string): Promise<T
   try {
     await writeFile(input, data);
     await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav]);
-    await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-otxt", "-of", outBase]);
+    await run(
+      WHISPER_BINARY,
+      ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-pp", "-otxt", "-of", outBase],
+      onProgress
+        ? (line) => {
+            const pct = parseWhisperProgress(line);
+            if (pct !== null) onProgress(pct);
+          }
+        : undefined,
+    );
     const transcript = (await readFile(`${outBase}.txt`, "utf8")).trim();
     if (!transcript) {
       return { success: false, provider: "whisper.cpp", error: "transcription returned empty text" };

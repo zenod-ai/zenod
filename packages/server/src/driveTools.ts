@@ -1,40 +1,28 @@
-import type { BrainEngine, DriveSourceTools, IngestProgress } from "zenod";
+import type { DriveSourceTools } from "zenod";
 import { DriveClient, type DriveFile } from "./drive.js";
-import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
+import type { IngestQueue } from "./ingestQueue.js";
 import type { Settings } from "./settings.js";
 
 /**
- * The Drive half of the chat loop's external-source tools: list what the
- * service account can see, and ingest one file — transcribing audio first —
- * through the engine's store pipeline so it lands as immutable evidence
- * (with the Drive link as provenance) plus filed meaning pages.
+ * The Drive half of the chat/MCP tool surface: list what the service account
+ * can see in the inbox, and *enqueue* a file for ingestion. The actual work —
+ * download → transcribe → file → archive — runs in the background queue
+ * (ingestQueue.ts), so a long transcription survives the user navigating away,
+ * refreshing, even a redeploy. The tool returns immediately with the job id;
+ * progress is watched in the Ingestion panel (GET /api/ingest/jobs).
  *
  * The shared folder is the INBOX and Drive is the binary store (the vault
  * holds markdown + pointers, never the binaries). After a successful ingest
- * the file is moved into an auto-created Archive/ subfolder — its file ID
- * and webViewLink survive the move, so the evidence pointer stays valid and
- * the inbox listing only ever shows what hasn't been consumed yet.
+ * the file moves to an auto-created Archive/ subfolder so the inbox listing
+ * only ever shows what hasn't been consumed yet.
  */
-
-const ARCHIVE_FOLDER = "Archive";
-
-const TEXT_MIME_PREFIXES = ["text/"];
-const TEXT_MIME_EXACT = new Set(["application/json", "application/xml", "application/x-yaml"]);
-const GOOGLE_DOC_MIMES = new Set([
-  "application/vnd.google-apps.document",
-  "application/vnd.google-apps.spreadsheet",
-  "application/vnd.google-apps.presentation",
-]);
 
 function describe(file: DriveFile): string {
   const size = file.size ? `${(Number(file.size) / (1024 * 1024)).toFixed(1)} MB` : "—";
   return `${file.name} | id: ${file.id} | ${file.mimeType} | ${size} | modified ${file.modifiedTime ?? "?"}`;
 }
 
-export function buildDriveTools(
-  settings: Settings,
-  getEngine: () => Promise<BrainEngine>,
-): DriveSourceTools | undefined {
+export function buildDriveTools(settings: Settings, queue: IngestQueue): DriveSourceTools | undefined {
   const serviceAccountJson = settings.get("google_service_account_json");
   if (!serviceAccountJson) return undefined;
 
@@ -55,89 +43,15 @@ export function buildDriveTools(
       return files.map(describe).join("\n");
     },
 
-    async ingestDriveFile(
-      fileId: string,
-      hints?: string[],
-      onProgress?: (event: IngestProgress) => void,
-    ): Promise<string> {
-      const file = await client.getFile(fileId);
-      const sourceLink = file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
-      const sizeMb = file.size ? (Number(file.size) / (1024 * 1024)).toFixed(1) : "?";
-      console.log(`[drive] ingest start: ${file.name} (${file.mimeType}, ${sizeMb} MB)`);
-
-      // Each phase is a start/✓ pair so the chat shows download → transcribe →
-      // file as distinct progress steps.
-      const step = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
-        onProgress?.({ phase: "start", label });
-        try {
-          return await run();
-        } finally {
-          onProgress?.({ phase: "end", label });
-        }
-      };
-
-      let body: string;
-      let transcribedBy: string | undefined;
-      if (isAudioMimeType(file.mimeType)) {
-        const data = await step(`Downloading ${file.name}`, () => client.download(file.id));
-        const result = await step(`Transcribing ${file.name} (local whisper)`, async () => {
-          console.log(`[drive] transcribing ${file.name} locally with whisper.cpp…`);
-          return transcribeAudio(data, file.name);
-        });
-        if (!result.success) {
-          console.error(`[drive] transcription failed for ${file.name}: ${result.error}`);
-          throw new Error(`could not transcribe ${file.name}: ${result.error}`);
-        }
-        body = result.transcript!;
-        transcribedBy = result.provider;
-        console.log(`[drive] transcribed ${file.name} via ${transcribedBy} (${body.length} chars)`);
-      } else if (GOOGLE_DOC_MIMES.has(file.mimeType)) {
-        body = await step(`Downloading ${file.name}`, () => client.exportText(file.id));
-      } else if (
-        TEXT_MIME_PREFIXES.some((p) => file.mimeType.startsWith(p)) ||
-        TEXT_MIME_EXACT.has(file.mimeType)
-      ) {
-        body = await step(`Downloading ${file.name}`, async () => (await client.download(file.id)).toString("utf8"));
-      } else {
-        throw new Error(`unsupported file type ${file.mimeType} — audio, text, and Google Docs are supported today`);
-      }
-
-      const header = [
-        `${transcribedBy ? "Voice note" : "Document"} "${file.name}" ingested from Google Drive.`,
-        `Original: ${sourceLink}`,
-        ...(transcribedBy ? [`Transcribed by ${transcribedBy} whisper.`] : []),
-      ].join("\n");
-
-      const engine = await getEngine();
-      const result = await step(`Filing ${file.name} into the vault`, () =>
-        engine.store({
-          content: `${header}\n\n${body}`,
-          source: "drive",
-          verbatim: true,
-          ...(hints && hints.length > 0 ? { hints } : {}),
-        }),
-      );
-
-      // Archive after the store landed: the Drive link in the evidence is by
-      // file ID, so it survives the move. A view-only share just skips this.
-      let archiveNote = "archived: no (no inbox folder configured)";
-      if (folderId) {
-        try {
-          const archiveId = await client.ensureFolder(ARCHIVE_FOLDER, folderId);
-          await client.moveFile(file.id, archiveId);
-          archiveNote = `archived: moved to ${ARCHIVE_FOLDER}/ in Drive (same link)`;
-        } catch (err) {
-          archiveNote = `archived: no — ${(err as Error).message.slice(0, 150)} (share the folder as Editor to enable archiving)`;
-        }
-      }
-      console.log(`[drive] ingest done: ${file.name} → ${result.pagesTouched.join(", ")} (${archiveNote})`);
-
+    async ingestDriveFile(fileId: string, hints?: string[]): Promise<string> {
+      // Resolve the name for a friendly job label; fall back to the id.
+      const file = await client.getFile(fileId).catch(() => null);
+      const name = file?.name ?? fileId;
+      const job = queue.enqueue(fileId, name, hints ?? []);
       return [
-        result.question ? `NEEDS FILING — ask the user: ${result.question}` : `Ingested ${file.name}.`,
-        `evidence: ${result.evidenceRef}`,
-        `pages: ${result.pagesTouched.join(", ")}`,
-        `commit: ${result.commitSha}`,
-        archiveNote,
+        `Queued "${name}" for ingestion (job ${job.id}, status: ${job.status}).`,
+        "It downloads, transcribes locally with whisper, files the transcript into the vault, and archives the original — in the background.",
+        "Tell the user it's processing and that live progress is in the Ingestion panel (Connections tab); the result lands in the vault when done.",
       ].join("\n");
     },
   };

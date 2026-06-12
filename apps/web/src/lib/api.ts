@@ -104,6 +104,46 @@ export type TranscriptionStatus = {
   error: string | null
 }
 
+export type IngestStatus =
+  | "queued"
+  | "downloading"
+  | "transcribing"
+  | "filing"
+  | "done"
+  | "error"
+  | "interrupted"
+
+export type IngestJob = {
+  id: string
+  driveFileId: string
+  fileName: string
+  hints: string[]
+  status: IngestStatus
+  progress: number
+  step: string | null
+  error: string | null
+  evidenceRef: string | null
+  pages: string[]
+  commitSha: string | null
+  archived: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export type IngestJobsResponse = {
+  jobs: IngestJob[]
+}
+
+/** A job is still moving — used to decide whether to keep polling. */
+export function isActiveIngest(status: IngestStatus): boolean {
+  return (
+    status === "queued" ||
+    status === "downloading" ||
+    status === "transcribing" ||
+    status === "filing"
+  )
+}
+
 export type WhatsAppStatus = {
   enabled: boolean
   state: "disabled" | "disconnected" | "pairing" | "connected" | "error"

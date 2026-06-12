@@ -62,7 +62,7 @@ function toolLabel(toolName: string, input: unknown): string {
     case "list_drive_files":
       return "Listing your Google Drive";
     case "ingest_drive_file":
-      return "Ingesting a Google Drive file — downloading, transcribing, filing";
+      return "Queuing a Google Drive file for ingestion";
     case "propose_vault_task":
       return "Planning vault changes";
     case "execute_vault_task":
@@ -237,7 +237,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           }),
           ingest_drive_file: tool({
             description:
-              "Download one Google Drive file by its file ID (from list_drive_files) and ingest it into the vault through the librarian pipeline: audio voice notes (m4a, mp3, ogg, wav) are transcribed first; the transcript lands as immutable evidence with a link back to the Drive file, then gets filed onto the right meaning page(s) and committed. After a successful ingest the file is moved out of the inbox into the Archive/ subfolder in Drive (its link stays valid). Returns a filing report (evidence ref, pages touched, commit, archive status). Ingest ONE file per call; report each result to the user as you go.",
+              "Queue one Google Drive file (by file ID from list_drive_files) for background ingestion: it downloads, transcribes audio voice notes locally with whisper, files the transcript into the vault as evidence + meaning, commits, and archives the original — all in a background worker that survives the user navigating away. Returns immediately with the job id and status; it does NOT wait for completion. Call once per file. Tell the user the files are queued/processing and that live progress is in the Ingestion panel (Connections tab).",
             inputSchema: z.object({
               fileId: z.string().describe("the Drive file ID"),
               hints: z
@@ -245,15 +245,7 @@ export class AiSdkBrainLlm implements BrainLlm {
                 .nullable()
                 .describe("optional filing hints, e.g. 'belongs to the housing project'; null for none"),
             }),
-            execute: ({ fileId, hints }) =>
-              caught(() =>
-                driveTools.ingestDriveFile(fileId, hints ?? undefined, (event) =>
-                  // Sub-step progress (download → transcribe → file) surfaced as
-                  // its own tool events; the generic ingest_drive_file event is
-                  // suppressed below so these replace it.
-                  input.onToolEvent?.({ phase: event.phase, tool: "ingest_drive_file", label: event.label }),
-                ),
-              ),
+            execute: ({ fileId, hints }) => caught(() => driveTools.ingestDriveFile(fileId, hints ?? undefined)),
           }),
         }
       : {};
@@ -263,7 +255,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         ? "You CAN reorganize the vault: propose_vault_task plans the work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute without showing the plan and getting an explicit yes first."
         : "",
       driveTools
-        ? "The user's Google Drive is connected: list_drive_files shows what is there; ingest_drive_file downloads one file (transcribing audio voice notes) and files it into the vault as evidence + meaning. When the user asks to ingest their Drive files or voice notes, list first, then ingest each relevant file and report the filing results."
+        ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background ingestion (download, local whisper transcription, filing, archiving). When the user asks to ingest their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Ingestion panel (Connections tab), and the transcripts land in the vault when done."
         : "",
     ].filter(Boolean);
 
@@ -310,14 +302,9 @@ export class AiSdkBrainLlm implements BrainLlm {
           input.onTextDelta?.(part.text);
         } else if (part.type === "tool-call") {
           // readPaths is tracked by the read_note tool's execute wrapper below.
-          // ingest_drive_file emits its own download/transcribe/file sub-steps.
-          if (part.toolName !== "ingest_drive_file") {
-            input.onToolEvent?.({ phase: "start", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
-          }
+          input.onToolEvent?.({ phase: "start", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
         } else if (part.type === "tool-result") {
-          if (part.toolName !== "ingest_drive_file") {
-            input.onToolEvent?.({ phase: "end", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
-          }
+          input.onToolEvent?.({ phase: "end", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
         } else if (part.type === "tool-error") {
           input.onToolEvent?.({ phase: "error", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
         } else if (part.type === "error") {

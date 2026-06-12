@@ -154,19 +154,10 @@ export interface VaultTaskTools {
  * ingestDriveFile downloads one file, transcribes it when it is audio, and
  * runs it through the librarian store pipeline, returning a filing report.
  */
-/** Sub-step progress within a single Drive ingest (download → transcribe → file). */
-export interface IngestProgress {
-  phase: "start" | "end";
-  label: string;
-}
-
 export interface DriveSourceTools {
   listDriveFiles(query?: string): Promise<string>;
-  ingestDriveFile(
-    fileId: string,
-    hints?: string[],
-    onProgress?: (event: IngestProgress) => void,
-  ): Promise<string>;
+  /** Enqueue a file for background ingestion; returns immediately with the job status. */
+  ingestDriveFile(fileId: string, hints?: string[]): Promise<string>;
 }
 
 export interface AnswerResult {
