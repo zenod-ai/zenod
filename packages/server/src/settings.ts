@@ -1,5 +1,10 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { SqliteStateStore } from "zenod";
+import {
+  normalizeAllowedSenders,
+  parseStoredAllowedSenders,
+  type WhatsAppSettings,
+} from "./whatsappConfig.js";
 
 /** Runtime settings persisted in SQLite; env vars seed them on first boot. */
 export const SETTING_KEYS = [
@@ -110,6 +115,33 @@ export class Settings {
   /** Google Drive is connected: a service account to read with. */
   driveConfigured(): boolean {
     return Boolean(this.get("google_service_account_json"));
+  }
+
+  whatsappSettings(): WhatsAppSettings {
+    return {
+      enabled: this.getRaw("whatsapp_enabled") === "true",
+      allowedSenders: parseStoredAllowedSenders(this.getRaw("whatsapp_allowed_senders")),
+      groupsEnabled: this.getRaw("whatsapp_groups_enabled") === "true",
+      acceptAll: this.getRaw("whatsapp_accept_all") === "true",
+    };
+  }
+
+  setWhatsAppSettings(
+    input: Partial<Omit<WhatsAppSettings, "allowedSenders">> & { allowedSenders?: unknown },
+  ): WhatsAppSettings {
+    const current = this.whatsappSettings();
+    const next: WhatsAppSettings = {
+      enabled: input.enabled ?? current.enabled,
+      allowedSenders:
+        input.allowedSenders === undefined ? current.allowedSenders : normalizeAllowedSenders(input.allowedSenders),
+      groupsEnabled: input.groupsEnabled ?? current.groupsEnabled,
+      acceptAll: input.acceptAll ?? current.acceptAll,
+    };
+    this.setRaw("whatsapp_enabled", next.enabled ? "true" : "false");
+    this.setRaw("whatsapp_allowed_senders", JSON.stringify(next.allowedSenders));
+    this.setRaw("whatsapp_groups_enabled", next.groupsEnabled ? "true" : "false");
+    this.setRaw("whatsapp_accept_all", next.acceptAll ? "true" : "false");
+    return next;
   }
 
   /**

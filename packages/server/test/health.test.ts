@@ -17,7 +17,7 @@ describe("server API", () => {
   });
 
   afterEach(async () => {
-    runtime.state.close();
+    runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
 

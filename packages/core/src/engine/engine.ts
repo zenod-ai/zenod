@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, normalize } from "node:path";
 import type {
   Answer,
   BrainEngine,
+  ChatOptions,
   Hit,
   LintReport,
   Note,
@@ -23,7 +24,7 @@ import { getNote } from "../ops/get.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
-import type { BrainLlm, Classification, DriveSourceTools } from "../llm/types.js";
+import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
 
@@ -31,8 +32,9 @@ import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
  * The conversation key for a surface. One continuous thread per surface today;
  * the `default:` prefix leaves room for multi-session later.
  */
-export function conversationId(surface: Surface): string {
-  return `default:${surface}`;
+export function conversationId(surface: Surface, key = "default"): string {
+  const safeKey = key.trim().replace(/[^\w@.+:-]/g, "_").slice(0, 160) || "default";
+  return `${surface}:${safeKey}`;
 }
 
 export interface EngineOptions {
@@ -417,9 +419,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
-  async function chat(message: string, surface: Surface, onDelta?: (delta: string) => void): Promise<Reply> {
+  async function chat(
+    message: string,
+    surface: Surface,
+    onDeltaOrOptions?: ((delta: string) => void) | ChatOptions,
+    onToolEvent?: (event: ChatToolEvent) => void,
+    conversationKey?: string,
+  ): Promise<Reply> {
+    const chatOptions =
+      typeof onDeltaOrOptions === "function"
+        ? { onDelta: onDeltaOrOptions, onToolEvent, conversationKey }
+        : (onDeltaOrOptions ?? {});
     await syncForRead();
-    const cid = conversationId(surface);
+    const cid = conversationId(surface, chatOptions.conversationKey);
     const window = await state.recentWindow(cid);
     await state.appendMessage(cid, "user", message, surface);
 
@@ -450,7 +462,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         question: message,
         vaultBriefing: await vaultBriefing(),
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
-        ...(onDelta ? { onTextDelta: onDelta } : {}),
+        ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
+        ...(chatOptions.onToolEvent ? { onToolEvent: chatOptions.onToolEvent } : {}),
       },
       readTools(),
       taskTools,

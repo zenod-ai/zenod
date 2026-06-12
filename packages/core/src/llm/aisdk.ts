@@ -42,6 +42,29 @@ function caught(run: () => Promise<string>): Promise<string> {
   return run().catch((err: unknown) => `ERROR: ${(err as Error).message}`);
 }
 
+/** Human-facing label for the "calling a tool…" indicator in the chat UI. */
+function toolLabel(toolName: string, input: unknown): string {
+  const args = (input ?? {}) as Record<string, unknown>;
+  switch (toolName) {
+    case "search_vault":
+      return typeof args.query === "string" ? `Searching the vault for “${args.query}”` : "Searching the vault";
+    case "read_note":
+      return typeof args.path === "string" ? `Reading ${args.path}` : "Reading a note";
+    case "list_pages":
+      return "Listing vault pages";
+    case "list_drive_files":
+      return "Listing your Google Drive";
+    case "ingest_drive_file":
+      return "Ingesting a Google Drive file — downloading, transcribing, filing";
+    case "propose_vault_task":
+      return "Planning vault changes";
+    case "execute_vault_task":
+      return "Reorganizing the vault";
+    default:
+      return `Running ${toolName}`;
+  }
+}
+
 /**
  * Classification schema. Every field is REQUIRED — optional fields are
  * expressed as `.nullable()`, never `.optional()`. OpenAI's strict structured
@@ -260,11 +283,26 @@ export class AiSdkBrainLlm implements BrainLlm {
       },
     };
 
-    if (input.onTextDelta) {
-      // Stream deltas as they arrive; the loop still runs the full tool chain.
+    if (input.onTextDelta || input.onToolEvent) {
+      // Stream the full event chain so tool calls surface as live activity —
+      // not just text. The loop still runs every tool to completion before the
+      // stream ends, so the turn finishes only once the work is done.
       const result = streamText(config);
-      for await (const delta of result.textStream) input.onTextDelta(delta);
-      return { text: await result.text, readPaths: [...readPaths] };
+      let text = "";
+      for await (const part of result.fullStream) {
+        if (part.type === "text-delta") {
+          text += part.text;
+          input.onTextDelta?.(part.text);
+        } else if (part.type === "tool-call") {
+          // readPaths is tracked by the read_note tool's execute wrapper below.
+          input.onToolEvent?.({ phase: "start", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
+        } else if (part.type === "tool-result") {
+          input.onToolEvent?.({ phase: "end", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
+        } else if (part.type === "tool-error") {
+          input.onToolEvent?.({ phase: "error", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
+        }
+      }
+      return { text, readPaths: [...readPaths] };
     }
 
     const { text } = await generateText(config);

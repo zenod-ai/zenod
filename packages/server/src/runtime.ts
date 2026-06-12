@@ -14,6 +14,8 @@ import { installationToken } from "./githubApp.js";
 import { buildDriveTools } from "./driveTools.js";
 import { OAuthStore } from "./oauthStore.js";
 import { Settings, type Provider } from "./settings.js";
+import { WhatsAppGateway } from "./whatsappGateway.js";
+import { WhatsAppStore } from "./whatsappStore.js";
 
 export class NotConfiguredError extends Error {
   constructor() {
@@ -29,6 +31,8 @@ export class Runtime {
   readonly settings: Settings;
   readonly state: SqliteStateStore;
   readonly oauth: OAuthStore;
+  readonly whatsappStore: WhatsAppStore;
+  readonly whatsapp: WhatsAppGateway;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
 
@@ -37,6 +41,13 @@ export class Runtime {
     this.oauth = new OAuthStore(join(dataDir, "oauth.sqlite"));
     this.settings = new Settings(this.state);
     this.settings.seedFromEnv();
+    this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
+    this.whatsapp = new WhatsAppGateway({
+      dataDir: join(dataDir, "whatsapp"),
+      settings: this.settings,
+      store: this.whatsappStore,
+      getEngine: () => this.getEngine(),
+    });
   }
 
   get workdir(): string {
@@ -105,6 +116,11 @@ export class Runtime {
   async reclone(): Promise<void> {
     this.invalidate();
     await rm(this.workdir, { recursive: true, force: true });
+  }
+
+  close(): void {
+    this.state.close();
+    this.whatsappStore.close();
   }
 }
 

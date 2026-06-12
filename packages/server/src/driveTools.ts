@@ -58,15 +58,22 @@ export function buildDriveTools(
     async ingestDriveFile(fileId: string, hints?: string[]): Promise<string> {
       const file = await client.getFile(fileId);
       const sourceLink = file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
+      const sizeMb = file.size ? (Number(file.size) / (1024 * 1024)).toFixed(1) : "?";
+      console.log(`[drive] ingest start: ${file.name} (${file.mimeType}, ${sizeMb} MB)`);
 
       let body: string;
       let transcribedBy: string | undefined;
       if (isAudioMimeType(file.mimeType)) {
         const data = await client.download(file.id);
-        const result = await transcribeAudio(data, file.name, settings.transcriptionKey());
-        if (!result.success) throw new Error(`could not transcribe ${file.name}: ${result.error}`);
+        console.log(`[drive] transcribing ${file.name} locally with whisper.cpp…`);
+        const result = await transcribeAudio(data, file.name);
+        if (!result.success) {
+          console.error(`[drive] transcription failed for ${file.name}: ${result.error}`);
+          throw new Error(`could not transcribe ${file.name}: ${result.error}`);
+        }
         body = result.transcript!;
         transcribedBy = result.provider;
+        console.log(`[drive] transcribed ${file.name} via ${transcribedBy} (${body.length} chars)`);
       } else if (GOOGLE_DOC_MIMES.has(file.mimeType)) {
         body = await client.exportText(file.id);
       } else if (
@@ -104,6 +111,7 @@ export function buildDriveTools(
           archiveNote = `archived: no — ${(err as Error).message.slice(0, 150)} (share the folder as Editor to enable archiving)`;
         }
       }
+      console.log(`[drive] ingest done: ${file.name} → ${result.pagesTouched.join(", ")} (${archiveNote})`);
 
       return [
         result.question ? `NEEDS FILING — ask the user: ${result.question}` : `Ingested ${file.name}.`,

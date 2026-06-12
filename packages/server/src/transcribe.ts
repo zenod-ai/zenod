@@ -1,14 +1,24 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { extname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 /**
- * Audio transcription for the Drive ingestion flow (docs/ROADMAP.md M1.5):
- * a provider envelope over Whisper-compatible APIs — Groq's
- * whisper-large-v3-turbo when a Groq key is configured, else OpenAI's
- * whisper-1. Files above the API size limit are first downsampled to 16 kHz
- * mono with ffmpeg (~10x smaller), which voice notes tolerate fine.
+ * Local audio transcription with whisper.cpp — no cloud, no API key, no
+ * per-minute cost. The same ffmpeg → 16 kHz mono WAV → whisper-cli flow as
+ * our standalone local_whisper service, run in-process (we already shell out
+ * to ffmpeg). The model is downloaded once to the persistent /data volume so
+ * it survives redeploys and never bloats the image.
+ *
+ * All knobs are env-overridable for self-hosters on smaller boxes:
+ *   ZENOD_WHISPER_BINARY   (default: whisper-cli, on PATH in the image)
+ *   ZENOD_WHISPER_MODEL    (default: large-v3-turbo)
+ *   ZENOD_WHISPER_MODEL_DIR(default: /data/models)
+ *   ZENOD_WHISPER_LANGUAGE (default: auto — detects es/ca/en per note)
+ *   ZENOD_WHISPER_THREADS  (default: 4)
  */
 
 export interface TranscriptionEnvelope {
@@ -18,102 +28,114 @@ export interface TranscriptionEnvelope {
   error?: string;
 }
 
-export interface TranscriptionKey {
-  provider: "groq" | "openai";
-  apiKey: string;
-}
-
-const PROVIDERS = {
-  groq: { url: "https://api.groq.com/openai/v1/audio/transcriptions", model: "whisper-large-v3-turbo" },
-  openai: { url: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1" },
-} as const;
-
-/** Both APIs reject uploads above ~25 MB; downsample anything close to it. */
-const MAX_UPLOAD_BYTES = 24 * 1024 * 1024;
+const WHISPER_BINARY = process.env.ZENOD_WHISPER_BINARY ?? "whisper-cli";
+const MODEL_NAME = process.env.ZENOD_WHISPER_MODEL ?? "large-v3-turbo";
+const MODEL_DIR = process.env.ZENOD_WHISPER_MODEL_DIR ?? "/data/models";
+const LANGUAGE = process.env.ZENOD_WHISPER_LANGUAGE ?? "auto";
+const THREADS = process.env.ZENOD_WHISPER_THREADS ?? "4";
+// Canonical ggml model host — same source local_whisper's download script uses.
+const MODEL_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
 export function isAudioMimeType(mimeType: string): boolean {
   return mimeType.startsWith("audio/") || mimeType.startsWith("video/");
 }
 
-/** 16 kHz mono 32 kbps mp3 — the Whisper input format, ~10x smaller than a phone voice note. */
-async function downsample(data: Buffer, filename: string): Promise<Buffer> {
-  const dir = await mkdtemp(join(tmpdir(), "zenod-audio-"));
-  const input = join(dir, `in${extname(filename) || ".m4a"}`);
-  const output = join(dir, "out.mp3");
-  try {
-    await writeFile(input, data);
-    await new Promise<void>((resolve, reject) => {
-      const ffmpeg = spawn("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-b:a", "32k", output], {
-        stdio: ["ignore", "ignore", "pipe"],
-      });
-      let stderr = "";
-      ffmpeg.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-      ffmpeg.on("error", (err) =>
-        reject(
-          (err as NodeJS.ErrnoException).code === "ENOENT"
-            ? new Error("ffmpeg is not installed on this server — required to shrink audio over 24 MB")
-            : err,
-        ),
-      );
-      ffmpeg.on("close", (code) =>
-        code === 0 ? resolve() : reject(new Error(`ffmpeg failed (exit ${code}): ${stderr.slice(-300)}`)),
-      );
-    });
-    return await readFile(output);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+function modelPath(): string {
+  return join(MODEL_DIR, `ggml-${MODEL_NAME}.bin`);
 }
 
-export async function transcribeAudio(
-  data: Buffer,
-  filename: string,
-  key: TranscriptionKey | null,
-): Promise<TranscriptionEnvelope> {
-  if (!key) {
+// One in-flight download shared across concurrent ingests.
+let modelDownload: Promise<void> | null = null;
+
+async function fileExists(path: string): Promise<boolean> {
+  return stat(path).then(() => true).catch(() => false);
+}
+
+/** Ensure the ggml model is present on the volume, downloading it once. */
+async function ensureModel(): Promise<string> {
+  const dest = modelPath();
+  if (await fileExists(dest)) return dest;
+  if (!modelDownload) {
+    modelDownload = downloadModel(dest).catch((err) => {
+      modelDownload = null; // let a later ingest retry
+      throw err;
+    });
+  }
+  await modelDownload;
+  return dest;
+}
+
+async function downloadModel(dest: string): Promise<void> {
+  await mkdir(dirname(dest), { recursive: true });
+  const url = `${MODEL_BASE_URL}/ggml-${MODEL_NAME}.bin`;
+  console.log(`[whisper] downloading model ${MODEL_NAME} (first run, ~once) from ${url}…`);
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new Error(`model download failed (${response.status}) from ${url}`);
+  }
+  // Download to a temp name, then atomic rename, so a crash mid-download
+  // never leaves a truncated model that whisper would choke on.
+  const tmp = `${dest}.part`;
+  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tmp));
+  await rename(tmp, dest);
+  console.log(`[whisper] model ready at ${dest}`);
+}
+
+function run(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    child.on("error", (err) =>
+      reject(
+        (err as NodeJS.ErrnoException).code === "ENOENT"
+          ? new Error(`${command} is not installed in this image`)
+          : err,
+      ),
+    );
+    child.on("close", (code) =>
+      code === 0 ? resolve() : reject(new Error(`${command} failed (exit ${code}): ${stderr.slice(-400)}`)),
+    );
+  });
+}
+
+/**
+ * Transcribe an audio buffer locally. ffmpeg normalizes to the 16 kHz mono
+ * WAV whisper.cpp expects (any size — it's local, no upload cap), then
+ * whisper-cli writes a .txt we read back.
+ */
+export async function transcribeAudio(data: Buffer, filename: string): Promise<TranscriptionEnvelope> {
+  if ((process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT) {
     return {
-      success: false,
-      error:
-        "no transcription key configured — add a Groq API key (free tier works) or an OpenAI API key in settings",
+      success: true,
+      transcript: process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT,
+      provider: `whisper.cpp ${MODEL_NAME}`,
     };
   }
-  const { url, model } = PROVIDERS[key.provider];
 
+  let model: string;
   try {
-    let upload = data;
-    let uploadName = filename;
-    if (data.byteLength > MAX_UPLOAD_BYTES) {
-      upload = await downsample(data, filename);
-      uploadName = `${filename}.mp3`;
-      if (upload.byteLength > MAX_UPLOAD_BYTES) {
-        return { success: false, provider: key.provider, error: "audio is still over 24 MB after downsampling" };
-      }
-    }
-
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(upload)]), uploadName);
-    form.append("model", model);
-    form.append("response_format", "json");
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key.apiKey}` },
-      body: form,
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      return {
-        success: false,
-        provider: key.provider,
-        error: `${key.provider} transcription failed (${response.status}): ${detail.slice(0, 200)}`,
-      };
-    }
-    const result = (await response.json()) as { text?: string };
-    if (!result.text || result.text.trim() === "") {
-      return { success: false, provider: key.provider, error: "transcription returned empty text" };
-    }
-    return { success: true, transcript: result.text.trim(), provider: key.provider };
+    model = await ensureModel();
   } catch (err) {
-    return { success: false, provider: key.provider, error: (err as Error).message };
+    return { success: false, provider: "whisper.cpp", error: `model unavailable: ${(err as Error).message}` };
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), "zenod-whisper-"));
+  const input = join(dir, `in${extname(filename) || ".m4a"}`);
+  const wav = join(dir, "audio.wav");
+  const outBase = join(dir, "out");
+  try {
+    await writeFile(input, data);
+    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav]);
+    await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-otxt", "-of", outBase]);
+    const transcript = (await readFile(`${outBase}.txt`, "utf8")).trim();
+    if (!transcript) {
+      return { success: false, provider: "whisper.cpp", error: "transcription returned empty text" };
+    }
+    return { success: true, transcript, provider: `whisper.cpp ${MODEL_NAME}` };
+  } catch (err) {
+    return { success: false, provider: "whisper.cpp", error: (err as Error).message };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 }

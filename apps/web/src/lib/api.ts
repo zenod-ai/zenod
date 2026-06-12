@@ -94,7 +94,19 @@ export type DriveStatus = {
   configured: boolean
   clientEmail: string | null
   folderId: string | null
-  transcriptionProvider: "groq" | "openai" | null
+  transcriptionProvider: string | null
+}
+
+export type WhatsAppStatus = {
+  enabled: boolean
+  state: "disabled" | "disconnected" | "pairing" | "connected" | "error"
+  linkedNumber: string | null
+  lastActivity: number | null
+  lastError: string | null
+  qr: string | null
+  allowedSenders: string[]
+  groupsEnabled: boolean
+  acceptAll: boolean
 }
 
 export type SettingsResponse = {
@@ -177,8 +189,15 @@ export type ChatReply = {
   stored?: ChatStored
 }
 
+export type ChatToolEvent = {
+  phase: "start" | "end" | "error"
+  tool: string
+  label: string
+}
+
 export type ChatStreamHandlers = {
   onDelta: (text: string) => void
+  onTool?: (event: ChatToolEvent) => void
   onDone: (done: { sources: ChatSource[]; stored?: ChatStored }) => void
 }
 
@@ -220,9 +239,12 @@ export async function chatStream(
     if (!trimmed) return
     const event = JSON.parse(trimmed) as
       | { type: "delta"; text: string }
+      | { type: "tool"; phase: ChatToolEvent["phase"]; tool: string; label: string }
       | { type: "done"; sources: ChatSource[]; stored?: ChatStored }
       | { type: "error"; message: string }
     if (event.type === "delta") handlers.onDelta(event.text)
+    else if (event.type === "tool")
+      handlers.onTool?.({ phase: event.phase, tool: event.tool, label: event.label })
     else if (event.type === "done")
       handlers.onDone({ sources: event.sources, ...(event.stored ? { stored: event.stored } : {}) })
     else if (event.type === "error") throw new ApiError(500, event.message)

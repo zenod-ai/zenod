@@ -46,7 +46,6 @@ const CONSOLE_SA_URL =
   "https://console.cloud.google.com/iam-admin/serviceaccounts"
 const CONSOLE_DRIVE_API_URL =
   "https://console.cloud.google.com/apis/library/drive.googleapis.com"
-const GROQ_KEYS_URL = "https://console.groq.com/keys"
 
 /** Google Drive triangle, lucide-style props (lucide ships no brand icons). */
 function DriveIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -105,7 +104,6 @@ export function GoogleDriveConnect() {
   const [setupOpen, setSetupOpen] = React.useState(false)
   const [json, setJson] = React.useState("")
   const [folderId, setFolderId] = React.useState("")
-  const [groqKey, setGroqKey] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [testing, setTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<TestResult | null>(null)
@@ -153,11 +151,9 @@ export function GoogleDriveConnect() {
         body: {
           ...(json.trim() !== "" ? { google_service_account_json: json } : {}),
           google_drive_folder_id: folderId,
-          ...(groqKey.trim() !== "" ? { groq_api_key: groqKey } : {}),
         },
       })
       setJson("")
-      setGroqKey("")
       setSetupOpen(false)
       await loadStatus()
       toast.success("Google Drive connected", {
@@ -223,10 +219,10 @@ export function GoogleDriveConnect() {
               {status?.clientEmail && <CopyButton value={status.clientEmail} />}
             </div>
             <FieldDescription>
-              Any folder shared with this email is visible to Zeno.
-              {status?.transcriptionProvider
-                ? ` Voice-note transcription: ${status.transcriptionProvider}.`
-                : " No transcription key yet — add a Groq key below to ingest voice notes."}
+              Any folder shared with this email is visible to Zeno. Voice
+              notes are transcribed on this server with{" "}
+              {status?.transcriptionProvider ?? "local whisper.cpp"} — no API
+              key, no per-minute cost.
             </FieldDescription>
           </Field>
         )}
@@ -320,32 +316,11 @@ export function GoogleDriveConnect() {
               </FieldDescription>
             </Field>
 
-            <Field>
-              <FieldLabel htmlFor="drive-groq-key">
-                Groq API key (voice-note transcription)
-              </FieldLabel>
-              <Input
-                id="drive-groq-key"
-                type="password"
-                autoComplete="off"
-                placeholder="gsk_…"
-                value={groqKey}
-                onChange={(event) => setGroqKey(event.target.value)}
-              />
-              <FieldDescription>
-                Whisper on Groq&apos;s{" "}
-                <a
-                  className="underline underline-offset-4"
-                  href={GROQ_KEYS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  free tier
-                </a>
-                . Falls back to your OpenAI key (Keys &amp; models) if one is
-                saved.
-              </FieldDescription>
-            </Field>
+            <FieldDescription>
+              Voice notes are transcribed locally with whisper.cpp
+              (large-v3-turbo), built into this server — no API key, no
+              per-minute cost. The model downloads once on the first ingest.
+            </FieldDescription>
 
             {testResult !== null && (
               <p

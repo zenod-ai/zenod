@@ -3,6 +3,8 @@
  * (later) the WhatsApp gateway are all thin adapters over `BrainEngine`.
  */
 
+import type { ChatToolEvent } from "./llm/types.js";
+
 export type Surface = "cli" | "mcp" | "whatsapp" | "web" | "drive";
 
 export interface StoreInput {
@@ -108,8 +110,20 @@ export interface BrainEngine {
   store(input: StoreInput): Promise<StoreResult>;
   /** Read-only agent loop: synthesized answer with citations. */
   ask(question: string): Promise<Answer>;
-  /** Full conversational turn: ask + optional store, with conversation memory. Pass onDelta to stream the answer. */
-  chat(message: string, surface: Surface, onDelta?: (delta: string) => void): Promise<Reply>;
+  /**
+   * Full conversational turn: ask + optional store, with conversation memory.
+   * Pass onDelta to stream the answer text, onToolEvent to surface tool
+   * start/end activity (the chat "calling a tool…" indicator). `conversationKey`
+   * scopes history for surfaces with multiple independent users, such as
+   * WhatsApp senders.
+   */
+  chat(
+    message: string,
+    surface: Surface,
+    onDeltaOrOptions?: ((delta: string) => void) | ChatOptions,
+    onToolEvent?: (event: ChatToolEvent) => void,
+    conversationKey?: string,
+  ): Promise<Reply>;
   /** Librarian work loop: propose (no plan) then execute (approved plan) vault maintenance. */
   work(input: WorkInput): Promise<WorkResult>;
   /** Deterministic two-pass search. No LLM. */
@@ -118,6 +132,12 @@ export interface BrainEngine {
   get(path: string): Promise<Note>;
   /** Deterministic vault validation. No LLM. */
   lint(): Promise<LintReport>;
+}
+
+export interface ChatOptions {
+  onDelta?: (delta: string) => void;
+  onToolEvent?: (event: ChatToolEvent) => void;
+  conversationKey?: string;
 }
 
 /**

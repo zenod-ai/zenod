@@ -68,7 +68,7 @@ describe("MCP endpoint", () => {
 
   afterAll(async () => {
     server.close();
-    runtime.state.close();
+    runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
 

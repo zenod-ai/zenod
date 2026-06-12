@@ -93,21 +93,22 @@ describe("drive client", () => {
 });
 
 describe("transcription envelope", () => {
-  it("fails cleanly without a key", async () => {
-    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", null);
+  it("fails cleanly when the local model is unavailable", async () => {
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a");
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/no transcription key/);
+    expect(result.provider).toBe("whisper.cpp");
+    expect(result.error).toMatch(/model unavailable/);
   });
 
-  it("transcribes through the configured provider", async () => {
-    vi.stubGlobal("fetch", stubFetch());
-    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", { provider: "groq", apiKey: "gsk_test" });
+  it("transcribes through the local provider", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a");
     expect(result).toEqual({
       success: true,
       transcript: "remember to renew the travel insurance",
-      provider: "groq",
+      provider: "whisper.cpp large-v3-turbo",
     });
-    vi.unstubAllGlobals();
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
   });
 });
 
@@ -121,8 +122,9 @@ describe("drive tools + API", () => {
   });
 
   afterEach(async () => {
-    runtime.state.close();
+    runtime.close();
     await rm(dir, { recursive: true, force: true });
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
     vi.unstubAllGlobals();
   });
 
@@ -133,9 +135,9 @@ describe("drive tools + API", () => {
   it("ingests an audio file: download, transcribe, store, archive in Drive", async () => {
     const moves: string[] = [];
     vi.stubGlobal("fetch", stubFetch(moves));
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
     runtime.settings.set("google_service_account_json", SA_JSON);
     runtime.settings.set("google_drive_folder_id", "folder-9");
-    runtime.settings.set("groq_api_key", "gsk_test");
 
     const stored: StoreInput[] = [];
     const fakeEngine = {
@@ -170,10 +172,8 @@ describe("drive tools + API", () => {
 
   it("masks the new secrets and exposes drive status", async () => {
     runtime.settings.set("google_service_account_json", SA_JSON);
-    runtime.settings.set("groq_api_key", "gsk_secret");
     const masked = runtime.settings.masked();
     expect(masked.google_service_account_json).toMatch(/^••••/);
-    expect(masked.groq_api_key).toMatch(/^••••/);
     expect(masked.google_service_account_json).not.toContain("PRIVATE KEY");
 
     const app = createApp(runtime);
@@ -188,6 +188,6 @@ describe("drive tools + API", () => {
     const body = await status.json();
     expect(body.configured).toBe(true);
     expect(body.clientEmail).toBe("zenod@test-project.iam.gserviceaccount.com");
-    expect(body.transcriptionProvider).toBe("groq");
+    expect(body.transcriptionProvider).toBe("whisper.cpp (local)");
   });
 });

@@ -18,7 +18,7 @@ describe("GitHub App flow", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    runtime.state.close();
+    runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
 

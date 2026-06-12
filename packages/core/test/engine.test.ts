@@ -340,10 +340,26 @@ describe("BrainEngine", () => {
     expect(reply.stored).toBeDefined();
     expect(reply.text).toBeTruthy();
 
-    const window = await state.recentWindow("default:web");
+    const window = await state.recentWindow("web:default");
     expect(window.length).toBe(2);
     expect(window[0]?.role).toBe("user");
     expect(window[1]?.role).toBe("assistant");
+  });
+
+  it("chat can isolate conversation history with a conversation key", async () => {
+    const e = engine();
+    await e.chat("hello from first sender", "whatsapp", { conversationKey: "34600000001" });
+    await e.chat("hello from second sender", "whatsapp", { conversationKey: "34600000002" });
+
+    expect((await state.recentWindow("whatsapp:34600000001")).map((m) => m.text)).toEqual([
+      "hello from first sender",
+      expect.stringContaining("Axa"),
+    ]);
+    expect((await state.recentWindow("whatsapp:34600000002")).map((m) => m.text)).toEqual([
+      "hello from second sender",
+      expect.stringContaining("Axa"),
+    ]);
+    expect(await state.recentWindow("web:default")).toEqual([]);
   });
 
   it("chat streams deltas to onDelta and the joined text equals reply.text", async () => {
@@ -355,7 +371,7 @@ describe("BrainEngine", () => {
     expect(reply.sources[0]?.path).toBe("Areas/Insurance.md"); // sources still resolve at the end
 
     // The streamed turn is persisted just like a non-streamed one.
-    const window = await state.recentWindow("default:web");
+    const window = await state.recentWindow("web:default");
     expect(window[window.length - 1]?.text).toBe(reply.text);
   });
 });

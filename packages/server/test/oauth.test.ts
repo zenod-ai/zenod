@@ -27,7 +27,7 @@ describe("OAuth 2.1 provider", () => {
   });
 
   afterEach(async () => {
-    runtime.state.close();
+    runtime.close();
     runtime.oauth.close();
     await rm(dir, { recursive: true, force: true });
   });

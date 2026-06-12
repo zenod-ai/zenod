@@ -74,6 +74,18 @@ export interface ComposePageInput {
   previousErrors?: LintError[];
 }
 
+/**
+ * A tool the agent loop invoked, surfaced to the UI so a long-running step
+ * (a Drive ingest, a vault reorganization) shows as live activity instead of
+ * a frozen screen. `label` is human-facing ("Ingesting a Drive file"); `tool`
+ * is the raw name for keys/debugging.
+ */
+export interface ChatToolEvent {
+  phase: "start" | "end" | "error";
+  tool: string;
+  label: string;
+}
+
 export interface AnswerInput {
   question: string;
   /** AGENTS.md + folder index context for the system prompt. */
@@ -85,6 +97,11 @@ export interface AnswerInput {
    * arrives. The full text is still returned in AnswerResult when the loop ends.
    */
   onTextDelta?: (delta: string) => void;
+  /**
+   * If set, tool start/end events are delivered as the loop calls tools — the
+   * basis for the "calling a tool…" indicator in the chat UI.
+   */
+  onToolEvent?: (event: ChatToolEvent) => void;
 }
 
 /** Read-only tool callbacks the agent loop may invoke. */

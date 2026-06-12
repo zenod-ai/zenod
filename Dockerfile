@@ -17,10 +17,27 @@ RUN npm run build
 # drop dev dependencies for the runtime copy
 RUN npm prune --omit=dev
 
+# ---- whisper.cpp (local, in-image transcription) ----
+# Same node:22-alpine base as the runtime so the musl/libstdc++ ABI matches.
+FROM node:22-alpine AS whisper
+RUN apk add --no-cache build-base cmake git
+WORKDIR /opt
+RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
+WORKDIR /opt/whisper.cpp
+# Static ggml/whisper libs linked into one whisper-cli binary; native SIMD
+# (the image is built on the same host it runs on via Dokploy).
+# -j2 (not nproc): the Dokploy build host is RAM-constrained; 4 parallel g++
+# jobs on ggml can OOM-kill the build.
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+      -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF \
+ && cmake --build build -j2 --target whisper-cli
+
 # ---- runtime ----
 FROM node:22-alpine
-# ffmpeg shrinks large voice notes before transcription (Drive ingestion)
-RUN apk add --no-cache git ripgrep ffmpeg
+# ffmpeg normalizes audio to 16 kHz mono WAV; libgomp/libstdc++ are whisper-cli's
+# runtime deps. The whisper model itself downloads once to the /data volume.
+RUN apk add --no-cache git ripgrep ffmpeg libstdc++ libgomp
+COPY --from=whisper /opt/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=8080 \

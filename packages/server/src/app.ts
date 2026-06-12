@@ -39,6 +39,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   const app = new Hono<{ Bindings: HttpBindings }>();
   const { settings } = runtime;
 
+  void runtime.whatsapp.startIfEnabled().catch((err: unknown) => {
+    console.error("[whatsapp] startup failed:", err);
+  });
+
   app.onError((err, c) => {
     if (err instanceof NotConfiguredError) return c.json({ error: err.message, code: "not_configured" }, 409);
     if (err instanceof NoteNotFoundError) return c.json({ error: err.message }, 404);
@@ -170,8 +174,51 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       configured: settings.driveConfigured(),
       clientEmail,
       folderId: settings.get("google_drive_folder_id"),
-      transcriptionProvider: settings.transcriptionKey()?.provider ?? null,
+      // Transcription is local whisper.cpp, built into the image — always
+      // available, no key required.
+      transcriptionProvider: "whisper.cpp (local)",
     });
+  });
+
+  app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
+
+  app.put("/api/whatsapp/settings", async (c) => {
+    const body = await c.req
+      .json<{
+        enabled?: boolean;
+        allowedSenders?: string[] | string;
+        groupsEnabled?: boolean;
+        acceptAll?: boolean;
+      }>()
+      .catch(() => ({} as { enabled?: boolean; allowedSenders?: string[] | string; groupsEnabled?: boolean; acceptAll?: boolean }));
+    const next = settings.setWhatsAppSettings({
+      ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
+      ...(body.allowedSenders !== undefined ? { allowedSenders: body.allowedSenders } : {}),
+      ...(typeof body.groupsEnabled === "boolean" ? { groupsEnabled: body.groupsEnabled } : {}),
+      ...(typeof body.acceptAll === "boolean" ? { acceptAll: body.acceptAll } : {}),
+    });
+    if (next.enabled) await runtime.whatsapp.startIfEnabled();
+    else await runtime.whatsapp.disconnect();
+    return c.json(runtime.whatsapp.status());
+  });
+
+  app.post("/api/whatsapp/pair", async (c) => {
+    await runtime.whatsapp.pair();
+    return c.json(runtime.whatsapp.status());
+  });
+
+  app.post("/api/whatsapp/disconnect", async (c) => {
+    settings.setWhatsAppSettings({ enabled: false });
+    await runtime.whatsapp.disconnect();
+    return c.json(runtime.whatsapp.status());
+  });
+
+  app.post("/api/whatsapp/reset-session", async (c) => {
+    const body = await c.req.json<{ confirm?: string }>().catch(() => ({}) as { confirm?: string });
+    if (body.confirm !== "RESET") return c.json({ error: "confirm must be RESET" }, 400);
+    settings.setWhatsAppSettings({ enabled: false });
+    await runtime.whatsapp.resetSession();
+    return c.json(runtime.whatsapp.status());
   });
 
   app.get("/api/token", (c) =>
@@ -321,9 +368,18 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       async start(controller) {
         const send = (event: unknown) => controller.enqueue(enc.encode(JSON.stringify(event) + "\n"));
         try {
-          const reply = await engine.chat(message, "web", (delta) => send({ type: "delta", text: delta }));
+          const reply = await engine.chat(message, "web", {
+            onDelta: (delta) => send({ type: "delta", text: delta }),
+            onToolEvent: (event) => {
+              // Mirror tool activity to the server log — the only place a long
+              // ingest/transcription is observable while it runs.
+              console.log(`[chat] tool ${event.phase}: ${event.tool} — ${event.label}`);
+              send({ type: "tool", phase: event.phase, tool: event.tool, label: event.label });
+            },
+          });
           send({ type: "done", sources: reply.sources, ...(reply.stored ? { stored: reply.stored } : {}) });
         } catch (err) {
+          console.error("[chat] stream failed:", err);
           send({ type: "error", message: err instanceof Error ? err.message : "chat failed" });
         } finally {
           controller.close();

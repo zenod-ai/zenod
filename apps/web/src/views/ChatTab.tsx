@@ -1,5 +1,5 @@
 import * as React from "react"
-import { BrainIcon, ExternalLinkIcon, SendIcon, Trash2Icon } from "lucide-react"
+import { BrainIcon, CheckIcon, ExternalLinkIcon, SendIcon, Trash2Icon } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -11,6 +11,7 @@ import {
   type ChatHistoryResponse,
   type ChatSource,
   type ChatStored,
+  type ChatToolEvent,
 } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -65,6 +66,10 @@ type Message = {
   sources?: ChatSource[]
   stored?: ChatStored
   error?: boolean
+  /** Label of the tool currently running this turn (null between/after tools). */
+  activity?: string | null
+  /** Tools that finished this turn, in order — shown as a quiet trail of steps. */
+  steps?: string[]
 }
 
 function SourceLinks({ sources }: { sources: ChatSource[] }) {
@@ -164,8 +169,18 @@ export function ChatTab() {
     try {
       await chatStream(message, {
         onDelta: (text) => patchStreaming((last) => ({ ...last, text: last.text + text })),
+        onTool: (event: ChatToolEvent) =>
+          patchStreaming((last) =>
+            event.phase === "start"
+              ? { ...last, activity: event.label }
+              : {
+                  ...last,
+                  activity: null,
+                  steps: [...(last.steps ?? []), event.label],
+                }
+          ),
         onDone: ({ sources, stored }) =>
-          patchStreaming((last) => ({ ...last, sources, ...(stored ? { stored } : {}) })),
+          patchStreaming((last) => ({ ...last, activity: null, sources, ...(stored ? { stored } : {}) })),
       })
     } catch (err) {
       const text = isNotConfigured(err)
@@ -219,22 +234,47 @@ export function ChatTab() {
               >
                 {message.text}
               </div>
-            ) : message.text === "" && !message.error ? (
-              <div key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner className="size-4" />
-                Working — reads are seconds, reorganizations can take a few minutes…
-              </div>
             ) : (
               <div key={i} className="flex max-w-[85%] flex-col gap-2">
-                <div
-                  className={
-                    message.error
-                      ? "rounded-xl bg-destructive/10 px-3 py-2 text-sm whitespace-pre-wrap text-destructive"
-                      : "rounded-xl bg-muted px-3 py-2 text-sm"
-                  }
-                >
-                  {message.error ? message.text : <AssistantMarkdown text={message.text} />}
-                </div>
+                {/* Trail of tools that already finished this turn. */}
+                {message.steps && message.steps.length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    {message.steps.map((step, s) => (
+                      <div
+                        key={s}
+                        className="flex items-center gap-2 text-xs text-muted-foreground"
+                      >
+                        <CheckIcon className="size-3.5 text-emerald-500" />
+                        {step}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* The tool running right now. */}
+                {message.activity && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner className="size-4" />
+                    {message.activity}
+                  </div>
+                )}
+                {message.text !== "" && (
+                  <div
+                    className={
+                      message.error
+                        ? "rounded-xl bg-destructive/10 px-3 py-2 text-sm whitespace-pre-wrap text-destructive"
+                        : "rounded-xl bg-muted px-3 py-2 text-sm"
+                    }
+                  >
+                    {message.error ? message.text : <AssistantMarkdown text={message.text} />}
+                  </div>
+                )}
+                {/* Nothing yet and no tool running — first moments of the turn. */}
+                {message.text === "" && !message.activity && !message.error && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner className="size-4" />
+                    Working…
+                  </div>
+                )}
                 {message.stored && <StoredReceipt stored={message.stored} />}
                 {message.sources && <SourceLinks sources={message.sources} />}
               </div>
