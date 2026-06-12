@@ -59,7 +59,7 @@ export interface SocketLike {
   user?: { id?: string | null } | null;
   sendMessage(jid: string, content: { text: string }): Promise<{ key?: { id?: string | null } } | undefined>;
   readMessages?(keys: WAMessageKey[]): Promise<void>;
-  sendReceipts?(keys: WAMessageKey[], type: "read" | "sender"): Promise<void>;
+  sendReceipts?(keys: WAMessageKey[], type: "read"): Promise<void>;
   sendPresenceUpdate?(type: "composing" | "paused", toJid?: string): Promise<void>;
   presenceSubscribe?(toJid: string): Promise<void>;
   onWhatsApp?(...jids: string[]): Promise<Array<{ jid?: string; exists?: unknown; lid?: unknown }> | undefined>;
@@ -219,14 +219,6 @@ function inboundMessageKeys(event: WhatsAppInboundEvent): WAMessageKey[] {
     keys.push({ ...key, remoteJid: event.senderId, participant: undefined });
   }
   return keys;
-}
-
-function senderReceiptKeys(event: WhatsAppInboundEvent): WAMessageKey[] {
-  const raw = event.raw as WAMessage | undefined;
-  const key = raw?.key;
-  if (!key || event.isGroup || !event.senderId || !event.chatId || event.senderId === event.chatId) return [];
-  if (!event.senderId.endsWith("@s.whatsapp.net") || !event.chatId.endsWith("@lid")) return [];
-  return [{ ...key, remoteJid: event.senderId, participant: event.chatId }];
 }
 
 function delay(ms: number): Promise<void> {
@@ -528,15 +520,12 @@ export class WhatsAppGateway {
   private async markEventRead(event: WhatsAppInboundEvent): Promise<void> {
     const keys = inboundMessageKeys(event);
     if (keys.length === 0) return;
-    await (this.socket?.sendReceipts ? this.socket.sendReceipts(keys, "read") : this.socket?.readMessages?.(keys))?.catch((err: unknown) => {
+    const markRead = this.socket?.sendReceipts
+      ? this.socket.sendReceipts(keys, "read")
+      : this.socket?.readMessages?.(keys);
+    await markRead?.catch((err: unknown) => {
       console.warn("[whatsapp] could not mark message read:", err);
     });
-    const senderKeys = senderReceiptKeys(event);
-    if (senderKeys.length > 0 && this.socket?.sendReceipts) {
-      await this.socket.sendReceipts(senderKeys, "sender").catch((err: unknown) => {
-        console.warn("[whatsapp] could not send sender receipt:", err);
-      });
-    }
   }
 
   private async setTyping(event: WhatsAppInboundEvent, typing: boolean): Promise<void> {

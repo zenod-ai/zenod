@@ -23,7 +23,7 @@ class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
   readonly sent: Array<{ jid: string; text: string }> = [];
   readonly readKeys: unknown[] = [];
-  readonly receipts: Array<{ keys: unknown[]; type: "read" | "sender" }> = [];
+  readonly receipts: Array<{ keys: unknown[]; type: "read" }> = [];
   readonly presence: Array<{ type: "composing" | "paused"; jid?: string }> = [];
   readonly presenceSubscriptions: string[] = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
@@ -43,7 +43,7 @@ class FakeSocket implements SocketLike {
     this.readKeys.push(...keys);
   }
 
-  async sendReceipts(keys: Parameters<NonNullable<SocketLike["sendReceipts"]>>[0], type: "read" | "sender") {
+  async sendReceipts(keys: Parameters<NonNullable<SocketLike["sendReceipts"]>>[0], type: "read") {
     this.receipts.push({ keys, type });
   }
 
@@ -344,16 +344,9 @@ describe("WhatsAppGateway", () => {
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
       expect(socket.readKeys).toHaveLength(0);
-      expect(socket.receipts).toHaveLength(2);
+      expect(socket.receipts).toHaveLength(1);
       expect(socket.receipts[0]?.type).toBe("read");
       expect(socket.receipts[0]?.keys).toHaveLength(2);
-      expect(socket.receipts[1]?.type).toBe("sender");
-      expect(socket.receipts[1]?.keys).toMatchObject([
-        {
-          remoteJid: "34611111111@s.whatsapp.net",
-          participant: "123456789012345@lid",
-        },
-      ]);
       expect(socket.presenceSubscriptions).toEqual(["34611111111@s.whatsapp.net", "123456789012345@lid"]);
       expect(socket.presence).toEqual([
         { type: "composing", jid: "34611111111@s.whatsapp.net" },
