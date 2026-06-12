@@ -103,6 +103,22 @@ describe("WhatsApp helpers", () => {
       null,
     );
   });
+
+  it("prefers Baileys senderPn over LID remote ids for direct senders", () => {
+    const event = eventFromBaileysMessage(
+      textMessage({
+        key: {
+          id: "m_lid",
+          remoteJid: "123456789012345@lid",
+          senderPn: "34611111111@s.whatsapp.net",
+          fromMe: false,
+        },
+      }),
+    );
+
+    expect(event?.chatId).toBe("123456789012345@lid");
+    expect(event?.senderId).toBe("34611111111@s.whatsapp.net");
+  });
 });
 
 describe("WhatsAppStore", () => {
@@ -253,6 +269,47 @@ describe("WhatsAppGateway", () => {
       expect(gateway.status().diagnostics.lastAliasRefreshAllowedCount).toBe(1);
       expect(gateway.status().diagnostics.lastAliasRefreshResultCount).toBe(1);
       expect(gateway.status().diagnostics.lastAliasRefreshError).toBeNull();
+      expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sends direct replies to senderPn when WhatsApp provides a LID chat id", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-senderpn-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const calls: string[] = [];
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine(calls),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+
+      await gateway.handleMessages(
+        [
+          textMessage({
+            key: {
+              id: "msg_senderpn",
+              remoteJid: "123456789012345@lid",
+              senderPn: "34611111111@s.whatsapp.net",
+              fromMe: false,
+            },
+          }),
+        ],
+        "notify",
+      );
+
+      expect(calls).toEqual(["34611111111:hello"]);
+      expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
     } finally {
       runtime.close();

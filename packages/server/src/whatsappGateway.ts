@@ -165,7 +165,8 @@ export function eventFromBaileysMessage(message: WAMessage): WhatsAppInboundEven
   if (chatId.includes("status")) return null;
   if (message.key.fromMe) return null;
 
-  const senderId = normalizedJid(message.key.participant || chatId);
+  const keyWithSenderPn = message.key as typeof message.key & { senderPn?: string | null };
+  const senderId = normalizedJid(keyWithSenderPn.senderPn || message.key.participant || chatId);
   const content = contentFromMessage(message);
   const extracted = extractBodyAndMedia(content);
   if (!extracted) return null;
@@ -648,11 +649,12 @@ export class WhatsAppGateway {
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
     if (!text) return;
+    const recipientJid = event.isGroup ? event.chatId : event.senderId || event.chatId;
     try {
-      const sent = await this.socket?.sendMessage(event.chatId, { text });
+      const sent = await this.socket?.sendMessage(recipientJid, { text });
       this.options.store.recordOutboundAudit({
         messageId: event.messageId,
-        chatId: event.chatId,
+        chatId: recipientJid,
         contactId: event.senderId,
         bodyText: text,
         status,
@@ -662,7 +664,7 @@ export class WhatsAppGateway {
     } catch (err) {
       this.options.store.recordOutboundAudit({
         messageId: event.messageId,
-        chatId: event.chatId,
+        chatId: recipientJid,
         contactId: event.senderId,
         bodyText: text,
         status: "failed",
