@@ -8,7 +8,15 @@ import type { Settings } from "./settings.js";
  * service account can see, and ingest one file — transcribing audio first —
  * through the engine's store pipeline so it lands as immutable evidence
  * (with the Drive link as provenance) plus filed meaning pages.
+ *
+ * The shared folder is the INBOX and Drive is the binary store (the vault
+ * holds markdown + pointers, never the binaries). After a successful ingest
+ * the file is moved into an auto-created Archive/ subfolder — its file ID
+ * and webViewLink survive the move, so the evidence pointer stays valid and
+ * the inbox listing only ever shows what hasn't been consumed yet.
  */
+
+const ARCHIVE_FOLDER = "Archive";
 
 const TEXT_MIME_PREFIXES = ["text/"];
 const TEXT_MIME_EXACT = new Set(["application/json", "application/xml", "application/x-yaml"]);
@@ -42,7 +50,7 @@ export function buildDriveTools(
       if (files.length === 0) {
         return query
           ? `no Drive files match '${query}'`
-          : "the connected Drive folder is empty (or nothing is shared with the service account yet)";
+          : "the Drive inbox is empty — everything has been ingested and archived (or nothing is shared with the service account yet)";
       }
       return files.map(describe).join("\n");
     },
@@ -84,11 +92,25 @@ export function buildDriveTools(
         ...(hints && hints.length > 0 ? { hints } : {}),
       });
 
+      // Archive after the store landed: the Drive link in the evidence is by
+      // file ID, so it survives the move. A view-only share just skips this.
+      let archiveNote = "archived: no (no inbox folder configured)";
+      if (folderId) {
+        try {
+          const archiveId = await client.ensureFolder(ARCHIVE_FOLDER, folderId);
+          await client.moveFile(file.id, archiveId);
+          archiveNote = `archived: moved to ${ARCHIVE_FOLDER}/ in Drive (same link)`;
+        } catch (err) {
+          archiveNote = `archived: no — ${(err as Error).message.slice(0, 150)} (share the folder as Editor to enable archiving)`;
+        }
+      }
+
       return [
         result.question ? `NEEDS FILING — ask the user: ${result.question}` : `Ingested ${file.name}.`,
         `evidence: ${result.evidenceRef}`,
         `pages: ${result.pagesTouched.join(", ")}`,
         `commit: ${result.commitSha}`,
+        archiveNote,
       ].join("\n");
     },
   };

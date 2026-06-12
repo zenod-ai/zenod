@@ -206,9 +206,10 @@ export function GoogleDriveConnect() {
           )}
         </CardTitle>
         <CardDescription>
-          Drop voice notes or documents in a Drive folder and ask Zeno to
-          ingest them — audio is transcribed, filed into the vault as
-          evidence, and committed.
+          Your shared Drive folder becomes Zeno&apos;s inbox: drop voice notes
+          or documents there and ask Zeno to ingest them — audio is
+          transcribed, filed into the vault as evidence, and the original is
+          moved to an Archive/ subfolder in Drive (the vault keeps the link).
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -259,7 +260,8 @@ export function GoogleDriveConnect() {
               </Step>
               <Step n={2}>
                 Paste the key file below — its email appears; share your Drive
-                folder with that email (Viewer is enough).
+                folder with that email as <strong>Editor</strong> (lets Zeno
+                archive ingested files; Viewer works but skips archiving).
               </Step>
               <Step n={3}>
                 Test, save, and you&apos;re connected — from then on Zeno can
@@ -312,8 +314,9 @@ export function GoogleDriveConnect() {
                 onChange={(event) => setFolderId(event.target.value)}
               />
               <FieldDescription>
-                Scopes Zeno to one folder. Leave empty to see everything
-                shared with the service account.
+                The folder that acts as the inbox — needed for archiving.
+                Leave empty to see everything shared with the service account
+                (no archiving).
               </FieldDescription>
             </Field>
 

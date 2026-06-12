@@ -156,7 +156,7 @@ export function buildMcpServer(
       {
         title: "List Google Drive files",
         description:
-          "List the files in the user's connected Google Drive folder, newest first — one per line with name, file ID, type, size, and modified date. Optional query filters by name. Use the file IDs with ingest_drive_file.",
+          "List files waiting in the user's Google Drive inbox folder, newest first — one per line with name, file ID, type, size, and modified date (already-ingested files live in its Archive/ subfolder and are not shown). Optional query filters by name. Use the file IDs with ingest_drive_file.",
         inputSchema: { query: z.string().optional().describe("Filter by file name (substring)") },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       },
@@ -170,7 +170,7 @@ export function buildMcpServer(
       {
         title: "Ingest a Google Drive file",
         description:
-          "Download one Google Drive file by ID and ingest it into the vault through the librarian pipeline. Audio voice notes (m4a, mp3, ogg, wav) are transcribed first; the transcript is recorded as immutable evidence with a link back to the Drive original, then filed onto meaning page(s) and committed. Returns the filing report. Ingest one file per call.",
+          "Download one Google Drive file by ID and ingest it into the vault through the librarian pipeline. Audio voice notes (m4a, mp3, ogg, wav) are transcribed first; the transcript is recorded as immutable evidence with a link back to the Drive original, then filed onto meaning page(s) and committed. After a successful ingest the file moves from the inbox to its Archive/ subfolder in Drive (the link stays valid). Returns the filing report. Ingest one file per call.",
         inputSchema: {
           fileId: z.string().min(1).describe("The Drive file ID from list_drive_files"),
           hints: z.array(z.string()).optional().describe("Optional filing hints"),

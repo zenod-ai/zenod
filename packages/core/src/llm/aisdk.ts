@@ -199,7 +199,7 @@ export class AiSdkBrainLlm implements BrainLlm {
       ? {
           list_drive_files: tool({
             description:
-              "List files in the user's connected Google Drive folder, newest first. Optional query filters by file name. Returns one file per line: name, file ID, type, size, modified date. Use when the user mentions files, recordings, or voice notes they dropped in Drive.",
+              "List files waiting in the user's Google Drive inbox folder, newest first (already-ingested files live in its Archive/ subfolder and are not shown). Optional query filters by file name. Returns one file per line: name, file ID, type, size, modified date. Use when the user mentions files, recordings, or voice notes they dropped in Drive.",
             inputSchema: z.object({
               query: z.string().nullable().describe("filter by file name (substring); null lists everything"),
             }),
@@ -207,7 +207,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           }),
           ingest_drive_file: tool({
             description:
-              "Download one Google Drive file by its file ID (from list_drive_files) and ingest it into the vault through the librarian pipeline: audio voice notes (m4a, mp3, ogg, wav) are transcribed first; the transcript lands as immutable evidence with a link back to the Drive file, then gets filed onto the right meaning page(s) and committed. Returns a filing report (evidence ref, pages touched, commit). Ingest ONE file per call; report each result to the user as you go.",
+              "Download one Google Drive file by its file ID (from list_drive_files) and ingest it into the vault through the librarian pipeline: audio voice notes (m4a, mp3, ogg, wav) are transcribed first; the transcript lands as immutable evidence with a link back to the Drive file, then gets filed onto the right meaning page(s) and committed. After a successful ingest the file is moved out of the inbox into the Archive/ subfolder in Drive (its link stays valid). Returns a filing report (evidence ref, pages touched, commit, archive status). Ingest ONE file per call; report each result to the user as you go.",
             inputSchema: z.object({
               fileId: z.string().describe("the Drive file ID"),
               hints: z

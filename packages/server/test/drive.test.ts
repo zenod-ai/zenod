@@ -28,10 +28,11 @@ const FILES = [
   },
 ];
 
-/** fetch stub: token exchange + Drive list/get/download + whisper endpoint. */
-function stubFetch(): typeof fetch {
+/** fetch stub: token exchange + Drive list/get/download/archive + whisper endpoint. */
+function stubFetch(moves: string[] = []): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    const method = init?.method ?? "GET";
     if (url.startsWith("https://oauth2.googleapis.com/token")) {
       const assertion = new URLSearchParams(String(init?.body)).get("assertion")!;
       expect(assertion.split(".")).toHaveLength(3); // a signed JWT
@@ -40,11 +41,22 @@ function stubFetch(): typeof fetch {
     expect((init?.headers as Record<string, string> | undefined)?.Authorization ?? "Bearer tok-123").toContain(
       "Bearer",
     );
-    if (url.includes("/drive/v3/files?") || url.includes("corpora=allDrives")) {
-      return Response.json({ files: FILES });
+    if (url.includes("/drive/v3/files?") && method === "POST") {
+      return Response.json({ id: "archive-folder-1" }); // create Archive/
+    }
+    if (url.includes("/drive/v3/files?")) {
+      const q = new URL(url).searchParams.get("q") ?? "";
+      return Response.json({ files: q.includes(`mimeType = '`) ? [] : FILES }); // no Archive/ yet
+    }
+    if (url.includes("/drive/v3/files/file-1") && method === "PATCH") {
+      moves.push(new URL(url).searchParams.get("addParents") ?? "");
+      return Response.json({ id: "file-1" });
     }
     if (url.includes("/drive/v3/files/file-1") && url.includes("alt=media")) {
       return new Response(Buffer.from("fake-audio-bytes"));
+    }
+    if (url.includes("/drive/v3/files/file-1") && url.includes("fields=parents")) {
+      return Response.json({ parents: ["folder-9"] });
     }
     if (url.includes("/drive/v3/files/file-1")) {
       return Response.json(FILES[0]);
@@ -118,9 +130,11 @@ describe("drive tools + API", () => {
     expect(buildDriveTools(runtime.settings, () => Promise.reject(new Error("unused")))).toBeUndefined();
   });
 
-  it("ingests an audio file: download, transcribe, store with Drive provenance", async () => {
-    vi.stubGlobal("fetch", stubFetch());
+  it("ingests an audio file: download, transcribe, store, archive in Drive", async () => {
+    const moves: string[] = [];
+    vi.stubGlobal("fetch", stubFetch(moves));
     runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
     runtime.settings.set("groq_api_key", "gsk_test");
 
     const stored: StoreInput[] = [];
@@ -144,6 +158,8 @@ describe("drive tools + API", () => {
     const report = await tools.ingestDriveFile("file-1", ["insurance"]);
     expect(report).toContain("Ingested Zenod voice note.m4a");
     expect(report).toContain("Areas/Insurance.md");
+    expect(report).toContain("archived: moved to Archive/");
+    expect(moves).toEqual(["archive-folder-1"]); // moved into the auto-created Archive/
     expect(stored).toHaveLength(1);
     expect(stored[0]!.source).toBe("drive");
     expect(stored[0]!.verbatim).toBe(true);
