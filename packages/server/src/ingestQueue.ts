@@ -23,6 +23,8 @@ const GOOGLE_DOC_MIMES = new Set([
 
 export class IngestQueue {
   private draining = false;
+  /** Abort controllers for jobs currently being processed, so Cancel can kill whisper. */
+  private readonly running = new Map<string, AbortController>();
 
   constructor(
     private readonly store: IngestStore,
@@ -42,6 +44,19 @@ export class IngestQueue {
     const job = this.store.requeue(jobId);
     if (job) void this.drain();
     return job;
+  }
+
+  /**
+   * Cancel a job. If it's running, abort kills the whisper/ffmpeg child; if
+   * it's only queued, mark it interrupted directly. Either way it lands as
+   * interrupted ("cancelled") and is retryable on the current model.
+   */
+  cancel(jobId: string): IngestJob | null {
+    const job = this.store.get(jobId);
+    if (!job) return null;
+    this.store.update(jobId, { status: "interrupted", step: "cancelled", progress: 0 });
+    this.running.get(jobId)?.abort();
+    return this.store.get(jobId);
   }
 
   /** Resume after boot: pick up anything still queued. */
@@ -70,6 +85,8 @@ export class IngestQueue {
     }
     const client = new DriveClient(serviceAccountJson);
     const folderId = this.settings.get("google_drive_folder_id");
+    const controller = new AbortController();
+    this.running.set(job.id, controller);
 
     try {
       const file = await client.getFile(job.driveFileId);
@@ -86,6 +103,7 @@ export class IngestQueue {
         const result = await transcribeAudio(data, file.name, {
           model: this.settings.whisperModel(),
           onProgress: (pct) => this.store.update(job.id, { progress: pct }),
+          signal: controller.signal,
         });
         if (!result.success) throw new Error(`transcription failed: ${result.error}`);
         body = result.transcript!;
@@ -137,8 +155,16 @@ export class IngestQueue {
       });
       console.log(`[ingest] ${job.id} done: ${file.name} → ${stored.pagesTouched.join(", ")} (archived: ${archived})`);
     } catch (err) {
-      console.error(`[ingest] ${job.id} failed:`, err);
-      this.store.update(job.id, { status: "error", step: null, error: (err as Error).message });
+      if (controller.signal.aborted) {
+        // Cancelled by the user — cancel() already set it to interrupted; don't
+        // overwrite with an error.
+        console.log(`[ingest] ${job.id} cancelled`);
+      } else {
+        console.error(`[ingest] ${job.id} failed:`, err);
+        this.store.update(job.id, { status: "error", step: null, error: (err as Error).message });
+      }
+    } finally {
+      this.running.delete(job.id);
     }
   }
 }

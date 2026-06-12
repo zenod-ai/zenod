@@ -23,6 +23,7 @@ class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
   readonly sent: Array<{ jid: string; text: string }> = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
+  onWhatsApp?: SocketLike["onWhatsApp"];
   ev = {
     on: (event: "connection.update" | "messages.upsert", listener: (...args: never[]) => void) => {
       this.emitter.on(event, listener);
@@ -210,6 +211,46 @@ describe("WhatsAppGateway", () => {
       await gateway.handleMessages([textMessage({ key: { id: "m2", remoteJid: "1@s.whatsapp.net", fromMe: false } })], "append");
       expect(gateway.status().diagnostics.lastIgnoredReason).toBe("upsert_type_append");
       expect(gateway.status().diagnostics.lastUpsertType).toBe("append");
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("allows LID senders resolved from allowlisted phone numbers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-lid-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const calls: string[] = [];
+    socket.onWhatsApp = async () => [
+      {
+        jid: "34611111111@s.whatsapp.net",
+        exists: true,
+        lid: "123456789012345@lid",
+      },
+    ];
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine(calls),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+
+      await gateway.handleMessages(
+        [textMessage({ key: { id: "msg_lid", remoteJid: "123456789012345@lid", fromMe: false } })],
+        "notify",
+      );
+
+      expect(calls).toEqual(["123456789012345:hello"]);
+      expect(socket.sent).toEqual([{ jid: "123456789012345@lid", text: "Re: hello" }]);
+      expect(gateway.status().diagnostics.allowedSenderAliasCount).toBeGreaterThan(1);
+      expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });

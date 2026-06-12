@@ -214,6 +214,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ job });
   });
 
+  app.post("/api/ingest/jobs/:id/cancel", (c) => {
+    const job = runtime.ingestQueue.cancel(c.req.param("id"));
+    if (!job) return c.json({ error: "job not found" }, 404);
+    return c.json({ job });
+  });
+
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
 
   app.put("/api/whatsapp/settings", async (c) => {

@@ -4,6 +4,7 @@ import {
   CircleAlertIcon,
   RefreshCwIcon,
   RotateCwIcon,
+  XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -68,7 +69,15 @@ function StatusBadge({ job }: { job: IngestJob }) {
   )
 }
 
-function JobRow({ job, onRetry }: { job: IngestJob; onRetry: (id: string) => void }) {
+function JobRow({
+  job,
+  onRetry,
+  onCancel,
+}: {
+  job: IngestJob
+  onRetry: (id: string) => void
+  onCancel: (id: string) => void
+}) {
   const showBar = job.status === "transcribing"
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border p-3">
@@ -114,6 +123,21 @@ function JobRow({ job, onRetry }: { job: IngestJob; onRetry: (id: string) => voi
           >
             <RotateCwIcon className="size-3.5" />
             Retry
+          </Button>
+        </div>
+      )}
+
+      {isActiveIngest(job.status) && (
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            onClick={() => onCancel(job.id)}
+          >
+            <XIcon className="size-3.5" />
+            Cancel
           </Button>
         </div>
       )}
@@ -173,6 +197,16 @@ export function IngestionPanel() {
     }
   }
 
+  async function handleCancel(id: string) {
+    try {
+      await api(`/api/ingest/jobs/${id}/cancel`, { method: "POST" })
+      await load()
+      toast.success("Cancelled")
+    } catch (err) {
+      toast.error("Could not cancel", { description: errorMessage(err) })
+    }
+  }
+
   async function handleRefresh() {
     setRefreshing(true)
     try {
@@ -223,7 +257,7 @@ export function IngestionPanel() {
         ) : (
           <div className={cn("flex flex-col gap-2", jobs === null && "opacity-50")}>
             {(jobs ?? []).map((job) => (
-              <JobRow key={job.id} job={job} onRetry={handleRetry} />
+              <JobRow key={job.id} job={job} onRetry={handleRetry} onCancel={handleCancel} />
             ))}
           </div>
         )}

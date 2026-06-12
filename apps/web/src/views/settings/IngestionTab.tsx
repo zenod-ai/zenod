@@ -37,8 +37,8 @@ function sizeLabel(mb: number): string {
 /**
  * Transcription quality picker. Saving stores the choice and the server
  * downloads the matching ggml model to the persistent /data volume (so it
- * survives restarts). Smaller = faster but less accurate, which matters for
- * multilingual (Catalan/Spanish) notes.
+ * survives restarts). Smaller = faster but less accurate, which matters most
+ * for non-English or accented audio.
  */
 function TranscriptionModelCard() {
   const [models, setModels] = React.useState<WhisperModelInfo[]>([])
@@ -106,9 +106,9 @@ function TranscriptionModelCard() {
         <CardTitle>Transcription quality</CardTitle>
         <CardDescription>
           Which local whisper.cpp model transcribes your voice notes. Bigger
-          models are more accurate (and better at Catalan/Spanish) but slower
-          on a small server. The model downloads once to the server and is kept
-          across restarts.
+          models are more accurate (and better at non-English or accented
+          speech) but slower on a small server. The model downloads once to the
+          server and is kept across restarts.
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -17,7 +17,7 @@ import { pipeline } from "node:stream/promises";
  *   ZENOD_WHISPER_BINARY   (default: whisper-cli, on PATH in the image)
  *   ZENOD_WHISPER_MODEL    (default: large-v3-turbo)
  *   ZENOD_WHISPER_MODEL_DIR(default: /data/models)
- *   ZENOD_WHISPER_LANGUAGE (default: auto — detects es/ca/en per note)
+ *   ZENOD_WHISPER_LANGUAGE (default: auto — detects the spoken language per file)
  *   ZENOD_WHISPER_THREADS  (default: 4)
  */
 
@@ -37,10 +37,10 @@ export interface WhisperModelInfo {
 }
 
 export const WHISPER_MODELS: WhisperModelInfo[] = [
-  { id: "base", label: "Base", note: "Fastest. Rough on Catalan/Spanish.", sizeMb: 142 },
-  { id: "small", label: "Small", note: "Fast, good multilingual — best speed/quality tradeoff.", sizeMb: 466 },
+  { id: "base", label: "Base", note: "Fastest, lowest accuracy.", sizeMb: 142 },
+  { id: "small", label: "Small", note: "Fast, solid multilingual — best speed/quality tradeoff.", sizeMb: 466 },
   { id: "medium", label: "Medium", note: "More accurate, noticeably slower.", sizeMb: 1530 },
-  { id: "large-v3-turbo", label: "Large v3 Turbo", note: "Top accuracy, fast for its size; heavy on a small VPS.", sizeMb: 1560 },
+  { id: "large-v3-turbo", label: "Large v3 Turbo", note: "Top accuracy, fast for its size; heavy on a small server.", sizeMb: 1560 },
   { id: "large-v3", label: "Large v3", note: "Max accuracy, slowest.", sizeMb: 3100 },
 ];
 
@@ -176,9 +176,16 @@ async function downloadModel(model: string, dest: string): Promise<void> {
   console.log(`[whisper] model ${model} ready at ${dest}`);
 }
 
-function run(command: string, args: string[], onStderrLine?: (line: string) => void): Promise<void> {
+function run(
+  command: string,
+  args: string[],
+  opts: { onStderrLine?: (line: string) => void; signal?: AbortSignal } = {},
+): Promise<void> {
+  const { onStderrLine, signal } = opts;
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+    // The signal option makes Node kill the child (SIGTERM) on abort — that's
+    // how a Cancel from the UI stops a long whisper run mid-file.
+    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"], ...(signal ? { signal } : {}) });
     let stderr = "";
     let lineBuf = "";
     child.stderr.on("data", (chunk: Buffer) => {
@@ -219,10 +226,13 @@ function parseWhisperProgress(line: string): number | null {
 export async function transcribeAudio(
   data: Buffer,
   filename: string,
-  options: { model?: string; onProgress?: (percent: number) => void } | ((percent: number) => void) = {},
+  options:
+    | { model?: string; onProgress?: (percent: number) => void; signal?: AbortSignal }
+    | ((percent: number) => void) = {},
 ): Promise<TranscriptionEnvelope> {
   const modelName = resolveWhisperModel(typeof options === "function" ? DEFAULT_WHISPER_MODEL : options.model);
   const onProgress = typeof options === "function" ? options : options.onProgress;
+  const signal = typeof options === "function" ? undefined : options.signal;
   if ((process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT) {
     onProgress?.(100);
     return {
@@ -245,17 +255,16 @@ export async function transcribeAudio(
   const outBase = join(dir, "out");
   try {
     await writeFile(input, data);
-    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav]);
-    await run(
-      WHISPER_BINARY,
-      ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-pp", "-otxt", "-of", outBase],
-      onProgress
+    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], { signal });
+    await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-pp", "-otxt", "-of", outBase], {
+      signal,
+      onStderrLine: onProgress
         ? (line) => {
             const pct = parseWhisperProgress(line);
             if (pct !== null) onProgress(pct);
           }
         : undefined,
-    );
+    });
     const transcript = (await readFile(`${outBase}.txt`, "utf8")).trim();
     if (!transcript) {
       return { success: false, provider: "whisper.cpp", error: "transcription returned empty text" };

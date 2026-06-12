@@ -42,6 +42,7 @@ export interface WhatsAppDiagnostics {
   lastUpsertMessageCount: number;
   lastIgnoredAt: number | null;
   lastIgnoredReason: string | null;
+  allowedSenderAliasCount: number;
   store: WhatsAppStoreDiagnostics;
 }
 
@@ -52,6 +53,7 @@ export interface SocketLike {
   };
   user?: { id?: string | null } | null;
   sendMessage(jid: string, content: { text: string }): Promise<{ key?: { id?: string | null } } | undefined>;
+  onWhatsApp?(...jids: string[]): Promise<Array<{ jid?: string; exists?: unknown; lid?: unknown }> | undefined>;
   end?(error?: Error): void;
   flushCredentials?(): Promise<void>;
 }
@@ -246,6 +248,8 @@ export class WhatsAppGateway {
   private lastUpsertMessageCount = 0;
   private lastIgnoredAt: number | null = null;
   private lastIgnoredReason: string | null = null;
+  private allowedSenderAliases = new Set<string>();
+  private aliasRefresh: Promise<void> | null = null;
 
   constructor(
     private readonly options: {
@@ -280,6 +284,7 @@ export class WhatsAppGateway {
         lastUpsertMessageCount: this.lastUpsertMessageCount,
         lastIgnoredAt: this.lastIgnoredAt,
         lastIgnoredReason: this.lastIgnoredReason,
+        allowedSenderAliasCount: this.allowedSenderAliases.size,
         store: this.options.store.diagnostics(),
       },
     };
@@ -423,6 +428,45 @@ export class WhatsAppGateway {
     this.lastIgnoredReason = reason;
   }
 
+  private async refreshAllowedSenderAliases(): Promise<void> {
+    if (this.aliasRefresh) return this.aliasRefresh;
+    const socket = this.socket;
+    const allowed = this.options.settings.whatsappSettings().allowedSenders.filter((sender) => sender !== "*");
+    if (!socket?.onWhatsApp || allowed.length === 0) {
+      this.allowedSenderAliases = new Set();
+      return;
+    }
+
+    this.aliasRefresh = socket
+      .onWhatsApp(...allowed.map((sender) => `${sender}@s.whatsapp.net`))
+      .then((results) => {
+        const aliases = new Set<string>();
+        for (const sender of allowed) aliases.add(sender);
+        for (const result of results ?? []) {
+          const jid = typeof result.jid === "string" ? result.jid : "";
+          const lid = typeof result.lid === "string" ? result.lid : "";
+          const normalizedJid = normalizeWhatsAppIdentifier(jid);
+          const normalizedLid = normalizeWhatsAppIdentifier(lid);
+          if (normalizedJid) aliases.add(normalizedJid);
+          if (normalizedLid) aliases.add(normalizedLid);
+        }
+        this.allowedSenderAliases = aliases;
+      })
+      .catch((err: unknown) => {
+        console.warn("[whatsapp] could not resolve allowlist LID aliases:", err);
+      })
+      .finally(() => {
+        this.aliasRefresh = null;
+      });
+    return this.aliasRefresh;
+  }
+
+  private senderIsAllowed(senderId: string, settings: Pick<WhatsAppSettings, "acceptAll" | "allowedSenders">): boolean {
+    if (senderIsAllowed(senderId, settings)) return true;
+    const normalized = normalizeWhatsAppIdentifier(senderId);
+    return normalized !== "" && this.allowedSenderAliases.has(normalized);
+  }
+
   private bindSocket(socket: SocketLike): void {
     socket.ev.on("connection.update", (update) => {
       if (this.socket !== socket) return;
@@ -442,6 +486,7 @@ export class WhatsAppGateway {
         const linked = socket.user?.id;
         if (linked) this.options.settings.setRaw("whatsapp_linked_jid", linked);
         this.notifyStatusChange();
+        void this.refreshAllowedSenderAliases();
       }
 
       if (update.connection === "close") {
@@ -497,7 +542,13 @@ export class WhatsAppGateway {
       return;
     }
 
-    if (!senderIsAllowed(event.senderId, settings)) {
+    let allowed = this.senderIsAllowed(event.senderId, settings);
+    if (!allowed && event.senderId.endsWith("@lid")) {
+      await this.refreshAllowedSenderAliases();
+      allowed = this.senderIsAllowed(event.senderId, settings);
+    }
+
+    if (!allowed) {
       this.options.store.markMessageStatus(event.messageId, "denied");
       this.options.store.recordOutboundAudit({
         messageId: event.messageId,
