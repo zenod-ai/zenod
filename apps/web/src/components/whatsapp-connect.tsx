@@ -114,10 +114,10 @@ export function WhatsAppConnect() {
   }, [loadStatus])
 
   React.useEffect(() => {
-    if (status?.state !== "pairing") return
+    if (!status?.enabled || status.state === "connected" || status.state === "disabled") return
     const timer = window.setInterval(() => void loadStatus(), 2000)
     return () => window.clearInterval(timer)
-  }, [loadStatus, status?.state])
+  }, [loadStatus, status?.enabled, status?.state])
 
   async function saveSettings(enabled = status?.enabled ?? false) {
     setSaving(true)

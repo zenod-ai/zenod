@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { BrainEngine } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
@@ -182,6 +182,43 @@ describe("WhatsAppGateway", () => {
       expect(runtime.whatsappStore.countMessages()).toBe(2);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(1);
     } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("restarts after Baileys restartRequired 515 during pairing", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-restart-"));
+    const runtime = new Runtime(dir);
+    const sockets = [new FakeSocket(), new FakeSocket()];
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => sockets[created++]!,
+    });
+
+    try {
+      await gateway.pair();
+      expect(created).toBe(1);
+      sockets[0]!.emitter.emit("connection.update", {
+        connection: "close",
+        lastDisconnect: { error: { output: { statusCode: 515 } } },
+      });
+      expect(gateway.status().lastError).toContain("Saving session");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(gateway.status().lastError).toContain("Reconnecting");
+
+      await vi.advanceTimersByTimeAsync(1_600);
+      expect(created).toBe(2);
+      sockets[1]!.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().state).toBe("connected");
+      expect(gateway.status().lastError).toBeNull();
+    } finally {
+      vi.useRealTimers();
       runtime.close();
       await rm(dir, { recursive: true, force: true });
     }

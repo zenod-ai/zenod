@@ -43,6 +43,7 @@ export interface SocketLike {
   user?: { id?: string | null } | null;
   sendMessage(jid: string, content: { text: string }): Promise<{ key?: { id?: string | null } } | undefined>;
   end?(error?: Error): void;
+  flushCredentials?(): Promise<void>;
 }
 
 export type SocketFactory = (sessionDir: string) => Promise<SocketLike>;
@@ -176,6 +177,8 @@ async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
   await mkdir(sessionDir, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
   const { version } = await fetchLatestBaileysVersion();
+  let pendingCredsSave = Promise.resolve();
+  let credsSaveError: unknown = null;
   const socket = makeWASocket({
     version,
     auth: state,
@@ -186,8 +189,18 @@ async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
     markOnlineOnConnect: false,
     getMessage: async () => ({ conversation: "" }),
   }) as WASocket;
-  socket.ev.on("creds.update", saveCreds);
-  return socket;
+  socket.ev.on("creds.update", () => {
+    pendingCredsSave = Promise.resolve(saveCreds()).catch((err: unknown) => {
+      credsSaveError = err;
+      console.error("[whatsapp] failed to save credentials:", err);
+    });
+  });
+  return Object.assign(socket, {
+    async flushCredentials() {
+      await pendingCredsSave;
+      if (credsSaveError) throw credsSaveError;
+    },
+  });
 }
 
 async function streamToBuffer(stream: AsyncIterable<Uint8Array | Buffer>): Promise<Buffer> {
@@ -201,6 +214,8 @@ export class WhatsAppGateway {
   private state: WhatsAppConnectionState = "disconnected";
   private qr: string | null = null;
   private lastError: string | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private readonly waiters = new Set<() => void>();
 
   constructor(
     private readonly options: {
@@ -247,14 +262,27 @@ export class WhatsAppGateway {
 
   async pair(): Promise<void> {
     this.options.settings.setWhatsAppSettings({ enabled: true });
+    if (this.socket) {
+      await this.disconnect({ keepEnabled: true });
+    }
     await this.start();
   }
 
-  async disconnect(): Promise<void> {
+  async waitForPairingSignal(timeoutMs = 8_000): Promise<void> {
+    await this.waitForStatus(
+      () => this.state === "pairing" || this.state === "connected" || this.state === "error",
+      timeoutMs,
+    );
+  }
+
+  async disconnect(options: { keepEnabled?: boolean } = {}): Promise<void> {
+    this.clearReconnectTimer();
+    if (!options.keepEnabled) this.options.settings.setWhatsAppSettings({ enabled: false });
     const socket = this.socket;
     this.socket = null;
     this.qr = null;
     this.state = "disconnected";
+    this.notifyStatusChange();
     socket?.end?.();
   }
 
@@ -264,35 +292,129 @@ export class WhatsAppGateway {
     this.options.settings.setRaw("whatsapp_linked_jid", "");
   }
 
+  close(): void {
+    this.clearReconnectTimer();
+    const socket = this.socket;
+    this.socket = null;
+    this.qr = null;
+    this.notifyStatusChange();
+    socket?.end?.();
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+  }
+
+  private notifyStatusChange(): void {
+    for (const waiter of this.waiters) waiter();
+  }
+
+  private waitForStatus(predicate: () => boolean, timeoutMs: number): Promise<void> {
+    if (predicate()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.waiters.delete(waiter);
+        resolve();
+      };
+      const waiter = () => {
+        if (predicate()) done();
+      };
+      const timer = setTimeout(done, timeoutMs);
+      this.waiters.add(waiter);
+    });
+  }
+
+  private async flushSocketCredentials(socket: SocketLike | null): Promise<void> {
+    if (!socket?.flushCredentials) return;
+    await socket.flushCredentials().catch((err: unknown) => {
+      this.lastError = `WhatsApp credentials could not be saved: ${err instanceof Error ? err.message : String(err)}`;
+      console.error("[whatsapp] credential flush failed:", err);
+    });
+  }
+
+  private scheduleReconnect(reason: string, delayMs: number): void {
+    if (!this.options.settings.whatsappSettings().enabled || this.reconnectTimer) return;
+    this.lastError = reason;
+    this.state = "disconnected";
+    this.notifyStatusChange();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.start().catch((err: unknown) => {
+        this.state = "error";
+        this.lastError = err instanceof Error ? err.message : String(err);
+        this.notifyStatusChange();
+        console.error("[whatsapp] reconnect failed:", err);
+      });
+    }, delayMs);
+  }
+
+  private async handleConnectionClose(socket: SocketLike, statusCode: number): Promise<void> {
+    if (statusCode === DisconnectReason.restartRequired) {
+      this.state = "disconnected";
+      this.lastError = "WhatsApp requested a restart after pairing. Saving session before reconnecting…";
+      this.notifyStatusChange();
+      await this.flushSocketCredentials(socket);
+      this.scheduleReconnect("WhatsApp requested a restart after pairing. Reconnecting…", 1_500);
+      return;
+    }
+    if (statusCode === DisconnectReason.loggedOut) {
+      this.state = "error";
+      this.options.settings.setRaw("whatsapp_linked_jid", "");
+      this.lastError = "WhatsApp logged out. Reset the session and pair again.";
+      this.notifyStatusChange();
+      return;
+    }
+    if (statusCode === DisconnectReason.badSession || statusCode === DisconnectReason.multideviceMismatch) {
+      this.state = "error";
+      this.options.settings.setRaw("whatsapp_linked_jid", "");
+      this.lastError = "WhatsApp session is invalid. Reset the session and pair again.";
+      this.notifyStatusChange();
+      return;
+    }
+    this.state = "disconnected";
+    this.lastError = statusCode ? `WhatsApp disconnected (${statusCode})` : "WhatsApp disconnected";
+    this.notifyStatusChange();
+    await this.flushSocketCredentials(socket);
+    this.scheduleReconnect(this.lastError, 2_000);
+  }
+
   private bindSocket(socket: SocketLike): void {
     socket.ev.on("connection.update", (update) => {
+      if (this.socket !== socket) return;
       const qr = typeof update.qr === "string" ? update.qr : null;
       if (qr) {
         this.qr = qr;
         this.state = "pairing";
+        this.lastError = null;
+        this.notifyStatusChange();
       }
 
       if (update.connection === "open") {
+        this.clearReconnectTimer();
         this.qr = null;
         this.state = "connected";
+        this.lastError = null;
         const linked = socket.user?.id;
         if (linked) this.options.settings.setRaw("whatsapp_linked_jid", linked);
+        this.notifyStatusChange();
       }
 
       if (update.connection === "close") {
+        const closingSocket = this.socket;
         const statusCode = Number(
           (update.lastDisconnect as { error?: { output?: { statusCode?: unknown } } } | undefined)?.error?.output
             ?.statusCode,
         );
         this.socket = null;
         this.qr = null;
-        if (statusCode === DisconnectReason.loggedOut) {
+        void this.handleConnectionClose(closingSocket ?? socket, statusCode).catch((err: unknown) => {
           this.state = "error";
-          this.lastError = "WhatsApp logged out. Reset the session and pair again.";
-          return;
-        }
-        this.state = "disconnected";
-        this.lastError = statusCode ? `WhatsApp disconnected (${statusCode})` : "WhatsApp disconnected";
+          this.lastError = err instanceof Error ? err.message : String(err);
+          this.notifyStatusChange();
+          console.error("[whatsapp] close handler failed:", err);
+        });
       }
     });
 

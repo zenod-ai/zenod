@@ -232,6 +232,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.post("/api/whatsapp/pair", async (c) => {
     await runtime.whatsapp.pair();
+    await runtime.whatsapp.waitForPairingSignal();
     return c.json(runtime.whatsapp.status());
   });
 
