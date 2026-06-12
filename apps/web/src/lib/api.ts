@@ -101,7 +101,20 @@ export type TranscriptionStatus = {
   model: string
   ready: boolean
   downloading: boolean
+  progress: number
   error: string | null
+}
+
+export type WhisperModelInfo = {
+  id: string
+  label: string
+  note: string
+  sizeMb: number
+}
+
+export type TranscriptionModelsResponse = {
+  models: WhisperModelInfo[]
+  selected: string
 }
 
 export type IngestStatus =
@@ -154,6 +167,29 @@ export type WhatsAppStatus = {
   allowedSenders: string[]
   groupsEnabled: boolean
   acceptAll: boolean
+  diagnostics: {
+    lastUpsertAt: number | null
+    lastUpsertType: string | null
+    lastUpsertMessageCount: number
+    lastIgnoredAt: number | null
+    lastIgnoredReason: string | null
+    store: {
+      inboundMessages: number
+      outboundAudits: number
+      processingCounts: Record<string, number>
+      outboundCounts: Record<string, number>
+      lastInbound: {
+        at: number
+        sender: string | null
+        status: string
+        isGroup: boolean
+      } | null
+      lastOutbound: {
+        at: number
+        status: string
+      } | null
+    }
+  }
 }
 
 export type SettingsResponse = {

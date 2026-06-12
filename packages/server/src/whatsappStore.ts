@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
+import { maskPhoneNumber, normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 
 export interface WhatsAppInboundEvent {
   messageId: string;
@@ -24,6 +24,23 @@ export interface WhatsAppInboundEvent {
 export interface RecordInboundResult {
   inserted: boolean;
   direction: "inbound";
+}
+
+export interface WhatsAppStoreDiagnostics {
+  inboundMessages: number;
+  outboundAudits: number;
+  processingCounts: Record<string, number>;
+  outboundCounts: Record<string, number>;
+  lastInbound: {
+    at: number;
+    sender: string | null;
+    status: string;
+    isGroup: boolean;
+  } | null;
+  lastOutbound: {
+    at: number;
+    status: string;
+  } | null;
 }
 
 function safeJson(value: unknown): string {
@@ -260,6 +277,46 @@ export class WhatsAppStore {
       )
       .get() as { at: number | null } | undefined;
     return row?.at ?? null;
+  }
+
+  diagnostics(): WhatsAppStoreDiagnostics {
+    const inboundMessages = this.countMessages();
+    const outboundAudits = this.countOutboundAudits();
+    const processingRows = this.db
+      .prepare("SELECT processing_status AS status, COUNT(*) AS count FROM whatsapp_messages GROUP BY processing_status")
+      .all() as unknown as Array<{ status: string; count: number }>;
+    const outboundRows = this.db
+      .prepare("SELECT status, COUNT(*) AS count FROM whatsapp_outbound_audit GROUP BY status")
+      .all() as unknown as Array<{ status: string; count: number }>;
+    const lastInbound = this.db
+      .prepare(
+        `SELECT m.received_at, m.contact_id, m.processing_status, c.chat_type
+         FROM whatsapp_messages m
+         LEFT JOIN whatsapp_chats c ON c.chat_id = m.chat_id
+         ORDER BY m.received_at DESC LIMIT 1`,
+      )
+      .get() as
+      | { received_at: number; contact_id: string | null; processing_status: string; chat_type: string | null }
+      | undefined;
+    const lastOutbound = this.db
+      .prepare("SELECT created_at, status FROM whatsapp_outbound_audit ORDER BY created_at DESC LIMIT 1")
+      .get() as { created_at: number; status: string } | undefined;
+
+    return {
+      inboundMessages,
+      outboundAudits,
+      processingCounts: Object.fromEntries(processingRows.map((row) => [row.status, Number(row.count)])),
+      outboundCounts: Object.fromEntries(outboundRows.map((row) => [row.status, Number(row.count)])),
+      lastInbound: lastInbound
+        ? {
+            at: lastInbound.received_at,
+            sender: lastInbound.contact_id ? maskPhoneNumber(lastInbound.contact_id) : null,
+            status: lastInbound.processing_status,
+            isGroup: lastInbound.chat_type === "group",
+          }
+        : null,
+      lastOutbound: lastOutbound ? { at: lastOutbound.created_at, status: lastOutbound.status } : null,
+    };
   }
 
   countMessages(): number {

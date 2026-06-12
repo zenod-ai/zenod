@@ -19,6 +19,7 @@ export const SETTING_KEYS = [
   "google_service_account_json",
   "google_drive_folder_id",
   "groq_api_key",
+  "whisper_model",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -44,6 +45,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
   google_drive_folder_id: "GOOGLE_DRIVE_FOLDER_ID",
   groq_api_key: "GROQ_API_KEY",
+  whisper_model: "ZENOD_WHISPER_MODEL",
 };
 
 export class Settings {
@@ -115,6 +117,11 @@ export class Settings {
   /** Google Drive is connected: a service account to read with. */
   driveConfigured(): boolean {
     return Boolean(this.get("google_service_account_json"));
+  }
+
+  /** Configured whisper transcription quality; defaults to large-v3-turbo. */
+  whisperModel(): string {
+    return this.get("whisper_model") || "large-v3-turbo";
   }
 
   whatsappSettings(): WhatsAppSettings {

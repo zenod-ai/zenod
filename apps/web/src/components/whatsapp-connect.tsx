@@ -67,6 +67,22 @@ function timeAgo(epochMs: number | null): string {
   return `${days} day${days === 1 ? "" : "s"} ago`
 }
 
+function diagnosticText(status: WhatsAppStatus | null): string {
+  if (!status) return "loading"
+  const diag = status.diagnostics
+  if (diag.store.lastInbound) {
+    const inbound = diag.store.lastInbound
+    return `last inbound ${timeAgo(inbound.at)} from ${inbound.sender ?? "unknown"} (${inbound.status})`
+  }
+  if (diag.lastIgnoredReason) {
+    return `last event ${timeAgo(diag.lastIgnoredAt)} ignored: ${diag.lastIgnoredReason}`
+  }
+  if (diag.lastUpsertAt) {
+    return `last event ${timeAgo(diag.lastUpsertAt)} (${diag.lastUpsertType ?? "unknown"})`
+  }
+  return "no WhatsApp messages seen yet"
+}
+
 function PairingQr({ value }: { value: string }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
 
@@ -114,22 +130,28 @@ export function WhatsAppConnect() {
   }, [loadStatus])
 
   React.useEffect(() => {
-    if (!status?.enabled || status.state === "connected" || status.state === "disabled") return
-    const timer = window.setInterval(() => void loadStatus(), 2000)
+    if (!status?.enabled || status.state === "disabled") return
+    const timer = window.setInterval(() => void loadStatus(), 3000)
     return () => window.clearInterval(timer)
   }, [loadStatus, status?.enabled, status?.state])
 
-  async function saveSettings(enabled = status?.enabled ?? false) {
+  async function saveSettings(enabled: boolean | null = status?.enabled ?? false) {
     setSaving(true)
     try {
+      const body: {
+        enabled?: boolean
+        allowedSenders: string[]
+        acceptAll: boolean
+        groupsEnabled: boolean
+      } = {
+        allowedSenders: parseAllowlist(allowlist),
+        acceptAll,
+        groupsEnabled,
+      }
+      if (enabled !== null) body.enabled = enabled
       const result = await api<WhatsAppStatus>("/api/whatsapp/settings", {
         method: "PUT",
-        body: {
-          enabled,
-          allowedSenders: parseAllowlist(allowlist),
-          acceptAll,
-          groupsEnabled,
-        },
+        body,
       })
       setStatus(result)
       toast.success("WhatsApp settings saved")
@@ -147,7 +169,7 @@ export function WhatsAppConnect() {
   async function handlePair() {
     setPairing(true)
     try {
-      await saveSettings(true)
+      await saveSettings(null)
       const result = await api<WhatsAppStatus>("/api/whatsapp/pair", {
         method: "POST",
       })
@@ -247,6 +269,9 @@ export function WhatsAppConnect() {
             <FieldLabel>Last activity</FieldLabel>
             <p className="text-sm text-muted-foreground">
               {timeAgo(status?.lastActivity ?? null)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {diagnosticText(status)}
             </p>
           </Field>
         </div>

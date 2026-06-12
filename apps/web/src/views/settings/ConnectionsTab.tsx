@@ -20,7 +20,6 @@ import {
 } from "@/lib/api"
 import { CodeSnippet, CopyButton } from "@/components/copy-button"
 import { GoogleDriveConnect } from "@/components/google-drive-connect"
-import { IngestionPanel } from "@/components/ingestion-panel"
 import { WhatsAppConnect } from "@/components/whatsapp-connect"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -187,8 +186,6 @@ export function ConnectionsTab() {
     <div className="flex flex-col gap-6">
       <WhatsAppConnect />
       <GoogleDriveConnect />
-
-      <IngestionPanel />
 
       <Card>
         <CardHeader>

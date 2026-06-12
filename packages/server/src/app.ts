@@ -27,7 +27,7 @@ import {
 import { buildMcpServer } from "./mcp.js";
 import { parseServiceAccount, testDrive } from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";
-import { prepareModel, transcriptionStatus } from "./transcribe.js";
+import { prepareModel, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 
@@ -48,7 +48,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // ~1.5 GB download to the /data volume happens during setup — not inside the
   // user's first chat ingest. The /data volume persists across redeploys, so
   // this is genuinely one-time.
-  if (settings.driveConfigured()) void prepareModel();
+  if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
 
   // Resume any ingest jobs left queued before the last restart.
   runtime.ingestQueue.resume();
@@ -131,8 +131,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       settings.set(key as SettingKey, value);
     }
     runtime.invalidate();
-    // Connecting Drive is the moment to start fetching the transcription model.
-    if (settings.driveConfigured()) void prepareModel();
+    // Connecting Drive, or changing the quality, is the moment to fetch the
+    // (newly) chosen transcription model to the persistent volume.
+    if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
     return c.json({ settings: settings.masked(), configured: settings.configured() });
   });
 
@@ -195,8 +196,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // Whisper model readiness — the setup UI polls this so the one-time model
   // download shows as setup progress instead of stalling the first ingest.
   app.get("/api/transcription/status", async (c) => {
-    return c.json(await transcriptionStatus());
+    return c.json(await transcriptionStatus(settings.whisperModel()));
   });
+
+  // The selectable transcription qualities (id, label, note, sizeMb).
+  app.get("/api/transcription/models", (c) =>
+    c.json({ models: WHISPER_MODELS, selected: settings.whisperModel() }),
+  );
 
   // Background ingest jobs — the Ingestion panel polls this so a long
   // transcription is visible from any tab and survives navigation/refresh.

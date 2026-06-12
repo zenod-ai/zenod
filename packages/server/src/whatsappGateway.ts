@@ -19,7 +19,7 @@ import {
   senderIsAllowed,
   type WhatsAppSettings,
 } from "./whatsappConfig.js";
-import { WhatsAppStore, type WhatsAppInboundEvent } from "./whatsappStore.js";
+import { WhatsAppStore, type WhatsAppInboundEvent, type WhatsAppStoreDiagnostics } from "./whatsappStore.js";
 
 export type WhatsAppConnectionState = "disabled" | "disconnected" | "pairing" | "connected" | "error";
 
@@ -33,6 +33,16 @@ export interface WhatsAppStatus {
   allowedSenders: string[];
   groupsEnabled: boolean;
   acceptAll: boolean;
+  diagnostics: WhatsAppDiagnostics;
+}
+
+export interface WhatsAppDiagnostics {
+  lastUpsertAt: number | null;
+  lastUpsertType: string | null;
+  lastUpsertMessageCount: number;
+  lastIgnoredAt: number | null;
+  lastIgnoredReason: string | null;
+  store: WhatsAppStoreDiagnostics;
 }
 
 export interface SocketLike {
@@ -173,6 +183,21 @@ export function eventFromBaileysMessage(message: WAMessage): WhatsAppInboundEven
   };
 }
 
+function skipReasonForBaileysMessage(message: WAMessage): string {
+  const messageId = textField(message.key.id);
+  const chatId = normalizedJid(message.key.remoteJid);
+  if (!messageId) return "missing_message_id";
+  if (!chatId) return "missing_chat_id";
+  if (!message.message) return "missing_message_body";
+  if (chatId.includes("status")) return "status_broadcast";
+  if (message.key.fromMe) return "from_linked_number";
+  const content = contentFromMessage(message);
+  const extracted = extractBodyAndMedia(content);
+  if (!extracted) return "unsupported_message_type";
+  if (!extracted.body && !extracted.hasMedia) return "empty_message";
+  return "unknown";
+}
+
 async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
   await mkdir(sessionDir, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
@@ -216,6 +241,11 @@ export class WhatsAppGateway {
   private lastError: string | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private readonly waiters = new Set<() => void>();
+  private lastUpsertAt: number | null = null;
+  private lastUpsertType: string | null = null;
+  private lastUpsertMessageCount = 0;
+  private lastIgnoredAt: number | null = null;
+  private lastIgnoredReason: string | null = null;
 
   constructor(
     private readonly options: {
@@ -244,6 +274,14 @@ export class WhatsAppGateway {
       allowedSenders: settings.allowedSenders,
       groupsEnabled: settings.groupsEnabled,
       acceptAll: settings.acceptAll,
+      diagnostics: {
+        lastUpsertAt: this.lastUpsertAt,
+        lastUpsertType: this.lastUpsertType,
+        lastUpsertMessageCount: this.lastUpsertMessageCount,
+        lastIgnoredAt: this.lastIgnoredAt,
+        lastIgnoredReason: this.lastIgnoredReason,
+        store: this.options.store.diagnostics(),
+      },
     };
   }
 
@@ -380,6 +418,11 @@ export class WhatsAppGateway {
     this.scheduleReconnect(this.lastError, 2_000);
   }
 
+  private rememberIgnored(reason: string): void {
+    this.lastIgnoredAt = Date.now();
+    this.lastIgnoredReason = reason;
+  }
+
   private bindSocket(socket: SocketLike): void {
     socket.ev.on("connection.update", (update) => {
       if (this.socket !== socket) return;
@@ -427,10 +470,19 @@ export class WhatsAppGateway {
   }
 
   async handleMessages(messages: WAMessage[], type: string): Promise<void> {
-    if (type !== "notify") return;
+    this.lastUpsertAt = Date.now();
+    this.lastUpsertType = type;
+    this.lastUpsertMessageCount = messages.length;
+    if (type !== "notify") {
+      this.rememberIgnored(`upsert_type_${type}`);
+      return;
+    }
     for (const message of messages) {
       const event = eventFromBaileysMessage(message);
-      if (!event) continue;
+      if (!event) {
+        this.rememberIgnored(skipReasonForBaileysMessage(message));
+        continue;
+      }
       await this.handleEvent(event);
     }
   }

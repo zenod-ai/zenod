@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChatTab } from "@/views/ChatTab"
 import { ConnectionsTab } from "@/views/settings/ConnectionsTab"
+import { IngestionTab } from "@/views/settings/IngestionTab"
 import { KeysTab } from "@/views/settings/KeysTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 
@@ -17,7 +18,7 @@ export function Settings({
   onLoggedOut,
 }: {
   initialSettings: SettingsValues
-  initialTab?: "chat" | "vault" | "keys" | "connections"
+  initialTab?: "chat" | "vault" | "keys" | "ingestion" | "connections"
   onLoggedOut: () => void
 }) {
   const [loggingOut, setLoggingOut] = React.useState(false)
@@ -61,6 +62,7 @@ export function Settings({
           <TabsTrigger value="chat">Chat</TabsTrigger>
           <TabsTrigger value="vault">Vault</TabsTrigger>
           <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>
+          <TabsTrigger value="ingestion">Ingestion</TabsTrigger>
           <TabsTrigger value="connections">Connections</TabsTrigger>
         </TabsList>
         <TabsContent value="chat" className="mt-4">
@@ -71,6 +73,9 @@ export function Settings({
         </TabsContent>
         <TabsContent value="keys" className="mt-4">
           <KeysTab initial={settings} onSaved={setSettings} />
+        </TabsContent>
+        <TabsContent value="ingestion" className="mt-4">
+          <IngestionTab />
         </TabsContent>
         <TabsContent value="connections" className="mt-4">
           <ConnectionsTab />

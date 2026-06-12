@@ -181,6 +181,35 @@ describe("WhatsAppGateway", () => {
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
       expect(runtime.whatsappStore.countMessages()).toBe(2);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(1);
+      expect(gateway.status().diagnostics.store.processingCounts.replied).toBe(1);
+      expect(gateway.status().diagnostics.store.outboundCounts.denied).toBe(1);
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports ignored Baileys messages before storage", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-diagnostics-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      await gateway.pair();
+      await gateway.handleMessages([textMessage({ key: { id: "m", remoteJid: "1@s.whatsapp.net", fromMe: true } })], "notify");
+      expect(gateway.status().diagnostics.lastIgnoredReason).toBe("from_linked_number");
+      expect(gateway.status().diagnostics.store.inboundMessages).toBe(0);
+
+      await gateway.handleMessages([textMessage({ key: { id: "m2", remoteJid: "1@s.whatsapp.net", fromMe: false } })], "append");
+      expect(gateway.status().diagnostics.lastIgnoredReason).toBe("upsert_type_append");
+      expect(gateway.status().diagnostics.lastUpsertType).toBe("append");
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });

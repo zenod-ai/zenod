@@ -28,8 +28,33 @@ export interface TranscriptionEnvelope {
   error?: string;
 }
 
+/** Selectable transcription quality — speed vs accuracy, with download size. */
+export interface WhisperModelInfo {
+  id: string;
+  label: string;
+  note: string;
+  sizeMb: number;
+}
+
+export const WHISPER_MODELS: WhisperModelInfo[] = [
+  { id: "base", label: "Base", note: "Fastest. Rough on Catalan/Spanish.", sizeMb: 142 },
+  { id: "small", label: "Small", note: "Fast, good multilingual — best speed/quality tradeoff.", sizeMb: 466 },
+  { id: "medium", label: "Medium", note: "More accurate, noticeably slower.", sizeMb: 1530 },
+  { id: "large-v3-turbo", label: "Large v3 Turbo", note: "Top accuracy, fast for its size; heavy on a small VPS.", sizeMb: 1560 },
+  { id: "large-v3", label: "Large v3", note: "Max accuracy, slowest.", sizeMb: 3100 },
+];
+
+export const DEFAULT_WHISPER_MODEL = process.env.ZENOD_WHISPER_MODEL ?? "large-v3-turbo";
+
+export function isValidWhisperModel(model: string): boolean {
+  return WHISPER_MODELS.some((m) => m.id === model);
+}
+
+export function resolveWhisperModel(model: string | null | undefined = DEFAULT_WHISPER_MODEL): string {
+  return model && isValidWhisperModel(model) ? model : "large-v3-turbo";
+}
+
 const WHISPER_BINARY = process.env.ZENOD_WHISPER_BINARY ?? "whisper-cli";
-const MODEL_NAME = process.env.ZENOD_WHISPER_MODEL ?? "large-v3-turbo";
 const MODEL_DIR = process.env.ZENOD_WHISPER_MODEL_DIR ?? "/data/models";
 const LANGUAGE = process.env.ZENOD_WHISPER_LANGUAGE ?? "auto";
 const THREADS = process.env.ZENOD_WHISPER_THREADS ?? "4";
@@ -40,61 +65,72 @@ export function isAudioMimeType(mimeType: string): boolean {
   return mimeType.startsWith("audio/") || mimeType.startsWith("video/");
 }
 
-function modelPath(): string {
-  return join(MODEL_DIR, `ggml-${MODEL_NAME}.bin`);
+function modelPath(model: string): string {
+  return join(MODEL_DIR, `ggml-${model}.bin`);
 }
 
-// One in-flight download shared across concurrent ingests, plus status the
-// setup UI can poll so the model is fetched at setup, not on the first chat.
-let modelDownload: Promise<void> | null = null;
-let modelReady = false;
-let modelDownloading = false;
-let modelError: string | null = null;
+// Per-model download state, keyed by model id — switching quality downloads a
+// different ggml file; both live on the volume. The UI polls this so the
+// (one-time, per-model) fetch shows as setup progress, not a first-ingest stall.
+interface ModelState {
+  download: Promise<void> | null;
+  downloading: boolean;
+  progress: number; // 0–100 of the download
+  error: string | null;
+}
+const modelStates = new Map<string, ModelState>();
+
+function stateFor(model: string): ModelState {
+  let s = modelStates.get(model);
+  if (!s) {
+    s = { download: null, downloading: false, progress: 0, error: null };
+    modelStates.set(model, s);
+  }
+  return s;
+}
 
 async function fileExists(path: string): Promise<boolean> {
   return stat(path).then(() => true).catch(() => false);
 }
 
 /** Ensure the ggml model is present on the volume, downloading it once. */
-async function ensureModel(): Promise<string> {
-  const dest = modelPath();
-  if (modelReady) return dest;
-  if (await fileExists(dest)) {
-    modelReady = true;
-    return dest;
-  }
-  if (!modelDownload) {
-    modelDownloading = true;
-    modelError = null;
-    modelDownload = downloadModel(dest)
+async function ensureModel(model: string): Promise<string> {
+  const dest = modelPath(model);
+  if (await fileExists(dest)) return dest;
+  const s = stateFor(model);
+  if (!s.download) {
+    s.downloading = true;
+    s.progress = 0;
+    s.error = null;
+    s.download = downloadModel(model, dest)
       .then(() => {
-        modelReady = true;
-        modelDownloading = false;
+        s.downloading = false;
+        s.progress = 100;
       })
       .catch((err) => {
-        modelDownloading = false;
-        modelError = (err as Error).message;
-        modelDownload = null; // let a later attempt retry
+        s.downloading = false;
+        s.error = (err as Error).message;
+        s.download = null; // let a later attempt retry
         throw err;
       });
   }
-  await modelDownload;
+  await s.download;
   return dest;
 }
 
 /**
- * Kick off the model download outside any chat turn — call on boot and when
- * Drive is connected so the (one-time, ~1.5 GB) fetch to the /data volume
+ * Kick off the model download outside any chat turn — call on boot, on Drive
+ * connect, and when the quality is changed, so the fetch to the /data volume
  * happens during setup rather than surprising the first ingest. Fire-and-forget.
  */
-export async function prepareModel(): Promise<void> {
-  // Never auto-download in fake/test mode (vitest sets VITEST) — a 1.5 GB
-  // fetch has no place in a unit run.
+export async function prepareModel(model = DEFAULT_WHISPER_MODEL): Promise<void> {
+  // Never auto-download in fake/test mode (vitest sets VITEST).
   if (process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT || process.env.VITEST) return;
+  const modelName = resolveWhisperModel(model);
   try {
-    await ensureModel();
+    await ensureModel(modelName);
   } catch {
-    // already recorded in modelError and logged; a later ingest retries
+    // already recorded in state and logged; a later ingest retries
   }
 }
 
@@ -102,29 +138,42 @@ export interface TranscriptionStatus {
   model: string;
   ready: boolean;
   downloading: boolean;
+  progress: number;
   error: string | null;
 }
 
-export async function transcriptionStatus(): Promise<TranscriptionStatus> {
-  const ready = modelReady || (await fileExists(modelPath()));
-  if (ready) modelReady = true;
-  return { model: MODEL_NAME, ready, downloading: modelDownloading, error: modelError };
+export async function transcriptionStatus(model = DEFAULT_WHISPER_MODEL): Promise<TranscriptionStatus> {
+  const modelName = resolveWhisperModel(model);
+  const ready = await fileExists(modelPath(modelName));
+  const s = stateFor(modelName);
+  return { model: modelName, ready, downloading: s.downloading, progress: s.progress, error: s.error };
 }
 
-async function downloadModel(dest: string): Promise<void> {
+async function downloadModel(model: string, dest: string): Promise<void> {
   await mkdir(dirname(dest), { recursive: true });
-  const url = `${MODEL_BASE_URL}/ggml-${MODEL_NAME}.bin`;
-  console.log(`[whisper] downloading model ${MODEL_NAME} (first run, ~once) from ${url}…`);
+  const url = `${MODEL_BASE_URL}/ggml-${model}.bin`;
+  console.log(`[whisper] downloading model ${model} from ${url}…`);
   const response = await fetch(url);
   if (!response.ok || !response.body) {
     throw new Error(`model download failed (${response.status}) from ${url}`);
   }
+  const total = Number(response.headers.get("content-length") ?? 0);
+  const s = stateFor(model);
+  let received = 0;
+  const track = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      received += chunk.byteLength;
+      if (total > 0) s.progress = Math.min(99, Math.round((received / total) * 100));
+      controller.enqueue(chunk);
+    },
+  });
   // Download to a temp name, then atomic rename, so a crash mid-download
   // never leaves a truncated model that whisper would choke on.
   const tmp = `${dest}.part`;
-  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tmp));
+  const tracked = response.body.pipeThrough(track);
+  await pipeline(Readable.fromWeb(tracked as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tmp));
   await rename(tmp, dest);
-  console.log(`[whisper] model ready at ${dest}`);
+  console.log(`[whisper] model ${model} ready at ${dest}`);
 }
 
 function run(command: string, args: string[], onStderrLine?: (line: string) => void): Promise<void> {
@@ -170,20 +219,22 @@ function parseWhisperProgress(line: string): number | null {
 export async function transcribeAudio(
   data: Buffer,
   filename: string,
-  onProgress?: (percent: number) => void,
+  options: { model?: string; onProgress?: (percent: number) => void } | ((percent: number) => void) = {},
 ): Promise<TranscriptionEnvelope> {
+  const modelName = resolveWhisperModel(typeof options === "function" ? DEFAULT_WHISPER_MODEL : options.model);
+  const onProgress = typeof options === "function" ? options : options.onProgress;
   if ((process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT) {
     onProgress?.(100);
     return {
       success: true,
       transcript: process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT,
-      provider: `whisper.cpp ${MODEL_NAME}`,
+      provider: `whisper.cpp ${modelName}`,
     };
   }
 
   let model: string;
   try {
-    model = await ensureModel();
+    model = await ensureModel(modelName);
   } catch (err) {
     return { success: false, provider: "whisper.cpp", error: `model unavailable: ${(err as Error).message}` };
   }
@@ -209,7 +260,7 @@ export async function transcribeAudio(
     if (!transcript) {
       return { success: false, provider: "whisper.cpp", error: "transcription returned empty text" };
     }
-    return { success: true, transcript, provider: `whisper.cpp ${MODEL_NAME}` };
+    return { success: true, transcript, provider: `whisper.cpp ${modelName}` };
   } catch (err) {
     return { success: false, provider: "whisper.cpp", error: (err as Error).message };
   } finally {

@@ -83,7 +83,10 @@ export class IngestQueue {
       if (isAudioMimeType(file.mimeType)) {
         const data = await client.download(file.id);
         this.store.update(job.id, { status: "transcribing", step: `Transcribing ${file.name}`, progress: 0 });
-        const result = await transcribeAudio(data, file.name, (pct) => this.store.update(job.id, { progress: pct }));
+        const result = await transcribeAudio(data, file.name, {
+          model: this.settings.whisperModel(),
+          onProgress: (pct) => this.store.update(job.id, { progress: pct }),
+        });
         if (!result.success) throw new Error(`transcription failed: ${result.error}`);
         body = result.transcript!;
         transcribedBy = result.provider;
