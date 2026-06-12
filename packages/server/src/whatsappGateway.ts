@@ -60,6 +60,7 @@ export interface SocketLike {
   sendMessage(jid: string, content: { text: string }): Promise<{ key?: { id?: string | null } } | undefined>;
   readMessages?(keys: WAMessageKey[]): Promise<void>;
   sendPresenceUpdate?(type: "composing" | "paused", toJid?: string): Promise<void>;
+  presenceSubscribe?(toJid: string): Promise<void>;
   onWhatsApp?(...jids: string[]): Promise<Array<{ jid?: string; exists?: unknown; lid?: unknown }> | undefined>;
   end?(error?: Error): void;
   flushCredentials?(): Promise<void>;
@@ -208,9 +209,19 @@ function skipReasonForBaileysMessage(message: WAMessage): string {
   return "unknown";
 }
 
-function inboundMessageKey(event: WhatsAppInboundEvent): WAMessageKey | null {
+function inboundMessageKeys(event: WhatsAppInboundEvent): WAMessageKey[] {
   const raw = event.raw as WAMessage | undefined;
-  return raw?.key ?? null;
+  const key = raw?.key;
+  if (!key) return [];
+  const keys = [key];
+  if (!event.isGroup && event.senderId && event.senderId !== event.chatId) {
+    keys.push({ ...key, remoteJid: event.senderId, participant: undefined });
+  }
+  return keys;
+}
+
+function delay(ms: number): Promise<void> {
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
 }
 
 async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
@@ -275,6 +286,7 @@ export class WhatsAppGateway {
       store: WhatsAppStore;
       getEngine: () => Promise<BrainEngine>;
       socketFactory?: SocketFactory;
+      typingMinimumMs?: number;
     },
   ) {}
 
@@ -499,20 +511,31 @@ export class WhatsAppGateway {
     return event.isGroup ? event.chatId : event.senderId || event.chatId;
   }
 
+  private presenceJidsForEvent(event: WhatsAppInboundEvent): string[] {
+    if (event.isGroup) return [event.chatId].filter(Boolean);
+    return [...new Set([event.senderId, event.chatId].filter(Boolean))];
+  }
+
   private async markEventRead(event: WhatsAppInboundEvent): Promise<void> {
-    const key = inboundMessageKey(event);
-    if (!key || !this.socket?.readMessages) return;
-    await this.socket.readMessages([key]).catch((err: unknown) => {
+    const keys = inboundMessageKeys(event);
+    if (keys.length === 0 || !this.socket?.readMessages) return;
+    await this.socket.readMessages(keys).catch((err: unknown) => {
       console.warn("[whatsapp] could not mark message read:", err);
     });
   }
 
   private async setTyping(event: WhatsAppInboundEvent, typing: boolean): Promise<void> {
-    const recipientJid = this.recipientJidForEvent(event);
-    if (!recipientJid || !this.socket?.sendPresenceUpdate) return;
-    await this.socket.sendPresenceUpdate(typing ? "composing" : "paused", recipientJid).catch((err: unknown) => {
-      console.warn("[whatsapp] could not update typing state:", err);
-    });
+    if (!this.socket?.sendPresenceUpdate) return;
+    for (const jid of this.presenceJidsForEvent(event)) {
+      if (typing) {
+        await this.socket.presenceSubscribe?.(jid).catch((err: unknown) => {
+          console.warn("[whatsapp] could not subscribe to presence:", err);
+        });
+      }
+      await this.socket.sendPresenceUpdate(typing ? "composing" : "paused", jid).catch((err: unknown) => {
+        console.warn("[whatsapp] could not update typing state:", err);
+      });
+    }
   }
 
   private bindSocket(socket: SocketLike): void {
@@ -609,6 +632,7 @@ export class WhatsAppGateway {
 
     await this.markEventRead(event);
     await this.setTyping(event, true);
+    const typingStartedAt = Date.now();
     try {
       const input = await this.engineInputForEvent(event, settings);
       if (input.kind === "fixed-reply") {
@@ -635,6 +659,7 @@ export class WhatsAppGateway {
       });
       throw err;
     } finally {
+      await delay((this.options.typingMinimumMs ?? 1_200) - (Date.now() - typingStartedAt));
       await this.setTyping(event, false);
     }
   }

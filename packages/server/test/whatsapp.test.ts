@@ -24,6 +24,7 @@ class FakeSocket implements SocketLike {
   readonly sent: Array<{ jid: string; text: string }> = [];
   readonly readKeys: unknown[] = [];
   readonly presence: Array<{ type: "composing" | "paused"; jid?: string }> = [];
+  readonly presenceSubscriptions: string[] = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
   onWhatsApp?: SocketLike["onWhatsApp"];
   ev = {
@@ -43,6 +44,10 @@ class FakeSocket implements SocketLike {
 
   async sendPresenceUpdate(type: "composing" | "paused", jid?: string) {
     this.presence.push({ type, jid });
+  }
+
+  async presenceSubscribe(jid: string) {
+    this.presenceSubscriptions.push(jid);
   }
 
   end() {
@@ -190,6 +195,7 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine(calls),
       socketFactory: async () => socket,
+      typingMinimumMs: 0,
     });
 
     try {
@@ -207,6 +213,7 @@ describe("WhatsAppGateway", () => {
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
       expect(socket.readKeys).toHaveLength(1);
+      expect(socket.presenceSubscriptions).toEqual(["34611111111@s.whatsapp.net"]);
       expect(socket.presence).toEqual([
         { type: "composing", jid: "34611111111@s.whatsapp.net" },
         { type: "paused", jid: "34611111111@s.whatsapp.net" },
@@ -231,6 +238,7 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine([]),
       socketFactory: async () => socket,
+      typingMinimumMs: 0,
     });
 
     try {
@@ -266,6 +274,7 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine(calls),
       socketFactory: async () => socket,
+      typingMinimumMs: 0,
     });
 
     try {
@@ -302,6 +311,7 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine(calls),
       socketFactory: async () => socket,
+      typingMinimumMs: 0,
     });
 
     try {
@@ -325,10 +335,13 @@ describe("WhatsAppGateway", () => {
 
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
-      expect(socket.readKeys).toHaveLength(1);
+      expect(socket.readKeys).toHaveLength(2);
+      expect(socket.presenceSubscriptions).toEqual(["34611111111@s.whatsapp.net", "123456789012345@lid"]);
       expect(socket.presence).toEqual([
         { type: "composing", jid: "34611111111@s.whatsapp.net" },
+        { type: "composing", jid: "123456789012345@lid" },
         { type: "paused", jid: "34611111111@s.whatsapp.net" },
+        { type: "paused", jid: "123456789012345@lid" },
       ]);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
     } finally {
@@ -349,6 +362,7 @@ describe("WhatsAppGateway", () => {
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine([]),
       socketFactory: async () => sockets[created++]!,
+      typingMinimumMs: 0,
     });
 
     try {
