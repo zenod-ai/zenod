@@ -621,7 +621,13 @@ export class WhatsAppGateway {
     }
 
     await this.markRead(event);
+    // WhatsApp's "composing" presence auto-expires after ~10s, so refresh it on
+    // an interval — otherwise typing vanishes mid-reply on slower engine calls.
     await this.setTyping(event, true);
+    const keepTyping = this.socket?.sendPresenceUpdate
+      ? setInterval(() => void this.setTyping(event, true), 8_000)
+      : null;
+    keepTyping?.unref?.();
     try {
       const input = await this.engineInputForEvent(event, settings);
       if (input.kind === "fixed-reply") {
@@ -648,6 +654,7 @@ export class WhatsAppGateway {
       });
       throw err;
     } finally {
+      if (keepTyping) clearInterval(keepTyping);
       await this.setTyping(event, false);
     }
   }
