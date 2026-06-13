@@ -259,8 +259,15 @@ function parseRetryAfterSeconds(response: Response, body: string): number | null
     const seconds = Number(header);
     if (Number.isFinite(seconds) && seconds >= 0) return seconds;
   }
-  const match = /try again in\s+(\d+)s/i.exec(body);
-  return match ? Number(match[1]) : null;
+  const secondsOnly = /try again in\s+(\d+(?:\.\d+)?)s/i.exec(body);
+  if (secondsOnly) return Math.ceil(Number(secondsOnly[1]));
+  const minutesSeconds = /try again in\s+(\d+(?:\.\d+)?)m(?:(\d+(?:\.\d+)?)s)?/i.exec(body);
+  if (minutesSeconds) {
+    const minutes = Number(minutesSeconds[1]);
+    const seconds = minutesSeconds[2] ? Number(minutesSeconds[2]) : 0;
+    return Math.ceil(minutes * 60 + seconds);
+  }
+  return null;
 }
 
 async function groqTranscribeFile(path: string, apiKey: string, signal?: AbortSignal): Promise<string> {
