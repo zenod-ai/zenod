@@ -16,7 +16,7 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3";
 // Archive/ subfolder. The service account still only ever sees what the
 // user explicitly shared with it.
 const SCOPE = "https://www.googleapis.com/auth/drive";
-const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,webViewLink";
+const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,webViewLink,parents";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 export interface ServiceAccount {
@@ -32,6 +32,7 @@ export interface DriveFile {
   size?: string;
   modifiedTime?: string;
   webViewLink?: string;
+  parents?: string[];
 }
 
 export function parseServiceAccount(json: string): ServiceAccount {

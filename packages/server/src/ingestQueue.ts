@@ -154,14 +154,17 @@ export class IngestQueue {
 
       // Archive the original (file ID — and its link — survive the move).
       let archived = false;
-      if (folderId) {
+      const archiveParentId = folderId ?? file.parents?.[0];
+      if (archiveParentId) {
         try {
-          const archiveId = await client.ensureFolder(ARCHIVE_FOLDER, folderId);
+          const archiveId = await client.ensureFolder(ARCHIVE_FOLDER, archiveParentId);
           await client.moveFile(file.id, archiveId);
           archived = true;
         } catch (err) {
           console.error(`[ingest] ${job.id} archive skipped: ${(err as Error).message}`);
         }
+      } else {
+        console.error(`[ingest] ${job.id} archive skipped: no Drive parent folder found`);
       }
 
       this.store.update(job.id, {
