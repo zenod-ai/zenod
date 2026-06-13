@@ -116,7 +116,12 @@ function prUrlForIssue(number) {
 function launch(numbers) {
   const args = [
     "start", "--repo", REPO, "--issues", numbers.join(","),
-    "--workdir", WORKDIR, "--draft-pr", "--concurrency", String(CONCURRENCY),
+    "--workdir", WORKDIR,
+    // --draft-pr: push branch + open draft PR. --github-status: flip the
+    // issue's status:* labels (queued→running→needs-review/blocked) — the
+    // monitor's outcome motion reads those labels, so this is required.
+    "--draft-pr", "--github-status",
+    "--concurrency", String(CONCURRENCY),
   ];
   // Detached: the fanout run is long; the monitor must stay responsive.
   const child = spawn("zenod-fanout-codex", args, { stdio: "ignore", detached: true });
