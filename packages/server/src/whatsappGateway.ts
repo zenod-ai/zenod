@@ -513,6 +513,21 @@ export class WhatsAppGateway {
     if (!key) return;
     const socket = this.socket;
     if (!socket) return;
+    // TEMP diagnostic: dump the inbound key addressing so we can see why blue
+    // ticks aren't landing on @lid chats. Remove once the receipt target is fixed.
+    console.info(
+      "[whatsapp][diag] markRead key=",
+      JSON.stringify({
+        id: key.id,
+        remoteJid: key.remoteJid,
+        remoteJidAlt: (key as Record<string, unknown>).remoteJidAlt,
+        participant: key.participant,
+        participantAlt: (key as Record<string, unknown>).participantAlt,
+        addressingMode: (key as Record<string, unknown>).addressingMode,
+        fromMe: key.fromMe,
+        via: socket.sendReceipts ? "sendReceipts(read)" : "readMessages",
+      }),
+    );
     const sent = socket.sendReceipts ? socket.sendReceipts([key], "read") : socket.readMessages?.([key]);
     await sent?.catch((err: unknown) => {
       console.warn("[whatsapp] could not mark message read:", err);
@@ -672,7 +687,10 @@ export class WhatsAppGateway {
       const stream = await downloadContentFromMessage(event.mediaRaw as never, "audio");
       const data = await streamToBuffer(stream);
       const filename = `${event.messageId}.${event.mimeType?.includes("mpeg") ? "mp3" : "ogg"}`;
-      const transcription = await transcribeAudio(data, filename);
+      const transcription = await transcribeAudio(data, filename, {
+        model: this.options.settings.whisperModel(),
+        groqApiKey: this.options.settings.get("groq_api_key"),
+      });
       if (!transcription.success) {
         return { kind: "fixed-reply", text: `I could not transcribe that voice note: ${transcription.error}` };
       }
