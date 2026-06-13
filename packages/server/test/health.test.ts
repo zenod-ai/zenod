@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { BrainEngine } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -148,6 +149,59 @@ describe("server API", () => {
     const body = await confirmed.json();
     expect(body.text).toContain("Initial clean commit");
     expect(body.cleanSlate.setupCommitSha).toBe("2".repeat(40));
+  });
+
+  it("test chat runs through engine.chat with explicit context and audit readback", async () => {
+    const calls: Array<{ message: string; surface: string; conversationKey?: string }> = [];
+    runtime.getEngine = async () =>
+      ({
+        async chat(message, surface, options) {
+          calls.push({
+            message,
+            surface,
+            conversationKey: typeof options === "object" ? options.conversationKey : undefined,
+          });
+          if (typeof options === "object") {
+            options.onToolEvent?.({ phase: "start", tool: "searchVault", label: "Searching memory" });
+            options.onToolEvent?.({ phase: "end", tool: "searchVault", label: "Searching memory" });
+          }
+          return {
+            text: `Memory-only answer: ${message}`,
+            sources: [{ path: "Areas/Insurance.md", githubUrl: "https://example.test/Areas/Insurance.md" }],
+          };
+        },
+      }) as BrainEngine;
+
+    const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
+    const res = await app.request("/api/test/chat", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        message: "negative control: answer from memory only",
+        surface: "web",
+        conversationKey: "issue-37-http",
+        testRunId: "issue-37",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.text).toBe("Memory-only answer: negative control: answer from memory only");
+    expect(body.correlationId).toMatch(/^test_/);
+    expect(body.conversationId).toBe("web:issue-37-http");
+    expect(body.toolEvents).toHaveLength(2);
+    expect(calls).toEqual([
+      { message: "negative control: answer from memory only", surface: "web", conversationKey: "issue-37-http" },
+    ]);
+
+    const audit = await app.request(`/api/test/chat/${body.correlationId}`, { headers });
+    expect(audit.status).toBe(200);
+    const auditBody = await audit.json();
+    expect(auditBody.run.prompt).toBe("negative control: answer from memory only");
+    expect(auditBody.run.reply).toBe("Memory-only answer: negative control: answer from memory only");
+    expect(auditBody.run.status).toBe("ok");
+
+    const recent = await app.request("/api/test/chat?limit=1", { headers });
+    expect((await recent.json()).runs[0].correlationId).toBe(body.correlationId);
   });
 
   it("tracks MCP clients and lists them via /api/connections", async () => {

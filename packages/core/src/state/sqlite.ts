@@ -1,7 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ConversationMessage, StateStore, Surface } from "../types.js";
+import type { ChatTestAuditInput, ChatTestAuditRecord, ConversationMessage, SourceRef, StateStore, Surface } from "../types.js";
+import type { ChatToolEvent } from "../llm/types.js";
 
 const WINDOW_MESSAGES = 20;
 const WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -36,6 +37,22 @@ export class SqliteStateStore implements StateStore {
         last_seen INTEGER NOT NULL,
         connections INTEGER NOT NULL DEFAULT 1
       );
+      CREATE TABLE IF NOT EXISTS chat_test_runs (
+        correlation_id TEXT PRIMARY KEY,
+        test_run_id TEXT,
+        surface TEXT NOT NULL,
+        conversation_key TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        reply TEXT,
+        sources_json TEXT NOT NULL,
+        tool_events_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('ok', 'error')),
+        error TEXT,
+        at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_chat_test_runs_at ON chat_test_runs (at DESC);
+      CREATE INDEX IF NOT EXISTS idx_chat_test_runs_test_run_id ON chat_test_runs (test_run_id, at DESC);
     `);
   }
 
@@ -83,6 +100,56 @@ export class SqliteStateStore implements StateStore {
     this.db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(conversationId);
   }
 
+  recordChatTestRun(input: ChatTestAuditInput): ChatTestAuditRecord {
+    this.db
+      .prepare(
+        `INSERT INTO chat_test_runs (
+           correlation_id, test_run_id, surface, conversation_key, conversation_id,
+           prompt, reply, sources_json, tool_events_json, status, error, at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.correlationId,
+        input.testRunId ?? null,
+        input.surface,
+        input.conversationKey,
+        input.conversationId,
+        input.prompt,
+        input.reply ?? null,
+        JSON.stringify(input.sources),
+        JSON.stringify(input.toolEvents),
+        input.status,
+        input.error ?? null,
+        input.at.getTime(),
+      );
+    return { ...input };
+  }
+
+  getChatTestRun(correlationId: string): ChatTestAuditRecord | null {
+    const row = this.db
+      .prepare(
+        `SELECT correlation_id AS correlationId, test_run_id AS testRunId, surface, conversation_key AS conversationKey,
+                conversation_id AS conversationId, prompt, reply, sources_json AS sourcesJson,
+                tool_events_json AS toolEventsJson, status, error, at
+         FROM chat_test_runs WHERE correlation_id = ?`,
+      )
+      .get(correlationId) as ChatTestRunRow | undefined;
+    return row ? chatTestRunFromRow(row) : null;
+  }
+
+  listChatTestRuns(limit = 20): ChatTestAuditRecord[] {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    const rows = this.db
+      .prepare(
+        `SELECT correlation_id AS correlationId, test_run_id AS testRunId, surface, conversation_key AS conversationKey,
+                conversation_id AS conversationId, prompt, reply, sources_json AS sourcesJson,
+                tool_events_json AS toolEventsJson, status, error, at
+         FROM chat_test_runs ORDER BY at DESC LIMIT ?`,
+      )
+      .all(safeLimit) as unknown as ChatTestRunRow[];
+    return rows.map(chatTestRunFromRow);
+  }
+
   /** Simple key-value settings — used by the server for runtime configuration. */
   getSetting(key: string): string | null {
     const row = this.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
@@ -106,4 +173,36 @@ export class SqliteStateStore implements StateStore {
   close(): void {
     this.db.close();
   }
+}
+
+interface ChatTestRunRow {
+  correlationId: string;
+  testRunId: string | null;
+  surface: Surface;
+  conversationKey: string;
+  conversationId: string;
+  prompt: string;
+  reply: string | null;
+  sourcesJson: string;
+  toolEventsJson: string;
+  status: "ok" | "error";
+  error: string | null;
+  at: number;
+}
+
+function chatTestRunFromRow(row: ChatTestRunRow): ChatTestAuditRecord {
+  return {
+    correlationId: row.correlationId,
+    ...(row.testRunId ? { testRunId: row.testRunId } : {}),
+    surface: row.surface,
+    conversationKey: row.conversationKey,
+    conversationId: row.conversationId,
+    prompt: row.prompt,
+    ...(row.reply !== null ? { reply: row.reply } : {}),
+    sources: JSON.parse(row.sourcesJson) as SourceRef[],
+    toolEvents: JSON.parse(row.toolEventsJson) as ChatToolEvent[],
+    status: row.status,
+    ...(row.error ? { error: row.error } : {}),
+    at: new Date(row.at),
+  };
 }

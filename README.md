@@ -61,6 +61,7 @@ claude mcp add --transport http zenod https://your-host/mcp --header "Authorizat
 
 - **Engine spec:** [docs/M0-SPEC.md](docs/M0-SPEC.md)
 - **Vault rules:** [docs/LIBRARIAN-DOCTRINE.md](docs/LIBRARIAN-DOCTRINE.md)
+- **Self-test chat harness:** [docs/SELF-TEST-HARNESS.md](docs/SELF-TEST-HARNESS.md)
 - **Stack:** TypeScript / Node 22+, Claude Agent SDK, simple-git, ripgrep, SQLite, React + Vite + shadcn/ui.
 
 ## License

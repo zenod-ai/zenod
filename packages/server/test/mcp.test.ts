@@ -23,7 +23,11 @@ const fakeEngine: BrainEngine = {
   async ask(question) {
     return { text: `Answer to: ${question}`, sources: [{ path: "Areas/Insurance.md", githubUrl: "" }] };
   },
-  async chat(message) {
+  async chat(message, _surface, options) {
+    if (typeof options === "object") {
+      options.onToolEvent?.({ phase: "start", tool: "digestBacklog", label: "Digest backlog" });
+      options.onToolEvent?.({ phase: "end", tool: "digestBacklog", label: "Digest backlog" });
+    }
     return { text: `Re: ${message}`, sources: [] };
   },
   async search(query) {
@@ -117,6 +121,7 @@ describe("MCP endpoint", () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "ask_brain",
+      "chat_with_zenod",
       "clean_slate_vault",
       "digest_backlog",
       "get_memory",
@@ -183,6 +188,31 @@ describe("MCP endpoint", () => {
     const answer = result.structuredContent as { text: string; sources: Array<{ path: string }> };
     expect(answer.text).toContain("what insurance do I have?");
     expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
+    await client.close();
+  });
+
+  it("chat_with_zenod runs engine.chat and writes a correlated audit row", async () => {
+    const client = await connect();
+    const result = await client.callTool({
+      name: "chat_with_zenod",
+      arguments: {
+        message: "do you have a digest backlog tool?",
+        conversationKey: "issue-37-mcp",
+        testRunId: "issue-37",
+      },
+    });
+    const chat = result.structuredContent as {
+      correlationId: string;
+      text: string;
+      surface: string;
+      conversationId: string;
+      toolEvents: Array<{ tool: string }>;
+    };
+    expect(chat.text).toBe("Re: do you have a digest backlog tool?");
+    expect(chat.surface).toBe("mcp");
+    expect(chat.conversationId).toBe("mcp:issue-37-mcp");
+    expect(chat.toolEvents.map((event) => event.tool)).toEqual(["digestBacklog", "digestBacklog"]);
+    expect(runtime.state.getChatTestRun(chat.correlationId)?.prompt).toBe("do you have a digest backlog tool?");
     await client.close();
   });
 
