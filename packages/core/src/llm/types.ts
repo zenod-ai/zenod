@@ -1,5 +1,5 @@
 import type { PageIndexEntry } from "../vault/pages.js";
-import type { BacklogCandidate, BacklogDigestInput, BacklogDigestResult, BacklogSourceRef, LintError } from "../types.js";
+import type { BacklogCandidate, BacklogDigestInput, BacklogDigestResult, BacklogSourceRef, LintError, StoreResult } from "../types.js";
 
 /**
  * The LLM seam. The engine talks to this interface only, so every pipeline
@@ -155,9 +155,14 @@ export interface BacklogExtractResult {
  * a plan the user explicitly approved in the conversation.
  */
 export interface VaultTaskTools {
+  captureNote(content: string, hints?: string[]): Promise<StoreResult>;
   proposeTask(objective: string): Promise<string>;
   executeTask(objective: string, plan: string): Promise<string>;
   digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult>;
+  createIssue(input: { repo: string; title: string; body: string; labels?: string[] }): Promise<string>;
+  labelIssue(input: { repo: string; issueNumber: number; labels: string[] }): Promise<string>;
+  queryBacklog(query?: string): Promise<string>;
+  serviceBacklog(query?: string): Promise<string>;
 }
 
 /**

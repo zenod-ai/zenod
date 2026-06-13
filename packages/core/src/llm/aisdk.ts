@@ -71,6 +71,16 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Reorganizing the vault";
     case "digest_backlog":
       return "Mining backlog candidates";
+    case "capture_note":
+      return "Filing a note";
+    case "create_issue":
+      return "Creating a GitHub issue";
+    case "label_issue":
+      return "Labeling a GitHub issue";
+    case "query_backlog":
+      return "Checking backlog status";
+    case "service_backlog":
+      return "Selecting backlog work";
     default:
       return `Running ${toolName}`;
   }
@@ -265,6 +275,24 @@ export class AiSdkBrainLlm implements BrainLlm {
 
     const taskToolSet = taskTools
       ? {
+          capture_note: tool({
+            description:
+              "Capture/file an inbound note through the librarian store pipeline. Use when the user asks to file, capture, save, remember, or log a note/message. Returns evidence, touched pages, commit, and URLs.",
+            inputSchema: z.object({
+              content: z.string().describe("the note text to file"),
+              hints: z.array(z.string()).nullable().describe("optional filing hints; null for none"),
+            }),
+            execute: async ({ content, hints }) => {
+              const result = await taskTools.captureNote(content, hints ?? undefined);
+              return [
+                `Filed: ${result.evidenceRef}`,
+                ...(result.pagesTouched.length > 0 ? [`Pages: ${result.pagesTouched.join(", ")}`] : []),
+                `Commit: ${result.commitSha}`,
+                ...(result.githubUrls.length > 0 ? ["URLs:", ...result.githubUrls.map((url) => `- ${url}`)] : []),
+                ...(result.question ? [`Question: ${result.question}`] : []),
+              ].join("\n");
+            },
+          }),
           propose_vault_task: tool({
             description:
               "Plan vault maintenance/reorganization (sweep the Inbox, merge or refile pages, restructure folders). The librarian surveys the vault read-only and returns a concrete operation-by-operation plan. NOTHING is changed. Relay the returned plan to the user verbatim and ask for approval. Use whenever the user asks to clean up, move, reorganize, or restructure.",
@@ -321,6 +349,51 @@ export class AiSdkBrainLlm implements BrainLlm {
               ].join("\n");
             },
           }),
+          create_issue: tool({
+            description:
+              "Create a GitHub issue when the user asks to create/open/file an issue. Use the configured repository unless the user specifies another owner/repo. Return the issue URL to the user.",
+            inputSchema: z.object({
+              repo: z.string().nullable().describe("owner/repo target; null uses the configured vault/project repo"),
+              title: z.string().describe("issue title"),
+              body: z.string().describe("issue body with context and acceptance criteria"),
+              labels: z.array(z.string()).nullable().describe("labels to apply at creation time; null for none"),
+            }),
+            execute: ({ repo, title, body, labels }) =>
+              caught(() =>
+                taskTools.createIssue({
+                  repo: repo ?? "",
+                  title,
+                  body,
+                  ...(labels ? { labels } : {}),
+                }),
+              ),
+          }),
+          label_issue: tool({
+            description: "Apply labels to an existing GitHub issue after creating or locating it.",
+            inputSchema: z.object({
+              repo: z.string().nullable().describe("owner/repo target; null uses the configured vault/project repo"),
+              issueNumber: z.number().int().positive().describe("GitHub issue number"),
+              labels: z.array(z.string()).min(1).describe("labels to add"),
+            }),
+            execute: ({ repo, issueNumber, labels }) =>
+              caught(() => taskTools.labelIssue({ repo: repo ?? "", issueNumber, labels })),
+          }),
+          query_backlog: tool({
+            description:
+              "Return real status for open backlog/issues. Use when the user asks where things stand, open issue status, backlog status, blockers, or what is ready next.",
+            inputSchema: z.object({
+              query: z.string().nullable().describe("optional status scope; null for general open backlog/issues"),
+            }),
+            execute: ({ query }) => caught(() => taskTools.queryBacklog(query ?? undefined)),
+          }),
+          service_backlog: tool({
+            description:
+              "Select eligible backlog work for servicing. This is a stub for the runner: it returns the eligible set/status and does not launch agents or execute work.",
+            inputSchema: z.object({
+              query: z.string().nullable().describe("optional selection scope; null for general eligible backlog"),
+            }),
+            execute: ({ query }) => caught(() => taskTools.serviceBacklog(query ?? undefined)),
+          }),
         }
       : {};
 
@@ -351,7 +424,7 @@ export class AiSdkBrainLlm implements BrainLlm {
 
     const briefingExtras = [
       taskTools
-        ? "You CAN reorganize the vault and mine backlog candidates: propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. digest_backlog extracts structured action/backlog candidates from raw text, memory paths, or scoped queries; it returns proposals unless the user explicitly asks to write Backlog/ records. Never execute or write without an explicit yes first."
+        ? "You CAN act on explicit tasking instructions using tools: capture_note files notes, digest_backlog/run digest mines structured backlog candidates, create_issue and label_issue manage GitHub issues, query_backlog reports open backlog/status, and service_backlog selects eligible work without launching a runner. propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute vault writes without explicit approval; creating a GitHub issue is allowed when the user explicitly asks to create/open/file one."
         : "",
       driveTools
         ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background ingestion (download, configured transcription provider for audio, filing, archiving). When the user asks to ingest their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Ingestion panel (Connections tab), and the transcripts land in the vault when done."

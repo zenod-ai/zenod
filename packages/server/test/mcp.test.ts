@@ -30,6 +30,9 @@ const fakeEngine: BrainEngine = {
     }
     return { text: `Re: ${message}`, sources: [] };
   },
+  async handleTasking(input) {
+    return { text: `Tasked: ${input.text}`, actions: [] };
+  },
   async search(query) {
     return [{ path: "Areas/Insurance.md", snippet: `about ${query}`, score: 9, githubUrl: "" }];
   },
@@ -128,6 +131,7 @@ describe("MCP endpoint", () => {
       "run_task",
       "search_memory",
       "store_memory",
+      "task_brain",
     ]);
     await client.close();
   });
@@ -213,6 +217,16 @@ describe("MCP endpoint", () => {
     expect(chat.conversationId).toBe("mcp:issue-37-mcp");
     expect(chat.toolEvents.map((event) => event.tool)).toEqual(["digestBacklog", "digestBacklog"]);
     expect(runtime.state.getChatTestRun(chat.correlationId)?.prompt).toBe("do you have a digest backlog tool?");
+    await client.close();
+  });
+
+  it("task_brain routes instructions through the shared tasking entrypoint", async () => {
+    const client = await connect();
+    const result = await client.callTool({
+      name: "task_brain",
+      arguments: { text: "create an issue for the digest gap", conversationKey: "mcp-test" },
+    });
+    expect(JSON.stringify(result.content)).toContain("Tasked: create an issue for the digest gap");
     await client.close();
   });
 

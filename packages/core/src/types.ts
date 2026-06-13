@@ -5,7 +5,8 @@
 
 import type { ChatToolEvent } from "./llm/types.js";
 
-export type Surface = "cli" | "mcp" | "whatsapp" | "web" | "drive";
+export type Surface = "cli" | "mcp" | "whatsapp" | "web" | "drive" | "selftest";
+export type TaskingSurface = "whatsapp" | "web" | "mcp" | "selftest";
 
 export interface StoreInput {
   /** The memory to store: a message, a fact, a capture. */
@@ -75,6 +76,30 @@ export interface ChatTestAuditInput {
 
 export interface ChatTestAuditRecord extends ChatTestAuditInput {
   at: Date;
+}
+
+export interface TaskingInput {
+  text: string;
+  surface: TaskingSurface;
+  conversationKey: string;
+}
+
+export interface TaskingAction {
+  tool: string;
+  input: Record<string, unknown>;
+  result: string;
+}
+
+export interface TaskingReply {
+  text: string;
+  actions: TaskingAction[];
+}
+
+export interface ExternalTaskingTools {
+  createIssue(input: { repo?: string; title: string; body: string; labels?: string[] }): Promise<string>;
+  labelIssue(input: { repo?: string; issueNumber: number; labels: string[] }): Promise<string>;
+  queryBacklog(query?: string): Promise<string>;
+  serviceBacklog(query?: string): Promise<string>;
 }
 
 export interface SourceRef {
@@ -199,6 +224,13 @@ export interface BrainEngine {
     onToolEvent?: (event: ChatToolEvent) => void,
     conversationKey?: string,
   ): Promise<Reply>;
+  /**
+   * Shared tasking entrypoint for transport gateways. Gateways do only
+   * transport work, then call this surface-agnostic loop with a correlation
+   * key. The returned actions are the mutating/status tools invoked in the
+   * loop, suitable for self-test/audit correlation.
+   */
+  handleTasking(input: TaskingInput): Promise<TaskingReply>;
   /** Librarian work loop: propose (no plan) then execute (approved plan) vault maintenance. */
   work(input: WorkInput): Promise<WorkResult>;
   /**

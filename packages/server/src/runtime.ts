@@ -10,6 +10,7 @@ import {
   VaultRepo,
   type BrainEngine,
   type CleanSlateResult,
+  type ExternalTaskingTools,
   type LintReport,
 } from "zenod";
 import { installationToken } from "./githubApp.js";
@@ -114,8 +115,80 @@ export class Runtime {
         branch: this.settings.get("vault_branch") ?? "main",
       },
       ...(driveTools ? { driveTools } : {}),
+      taskingTools: this.buildTaskingTools(),
     });
     return this.engine;
+  }
+
+  private async githubToken(): Promise<string | null> {
+    if (this.settings.hasGithubApp()) return installationToken(this.settings);
+    return this.settings.get("github_token");
+  }
+
+  private buildTaskingTools(): ExternalTaskingTools {
+    const defaultRepo = () => this.settings.get("vault_repo") || "";
+    const githubJson = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+      const token = await this.githubToken();
+      if (!token) throw new Error("GitHub token or app installation is required");
+      const response = await fetch(`https://api.github.com${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "User-Agent": "zenod",
+          Accept: "application/vnd.github+json",
+          ...(init.body ? { "Content-Type": "application/json" } : {}),
+          ...(init.headers ?? {}),
+        },
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`GitHub returned ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
+      }
+      return (await response.json()) as T;
+    };
+
+    const queryBacklog = async (query?: string): Promise<string> => {
+      const repo = defaultRepo();
+      if (!repo) return "No GitHub repository is configured.";
+      const issues = await githubJson<
+        Array<{ number: number; title: string; html_url: string; labels: Array<{ name: string }>; updated_at: string }>
+      >(`/repos/${encodeURIComponent(repo).replace("%2F", "/")}/issues?state=open&per_page=30&sort=updated&direction=desc`);
+      const filtered = query
+        ? issues.filter((issue) => `${issue.title} ${issue.labels.map((label) => label.name).join(" ")}`.toLowerCase().includes(query.toLowerCase()))
+        : issues;
+      if (filtered.length === 0) return query ? `No open issues matched "${query}".` : "No open issues found.";
+      return [
+        `Open issues${query ? ` matching "${query}"` : ""}: ${filtered.length}`,
+        ...filtered.slice(0, 10).map((issue) => {
+          const labels = issue.labels.map((label) => label.name).join(", ");
+          return `#${issue.number} ${issue.title}${labels ? ` [${labels}]` : ""} — updated ${issue.updated_at} — ${issue.html_url}`;
+        }),
+      ].join("\n");
+    };
+
+    return {
+      createIssue: async ({ repo, title, body, labels }) => {
+        const target = repo || defaultRepo();
+        if (!target) return "No GitHub repository is configured.";
+        const issue = await githubJson<{ number: number; html_url: string }>(`/repos/${encodeURIComponent(target).replace("%2F", "/")}/issues`, {
+          method: "POST",
+          body: JSON.stringify({ title, body, labels: labels ?? [] }),
+        });
+        return `Created issue #${issue.number}: ${issue.html_url}`;
+      },
+      labelIssue: async ({ repo, issueNumber, labels }) => {
+        const target = repo || defaultRepo();
+        if (!target) return "No GitHub repository is configured.";
+        const issue = await githubJson<{ html_url: string }>(
+          `/repos/${encodeURIComponent(target).replace("%2F", "/")}/issues/${issueNumber}/labels`,
+          { method: "POST", body: JSON.stringify({ labels }) },
+        );
+        return `Labeled issue #${issueNumber}: ${issue.html_url}`;
+      },
+      queryBacklog,
+      serviceBacklog: async (query?: string) =>
+        ["Backlog service selection only; runner is tracked separately.", await queryBacklog(query)].join("\n"),
+    };
   }
 
   /** Lint the vault — deterministic, needs only the repo (no Anthropic key). */
