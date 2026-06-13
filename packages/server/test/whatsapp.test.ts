@@ -235,6 +235,40 @@ describe("WhatsApp API", () => {
 });
 
 describe("WhatsAppGateway", () => {
+  it("sends an automated error reply when the engine fails (never silent)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-gateway-err-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => ({
+        ...fakeEngine([]),
+        async chat() {
+          throw new Error("You exceeded your current quota (429)");
+        },
+      }),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+
+      await gateway.handleMessages([textMessage()], "notify");
+
+      // The sender must get an automated, non-LLM notice — not silence.
+      expect(socket.sent).toHaveLength(1);
+      expect(socket.sent[0]!.text).toContain("AI model is unavailable");
+      expect(runtime.whatsappStore.countOutboundAudits("failed")).toBe(1);
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("replies to allowlisted text once and denies non-allowlisted senders", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-gateway-"));
     const runtime = new Runtime(dir);
