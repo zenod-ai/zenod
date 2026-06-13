@@ -6,6 +6,9 @@ import { defineConfig } from "vite"
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    __ZENOD_WEB_BUILD_ID__: JSON.stringify(process.env.ZENOD_WEB_BUILD_ID ?? String(Date.now())),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
