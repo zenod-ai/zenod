@@ -84,6 +84,23 @@ class FakeLlm implements BrainLlm {
       });
       return { text: url, readPaths: [] };
     }
+    if (taskTools && input.question.startsWith("CREATEQUEUEDISSUE:")) {
+      const url = await taskTools.createIssue({
+        repo: "zenod-ai/zenod",
+        title: input.question.slice("CREATEQUEUEDISSUE:".length).trim(),
+        body: "Created from tasking test.",
+        labels: ["owner:agent", "status:queued"],
+      });
+      return { text: url, readPaths: [] };
+    }
+    if (taskTools && input.question.startsWith("LABELQUEUEDISSUE")) {
+      const text = await taskTools.labelIssue({
+        repo: "zenod-ai/zenod",
+        issueNumber: 52,
+        labels: ["status:queued", "owner:agent"],
+      });
+      return { text, readPaths: [] };
+    }
     if (taskTools && input.question.startsWith("QUERYBACKLOG")) {
       const text = await taskTools.queryBacklog("open issues");
       return { text, readPaths: [] };
@@ -579,10 +596,43 @@ describe("BrainEngine", () => {
     expect(query.actions.map((action) => action.tool)).toEqual(["queryBacklog"]);
     expect(service.actions.map((action) => action.tool)).toEqual(["serviceBacklog"]);
     expect(calls).toEqual([
-      "create:zenod-ai/zenod:Task from WhatsApp:from-tasking",
+      "create:zenod-ai/zenod:Task from WhatsApp:from-tasking,status:proposed",
       "query:open issues",
       "service:ready",
     ]);
+  });
+
+  it("forces agent-created GitHub issues to proposed instead of queued", async () => {
+    const calls: string[] = [];
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        async createIssue(input) {
+          calls.push(`create:${input.labels?.join(",")}`);
+          return "Created issue #52: https://github.com/zenod-ai/zenod/issues/52";
+        },
+        async labelIssue(input) {
+          calls.push(`label:${input.labels.join(",")}`);
+          return "labeled";
+        },
+        async queryBacklog() {
+          return "";
+        },
+        async serviceBacklog() {
+          return "";
+        },
+      },
+    });
+
+    const issue = await e.handleTasking({ text: "CREATEQUEUEDISSUE: Human-only queue gate", surface: "web", conversationKey: "same" });
+    const label = await e.handleTasking({ text: "LABELQUEUEDISSUE", surface: "web", conversationKey: "same" });
+
+    expect(issue.actions[0]?.input.labels).toEqual(["owner:agent", "status:proposed"]);
+    expect(label.actions[0]?.input.labels).toEqual(["status:proposed", "owner:agent"]);
+    expect(calls).toEqual(["create:owner:agent,status:proposed", "label:status:proposed,owner:agent"]);
   });
 
   it("chat persists the conversation window and can trigger a store", async () => {

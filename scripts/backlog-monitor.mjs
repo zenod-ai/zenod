@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Backlog monitor (#27) — the single process that runs the chat-trigger loop.
 //
-// Architecture: GitHub is the queue + state + comms surface. Zenod (chat) drops
-// thin trigger tickets and labels them `status:queued`. THIS monitor — running
+// Architecture: GitHub is the queue + state + comms surface. Zenod agents can
+// create and label proposed tickets, but only a human applies `status:queued`.
+// THIS monitor — running
 // in the EXTERNAL agent-runner container, never killed by an app redeploy —
 // reacts to label state with three motions:
 //
