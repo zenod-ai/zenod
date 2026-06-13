@@ -12,7 +12,7 @@
   "scripts": {
     "build": "npm run build -w zenod && npm run build -w @zenod/server && npm run build -w web && npm run build -w site",
     "typecheck": "npm run build -w zenod && npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && node --test scripts/*.test.mjs",
     "dev:web": "npm run dev -w web",
     "dev:site": "npm run dev -w site",
     "build:site": "npm run build -w site",
