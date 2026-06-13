@@ -6,6 +6,8 @@ import {
   cleanSlateVault,
   ensureSchemaV1,
   lintVault,
+  normalizeCreateIssueLabels,
+  normalizeLabelIssueLabels,
   SqliteStateStore,
   VaultRepo,
   type BrainEngine,
@@ -172,7 +174,7 @@ export class Runtime {
         if (!target) return "No GitHub repository is configured.";
         const issue = await githubJson<{ number: number; html_url: string }>(`/repos/${encodeURIComponent(target).replace("%2F", "/")}/issues`, {
           method: "POST",
-          body: JSON.stringify({ title, body, labels: labels ?? [] }),
+          body: JSON.stringify({ title, body, labels: normalizeCreateIssueLabels(labels) }),
         });
         return `Created issue #${issue.number}: ${issue.html_url}`;
       },
@@ -181,7 +183,7 @@ export class Runtime {
         if (!target) return "No GitHub repository is configured.";
         const issue = await githubJson<{ html_url: string }>(
           `/repos/${encodeURIComponent(target).replace("%2F", "/")}/issues/${issueNumber}/labels`,
-          { method: "POST", body: JSON.stringify({ labels }) },
+          { method: "POST", body: JSON.stringify({ labels: normalizeLabelIssueLabels(labels) }) },
         );
         return `Labeled issue #${issueNumber}: ${issue.html_url}`;
       },

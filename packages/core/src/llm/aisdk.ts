@@ -351,7 +351,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           }),
           create_issue: tool({
             description:
-              "Create a GitHub issue when the user asks to create/open/file an issue. Use the configured repository unless the user specifies another owner/repo. Return the issue URL to the user.",
+              "Create a GitHub issue when the user asks to create/open/file an issue. Agent-created issues are proposals only: use status:proposed, never status:queued. Use the configured repository unless the user specifies another owner/repo. Return the issue URL to the user.",
             inputSchema: z.object({
               repo: z.string().nullable().describe("owner/repo target; null uses the configured vault/project repo"),
               title: z.string().describe("issue title"),
@@ -369,7 +369,8 @@ export class AiSdkBrainLlm implements BrainLlm {
               ),
           }),
           label_issue: tool({
-            description: "Apply labels to an existing GitHub issue after creating or locating it.",
+            description:
+              "Apply labels to an existing GitHub issue after creating or locating it. This agent tool may propose work with status:proposed, but must never apply status:queued; only a human can approve proposed work into queued.",
             inputSchema: z.object({
               repo: z.string().nullable().describe("owner/repo target; null uses the configured vault/project repo"),
               issueNumber: z.number().int().positive().describe("GitHub issue number"),

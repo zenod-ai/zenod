@@ -35,6 +35,7 @@ import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
+import { normalizeCreateIssueLabels, normalizeLabelIssueLabels } from "../taskingPolicy.js";
 
 /**
  * The conversation key for a surface. One continuous thread per surface today;
@@ -391,20 +392,20 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return result;
       },
       createIssue: async (input) => {
-        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        const normalized = { ...input, repo: input.repo || defaultRepo(), labels: normalizeCreateIssueLabels(input.labels) };
         const result = options.taskingTools
           ? await options.taskingTools.createIssue({
               title: normalized.title,
               body: normalized.body,
               ...(normalized.repo ? { repo: normalized.repo } : {}),
-              ...(normalized.labels ? { labels: normalized.labels } : {}),
+              labels: normalized.labels,
             })
           : noExternalTool("createIssue");
         recordAction("createIssue", normalized, result);
         return result;
       },
       labelIssue: async (input) => {
-        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        const normalized = { ...input, repo: input.repo || defaultRepo(), labels: normalizeLabelIssueLabels(input.labels) };
         const result = options.taskingTools
           ? await options.taskingTools.labelIssue({
               issueNumber: normalized.issueNumber,
