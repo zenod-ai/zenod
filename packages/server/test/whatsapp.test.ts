@@ -22,6 +22,8 @@ import { WhatsAppStore } from "../src/whatsappStore.js";
 class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
   readonly sent: Array<{ jid: string; text: string }> = [];
+  readonly reads: Array<Array<{ id?: string | null; remoteJid?: string | null }>> = [];
+  readonly presence: Array<{ type: string; jid?: string }> = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
   onWhatsApp?: SocketLike["onWhatsApp"];
   ev = {
@@ -33,6 +35,14 @@ class FakeSocket implements SocketLike {
   async sendMessage(jid: string, content: { text: string }) {
     this.sent.push({ jid, text: content.text });
     return { key: { id: `sent_${this.sent.length}` } };
+  }
+
+  async readMessages(keys: Array<{ id?: string | null; remoteJid?: string | null }>) {
+    this.reads.push(keys);
+  }
+
+  async sendPresenceUpdate(type: "composing" | "paused", toJid?: string) {
+    this.presence.push({ type, jid: toJid });
   }
 
   end() {
@@ -311,6 +321,54 @@ describe("WhatsAppGateway", () => {
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("marks the inbound message read with the real key and sends typing to the reply JID", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-receipts-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const calls: string[] = [];
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine(calls),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+
+      await gateway.handleMessages(
+        [
+          textMessage({
+            key: {
+              id: "msg_receipt",
+              remoteJid: "123456789012345@lid",
+              remoteJidAlt: "34611111111@s.whatsapp.net",
+              fromMe: false,
+            },
+          }),
+        ],
+        "notify",
+      );
+
+      // Read receipt uses the UNMODIFIED inbound key (still the @lid remoteJid) —
+      // we must never fabricate/rewrite it, which is what broke sessions before.
+      expect(socket.reads).toEqual([
+        [expect.objectContaining({ id: "msg_receipt", remoteJid: "123456789012345@lid" })],
+      ]);
+      // Typing is sent to the same phone JID we reply to: composing, then paused.
+      expect(socket.presence).toEqual([
+        { type: "composing", jid: "34611111111@s.whatsapp.net" },
+        { type: "paused", jid: "34611111111@s.whatsapp.net" },
+      ]);
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });

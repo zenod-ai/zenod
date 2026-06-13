@@ -7,6 +7,7 @@ import {
   makeWASocket,
   useMultiFileAuthState,
   type WAMessage,
+  type WAMessageKey,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { pino } from "pino";
@@ -57,6 +58,8 @@ export interface SocketLike {
   };
   user?: { id?: string | null } | null;
   sendMessage(jid: string, content: { text: string }): Promise<{ key?: { id?: string | null } } | undefined>;
+  readMessages?(keys: WAMessageKey[]): Promise<void>;
+  sendPresenceUpdate?(type: "composing" | "paused", toJid?: string): Promise<void>;
   onWhatsApp?(...jids: string[]): Promise<Array<{ jid?: string; exists?: unknown; lid?: unknown }> | undefined>;
   end?(error?: Error): void;
   flushCredentials?(): Promise<void>;
@@ -492,6 +495,30 @@ export class WhatsAppGateway {
     return normalized !== "" && this.allowedSenderAliases.has(normalized);
   }
 
+  private recipientJid(event: WhatsAppInboundEvent): string {
+    return event.isGroup ? event.chatId : event.senderId || event.chatId;
+  }
+
+  // Send a read receipt (blue ticks) for the inbound message. Uses ONLY the
+  // real inbound key — never fabricate/rewrite remoteJid/participant, which is
+  // what desynced @lid Signal sessions before. v7 addresses the receipt itself.
+  private async markRead(event: WhatsAppInboundEvent): Promise<void> {
+    const key = (event.raw as WAMessage | undefined)?.key;
+    if (!key || !this.socket?.readMessages) return;
+    await this.socket.readMessages([key]).catch((err: unknown) => {
+      console.warn("[whatsapp] could not mark message read:", err);
+    });
+  }
+
+  // Typing indicator, sent to the same single JID we reply to. No fan-out.
+  private async setTyping(event: WhatsAppInboundEvent, typing: boolean): Promise<void> {
+    const jid = this.recipientJid(event);
+    if (!jid || !this.socket?.sendPresenceUpdate) return;
+    await this.socket.sendPresenceUpdate(typing ? "composing" : "paused", jid).catch((err: unknown) => {
+      console.warn("[whatsapp] could not update typing state:", err);
+    });
+  }
+
   private bindSocket(socket: SocketLike): void {
     socket.ev.on("connection.update", (update) => {
       if (this.socket !== socket) return;
@@ -584,13 +611,15 @@ export class WhatsAppGateway {
       return;
     }
 
-    const input = await this.engineInputForEvent(event, settings);
-    if (input.kind === "fixed-reply") {
-      await this.sendReply(event, input.text, "unsupported_media");
-      return;
-    }
-
+    await this.markRead(event);
+    await this.setTyping(event, true);
     try {
+      const input = await this.engineInputForEvent(event, settings);
+      if (input.kind === "fixed-reply") {
+        await this.sendReply(event, input.text, "unsupported_media");
+        return;
+      }
+
       this.options.store.markMessageStatus(event.messageId, "processing");
       const engine = await this.options.getEngine();
       const reply = await engine.chat(input.text, "whatsapp", {
@@ -609,6 +638,8 @@ export class WhatsAppGateway {
         errorText: message,
       });
       throw err;
+    } finally {
+      await this.setTyping(event, false);
     }
   }
 
@@ -654,7 +685,7 @@ export class WhatsAppGateway {
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
     if (!text) return;
-    const recipientJid = event.isGroup ? event.chatId : event.senderId || event.chatId;
+    const recipientJid = this.recipientJid(event);
     try {
       const sent = await this.socket?.sendMessage(recipientJid, { text });
       this.options.store.recordOutboundAudit({
