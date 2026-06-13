@@ -682,7 +682,9 @@ export class WhatsAppGateway {
 
       this.options.store.markMessageStatus(event.messageId, "processing");
       const engine = await this.options.getEngine();
-      const reply = await engine.chat(input.text, "whatsapp", {
+      const reply = await engine.handleTasking({
+        text: input.text,
+        surface: "whatsapp",
         conversationKey: normalizeWhatsAppIdentifier(event.senderId) || event.senderId,
       });
       await this.sendReply(event, reply.text, "sent");

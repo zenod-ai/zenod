@@ -18,6 +18,7 @@ export type {
   ChatTestStatus,
   ChatOptions,
   ConversationMessage,
+  ExternalTaskingTools,
   Hit,
   LintError,
   LintReport,
@@ -28,6 +29,10 @@ export type {
   StoreInput,
   StoreResult,
   Surface,
+  TaskingAction,
+  TaskingInput,
+  TaskingReply,
+  TaskingSurface,
 } from "./types.js";
 
 export { loadBrainConfig, ConfigError, CONFIG_PATH, type BrainConfig } from "./vault/config.js";
