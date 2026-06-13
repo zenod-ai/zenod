@@ -1,19 +1,29 @@
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 /**
- * Local audio transcription with whisper.cpp — no cloud, no API key, no
- * per-minute cost. The same ffmpeg → 16 kHz mono WAV → whisper-cli flow as
- * our standalone local_whisper service, run in-process (we already shell out
- * to ffmpeg). The model is downloaded once to the persistent /data volume so
- * it survives redeploys and never bloats the image.
+ * Audio transcription. Two engines:
+ *
+ * 1. Groq cloud STT (whisper-large-v3-turbo) — used when GROQ_API_KEY is set.
+ *    ~200x realtime, so an hour of audio takes seconds instead of pinning the
+ *    server's CPUs for half an hour. Audio is compressed to 16 kHz mono FLAC
+ *    (what Groq resamples to anyway) to stay under the 25 MB free-tier upload
+ *    cap; anything still larger is split into segments and stitched back.
+ *
+ * 2. Local whisper.cpp — the default and the fallback when Groq is missing,
+ *    rate-limited, or down. No cloud, no API key, no per-minute cost: the same
+ *    ffmpeg → 16 kHz mono WAV → whisper-cli flow as our standalone
+ *    local_whisper service, run in-process. The model is downloaded once to
+ *    the persistent /data volume so it survives redeploys.
  *
  * All knobs are env-overridable for self-hosters on smaller boxes:
+ *   GROQ_API_KEY           (unset: local-only)
+ *   ZENOD_GROQ_STT_MODEL   (default: whisper-large-v3-turbo)
  *   ZENOD_WHISPER_BINARY   (default: whisper-cli, on PATH in the image)
  *   ZENOD_WHISPER_MODEL    (default: large-v3-turbo)
  *   ZENOD_WHISPER_MODEL_DIR(default: /data/models)
@@ -58,6 +68,16 @@ const WHISPER_BINARY = process.env.ZENOD_WHISPER_BINARY ?? "whisper-cli";
 const MODEL_DIR = process.env.ZENOD_WHISPER_MODEL_DIR ?? "/data/models";
 const LANGUAGE = process.env.ZENOD_WHISPER_LANGUAGE ?? "auto";
 const THREADS = process.env.ZENOD_WHISPER_THREADS ?? "4";
+const GROQ_STT_MODEL = process.env.ZENOD_GROQ_STT_MODEL ?? "whisper-large-v3-turbo";
+const GROQ_STT_URL = process.env.ZENOD_GROQ_BASE_URL
+  ? `${process.env.ZENOD_GROQ_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
+  : "https://api.groq.com/openai/v1/audio/transcriptions";
+// Groq's free tier rejects uploads over 25 MB; stay safely under it whether
+// they count decimal or binary megabytes (multipart overhead included).
+const GROQ_MAX_UPLOAD_BYTES = 23_000_000;
+// Segment length when a compressed file still exceeds the cap. 10 minutes of
+// 16 kHz mono FLAC speech is ~5–8 MB, comfortably within the limit.
+const GROQ_SEGMENT_SECONDS = "600";
 // Canonical ggml model host — same source local_whisper's download script uses.
 const MODEL_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
@@ -218,6 +238,71 @@ function parseWhisperProgress(line: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** POST one audio file to Groq's OpenAI-compatible transcription endpoint. */
+async function groqTranscribeFile(path: string, signal?: AbortSignal): Promise<string> {
+  const form = new FormData();
+  form.append("file", new Blob([await readFile(path)]), "audio.flac");
+  form.append("model", GROQ_STT_MODEL);
+  form.append("response_format", "text");
+  if (LANGUAGE !== "auto") form.append("language", LANGUAGE);
+  const timeout = AbortSignal.timeout(120_000);
+  const response = await fetch(GROQ_STT_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: form,
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+  if (!response.ok) {
+    const body = (await response.text().catch(() => "")).slice(0, 400);
+    throw new Error(`groq transcription failed (${response.status}): ${body}`);
+  }
+  return (await response.text()).trim();
+}
+
+/**
+ * Transcribe via Groq. ffmpeg compresses to 16 kHz mono FLAC first (lossless
+ * at the sample rate Groq resamples to, ~4x smaller than WAV); files still
+ * over the upload cap are split into fixed-length segments transcribed in
+ * order. Throws on any failure so the caller can fall back to local whisper.
+ */
+async function transcribeWithGroq(
+  data: Buffer,
+  filename: string,
+  onProgress?: (percent: number) => void,
+  signal?: AbortSignal,
+): Promise<TranscriptionEnvelope> {
+  const dir = await mkdtemp(join(tmpdir(), "zenod-groq-"));
+  const input = join(dir, `in${extname(filename) || ".m4a"}`);
+  const flac = join(dir, "audio.flac");
+  try {
+    await writeFile(input, data);
+    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "flac", flac], { signal });
+    const { size } = await stat(flac);
+    let parts: string[];
+    if (size <= GROQ_MAX_UPLOAD_BYTES) {
+      parts = [flac];
+    } else {
+      await run(
+        "ffmpeg",
+        ["-y", "-i", flac, "-f", "segment", "-segment_time", GROQ_SEGMENT_SECONDS, "-c:a", "flac", join(dir, "seg%04d.flac")],
+        { signal },
+      );
+      parts = (await readdir(dir)).filter((f) => f.startsWith("seg")).sort().map((f) => join(dir, f));
+      if (parts.length === 0) throw new Error("segmenting oversized audio produced no chunks");
+    }
+    const texts: string[] = [];
+    for (const [i, part] of parts.entries()) {
+      texts.push(await groqTranscribeFile(part, signal));
+      onProgress?.(Math.round(((i + 1) / parts.length) * 100));
+    }
+    const transcript = texts.join(" ").trim();
+    if (!transcript) throw new Error("groq transcription returned empty text");
+    return { success: true, transcript, provider: `groq ${GROQ_STT_MODEL}` };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 /**
  * Transcribe an audio buffer locally. ffmpeg normalizes to the 16 kHz mono
  * WAV whisper.cpp expects (any size — it's local, no upload cap), then
@@ -240,6 +325,18 @@ export async function transcribeAudio(
       transcript: process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT,
       provider: `whisper.cpp ${modelName}`,
     };
+  }
+
+  // Groq first when configured — seconds instead of minutes, and it doesn't
+  // pin the server's CPUs. Any failure (rate limit, network, oversized chunk)
+  // falls through to local whisper.cpp so transcription still works offline.
+  if (process.env.GROQ_API_KEY) {
+    try {
+      return await transcribeWithGroq(data, filename, onProgress, signal);
+    } catch (err) {
+      if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
+      console.warn(`[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`);
+    }
   }
 
   let model: string;
