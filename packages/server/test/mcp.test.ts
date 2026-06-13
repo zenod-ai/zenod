@@ -46,6 +46,32 @@ const fakeEngine: BrainEngine = {
       githubUrls: [],
     };
   },
+  async digestBacklog(input) {
+    const sourceRefs = input.sourceRefs ?? [{ path: input.memoryPath ?? "Log/2026-06-13.md#^e-abc123", githubUrl: "" }];
+    return {
+      candidates: [
+        {
+          title: "Write launch backlog",
+          type: "action" as const,
+          owner: "agent" as const,
+          priority: "P0" as const,
+          status: "ready" as const,
+          source_refs: sourceRefs,
+          summary: "Create structured backlog from the transcript.",
+          context: "The source asks for backlog writing.",
+          acceptance_criteria: ["Candidates include citations."],
+          dependencies: [],
+          open_questions: [],
+          difficulty: "medium" as const,
+          suggested_labels: ["backlog"],
+          target_repo: "zenod-ai/zenod",
+        },
+      ],
+      written: input.write ? [{ path: "Backlog/write-launch-backlog.md", githubUrl: "", title: "Write launch backlog" }] : [],
+      skipped: input.write ? [] : [{ reason: "write not requested; returned proposed candidates only" }],
+      source_refs: sourceRefs,
+    };
+  },
 };
 
 describe("MCP endpoint", () => {
@@ -86,10 +112,17 @@ describe("MCP endpoint", () => {
     await expect(client.connect(transport)).rejects.toThrow(/401|unauthorized/i);
   });
 
-  it("lists the five Zenod tools", async () => {
+  it("lists the six Zenod tools", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["ask_brain", "get_memory", "run_task", "search_memory", "store_memory"]);
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      "ask_brain",
+      "digest_backlog",
+      "get_memory",
+      "run_task",
+      "search_memory",
+      "store_memory",
+    ]);
     await client.close();
   });
 
@@ -142,6 +175,25 @@ describe("MCP endpoint", () => {
     const answer = result.structuredContent as { text: string; sources: Array<{ path: string }> };
     expect(answer.text).toContain("what insurance do I have?");
     expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
+    await client.close();
+  });
+
+  it("digest_backlog returns structured candidates and preserves source refs", async () => {
+    const client = await connect();
+    const result = await client.callTool({
+      name: "digest_backlog",
+      arguments: {
+        rawText: "launch backlog writing",
+        sourceRefs: [{ path: "Log/2026-06-13.md#^e-test", githubUrl: "https://example.test/source" }],
+      },
+    });
+    const digest = result.structuredContent as {
+      candidates: Array<{ title: string; source_refs: Array<{ path: string }> }>;
+      written: Array<{ path: string }>;
+    };
+    expect(digest.candidates[0]?.title).toBe("Write launch backlog");
+    expect(digest.candidates[0]?.source_refs[0]?.path).toBe("Log/2026-06-13.md#^e-test");
+    expect(digest.written).toEqual([]);
     await client.close();
   });
 });

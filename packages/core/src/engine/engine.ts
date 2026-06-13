@@ -2,6 +2,10 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import type {
   Answer,
+  BacklogCandidate,
+  BacklogDigestInput,
+  BacklogDigestResult,
+  BacklogSourceRef,
   BrainEngine,
   ChatOptions,
   Hit,
@@ -178,6 +182,141 @@ export function createEngine(options: EngineOptions): BrainEngine {
         await rm(join(vaultPath, clean));
         return `deleted ${clean}`;
       },
+    };
+  }
+
+  function shouldDigestForBacklog(input: StoreInput): boolean {
+    if (input.source !== "drive") return false;
+    if (input.content.length > 1200) return true;
+    return /\b(action|backlog|blocker|issue|launch|must|need(?:s|ed)?|next step|question|remember to|should|todo)\b/i.test(
+      input.content,
+    );
+  }
+
+  function slugifyTitle(title: string): string {
+    const slug = title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 70);
+    return slug || "candidate";
+  }
+
+  function candidateMarkdown(candidate: BacklogCandidate): string {
+    const sourceRefs = candidate.source_refs
+      .map((ref) => `- ${ref.path}${ref.githubUrl ? ` — ${ref.githubUrl}` : ""}`)
+      .join("\n");
+    const list = (items: string[]) => (items.length > 0 ? items.map((item) => `- ${item}`).join("\n") : "- None stated");
+    return [
+      "---",
+      `title: ${JSON.stringify(candidate.title)}`,
+      "status: proposed",
+      `type: ${candidate.type}`,
+      `owner: ${candidate.owner}`,
+      `priority: ${candidate.priority}`,
+      `difficulty: ${candidate.difficulty}`,
+      `target_repo: ${JSON.stringify(candidate.target_repo ?? "")}`,
+      `labels: ${JSON.stringify(candidate.suggested_labels)}`,
+      "---",
+      "",
+      `# ${candidate.title}`,
+      "",
+      candidate.summary,
+      "",
+      "## Context",
+      candidate.context || "None stated",
+      "",
+      "## Acceptance Criteria",
+      list(candidate.acceptance_criteria),
+      "",
+      "## Dependencies",
+      list(candidate.dependencies),
+      "",
+      "## Open Questions",
+      list(candidate.open_questions),
+      "",
+      "## Sources",
+      sourceRefs || "- None",
+      "",
+    ].join("\n");
+  }
+
+  function ensureCandidateSources(candidates: BacklogCandidate[], sourceRefs: BacklogSourceRef[]): BacklogCandidate[] {
+    return candidates.map((candidate) => ({
+      ...candidate,
+      source_refs: candidate.source_refs.length > 0 ? candidate.source_refs : sourceRefs,
+    }));
+  }
+
+  async function collectBacklogSource(input: BacklogDigestInput): Promise<{ content: string; sourceRefs: BacklogSourceRef[] }> {
+    if (input.rawText?.trim()) {
+      return { content: input.rawText.trim(), sourceRefs: input.sourceRefs ?? [] };
+    }
+
+    if (input.memoryPath?.trim()) {
+      const note = await getNote(vaultPath, input.memoryPath.trim(), location);
+      return {
+        content: note.body,
+        sourceRefs: [{ path: note.path, githubUrl: note.githubUrl }],
+      };
+    }
+
+    if (input.query?.trim()) {
+      const hits = (await searchVault(vaultPath, input.query.trim(), location)).slice(0, 5);
+      const notes = await Promise.all(hits.map((hit) => getNote(vaultPath, hit.path, location)));
+      return {
+        content: notes.map((note) => `# ${note.path}\n${note.body}`).join("\n\n"),
+        sourceRefs: notes.map((note) => ({ path: note.path, githubUrl: note.githubUrl })),
+      };
+    }
+
+    throw new Error("digestBacklog requires rawText, memoryPath, or query");
+  }
+
+  async function writeBacklogCandidates(candidates: BacklogCandidate[]): Promise<BacklogDigestResult["written"]> {
+    const written: BacklogDigestResult["written"] = [];
+    const stamp = now().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    for (let index = 0; index < candidates.length; index++) {
+      const candidate = candidates[index]!;
+      const path = `Backlog/${stamp}-${String(index + 1).padStart(2, "0")}-${slugifyTitle(candidate.title)}.md`;
+      await mkdir(dirname(join(vaultPath, path)), { recursive: true });
+      await writeFile(join(vaultPath, path), candidateMarkdown(candidate));
+      written.push({ path, githubUrl: githubUrl(location, path), title: candidate.title });
+    }
+    return written;
+  }
+
+  async function digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult> {
+    if (input.write) {
+      return queue.run(async () => {
+        await repo.pull().catch(() => {});
+        lastSyncMs = now().getTime();
+        const source = await collectBacklogSource(input);
+        const extracted = await llm.extractBacklog(source);
+        const candidates = ensureCandidateSources(extracted.candidates, source.sourceRefs);
+        if (candidates.length === 0) {
+          return { candidates, written: [], skipped: [{ reason: "no backlog candidates found" }], source_refs: source.sourceRefs };
+        }
+        const written = await writeBacklogCandidates(candidates);
+        await repo.commitAndPush(`backlog: propose ${candidates.length} item${candidates.length === 1 ? "" : "s"}`);
+        return {
+          candidates,
+          written: written.map((item) => ({ ...item, githubUrl: item.githubUrl || githubUrl(location, item.path) })),
+          skipped: [],
+          source_refs: source.sourceRefs,
+        };
+      });
+    }
+
+    await syncForRead();
+    const source = await collectBacklogSource(input);
+    const extracted = await llm.extractBacklog(source);
+    const candidates = ensureCandidateSources(extracted.candidates, source.sourceRefs);
+    return {
+      candidates,
+      written: [],
+      skipped: input.write === false ? [] : [{ reason: "write not requested; returned proposed candidates only" }],
+      source_refs: source.sourceRefs,
     };
   }
 
@@ -395,7 +534,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
       // 7-8. One commit per store.
       const sha = await repo.commitAndPush(`memory: ${classification.summary}`);
-      return {
+      const result: StoreResult = {
         evidenceRef,
         pagesTouched: touched,
         commitSha: sha,
@@ -404,6 +543,27 @@ export function createEngine(options: EngineOptions): BrainEngine {
           ...touched.map((p) => githubUrl(location, p)),
         ].filter(Boolean),
       };
+      if (shouldDigestForBacklog(input)) {
+        const sourceRefs = [{ path: evidenceRef, githubUrl: githubUrl(location, evidence.logPath) }];
+        try {
+          const extracted = await llm.extractBacklog({ content: input.content, sourceRefs });
+          const candidates = ensureCandidateSources(extracted.candidates, sourceRefs);
+          result.backlog = {
+            candidates,
+            written: [],
+            skipped: [{ reason: "proactive digestion is proposal-only; write not requested" }],
+            source_refs: sourceRefs,
+          };
+        } catch (err) {
+          result.backlog = {
+            candidates: [],
+            written: [],
+            skipped: [{ reason: `backlog digestion failed: ${(err as Error).message}` }],
+            source_refs: sourceRefs,
+          };
+        }
+      }
+      return result;
     });
   }
 
@@ -483,6 +643,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     ask,
     chat,
     work,
+    digestBacklog,
     search: async (query: string): Promise<Hit[]> => {
       await syncForRead();
       return searchVault(vaultPath, query, location);

@@ -149,6 +149,46 @@ export function buildMcpServer(
     },
   );
 
+  server.registerTool(
+    "digest_backlog",
+    {
+      title: "Digest backlog",
+      description:
+        "Mine a transcript, memory note, or scoped vault query for structured backlog/action candidates with citations. Returns proposed candidates by default. Set write=true only when the user explicitly wants proposed backlog records materialized in the vault backlog surface; this writes records, not arbitrary task execution or GitHub issues.",
+      inputSchema: {
+        rawText: z.string().min(1).optional().describe("Raw transcript or note text to mine directly"),
+        memoryPath: z.string().min(1).optional().describe("Vault-relative note/log path to mine"),
+        query: z.string().min(1).optional().describe("Vault search scope, e.g. 'recent Zenod voice notes launch backlog'"),
+        sourceRefs: z
+          .array(z.object({ path: z.string().min(1), githubUrl: z.string() }))
+          .optional()
+          .describe("Optional source refs to attach to rawText candidates"),
+        write: z.boolean().optional().describe("When true, write proposed backlog records under Backlog/"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ rawText, memoryPath, query, sourceRefs, write }) => {
+      const engine = await getEngine();
+      const result = await engine.digestBacklog({
+        ...(rawText ? { rawText } : {}),
+        ...(memoryPath ? { memoryPath } : {}),
+        ...(query ? { query } : {}),
+        ...(sourceRefs ? { sourceRefs } : {}),
+        ...(write !== undefined ? { write } : {}),
+      });
+      const lines = [
+        `Backlog candidates: ${result.candidates.length}`,
+        ...result.candidates.map((candidate, index) => {
+          const sources = candidate.source_refs.map((ref) => ref.path).join(", ");
+          return `${index + 1}. [${candidate.priority}/${candidate.type}/${candidate.status}] ${candidate.title}${sources ? ` — ${sources}` : ""}`;
+        }),
+        ...(result.written.length > 0 ? ["", "Written:", ...result.written.map((item) => `- ${item.path}${item.githubUrl ? ` (${item.githubUrl})` : ""}`)] : []),
+        ...(result.skipped.length > 0 ? ["", "Skipped:", ...result.skipped.map((item) => `- ${item.title ? `${item.title}: ` : ""}${item.reason}`)] : []),
+      ];
+      return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
+    },
+  );
+
   const driveTools = getDriveTools?.();
   if (driveTools) {
     server.registerTool(

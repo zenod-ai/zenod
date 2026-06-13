@@ -1,5 +1,5 @@
 import type { PageIndexEntry } from "../vault/pages.js";
-import type { LintError } from "../types.js";
+import type { BacklogCandidate, BacklogSourceRef, LintError } from "../types.js";
 
 /**
  * The LLM seam. The engine talks to this interface only, so every pipeline
@@ -29,6 +29,8 @@ export interface BrainLlm {
    * (execute mode). The engine validates and commits — never this loop.
    */
   work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult>;
+  /** Mine provided evidence/context for structured backlog candidates. */
+  extractBacklog(input: BacklogExtractInput): Promise<BacklogExtractResult>;
 }
 
 export interface ClassifyInput {
@@ -136,6 +138,15 @@ export interface WorkLoopInput {
 export interface WorkLoopResult {
   /** Propose mode: the plan. Execute mode: one-line summary first (commit message), then details. */
   text: string;
+}
+
+export interface BacklogExtractInput {
+  content: string;
+  sourceRefs: BacklogSourceRef[];
+}
+
+export interface BacklogExtractResult {
+  candidates: BacklogCandidate[];
 }
 
 /**

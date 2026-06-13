@@ -1,0 +1,8 @@
+Zenod 4 voice note.
+
+Object handling needs a better model: voice notes, Drive docs, source links, and
+attachments should remain inspectable as objects. We need a backlog UI for proposed
+work, with difficulty and dependency modeling so agents know routing and sequencing.
+Question-actions are important when the next step is answering a scoping question.
+Agent orchestration questions remain open: who owns fan-out, how do blockers bubble
+up, and when does Zenod stop versus the execution layer?

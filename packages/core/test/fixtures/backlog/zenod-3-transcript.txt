@@ -1,0 +1,8 @@
+Zenod 3 voice note.
+
+Launch blockers need to be extracted into the backlog. We need clean-slate onboarding
+so a new user can connect a vault and immediately understand the first run. The UX
+should be two-phase: acknowledge ingestion immediately, then send a later digestion
+report with evidence, meaning pages, and proposed work. Launch writing is still
+needed, especially the public UX and docs review. The system should write backlog
+records or GitHub issues, but proposed first unless we have a safe writer target.

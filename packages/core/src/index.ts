@@ -2,6 +2,15 @@ export const VERSION = "0.0.1";
 
 export type {
   Answer,
+  BacklogCandidate,
+  BacklogCandidateType,
+  BacklogDifficulty,
+  BacklogDigestInput,
+  BacklogDigestResult,
+  BacklogOwner,
+  BacklogPriority,
+  BacklogSourceRef,
+  BacklogStatus,
   AttachmentInput,
   BrainEngine,
   ChatOptions,
@@ -43,6 +52,8 @@ export {
 export type {
   AnswerInput,
   AnswerResult,
+  BacklogExtractInput,
+  BacklogExtractResult,
   BrainLlm,
   Classification,
   ClassificationPage,

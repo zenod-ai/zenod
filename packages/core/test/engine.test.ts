@@ -10,6 +10,8 @@ import { SqliteStateStore } from "../src/state/sqlite.js";
 import type {
   AnswerInput,
   AnswerResult,
+  BacklogExtractInput,
+  BacklogExtractResult,
   BrainLlm,
   Classification,
   ClassifyInput,
@@ -93,6 +95,78 @@ class FakeLlm implements BrainLlm {
     }
     const text = this.workScript ? await this.workScript(tools, writeTools) : "did nothing";
     return { text };
+  }
+
+  async extractBacklog(input: BacklogExtractInput): Promise<BacklogExtractResult> {
+    const refs = input.sourceRefs.length > 0 ? input.sourceRefs : [{ path: "Log/2026-06-13.md", githubUrl: "" }];
+    const lower = input.content.toLowerCase();
+    const make = (
+      title: string,
+      type: "action" | "question-action" | "blocker" | "roadmap" | "follow-up",
+      extras: Partial<BacklogExtractResult["candidates"][number]> = {},
+    ): BacklogExtractResult["candidates"][number] => ({
+      title,
+      type,
+      owner: "agent",
+      priority: type === "blocker" ? "P0" : "P1",
+      status: type === "question-action" ? "needs-clarification" : type === "blocker" ? "blocked" : "ready",
+      source_refs: refs,
+      summary: "Extracted from the supplied memory.",
+      context: "The source names the next step explicitly.",
+      acceptance_criteria: ["The next step is captured with evidence."],
+      dependencies: [],
+      open_questions: type === "question-action" ? ["Clarify the next executable step."] : [],
+      difficulty: "medium",
+      suggested_labels: ["backlog", "digested"],
+      target_repo: "zenod-ai/zenod",
+      ...extras,
+    });
+
+    if (lower.includes("zenod 3 voice note")) {
+      return {
+        candidates: [
+          make("Extract launch blockers into backlog", "blocker"),
+          make("Build clean-slate onboarding", "action"),
+          make("Design two-phase ingestion UX", "action"),
+          make("Draft launch writing", "action"),
+          make("Review public UX and docs", "follow-up"),
+          make("Write proposed backlog records or GitHub issues", "action"),
+        ],
+      };
+    }
+
+    if (lower.includes("zenod 4 voice note")) {
+      return {
+        candidates: [
+          make("Improve object handling for source artifacts", "action"),
+          make("Create proposed backlog UI", "roadmap"),
+          make("Model difficulty and dependencies", "action", { dependencies: ["Backlog candidate schema"] }),
+          make("Capture scoping question-actions", "question-action"),
+          make("Answer agent orchestration ownership questions", "question-action"),
+        ],
+      };
+    }
+
+    return {
+      candidates: [
+        {
+          title: lower.includes("question") ? "Answer launch orchestration question" : "Renew travel insurance",
+          type: lower.includes("blocker") ? "blocker" : lower.includes("question") ? "question-action" : "action",
+          owner: lower.includes("human") ? "human" : "agent",
+          priority: lower.includes("launch") || lower.includes("blocker") ? "P0" : "P1",
+          status: lower.includes("question") ? "needs-clarification" : "ready",
+          source_refs: refs,
+          summary: "Extracted from the supplied memory.",
+          context: "The source names the next step explicitly.",
+          acceptance_criteria: ["The next step is captured with evidence."],
+          dependencies: lower.includes("dependency") ? ["Resolve dependency"] : [],
+          open_questions: lower.includes("question") ? ["Which agent should own orchestration?"] : [],
+          difficulty: "medium",
+          suggested_labels: ["backlog", "digested"],
+          target_repo: "zenod-ai/zenod",
+        },
+      ],
+    };
   }
 }
 
@@ -241,6 +315,83 @@ describe("BrainEngine", () => {
     expect(answer.text).toContain("Axa");
     expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
     expect(answer.sources[0]?.githubUrl).toContain("github.com/zenod-ai/fixture");
+  });
+
+  it("digests raw transcript text into structured backlog candidates with source refs", async () => {
+    const result = await engine().digestBacklog({
+      rawText: "Launch blocker: question for orchestration ownership has a dependency.",
+      sourceRefs: [{ path: "Log/2026-06-13.md#^e-test01", githubUrl: "https://github.com/zenod-ai/fixture/blob/main/Log/2026-06-13.md" }],
+    });
+
+    expect(result.written).toEqual([]);
+    expect(result.candidates[0]?.type).toBe("blocker");
+    expect(result.candidates[0]?.priority).toBe("P0");
+    expect(result.candidates[0]?.source_refs[0]?.path).toBe("Log/2026-06-13.md#^e-test01");
+    expect(result.candidates[0]?.acceptance_criteria).toContain("The next step is captured with evidence.");
+    expect(result.skipped[0]?.reason).toMatch(/write not requested/);
+  });
+
+  it("can materialize proposed backlog records when explicitly requested", async () => {
+    const result = await engine().digestBacklog({
+      rawText: "Remember to renew travel insurance.",
+      sourceRefs: [{ path: "Log/2026-06-13.md#^e-test02", githubUrl: "" }],
+      write: true,
+    });
+
+    expect(result.written).toHaveLength(1);
+    expect(result.written[0]?.path).toMatch(/^Backlog\/.*renew-travel-insurance\.md$/);
+    const record = await readFile(join(repo.path, result.written[0]!.path), "utf8");
+    expect(record).toContain("## Acceptance Criteria");
+    expect(record).toContain("Log/2026-06-13.md#^e-test02");
+    expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("proactively proposes backlog candidates after task-like Drive ingestion", async () => {
+    const result = await engine().store({
+      content: "Voice note from Drive. Launch blocker: question for agent orchestration ownership.",
+      source: "drive",
+      verbatim: true,
+    });
+
+    expect(result.backlog?.written).toEqual([]);
+    expect(result.backlog?.candidates[0]?.status).toBe("needs-clarification");
+    expect(result.backlog?.candidates[0]?.source_refs[0]?.path).toBe(result.evidenceRef);
+    expect(result.backlog?.skipped[0]?.reason).toMatch(/proposal-only/);
+  });
+
+  it("fixture: Zenod 3 extracts launch backlog themes with citations", async () => {
+    const transcript = await readFile(join(FIXTURE, "../backlog/zenod-3-transcript.txt"), "utf8");
+    const result = await engine().digestBacklog({
+      rawText: transcript,
+      sourceRefs: [{ path: "Log/2026-06-13.md#^e-zenod3", githubUrl: "https://github.com/zenod-ai/fixture/blob/main/Log/2026-06-13.md" }],
+    });
+
+    expect(result.candidates.map((c) => c.title)).toEqual([
+      "Extract launch blockers into backlog",
+      "Build clean-slate onboarding",
+      "Design two-phase ingestion UX",
+      "Draft launch writing",
+      "Review public UX and docs",
+      "Write proposed backlog records or GitHub issues",
+    ]);
+    expect(result.candidates.some((c) => c.type === "blocker" && c.priority === "P0")).toBe(true);
+    expect(result.candidates.every((c) => c.source_refs[0]?.path === "Log/2026-06-13.md#^e-zenod3")).toBe(true);
+  });
+
+  it("fixture: Zenod 4 extracts object handling, dependencies, question-actions, and orchestration", async () => {
+    const transcript = await readFile(join(FIXTURE, "../backlog/zenod-4-transcript.txt"), "utf8");
+    const result = await engine().digestBacklog({
+      rawText: transcript,
+      sourceRefs: [{ path: "Log/2026-06-13.md#^e-zenod4", githubUrl: "https://github.com/zenod-ai/fixture/blob/main/Log/2026-06-13.md" }],
+    });
+
+    expect(result.candidates.map((c) => c.title)).toContain("Improve object handling for source artifacts");
+    expect(result.candidates.some((c) => c.type === "roadmap" && c.title === "Create proposed backlog UI")).toBe(true);
+    expect(result.candidates.find((c) => c.title === "Model difficulty and dependencies")?.dependencies).toContain(
+      "Backlog candidate schema",
+    );
+    expect(result.candidates.filter((c) => c.type === "question-action")).toHaveLength(2);
+    expect(result.candidates.every((c) => c.source_refs[0]?.path === "Log/2026-06-13.md#^e-zenod4")).toBe(true);
   });
 
   it("work without a plan proposes and commits nothing", async () => {
