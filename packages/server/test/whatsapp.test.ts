@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { BrainEngine } from "zenod";
+import type { BrainEngine, StoreInput, StoreResult } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 import {
@@ -18,6 +18,16 @@ import {
   type SocketLike,
 } from "../src/whatsappGateway.js";
 import { WhatsAppStore } from "../src/whatsappStore.js";
+
+vi.mock("@whiskeysockets/baileys", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@whiskeysockets/baileys")>();
+  return {
+    ...actual,
+    downloadContentFromMessage: vi.fn(async function* () {
+      yield Buffer.from("fake-audio-bytes");
+    }),
+  };
+});
 
 class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
@@ -88,6 +98,49 @@ function fakeEngine(calls: string[]): BrainEngine {
     async work() {
       return { mode: "proposal", text: "", committed: false };
     },
+  };
+}
+
+async function waitFor<T>(read: () => T, done: (value: T) => boolean): Promise<T> {
+  const started = Date.now();
+  let value = read();
+  while (!done(value)) {
+    if (Date.now() - started > 2_000) throw new Error("timed out waiting for async work");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    value = read();
+  }
+  return value;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function audioEvent(overrides: Record<string, unknown> = {}) {
+  return {
+    messageId: "voice_1",
+    chatId: "34611111111@s.whatsapp.net",
+    senderId: "34611111111@s.whatsapp.net",
+    senderName: "Tester",
+    chatName: "Tester",
+    isGroup: false,
+    timestamp: 1_800_000_000,
+    body: "",
+    hasMedia: true,
+    mediaType: "ptt",
+    mimeType: "audio/ogg",
+    fileName: null,
+    mediaRaw: {},
+    raw: {
+      key: { id: "voice_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
+    },
+    ...overrides,
   };
 }
 
@@ -374,6 +427,92 @@ describe("WhatsAppGateway", () => {
         { type: "composing", jid: "34611111111@s.whatsapp.net" },
         { type: "paused", jid: "34611111111@s.whatsapp.net" },
       ]);
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("acks a voice note immediately after durable storage, then sends a digest report", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-digest-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const stored: StoreInput[] = [];
+    const gate = deferred<StoreResult>();
+    const fakeDigestEngine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        return gate.promise;
+      },
+    } as unknown as BrainEngine;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeDigestEngine,
+      socketFactory: async () => socket,
+    });
+
+    try {
+      process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "renew the travel insurance\nask Alex about the claim";
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+
+      await gateway.handleEvent(audioEvent() as never);
+
+      expect(socket.sent).toHaveLength(1);
+      expect(socket.sent[0]!.text).toContain("Got this voice note");
+      expect(socket.sent[0]!.text).toContain("Digest job: wa-voice_1");
+      expect(runtime.whatsappStore.diagnostics().processingCounts.digest_queued).toBe(1);
+      await waitFor(() => stored.length, (count) => count === 1);
+      expect(socket.sent).toHaveLength(1);
+      expect(stored[0]!.source).toBe("whatsapp");
+      expect(stored[0]!.verbatim).toBe(true);
+      expect(stored[0]!.content).toContain("renew the travel insurance");
+
+      gate.resolve({
+        evidenceRef: "Log/2026-06-13.md#^e-wa1",
+        pagesTouched: ["Projects/Zenod.md"],
+        commitSha: "1".repeat(40),
+        githubUrls: [],
+      });
+
+      await waitFor(() => socket.sent.length, (count) => count === 2);
+      expect(socket.sent[1]!.text).toContain("Digest complete");
+      expect(socket.sent[1]!.text).toContain("evidence Log/2026-06-13.md#^e-wa1");
+      expect(socket.sent[1]!.text).toContain("Backlog: no backlog records created");
+      expect(runtime.whatsappStore.diagnostics().processingCounts.digested).toBe(1);
+    } finally {
+      delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a recoverable voice-note digest failure after the immediate ack", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-digest-failure-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+
+      await gateway.handleEvent(audioEvent({ mediaRaw: null }) as never);
+
+      expect(socket.sent[0]!.text).toContain("Got this voice note");
+      await waitFor(() => socket.sent.length, (count) => count === 2);
+      expect(socket.sent[1]!.text).toContain("Digest failed");
+      expect(socket.sent[1]!.text).toContain("could not download");
+      expect(socket.sent[1]!.text).toContain("Open questions: retry");
+      expect(runtime.whatsappStore.diagnostics().processingCounts.digest_failed).toBe(1);
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });

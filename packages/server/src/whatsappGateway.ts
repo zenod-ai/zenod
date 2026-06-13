@@ -11,7 +11,7 @@ import {
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { pino } from "pino";
-import type { BrainEngine } from "zenod";
+import type { BrainEngine, StoreResult } from "zenod";
 import type { Settings } from "./settings.js";
 import { transcribeAudio } from "./transcribe.js";
 import {
@@ -649,6 +649,16 @@ export class WhatsAppGateway {
     }
 
     await this.markRead(event);
+
+    if (event.hasMedia) {
+      this.options.store.markMessageStatus(event.messageId, "digest_queued");
+      await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
+      void this.processDigest(event).catch((err: unknown) => {
+        console.error("[whatsapp] digest worker failed:", err);
+      });
+      return;
+    }
+
     // WhatsApp's "composing" presence auto-expires after ~10s, so refresh it on
     // an interval — otherwise typing vanishes mid-reply on slower engine calls.
     await this.setTyping(event, true);
@@ -730,6 +740,105 @@ export class WhatsAppGateway {
           ? "I received media, but this Zenod WhatsApp connector can only process text, captions, and voice notes in v1."
           : "",
     };
+  }
+
+  private formatIngestAck(event: WhatsAppInboundEvent): string {
+    const timestamp =
+      typeof event.timestamp === "object" && event.timestamp !== null && "low" in event.timestamp
+        ? String((event.timestamp as { low: unknown }).low)
+        : String(event.timestamp ?? "unknown");
+    const channel = event.isGroup ? "WhatsApp group" : "WhatsApp";
+    const isVoice = event.mediaType === "ptt" || event.mediaType === "audio";
+    const kind = isVoice ? "voice note" : event.mediaType ?? "media";
+    const work = isVoice ? "transcription, filing, and digestion" : "filing and digestion";
+    return [
+      `Got this ${kind}. I queued it for ${work}.`,
+      `Source: ${channel} message ${event.messageId} at ${timestamp}.`,
+      `Digest job: wa-${event.messageId}.`,
+    ].join("\n");
+  }
+
+  private formatDigestReport(input: {
+    event: WhatsAppInboundEvent;
+    stored?: StoreResult;
+    summary?: string[];
+    error?: string;
+  }): string {
+    const { event, stored, summary = [], error } = input;
+    const sourcePointer = `${event.isGroup ? event.chatId : event.senderId} / ${event.messageId}`;
+    if (error) {
+      return [
+        "Digest failed",
+        `Summary: ${error}`,
+        `Filed: no transcript or memory changes were filed.`,
+        "Backlog: no records created.",
+        "Open questions: retry after fixing the failure above.",
+        `Source: WhatsApp ${sourcePointer}; digest job wa-${event.messageId}.`,
+      ].join("\n");
+    }
+
+    const filed = [
+      stored?.evidenceRef ? `evidence ${stored.evidenceRef}` : null,
+      ...(stored?.pagesTouched ?? []).map((page) => `memory ${page}`),
+      stored?.commitSha ? `commit ${stored.commitSha}` : null,
+    ].filter(Boolean);
+
+    return [
+      "Digest complete",
+      "Summary:",
+      ...(summary.length > 0 ? summary.slice(0, 6).map((line) => `- ${line}`) : ["- Transcript filed as WhatsApp evidence."]),
+      `Filed: ${filed.length > 0 ? filed.join("; ") : "no filed paths returned"}.`,
+      "Backlog: no backlog records created by the ingest lifecycle.",
+      stored?.question ? `Open questions: ${stored.question}` : "Open questions: none reported.",
+      `Source: WhatsApp ${sourcePointer}; transcript pointer ${stored?.evidenceRef ?? "unavailable"}; digest job wa-${event.messageId}.`,
+    ].join("\n");
+  }
+
+  private summarizeForReport(text: string): string[] {
+    return text
+      .split(/\n+/)
+      .map((line) => line.replace(/^[-*]\s*/, "").trim())
+      .filter(Boolean)
+      .slice(0, 6);
+  }
+
+  private async processDigest(event: WhatsAppInboundEvent): Promise<void> {
+    await this.setTyping(event, true);
+    this.options.store.markMessageStatus(event.messageId, "digesting");
+    try {
+      const input = await this.engineInputForEvent(event, this.options.settings.whatsappSettings());
+      if (input.kind === "fixed-reply") {
+        this.options.store.markMessageStatus(event.messageId, "digest_failed");
+        await this.sendReply(event, this.formatDigestReport({ event, error: input.text }), "digest_failed");
+        return;
+      }
+
+      const engine = await this.options.getEngine();
+      const stored = await engine.store({
+        content: [
+          `WhatsApp ${event.mediaType ?? "media"} from ${event.senderName || event.senderId}.`,
+          `Source message: ${event.messageId}`,
+          `Source chat: ${event.chatId}`,
+          `Received timestamp: ${String(event.timestamp ?? "unknown")}`,
+          "",
+          input.text,
+        ].join("\n"),
+        source: "whatsapp",
+        verbatim: true,
+      });
+      this.options.store.markMessageStatus(event.messageId, "digested");
+      await this.sendReply(
+        event,
+        this.formatDigestReport({ event, stored, summary: this.summarizeForReport(input.text) }),
+        "digest_report_sent",
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.options.store.markMessageStatus(event.messageId, "digest_failed");
+      await this.sendReply(event, this.formatDigestReport({ event, error: message }), "digest_failed");
+    } finally {
+      await this.setTyping(event, false);
+    }
   }
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
