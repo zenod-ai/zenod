@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 
 /**
  * Audio transcription. Two engines:
@@ -75,9 +76,12 @@ const GROQ_STT_URL = process.env.ZENOD_GROQ_BASE_URL
 // Groq's free tier rejects uploads over 25 MB; stay safely under it whether
 // they count decimal or binary megabytes (multipart overhead included).
 const GROQ_MAX_UPLOAD_BYTES = 23_000_000;
-// Segment length when a compressed file still exceeds the cap. 10 minutes of
-// 16 kHz mono FLAC speech is ~5–8 MB, comfortably within the limit.
-const GROQ_SEGMENT_SECONDS = "600";
+// Segment length for Groq uploads. We chunk by time even when the compressed
+// file is below the upload cap: long single requests can hit endpoint timeouts,
+// and chunking gives the UI meaningful progress.
+const GROQ_SEGMENT_SECONDS = "300";
+const GROQ_MAX_RETRY_ATTEMPTS = 3;
+const GROQ_MAX_RETRY_AFTER_SECONDS = 180;
 // Canonical ggml model host — same source local_whisper's download script uses.
 const MODEL_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
@@ -239,6 +243,26 @@ function parseWhisperProgress(line: string): number | null {
 }
 
 /** POST one audio file to Groq's OpenAI-compatible transcription endpoint. */
+class GroqTranscriptionError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterSeconds: number | null,
+  ) {
+    super(message);
+  }
+}
+
+function parseRetryAfterSeconds(response: Response, body: string): number | null {
+  const header = response.headers.get("retry-after");
+  if (header) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds;
+  }
+  const match = /try again in\s+(\d+)s/i.exec(body);
+  return match ? Number(match[1]) : null;
+}
+
 async function groqTranscribeFile(path: string, apiKey: string, signal?: AbortSignal): Promise<string> {
   const form = new FormData();
   form.append("file", new Blob([await readFile(path)]), "audio.flac");
@@ -254,16 +278,40 @@ async function groqTranscribeFile(path: string, apiKey: string, signal?: AbortSi
   });
   if (!response.ok) {
     const body = (await response.text().catch(() => "")).slice(0, 400);
-    throw new Error(`groq transcription failed (${response.status}): ${body}`);
+    throw new GroqTranscriptionError(
+      `groq transcription failed (${response.status}): ${body}`,
+      response.status,
+      parseRetryAfterSeconds(response, body),
+    );
   }
   return (await response.text()).trim();
 }
 
+async function groqTranscribeFileWithRetry(path: string, apiKey: string, signal?: AbortSignal): Promise<string> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await groqTranscribeFile(path, apiKey, signal);
+    } catch (err) {
+      if (!(err instanceof GroqTranscriptionError) || err.status !== 429) throw err;
+      const retryAfter = err.retryAfterSeconds;
+      if (
+        retryAfter === null ||
+        retryAfter > GROQ_MAX_RETRY_AFTER_SECONDS ||
+        attempt >= GROQ_MAX_RETRY_ATTEMPTS
+      ) {
+        throw err;
+      }
+      console.warn(`[transcribe] groq rate limited; retrying in ${retryAfter}s`);
+      await sleep((retryAfter + 1) * 1000, undefined, { signal });
+    }
+  }
+}
+
 /**
  * Transcribe via Groq. ffmpeg compresses to 16 kHz mono FLAC first (lossless
- * at the sample rate Groq resamples to, ~4x smaller than WAV); files still
- * over the upload cap are split into fixed-length segments transcribed in
- * order. Throws on any failure so the caller can fall back to local whisper.
+ * at the sample rate Groq resamples to, ~4x smaller than WAV), then splits
+ * into fixed-length segments transcribed in order. Short 429 rate limits are
+ * retried; other failures throw so the caller can fall back to local whisper.
  */
 async function transcribeWithGroq(
   data: Buffer,
@@ -278,22 +326,35 @@ async function transcribeWithGroq(
   try {
     await writeFile(input, data);
     await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "flac", flac], { signal });
-    const { size } = await stat(flac);
-    let parts: string[];
-    if (size <= GROQ_MAX_UPLOAD_BYTES) {
-      parts = [flac];
-    } else {
-      await run(
-        "ffmpeg",
-        ["-y", "-i", flac, "-f", "segment", "-segment_time", GROQ_SEGMENT_SECONDS, "-c:a", "flac", join(dir, "seg%04d.flac")],
-        { signal },
-      );
-      parts = (await readdir(dir)).filter((f) => f.startsWith("seg")).sort().map((f) => join(dir, f));
-      if (parts.length === 0) throw new Error("segmenting oversized audio produced no chunks");
+    await run(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        flac,
+        "-f",
+        "segment",
+        "-segment_time",
+        GROQ_SEGMENT_SECONDS,
+        "-reset_timestamps",
+        "1",
+        "-c:a",
+        "flac",
+        join(dir, "seg%04d.flac"),
+      ],
+      { signal },
+    );
+    const parts = (await readdir(dir)).filter((f) => f.startsWith("seg")).sort().map((f) => join(dir, f));
+    if (parts.length === 0) throw new Error("segmenting audio produced no chunks");
+    for (const part of parts) {
+      const { size } = await stat(part);
+      if (size > GROQ_MAX_UPLOAD_BYTES) {
+        throw new Error(`groq segment exceeds upload cap (${Math.round(size / 1_000_000)} MB)`);
+      }
     }
     const texts: string[] = [];
     for (const [i, part] of parts.entries()) {
-      texts.push(await groqTranscribeFile(part, apiKey, signal));
+      texts.push(await groqTranscribeFileWithRetry(part, apiKey, signal));
       onProgress?.(Math.round(((i + 1) / parts.length) * 100));
     }
     const transcript = texts.join(" ").trim();
