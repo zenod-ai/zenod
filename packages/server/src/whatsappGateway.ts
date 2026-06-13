@@ -703,6 +703,8 @@ export class WhatsAppGateway {
       const transcription = await transcribeAudio(data, filename, {
         model: this.options.settings.whisperModel(),
         groqApiKey: this.options.settings.get("groq_api_key"),
+        openaiApiKey: this.options.settings.get("openai_api_key"),
+        useOpenAiForLongAudio: this.options.settings.useOpenAiForLongTranscription(),
       });
       if (!transcription.success) {
         return { kind: "fixed-reply", text: `I could not transcribe that voice note: ${transcription.error}` };

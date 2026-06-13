@@ -1,5 +1,5 @@
 import * as React from "react"
-import { CheckIcon, SaveIcon, ZapIcon } from "lucide-react"
+import { CheckIcon, ClockIcon, SaveIcon, ZapIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -137,6 +137,94 @@ function GroqTranscriptionCard() {
 
 function sizeLabel(mb: number): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`
+}
+
+function OpenAiLongTranscriptionCard() {
+  const [hasOpenAiKey, setHasOpenAiKey] = React.useState(false)
+  const [checked, setChecked] = React.useState(false)
+  const [saved, setSaved] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    void api<SettingsResponse>("/api/settings")
+      .then((result) => {
+        const hasKey = result.settings.openai_api_key !== null
+        const enabled = hasKey && result.settings.openai_long_transcription !== "false"
+        setHasOpenAiKey(hasKey)
+        setChecked(enabled)
+        setSaved(enabled)
+      })
+      .catch(() => {
+        /* leave disabled */
+      })
+  }, [])
+
+  const effectiveChecked = hasOpenAiKey && checked
+  const dirty = effectiveChecked !== saved
+
+  async function handleSave() {
+    if (!hasOpenAiKey) return
+    setSaving(true)
+    try {
+      const result = await api<SettingsResponse>("/api/settings", {
+        method: "PUT",
+        body: { openai_long_transcription: effectiveChecked ? "true" : "false" },
+      })
+      const hasKey = result.settings.openai_api_key !== null
+      const enabled = hasKey && result.settings.openai_long_transcription !== "false"
+      setHasOpenAiKey(hasKey)
+      setChecked(enabled)
+      setSaved(enabled)
+      toast.success(enabled ? "OpenAI enabled for long voice notes" : "Long voice notes will use local transcription")
+    } catch (err) {
+      toast.error("Could not save", { description: errorMessage(err) })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Long voice notes</CardTitle>
+        <CardDescription>
+          For notes over 5 minutes, use OpenAI Whisper directly when an OpenAI
+          key is available. If this is off, long notes fall back to local
+          whisper.cpp, which is slower but does not use paid API calls.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Field orientation="horizontal" data-disabled={!hasOpenAiKey}>
+          <input
+            id="openai-long-transcription"
+            type="checkbox"
+            className="mt-0.5 size-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+            checked={effectiveChecked}
+            disabled={!hasOpenAiKey || saving}
+            onChange={(event) => setChecked(event.target.checked)}
+          />
+          <div className="flex flex-col gap-1">
+            <FieldLabel htmlFor="openai-long-transcription">Use OpenAI for notes over 5 minutes</FieldLabel>
+            <FieldDescription>
+              {hasOpenAiKey
+                ? "Short notes still try Groq first; long notes use OpenAI, with local whisper.cpp as fallback."
+                : "Add an OpenAI API key in Keys to enable this option. Long notes currently use local whisper.cpp."}
+            </FieldDescription>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <ClockIcon className="size-3.5" />
+              Threshold: 300 seconds.
+            </div>
+          </div>
+        </Field>
+      </CardContent>
+      <CardFooter className="justify-end">
+        <Button type="button" disabled={saving || !dirty || !hasOpenAiKey} onClick={handleSave}>
+          {saving ? <Spinner /> : <SaveIcon data-icon="inline-start" />}
+          Save
+        </Button>
+      </CardFooter>
+    </Card>
+  )
 }
 
 /**
@@ -277,6 +365,7 @@ export function IngestionTab() {
   return (
     <div className="flex flex-col gap-6">
       <GroqTranscriptionCard />
+      <OpenAiLongTranscriptionCard />
       <TranscriptionModelCard />
       <IngestionPanel />
     </div>

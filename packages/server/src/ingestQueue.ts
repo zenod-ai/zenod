@@ -103,6 +103,8 @@ export class IngestQueue {
         const result = await transcribeAudio(data, file.name, {
           model: this.settings.whisperModel(),
           groqApiKey: this.settings.get("groq_api_key"),
+          openaiApiKey: this.settings.get("openai_api_key"),
+          useOpenAiForLongAudio: this.settings.useOpenAiForLongTranscription(),
           onProgress: (pct) => this.store.update(job.id, { progress: pct }),
           signal: controller.signal,
         });

@@ -187,11 +187,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       configured: settings.driveConfigured(),
       clientEmail,
       folderId: settings.get("google_drive_folder_id"),
-      // Groq cloud STT when a key is set, else local whisper.cpp (built into
-      // the image — always available as the no-key fallback).
-      transcriptionProvider: settings.get("groq_api_key")
-        ? "groq (cloud, local fallback)"
-        : "whisper.cpp (local)",
+      transcriptionProvider: [
+        settings.get("groq_api_key") ? "groq for notes up to 5 min" : null,
+        settings.useOpenAiForLongTranscription() ? "openai for notes over 5 min" : "local whisper.cpp for long notes",
+      ]
+        .filter(Boolean)
+        .join("; "),
     });
   });
 

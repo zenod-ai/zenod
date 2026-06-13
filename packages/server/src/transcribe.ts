@@ -73,9 +73,15 @@ const GROQ_STT_MODEL = process.env.ZENOD_GROQ_STT_MODEL ?? "whisper-large-v3-tur
 const GROQ_STT_URL = process.env.ZENOD_GROQ_BASE_URL
   ? `${process.env.ZENOD_GROQ_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
   : "https://api.groq.com/openai/v1/audio/transcriptions";
+const OPENAI_STT_MODEL = process.env.ZENOD_OPENAI_STT_MODEL ?? "whisper-1";
+const OPENAI_STT_URL = process.env.ZENOD_OPENAI_BASE_URL
+  ? `${process.env.ZENOD_OPENAI_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
+  : "https://api.openai.com/v1/audio/transcriptions";
 // Groq's free tier rejects uploads over 25 MB; stay safely under it whether
 // they count decimal or binary megabytes (multipart overhead included).
 const GROQ_MAX_UPLOAD_BYTES = 23_000_000;
+const OPENAI_MAX_UPLOAD_BYTES = 24_000_000;
+const LONG_AUDIO_SECONDS = 300;
 // Segment length for Groq uploads. We chunk by time even when the compressed
 // file is below the upload cap: long single requests can hit endpoint timeouts,
 // and chunking gives the UI meaningful progress.
@@ -236,6 +242,31 @@ function run(
   });
 }
 
+function runCapture(command: string, args: string[], opts: { signal?: AbortSignal } = {}): Promise<string> {
+  const { signal } = opts;
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], ...(signal ? { signal } : {}) });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (err) =>
+      reject(
+        (err as NodeJS.ErrnoException).code === "ENOENT"
+          ? new Error(`${command} is not installed in this image`)
+          : err,
+      ),
+    );
+    child.on("close", (code) =>
+      code === 0 ? resolve(stdout) : reject(new Error(`${command} failed (exit ${code}): ${stderr.slice(-400)}`)),
+    );
+  });
+}
+
 /** whisper-cli with --print-progress emits "... progress = N%" on stderr. */
 function parseWhisperProgress(line: string): number | null {
   const m = /progress\s*=\s*(\d+)\s*%/.exec(line);
@@ -314,6 +345,76 @@ async function groqTranscribeFileWithRetry(path: string, apiKey: string, signal?
   }
 }
 
+async function probeDurationSeconds(data: Buffer, filename: string, signal?: AbortSignal): Promise<number | null> {
+  const dir = await mkdtemp(join(tmpdir(), "zenod-probe-"));
+  const input = join(dir, `in${extname(filename) || ".m4a"}`);
+  try {
+    await writeFile(input, data);
+    const out = await runCapture(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input],
+      { signal },
+    );
+    const seconds = Number(out.trim());
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+  } catch (err) {
+    console.warn(`[transcribe] could not probe audio duration: ${(err as Error).message}`);
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function transcribeWithOpenAI(
+  data: Buffer,
+  filename: string,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<TranscriptionEnvelope> {
+  const dir = await mkdtemp(join(tmpdir(), "zenod-openai-"));
+  const input = join(dir, `in${extname(filename) || ".m4a"}`);
+  const mp3 = join(dir, "audio.mp3");
+  try {
+    await writeFile(input, data);
+    await run(
+      "ffmpeg",
+      ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "32k", mp3],
+      { signal },
+    );
+    const { size } = await stat(mp3);
+    if (size > OPENAI_MAX_UPLOAD_BYTES) {
+      return {
+        success: false,
+        provider: "openai",
+        error: `compressed audio exceeds OpenAI upload cap (${Math.round(size / 1_000_000)} MB)`,
+      };
+    }
+    const form = new FormData();
+    form.append("file", new Blob([await readFile(mp3)], { type: "audio/mpeg" }), "audio.mp3");
+    form.append("model", OPENAI_STT_MODEL);
+    form.append("response_format", "text");
+    if (LANGUAGE !== "auto") form.append("language", LANGUAGE);
+    const timeout = AbortSignal.timeout(300_000);
+    const response = await fetch(OPENAI_STT_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+    if (!response.ok) {
+      const body = (await response.text().catch(() => "")).slice(0, 400);
+      return { success: false, provider: "openai", error: `openai transcription failed (${response.status}): ${body}` };
+    }
+    const transcript = (await response.text()).trim();
+    if (!transcript) return { success: false, provider: "openai", error: "transcription returned empty text" };
+    return { success: true, transcript, provider: `openai ${OPENAI_STT_MODEL}` };
+  } catch (err) {
+    return { success: false, provider: "openai", error: (err as Error).message };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 /**
  * Transcribe via Groq. ffmpeg compresses to 16 kHz mono FLAC first (lossless
  * at the sample rate Groq resamples to, ~4x smaller than WAV), then splits
@@ -381,7 +482,15 @@ export async function transcribeAudio(
   data: Buffer,
   filename: string,
   options:
-    | { model?: string; groqApiKey?: string | null; onProgress?: (percent: number) => void; signal?: AbortSignal }
+    | {
+        model?: string;
+        groqApiKey?: string | null;
+        openaiApiKey?: string | null;
+        useOpenAiForLongAudio?: boolean;
+        durationSeconds?: number;
+        onProgress?: (percent: number) => void;
+        signal?: AbortSignal;
+      }
     | ((percent: number) => void) = {},
 ): Promise<TranscriptionEnvelope> {
   const modelName = resolveWhisperModel(typeof options === "function" ? DEFAULT_WHISPER_MODEL : options.model);
@@ -390,19 +499,47 @@ export async function transcribeAudio(
   // The durable setting (UI-pasted, env-seeded on first boot) wins; the raw
   // env var keeps standalone/test use working without a settings store.
   const groqApiKey = (typeof options === "function" ? undefined : options.groqApiKey) ?? process.env.GROQ_API_KEY;
-  if ((process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT) {
+  const openaiApiKey = (typeof options === "function" ? undefined : options.openaiApiKey) ?? process.env.OPENAI_API_KEY;
+  const useOpenAiForLongAudio = typeof options === "function" ? false : options.useOpenAiForLongAudio === true;
+  const fakeTranscript = (process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  const needsDuration = Boolean(groqApiKey || (useOpenAiForLongAudio && openaiApiKey));
+  const durationSeconds =
+    typeof options === "function" || fakeTranscript || !needsDuration
+      ? typeof options === "function"
+        ? undefined
+        : options.durationSeconds
+      : options.durationSeconds ?? (await probeDurationSeconds(data, filename, signal));
+  const isLongAudio = durationSeconds !== null && durationSeconds !== undefined && durationSeconds > LONG_AUDIO_SECONDS;
+  if (fakeTranscript) {
     onProgress?.(100);
+    const provider =
+      isLongAudio && useOpenAiForLongAudio && openaiApiKey
+        ? `openai ${OPENAI_STT_MODEL}`
+        : isLongAudio
+          ? `whisper.cpp ${modelName}`
+          : groqApiKey
+            ? `groq ${GROQ_STT_MODEL}`
+            : `whisper.cpp ${modelName}`;
     return {
       success: true,
       transcript: process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT,
-      provider: groqApiKey ? `groq ${GROQ_STT_MODEL}` : `whisper.cpp ${modelName}`,
+      provider,
     };
   }
 
-  // Groq first when configured — seconds instead of minutes, and it doesn't
-  // pin the server's CPUs. Any failure (rate limit, network, oversized chunk)
-  // falls through to local whisper.cpp so transcription still works offline.
-  if (groqApiKey) {
+  if (isLongAudio) {
+    if (useOpenAiForLongAudio && openaiApiKey) {
+      const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
+      if (result.success || signal?.aborted) return result;
+      console.warn(`[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`);
+    }
+    console.log(
+      `[transcribe] ${Math.round(durationSeconds)}s audio exceeds ${LONG_AUDIO_SECONDS}s; using local whisper.cpp fallback`,
+    );
+  } else if (groqApiKey) {
+    // Groq first when configured — seconds instead of minutes, and it doesn't
+    // pin the server's CPUs. Any failure (rate limit, network, oversized chunk)
+    // falls through to local whisper.cpp so transcription still works offline.
     try {
       return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
     } catch (err) {

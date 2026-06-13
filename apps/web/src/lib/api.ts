@@ -88,6 +88,7 @@ export type SettingsValues = {
   google_service_account_json: string | null
   google_drive_folder_id: string | null
   groq_api_key: string | null
+  openai_long_transcription: string | null
 }
 
 export type DriveStatus = {

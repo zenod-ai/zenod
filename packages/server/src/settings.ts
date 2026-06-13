@@ -19,6 +19,7 @@ export const SETTING_KEYS = [
   "google_service_account_json",
   "google_drive_folder_id",
   "groq_api_key",
+  "openai_long_transcription",
   "whisper_model",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -45,6 +46,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
   google_drive_folder_id: "GOOGLE_DRIVE_FOLDER_ID",
   groq_api_key: "GROQ_API_KEY",
+  openai_long_transcription: "ZENOD_OPENAI_LONG_TRANSCRIPTION",
   whisper_model: "ZENOD_WHISPER_MODEL",
 };
 
@@ -122,6 +124,11 @@ export class Settings {
   /** Configured whisper transcription quality; defaults to large-v3-turbo. */
   whisperModel(): string {
     return this.get("whisper_model") || "large-v3-turbo";
+  }
+
+  /** Long voice notes use OpenAI transcription by default when a key exists. */
+  useOpenAiForLongTranscription(): boolean {
+    return Boolean(this.get("openai_api_key") && this.get("openai_long_transcription") !== "false");
   }
 
   whatsappSettings(): WhatsAppSettings {

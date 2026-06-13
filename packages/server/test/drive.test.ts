@@ -133,6 +133,36 @@ describe("transcription envelope", () => {
     });
     delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
   });
+
+  it("uses OpenAI for long audio when enabled", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", {
+      groqApiKey: "gsk_test",
+      openaiApiKey: "sk-openai",
+      useOpenAiForLongAudio: true,
+      durationSeconds: 301,
+    });
+    expect(result).toEqual({
+      success: true,
+      transcript: "remember to renew the travel insurance",
+      provider: "openai whisper-1",
+    });
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  });
+
+  it("keeps long audio off Groq when OpenAI is unavailable", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", {
+      groqApiKey: "gsk_test",
+      durationSeconds: 301,
+    });
+    expect(result).toEqual({
+      success: true,
+      transcript: "remember to renew the travel insurance",
+      provider: "whisper.cpp large-v3-turbo",
+    });
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  });
 });
 
 describe("drive tools + API", () => {
@@ -252,6 +282,6 @@ describe("drive tools + API", () => {
     const body = await status.json();
     expect(body.configured).toBe(true);
     expect(body.clientEmail).toBe("zenod@test-project.iam.gserviceaccount.com");
-    expect(body.transcriptionProvider).toBe("whisper.cpp (local)");
+    expect(body.transcriptionProvider).toBe("local whisper.cpp for long notes");
   });
 });
