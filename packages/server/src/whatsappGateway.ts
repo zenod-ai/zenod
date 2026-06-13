@@ -942,8 +942,18 @@ export class WhatsAppGateway {
       const engine = await this.options.getEngine();
       const conversationKey = normalizeWhatsAppIdentifier(event.senderId) || event.senderId;
 
-      // Provenance (best-effort, non-blocking): capture the transcript as
-      // evidence so substantive notes remain artifacts. Never blocks the action.
+      // REPLY FIRST. Voice ≡ text: act on the transcript and answer immediately.
+      // Filing (engine.store) holds the engine's single write-queue for its whole
+      // classify/compose/commit pipeline, and handleTasking's read path waits on
+      // that same queue — so filing-before-reply serialized them and put minutes
+      // of filing on the hot path. Answer first; file after, in the background.
+      const reply = await engine.handleTasking({ text: input.text, surface: "whatsapp", conversationKey });
+      this.options.store.markMessageStatus(event.messageId, "replied");
+      await this.sendReply(event, reply.text, "sent");
+
+      // Provenance (best-effort, background): capture the transcript as evidence
+      // so substantive notes remain artifacts. Runs AFTER the reply is sent and
+      // never blocks it.
       void engine
         .store({
           content: [
@@ -957,13 +967,9 @@ export class WhatsAppGateway {
           source: "whatsapp",
           verbatim: true,
         })
-        .then(() => this.options.store.markMessageStatus(event.messageId, "digested"))
+        // Background provenance only — the message is already "replied"; filing
+        // must not change the user-facing status. Surface failures via the log.
         .catch((err: unknown) => console.error("[whatsapp] evidence capture failed:", err));
-
-      // Voice ≡ text: the transcript is a prompt — act on it.
-      const reply = await engine.handleTasking({ text: input.text, surface: "whatsapp", conversationKey });
-      this.options.store.markMessageStatus(event.messageId, "replied");
-      await this.sendReply(event, reply.text, "sent");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.options.store.markMessageStatus(event.messageId, "failed");
