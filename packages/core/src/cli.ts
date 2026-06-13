@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { simpleGit } from "simple-git";
 import { VERSION } from "./index.js";
 import { getNote, NoteNotFoundError } from "./ops/get.js";
 import { searchVault } from "./ops/search.js";
@@ -7,12 +9,13 @@ import { lintVault } from "./vault/lint.js";
 import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
 import { ensureSchemaV1 } from "./vault/migrate.js";
+import { cleanSlateVault, type CleanSlateResult } from "./vault/cleanSlate.js";
 import { VaultRepo } from "./git/vaultRepo.js";
 import { createBrainLlm, type Provider } from "./llm/aisdk.js";
 import { SqliteStateStore } from "./state/sqlite.js";
 import type { BrainEngine } from "./types.js";
 
-const COMMANDS = ["store", "ask", "chat", "search", "get", "lint"] as const;
+const COMMANDS = ["store", "ask", "chat", "search", "get", "lint", "clean-slate"] as const;
 type Command = (typeof COMMANDS)[number];
 
 function usage(): string {
@@ -28,10 +31,29 @@ function usage(): string {
     "  search <query>  deterministic search, no LLM",
     "  get <path>      fetch one note, no LLM",
     "  lint [paths..]  validate the vault against the schema",
+    "  clean-slate <path> [--push]  initialize an empty vault in two commits",
     "",
     "Environment:",
     "  ZENOD_VAULT_PATH  local vault directory (dev harness for search/get/lint)",
     "  VAULT_REPO        owner/name on GitHub, used for provenance URLs",
+  ].join("\n");
+}
+
+function formatCleanSlate(result: CleanSlateResult): string {
+  return [
+    `vault: ${result.vaultPath}`,
+    `branch: ${result.branch}`,
+    `initial commit: ${result.initialCommitSha}`,
+    `setup commit: ${result.setupCommitSha}`,
+    `top-level: ${result.topLevelPaths.join(", ")}`,
+    `lint: ${result.lint.ok ? "ok" : `${result.lint.errors.length} error(s)`}`,
+    "",
+    "inspect:",
+    ...result.inspect.map((cmd) => `  ${cmd}`),
+    "",
+    "revert:",
+    ...result.revert.map((cmd) => `  ${cmd}`),
+    ...result.githubUrls.map((url) => `\n${url}`),
   ].join("\n");
 }
 
@@ -145,6 +167,26 @@ async function main(): Promise<number> {
       }
       console.log(`${report.ok ? "ok" : `${report.errors.length} error(s)`} — ${report.checkedFiles} file(s) checked`);
       return report.ok ? 0 : 1;
+    }
+
+    case "clean-slate": {
+      const push = args.includes("--push");
+      const path = args.find((arg) => !arg.startsWith("--")) ?? process.env.ZENOD_VAULT_PATH;
+      if (!path) {
+        console.error("usage: zenod clean-slate <path> [--push]");
+        return 1;
+      }
+      await mkdir(path, { recursive: true });
+      const hasGit = await simpleGit(path).checkIsRepo().catch(() => false);
+      if (!hasGit) await simpleGit(path).init(["--initial-branch=main"]);
+      const repo = await VaultRepo.open({
+        workdir: path,
+        ...(process.env.VAULT_REPO ? { repo: process.env.VAULT_REPO } : {}),
+        ...(process.env.GITHUB_TOKEN ? { token: process.env.GITHUB_TOKEN } : {}),
+      });
+      const result = await cleanSlateVault(repo, { push, location: location() });
+      console.log(formatCleanSlate(result));
+      return result.lint.ok ? 0 : 1;
     }
 
     case "store": {

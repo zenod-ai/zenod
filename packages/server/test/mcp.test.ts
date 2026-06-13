@@ -86,10 +86,24 @@ describe("MCP endpoint", () => {
     await expect(client.connect(transport)).rejects.toThrow(/401|unauthorized/i);
   });
 
-  it("lists the five Zenod tools", async () => {
+  it("lists the Zenod tools", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["ask_brain", "get_memory", "run_task", "search_memory", "store_memory"]);
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      "ask_brain",
+      "clean_slate_vault",
+      "get_memory",
+      "run_task",
+      "search_memory",
+      "store_memory",
+    ]);
+    await client.close();
+  });
+
+  it("clean_slate_vault requires explicit confirmation", async () => {
+    const client = await connect();
+    const result = await client.callTool({ name: "clean_slate_vault", arguments: { confirm: false } });
+    expect((result.structuredContent as { confirmed?: boolean }).confirmed).toBe(false);
     await client.close();
   });
 
