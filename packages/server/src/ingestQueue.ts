@@ -169,7 +169,11 @@ export class IngestQueue {
 
       this.store.update(job.id, {
         status: "done",
-        step: stored.question ? `Filed to Inbox — ${stored.question}` : null,
+        step: stored.question
+          ? `Filed to Inbox — ${stored.question}`
+          : stored.backlog?.candidates.length
+            ? `Filed; proposed ${stored.backlog.candidates.length} backlog candidate${stored.backlog.candidates.length === 1 ? "" : "s"}`
+            : null,
         progress: 100,
         evidenceRef: stored.evidenceRef,
         pages: stored.pagesTouched,

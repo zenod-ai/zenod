@@ -5,6 +5,8 @@ import { z } from "zod";
 import type {
   AnswerInput,
   AnswerResult,
+  BacklogExtractInput,
+  BacklogExtractResult,
   BrainLlm,
   Classification,
   ClassifyInput,
@@ -101,6 +103,34 @@ const classificationSchema = z.object({
 /** Exposed for regression testing the OpenAI-strict constraint. */
 export { classificationSchema };
 
+const backlogCandidateSchema = z.object({
+  title: z.string().describe("short issue/backlog title"),
+  type: z.enum(["action", "question-action", "blocker", "roadmap", "follow-up"]),
+  owner: z.enum(["agent", "human", "unknown"]),
+  priority: z.enum(["P0", "P1", "P2", "unknown"]),
+  status: z.enum(["proposed", "ready", "blocked", "needs-clarification"]),
+  source_refs: z.array(
+    z.object({
+      path: z.string().describe("vault-relative path, optionally with a block anchor"),
+      githubUrl: z.string().describe("GitHub URL for the source, or empty string when unavailable"),
+    }),
+  ),
+  summary: z.string(),
+  context: z.string(),
+  acceptance_criteria: z.array(z.string()),
+  dependencies: z.array(z.string()),
+  open_questions: z.array(z.string()),
+  difficulty: z.enum(["low", "medium", "high", "unknown"]),
+  suggested_labels: z.array(z.string()),
+  target_repo: z.string().nullable().describe("repo slug when relevant, otherwise null"),
+});
+
+const backlogExtractSchema = z.object({
+  candidates: z.array(backlogCandidateSchema),
+});
+
+export { backlogCandidateSchema, backlogExtractSchema };
+
 /**
  * The single LLM implementation, provider-agnostic via the Vercel AI SDK.
  * Switching provider is just a different model factory — the engine never
@@ -189,6 +219,34 @@ export class AiSdkBrainLlm implements BrainLlm {
     });
 
     return text.replace(/^```(?:markdown|md)?\n/, "").replace(/\n```\s*$/, "").trimEnd() + "\n";
+  }
+
+  async extractBacklog(input: BacklogExtractInput): Promise<BacklogExtractResult> {
+    const { object } = await generateObject({
+      model: this.model(this.classifyModelId),
+      schema: backlogExtractSchema,
+      system: [
+        "You are Zenod's backlog/action digester. Mine memory evidence into structured backlog candidates.",
+        "Extract concrete actions, question-actions, launch blockers, roadmap/phaseable items, dependencies, priority, difficulty, acceptance criteria, and open clarifying questions.",
+        "Use only what the source supports. If an item is not executable, set status to needs-clarification and include open_questions.",
+        "Distinguish launch blockers from roadmap items when the source context says so.",
+        "Every candidate must keep source_refs from the provided source references. Do not emit candidates that have no source evidence.",
+        "Owner, priority, difficulty, target_repo, and labels are hints; use unknown or null instead of inventing precision.",
+      ].join("\n"),
+      prompt: [
+        "Source refs:",
+        JSON.stringify(input.sourceRefs),
+        "Memory/transcript content:",
+        input.content,
+      ].join("\n\n"),
+    });
+
+    return {
+      candidates: object.candidates.map((candidate) => {
+        const { target_repo, ...rest } = candidate;
+        return target_repo ? { ...rest, target_repo } : rest;
+      }),
+    };
   }
 
   async answer(

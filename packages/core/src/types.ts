@@ -37,6 +37,11 @@ export interface StoreResult {
    * landed as an Inbox stub and this is the question to relay to the user.
    */
   question?: string;
+  /**
+   * Present when the store path also ran the conservative backlog digester.
+   * This is advisory: candidates are proposed unless explicitly written.
+   */
+  backlog?: BacklogDigestResult;
 }
 
 export interface Answer {
@@ -105,6 +110,55 @@ export interface WorkResult {
   githubUrls?: string[];
 }
 
+export type BacklogCandidateType = "action" | "question-action" | "blocker" | "roadmap" | "follow-up";
+export type BacklogOwner = "agent" | "human" | "unknown";
+export type BacklogPriority = "P0" | "P1" | "P2" | "unknown";
+export type BacklogStatus = "proposed" | "ready" | "blocked" | "needs-clarification";
+export type BacklogDifficulty = "low" | "medium" | "high" | "unknown";
+
+export interface BacklogSourceRef {
+  /** Vault-relative path, optionally with a block anchor. */
+  path: string;
+  githubUrl: string;
+}
+
+export interface BacklogCandidate {
+  title: string;
+  type: BacklogCandidateType;
+  owner: BacklogOwner;
+  priority: BacklogPriority;
+  status: BacklogStatus;
+  source_refs: BacklogSourceRef[];
+  summary: string;
+  context: string;
+  acceptance_criteria: string[];
+  dependencies: string[];
+  open_questions: string[];
+  difficulty: BacklogDifficulty;
+  suggested_labels: string[];
+  target_repo?: string;
+}
+
+export interface BacklogDigestInput {
+  /** Vault-relative memory/log/meaning path to mine. */
+  memoryPath?: string;
+  /** Raw transcript or note text to mine directly. */
+  rawText?: string;
+  /** Search scope, e.g. "mine recent Zenod voice notes for launch backlog". */
+  query?: string;
+  /** Optional source refs to attach to rawText candidates. */
+  sourceRefs?: BacklogSourceRef[];
+  /** When true, write proposed backlog records to the vault backlog surface. */
+  write?: boolean;
+}
+
+export interface BacklogDigestResult {
+  candidates: BacklogCandidate[];
+  written: Array<{ path: string; githubUrl: string; title: string }>;
+  skipped: Array<{ title?: string; reason: string }>;
+  source_refs: BacklogSourceRef[];
+}
+
 export interface BrainEngine {
   /** The librarian pipeline — the only write path. */
   store(input: StoreInput): Promise<StoreResult>;
@@ -126,6 +180,11 @@ export interface BrainEngine {
   ): Promise<Reply>;
   /** Librarian work loop: propose (no plan) then execute (approved plan) vault maintenance. */
   work(input: WorkInput): Promise<WorkResult>;
+  /**
+   * Mine memory, transcript text, or a scoped vault query for structured
+   * backlog candidates. Writing is opt-in and materializes proposed records.
+   */
+  digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult>;
   /** Deterministic two-pass search. No LLM. */
   search(query: string): Promise<Hit[]>;
   /** Deterministic note fetch. No LLM. */
