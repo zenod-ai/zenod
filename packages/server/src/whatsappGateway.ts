@@ -823,13 +823,25 @@ export class WhatsAppGateway {
       ...(stored?.pagesTouched ?? []).map((page) => `memory ${page}`),
       stored?.commitSha ? `commit ${stored.commitSha}` : null,
     ].filter(Boolean);
+    const backlog = stored?.backlog;
+    const backlogLine = backlog
+      ? [
+          `Backlog: ${backlog.written.length} written, ${backlog.candidates.length} proposed, ${backlog.skipped.length} skipped.`,
+          ...backlog.written.slice(0, 5).map((item) => `- wrote ${item.path}${item.githubUrl ? ` (${item.githubUrl})` : ""}`),
+          ...backlog.candidates
+            .filter((candidate) => !backlog.written.some((item) => item.title === candidate.title))
+            .slice(0, 5)
+            .map((candidate) => `- proposed [${candidate.priority}/${candidate.type}/${candidate.status}] ${candidate.title}`),
+          ...backlog.skipped.slice(0, 3).map((item) => `- skipped ${item.title ? `${item.title}: ` : ""}${item.reason}`),
+        ].join("\n")
+      : "Backlog: no backlog records created by the ingest lifecycle.";
 
     return [
       "Digest complete",
       "Summary:",
       ...(summary.length > 0 ? summary.slice(0, 6).map((line) => `- ${line}`) : ["- Transcript filed as WhatsApp evidence."]),
       `Filed: ${filed.length > 0 ? filed.join("; ") : "no filed paths returned"}.`,
-      "Backlog: no backlog records created by the ingest lifecycle.",
+      backlogLine,
       stored?.question ? `Open questions: ${stored.question}` : "Open questions: none reported.",
       `Source: WhatsApp ${sourcePointer}; transcript pointer ${stored?.evidenceRef ?? "unavailable"}; digest job wa-${event.messageId}.`,
     ].join("\n");

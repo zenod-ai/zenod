@@ -186,7 +186,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   function shouldDigestForBacklog(input: StoreInput): boolean {
-    if (input.source !== "drive") return false;
+    if (input.source !== "drive" && input.source !== "whatsapp") return false;
     if (input.content.length > 1200) return true;
     return /\b(action|backlog|blocker|issue|launch|must|need(?:s|ed)?|next step|question|remember to|should|todo)\b/i.test(
       input.content,
@@ -615,6 +615,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           ...(executed.changedPaths?.length ? [`changed: ${executed.changedPaths.join(", ")}`] : []),
         ].join("\n");
       },
+      digestBacklog,
     };
 
     const result = await llm.answer(

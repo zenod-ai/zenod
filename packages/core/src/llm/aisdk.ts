@@ -69,6 +69,8 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Planning vault changes";
     case "execute_vault_task":
       return "Reorganizing the vault";
+    case "digest_backlog":
+      return "Mining backlog candidates";
     default:
       return `Running ${toolName}`;
   }
@@ -280,6 +282,45 @@ export class AiSdkBrainLlm implements BrainLlm {
             }),
             execute: ({ objective, plan }) => caught(() => taskTools.executeTask(objective, plan)),
           }),
+          digest_backlog: tool({
+            description:
+              "Mine a transcript, memory note, or scoped vault query for structured backlog/action candidates with citations. Returns proposed candidates by default. Only set write=true after the user explicitly asks to materialize proposed backlog records; this writes Backlog/ records, not GitHub issues and not task execution.",
+            inputSchema: z.object({
+              rawText: z.string().nullable().describe("raw transcript or note text to mine directly; null when using memoryPath or query"),
+              memoryPath: z.string().nullable().describe("vault-relative note/log path to mine; null when using rawText or query"),
+              query: z.string().nullable().describe("vault search scope, e.g. 'recent Zenod voice notes launch backlog'; null when using rawText or memoryPath"),
+              sourceRefs: z
+                .array(z.object({ path: z.string(), githubUrl: z.string() }))
+                .nullable()
+                .describe("source refs to attach to rawText candidates; null for none"),
+              write: z
+                .boolean()
+                .nullable()
+                .describe("true only when the user explicitly asked to write proposed Backlog/ records; null/false returns proposals only"),
+            }),
+            execute: async ({ rawText, memoryPath, query, sourceRefs, write }) => {
+              const result = await taskTools.digestBacklog({
+                ...(rawText ? { rawText } : {}),
+                ...(memoryPath ? { memoryPath } : {}),
+                ...(query ? { query } : {}),
+                ...(sourceRefs ? { sourceRefs } : {}),
+                ...(write !== null ? { write: Boolean(write) } : {}),
+              });
+              return [
+                `Backlog candidates: ${result.candidates.length}`,
+                ...result.candidates.map((candidate, index) => {
+                  const sources = candidate.source_refs.map((ref) => ref.path).join(", ");
+                  return `${index + 1}. [${candidate.priority}/${candidate.type}/${candidate.status}] ${candidate.title}${sources ? ` — ${sources}` : ""}`;
+                }),
+                ...(result.written.length > 0
+                  ? ["Written:", ...result.written.map((item) => `- ${item.path}${item.githubUrl ? ` (${item.githubUrl})` : ""}`)]
+                  : []),
+                ...(result.skipped.length > 0
+                  ? ["Skipped:", ...result.skipped.map((item) => `- ${item.title ? `${item.title}: ` : ""}${item.reason}`)]
+                  : []),
+              ].join("\n");
+            },
+          }),
         }
       : {};
 
@@ -310,7 +351,7 @@ export class AiSdkBrainLlm implements BrainLlm {
 
     const briefingExtras = [
       taskTools
-        ? "You CAN reorganize the vault: propose_vault_task plans the work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute without showing the plan and getting an explicit yes first."
+        ? "You CAN reorganize the vault and mine backlog candidates: propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. digest_backlog extracts structured action/backlog candidates from raw text, memory paths, or scoped queries; it returns proposals unless the user explicitly asks to write Backlog/ records. Never execute or write without an explicit yes first."
         : "",
       driveTools
         ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background ingestion (download, configured transcription provider for audio, filing, archiving). When the user asks to ingest their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Ingestion panel (Connections tab), and the transcripts land in the vault when done."
