@@ -768,11 +768,7 @@ export class WhatsAppGateway {
   private localDigestStatusReply(event: WhatsAppInboundEvent): string | null {
     const text = event.body.trim();
     if (!text) return null;
-    const asksForStatus = /\b(status|progress|done|finished|complete|completed|happen(?:ed)?|where|filed|transcrib(?:e|ed|ing)|digest(?:ed|ion)?)\b/i.test(
-      text,
-    );
-    const asksAboutIngest = /\b(voice\s*note|audio|recording|note|transcript|digest|ingest|file)\b/i.test(text);
-    if (!asksForStatus || !asksAboutIngest) return null;
+    if (!this.isLocalDigestStatusQuestion(text)) return null;
 
     const status = this.options.store.latestDigestStatusForContact(event.senderId);
     if (!status) return null;
@@ -797,6 +793,24 @@ export class WhatsAppGateway {
       `Digest job: wa-${status.messageId}.`,
       "No final digest report has been recorded yet.",
     ].join("\n");
+  }
+
+  private isLocalDigestStatusQuestion(text: string): boolean {
+    const asksForStatus = /\b(status|progress|done|finished|complete|completed|happen(?:ed)?|where|filed|transcrib(?:e|ed|ing)|digest(?:ed|ion)?)\b/i.test(
+      text,
+    );
+    const asksAboutIngest = /\b(voice\s*note|audio|recording|note|transcript|digest|ingest|file)\b/i.test(text);
+    if (!asksForStatus || !asksAboutIngest) return false;
+
+    // This shortcut is only for quick local status checks. Longer tasking
+    // instructions often mention "voice note" or "digest" as context, but still
+    // need the full chat/tool route so the agent can follow the user's request.
+    if (text.length > 180) return false;
+
+    const taskingIntent = /\b(create|open|reopen|write|launch|run|start|trigger|fan[\s-]*out|fan[\s-]*in|codex|agent|issue|pr|pull request|implement|fix|test|analy[sz]e|investigate|fast[\s-]*track)\b/i.test(
+      text,
+    );
+    return !taskingIntent;
   }
 
   private formatDigestReport(input: {

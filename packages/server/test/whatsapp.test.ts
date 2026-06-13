@@ -599,6 +599,62 @@ describe("WhatsAppGateway", () => {
     }
   });
 
+  it("routes tasking instructions that mention voice-note digestion through chat", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-tasking-after-digest-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const calls: string[] = [];
+    const fakeDigestEngine = {
+      ...fakeEngine(calls),
+      async store() {
+        return {
+          evidenceRef: "Log/2026-06-13.md#^e-wa-tasking",
+          pagesTouched: ["Projects/Zenod.md"],
+          commitSha: "3".repeat(40),
+          githubUrls: [],
+        };
+      },
+    } as unknown as BrainEngine;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeDigestEngine,
+      socketFactory: async () => socket,
+    });
+
+    try {
+      process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "test fan out from this voice note";
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+
+      await gateway.handleEvent(audioEvent() as never);
+      await waitFor(() => socket.sent.length, (count) => count === 2);
+
+      const taskingText =
+        "So I think I want to fast track one job which is doing log analysis of the last transcripts because I sent three voice notes but only got two digestions. Can you immediately create this one issue and launch a Codex agent against that issue?";
+      await gateway.handleEvent({
+        ...(eventFromBaileysMessage(
+          textMessage({
+            key: { id: "tasking_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
+            message: { conversation: taskingText },
+          }),
+        ) as NonNullable<ReturnType<typeof eventFromBaileysMessage>>),
+      } as never);
+
+      expect(calls).toEqual([`34611111111:${taskingText}`]);
+      expect(socket.sent).toHaveLength(3);
+      expect(socket.sent[2]!.text).toBe(`Re: ${taskingText}`);
+      expect(socket.sent[2]!.text).not.toContain("Latest voice-note digest status");
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(1);
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBeUndefined();
+    } finally {
+      delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("restarts after Baileys restartRequired 515 during pairing", async () => {
     vi.useFakeTimers();
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-restart-"));
