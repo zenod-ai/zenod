@@ -1,6 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { simpleGit, type SimpleGit } from "simple-git";
+import { simpleGit, type SimpleGit, type StatusResult } from "simple-git";
 import type { FileChange } from "../vault/immutability.js";
 
 export interface VaultRepoOptions {
@@ -68,7 +68,7 @@ export class VaultRepo {
       // keep the remote in sync with current settings (e.g. rotated token)
       await git.remote(["set-url", "origin", remoteUrl]);
     }
-    const branch = (await git.revparse(["--abbrev-ref", "HEAD"])).trim();
+    const branch = (await git.raw(["symbolic-ref", "--short", "HEAD"])).trim();
     return new VaultRepo(options.workdir, git, branch, options.repo, options.tokenProvider);
   }
 
@@ -86,6 +86,19 @@ export class VaultRepo {
 
   async headSha(): Promise<string> {
     return (await this.git.revparse(["HEAD"])).trim();
+  }
+
+  async hasHead(): Promise<boolean> {
+    return this.git.revparse(["--verify", "HEAD"]).then(() => true).catch(() => false);
+  }
+
+  async status(): Promise<StatusResult> {
+    return this.git.status();
+  }
+
+  async trackedFiles(): Promise<string[]> {
+    const out = await this.git.raw(["ls-files"]);
+    return out.split("\n").map((line) => line.trim()).filter(Boolean);
   }
 
   /** Content of a file as of HEAD, or null if it doesn't exist there. */
@@ -121,11 +134,14 @@ export class VaultRepo {
    * One commit per memory: stage, commit, push. A rejected push is resolved
    * by pull --rebase and retried up to 3 times, then surfaced.
    */
-  async commitAndPush(message: string): Promise<string> {
-    await this.ensureFreshRemote();
+  async commit(message: string): Promise<string> {
     await this.git.add(["-A"]);
     await this.git.commit(message);
-    const sha = await this.headSha();
+    return this.headSha();
+  }
+
+  async pushWithRetry(commitSha: string): Promise<string> {
+    await this.ensureFreshRemote();
 
     let lastError: unknown;
     for (let attempt = 0; attempt < PUSH_RETRIES; attempt++) {
@@ -138,11 +154,22 @@ export class VaultRepo {
           await this.git.pull("origin", this.branch, { "--rebase": "true" });
         } catch (rebaseErr) {
           throw new Error(
-            `push rejected and rebase failed for commit ${sha}: ${(rebaseErr as Error).message}`,
+            `push rejected and rebase failed for commit ${commitSha}: ${(rebaseErr as Error).message}`,
           );
         }
       }
     }
     throw new Error(`push failed after ${PUSH_RETRIES} attempts: ${(lastError as Error).message}`);
+  }
+
+  async push(): Promise<string> {
+    await this.ensureFreshRemote();
+    await this.git.push("origin", this.branch);
+    return this.headSha();
+  }
+
+  async commitAndPush(message: string): Promise<string> {
+    const sha = await this.commit(message);
+    return this.pushWithRetry(sha);
   }
 }

@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { VERSION, type BrainEngine, type DriveSourceTools } from "zenod";
+import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools } from "zenod";
 
 /**
  * The Zenod MCP tool surface (docs/M0-SPEC.md): no raw file CRUD. Drive tools
@@ -10,6 +10,7 @@ import { VERSION, type BrainEngine, type DriveSourceTools } from "zenod";
 export function buildMcpServer(
   getEngine: () => Promise<BrainEngine>,
   getDriveTools?: () => DriveSourceTools | undefined,
+  cleanSlate?: () => Promise<CleanSlateResult>,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -148,6 +149,48 @@ export function buildMcpServer(
       return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
     },
   );
+
+  if (cleanSlate) {
+    server.registerTool(
+      "clean_slate_vault",
+      {
+        title: "Clean-slate vault onboarding",
+        description:
+          "Initialize a fresh empty vault through Zenod's clean-slate onboarding flow. This is intentionally hard to invoke: it refuses non-empty vaults and requires confirm=true. It creates two auditable commits: clean-slate: initial vault, then clean-slate: initialize Zenod schema. Use only when the user explicitly asks to start a clean-slate vault.",
+        inputSchema: {
+          confirm: z.boolean().describe("Must be true after explicit user confirmation."),
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      async ({ confirm }) => {
+        if (!confirm) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Confirmation required. Ask the user to confirm clean-slate onboarding, then call clean_slate_vault with confirm=true.",
+              },
+            ],
+            structuredContent: { confirmed: false },
+          };
+        }
+        const result = await cleanSlate();
+        const lines = [
+          "Clean-slate vault initialized.",
+          `vault: ${result.vaultPath}`,
+          `initial commit: ${result.initialCommitSha}`,
+          `setup commit: ${result.setupCommitSha}`,
+          `top-level: ${result.topLevelPaths.join(", ")}`,
+          `lint: ${result.lint.ok ? "ok" : `${result.lint.errors.length} error(s)`}`,
+          "inspect:",
+          ...result.inspect.map((cmd) => `- ${cmd}`),
+          "revert:",
+          ...result.revert.map((cmd) => `- ${cmd}`),
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
+      },
+    );
+  }
 
   const driveTools = getDriveTools?.();
   if (driveTools) {

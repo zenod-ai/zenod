@@ -5,7 +5,7 @@ import type { HttpBindings } from "@hono/node-server";
 import { serveStatic, type ServeStaticOptions } from "@hono/node-server/serve-static";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { conversationId, NoteNotFoundError, VERSION } from "zenod";
+import { conversationId, NoteNotFoundError, VERSION, type CleanSlateResult } from "zenod";
 import { clearSession, issueSession, requireAuth, requireMcpAuth } from "./auth.js";
 import {
   authServerMetadata,
@@ -333,6 +333,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.get("/api/vault/lint", async (c) => c.json(await runtime.lint()));
 
+  app.post("/api/vault/clean-slate", async (c) => c.json(await runtime.cleanSlate()));
+
   // --- GitHub App connect flow (manifest) ---
 
   /** Public base URL as seen through the reverse proxy. */
@@ -400,6 +402,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/chat", async (c) => {
     const { message } = await c.req.json<{ message?: string }>();
     if (!message) return c.json({ error: "message is required" }, 400);
+    const cleanSlate = await handleCleanSlateChat(message, runtime);
+    if (cleanSlate) return c.json(cleanSlate);
     const engine = await runtime.getEngine();
     return c.json(await engine.chat(message, "web"));
   });
@@ -410,6 +414,20 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/chat/stream", async (c) => {
     const { message } = await c.req.json<{ message?: string }>();
     if (!message) return c.json({ error: "message is required" }, 400);
+    const cleanSlate = await handleCleanSlateChat(message, runtime);
+    if (cleanSlate) {
+      const enc = new TextEncoder();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(enc.encode(JSON.stringify({ type: "delta", text: cleanSlate.text }) + "\n"));
+          controller.enqueue(enc.encode(JSON.stringify({ type: "done", sources: cleanSlate.sources }) + "\n"));
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache" },
+      });
+    }
     const engine = await runtime.getEngine();
     const enc = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
@@ -493,6 +511,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const server = buildMcpServer(
       () => runtime.getEngine(),
       () => buildDriveTools(settings, runtime.ingestQueue),
+      () => runtime.cleanSlate(),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -530,4 +549,47 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   }
 
   return app;
+}
+
+function cleanSlatePreview(): string {
+  return [
+    "Clean-slate vault onboarding is a two-commit setup for a fresh, empty vault repo.",
+    "",
+    "It will refuse to run if the vault already contains tracked or untracked files.",
+    "",
+    "To continue, send exactly `/clean-slate confirm`.",
+  ].join("\n");
+}
+
+function formatCleanSlateResult(result: CleanSlateResult): string {
+  return [
+    "Clean-slate vault initialized.",
+    "",
+    `Vault path: ${result.vaultPath}`,
+    `Branch: ${result.branch}`,
+    `Initial clean commit: ${result.initialCommitSha}`,
+    `Zenod setup commit: ${result.setupCommitSha}`,
+    "",
+    `Created top-level structure: ${result.topLevelPaths.join(", ")}`,
+    `Lint: ${result.lint.ok ? "ok" : `${result.lint.errors.length} error(s)`}`,
+    "",
+    "Inspect:",
+    ...result.inspect.map((cmd) => `- \`${cmd}\``),
+    "",
+    "Revert in order:",
+    ...result.revert.map((cmd) => `- \`${cmd}\``),
+  ].join("\n");
+}
+
+async function handleCleanSlateChat(
+  message: string,
+  runtime: Runtime,
+): Promise<{ text: string; sources: []; cleanSlate?: CleanSlateResult } | null> {
+  const trimmed = message.trim();
+  if (trimmed === "/clean-slate" || /^start a clean slate vault\.?$/i.test(trimmed)) {
+    return { text: cleanSlatePreview(), sources: [] };
+  }
+  if (trimmed !== "/clean-slate confirm") return null;
+  const result = await runtime.cleanSlate();
+  return { text: formatCleanSlateResult(result), sources: [], cleanSlate: result };
 }

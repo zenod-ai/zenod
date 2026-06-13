@@ -3,11 +3,13 @@ import { rm } from "node:fs/promises";
 import {
   createBrainLlm,
   createEngine,
+  cleanSlateVault,
   ensureSchemaV1,
   lintVault,
   SqliteStateStore,
   VaultRepo,
   type BrainEngine,
+  type CleanSlateResult,
   type LintReport,
 } from "zenod";
 import { installationToken } from "./githubApp.js";
@@ -67,7 +69,8 @@ export class Runtime {
     this.repo = null;
   }
 
-  async getRepo(): Promise<VaultRepo> {
+  async getRepo(options: { ensureSchema?: boolean } = {}): Promise<VaultRepo> {
+    const ensureSchema = options.ensureSchema ?? true;
     if (this.repo) return this.repo;
     const repoName = this.settings.get("vault_repo");
     const token = this.settings.get("github_token");
@@ -79,9 +82,11 @@ export class Runtime {
       // GitHub App installation tokens (short-lived, repo-scoped) win over a PAT
       ...(hasApp ? { tokenProvider: () => installationToken(this.settings) } : { token: token! }),
     });
-    const created = await ensureSchemaV1(repo.path);
-    if (created.length > 0) {
-      await repo.commitAndPush(`schema: v1 — add ${created.join(", ")}`);
+    if (ensureSchema) {
+      const created = await ensureSchemaV1(repo.path);
+      if (created.length > 0) {
+        await repo.commitAndPush(`schema: v1 — add ${created.join(", ")}`);
+      }
     }
     this.repo = repo;
     return this.repo;
@@ -117,6 +122,22 @@ export class Runtime {
   async lint(): Promise<LintReport> {
     const repo = await this.getRepo();
     return lintVault(repo.path);
+  }
+
+  async cleanSlate(): Promise<CleanSlateResult> {
+    this.invalidate();
+    try {
+      const repo = await this.getRepo({ ensureSchema: false });
+      return await cleanSlateVault(repo, {
+        push: true,
+        location: {
+          repo: this.settings.get("vault_repo")!,
+          branch: this.settings.get("vault_branch") ?? "main",
+        },
+      });
+    } finally {
+      this.invalidate();
+    }
   }
 
   /** Drop the local clone and re-clone on next use. */

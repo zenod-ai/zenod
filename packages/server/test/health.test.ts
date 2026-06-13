@@ -115,6 +115,41 @@ describe("server API", () => {
     expect((await res.json()).code).toBe("not_configured");
   });
 
+  it("chat exposes clean-slate preview and explicit confirmation", async () => {
+    const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
+    runtime.cleanSlate = async () => ({
+      vaultPath: "/tmp/vault",
+      branch: "main",
+      initialCommitSha: "1".repeat(40),
+      setupCommitSha: "2".repeat(40),
+      initialPaths: ["README.md"],
+      setupPaths: [".brain/config.yml"],
+      topLevelPaths: ["README.md", "Inbox/", "Log/"],
+      githubUrls: [],
+      lint: { ok: true, errors: [], checkedFiles: 3 },
+      inspect: ["git -C /tmp/vault log --oneline -2"],
+      revert: ["git -C /tmp/vault revert 2222222"],
+    });
+
+    const preview = await app.request("/api/chat", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ message: "/clean-slate" }),
+    });
+    expect(preview.status).toBe(200);
+    expect((await preview.json()).text).toContain("/clean-slate confirm");
+
+    const confirmed = await app.request("/api/chat", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ message: "/clean-slate confirm" }),
+    });
+    expect(confirmed.status).toBe(200);
+    const body = await confirmed.json();
+    expect(body.text).toContain("Initial clean commit");
+    expect(body.cleanSlate.setupCommitSha).toBe("2".repeat(40));
+  });
+
   it("tracks MCP clients and lists them via /api/connections", async () => {
     runtime.state.recordMcpClient("Claude Code", "1.0.0");
     runtime.state.recordMcpClient("Codex", null);
