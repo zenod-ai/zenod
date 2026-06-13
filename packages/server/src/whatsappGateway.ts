@@ -59,6 +59,7 @@ export interface SocketLike {
   user?: { id?: string | null } | null;
   sendMessage(jid: string, content: { text: string }): Promise<{ key?: { id?: string | null } } | undefined>;
   readMessages?(keys: WAMessageKey[]): Promise<void>;
+  sendReceipts?(keys: WAMessageKey[], type: "read"): Promise<void>;
   sendPresenceUpdate?(type: "composing" | "paused", toJid?: string): Promise<void>;
   onWhatsApp?(...jids: string[]): Promise<Array<{ jid?: string; exists?: unknown; lid?: unknown }> | undefined>;
   end?(error?: Error): void;
@@ -502,10 +503,18 @@ export class WhatsAppGateway {
   // Send a read receipt (blue ticks) for the inbound message. Uses ONLY the
   // real inbound key — never fabricate/rewrite remoteJid/participant, which is
   // what desynced @lid Signal sessions before. v7 addresses the receipt itself.
+  //
+  // Prefer sendReceipts(keys, "read") over readMessages(keys): readMessages
+  // downgrades to a "read-self" receipt (read on our own devices only, no blue
+  // ticks for the sender) unless the bot account's readreceipts privacy is
+  // "all". Forcing "read" makes blue ticks reliable regardless of that setting.
   private async markRead(event: WhatsAppInboundEvent): Promise<void> {
     const key = (event.raw as WAMessage | undefined)?.key;
-    if (!key || !this.socket?.readMessages) return;
-    await this.socket.readMessages([key]).catch((err: unknown) => {
+    if (!key) return;
+    const socket = this.socket;
+    if (!socket) return;
+    const sent = socket.sendReceipts ? socket.sendReceipts([key], "read") : socket.readMessages?.([key]);
+    await sent?.catch((err: unknown) => {
       console.warn("[whatsapp] could not mark message read:", err);
     });
   }

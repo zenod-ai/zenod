@@ -22,7 +22,7 @@ import { WhatsAppStore } from "../src/whatsappStore.js";
 class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
   readonly sent: Array<{ jid: string; text: string }> = [];
-  readonly reads: Array<Array<{ id?: string | null; remoteJid?: string | null }>> = [];
+  readonly receipts: Array<{ keys: Array<{ id?: string | null; remoteJid?: string | null }>; type: string }> = [];
   readonly presence: Array<{ type: string; jid?: string }> = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
   onWhatsApp?: SocketLike["onWhatsApp"];
@@ -37,8 +37,8 @@ class FakeSocket implements SocketLike {
     return { key: { id: `sent_${this.sent.length}` } };
   }
 
-  async readMessages(keys: Array<{ id?: string | null; remoteJid?: string | null }>) {
-    this.reads.push(keys);
+  async sendReceipts(keys: Array<{ id?: string | null; remoteJid?: string | null }>, type: "read") {
+    this.receipts.push({ keys, type });
   }
 
   async sendPresenceUpdate(type: "composing" | "paused", toJid?: string) {
@@ -359,10 +359,14 @@ describe("WhatsAppGateway", () => {
         "notify",
       );
 
-      // Read receipt uses the UNMODIFIED inbound key (still the @lid remoteJid) —
-      // we must never fabricate/rewrite it, which is what broke sessions before.
-      expect(socket.reads).toEqual([
-        [expect.objectContaining({ id: "msg_receipt", remoteJid: "123456789012345@lid" })],
+      // Read receipt is forced to type "read" (blue ticks, not "read-self") and
+      // uses the UNMODIFIED inbound key (still the @lid remoteJid) — we must never
+      // fabricate/rewrite it, which is what broke sessions before.
+      expect(socket.receipts).toEqual([
+        {
+          keys: [expect.objectContaining({ id: "msg_receipt", remoteJid: "123456789012345@lid" })],
+          type: "read",
+        },
       ]);
       // Typing is sent to the same phone JID we reply to: composing, then paused.
       expect(socket.presence).toEqual([
