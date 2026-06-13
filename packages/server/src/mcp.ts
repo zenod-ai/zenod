@@ -119,6 +119,29 @@ export function buildMcpServer(
   );
 
   server.registerTool(
+    "task_brain",
+    {
+      title: "Task the brain",
+      description:
+        "Send an instruction-bearing message through the shared tasking loop used by WhatsApp, Web, MCP, and self-tests. Use for requests to file/capture notes, run a digest, create or label GitHub issues, query backlog status, or service/select backlog work.",
+      inputSchema: {
+        text: z.string().min(1).describe("The user's instruction or status question"),
+        conversationKey: z.string().min(1).optional().describe("Correlation/thread key; defaults to mcp"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ text, conversationKey }) => {
+      const engine = await getEngine();
+      const result = await engine.handleTasking({ text, surface: "mcp", conversationKey: conversationKey ?? "mcp" });
+      const actions =
+        result.actions.length > 0
+          ? ["", "Actions:", ...result.actions.map((action) => `- ${action.tool}: ${action.result}`)]
+          : [];
+      return { content: [{ type: "text", text: [result.text, ...actions].join("\n") }], structuredContent: { ...result } };
+    },
+  );
+
+  server.registerTool(
     "run_task",
     {
       title: "Run a vault task",

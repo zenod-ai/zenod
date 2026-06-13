@@ -80,6 +80,10 @@ function fakeEngine(calls: string[]): BrainEngine {
       calls.push(`${typeof options === "object" ? options.conversationKey : "none"}:${message}`);
       return { text: `Re: ${message}`, sources: [] };
     },
+    async handleTasking(input) {
+      calls.push(`${input.conversationKey}:${input.text}`);
+      return { text: `Re: ${input.text}`, actions: [] };
+    },
     async store() {
       throw new Error("unused");
     },

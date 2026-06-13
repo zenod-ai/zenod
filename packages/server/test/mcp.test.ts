@@ -26,6 +26,9 @@ const fakeEngine: BrainEngine = {
   async chat(message) {
     return { text: `Re: ${message}`, sources: [] };
   },
+  async handleTasking(input) {
+    return { text: `Tasked: ${input.text}`, actions: [] };
+  },
   async search(query) {
     return [{ path: "Areas/Insurance.md", snippet: `about ${query}`, score: 9, githubUrl: "" }];
   },
@@ -123,6 +126,7 @@ describe("MCP endpoint", () => {
       "run_task",
       "search_memory",
       "store_memory",
+      "task_brain",
     ]);
     await client.close();
   });
@@ -183,6 +187,16 @@ describe("MCP endpoint", () => {
     const answer = result.structuredContent as { text: string; sources: Array<{ path: string }> };
     expect(answer.text).toContain("what insurance do I have?");
     expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
+    await client.close();
+  });
+
+  it("task_brain routes instructions through the shared tasking entrypoint", async () => {
+    const client = await connect();
+    const result = await client.callTool({
+      name: "task_brain",
+      arguments: { text: "create an issue for the digest gap", conversationKey: "mcp-test" },
+    });
+    expect(JSON.stringify(result.content)).toContain("Tasked: create an issue for the digest gap");
     await client.close();
   });
 

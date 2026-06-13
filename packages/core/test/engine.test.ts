@@ -75,6 +75,23 @@ class FakeLlm implements BrainLlm {
       });
       return { text: `Backlog candidates: ${result.candidates.map((c) => c.title).join(", ")}`, readPaths: [] };
     }
+    if (taskTools && input.question.startsWith("CREATEISSUE:")) {
+      const url = await taskTools.createIssue({
+        repo: "zenod-ai/zenod",
+        title: input.question.slice("CREATEISSUE:".length).trim(),
+        body: "Created from tasking test.",
+        labels: ["from-tasking"],
+      });
+      return { text: url, readPaths: [] };
+    }
+    if (taskTools && input.question.startsWith("QUERYBACKLOG")) {
+      const text = await taskTools.queryBacklog("open issues");
+      return { text, readPaths: [] };
+    }
+    if (taskTools && input.question.startsWith("SERVICEBACKLOG")) {
+      const text = await taskTools.serviceBacklog("ready");
+      return { text, readPaths: [] };
+    }
     if (taskTools && input.question.startsWith("EXEC:")) {
       const text = await taskTools.executeTask(input.question.slice(5).trim(), "approved plan");
       return { text, readPaths: [] };
@@ -509,6 +526,63 @@ describe("BrainEngine", () => {
 
     expect(reply.text).toContain("Backlog candidates:");
     expect(reply.text).toContain("Answer launch orchestration question");
+  });
+
+  it("handleTasking records digest actions with the selftest surface conversation key", async () => {
+    const reply = await engine().handleTasking({
+      text: "BACKLOG: Launch blocker: question for agent orchestration ownership.",
+      surface: "selftest",
+      conversationKey: "issue-25",
+    });
+
+    expect(reply.text).toContain("Backlog candidates:");
+    expect(reply.actions.map((action) => action.tool)).toEqual(["runDigest"]);
+    expect(reply.actions[0]?.result).toContain("Backlog candidates: 1");
+    expect((await state.recentWindow("selftest:issue-25")).map((m) => m.text)).toEqual([
+      "BACKLOG: Launch blocker: question for agent orchestration ownership.",
+      reply.text,
+    ]);
+  });
+
+  it("handleTasking reaches issue and backlog tools through injected tasking tools", async () => {
+    const calls: string[] = [];
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        async createIssue(input) {
+          calls.push(`create:${input.repo}:${input.title}:${input.labels?.join(",")}`);
+          return "Created issue #25: https://github.com/zenod-ai/zenod/issues/25";
+        },
+        async labelIssue(input) {
+          calls.push(`label:${input.repo}:${input.issueNumber}:${input.labels.join(",")}`);
+          return "labeled";
+        },
+        async queryBacklog(query) {
+          calls.push(`query:${query}`);
+          return "Open issues: #25 tasking";
+        },
+        async serviceBacklog(query) {
+          calls.push(`service:${query}`);
+          return "Eligible set: #25";
+        },
+      },
+    });
+
+    const issue = await e.handleTasking({ text: "CREATEISSUE: Task from WhatsApp", surface: "web", conversationKey: "same" });
+    const query = await e.handleTasking({ text: "QUERYBACKLOG", surface: "whatsapp", conversationKey: "same" });
+    const service = await e.handleTasking({ text: "SERVICEBACKLOG", surface: "web", conversationKey: "same" });
+
+    expect(issue.actions.map((action) => action.tool)).toEqual(["createIssue"]);
+    expect(query.actions.map((action) => action.tool)).toEqual(["queryBacklog"]);
+    expect(service.actions.map((action) => action.tool)).toEqual(["serviceBacklog"]);
+    expect(calls).toEqual([
+      "create:zenod-ai/zenod:Task from WhatsApp:from-tasking",
+      "query:open issues",
+      "service:ready",
+    ]);
   });
 
   it("chat persists the conversation window and can trigger a store", async () => {

@@ -8,6 +8,7 @@ import type {
   BacklogSourceRef,
   BrainEngine,
   ChatOptions,
+  ExternalTaskingTools,
   Hit,
   LintReport,
   Note,
@@ -16,6 +17,9 @@ import type {
   StoreInput,
   StoreResult,
   Surface,
+  TaskingAction,
+  TaskingReply,
+  TaskingSurface,
   WorkInput,
   WorkResult,
 } from "../types.js";
@@ -28,7 +32,7 @@ import { getNote } from "../ops/get.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
-import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools } from "../llm/types.js";
+import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
 
@@ -52,6 +56,11 @@ export interface EngineOptions {
    * stays source-agnostic.
    */
   driveTools?: DriveSourceTools;
+  /**
+   * External tasking tools exposed through handleTasking/chat. Server adapters
+   * provide GitHub/backlog integrations; core supplies conservative fallbacks.
+   */
+  taskingTools?: ExternalTaskingTools;
   /** Override for tests. */
   now?: () => Date;
   /**
@@ -317,6 +326,111 @@ export function createEngine(options: EngineOptions): BrainEngine {
       written: [],
       skipped: input.write === false ? [] : [{ reason: "write not requested; returned proposed candidates only" }],
       source_refs: source.sourceRefs,
+    };
+  }
+
+  function formatDigestResult(result: BacklogDigestResult): string {
+    return [
+      `Backlog candidates: ${result.candidates.length}`,
+      ...result.candidates.map((candidate, index) => {
+        const sources = candidate.source_refs.map((ref) => ref.path).join(", ");
+        return `${index + 1}. [${candidate.priority}/${candidate.type}/${candidate.status}] ${candidate.title}${sources ? ` — ${sources}` : ""}`;
+      }),
+      ...(result.written.length > 0
+        ? ["Written:", ...result.written.map((item) => `- ${item.path}${item.githubUrl ? ` (${item.githubUrl})` : ""}`)]
+        : []),
+      ...(result.skipped.length > 0
+        ? ["Skipped:", ...result.skipped.map((item) => `- ${item.title ? `${item.title}: ` : ""}${item.reason}`)]
+        : []),
+    ].join("\n");
+  }
+
+  function defaultRepo(): string {
+    return location.repo ?? "";
+  }
+
+  function noExternalTool(name: string): string {
+    return `${name} is not configured for this engine instance.`;
+  }
+
+  function buildTaskTools(surface: Surface, record?: (action: TaskingAction) => void): VaultTaskTools {
+    const recordAction = (tool: string, input: Record<string, unknown>, result: string) => {
+      record?.({ tool, input, result });
+    };
+    return {
+      captureNote: async (content: string, hints?: string[]) => {
+        const result = await store({ content, source: surface, ...(hints?.length ? { hints } : {}) });
+        recordAction(
+          "capture",
+          { content, ...(hints?.length ? { hints } : {}) },
+          [`Filed: ${result.evidenceRef}`, ...(result.pagesTouched.length ? [`Pages: ${result.pagesTouched.join(", ")}`] : []), `Commit: ${result.commitSha}`].join(
+            "\n",
+          ),
+        );
+        return result;
+      },
+      proposeTask: async (objective: string) => {
+        const proposal = await work({ objective });
+        recordAction("proposeVaultTask", { objective }, proposal.text);
+        return proposal.text;
+      },
+      executeTask: async (objective: string, plan: string) => {
+        const executed = await work({ objective, plan });
+        const text = [
+          executed.mode === "failed" ? "FAILED (rolled back, nothing committed)" : "DONE",
+          executed.text,
+          ...(executed.commitSha ? [`commit: ${executed.commitSha}`] : []),
+          ...(executed.changedPaths?.length ? [`changed: ${executed.changedPaths.join(", ")}`] : []),
+        ].join("\n");
+        recordAction("executeVaultTask", { objective, plan }, text);
+        return text;
+      },
+      digestBacklog: async (input: BacklogDigestInput) => {
+        const result = await digestBacklog(input);
+        recordAction("runDigest", { ...input }, formatDigestResult(result));
+        return result;
+      },
+      createIssue: async (input) => {
+        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        const result = options.taskingTools
+          ? await options.taskingTools.createIssue({
+              title: normalized.title,
+              body: normalized.body,
+              ...(normalized.repo ? { repo: normalized.repo } : {}),
+              ...(normalized.labels ? { labels: normalized.labels } : {}),
+            })
+          : noExternalTool("createIssue");
+        recordAction("createIssue", normalized, result);
+        return result;
+      },
+      labelIssue: async (input) => {
+        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        const result = options.taskingTools
+          ? await options.taskingTools.labelIssue({
+              issueNumber: normalized.issueNumber,
+              labels: normalized.labels,
+              ...(normalized.repo ? { repo: normalized.repo } : {}),
+            })
+          : noExternalTool("labelIssue");
+        recordAction("labelIssue", normalized, result);
+        return result;
+      },
+      queryBacklog: async (query?: string) => {
+        const result = options.taskingTools
+          ? await options.taskingTools.queryBacklog(query)
+          : formatDigestResult(await digestBacklog({ query: query || "open backlog and issue status" }));
+        recordAction("queryBacklog", query ? { query } : {}, result);
+        return result;
+      },
+      serviceBacklog: async (query?: string) => {
+        const result = options.taskingTools
+          ? await options.taskingTools.serviceBacklog(query)
+          : ["Backlog servicing runner is not wired in this engine instance.", "Eligible set from backlog query:", await buildTaskTools(surface).queryBacklog(query)].join(
+              "\n",
+            );
+        recordAction("serviceBacklog", query ? { query } : {}, result);
+        return result;
+      },
     };
   }
 
@@ -601,22 +715,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       stored = await store({ content: message, source: surface });
     }
 
-    const taskTools = {
-      proposeTask: async (objective: string) => {
-        const proposal = await work({ objective });
-        return proposal.text;
-      },
-      executeTask: async (objective: string, plan: string) => {
-        const executed = await work({ objective, plan });
-        return [
-          executed.mode === "failed" ? "FAILED (rolled back, nothing committed)" : "DONE",
-          executed.text,
-          ...(executed.commitSha ? [`commit: ${executed.commitSha}`] : []),
-          ...(executed.changedPaths?.length ? [`changed: ${executed.changedPaths.join(", ")}`] : []),
-        ].join("\n");
-      },
-      digestBacklog,
-    };
+    const taskTools = buildTaskTools(surface);
 
     const result = await llm.answer(
       {
@@ -639,10 +738,32 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
+  async function handleTasking(input: { text: string; surface: TaskingSurface; conversationKey: string }): Promise<TaskingReply> {
+    await syncForRead();
+    const cid = conversationId(input.surface, input.conversationKey);
+    const window = await state.recentWindow(cid);
+    await state.appendMessage(cid, "user", input.text, input.surface);
+
+    const actions: TaskingAction[] = [];
+    const result = await llm.answer(
+      {
+        question: input.text,
+        vaultBriefing: await vaultBriefing(),
+        conversation: window.map((m) => ({ role: m.role, text: m.text })),
+      },
+      readTools(),
+      buildTaskTools(input.surface, (action) => actions.push(action)),
+      options.driveTools,
+    );
+    await state.appendMessage(cid, "assistant", result.text, input.surface);
+    return { text: result.text, actions };
+  }
+
   return {
     store,
     ask,
     chat,
+    handleTasking,
     work,
     digestBacklog,
     search: async (query: string): Promise<Hit[]> => {
