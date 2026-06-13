@@ -30,6 +30,8 @@ The selector is pure and read-only. It reads GitHub and returns the selected iss
 
 Backlog service gateways must call `selectBacklog(repo)` immediately before launching work. Re-running after labels change therefore picks up the current ready set instead of stale or unflagged backlog items.
 
+When a gateway launches a batch of more than one queued issue, that batch is not complete when the individual branches become reviewable. The backlog monitor records the launched issue set as a fan-in batch and schedules one additional N+1 integration worker after every issue in the set reaches a terminal fan-out state (`status:needs-review` for reviewable work, or `status:complete` for no-change work). That worker receives every branch in deterministic issue-number order, resolves textual conflicts, treats combined build/typecheck/test failures as semantic conflicts, and reports a single integration result instead of letting the monitor silently surface isolated branch PRs.
+
 The lifecycle vocabulary is:
 
 - `owner:agent` + `status:queued`: ready for an agent; the only issues service touches
