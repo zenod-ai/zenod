@@ -178,6 +178,7 @@ export class IngestQueue {
         evidenceRef: stored.evidenceRef,
         pages: stored.pagesTouched,
         commitSha: stored.commitSha,
+        backlog: stored.backlog ?? null,
         archived,
       });
       console.log(`[ingest] ${job.id} done: ${file.name} → ${stored.pagesTouched.join(", ")} (archived: ${archived})`);

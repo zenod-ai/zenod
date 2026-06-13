@@ -139,10 +139,26 @@ export type IngestJob = {
   evidenceRef: string | null
   pages: string[]
   commitSha: string | null
+  backlog: BacklogDigestResult | null
   archived: boolean
   cached: boolean
   createdAt: number
   updatedAt: number
+}
+
+export type BacklogDigestResult = {
+  candidates: Array<{
+    title: string
+    type: string
+    owner: string
+    priority: string
+    status: string
+    summary: string
+    open_questions: string[]
+  }>
+  written: Array<{ path: string; githubUrl: string; title: string }>
+  skipped: Array<{ title?: string; reason: string }>
+  source_refs: Array<{ path: string; githubUrl: string }>
 }
 
 export type IngestJobsResponse = {

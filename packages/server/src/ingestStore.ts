@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { BacklogDigestResult } from "zenod";
 
 /**
  * Durable queue for Drive ingestion jobs — its own SQLite file on the /data
@@ -38,6 +39,7 @@ export interface IngestJob {
   evidenceRef: string | null;
   pages: string[];
   commitSha: string | null;
+  backlog: BacklogDigestResult | null;
   archived: boolean;
   cached: boolean;
   createdAt: number;
@@ -56,6 +58,7 @@ interface Row {
   evidence_ref: string | null;
   pages: string | null;
   commit_sha: string | null;
+  backlog_json: string | null;
   archived: number;
   cached_body: string | null;
   cached_provider: string | null;
@@ -77,6 +80,7 @@ function rowToJob(row: Row): IngestJob {
     evidenceRef: row.evidence_ref,
     pages: JSON.parse(row.pages || "[]") as string[],
     commitSha: row.commit_sha,
+    backlog: row.backlog_json ? (JSON.parse(row.backlog_json) as BacklogDigestResult) : null,
     archived: row.archived === 1,
     cached: row.cached_body !== null,
     createdAt: row.created_at,
@@ -98,6 +102,7 @@ export interface JobPatch {
   evidenceRef?: string | null;
   pages?: string[];
   commitSha?: string | null;
+  backlog?: BacklogDigestResult | null;
   archived?: boolean;
   cachedBody?: string | null;
   cachedProvider?: string | null;
@@ -123,6 +128,7 @@ export class IngestStore {
         evidence_ref TEXT,
         pages TEXT NOT NULL DEFAULT '[]',
         commit_sha TEXT,
+        backlog_json TEXT,
         archived INTEGER NOT NULL DEFAULT 0,
         cached_body TEXT,
         cached_provider TEXT,
@@ -147,6 +153,7 @@ export class IngestStore {
       `ALTER TABLE ingest_jobs ADD COLUMN cached_body TEXT`,
       `ALTER TABLE ingest_jobs ADD COLUMN cached_provider TEXT`,
       `ALTER TABLE ingest_jobs ADD COLUMN cached_source_link TEXT`,
+      `ALTER TABLE ingest_jobs ADD COLUMN backlog_json TEXT`,
     ]) {
       try {
         this.db.exec(statement);
@@ -224,6 +231,7 @@ export class IngestStore {
     if (patch.evidenceRef !== undefined) push("evidence_ref", patch.evidenceRef);
     if (patch.pages !== undefined) push("pages", JSON.stringify(patch.pages));
     if (patch.commitSha !== undefined) push("commit_sha", patch.commitSha);
+    if (patch.backlog !== undefined) push("backlog_json", patch.backlog ? JSON.stringify(patch.backlog) : null);
     if (patch.archived !== undefined) push("archived", patch.archived ? 1 : 0);
     if (patch.cachedBody !== undefined) push("cached_body", patch.cachedBody);
     if (patch.cachedProvider !== undefined) push("cached_provider", patch.cachedProvider);

@@ -519,6 +519,60 @@ describe("WhatsAppGateway", () => {
     }
   });
 
+  it("answers voice-note status questions from durable digest state", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-digest-status-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const fakeDigestEngine = {
+      async store() {
+        return {
+          evidenceRef: "Log/2026-06-13.md#^e-wa-status",
+          pagesTouched: ["Projects/Zenod.md"],
+          commitSha: "2".repeat(40),
+          githubUrls: [],
+        };
+      },
+      async chat() {
+        throw new Error("status questions should not call the LLM chat loop");
+      },
+    } as unknown as BrainEngine;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeDigestEngine,
+      socketFactory: async () => socket,
+    });
+
+    try {
+      process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "renew the travel insurance";
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+
+      await gateway.handleEvent(audioEvent() as never);
+      await waitFor(() => socket.sent.length, (count) => count === 2);
+
+      await gateway.handleEvent({
+        ...(eventFromBaileysMessage(
+          textMessage({
+            key: { id: "status_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
+            message: { conversation: "what happened to my voice note digest?" },
+          }),
+        ) as NonNullable<ReturnType<typeof eventFromBaileysMessage>>),
+      } as never);
+
+      expect(socket.sent).toHaveLength(3);
+      expect(socket.sent[2]!.text).toContain("Latest voice-note digest status: digested");
+      expect(socket.sent[2]!.text).toContain("Digest complete");
+      expect(socket.sent[2]!.text).toContain("Log/2026-06-13.md#^e-wa-status");
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBe(1);
+    } finally {
+      delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("restarts after Baileys restartRequired 515 during pairing", async () => {
     vi.useFakeTimers();
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-restart-"));

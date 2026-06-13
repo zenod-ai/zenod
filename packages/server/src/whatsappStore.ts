@@ -43,6 +43,22 @@ export interface WhatsAppStoreDiagnostics {
   } | null;
 }
 
+export interface WhatsAppDigestStatus {
+  messageId: string;
+  chatId: string;
+  contactId: string | null;
+  receivedAt: number;
+  messageTimestamp: number | null;
+  mediaType: string | null;
+  status: string;
+  lastReport: {
+    at: number;
+    status: string;
+    bodyText: string;
+    errorText: string | null;
+  } | null;
+}
+
 function safeJson(value: unknown): string {
   return JSON.stringify(value ?? {}, (_key, item: unknown) => {
     if (typeof item === "bigint") return item.toString();
@@ -316,6 +332,62 @@ export class WhatsAppStore {
           }
         : null,
       lastOutbound: lastOutbound ? { at: lastOutbound.created_at, status: lastOutbound.status } : null,
+    };
+  }
+
+  latestDigestStatusForContact(contactId: string): WhatsAppDigestStatus | null {
+    const message = this.db
+      .prepare(
+        `SELECT message_id, chat_id, contact_id, received_at, message_timestamp, media_type, processing_status
+         FROM whatsapp_messages
+         WHERE direction='inbound'
+           AND has_media=1
+           AND contact_id=?
+         ORDER BY received_at DESC
+         LIMIT 1`,
+      )
+      .get(contactId) as
+      | {
+          message_id: string;
+          chat_id: string;
+          contact_id: string | null;
+          received_at: number;
+          message_timestamp: number | null;
+          media_type: string | null;
+          processing_status: string;
+        }
+      | undefined;
+    if (!message) return null;
+
+    const report = this.db
+      .prepare(
+        `SELECT created_at, status, body_text, error_text
+         FROM whatsapp_outbound_audit
+         WHERE message_id=?
+           AND status IN ('digest_report_sent', 'digest_failed', 'ack_sent')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      )
+      .get(message.message_id) as
+      | { created_at: number; status: string; body_text: string; error_text: string | null }
+      | undefined;
+
+    return {
+      messageId: message.message_id,
+      chatId: message.chat_id,
+      contactId: message.contact_id,
+      receivedAt: message.received_at,
+      messageTimestamp: message.message_timestamp,
+      mediaType: message.media_type,
+      status: message.processing_status,
+      lastReport: report
+        ? {
+            at: report.created_at,
+            status: report.status,
+            bodyText: report.body_text,
+            errorText: report.error_text,
+          }
+        : null,
     };
   }
 
