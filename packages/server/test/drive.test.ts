@@ -202,6 +202,28 @@ describe("drive tools + API", () => {
           pagesTouched: ["Areas/Insurance.md"],
           commitSha: "0".repeat(40),
           githubUrls: [],
+          backlog: {
+            candidates: [
+              {
+                title: "Renew travel insurance",
+                type: "action",
+                owner: "human",
+                priority: "P1",
+                status: "proposed",
+                source_refs: [{ path: "Log/2026-06-12.md#^e-abc123", githubUrl: "" }],
+                summary: "Renew the travel insurance from the voice note.",
+                context: "Drive voice note ingestion",
+                acceptance_criteria: ["Travel insurance is renewed."],
+                dependencies: [],
+                open_questions: [],
+                difficulty: "low",
+                suggested_labels: ["backlog"],
+              },
+            ],
+            written: [{ path: "Backlog/renew-travel-insurance.md", githubUrl: "", title: "Renew travel insurance" }],
+            skipped: [],
+            source_refs: [{ path: "Log/2026-06-12.md#^e-abc123", githubUrl: "" }],
+          },
         };
       },
     } as unknown as BrainEngine;
@@ -221,6 +243,8 @@ describe("drive tools + API", () => {
     );
     expect(done?.evidenceRef).toBe("Log/2026-06-12.md#^e-abc123");
     expect(done?.pages).toEqual(["Areas/Insurance.md"]);
+    expect(done?.backlog?.candidates[0]?.title).toBe("Renew travel insurance");
+    expect(done?.backlog?.written[0]?.path).toBe("Backlog/renew-travel-insurance.md");
     expect(done?.archived).toBe(true);
     expect(done?.cached).toBe(true);
     expect(moves).toEqual(["archive-folder-1"]); // moved into the auto-created Archive/

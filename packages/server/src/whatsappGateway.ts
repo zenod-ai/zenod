@@ -659,6 +659,13 @@ export class WhatsAppGateway {
       return;
     }
 
+    const localStatus = this.localDigestStatusReply(event);
+    if (localStatus) {
+      this.options.store.markMessageStatus(event.messageId, "replied_from_digest_state");
+      await this.sendReply(event, localStatus, "sent");
+      return;
+    }
+
     // WhatsApp's "composing" presence auto-expires after ~10s, so refresh it on
     // an interval — otherwise typing vanishes mid-reply on slower engine calls.
     await this.setTyping(event, true);
@@ -755,6 +762,40 @@ export class WhatsAppGateway {
       `Got this ${kind}. I queued it for ${work}.`,
       `Source: ${channel} message ${event.messageId} at ${timestamp}.`,
       `Digest job: wa-${event.messageId}.`,
+    ].join("\n");
+  }
+
+  private localDigestStatusReply(event: WhatsAppInboundEvent): string | null {
+    const text = event.body.trim();
+    if (!text) return null;
+    const asksForStatus = /\b(status|progress|done|finished|complete|completed|happen(?:ed)?|where|filed|transcrib(?:e|ed|ing)|digest(?:ed|ion)?)\b/i.test(
+      text,
+    );
+    const asksAboutIngest = /\b(voice\s*note|audio|recording|note|transcript|digest|ingest|file)\b/i.test(text);
+    if (!asksForStatus || !asksAboutIngest) return null;
+
+    const status = this.options.store.latestDigestStatusForContact(event.senderId);
+    if (!status) return null;
+
+    const source = `WhatsApp message ${status.messageId}`;
+    const received = status.messageTimestamp
+      ? new Date(status.messageTimestamp).toISOString()
+      : new Date(status.receivedAt).toISOString();
+
+    if (status.lastReport?.status === "digest_report_sent" || status.lastReport?.status === "digest_failed") {
+      return [
+        `Latest voice-note digest status: ${status.status}.`,
+        `Source: ${source}, received ${received}.`,
+        "",
+        status.lastReport.bodyText,
+      ].join("\n");
+    }
+
+    return [
+      `Latest voice-note digest status: ${status.status}.`,
+      `Source: ${source}, received ${received}.`,
+      `Digest job: wa-${status.messageId}.`,
+      "No final digest report has been recorded yet.",
     ].join("\n");
   }
 

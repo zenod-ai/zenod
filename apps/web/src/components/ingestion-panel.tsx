@@ -101,11 +101,47 @@ function JobRow({
       )}
 
       {job.status === "done" ? (
-        <p className="text-xs text-muted-foreground">
-          Filed to {job.pages.length > 0 ? job.pages.join(", ") : "the Inbox"}
-          {job.archived ? " · archived in Drive" : ""}
-          {job.commitSha ? ` · ${job.commitSha.slice(0, 7)}` : ""}
-        </p>
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <p>
+            Filed to {job.pages.length > 0 ? job.pages.join(", ") : "the Inbox"}
+            {job.archived ? " · archived in Drive" : ""}
+            {job.commitSha ? ` · ${job.commitSha.slice(0, 7)}` : ""}
+          </p>
+          {job.backlog && (
+            <div className="flex flex-col gap-1 rounded-md bg-muted/60 p-2">
+              <p className="font-medium text-foreground">
+                Backlog digest: {job.backlog.candidates.length} proposed
+                {job.backlog.written.length > 0 ? ` · ${job.backlog.written.length} written` : ""}
+              </p>
+              {job.backlog.written.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {job.backlog.written.map((item) => (
+                    item.githubUrl ? (
+                      <a
+                        key={item.path}
+                        href={item.githubUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded bg-background px-1.5 py-0.5 underline underline-offset-2"
+                      >
+                        {item.title}
+                      </a>
+                    ) : (
+                      <span key={item.path} className="rounded bg-background px-1.5 py-0.5">
+                        {item.title}
+                      </span>
+                    )
+                  ))}
+                </div>
+              )}
+              {job.backlog.candidates.slice(0, 3).map((candidate) => (
+                <p key={candidate.title}>
+                  {candidate.priority} · {candidate.title}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
       ) : job.error ? (
         <p className="text-xs text-destructive">{job.error}</p>
       ) : job.step ? (
