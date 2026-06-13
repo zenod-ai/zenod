@@ -39,7 +39,10 @@ export function buildManifest(baseUrl: string): { action: string; manifest: Reco
       setup_url: `${baseUrl}/api/github/app/setup`,
       setup_on_update: true,
       public: false,
-      default_permissions: { contents: "write", metadata: "read" },
+      // contents: commit the vault. issues: manage Zenod's own central backlog
+      // (create/label/queue issues on its own repo — #61). Zenod never needs
+      // write to other repos; Codex (broad VPS access) handles those.
+      default_permissions: { contents: "write", issues: "write", metadata: "read" },
       default_events: [],
       hook_attributes: { url: `${baseUrl}/api/github/app/hook`, active: false },
     },

@@ -27,7 +27,7 @@ describe("GitHub App flow", () => {
     expect(action).toBe("https://github.com/settings/apps/new");
     expect(manifest.redirect_url).toBe("https://app.zenod.dev/api/github/app/callback");
     expect(manifest.setup_url).toBe("https://app.zenod.dev/api/github/app/setup");
-    expect(manifest.default_permissions).toEqual({ contents: "write", metadata: "read" });
+    expect(manifest.default_permissions).toEqual({ contents: "write", issues: "write", metadata: "read" });
     expect(String(manifest.name)).toMatch(/^zenod-[0-9a-f]{4}$/);
   });
 
