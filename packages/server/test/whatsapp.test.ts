@@ -276,6 +276,33 @@ describe("WhatsAppGateway", () => {
     }
   });
 
+  it("notifyOwner proactively messages the allowed senders (#35 ping primitive)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-notify-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+
+      const result = await gateway.notifyOwner("✅ #43 ready for review");
+
+      expect(result.sent).toBe(1);
+      expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "✅ #43 ready for review" }]);
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("replies to allowlisted text once and denies non-allowlisted senders", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-gateway-"));
     const runtime = new Runtime(dir);

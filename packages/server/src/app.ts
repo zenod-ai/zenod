@@ -411,6 +411,16 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ text: reply.text, sources: [], actions: reply.actions });
   });
 
+  // #35 ping primitive: the external backlog monitor POSTs here (bearer-authed
+  // like all /api/*) to make Zenod proactively message the owner over WhatsApp
+  // when a Codex job lands or blocks. The WhatsApp connection stays in the app.
+  app.post("/api/notify", async (c) => {
+    const { text } = await c.req.json<{ text?: string }>().catch(() => ({ text: undefined }));
+    if (!text?.trim()) return c.json({ error: "text is required" }, 400);
+    const result = await runtime.whatsapp.notifyOwner(text);
+    return c.json(result);
+  });
+
   app.post("/api/test/chat", async (c) => {
     const body = await c.req.json<SyntheticChatRequest>().catch((): SyntheticChatRequest => ({}));
     if (!body.message?.trim()) return c.json({ error: "message is required" }, 400);

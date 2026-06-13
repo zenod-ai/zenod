@@ -500,6 +500,45 @@ export class WhatsAppGateway {
     return event.isGroup ? event.chatId : event.senderId || event.chatId;
   }
 
+  /**
+   * Proactively message the owner(s) — the allowed senders — with no inbound
+   * event. The #35 ping primitive: the backlog monitor calls this (via
+   * POST /api/notify) when a Codex job lands or blocks, so Zenod tells the user
+   * unprompted instead of making them check GitHub.
+   */
+  async notifyOwner(text: string, timestamp = Date.now()): Promise<{ sent: number; recipients: string[] }> {
+    const recipients: string[] = [];
+    const socket = this.socket;
+    if (!text?.trim() || !socket) return { sent: 0, recipients };
+    const owners = this.options.settings.whatsappSettings().allowedSenders.filter((s) => s && s !== "*");
+    for (const number of owners) {
+      const jid = `${number}@s.whatsapp.net`;
+      try {
+        const sent = await socket.sendMessage(jid, { text });
+        this.options.store.recordOutboundAudit({
+          messageId: `notify-${number}-${timestamp}`,
+          chatId: jid,
+          contactId: jid,
+          bodyText: text,
+          status: "notify",
+          sentMessageId: sent?.key?.id ?? null,
+          raw: sent,
+        });
+        recipients.push(jid);
+      } catch (err) {
+        this.options.store.recordOutboundAudit({
+          messageId: `notify-${number}-${timestamp}`,
+          chatId: jid,
+          contactId: jid,
+          bodyText: text,
+          status: "failed",
+          errorText: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return { sent: recipients.length, recipients };
+  }
+
   // Send a read receipt (blue ticks) for the inbound message. Uses ONLY the
   // real inbound key — never fabricate/rewrite remoteJid/participant, which is
   // what desynced @lid Signal sessions before. v7 addresses the receipt itself.
