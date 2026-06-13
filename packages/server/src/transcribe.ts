@@ -79,7 +79,7 @@ const GROQ_MAX_UPLOAD_BYTES = 23_000_000;
 // Segment length for Groq uploads. We chunk by time even when the compressed
 // file is below the upload cap: long single requests can hit endpoint timeouts,
 // and chunking gives the UI meaningful progress.
-const GROQ_SEGMENT_SECONDS = "900";
+const GROQ_SEGMENT_SECONDS = "500";
 const GROQ_MAX_RETRY_ATTEMPTS = 3;
 const GROQ_MAX_RETRY_AFTER_SECONDS = 180;
 // Canonical ggml model host — same source local_whisper's download script uses.
