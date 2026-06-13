@@ -170,7 +170,7 @@ export function buildMcpServer(
       {
         title: "Ingest a Google Drive file",
         description:
-          "Queue one Google Drive file (by ID) for background ingestion: it downloads, transcribes audio locally with whisper, files the transcript into the vault as evidence + meaning, commits, and archives the original — in a background worker. Returns immediately with the job id/status; it does not wait for completion. Queue one file per call.",
+          "Queue one Google Drive file (by ID) for background ingestion: it downloads, transcribes audio with the configured provider (Groq when set, otherwise local whisper.cpp), files the transcript into the vault as evidence + meaning, commits, and archives the original — in a background worker. Returns immediately with the job id/status; it does not wait for completion. Queue one file per call.",
         inputSchema: {
           fileId: z.string().min(1).describe("The Drive file ID from list_drive_files"),
           hints: z.array(z.string()).optional().describe("Optional filing hints"),

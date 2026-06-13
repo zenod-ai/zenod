@@ -50,7 +50,7 @@ export function buildDriveTools(settings: Settings, queue: IngestQueue): DriveSo
       const job = queue.enqueue(fileId, name, hints ?? []);
       return [
         `Queued "${name}" for ingestion (job ${job.id}, status: ${job.status}).`,
-        "It downloads, transcribes locally with whisper, files the transcript into the vault, and archives the original — in the background.",
+        "It downloads, transcribes audio with the configured provider, files the transcript into the vault, and archives the original — in the background.",
         "Tell the user it's processing and that live progress is in the Ingestion panel (Connections tab); the result lands in the vault when done.",
       ].join("\n");
     },

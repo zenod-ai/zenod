@@ -327,7 +327,7 @@ export async function transcribeAudio(
     return {
       success: true,
       transcript: process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT,
-      provider: `whisper.cpp ${modelName}`,
+      provider: groqApiKey ? `groq ${GROQ_STT_MODEL}` : `whisper.cpp ${modelName}`,
     };
   }
 

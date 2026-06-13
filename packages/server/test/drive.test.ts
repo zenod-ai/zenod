@@ -122,6 +122,17 @@ describe("transcription envelope", () => {
     });
     delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
   });
+
+  it("uses Groq when a Groq key is configured", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", { groqApiKey: "gsk_test" });
+    expect(result).toEqual({
+      success: true,
+      transcript: "remember to renew the travel insurance",
+      provider: "groq whisper-large-v3-turbo",
+    });
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  });
 });
 
 describe("drive tools + API", () => {
@@ -187,6 +198,40 @@ describe("drive tools + API", () => {
     expect(stored[0]!.hints).toEqual(["insurance"]);
     expect(stored[0]!.content).toContain("remember to renew the travel insurance");
     expect(stored[0]!.content).toContain("https://drive.google.com/file/d/file-1/view");
+  });
+
+  it("uses the configured Groq key for Drive audio ingestion", async () => {
+    const moves: string[] = [];
+    vi.stubGlobal("fetch", stubFetch(moves));
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
+    runtime.settings.set("groq_api_key", "gsk_test");
+
+    const stored: StoreInput[] = [];
+    const fakeEngine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-06-12.md#^e-abc123",
+          pagesTouched: ["Areas/Insurance.md"],
+          commitSha: "0".repeat(40),
+          githubUrls: [],
+        };
+      },
+    } as unknown as BrainEngine;
+
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
+
+    await tools.ingestDriveFile("file-1", ["insurance"]);
+    await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "done",
+    );
+
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.content).toContain("Transcribed by groq whisper-large-v3-turbo.");
   });
 
   it("masks the new secrets and exposes drive status", async () => {

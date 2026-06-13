@@ -237,7 +237,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           }),
           ingest_drive_file: tool({
             description:
-              "Queue one Google Drive file (by file ID from list_drive_files) for background ingestion: it downloads, transcribes audio voice notes locally with whisper, files the transcript into the vault as evidence + meaning, commits, and archives the original — all in a background worker that survives the user navigating away. Returns immediately with the job id and status; it does NOT wait for completion. Call once per file. Tell the user the files are queued/processing and that live progress is in the Ingestion panel (Connections tab).",
+              "Queue one Google Drive file (by file ID from list_drive_files) for background ingestion: it downloads, transcribes audio voice notes with the configured transcription provider (Groq when set, otherwise local whisper.cpp), files the transcript into the vault as evidence + meaning, commits, and archives the original — all in a background worker that survives the user navigating away. Returns immediately with the job id and status; it does NOT wait for completion. Call once per file. Tell the user the files are queued/processing and that live progress is in the Ingestion panel (Connections tab).",
             inputSchema: z.object({
               fileId: z.string().describe("the Drive file ID"),
               hints: z
@@ -255,7 +255,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         ? "You CAN reorganize the vault: propose_vault_task plans the work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute without showing the plan and getting an explicit yes first."
         : "",
       driveTools
-        ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background ingestion (download, local whisper transcription, filing, archiving). When the user asks to ingest their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Ingestion panel (Connections tab), and the transcripts land in the vault when done."
+        ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background ingestion (download, configured transcription provider for audio, filing, archiving). When the user asks to ingest their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Ingestion panel (Connections tab), and the transcripts land in the vault when done."
         : "",
     ].filter(Boolean);
 
