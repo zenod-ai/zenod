@@ -697,7 +697,19 @@ export class WhatsAppGateway {
         status: "failed",
         errorText: message,
       });
-      throw err;
+      // Fail loud, not silent: a provider/quota/config error must never look
+      // like Zenod ignoring the sender. Reply with an automated (non-LLM)
+      // notice so there is always a response. We do not re-throw — the error is
+      // recorded and acknowledged, and the next message must still be handled.
+      const providerIssue =
+        /quota|billing|rate.?limit|insufficient|api key|unauthor|401|429|overloaded|model provider|not configured/i.test(
+          message,
+        );
+      const notice = providerIssue
+        ? "⚠️ I got your message, but the AI model is unavailable right now (it may be out of quota, rate-limited, or misconfigured). Nothing was lost — please try again once that's sorted."
+        : "⚠️ I got your message, but hit an error while processing it. It's been logged — please try again in a moment.";
+      await this.sendReply(event, notice, "error").catch(() => {});
+      console.error(`[whatsapp] reply failed for ${event.messageId}: ${message}`);
     } finally {
       if (keepTyping) clearInterval(keepTyping);
       await this.setTyping(event, false);
