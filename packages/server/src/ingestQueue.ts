@@ -102,6 +102,7 @@ export class IngestQueue {
         this.store.update(job.id, { status: "transcribing", step: `Transcribing ${file.name}`, progress: 0 });
         const result = await transcribeAudio(data, file.name, {
           model: this.settings.whisperModel(),
+          groqApiKey: this.settings.get("groq_api_key"),
           onProgress: (pct) => this.store.update(job.id, { progress: pct }),
           signal: controller.signal,
         });

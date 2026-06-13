@@ -239,7 +239,7 @@ function parseWhisperProgress(line: string): number | null {
 }
 
 /** POST one audio file to Groq's OpenAI-compatible transcription endpoint. */
-async function groqTranscribeFile(path: string, signal?: AbortSignal): Promise<string> {
+async function groqTranscribeFile(path: string, apiKey: string, signal?: AbortSignal): Promise<string> {
   const form = new FormData();
   form.append("file", new Blob([await readFile(path)]), "audio.flac");
   form.append("model", GROQ_STT_MODEL);
@@ -248,7 +248,7 @@ async function groqTranscribeFile(path: string, signal?: AbortSignal): Promise<s
   const timeout = AbortSignal.timeout(120_000);
   const response = await fetch(GROQ_STT_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
@@ -268,6 +268,7 @@ async function groqTranscribeFile(path: string, signal?: AbortSignal): Promise<s
 async function transcribeWithGroq(
   data: Buffer,
   filename: string,
+  apiKey: string,
   onProgress?: (percent: number) => void,
   signal?: AbortSignal,
 ): Promise<TranscriptionEnvelope> {
@@ -292,7 +293,7 @@ async function transcribeWithGroq(
     }
     const texts: string[] = [];
     for (const [i, part] of parts.entries()) {
-      texts.push(await groqTranscribeFile(part, signal));
+      texts.push(await groqTranscribeFile(part, apiKey, signal));
       onProgress?.(Math.round(((i + 1) / parts.length) * 100));
     }
     const transcript = texts.join(" ").trim();
@@ -312,12 +313,15 @@ export async function transcribeAudio(
   data: Buffer,
   filename: string,
   options:
-    | { model?: string; onProgress?: (percent: number) => void; signal?: AbortSignal }
+    | { model?: string; groqApiKey?: string | null; onProgress?: (percent: number) => void; signal?: AbortSignal }
     | ((percent: number) => void) = {},
 ): Promise<TranscriptionEnvelope> {
   const modelName = resolveWhisperModel(typeof options === "function" ? DEFAULT_WHISPER_MODEL : options.model);
   const onProgress = typeof options === "function" ? options : options.onProgress;
   const signal = typeof options === "function" ? undefined : options.signal;
+  // The durable setting (UI-pasted, env-seeded on first boot) wins; the raw
+  // env var keeps standalone/test use working without a settings store.
+  const groqApiKey = (typeof options === "function" ? undefined : options.groqApiKey) ?? process.env.GROQ_API_KEY;
   if ((process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT) {
     onProgress?.(100);
     return {
@@ -330,9 +334,9 @@ export async function transcribeAudio(
   // Groq first when configured — seconds instead of minutes, and it doesn't
   // pin the server's CPUs. Any failure (rate limit, network, oversized chunk)
   // falls through to local whisper.cpp so transcription still works offline.
-  if (process.env.GROQ_API_KEY) {
+  if (groqApiKey) {
     try {
-      return await transcribeWithGroq(data, filename, onProgress, signal);
+      return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
     } catch (err) {
       if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
       console.warn(`[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`);

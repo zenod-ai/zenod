@@ -1,10 +1,11 @@
 import * as React from "react"
-import { CheckIcon, SaveIcon } from "lucide-react"
+import { CheckIcon, SaveIcon, ZapIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
   api,
   errorMessage,
+  type SettingsResponse,
   type TranscriptionModelsResponse,
   type TranscriptionStatus,
   type WhisperModelInfo,
@@ -21,6 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -29,6 +31,109 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
+
+/**
+ * Groq cloud transcription key. When set, voice notes go to Groq's
+ * whisper-large-v3-turbo (~200x realtime, free tier) and the local model
+ * below becomes the automatic fallback. The key is stored server-side and
+ * echoed back masked; saving the masked echo leaves it unchanged, saving an
+ * empty field removes it.
+ */
+function GroqTranscriptionCard() {
+  const [value, setValue] = React.useState("")
+  const [savedMasked, setSavedMasked] = React.useState<string | null>(null)
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    void api<SettingsResponse>("/api/settings")
+      .then((result) => {
+        setSavedMasked(result.settings.groq_api_key)
+        setValue(result.settings.groq_api_key ?? "")
+      })
+      .catch(() => {
+        /* field starts empty; saving still works */
+      })
+  }, [])
+
+  const active = savedMasked !== null
+  const dirty = value !== (savedMasked ?? "")
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const result = await api<SettingsResponse>("/api/settings", {
+        method: "PUT",
+        body: { groq_api_key: value },
+      })
+      setSavedMasked(result.settings.groq_api_key)
+      setValue(result.settings.groq_api_key ?? "")
+      toast.success(
+        result.settings.groq_api_key
+          ? "Groq key saved — voice notes now transcribe in the cloud"
+          : "Groq key removed — back to local transcription"
+      )
+    } catch (err) {
+      toast.error("Could not save", { description: errorMessage(err) })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Cloud transcription (Groq)</CardTitle>
+        <CardDescription>
+          Paste a Groq API key to transcribe voice notes with
+          whisper-large-v3-turbo in the cloud — seconds instead of minutes,
+          with a generous free tier. The local model below stays as the
+          automatic fallback whenever Groq is unavailable. Get a key at{" "}
+          <a
+            href="https://console.groq.com/keys"
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2"
+          >
+            console.groq.com/keys
+          </a>
+          .
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Field>
+          <FieldLabel htmlFor="groq-api-key">Groq API key</FieldLabel>
+          <Input
+            id="groq-api-key"
+            type="password"
+            autoComplete="off"
+            placeholder="gsk_…"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {active ? (
+              <>
+                <ZapIcon className="size-3.5 text-emerald-500" />
+                Groq transcription is active — the local model is only used as
+                fallback. Clear the field and save to go local-only.
+              </>
+            ) : (
+              <span>
+                No key set — transcription runs on this server&apos;s CPU.
+              </span>
+            )}
+          </div>
+        </Field>
+      </CardContent>
+      <CardFooter className="justify-end">
+        <Button type="button" disabled={saving || !dirty} onClick={handleSave}>
+          {saving ? <Spinner /> : <SaveIcon data-icon="inline-start" />}
+          Save
+        </Button>
+      </CardFooter>
+    </Card>
+  )
+}
 
 function sizeLabel(mb: number): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`
@@ -103,12 +208,13 @@ function TranscriptionModelCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Transcription quality</CardTitle>
+        <CardTitle>Local transcription quality</CardTitle>
         <CardDescription>
-          Which local whisper.cpp model transcribes your voice notes. Bigger
-          models are more accurate (and better at non-English or accented
-          speech) but slower on a small server. The model downloads once to the
-          server and is kept across restarts.
+          Which local whisper.cpp model transcribes your voice notes (or serves
+          as fallback when a Groq key is set above). Bigger models are more
+          accurate (and better at non-English or accented speech) but slower on
+          a small server. The model downloads once to the server and is kept
+          across restarts.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -170,6 +276,7 @@ function TranscriptionModelCard() {
 export function IngestionTab() {
   return (
     <div className="flex flex-col gap-6">
+      <GroqTranscriptionCard />
       <TranscriptionModelCard />
       <IngestionPanel />
     </div>

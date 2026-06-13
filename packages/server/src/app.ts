@@ -187,9 +187,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       configured: settings.driveConfigured(),
       clientEmail,
       folderId: settings.get("google_drive_folder_id"),
-      // Transcription is local whisper.cpp, built into the image — always
-      // available, no key required.
-      transcriptionProvider: "whisper.cpp (local)",
+      // Groq cloud STT when a key is set, else local whisper.cpp (built into
+      // the image — always available as the no-key fallback).
+      transcriptionProvider: settings.get("groq_api_key")
+        ? "groq (cloud, local fallback)"
+        : "whisper.cpp (local)",
     });
   });
 

@@ -689,7 +689,6 @@ export class WhatsAppGateway {
       const filename = `${event.messageId}.${event.mimeType?.includes("mpeg") ? "mp3" : "ogg"}`;
       const transcription = await transcribeAudio(data, filename, {
         model: this.options.settings.whisperModel(),
-        groqApiKey: this.options.settings.get("groq_api_key"),
       });
       if (!transcription.success) {
         return { kind: "fixed-reply", text: `I could not transcribe that voice note: ${transcription.error}` };
