@@ -98,6 +98,9 @@ function fakeEngine(calls: string[]): BrainEngine {
     async work() {
       return { mode: "proposal", text: "", committed: false };
     },
+    async digestBacklog() {
+      return { candidates: [], written: [], skipped: [], source_refs: [] };
+    },
   };
 }
 
@@ -475,12 +478,35 @@ describe("WhatsAppGateway", () => {
         pagesTouched: ["Projects/Zenod.md"],
         commitSha: "1".repeat(40),
         githubUrls: [],
+        backlog: {
+          candidates: [
+            {
+              title: "Renew travel insurance",
+              type: "action",
+              owner: "agent",
+              priority: "P1",
+              status: "ready",
+              source_refs: [{ path: "Log/2026-06-13.md#^e-wa1", githubUrl: "" }],
+              summary: "Renew the travel insurance.",
+              context: "The voice note asks for renewal.",
+              acceptance_criteria: ["Renewal next step is captured."],
+              dependencies: [],
+              open_questions: [],
+              difficulty: "medium",
+              suggested_labels: ["backlog"],
+            },
+          ],
+          written: [],
+          skipped: [{ reason: "proactive digestion is proposal-only; write not requested" }],
+          source_refs: [{ path: "Log/2026-06-13.md#^e-wa1", githubUrl: "" }],
+        },
       });
 
       await waitFor(() => socket.sent.length, (count) => count === 2);
       expect(socket.sent[1]!.text).toContain("Digest complete");
       expect(socket.sent[1]!.text).toContain("evidence Log/2026-06-13.md#^e-wa1");
-      expect(socket.sent[1]!.text).toContain("Backlog: no backlog records created");
+      expect(socket.sent[1]!.text).toContain("Backlog: 0 written, 1 proposed, 1 skipped.");
+      expect(socket.sent[1]!.text).toContain("proposed [P1/action/ready] Renew travel insurance");
       expect(runtime.whatsappStore.diagnostics().processingCounts.digested).toBe(1);
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;

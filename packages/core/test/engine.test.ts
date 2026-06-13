@@ -68,6 +68,13 @@ class FakeLlm implements BrainLlm {
   }
 
   async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult> {
+    if (taskTools && input.question.startsWith("BACKLOG:")) {
+      const result = await taskTools.digestBacklog({
+        rawText: input.question.slice(8).trim(),
+        sourceRefs: [{ path: "Log/2026-06-13.md#^e-chat", githubUrl: "" }],
+      });
+      return { text: `Backlog candidates: ${result.candidates.map((c) => c.title).join(", ")}`, readPaths: [] };
+    }
     if (taskTools && input.question.startsWith("EXEC:")) {
       const text = await taskTools.executeTask(input.question.slice(5).trim(), "approved plan");
       return { text, readPaths: [] };
@@ -359,6 +366,18 @@ describe("BrainEngine", () => {
     expect(result.backlog?.skipped[0]?.reason).toMatch(/proposal-only/);
   });
 
+  it("proactively proposes backlog candidates after task-like WhatsApp ingestion", async () => {
+    const result = await engine().store({
+      content: "WhatsApp voice note transcript. Launch blocker: question for agent orchestration ownership.",
+      source: "whatsapp",
+      verbatim: true,
+    });
+
+    expect(result.backlog?.written).toEqual([]);
+    expect(result.backlog?.candidates[0]?.type).toBe("blocker");
+    expect(result.backlog?.candidates[0]?.source_refs[0]?.path).toBe(result.evidenceRef);
+  });
+
   it("fixture: Zenod 3 extracts launch backlog themes with citations", async () => {
     const transcript = await readFile(join(FIXTURE, "../backlog/zenod-3-transcript.txt"), "utf8");
     const result = await engine().digestBacklog({
@@ -483,6 +502,13 @@ describe("BrainEngine", () => {
     expect(reply.text).toMatch(/commit: [0-9a-f]{40}/);
     await expect(readFile(join(repo.path, "Inbox/junk.md"), "utf8")).rejects.toThrow();
     expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("chat can invoke the backlog digester through its task tools", async () => {
+    const reply = await engine().chat("BACKLOG: Launch blocker: question for agent orchestration ownership.", "web");
+
+    expect(reply.text).toContain("Backlog candidates:");
+    expect(reply.text).toContain("Answer launch orchestration question");
   });
 
   it("chat persists the conversation window and can trigger a store", async () => {
