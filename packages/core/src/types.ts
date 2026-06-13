@@ -56,6 +56,27 @@ export interface Reply {
   stored?: StoreResult;
 }
 
+export type ChatTestStatus = "ok" | "error";
+
+export interface ChatTestAuditInput {
+  correlationId: string;
+  testRunId?: string;
+  surface: Surface;
+  conversationKey: string;
+  conversationId: string;
+  prompt: string;
+  reply?: string;
+  sources: SourceRef[];
+  toolEvents: ChatToolEvent[];
+  status: ChatTestStatus;
+  error?: string;
+  at: Date;
+}
+
+export interface ChatTestAuditRecord extends ChatTestAuditInput {
+  at: Date;
+}
+
 export interface SourceRef {
   /** Vault-relative path, optionally with a block anchor. */
   path: string;

@@ -30,6 +30,7 @@ import { buildDriveTools } from "./driveTools.js";
 import { prepareModel, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
+import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
 
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
@@ -39,6 +40,7 @@ export interface AppOptions {
 export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
   const app = new Hono<{ Bindings: HttpBindings }>();
   const { settings } = runtime;
+  const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
 
   void runtime.whatsapp.startIfEnabled().catch((err: unknown) => {
     console.error("[whatsapp] startup failed:", err);
@@ -408,6 +410,34 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json(await engine.chat(message, "web"));
   });
 
+  app.post("/api/test/chat", async (c) => {
+    const body = await c.req.json<SyntheticChatRequest>().catch((): SyntheticChatRequest => ({}));
+    if (!body.message?.trim()) return c.json({ error: "message is required" }, 400);
+    let result: Awaited<ReturnType<typeof runSyntheticChat>>;
+    try {
+      result = await runSyntheticChat({
+        request: body,
+        defaultSurface: "mcp",
+        getEngine: () => runtime.getEngine(),
+        recordAudit: (input) => chatTestAudit.recordChatTestRun(input),
+      });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "invalid test chat request" }, 400);
+    }
+    return c.json(result, result.status === "ok" ? 200 : 500);
+  });
+
+  app.get("/api/test/chat", (c) => {
+    const limit = Number(c.req.query("limit") ?? "20");
+    return c.json({ runs: chatTestAudit.listChatTestRuns(Number.isFinite(limit) ? limit : 20) });
+  });
+
+  app.get("/api/test/chat/:correlationId", (c) => {
+    const run = chatTestAudit.getChatTestRun(c.req.param("correlationId"));
+    if (!run) return c.json({ error: "test chat run not found" }, 404);
+    return c.json({ run });
+  });
+
   // Streaming twin of /api/chat: newline-delimited JSON events
   // ({type:"delta"|"done"|"error"}). getEngine() runs first so a config error
   // surfaces as a normal 409 before the stream opens.
@@ -512,6 +542,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       () => runtime.getEngine(),
       () => buildDriveTools(settings, runtime.ingestQueue),
       () => runtime.cleanSlate(),
+      (input) => chatTestAudit.recordChatTestRun(input),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

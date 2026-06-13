@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools } from "zenod";
+import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
 
 /**
  * The Zenod MCP tool surface (docs/M0-SPEC.md): no raw file CRUD. Drive tools
@@ -11,8 +12,46 @@ export function buildMcpServer(
   getEngine: () => Promise<BrainEngine>,
   getDriveTools?: () => DriveSourceTools | undefined,
   cleanSlate?: () => Promise<CleanSlateResult>,
+  recordChatTestRun?: (input: ChatTestAuditInput) => ChatTestAuditRecord,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
+
+  server.registerTool(
+    "chat_with_zenod",
+    {
+      title: "Chat with Zenod",
+      description:
+        "Synthetic chat/test harness for Codex and other agents. Sends a natural-language prompt through the same engine.chat loop used by web and WhatsApp, with an explicit conversationKey/testRunId for isolated multi-turn tests. Returns reply text, sources, tool events, and a correlation id that is also written to the test chat audit log.",
+      inputSchema: {
+        message: z.string().min(1).describe("Natural-language prompt to send to Zenod"),
+        surface: z.enum(["cli", "mcp", "whatsapp", "web", "drive"]).optional().describe("Surface label to run as. Defaults to mcp."),
+        conversationKey: z.string().min(1).optional().describe("Stable key for multi-turn test context"),
+        testRunId: z.string().min(1).optional().describe("Optional caller-supplied test run grouping id"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ message, surface, conversationKey, testRunId }) => {
+      if (!recordChatTestRun) throw new Error("chat test audit store is not configured");
+      const result = await runSyntheticChat({
+        request: { message, ...(surface ? { surface } : {}), ...(conversationKey ? { conversationKey } : {}), ...(testRunId ? { testRunId } : {}) },
+        defaultSurface: "mcp",
+        getEngine,
+        recordAudit: recordChatTestRun,
+      });
+      const lines = [
+        result.status === "ok" ? result.text : `ERROR: ${result.error}`,
+        "",
+        `correlationId: ${result.correlationId}`,
+        `conversationId: ${result.conversationId}`,
+        `toolEvents: ${result.toolEvents.length}`,
+      ];
+      return {
+        content: [{ type: "text", text: lines.join("\n") }],
+        structuredContent: result as unknown as { [key: string]: unknown },
+        isError: result.status === "error",
+      };
+    },
+  );
 
   server.registerTool(
     "search_memory",
