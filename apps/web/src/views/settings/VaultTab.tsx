@@ -292,6 +292,19 @@ export function VaultTab() {
         </CardFooter>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>GitHub connection</CardTitle>
+          <CardDescription>
+            The GitHub App Zenod uses to reach this repository. Disconnect to
+            re-pair — e.g. to grant new permissions like managing issues.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GithubConnect onRepoPicked={() => reload()} />
+        </CardContent>
+      </Card>
+
       {lintResult !== null && (
         <Card>
           <CardHeader>
