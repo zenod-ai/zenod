@@ -379,6 +379,18 @@ export class AiSdkBrainLlm implements BrainLlm {
             execute: ({ repo, issueNumber, labels }) =>
               caught(() => taskTools.labelIssue({ repo: repo ?? "", issueNumber, labels })),
           }),
+          approve_queue: tool({
+            description:
+              "Promote specific backlog issues from status:proposed to status:queued so the monitor executes them. THIS IS THE ONLY TOOL THAT CAN SET status:queued. Call it ONLY when the human has EXPLICITLY approved specific issues for execution by number in this conversation (e.g. 'yes, queue #1 and #2', 'approve 51 and 53, run them'). Never infer approval; never queue on a vague or general request. After queuing, tell the user exactly which issues were queued.",
+            inputSchema: z.object({
+              repo: z.string().nullable().describe("owner/repo target; null uses the configured vault/project repo"),
+              issueNumbers: z
+                .array(z.number().int().positive())
+                .min(1)
+                .describe("the issue numbers the human explicitly approved to run now"),
+            }),
+            execute: ({ repo, issueNumbers }) => caught(() => taskTools.approveQueue({ repo: repo ?? "", issueNumbers })),
+          }),
           query_backlog: tool({
             description:
               "Return real status for open backlog/issues. Use when the user asks where things stand, open issue status, backlog status, blockers, or what is ready next.",

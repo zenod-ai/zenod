@@ -8,6 +8,8 @@ import {
   lintVault,
   normalizeCreateIssueLabels,
   normalizeLabelIssueLabels,
+  STATUS_PROPOSED,
+  STATUS_QUEUED,
   SqliteStateStore,
   VaultRepo,
   type BrainEngine,
@@ -190,6 +192,25 @@ export class Runtime {
       queryBacklog,
       serviceBacklog: async (query?: string) =>
         ["Backlog service selection only; runner is tracked separately.", await queryBacklog(query)].join("\n"),
+      // The only path that sets status:queued (#58) — explicit human approval.
+      // Removes status:proposed (404 is fine if absent) and adds status:queued.
+      approveQueue: async ({ repo, issueNumbers }) => {
+        const target = repo || defaultRepo();
+        if (!target) return "No GitHub repository is configured.";
+        const repoPath = encodeURIComponent(target).replace("%2F", "/");
+        const queued: number[] = [];
+        for (const n of issueNumbers) {
+          await githubJson(`/repos/${repoPath}/issues/${n}/labels/${encodeURIComponent(STATUS_PROPOSED)}`, {
+            method: "DELETE",
+          }).catch(() => {});
+          await githubJson(`/repos/${repoPath}/issues/${n}/labels`, {
+            method: "POST",
+            body: JSON.stringify({ labels: [STATUS_QUEUED] }),
+          });
+          queued.push(n);
+        }
+        return `Queued ${queued.map((n) => `#${n}`).join(", ")} — the monitor will pick them up.`;
+      },
     };
   }
 
