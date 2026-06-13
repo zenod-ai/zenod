@@ -352,6 +352,7 @@ describe("WhatsAppGateway", () => {
               id: "msg_receipt",
               remoteJid: "123456789012345@lid",
               remoteJidAlt: "34611111111@s.whatsapp.net",
+              addressingMode: "lid",
               fromMe: false,
             },
           }),
@@ -359,12 +360,12 @@ describe("WhatsAppGateway", () => {
         "notify",
       );
 
-      // Read receipt is forced to type "read" (blue ticks, not "read-self") and
-      // uses the UNMODIFIED inbound key (still the @lid remoteJid) — we must never
-      // fabricate/rewrite it, which is what broke sessions before.
+      // Read receipt is forced to type "read" (blue ticks, not "read-self"). For a
+      // lid-addressed chat the receipt is re-targeted to the phone JID so the
+      // sender's client attributes it — but it keeps the original message id.
       expect(socket.receipts).toEqual([
         {
-          keys: [expect.objectContaining({ id: "msg_receipt", remoteJid: "123456789012345@lid" })],
+          keys: [expect.objectContaining({ id: "msg_receipt", remoteJid: "34611111111@s.whatsapp.net" })],
           type: "read",
         },
       ]);

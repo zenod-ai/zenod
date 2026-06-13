@@ -508,27 +508,40 @@ export class WhatsAppGateway {
   // downgrades to a "read-self" receipt (read on our own devices only, no blue
   // ticks for the sender) unless the bot account's readreceipts privacy is
   // "all". Forcing "read" makes blue ticks reliable regardless of that setting.
+  // For lid-addressed chats, the sender's client doesn't attribute a read
+  // receipt sent to the @lid, so blue ticks never appear. Re-target the receipt
+  // to the phone JID (remoteJidAlt). This is safe: a <receipt> is a plain,
+  // unencrypted stanza — not a Signal/session op — so retargeting it cannot
+  // desync E2E sessions (unlike rewriting keys for encrypted sends/receipts).
+  private readReceiptKey(key: WAMessageKey): WAMessageKey {
+    const extra = key as Record<string, unknown>;
+    const phoneJid = typeof extra.remoteJidAlt === "string" ? extra.remoteJidAlt : "";
+    if (extra.addressingMode === "lid" && phoneJid) {
+      return { ...key, remoteJid: phoneJid };
+    }
+    return key;
+  }
+
   private async markRead(event: WhatsAppInboundEvent): Promise<void> {
     const key = (event.raw as WAMessage | undefined)?.key;
     if (!key) return;
     const socket = this.socket;
     if (!socket) return;
-    // TEMP diagnostic: dump the inbound key addressing so we can see why blue
-    // ticks aren't landing on @lid chats. Remove once the receipt target is fixed.
+    const receiptKey = this.readReceiptKey(key);
+    // TEMP diagnostic: dump the inbound key + chosen receipt target so we can see
+    // why blue ticks aren't landing on @lid chats. Remove once confirmed working.
     console.info(
       "[whatsapp][diag] markRead key=",
       JSON.stringify({
         id: key.id,
         remoteJid: key.remoteJid,
         remoteJidAlt: (key as Record<string, unknown>).remoteJidAlt,
-        participant: key.participant,
-        participantAlt: (key as Record<string, unknown>).participantAlt,
         addressingMode: (key as Record<string, unknown>).addressingMode,
-        fromMe: key.fromMe,
+        receiptTo: receiptKey.remoteJid,
         via: socket.sendReceipts ? "sendReceipts(read)" : "readMessages",
       }),
     );
-    const sent = socket.sendReceipts ? socket.sendReceipts([key], "read") : socket.readMessages?.([key]);
+    const sent = socket.sendReceipts ? socket.sendReceipts([receiptKey], "read") : socket.readMessages?.([receiptKey]);
     await sent?.catch((err: unknown) => {
       console.warn("[whatsapp] could not mark message read:", err);
     });
