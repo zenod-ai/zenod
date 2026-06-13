@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
+import { serveStatic, type ServeStaticOptions } from "@hono/node-server/serve-static";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { conversationId, NoteNotFoundError, VERSION } from "zenod";
@@ -520,8 +520,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   if (options.webDist) {
     const root = options.webDist;
-    app.use("/*", serveStatic({ root }));
-    app.get("*", serveStatic({ root, path: "index.html" })); // SPA fallback
+    const noCache: Pick<ServeStaticOptions, "onFound"> = {
+      onFound: (_path, c) => {
+        c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+      },
+    };
+    app.use("/*", serveStatic({ root, ...noCache }));
+    app.get("*", serveStatic({ root, path: "index.html", ...noCache })); // SPA fallback
   }
 
   return app;
