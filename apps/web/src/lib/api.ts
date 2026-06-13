@@ -140,6 +140,7 @@ export type IngestJob = {
   pages: string[]
   commitSha: string | null
   archived: boolean
+  cached: boolean
   createdAt: number
   updatedAt: number
 }

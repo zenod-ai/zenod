@@ -90,14 +90,19 @@ export class IngestQueue {
 
     try {
       const file = await client.getFile(job.driveFileId);
-      const sourceLink = file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
+      const cached = this.store.cachedPayload(job.id);
+      const sourceLink = cached?.sourceLink ?? file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`;
       console.log(`[ingest] ${job.id} start: ${file.name} (${file.mimeType})`);
 
       this.store.update(job.id, { status: "downloading", step: `Downloading ${file.name}`, progress: 0 });
 
       let body: string;
       let transcribedBy: string | undefined;
-      if (isAudioMimeType(file.mimeType)) {
+      if (cached) {
+        body = cached.body;
+        transcribedBy = cached.provider ?? undefined;
+        console.log(`[ingest] ${job.id} using cached transcript for ${file.name} (${body.length} chars)`);
+      } else if (isAudioMimeType(file.mimeType)) {
         const data = await client.download(file.id);
         this.store.update(job.id, { status: "transcribing", step: `Transcribing ${file.name}`, progress: 0 });
         const result = await transcribeAudio(data, file.name, {
@@ -111,11 +116,19 @@ export class IngestQueue {
         if (!result.success) throw new Error(`transcription failed: ${result.error}`);
         body = result.transcript!;
         transcribedBy = result.provider;
+        this.store.update(job.id, {
+          cachedBody: body,
+          cachedProvider: transcribedBy ?? null,
+          cachedSourceLink: sourceLink,
+          progress: 100,
+        });
         console.log(`[ingest] ${job.id} transcribed ${file.name} via ${transcribedBy} (${body.length} chars)`);
       } else if (GOOGLE_DOC_MIMES.has(file.mimeType)) {
         body = await client.exportText(file.id);
+        this.store.update(job.id, { cachedBody: body, cachedProvider: null, cachedSourceLink: sourceLink });
       } else if (TEXT_MIME_PREFIXES.some((p) => file.mimeType.startsWith(p)) || TEXT_MIME_EXACT.has(file.mimeType)) {
         body = (await client.download(file.id)).toString("utf8");
+        this.store.update(job.id, { cachedBody: body, cachedProvider: null, cachedSourceLink: sourceLink });
       } else {
         throw new Error(`unsupported file type ${file.mimeType} — audio, text, and Google Docs are supported`);
       }
@@ -126,7 +139,11 @@ export class IngestQueue {
         ...(transcribedBy ? [`Transcribed by ${transcribedBy}.`] : []),
       ].join("\n");
 
-      this.store.update(job.id, { status: "filing", step: `Filing ${file.name}`, progress: 100 });
+      this.store.update(job.id, {
+        status: "filing",
+        step: cached ? `Filing cached transcript for ${file.name}` : `Filing ${file.name}`,
+        progress: 100,
+      });
       const engine = await this.getEngine();
       const stored = await engine.store({
         content: `${header}\n\n${body}`,

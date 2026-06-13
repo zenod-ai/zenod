@@ -109,7 +109,10 @@ function JobRow({
       ) : job.error ? (
         <p className="text-xs text-destructive">{job.error}</p>
       ) : job.step ? (
-        <p className="text-xs text-muted-foreground">{job.step}</p>
+        <p className="text-xs text-muted-foreground">
+          {job.step}
+          {job.cached ? " · transcript cached" : ""}
+        </p>
       ) : null}
 
       {(job.status === "error" || job.status === "interrupted") && (

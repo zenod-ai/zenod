@@ -39,6 +39,7 @@ export interface IngestJob {
   pages: string[];
   commitSha: string | null;
   archived: boolean;
+  cached: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -56,6 +57,9 @@ interface Row {
   pages: string | null;
   commit_sha: string | null;
   archived: number;
+  cached_body: string | null;
+  cached_provider: string | null;
+  cached_source_link: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -74,9 +78,16 @@ function rowToJob(row: Row): IngestJob {
     pages: JSON.parse(row.pages || "[]") as string[],
     commitSha: row.commit_sha,
     archived: row.archived === 1,
+    cached: row.cached_body !== null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+export interface CachedIngestPayload {
+  body: string;
+  provider: string | null;
+  sourceLink: string | null;
 }
 
 export interface JobPatch {
@@ -88,6 +99,9 @@ export interface JobPatch {
   pages?: string[];
   commitSha?: string | null;
   archived?: boolean;
+  cachedBody?: string | null;
+  cachedProvider?: string | null;
+  cachedSourceLink?: string | null;
 }
 
 export class IngestStore {
@@ -110,11 +124,15 @@ export class IngestStore {
         pages TEXT NOT NULL DEFAULT '[]',
         commit_sha TEXT,
         archived INTEGER NOT NULL DEFAULT 0,
+        cached_body TEXT,
+        cached_provider TEXT,
+        cached_source_link TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS ingest_jobs_status ON ingest_jobs(status, created_at);
     `);
+    this.migrate();
     // A restart killed any in-flight whisper process — surface those jobs as
     // interrupted (not stuck "running") so the user can retry them.
     const stmt = this.db.prepare(
@@ -122,6 +140,20 @@ export class IngestStore {
        WHERE status IN (${IN_FLIGHT_STATES.map(() => "?").join(",")})`,
     );
     stmt.run(now(), ...IN_FLIGHT_STATES);
+  }
+
+  private migrate(): void {
+    for (const statement of [
+      `ALTER TABLE ingest_jobs ADD COLUMN cached_body TEXT`,
+      `ALTER TABLE ingest_jobs ADD COLUMN cached_provider TEXT`,
+      `ALTER TABLE ingest_jobs ADD COLUMN cached_source_link TEXT`,
+    ]) {
+      try {
+        this.db.exec(statement);
+      } catch {
+        // Column already exists.
+      }
+    }
   }
 
   enqueue(driveFileId: string, fileName: string, hints: string[] = [], now: number = Date.now()): IngestJob {
@@ -166,6 +198,18 @@ export class IngestStore {
     return rows.map(rowToJob);
   }
 
+  cachedPayload(id: string): CachedIngestPayload | null {
+    const row = this.db
+      .prepare(`SELECT cached_body, cached_provider, cached_source_link FROM ingest_jobs WHERE id=?`)
+      .get(id) as Pick<Row, "cached_body" | "cached_provider" | "cached_source_link"> | undefined;
+    if (!row?.cached_body) return null;
+    return {
+      body: row.cached_body,
+      provider: row.cached_provider,
+      sourceLink: row.cached_source_link,
+    };
+  }
+
   update(id: string, patch: JobPatch, now: number = Date.now()): void {
     const sets: string[] = [];
     const vals: unknown[] = [];
@@ -181,6 +225,9 @@ export class IngestStore {
     if (patch.pages !== undefined) push("pages", JSON.stringify(patch.pages));
     if (patch.commitSha !== undefined) push("commit_sha", patch.commitSha);
     if (patch.archived !== undefined) push("archived", patch.archived ? 1 : 0);
+    if (patch.cachedBody !== undefined) push("cached_body", patch.cachedBody);
+    if (patch.cachedProvider !== undefined) push("cached_provider", patch.cachedProvider);
+    if (patch.cachedSourceLink !== undefined) push("cached_source_link", patch.cachedSourceLink);
     if (sets.length === 0) return;
     push("updated_at", now);
     vals.push(id);
@@ -193,7 +240,7 @@ export class IngestStore {
     if (!job) return null;
     this.update(
       id,
-      { status: "queued", progress: 0, step: null, error: null },
+      { status: "queued", progress: job.cached ? 100 : 0, step: null, error: null },
       now,
     );
     return this.get(id);

@@ -221,6 +221,7 @@ describe("drive tools + API", () => {
     expect(done?.evidenceRef).toBe("Log/2026-06-12.md#^e-abc123");
     expect(done?.pages).toEqual(["Areas/Insurance.md"]);
     expect(done?.archived).toBe(true);
+    expect(done?.cached).toBe(true);
     expect(moves).toEqual(["archive-folder-1"]); // moved into the auto-created Archive/
     expect(stored).toHaveLength(1);
     expect(stored[0]!.source).toBe("drive");
@@ -262,6 +263,54 @@ describe("drive tools + API", () => {
 
     expect(stored).toHaveLength(1);
     expect(stored[0]!.content).toContain("Transcribed by groq whisper-large-v3-turbo.");
+  });
+
+  it("retries filing from the cached transcript without transcribing again", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "first cached transcript";
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
+
+    const stored: StoreInput[] = [];
+    let failStore = true;
+    const fakeEngine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        if (failStore) {
+          failStore = false;
+          throw new Error("temporary filing failure");
+        }
+        return {
+          evidenceRef: "Log/2026-06-12.md#^e-abc123",
+          pagesTouched: ["Areas/Insurance.md"],
+          commitSha: "0".repeat(40),
+          githubUrls: [],
+        };
+      },
+    } as unknown as BrainEngine;
+
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
+
+    await tools.ingestDriveFile("file-1", ["insurance"]);
+    const failed = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "error",
+    );
+    expect(failed?.cached).toBe(true);
+    expect(failed?.error).toBe("temporary filing failure");
+
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "second transcript should not be used";
+    queue.retry(failed!.id);
+    const done = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "done",
+    );
+
+    expect(done?.cached).toBe(true);
+    expect(stored).toHaveLength(2);
+    expect(stored[1]!.content).toContain("first cached transcript");
+    expect(stored[1]!.content).not.toContain("second transcript should not be used");
   });
 
   it("masks the new secrets and exposes drive status", async () => {
