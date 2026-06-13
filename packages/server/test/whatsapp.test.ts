@@ -504,78 +504,51 @@ describe("WhatsAppGateway", () => {
     }
   });
 
-  it("acks a voice note immediately after durable storage, then sends a digest report", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-digest-"));
+  it("acks a voice note immediately, then acts on the transcript via the tasking loop (voice ≡ text)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-voice-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
     const stored: StoreInput[] = [];
-    const gate = deferred<StoreResult>();
-    const fakeDigestEngine = {
+    const calls: string[] = [];
+    const fakeVoiceEngine = {
+      ...fakeEngine(calls),
       async store(input: StoreInput) {
         stored.push(input);
-        return gate.promise;
+        return {
+          evidenceRef: "Log/2026-06-13.md#^e-wa1",
+          pagesTouched: ["Projects/Zenod.md"],
+          commitSha: "1".repeat(40),
+          githubUrls: [],
+        };
       },
     } as unknown as BrainEngine;
     const gateway = new WhatsAppGateway({
       dataDir: join(dir, "whatsapp"),
       settings: runtime.settings,
       store: runtime.whatsappStore,
-      getEngine: async () => fakeDigestEngine,
+      getEngine: async () => fakeVoiceEngine,
       socketFactory: async () => socket,
     });
 
     try {
-      process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "renew the travel insurance\nask Alex about the claim";
+      process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "queue 51 and 53";
       runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
       await gateway.pair();
 
       await gateway.handleEvent(audioEvent() as never);
 
-      expect(socket.sent).toHaveLength(1);
+      // Immediate ack.
       expect(socket.sent[0]!.text).toContain("Got this voice note");
-      expect(socket.sent[0]!.text).toContain("Digest job: wa-voice_1");
-      expect(runtime.whatsappStore.diagnostics().processingCounts.digest_queued).toBe(1);
+      // Then it ACTS on the transcript through the same tasking loop as text.
+      await waitFor(() => socket.sent.length, (count) => count === 2);
+      expect(calls.some((c) => c.includes("queue 51 and 53"))).toBe(true);
+      expect(socket.sent[1]!.text).toContain("queue 51 and 53");
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(1);
+      // Provenance: the transcript is still captured as evidence (background).
       await waitFor(() => stored.length, (count) => count === 1);
-      expect(socket.sent).toHaveLength(1);
       expect(stored[0]!.source).toBe("whatsapp");
       expect(stored[0]!.verbatim).toBe(true);
-      expect(stored[0]!.content).toContain("renew the travel insurance");
-
-      gate.resolve({
-        evidenceRef: "Log/2026-06-13.md#^e-wa1",
-        pagesTouched: ["Projects/Zenod.md"],
-        commitSha: "1".repeat(40),
-        githubUrls: [],
-        backlog: {
-          candidates: [
-            {
-              title: "Renew travel insurance",
-              type: "action",
-              owner: "agent",
-              priority: "P1",
-              status: "ready",
-              source_refs: [{ path: "Log/2026-06-13.md#^e-wa1", githubUrl: "" }],
-              summary: "Renew the travel insurance.",
-              context: "The voice note asks for renewal.",
-              acceptance_criteria: ["Renewal next step is captured."],
-              dependencies: [],
-              open_questions: [],
-              difficulty: "medium",
-              suggested_labels: ["backlog"],
-            },
-          ],
-          written: [],
-          skipped: [{ reason: "proactive digestion is proposal-only; write not requested" }],
-          source_refs: [{ path: "Log/2026-06-13.md#^e-wa1", githubUrl: "" }],
-        },
-      });
-
-      await waitFor(() => socket.sent.length, (count) => count === 2);
-      expect(socket.sent[1]!.text).toContain("Digest complete");
-      expect(socket.sent[1]!.text).toContain("evidence Log/2026-06-13.md#^e-wa1");
-      expect(socket.sent[1]!.text).toContain("Backlog: 0 written, 1 proposed, 1 skipped.");
-      expect(socket.sent[1]!.text).toContain("proposed [P1/action/ready] Renew travel insurance");
-      expect(runtime.whatsappStore.diagnostics().processingCounts.digested).toBe(1);
+      expect(stored[0]!.content).toContain("queue 51 and 53");
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
       runtime.close();
@@ -583,8 +556,8 @@ describe("WhatsAppGateway", () => {
     }
   });
 
-  it("reports a recoverable voice-note digest failure after the immediate ack", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-digest-failure-"));
+  it("replies clearly when a voice note can't be transcribed (never silent)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-voice-failure-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
     const gateway = new WhatsAppGateway({
@@ -603,10 +576,8 @@ describe("WhatsAppGateway", () => {
 
       expect(socket.sent[0]!.text).toContain("Got this voice note");
       await waitFor(() => socket.sent.length, (count) => count === 2);
-      expect(socket.sent[1]!.text).toContain("Digest failed");
       expect(socket.sent[1]!.text).toContain("could not download");
-      expect(socket.sent[1]!.text).toContain("Open questions: retry");
-      expect(runtime.whatsappStore.diagnostics().processingCounts.digest_failed).toBe(1);
+      expect(runtime.whatsappStore.diagnostics().processingCounts.failed).toBe(1);
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });
@@ -617,7 +588,9 @@ describe("WhatsAppGateway", () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-digest-status-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
+    const calls: string[] = [];
     const fakeDigestEngine = {
+      ...fakeEngine(calls),
       async store() {
         return {
           evidenceRef: "Log/2026-06-13.md#^e-wa-status",
@@ -625,9 +598,6 @@ describe("WhatsAppGateway", () => {
           commitSha: "2".repeat(40),
           githubUrls: [],
         };
-      },
-      async chat() {
-        throw new Error("status questions should not call the LLM chat loop");
       },
     } as unknown as BrainEngine;
     const gateway = new WhatsAppGateway({
@@ -650,15 +620,13 @@ describe("WhatsAppGateway", () => {
         ...(eventFromBaileysMessage(
           textMessage({
             key: { id: "status_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
-            message: { conversation: "what happened to my voice note digest?" },
+            message: { conversation: "what happened to my voice note?" },
           }),
         ) as NonNullable<ReturnType<typeof eventFromBaileysMessage>>),
       } as never);
 
       expect(socket.sent).toHaveLength(3);
-      expect(socket.sent[2]!.text).toContain("Latest voice-note digest status: digested");
-      expect(socket.sent[2]!.text).toContain("Digest complete");
-      expect(socket.sent[2]!.text).toContain("Log/2026-06-13.md#^e-wa-status");
+      expect(socket.sent[2]!.text).toContain("Latest voice-note digest status:");
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBe(1);
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
@@ -710,11 +678,14 @@ describe("WhatsAppGateway", () => {
         ) as NonNullable<ReturnType<typeof eventFromBaileysMessage>>),
       } as never);
 
-      expect(calls).toEqual([`34611111111:${taskingText}`]);
+      // The voice note now ALSO acts via the tasking loop, so there are two
+      // handleTasking calls: the voice transcript, then the text instruction.
+      expect(calls).toHaveLength(2);
+      expect(calls).toContain(`34611111111:${taskingText}`);
       expect(socket.sent).toHaveLength(3);
       expect(socket.sent[2]!.text).toBe(`Re: ${taskingText}`);
       expect(socket.sent[2]!.text).not.toContain("Latest voice-note digest status");
-      expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(1);
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(2);
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBeUndefined();
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;

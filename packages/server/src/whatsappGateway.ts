@@ -692,8 +692,8 @@ export class WhatsAppGateway {
     if (event.hasMedia) {
       this.options.store.markMessageStatus(event.messageId, "digest_queued");
       await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
-      void this.processDigest(event).catch((err: unknown) => {
-        console.error("[whatsapp] digest worker failed:", err);
+      void this.processVoiceNote(event).catch((err: unknown) => {
+        console.error("[whatsapp] voice note worker failed:", err);
       });
       return;
     }
@@ -922,40 +922,60 @@ export class WhatsAppGateway {
       .slice(0, 6);
   }
 
-  private async processDigest(event: WhatsAppInboundEvent): Promise<void> {
+  // A transcribed voice note IS a prompt — there is no behavioral difference
+  // from typing (#51). So after transcription we run it through the SAME tasking
+  // loop as text (handleTasking), so it can ACT (approve_queue, create issues,
+  // answer…). Evidence capture still happens, but as a non-blocking background
+  // side-effect for provenance — it never gates or slows the action/reply.
+  // Artifact-ness is a property of content, not of input type.
+  private async processVoiceNote(event: WhatsAppInboundEvent): Promise<void> {
     await this.setTyping(event, true);
-    this.options.store.markMessageStatus(event.messageId, "digesting");
+    this.options.store.markMessageStatus(event.messageId, "processing");
     try {
       const input = await this.engineInputForEvent(event, this.options.settings.whatsappSettings());
       if (input.kind === "fixed-reply") {
-        this.options.store.markMessageStatus(event.messageId, "digest_failed");
-        await this.sendReply(event, this.formatDigestReport({ event, error: input.text }), "digest_failed");
+        this.options.store.markMessageStatus(event.messageId, "failed");
+        await this.sendReply(event, input.text, "unsupported_media");
         return;
       }
 
       const engine = await this.options.getEngine();
-      const stored = await engine.store({
-        content: [
-          `WhatsApp ${event.mediaType ?? "media"} from ${event.senderName || event.senderId}.`,
-          `Source message: ${event.messageId}`,
-          `Source chat: ${event.chatId}`,
-          `Received timestamp: ${String(event.timestamp ?? "unknown")}`,
-          "",
-          input.text,
-        ].join("\n"),
-        source: "whatsapp",
-        verbatim: true,
-      });
-      this.options.store.markMessageStatus(event.messageId, "digested");
-      await this.sendReply(
-        event,
-        this.formatDigestReport({ event, stored, summary: this.summarizeForReport(input.text) }),
-        "digest_report_sent",
-      );
+      const conversationKey = normalizeWhatsAppIdentifier(event.senderId) || event.senderId;
+
+      // Provenance (best-effort, non-blocking): capture the transcript as
+      // evidence so substantive notes remain artifacts. Never blocks the action.
+      void engine
+        .store({
+          content: [
+            `WhatsApp ${event.mediaType ?? "media"} from ${event.senderName || event.senderId}.`,
+            `Source message: ${event.messageId}`,
+            `Source chat: ${event.chatId}`,
+            `Received timestamp: ${String(event.timestamp ?? "unknown")}`,
+            "",
+            input.text,
+          ].join("\n"),
+          source: "whatsapp",
+          verbatim: true,
+        })
+        .then(() => this.options.store.markMessageStatus(event.messageId, "digested"))
+        .catch((err: unknown) => console.error("[whatsapp] evidence capture failed:", err));
+
+      // Voice ≡ text: the transcript is a prompt — act on it.
+      const reply = await engine.handleTasking({ text: input.text, surface: "whatsapp", conversationKey });
+      this.options.store.markMessageStatus(event.messageId, "replied");
+      await this.sendReply(event, reply.text, "sent");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.options.store.markMessageStatus(event.messageId, "digest_failed");
-      await this.sendReply(event, this.formatDigestReport({ event, error: message }), "digest_failed");
+      this.options.store.markMessageStatus(event.messageId, "failed");
+      const providerIssue =
+        /quota|billing|rate.?limit|insufficient|api key|unauthor|401|429|overloaded|model provider|not configured/i.test(
+          message,
+        );
+      const notice = providerIssue
+        ? "⚠️ I got your voice note, but the AI model is unavailable right now (out of quota, rate-limited, or misconfigured). Nothing was lost — please try again once that's sorted."
+        : "⚠️ I got your voice note, but hit an error while processing it. It's been logged — please try again in a moment.";
+      await this.sendReply(event, notice, "error").catch(() => {});
+      console.error(`[whatsapp] voice note processing failed for ${event.messageId}: ${message}`);
     } finally {
       await this.setTyping(event, false);
     }
