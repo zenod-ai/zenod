@@ -353,11 +353,19 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // GitHub redirects the user's browser here after creating the app
   app.get("/api/github/app/callback", async (c) => {
     const code = c.req.query("code");
-    if (!code) return c.json({ error: "missing code" }, 400);
-    const application = await exchangeManifestCode(code, settings);
-    runtime.invalidate();
-    // continue straight into the install step (repo picker on GitHub's side)
-    return c.redirect(`https://github.com/apps/${application.slug}/installations/new`);
+    if (!code) return c.redirect("/?github=error&reason=missing_code");
+    try {
+      const application = await exchangeManifestCode(code, settings);
+      runtime.invalidate();
+      // continue straight into the install step (repo picker on GitHub's side)
+      return c.redirect(`https://github.com/apps/${application.slug}/installations/new`);
+    } catch (err) {
+      // Never bare-500 a connection flow — log it and bounce back to the UI
+      // with a readable reason (e.g. an expired/used manifest code).
+      const reason = err instanceof Error ? err.message : "manifest exchange failed";
+      console.error("[github] manifest callback failed:", reason);
+      return c.redirect(`/?github=error&reason=${encodeURIComponent(reason.slice(0, 200))}`);
+    }
   });
 
   // ...and here after choosing which repos to grant
