@@ -109,6 +109,15 @@ class FakeLlm implements BrainLlm {
       const text = await taskTools.serviceBacklog("ready");
       return { text, readPaths: [] };
     }
+    if (taskTools && input.question.startsWith("APPROVEQUEUE:")) {
+      const numbers = input.question
+        .slice("APPROVEQUEUE:".length)
+        .trim()
+        .split(/\s+/)
+        .map((n) => Number(n));
+      const text = await taskTools.approveQueue({ repo: "zenod-ai/fixture", issueNumbers: numbers });
+      return { text, readPaths: [] };
+    }
     if (taskTools && input.question.startsWith("EXEC:")) {
       const text = await taskTools.executeTask(input.question.slice(5).trim(), "approved plan");
       return { text, readPaths: [] };
@@ -585,6 +594,10 @@ describe("BrainEngine", () => {
           calls.push(`service:${query}`);
           return "Eligible set: #25";
         },
+        async approveQueue(input) {
+          calls.push(`approve:${input.issueNumbers.join(",")}`);
+          return `Queued ${input.issueNumbers.map((n) => `#${n}`).join(", ")}`;
+        },
       },
     });
 
@@ -624,6 +637,10 @@ describe("BrainEngine", () => {
         async serviceBacklog() {
           return "";
         },
+        async approveQueue(input) {
+          calls.push(`approve:${input.issueNumbers.join(",")}`);
+          return "queued";
+        },
       },
     });
 
@@ -633,6 +650,40 @@ describe("BrainEngine", () => {
     expect(issue.actions[0]?.input.labels).toEqual(["owner:agent", "status:proposed"]);
     expect(label.actions[0]?.input.labels).toEqual(["status:proposed", "owner:agent"]);
     expect(calls).toEqual(["create:owner:agent,status:proposed", "label:status:proposed,owner:agent"]);
+  });
+
+  it("approveQueue is the one path that promotes to queued (human approval relayed by chat)", async () => {
+    const calls: string[] = [];
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        async createIssue() {
+          return "Created issue #1";
+        },
+        async labelIssue() {
+          return "labeled";
+        },
+        async queryBacklog() {
+          return "";
+        },
+        async serviceBacklog() {
+          return "";
+        },
+        async approveQueue(input) {
+          calls.push(`approve:${input.repo}:${input.issueNumbers.join(",")}`);
+          return `Queued ${input.issueNumbers.map((n) => `#${n}`).join(", ")}`;
+        },
+      },
+    });
+
+    const res = await e.handleTasking({ text: "APPROVEQUEUE: 51 53", surface: "web", conversationKey: "same" });
+
+    expect(res.actions.map((action) => action.tool)).toEqual(["approveQueue"]);
+    expect(res.actions[0]?.input.issueNumbers).toEqual([51, 53]);
+    expect(calls).toEqual(["approve:zenod-ai/fixture:51,53"]);
   });
 
   it("chat persists the conversation window and can trigger a store", async () => {

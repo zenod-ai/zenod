@@ -100,6 +100,12 @@ export interface ExternalTaskingTools {
   labelIssue(input: { repo?: string; issueNumber: number; labels: string[] }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
+  /**
+   * Promote proposed issues to status:queued. The ONLY path allowed to set
+   * queued — invoked solely on explicit human approval relayed through chat
+   * (#58). createIssue/labelIssue stay gated and can never queue.
+   */
+  approveQueue(input: { repo?: string; issueNumbers: number[] }): Promise<string>;
 }
 
 export interface SourceRef {

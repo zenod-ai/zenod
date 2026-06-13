@@ -432,6 +432,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
         recordAction("serviceBacklog", query ? { query } : {}, result);
         return result;
       },
+      // The ONLY path that sets status:queued — promotes proposed→queued on
+      // explicit human approval relayed through chat (#58). No label
+      // normalization (unlike createIssue/labelIssue, which can never queue);
+      // promotion IS the approval.
+      approveQueue: async (input: { repo: string; issueNumbers: number[] }) => {
+        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        const result = options.taskingTools
+          ? await options.taskingTools.approveQueue({
+              issueNumbers: normalized.issueNumbers,
+              ...(normalized.repo ? { repo: normalized.repo } : {}),
+            })
+          : noExternalTool("approveQueue");
+        recordAction("approveQueue", normalized, result);
+        return result;
+      },
     };
   }
 

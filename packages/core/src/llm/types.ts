@@ -163,6 +163,7 @@ export interface VaultTaskTools {
   labelIssue(input: { repo: string; issueNumber: number; labels: string[] }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
+  approveQueue(input: { repo: string; issueNumbers: number[] }): Promise<string>;
 }
 
 /**
