@@ -85,6 +85,10 @@ async function notify(text) {
   }
 }
 
+function pickupNotification(central) {
+  return `🤖 Codex working on #${central.number} — ${central.title} (${central.target})`;
+}
+
 // ---- central backlog (obsidian-brain) ----
 
 // owner:agent central issues with their status + target repo.
@@ -483,7 +487,7 @@ async function scan(reason) {
           setCentralStatus(c.number, "status:queued", "status:running");
           state.bridges[c.number] = { target: c.target, exec, mirrored: null };
           launched++;
-          await notify(`🚀 Queued Codex on #${c.number} ${c.title} (working ${c.target}). I'll message you when it lands.`);
+          await notify(pickupNotification(c));
         }
       }
     }
@@ -649,6 +653,7 @@ export {
   reviewHeldByFanInBatch,
   updateFanInBatches,
   latestComment,
+  pickupNotification,
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

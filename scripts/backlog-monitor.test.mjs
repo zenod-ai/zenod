@@ -10,12 +10,20 @@ import {
   ensureFanInBatch,
   integrationPrompt,
   normalizeState,
+  pickupNotification,
   reviewHeldByFanInBatch,
   updateFanInBatches,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
   assert.equal(batchKey([52, 41, 7]), "7-41-52");
+});
+
+test("pickup notification says Codex is working with issue title and repo", () => {
+  assert.equal(
+    pickupNotification({ number: 56, title: "Work-started visibility", target: "zenod-ai/zenod" }),
+    "🤖 Codex working on #56 — Work-started visibility (zenod-ai/zenod)",
+  );
 });
 
 test("ensureFanInBatch records only multi-issue launches", () => {
