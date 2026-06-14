@@ -1,6 +1,6 @@
 # WhatsApp Connector Notes
 
-Status: v1 in progress, paired through Baileys / WhatsApp Web.
+Status: v1 integrated, paired through Baileys / WhatsApp Web.
 
 ## Shape In The Repo
 
@@ -51,7 +51,11 @@ settings, the server SQLite data directory, and `BrainEngine`.
 - Group chats are off unless explicitly enabled.
 - `Accept every sender` bypasses the allowlist but should be treated as an
   admin-only/self-hosted convenience.
-- Voice notes are intended to reuse the local `whisper.cpp` transcription path.
+- Voice notes download through Baileys, transcribe through the shared transcription path
+  (`whisper.cpp` locally by default, with Groq/OpenAI when configured), then enter
+  the same tasking/chat loop as typed text.
+- Filing/digestion for voice notes is designed as a background/provenance path;
+  the immediate interaction should not wait on a slow vault write.
 - Images/documents are metadata/caption-first for now; full attachment filing is
   still follow-up work.
 - The status card now shows safe diagnostics: last Baileys upsert, last ignored
@@ -70,6 +74,17 @@ settings, the server SQLite data directory, and `BrainEngine`.
 - If pairing shows `515`, that is not by itself fatal. It is the expected
   restart-required step after QR scan; Zenod should save credentials and
   reconnect.
+
+## Debugging a past interaction
+
+To reconstruct exactly what happened during a single WhatsApp interaction
+(which message, which LLM calls, how long each took, why a reply was slow), see
+[`SESSION-LOG-FORENSICS.md`](./SESSION-LOG-FORENSICS.md). Short version:
+`docker logs` is nearly silent on the engine path and is wiped on every deploy —
+the real timeline comes from cross-referencing `/data/whatsapp/whatsapp.sqlite`
+(inbound `received_at` → outbound `created_at` = user-visible latency) with
+`/data/usage.sqlite`'s `llm_usage` ledger (per-call `operation`/`ts` shows where
+the time went). That doc also lists the logging gaps worth closing.
 
 ## Tests
 

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
@@ -174,6 +174,12 @@ class FakeLlm implements BrainLlm {
     if (taskTools && input.question.startsWith("EXEC:")) {
       const text = await taskTools.executeTask(input.question.slice(5).trim(), "approved plan");
       return { text, readPaths: [] };
+    }
+    if (taskTools && input.question.startsWith("CAPTURE:")) {
+      const result = await taskTools.captureNote(input.question.slice("CAPTURE:".length).trim());
+      // A real model would see the queued tool result and acknowledge without
+      // claiming a commit; mirror that here.
+      return { text: result.queued ? "Got it — capturing that in the background." : `Filed: ${result.evidenceRef}`, readPaths: [] };
     }
     await tools.searchVault(input.question);
     const note = await tools.readNote("Areas/Insurance.md");
@@ -730,6 +736,29 @@ describe("BrainEngine", () => {
       "query:open issues",
       "service:ready",
     ]);
+  });
+
+  it("captureNote files in the background — never blocks the tasking reply", async () => {
+    const e = engine();
+    const memoryCommits = async () =>
+      (await simpleGit(repo.path).log()).all.filter((c) => c.message.startsWith("memory:")).length;
+    expect(await memoryCommits()).toBe(0);
+
+    const reply = await e.handleTasking({
+      text: "CAPTURE: I just got travel insurance with Axa, policy ends March 2027",
+      surface: "whatsapp",
+      conversationKey: "cap",
+    });
+
+    // The reply comes back queued — the librarian pipeline did NOT run on the
+    // hot path, so nothing is committed yet and the reply claims no commit.
+    const capture = reply.actions.find((action) => action.tool === "capture");
+    expect(capture?.result).toMatch(/^Queued:/);
+    expect(reply.text).not.toMatch(/Filed:|Commit:/);
+
+    // ...but the note is still filed, just in the background.
+    await vi.waitFor(async () => expect(await memoryCommits()).toBe(1), { timeout: 5000, interval: 50 });
+    expect((await engine().lint()).errors).toEqual([]);
   });
 
   it("corrects a fabricated 'Created issue #N' when create_issue actually failed", async () => {

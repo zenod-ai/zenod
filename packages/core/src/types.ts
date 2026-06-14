@@ -43,6 +43,13 @@ export interface StoreResult {
    * This is advisory: candidates are proposed unless explicitly written.
    */
   backlog?: BacklogDigestResult;
+  /**
+   * Set when the librarian pipeline was kicked off in the background (off the
+   * hot reply line) rather than awaited. The evidenceRef/pagesTouched/commitSha
+   * fields are placeholders in this case — the real filing completes later and
+   * self-reports to the logs. Callers must not narrate the note as committed.
+   */
+  queued?: boolean;
 }
 
 export type TokenCostOperation = "classify" | "compose" | "ask" | "chat" | "tasking" | "work";

@@ -454,15 +454,28 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
     return {
       captureNote: async (content: string, hints?: string[]) => {
-        const result = await store({ content, source: surface, ...(hints?.length ? { hints } : {}) });
+        // The librarian pipeline (classify → compose → digest → commit) must
+        // never sit on the hot reply line: on a slow model it adds minutes
+        // (a real WhatsApp turn took ~4 min, ~2:20 of it filing — see
+        // docs/SESSION-LOG-FORENSICS.md). Kick it off in the background through
+        // the same write queue (so writes still serialize) and return at once;
+        // the reply confirms the note is *queued*, not committed. The filing
+        // self-reports to the logs when it lands.
+        void store({ content, source: surface, ...(hints?.length ? { hints } : {}) })
+          .then((result) =>
+            console.info(
+              `[librarian] background filing complete: ${result.evidenceRef}` +
+                (result.pagesTouched.length ? ` → ${result.pagesTouched.join(", ")}` : " → (inbox)") +
+                ` @ ${result.commitSha}`,
+            ),
+          )
+          .catch((err) => console.error(`[librarian] background filing failed: ${(err as Error).message}`));
         recordAction(
           "capture",
           { content, ...(hints?.length ? { hints } : {}) },
-          [`Filed: ${result.evidenceRef}`, ...(result.pagesTouched.length ? [`Pages: ${result.pagesTouched.join(", ")}`] : []), `Commit: ${result.commitSha}`].join(
-            "\n",
-          ),
+          "Queued: filing this note to the vault in the background (not yet committed).",
         );
-        return result;
+        return { evidenceRef: "(queued)", pagesTouched: [], commitSha: "(queued)", githubUrls: [], queued: true };
       },
       proposeTask: async (objective: string) => {
         const proposal = await work({ objective });
