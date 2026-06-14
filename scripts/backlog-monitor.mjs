@@ -185,6 +185,48 @@ function prUrlForExec(target, execNumber) {
   }
 }
 
+// Recover the execution issue number for a central ticket from its [central #N]
+// title — the bridge state is the fast path; this is the durable fallback when
+// the monitor was restarted and lost its in-memory map.
+function execForCentral(target, centralNumber) {
+  try {
+    const out = gh([
+      "issue", "list", "--repo", target, "--state", "all",
+      "--search", `[central #${centralNumber}] in:title`, "--json", "number,title", "--limit", "30",
+    ]);
+    const found = JSON.parse(out).find((i) => i.title.startsWith(`[central #${centralNumber}]`));
+    return found ? found.number : null;
+  } catch {
+    return null;
+  }
+}
+
+// PR merge readiness: open/merged state, CI rollup (pending/failed), mergeability.
+function prMergeReadiness(target, prNumber) {
+  try {
+    const out = gh(["pr", "view", String(prNumber), "--repo", target, "--json", "state,mergeable,statusCheckRollup"]);
+    const o = JSON.parse(out);
+    const checks = o.statusCheckRollup || [];
+    const norm = checks.map((c) => String(c.conclusion || c.state || c.status || "").toUpperCase());
+    const PENDING = new Set(["", "PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "WAITING", "REQUESTED", "ACTION_REQUIRED"]);
+    const FAILED = new Set(["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE", "STALE"]);
+    return {
+      state: o.state, // OPEN | MERGED | CLOSED
+      mergeable: o.mergeable, // MERGEABLE | CONFLICTING | UNKNOWN
+      pending: norm.some((s) => PENDING.has(s)),
+      failed: norm.some((s) => FAILED.has(s)),
+      checks: checks.length,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function prNumberFromUrl(url) {
+  const m = (url || "").match(/\/pull\/(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
 // ---- fan-in (#41), preserved for re-integration in the central model ----
 
 function latestComment(number, repo = REPO) {
@@ -451,6 +493,86 @@ async function scan(reason) {
         await notify(`⛔ #${c.number} ${c.title} — blocked, needs your decision${q ? `:\n${q}` : "."}`);
         bridge.mirrored = "blocked";
       }
+    }
+
+    // MERGE: the human approved the PR via Zenod (status:approved-merge). Zenod
+    // never merges — it relays the trigger; the controller (this monitor) merges
+    // the PR on GREEN CI, then marks the central ticket merged and closes it.
+    for (const c of issues) {
+      if (c.status !== "status:approved-merge") continue;
+      // Fast path: the bridge. Durable fallback: recover exec from the title.
+      let bridge = state.bridges[c.number];
+      if (!bridge) {
+        const exec = execForCentral(c.target, c.number);
+        if (exec) bridge = state.bridges[c.number] = { target: c.target, exec, mirrored: "needs-review" };
+      }
+      if (!bridge) {
+        log(`merge: no exec mapping for central #${c.number}`);
+        continue;
+      }
+      if (bridge.mirrored === "merged") continue;
+      const prUrl = prUrlForExec(bridge.target, bridge.exec);
+      const prNum = prNumberFromUrl(prUrl);
+      if (!prNum) {
+        log(`merge: no open PR for ${bridge.target}#${bridge.exec} (central #${c.number})`);
+        continue;
+      }
+      const r = prMergeReadiness(bridge.target, prNum);
+      if (!r) {
+        log(`merge: could not read PR ${prUrl}`);
+        continue;
+      }
+      const finalizeMerged = async () => {
+        setCentralStatus(c.number, "status:approved-merge", "status:merged");
+        try {
+          gh(["issue", "close", String(c.number), "--repo", BACKLOG]);
+        } catch {
+          // best-effort
+        }
+        bridge.mirrored = "merged";
+        await notify(`🎉 #${c.number} ${c.title} — merged: ${prUrl}`);
+      };
+      if (r.state === "MERGED") {
+        await finalizeMerged();
+        continue;
+      }
+      if (r.failed || r.mergeable === "CONFLICTING") {
+        if (!bridge.mergeBlockedNotified) {
+          bridge.mergeBlockedNotified = true;
+          await notify(`⚠️ #${c.number} ${c.title} — can't merge: ${r.mergeable === "CONFLICTING" ? "branch has conflicts" : "CI is failing"}. ${prUrl}`);
+        }
+        continue;
+      }
+      if (r.pending || r.mergeable === "UNKNOWN") {
+        if (!bridge.mergeWaitNotified) {
+          bridge.mergeWaitNotified = true;
+          await notify(`⏳ #${c.number} ${c.title} — approved; waiting on green CI before merge. ${prUrl}`);
+        }
+        continue;
+      }
+      // Green + mergeable -> merge now (squash). A failed branch-delete after a
+      // successful merge must not read as a merge failure, so re-check state.
+      let merged = false;
+      try {
+        // Fanout opens DRAFT PRs (humans review via the approve_merge gate); a
+        // draft can't be merged, so mark it ready at merge time. Idempotent.
+        try {
+          gh(["pr", "ready", String(prNum), "--repo", bridge.target]);
+        } catch {
+          // already ready
+        }
+        gh(["pr", "merge", String(prNum), "--repo", bridge.target, "--squash", "--delete-branch"]);
+        merged = true;
+      } catch (e) {
+        const after = prMergeReadiness(bridge.target, prNum);
+        if (after && after.state === "MERGED") merged = true;
+        else if (!bridge.mergeErrNotified) {
+          bridge.mergeErrNotified = true;
+          await notify(`⚠️ #${c.number} ${c.title} — merge failed: ${String(e.message).slice(0, 180)}. ${prUrl}`);
+          log(`merge failed for ${prUrl}: ${e.message}`);
+        }
+      }
+      if (merged) await finalizeMerged();
     }
 
     // Re-queued after a review/block -> let it run again.

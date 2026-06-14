@@ -10,6 +10,8 @@ import {
   normalizeLabelIssueLabels,
   STATUS_PROPOSED,
   STATUS_QUEUED,
+  STATUS_NEEDS_REVIEW,
+  STATUS_APPROVED_MERGE,
   SqliteStateStore,
   VaultRepo,
   type BrainEngine,
@@ -210,6 +212,26 @@ export class Runtime {
           queued.push(n);
         }
         return `Queued ${queued.map((n) => `#${n}`).join(", ")} — the monitor will pick them up.`;
+      },
+      // The only path that sets status:approved-merge — explicit human approval.
+      // Removes status:needs-review (404 fine if absent) and adds approved-merge.
+      // The controller (monitor) merges the PR on green CI and reports back.
+      approveMerge: async ({ repo, issueNumbers }) => {
+        const target = repo || defaultRepo();
+        if (!target) return "No GitHub repository is configured.";
+        const repoPath = encodeURIComponent(target).replace("%2F", "/");
+        const approved: number[] = [];
+        for (const n of issueNumbers) {
+          await githubJson(`/repos/${repoPath}/issues/${n}/labels/${encodeURIComponent(STATUS_NEEDS_REVIEW)}`, {
+            method: "DELETE",
+          }).catch(() => {});
+          await githubJson(`/repos/${repoPath}/issues/${n}/labels`, {
+            method: "POST",
+            body: JSON.stringify({ labels: [STATUS_APPROVED_MERGE] }),
+          });
+          approved.push(n);
+        }
+        return `Approved merge for ${approved.map((n) => `#${n}`).join(", ")} — the controller will merge on green CI and report back.`;
       },
     };
   }

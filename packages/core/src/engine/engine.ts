@@ -447,6 +447,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
         recordAction("approveQueue", normalized, result);
         return result;
       },
+      // The ONLY path that sets status:approved-merge — promotes
+      // needs-review→approved-merge on explicit human approval relayed through
+      // chat. Zenod never merges; this just trips the gate the controller
+      // (monitor) watches to merge the PR on green CI.
+      approveMerge: async (input: { repo: string; issueNumbers: number[] }) => {
+        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        const result = options.taskingTools
+          ? await options.taskingTools.approveMerge({
+              issueNumbers: normalized.issueNumbers,
+              ...(normalized.repo ? { repo: normalized.repo } : {}),
+            })
+          : noExternalTool("approveMerge");
+        recordAction("approveMerge", normalized, result);
+        return result;
+      },
     };
   }
 

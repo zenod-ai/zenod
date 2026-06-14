@@ -106,6 +106,14 @@ export interface ExternalTaskingTools {
    * (#58). createIssue/labelIssue stay gated and can never queue.
    */
   approveQueue(input: { repo?: string; issueNumbers: number[] }): Promise<string>;
+  /**
+   * Approve merge of the PR(s) produced for central tickets at
+   * status:needs-review — flips them to status:approved-merge so the controller
+   * (monitor) merges on green CI. The ONLY path allowed to set approved-merge;
+   * invoked solely on explicit human approval relayed through chat. Zenod never
+   * merges directly — it relays the trigger; the controller publishes.
+   */
+  approveMerge(input: { repo?: string; issueNumbers: number[] }): Promise<string>;
 }
 
 export interface SourceRef {

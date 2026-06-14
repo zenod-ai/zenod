@@ -164,6 +164,7 @@ export interface VaultTaskTools {
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
   approveQueue(input: { repo: string; issueNumbers: number[] }): Promise<string>;
+  approveMerge(input: { repo: string; issueNumbers: number[] }): Promise<string>;
 }
 
 /**
