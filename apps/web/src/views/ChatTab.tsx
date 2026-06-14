@@ -3,13 +3,16 @@ import {
   BrainIcon,
   CheckIcon,
   ExternalLinkIcon,
+  FileTextIcon,
   MicIcon,
   SendIcon,
   SquareIcon,
   Trash2Icon,
 } from "lucide-react"
-import ReactMarkdown from "react-markdown"
+import type { Element, Parent, Root, RootContent, Text } from "hast"
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { visit } from "unist-util-visit"
 
 import {
   api,
@@ -35,10 +38,118 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 
+const OBSIDIAN_LINK_RE = /(!?)\[\[([^[\]\n]+?)\]\]/g
+const SAFE_OBSIDIAN_URL_RE = /^obsidian:\/\/open\?path=[^"'<>]+(?:#[^"'<>]+)?$/
+
+type ObsidianLinkParts = {
+  display: string
+  href: string
+  embedded: boolean
+}
+
+function rehypeObsidianWikilinks() {
+  return (tree: Root) => {
+    visit(tree, "text", (node: Text, index, parent: Parent | undefined) => {
+      if (index === undefined || !parent || !node.value.includes("[["))
+        return
+      if (isInsideLiteralMarkdown(parent)) return
+
+      OBSIDIAN_LINK_RE.lastIndex = 0
+      const next: RootContent[] = []
+      let cursor = 0
+      let match: RegExpExecArray | null
+
+      while ((match = OBSIDIAN_LINK_RE.exec(node.value)) !== null) {
+        const [raw, embedMarker = "", body = ""] = match
+        const start = match.index
+        if (start > cursor) {
+          next.push({ type: "text", value: node.value.slice(cursor, start) })
+        }
+
+        const parsed = parseObsidianLink(body, embedMarker === "!")
+        if (parsed) next.push(obsidianLinkNode(parsed))
+        else next.push({ type: "text", value: raw })
+        cursor = start + raw.length
+      }
+
+      if (cursor < node.value.length) {
+        next.push({ type: "text", value: node.value.slice(cursor) })
+      }
+
+      parent.children.splice(index, 1, ...next)
+    })
+  }
+}
+
+function isInsideLiteralMarkdown(parent: Parent): boolean {
+  if (parent.type !== "element") return false
+  const tagName = (parent as Element).tagName
+  return ["a", "code", "kbd", "pre", "samp"].includes(tagName)
+}
+
+function parseObsidianLink(
+  body: string,
+  embedded: boolean
+): ObsidianLinkParts | null {
+  const [rawTarget = "", rawAlias] = body.split("|", 2)
+  const target = rawTarget.trim()
+  if (!target) return null
+
+  const display = (rawAlias?.trim() || targetDisplayName(target)).trim()
+  return {
+    display,
+    href: obsidianOpenUrl(target),
+    embedded,
+  }
+}
+
+function targetDisplayName(target: string): string {
+  const [path = "", subpath] = target.split("#", 2)
+  const name = (path.split("/").pop() || path).replace(/\.md$/i, "")
+  if (subpath) return `${name}#${subpath}`
+  return name
+}
+
+function obsidianOpenUrl(target: string): string {
+  const [rawPath = "", rawSubpath] = target.split("#", 2)
+  const path = rawPath.endsWith(".md") ? rawPath : `${rawPath}.md`
+  const url = `obsidian://open?path=${encodeURIComponent(path)}`
+  return rawSubpath ? `${url}#${encodeURIComponent(rawSubpath)}` : url
+}
+
+function obsidianLinkNode({
+  display,
+  href,
+  embedded,
+}: ObsidianLinkParts): Element {
+  return {
+    type: "element",
+    tagName: "a",
+    properties: {
+      href,
+      title: embedded
+        ? "Open embedded note in Obsidian"
+        : "Open note in Obsidian",
+      className: embedded
+        ? ["obsidian-link", "obsidian-link-embed"]
+        : ["obsidian-link"],
+      dataObsidianLink: "true",
+    },
+    children: [{ type: "text", value: display }],
+  }
+}
+
+function markdownUrlTransform(value: string): string {
+  if (SAFE_OBSIDIAN_URL_RE.test(value)) return value
+  return defaultUrlTransform(value)
+}
+
 function AssistantMarkdown({ text }: { text: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeObsidianWikilinks]}
+      urlTransform={markdownUrlTransform}
       components={{
         p: (props) => <p className="my-1.5 first:mt-0 last:mb-0" {...props} />,
         ul: (props) => <ul className="my-1.5 list-disc pl-5" {...props} />,
@@ -47,9 +158,29 @@ function AssistantMarkdown({ text }: { text: string }) {
         h1: (props) => <p className="mt-2 mb-1 font-semibold" {...props} />,
         h2: (props) => <p className="mt-2 mb-1 font-semibold" {...props} />,
         h3: (props) => <p className="mt-2 mb-1 font-semibold" {...props} />,
-        a: (props) => (
-          <a className="underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />
-        ),
+        a: ({ className, children, node, ...props }) => {
+          void node
+          return className?.split(" ").includes("obsidian-link") ? (
+            <a
+              className="inline-flex max-w-full items-baseline gap-1 align-baseline font-semibold text-sky-300 underline decoration-sky-300/60 underline-offset-3 transition-colors hover:text-sky-200 hover:decoration-sky-200"
+              target="_blank"
+              rel="noreferrer"
+              {...props}
+            >
+              <FileTextIcon className="relative top-0.5 size-3 shrink-0 text-sky-300/80" />
+              <span className="min-w-0 truncate">{children}</span>
+            </a>
+          ) : (
+            <a
+              className="underline underline-offset-2"
+              target="_blank"
+              rel="noreferrer"
+              {...props}
+            >
+              {children}
+            </a>
+          )
+        },
         code: (props) => (
           <code className="rounded bg-background/60 px-1 py-0.5 font-mono text-[0.85em]" {...props} />
         ),
