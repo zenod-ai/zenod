@@ -44,7 +44,7 @@ The lifecycle vocabulary is:
 
 ## Queueing and Testing Gate
 
-Issues become queued only through an explicit human readiness signal: a human applies `owner:agent` + `status:queued`. Agents, chat tasking tools, and digest/groom workers may read, search, digest, analyze, comment, and create or edit proposed tickets, but their GitHub issue mutation tools normalize work into `status:proposed` and must never apply `status:queued`. Mining backlog records alone does not make work runnable.
+Issues become queued only through an explicit human readiness signal: `approve_queue` promotes tickets to `owner:agent` + `status:queued`. Agents, chat tasking tools, and digest/groom workers may read, search, digest, analyze, comment, and create or edit proposed tickets, but their generic GitHub issue mutation tools normalize work into `status:proposed` and must never apply `status:queued`. Mining backlog records alone does not make work runnable.
 
 Action classes:
 

@@ -59,7 +59,16 @@ export {
 } from "./backlog.js";
 export { createEngine, conversationId, type EngineOptions } from "./engine/engine.js";
 export { appendEvidence, todayString, type EvidenceEntry } from "./engine/evidence.js";
-export { STATUS_PROPOSED, STATUS_QUEUED, STATUS_NEEDS_REVIEW, STATUS_APPROVED_MERGE, STATUS_MERGED, normalizeCreateIssueLabels, normalizeLabelIssueLabels } from "./taskingPolicy.js";
+export {
+  OWNER_AGENT,
+  STATUS_PROPOSED,
+  STATUS_QUEUED,
+  STATUS_NEEDS_REVIEW,
+  STATUS_APPROVED_MERGE,
+  STATUS_MERGED,
+  normalizeCreateIssueLabels,
+  normalizeLabelIssueLabels,
+} from "./taskingPolicy.js";
 export { SqliteStateStore } from "./state/sqlite.js";
 export {
   AiSdkBrainLlm,

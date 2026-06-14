@@ -6,6 +6,7 @@ import {
   cleanSlateVault,
   ensureSchemaV1,
   lintVault,
+  OWNER_AGENT,
   normalizeCreateIssueLabels,
   normalizeLabelIssueLabels,
   STATUS_PROPOSED,
@@ -197,7 +198,8 @@ export class Runtime {
       serviceBacklog: async (query?: string) =>
         ["Backlog service selection only; runner is tracked separately.", await queryBacklog(query)].join("\n"),
       // The only path that sets status:queued (#58) — explicit human approval.
-      // Removes status:proposed (404 is fine if absent) and adds status:queued.
+      // Removes status:proposed (404 is fine if absent) and adds the complete
+      // runnable label set consumed by the monitor.
       approveQueue: async ({ repo, issueNumbers }) => {
         const target = repo || defaultRepo();
         if (!target) return "No GitHub repository is configured.";
@@ -209,7 +211,7 @@ export class Runtime {
           }).catch(() => {});
           await githubJson(`/repos/${repoPath}/issues/${n}/labels`, {
             method: "POST",
-            body: JSON.stringify({ labels: [STATUS_QUEUED] }),
+            body: JSON.stringify({ labels: [OWNER_AGENT, STATUS_QUEUED] }),
           });
           queued.push(n);
         }
