@@ -7,6 +7,7 @@ import { basenameOf, isIndexFile, MEANING_FOLDERS, tierOf } from "./files.js";
 import { extractCitations, extractPageLinks, scanVault, type VaultSnapshot } from "./pages.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/;
 const REQUIRED_FIELDS = ["title", "type", "tags", "created", "updated", "summary"] as const;
 
 /**
@@ -80,6 +81,9 @@ function lintMeaningPage(
   if ("summary" in frontmatter && (typeof frontmatter.summary !== "string" || frontmatter.summary.trim() === "")) {
     errors.push({ path: file, rule: "frontmatter/field", message: "summary must be a non-empty one-line string" });
   }
+  if ("description" in frontmatter && (typeof frontmatter.description !== "string" || frontmatter.description.trim() === "")) {
+    errors.push({ path: file, rule: "frontmatter/field", message: "description must be a non-empty one-line string" });
+  }
   if ("type" in frontmatter && frontmatter.type !== expectedType) {
     errors.push({
       path: file,
@@ -94,6 +98,13 @@ function lintMeaningPage(
       if (typeof asString !== "string" || !DATE_RE.test(asString)) {
         errors.push({ path: file, rule: "frontmatter/field", message: `${field} must be a YYYY-MM-DD date` });
       }
+    }
+  }
+  if ("timestamp" in frontmatter) {
+    const value = frontmatter.timestamp;
+    const asString = value instanceof Date ? value.toISOString() : value;
+    if (typeof asString !== "string" || !ISO_DATETIME_RE.test(asString)) {
+      errors.push({ path: file, rule: "frontmatter/field", message: "timestamp must be an ISO 8601 datetime" });
     }
   }
 

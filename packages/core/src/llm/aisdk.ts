@@ -210,7 +210,7 @@ export class AiSdkBrainLlm implements BrainLlm {
       system: [
         "You are the librarian of a personal knowledge vault. Produce the COMPLETE new content of one meaning page, integrating a new piece of evidence.",
         "Hard rules (validated by code, not negotiable):",
-        "- YAML frontmatter with exactly these keys: title, type, tags, created, updated (YYYY-MM-DD), summary (one dense line written for a cold LLM reader).",
+        "- YAML frontmatter with exactly these keys: title, type, tags, created, updated (YYYY-MM-DD), summary (one dense line written for a cold LLM reader), description (same value as summary, for OKF consumers), timestamp (ISO 8601 datetime for updated at 00:00:00Z unless a better source time is known).",
         `- The 'type' field MUST be exactly: ${input.requiredType}`,
         `- 'tags' may only use this vocabulary: ${input.tagVocabulary.join(", ")}`,
         `- Every claim derived from the evidence must cite it inline: (${input.citation})`,
@@ -530,7 +530,7 @@ export class AiSdkBrainLlm implements BrainLlm {
             "MODE: EXECUTE. Carry out the approved plan below against the vault, using the write tools.",
             "Hard rules:",
             "- Log/ and _attachments/ are immutable evidence — never write, move, or delete there (tools will reject it).",
-            "- Meaning pages (Projects/, Areas/, Notes/) need valid frontmatter: title, type (project|area|note matching the folder), tags, created, updated, summary.",
+            "- Meaning pages (Projects/, Areas/, Notes/) need valid frontmatter: title, type (project|area|note matching the folder), tags, created, updated, summary. New pages should also include OKF-compatible description and timestamp fields.",
             "- When you move or rename a page, update wikilinks that point to it by full path.",
             "- Stay within the plan; skip a step (and say so) rather than improvising a different change.",
             "- The engine validates and commits when you finish — do not narrate git operations.",

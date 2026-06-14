@@ -18,12 +18,12 @@ A TypeScript library + thin CLI that, given a vault repo and a message, performs
 
 ## Vault schema v1 (the meta-schema, enforced in code)
 
-Maps the two tiers onto simple folders — the user-visible vault stays a normal Obsidian vault, plus `Areas/` and a machine config dir:
+Maps the two tiers onto simple folders — the user-visible vault stays a normal Obsidian vault and is also a strict Open Knowledge Format (OKF) profile. See [OKF-PROFILE.md](OKF-PROFILE.md).
 
 ```
 .brain/config.yml     schema_version: 1, tag vocabulary, controlled values
 AGENTS.md             human/LLM-readable doctrine (read first by every loop)
-Index.md              home note
+index.md              home note and OKF root index / progressive-disclosure entrypoint
 Inbox/                ONLY unresolved items (low-confidence filings awaiting the user)
 Log/YYYY-MM-DD.md     EVIDENCE — append-only daily files
 _attachments/<area>/  EVIDENCE — original documents/files
@@ -61,9 +61,12 @@ tags:       [from .brain/config.yml vocabulary only]
 created:    YYYY-MM-DD
 updated:    YYYY-MM-DD
 summary:    one line, written for a cold LLM context
+description: OKF alias for summary on new/rewritten pages
+timestamp:  ISO 8601 datetime for the last meaningful update on new/rewritten pages
+resource:   optional canonical URI when the page describes an external asset
 ```
 
-Rules (lint-enforced): every claim derived from evidence cites it — `([[2026-06-10#^e-7f3a2c]])`; every page links ≥1 other page or its folder index (no orphans); pages are dense and self-contained (doctrine rule 8 — style-checked by the librarian, not lint).
+Rules (lint-enforced): every claim derived from evidence cites it — `([[2026-06-10#^e-7f3a2c]])`; every page links ≥1 other page or its folder index (no orphans); pages are dense and self-contained (doctrine rule 8 — style-checked by the librarian, not lint). Standard Markdown links to local `.md` files count as concept links for OKF compatibility; Obsidian wikilinks remain supported.
 
 ## Engine API
 

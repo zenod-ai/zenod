@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseNote } from "./frontmatter.js";
-import { basenameOf, listMarkdownFiles, tierOf } from "./files.js";
+import { basenameOf, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 
 /** One row of the frontmatter index — the cheap first retrieval pass. */
 export interface PageIndexEntry {
@@ -24,6 +24,7 @@ export interface VaultSnapshot {
 }
 
 export const WIKILINK_RE = /\[\[([^\]|#]+)(#[^\]|]*)?(\|[^\]]*)?\]\]/g;
+export const MARKDOWN_LINK_RE = /!?\[[^\]]+\]\(([^)#][^)]+?)(?:#[^)]+)?\)/g;
 export const CITATION_RE = /\[\[(\d{4}-\d{2}-\d{2})#\^(e-[0-9a-f]{6})(?:\|[^\]]*)?\]\]/g;
 export const ANCHOR_RE = /\^(e-[0-9a-f]{6})\b/g;
 
@@ -43,7 +44,7 @@ export async function scanVault(vaultPath: string): Promise<VaultSnapshot> {
 
   for (const file of files) {
     const tier = tierOf(file);
-    if (tier === "meaning") {
+    if (tier === "meaning" && !isIndexFile(file)) {
       const { frontmatter } = parseNote(await readFile(join(vaultPath, file), "utf8"));
       if (frontmatter) {
         pages.push({
@@ -75,7 +76,21 @@ export function extractPageLinks(body: string): string[] {
     if (/^#\^e-[0-9a-f]{6}$/.test(anchor)) continue; // evidence citation, not a page link
     if (target.length > 0) out.push(target);
   }
+  for (const m of body.matchAll(MARKDOWN_LINK_RE)) {
+    if (m[0]!.startsWith("!")) continue;
+    const target = normalizeMarkdownConceptTarget(m[1]!.trim());
+    if (target) out.push(target);
+  }
   return out;
+}
+
+function normalizeMarkdownConceptTarget(target: string): string | null {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
+  if (target.startsWith("#")) return null;
+  let clean = target.replace(/^\.\//, "").replace(/^\//, "");
+  if (!clean.endsWith(".md")) return null;
+  clean = clean.replace(/\.md$/, "");
+  return clean || null;
 }
 
 export function extractCitations(body: string): Array<{ date: string; anchor: string }> {
