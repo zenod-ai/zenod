@@ -740,9 +740,11 @@ describe("BrainEngine", () => {
 
   it("captureNote files in the background — never blocks the tasking reply", async () => {
     const e = engine();
-    const memoryCommits = async () =>
-      (await simpleGit(repo.path).log()).all.filter((c) => c.message.startsWith("memory:")).length;
-    expect(await memoryCommits()).toBe(0);
+    // Poll the ORIGIN bare repo: it only gains the commit once the background
+    // push has fully landed, so awaiting it also rules out a teardown race.
+    const originMemoryCommits = async () =>
+      (await simpleGit(join(dir, "origin.git")).log()).all.filter((c) => c.message.startsWith("memory:")).length;
+    expect(await originMemoryCommits()).toBe(0);
 
     const reply = await e.handleTasking({
       text: "CAPTURE: I just got travel insurance with Axa, policy ends March 2027",
@@ -757,7 +759,7 @@ describe("BrainEngine", () => {
     expect(reply.text).not.toMatch(/Filed:|Commit:/);
 
     // ...but the note is still filed, just in the background.
-    await vi.waitFor(async () => expect(await memoryCommits()).toBe(1), { timeout: 5000, interval: 50 });
+    await vi.waitFor(async () => expect(await originMemoryCommits()).toBe(1), { timeout: 5000, interval: 50 });
     expect((await engine().lint()).errors).toEqual([]);
   });
 

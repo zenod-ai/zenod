@@ -32,7 +32,7 @@ import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
 import { searchVault } from "../ops/search.js";
-import { WriteQueue } from "../git/queue.js";
+import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
@@ -155,6 +155,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
    */
   async function syncForRead(): Promise<void> {
     if (now().getTime() - lastSyncMs < readSyncTtl) return;
+    // Never block an interactive turn on a best-effort freshness pull. If a
+    // write is in flight (especially a slow background librarian filing), serve
+    // the local clone now and sync on a later read — blocking here let
+    // background filing stall replies for minutes (#96). lastSyncMs is left
+    // untouched so the next idle read retries the pull.
+    if (queue.busy) return;
     await queue.run(async () => {
       if (now().getTime() - lastSyncMs < readSyncTtl) return; // a queued turn already synced
       await repo.pull().catch(() => {});
@@ -506,7 +512,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         // the same write queue (so writes still serialize) and return at once;
         // the reply confirms the note is *queued*, not committed. The filing
         // self-reports to the logs when it lands.
-        void store({ content, source: surface, ...(hints?.length ? { hints } : {}) })
+        void store({ content, source: surface, ...(hints?.length ? { hints } : {}) }, "background")
           .then((result) =>
             console.info(
               `[librarian] background filing complete: ${result.evidenceRef}` +
@@ -717,8 +723,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return path;
   }
 
-  /** The librarian pipeline — docs/M0-SPEC.md § The librarian pipeline. */
-  async function store(input: StoreInput): Promise<StoreResult> {
+  /**
+   * The librarian pipeline — docs/M0-SPEC.md § The librarian pipeline.
+   * `priority` defaults to interactive (direct callers — MCP, Drive, chat —
+   * await the result). Background filing from the tasking loop passes
+   * "background" so it can never starve an interactive turn (#96).
+   */
+  async function store(input: StoreInput, priority: QueuePriority = "interactive"): Promise<StoreResult> {
     return queue.run(async () => {
       await repo.pull().catch(() => {
         // offline or empty remote — proceed against the local clone
@@ -895,7 +906,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }
       }
       return result;
-    });
+    }, priority);
   }
 
   async function ask(question: string): Promise<Answer> {
