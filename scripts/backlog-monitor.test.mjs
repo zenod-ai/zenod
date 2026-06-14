@@ -9,8 +9,10 @@ import {
   detectIntegrationStatus,
   ensureFanInBatch,
   integrationPrompt,
+  mergeApprovalForIssue,
   normalizeState,
   pickupNotification,
+  recordMergeAttempt,
   reviewHeldByFanInBatch,
   updateFanInBatches,
 } from "./backlog-monitor.mjs";
@@ -36,6 +38,58 @@ test("ensureFanInBatch records only multi-issue launches", () => {
   assert.deepEqual(batch.issues, [41, 52]);
   assert.equal(batch.status, "waiting");
   assert.equal(state.fanInBatches["41-52"], batch);
+});
+
+test("auto-merge is opt-in and manual approval stays eligible", () => {
+  const manualState = normalizeState({});
+  const reviewIssue = { number: 93, title: "auto merge", status: "status:needs-review", autoMerge: false };
+  const approvedIssue = { number: 94, title: "manual merge", status: "status:approved-merge", autoMerge: false };
+
+  assert.deepEqual(mergeApprovalForIssue(manualState, reviewIssue), {
+    eligible: false,
+    autoMerge: false,
+    fromStatus: "status:needs-review",
+  });
+  assert.deepEqual(mergeApprovalForIssue(manualState, approvedIssue), {
+    eligible: true,
+    autoMerge: false,
+    fromStatus: "status:approved-merge",
+  });
+
+  const globalAutoState = normalizeState({ autoMerge: true });
+  assert.deepEqual(mergeApprovalForIssue(globalAutoState, reviewIssue), {
+    eligible: true,
+    autoMerge: true,
+    fromStatus: "status:needs-review",
+  });
+
+  const perTicketIssue = { ...reviewIssue, autoMerge: true };
+  assert.deepEqual(mergeApprovalForIssue(manualState, perTicketIssue), {
+    eligible: true,
+    autoMerge: true,
+    fromStatus: "status:needs-review",
+  });
+});
+
+test("merge attempts are recorded in monitor state and bridge audit", () => {
+  const state = normalizeState({ autoMerge: true });
+  const bridge = { target: "zenod-ai/zenod", exec: 93, mirrored: "needs-review" };
+  const issue = { number: 58, title: "runner auto merge", target: "zenod-ai/zenod" };
+
+  const entry = recordMergeAttempt(state, bridge, issue, {
+    autoMerge: true,
+    prUrl: "https://github.test/zenod-ai/zenod/pull/93",
+    outcome: "update-branch",
+    detail: "refreshing against main",
+  });
+
+  assert.equal(state.autoMerge, true);
+  assert.equal(state.mergeAttempts.length, 1);
+  assert.equal(state.mergeAttempts[0], entry);
+  assert.equal(bridge.autoMerge, true);
+  assert.deepEqual(bridge.mergeAttempts, [entry]);
+  assert.equal(entry.outcome, "update-branch");
+  assert.equal(entry.detail, "refreshing against main");
 });
 
 test("updateFanInBatches launches integration only after every branch reaches needs-review", () => {

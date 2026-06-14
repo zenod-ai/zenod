@@ -37,6 +37,7 @@ const POKE_PORT = Number(process.env.ZENOD_POKE_PORT || 8787);
 const CONCURRENCY = Number(process.env.ZENOD_CONCURRENCY || 3);
 const STATE_PATH = process.env.ZENOD_STATE || `${WORKDIR}/.fanout/monitor-state.json`;
 const BASE_BRANCH = process.env.ZENOD_BASE || "main";
+const AUTO_MERGE_ENV = parseBooleanSetting(process.env.ZENOD_AUTO_MERGE);
 
 function log(...a) {
   console.log(new Date().toISOString(), "[monitor]", ...a);
@@ -50,18 +51,30 @@ function gh(args) {
 
 function loadState() {
   try {
-    return normalizeState(JSON.parse(readFileSync(STATE_PATH, "utf8")));
+    return stateWithEnvOverrides(normalizeState(JSON.parse(readFileSync(STATE_PATH, "utf8"))));
   } catch {
-    return normalizeState({});
+    return stateWithEnvOverrides(normalizeState({}));
   }
 }
 function normalizeState(state) {
   return {
+    autoMerge: state?.autoMerge === true,
     launched: state?.launched ?? {},
     notified: state?.notified ?? {},
     fanInBatches: state?.fanInBatches ?? {},
     bridges: state?.bridges ?? {}, // central # -> { target, exec, mirrored }
+    mergeAttempts: Array.isArray(state?.mergeAttempts) ? state.mergeAttempts : [],
   };
+}
+function parseBooleanSetting(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (["1", "true", "yes", "on"].includes(String(value).toLowerCase())) return true;
+  if (["0", "false", "no", "off"].includes(String(value).toLowerCase())) return false;
+  return null;
+}
+function stateWithEnvOverrides(state) {
+  if (AUTO_MERGE_ENV !== null) state.autoMerge = AUTO_MERGE_ENV;
+  return state;
 }
 function saveState(s) {
   mkdirSync(dirname(STATE_PATH), { recursive: true });
@@ -108,6 +121,7 @@ function listCentralIssues() {
       body: i.body || "",
       status: names.find((n) => n.startsWith("status:")) || null,
       target: target ? target.slice("target:".length) : REPO,
+      autoMerge: names.includes("auto-merge") || names.includes("auto_merge"),
     };
   });
 }
@@ -262,6 +276,41 @@ function prGate(target, prNumber) {
 function prNumberFromUrl(url) {
   const m = (url || "").match(/\/pull\/(\d+)/);
   return m ? Number(m[1]) : null;
+}
+
+function autoMergeForIssue(state, issue) {
+  return state.autoMerge === true || issue.autoMerge === true;
+}
+
+function mergeApprovalForIssue(state, issue) {
+  if (issue.status === "status:approved-merge") {
+    return { eligible: true, autoMerge: false, fromStatus: "status:approved-merge" };
+  }
+  if (issue.status === "status:needs-review" && autoMergeForIssue(state, issue)) {
+    return { eligible: true, autoMerge: true, fromStatus: "status:needs-review" };
+  }
+  return { eligible: false, autoMerge: false, fromStatus: issue.status };
+}
+
+function recordMergeAttempt(state, bridge, issue, attempt) {
+  const entry = {
+    at: new Date().toISOString(),
+    central: issue.number,
+    title: issue.title,
+    target: bridge?.target ?? issue.target,
+    exec: bridge?.exec ?? null,
+    autoMerge: attempt.autoMerge === true,
+    prUrl: attempt.prUrl ?? "",
+    outcome: attempt.outcome,
+    detail: attempt.detail ?? "",
+  };
+  state.mergeAttempts.push(entry);
+  if (bridge) {
+    bridge.autoMerge = attempt.autoMerge === true;
+    bridge.mergeAttempts = bridge.mergeAttempts ?? [];
+    bridge.mergeAttempts.push(entry);
+  }
+  return entry;
 }
 
 // ---- fan-in (#41), preserved for re-integration in the central model ----
@@ -544,9 +593,11 @@ async function scan(reason) {
       }
     }
 
-    // MERGE: the human approved (status:approved-merge). Zenod never merges — it
-    // relays the trigger; the controller (this monitor) lands the PR. This is a
-    // SMART MERGE GATE / merge-queue: integration happens per-PR at merge time.
+    // MERGE: manual mode watches human approval (status:approved-merge). Opt-in
+    // auto-merge also lets status:needs-review tickets enter this SAME smart gate.
+    // Zenod never merges — it relays/records the trigger; the controller (this
+    // monitor) lands the PR. This is a SMART MERGE GATE / merge-queue: integration
+    // happens per-PR at merge time.
     // Concurrent, independently-queued workers each land safely with NO fan-in,
     // because before merging we (a) bring the PR up to date with main and (b)
     // require GREEN CI on the UPDATED branch — so a PR whose green ran against a
@@ -555,7 +606,8 @@ async function scan(reason) {
     // ONE merge per scan keeps main stable while the loop runs.
     let mergedThisScan = false;
     for (const c of issues) {
-      if (c.status !== "status:approved-merge") continue;
+      const approval = mergeApprovalForIssue(state, c);
+      if (!approval.eligible) continue;
       // Fast path: the bridge. Durable fallback: recover exec from the title.
       let bridge = state.bridges[c.number];
       if (!bridge) {
@@ -564,6 +616,7 @@ async function scan(reason) {
       }
       if (!bridge) {
         log(`merge: no exec mapping for central #${c.number}`);
+        recordMergeAttempt(state, null, c, { autoMerge: approval.autoMerge, outcome: "no-exec-mapping" });
         continue;
       }
       if (bridge.mirrored === "merged") continue;
@@ -571,17 +624,35 @@ async function scan(reason) {
       const prNum = prNumberFromUrl(prUrl);
       if (!prNum) {
         log(`merge: no open PR for ${bridge.target}#${bridge.exec} (central #${c.number})`);
+        recordMergeAttempt(state, bridge, c, { autoMerge: approval.autoMerge, outcome: "no-open-pr", prUrl });
         continue;
       }
       // Notify only on state TRANSITIONS, so a multi-scan wait doesn't spam.
-      const note = async (key, text) => {
+      const note = async (key, text, options = {}) => {
+        recordMergeAttempt(state, bridge, c, {
+          autoMerge: approval.autoMerge,
+          prUrl,
+          outcome: options.outcome ?? key,
+          detail: options.detail ?? "",
+        });
         if (bridge.mergeNote !== key) {
           bridge.mergeNote = key;
+          if (options.blockAutoMerge && approval.autoMerge && c.status === "status:needs-review") {
+            setCentralStatus(c.number, "status:needs-review", "status:blocked");
+          }
+          if (options.comment && approval.autoMerge) {
+            try {
+              gh(["issue", "comment", String(c.number), "--repo", BACKLOG, "--body", text]);
+            } catch {
+              // best-effort
+            }
+          }
           await notify(text);
         }
       };
       const finalizeMerged = async () => {
-        setCentralStatus(c.number, "status:approved-merge", "status:merged");
+        recordMergeAttempt(state, bridge, c, { autoMerge: approval.autoMerge, prUrl, outcome: "merged" });
+        setCentralStatus(c.number, approval.fromStatus, "status:merged");
         try {
           gh(["issue", "close", String(c.number), "--repo", BACKLOG]);
         } catch {
@@ -594,6 +665,7 @@ async function scan(reason) {
       const g = prGate(bridge.target, prNum);
       if (!g) {
         log(`merge: could not read PR ${prUrl}`);
+        recordMergeAttempt(state, bridge, c, { autoMerge: approval.autoMerge, prUrl, outcome: "pr-gate-unreadable" });
         continue;
       }
       if (g.state === "MERGED") {
@@ -601,16 +673,25 @@ async function scan(reason) {
         continue;
       }
       if (g.state === "CLOSED") {
-        await note("closed", `⚠️ #${c.number} ${c.title} — PR was closed without merging. ${prUrl}`);
+        await note("closed", `⚠️ #${c.number} ${c.title} — PR was closed without merging. ${prUrl}`, {
+          comment: true,
+          blockAutoMerge: true,
+        });
         continue;
       }
       // Hard blockers — need a human or a resolve worker, not a retry.
       if (g.mergeable === "CONFLICTING") {
-        await note("conflict", `⛔ #${c.number} ${c.title} — branch conflicts with main; needs a rebase/resolve. ${prUrl}`);
+        await note("conflict", `⛔ #${c.number} ${c.title} — branch conflicts with main; needs a rebase/resolve. ${prUrl}`, {
+          comment: true,
+          blockAutoMerge: true,
+        });
         continue;
       }
       if (g.failed) {
-        await note("failed", `⛔ #${c.number} ${c.title} — CI is failing; can't merge. ${prUrl}`);
+        await note("failed", `⛔ #${c.number} ${c.title} — CI is failing; can't merge. ${prUrl}`, {
+          comment: true,
+          blockAutoMerge: true,
+        });
         continue;
       }
       // Fanout opens DRAFT PRs (review is the approve_merge gate); ready it first.
@@ -633,9 +714,15 @@ async function scan(reason) {
       if (g.behind > 0) {
         try {
           gh(["api", "-X", "PUT", `repos/${bridge.target}/pulls/${prNum}/update-branch`]);
-          await note("verify", `⏳ #${c.number} ${c.title} — bringing branch up to latest main + re-running CI before merge. ${prUrl}`);
+          await note("verify", `⏳ #${c.number} ${c.title} — bringing branch up to latest main + re-running CI before merge. ${prUrl}`, {
+            outcome: "update-branch",
+          });
         } catch {
-          await note("conflict", `⛔ #${c.number} ${c.title} — couldn't update branch to main (likely a conflict); needs resolve. ${prUrl}`);
+          await note("conflict", `⛔ #${c.number} ${c.title} — couldn't update branch to main (likely a conflict); needs resolve. ${prUrl}`, {
+            comment: true,
+            blockAutoMerge: true,
+            outcome: "update-branch-failed",
+          });
         }
         continue;
       }
@@ -645,7 +732,10 @@ async function scan(reason) {
         continue;
       }
       // behind==0, mergeable, GREEN on the up-to-date branch → safe to land.
-      if (mergedThisScan) continue; // one merge per scan; the rest re-verify next pass
+      if (mergedThisScan) {
+        recordMergeAttempt(state, bridge, c, { autoMerge: approval.autoMerge, prUrl, outcome: "deferred-one-merge-per-scan" });
+        continue;
+      } // one merge per scan; the rest re-verify next pass
       let merged = false;
       try {
         gh(["pr", "merge", String(prNum), "--repo", bridge.target, "--squash", "--delete-branch"]);
@@ -654,7 +744,12 @@ async function scan(reason) {
         const after = prGate(bridge.target, prNum);
         if (after && after.state === "MERGED") merged = true;
         else {
-          await note("mergeerr", `⚠️ #${c.number} ${c.title} — merge failed: ${String(e.message).slice(0, 160)}. ${prUrl}`);
+          await note("mergeerr", `⚠️ #${c.number} ${c.title} — merge failed: ${String(e.message).slice(0, 160)}. ${prUrl}`, {
+            comment: true,
+            blockAutoMerge: true,
+            outcome: "merge-failed",
+            detail: String(e.message).slice(0, 300),
+          });
           log(`merge failed for ${prUrl}: ${e.message}`);
         }
       }
@@ -703,7 +798,9 @@ export {
   batchKey,
   ensureFanInBatch,
   integrationPrompt,
+  mergeApprovalForIssue,
   normalizeState,
+  recordMergeAttempt,
   detectIntegrationStatus,
   reviewHeldByFanInBatch,
   updateFanInBatches,
