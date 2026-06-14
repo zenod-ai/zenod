@@ -41,10 +41,59 @@ export interface RecordedAction {
   result: string;
 }
 
-// Verbs that assert a state change already happened (perfective forms only, so
-// offers like "want me to create…" / "I'll open…" don't trip the guard).
-const MUTATION_CLAIM = /\b(created|filed|opened|raised|logged|queued|merged|approved)\b/i;
-const CREATION_CLAIM = /\b(created|filed|opened|raised|logged)\b/i;
+// Perfective mutation verbs. Offers ("want me to create…", "I'll open…") use
+// other forms and don't trip the guard.
+const MUTATION_VERBS = "created|filed|opened|raised|logged|queued|merged|approved";
+const CREATION_VERBS = "created|filed|opened|raised|logged";
+
+// A mutation verb is only a *claim about this turn* when it's active voice. A
+// be-verb/modal/infinitive immediately before it marks a description, not a
+// receipt: "issues are created with status:proposed", "can be filed", "to open".
+// Without this, listing capabilities or quoting docs tripped a false correction.
+const DESCRIPTIVE_LEAD = /\b(is|are|was|were|be|been|being|get|gets|got|can|could|will|would|to|cannot|can't|not)\s*$/i;
+
+/**
+ * The model's own this-turn assertions — with markdown blockquotes and fenced
+ * code removed. Quoting a past reply ("the log shows: > Created issue #62") or
+ * showing an example is not a claim that the action happened now.
+ */
+function assertedProse(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .split("\n")
+    .filter((line) => !/^\s*>/.test(line))
+    .join("\n");
+}
+
+/** True when one of `verbs` appears as an active completion claim in `prose`. */
+function hasActiveClaim(prose: string, verbs: string): boolean {
+  const re = new RegExp(`\\b(${verbs})\\b`, "gi");
+  for (const m of prose.matchAll(re)) {
+    if (DESCRIPTIVE_LEAD.test(prose.slice(Math.max(0, m.index - 28), m.index))) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Issue numbers presented right next to a mutation verb on the same line —
+ * "Queued #99", "#51 merged", or a receipt URL. A bare status-list noun
+ * ("e.g. proposed, queued, in-progress") or an unrelated number elsewhere in
+ * the reply does not count, so describing the backlog never trips the guard.
+ */
+function numbersClaimedAdjacent(prose: string, verbs: string): Set<number> {
+  const verb = new RegExp(`\\b(${verbs})\\b`, "i");
+  const nums = new Set<number>();
+  for (const line of prose.split("\n")) {
+    if (!verb.test(line)) continue;
+    for (const m of line.matchAll(/#(\d+)\b/g)) {
+      const around = line.slice(Math.max(0, m.index - 24), m.index + 24);
+      if (verb.test(around)) nums.add(Number(m[1]));
+    }
+    for (const m of line.matchAll(/\/issues\/(\d+)\b/g)) nums.add(Number(m[1]));
+  }
+  return nums;
+}
 
 function issueNumbersIn(text: string): Set<number> {
   const nums = new Set<number>();
@@ -99,15 +148,18 @@ export function summarizeActionsForReply(actions: ReadonlyArray<RecordedAction>)
  * Pure and deterministic so it can be unit-tested against real transcripts.
  */
 export function reconcileTaskingReply(text: string, actions: ReadonlyArray<RecordedAction>): string {
-  // Only police replies that claim a state change. Read-only mentions of an
-  // issue number (answering "what's the status of #44") are left alone.
-  if (!MUTATION_CLAIM.test(text)) return text;
+  // Only police active claims the model makes about THIS turn. Read-only
+  // mentions ("what's the status of #44"), capability descriptions ("issues are
+  // created with status:proposed"), and quoted history (a blockquoted past
+  // receipt) are left alone — they don't assert a mutation just happened.
+  const prose = assertedProse(text);
+  if (!hasActiveClaim(prose, MUTATION_VERBS)) return text;
 
-  const presented = issueNumbersIn(text);
+  const presented = issueNumbersIn(prose);
   const receipts = createReceipts(actions);
   const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
 
-  const claimsCreation = CREATION_CLAIM.test(text) && (presented.size > 0 || /\b(issue|ticket)\b/i.test(text));
+  const claimsCreation = hasActiveClaim(prose, CREATION_VERBS) && (presented.size > 0 || /\b(issue|ticket)\b/i.test(prose));
 
   // The demonstrated bug: a creation is claimed but nothing was created.
   if (claimsCreation && createdNums.size === 0) {
@@ -129,9 +181,10 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   }
 
   // Any other mutation claim that cites an issue number no tool produced or
-  // touched this turn (fabricated queue/merge/label receipts).
+  // touched this turn (fabricated queue/merge/label receipts) — but only a
+  // number presented right next to the verb, not one merely mentioned nearby.
   const proven = provenNumbers(actions);
-  const unproven = [...presented].filter((n) => !proven.has(n));
+  const unproven = [...numbersClaimedAdjacent(prose, MUTATION_VERBS)].filter((n) => !proven.has(n));
   if (unproven.length > 0) {
     return `⚠️ Correction — I couldn't confirm ${fmt(unproven)} against the backlog this turn, so don't rely on ${unproven.length > 1 ? "those references" : "that reference"}.\n\n${text}`;
   }

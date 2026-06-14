@@ -62,6 +62,23 @@ describe("reconcileTaskingReply", () => {
     const out = reconcileTaskingReply(reply, [{ tool: "approveQueue", result: "Queued #51 — the monitor will pick them up." }]);
     expect(out).toBe(reply);
   });
+
+  it("does not correct a capabilities description that names verbs and example numbers", () => {
+    const reply =
+      "Here's what I can do with issues:\n\n" +
+      "- create_issue: Create a new GitHub issue. Issues are created with status:proposed by default.\n" +
+      "- query_backlog: Check status of open issues (e.g. proposed, queued, in-progress, needs-review).\n" +
+      "- approve_queue: Move specific proposed issues to queued — only when you approve by number (e.g. \"queue #62 and #63\").";
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
+  it("does not correct a quoted past receipt from chat history", () => {
+    const reply =
+      "Yes, the chat log shows my first reply was:\n\n" +
+      "> Created issue #62: https://github.com/AlfaBlok/obsidian-brain/issues/62\n\n" +
+      "So that was the one. (I later second-guessed myself and corrected it.)";
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
 });
 
 describe("summarizeActionsForReply", () => {
