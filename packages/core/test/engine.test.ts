@@ -88,6 +88,24 @@ class FakeLlm implements BrainLlm {
       });
       return { text: url, readPaths: [] };
     }
+    if (taskTools && input.question.startsWith("FABRICATECREATE:")) {
+      // Reproduce the real bug: the create call fails, but the model swallows the
+      // error and narrates a confident, fully-fabricated success (number + url).
+      try {
+        await taskTools.createIssue({
+          repo: "zenod-ai/zenod",
+          title: input.question.slice("FABRICATECREATE:".length).trim(),
+          body: "Created from tasking test.",
+          labels: ["from-tasking"],
+        });
+      } catch {
+        // swallowed — exactly the failure mode we're guarding against
+      }
+      return {
+        text: "Done. Created:\n• #58 — Market research on idealista_scraper repo\nhttps://github.com/AlfaBlok/obsidian-brain/issues/58\nStatus: proposed (not queued).",
+        readPaths: [],
+      };
+    }
     if (taskTools && input.question.startsWith("CREATEQUEUEDISSUE:")) {
       const url = await taskTools.createIssue({
         repo: "zenod-ai/zenod",
@@ -436,9 +454,9 @@ describe("BrainEngine", () => {
     await e.ask("what is in generated note 99?");
 
     const briefing = llm.answerInputs.at(-1)?.vaultBriefing ?? "";
-    expect(briefing).toContain("Meaning pages (80/");
-    expect(briefing).toContain("Recent evidence logs (20/");
-    expect(briefing).toContain("Recent attachments (40/");
+    expect(briefing).toContain("MAP — meaning pages (80/");
+    expect(briefing).toContain("MAP — recent evidence logs (20/");
+    expect(briefing).toContain("MAP — recent attachments (40/");
     expect(briefing).not.toContain("Generated 099");
     expect(briefing).not.toContain("Log/2026-07-01.md");
     expect(briefing).not.toContain("_attachments/generated/file-001.txt");
@@ -698,6 +716,77 @@ describe("BrainEngine", () => {
       "query:open issues",
       "service:ready",
     ]);
+  });
+
+  it("corrects a fabricated 'Created issue #N' when create_issue actually failed", async () => {
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        async createIssue() {
+          throw new Error("GitHub returned 403: forbidden");
+        },
+        async labelIssue() {
+          return "labeled";
+        },
+        async queryBacklog() {
+          return "";
+        },
+        async serviceBacklog() {
+          return "";
+        },
+        async approveQueue() {
+          return "queued";
+        },
+      },
+    });
+
+    const reply = await e.handleTasking({
+      text: "FABRICATECREATE: Market research on idealista_scraper",
+      surface: "whatsapp",
+      conversationKey: "fab",
+    });
+
+    // The user must be told nothing was created — not the fabricated #58.
+    expect(reply.text).toMatch(/^⚠️ Correction/);
+    expect(reply.text).toContain("no GitHub issue was created");
+    expect(reply.text).toContain("403");
+    // The failed attempt is recorded for audit instead of silently dropped.
+    const create = reply.actions.find((action) => action.tool === "createIssue");
+    expect(create?.result).toMatch(/^ERROR:.*403/);
+  });
+
+  it("leaves a genuine 'Created issue #N' reply untouched", async () => {
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        async createIssue() {
+          return "Created issue #25: https://github.com/zenod-ai/zenod/issues/25";
+        },
+        async labelIssue() {
+          return "labeled";
+        },
+        async queryBacklog() {
+          return "";
+        },
+        async serviceBacklog() {
+          return "";
+        },
+        async approveQueue() {
+          return "queued";
+        },
+      },
+    });
+
+    const reply = await e.handleTasking({ text: "CREATEISSUE: Real task", surface: "whatsapp", conversationKey: "ok" });
+
+    expect(reply.text).not.toContain("Correction");
+    expect(reply.text).toContain("Created issue #25");
   });
 
   it("forces agent-created GitHub issues to proposed instead of queued", async () => {
