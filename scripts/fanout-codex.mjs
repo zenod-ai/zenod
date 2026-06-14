@@ -700,6 +700,8 @@ function changedFiles(cwd) {
 
 function detectBlocker(text) {
   if (!text) return null;
+  // 1) Authoritative structured signal: a fenced JSON block with status:blocked
+  //    (the worker prompt defines this for blocking).
   const fence = text.match(/```json\s*([\s\S]*?)```/i);
   const jsonText = fence?.[1] ?? (text.trim().startsWith("{") ? text.trim() : null);
   if (jsonText) {
@@ -710,14 +712,24 @@ function detectBlocker(text) {
       // fall through
     }
   }
-  if (/status:\s*blocked|blocked:/i.test(text)) {
-    return {
-      status: "blocked",
-      reason: "worker-reported-blocked",
-      question: text.match(/(?:question|decision needed):\s*(.+)/i)?.[1]?.trim() ?? "Worker reported blocked; inspect final handoff.",
-      attempted: [],
-      suggestedNextStep: "Inspect worker final handoff and decide how to proceed.",
-    };
+  // 2) The Final Handoff "Status:" line ONLY — anchored to the start of a line
+  //    (optional leading bullet). We must NOT scan arbitrary "status:blocked"
+  //    substrings: workers constantly DESCRIBE status labels in prose (e.g. "sets
+  //    `status:blocked` on conflict"), which would false-block a completed task.
+  //    The alternation captures the first word, so "Status: complete | blocked |
+  //    failed" (the template echoed) reads as complete.
+  const statusLine = text.match(/^\s*(?:[-*]\s*)?status:\s*(complete|blocked|failed)\b/im);
+  if (statusLine) {
+    const declared = statusLine[1].toLowerCase();
+    if (declared === "blocked" || declared === "failed") {
+      return {
+        status: "blocked",
+        reason: "worker-reported-blocked",
+        question: text.match(/(?:question|decision needed):\s*(.+)/i)?.[1]?.trim() ?? "Worker reported blocked; inspect final handoff.",
+        attempted: [],
+        suggestedNextStep: "Inspect worker final handoff and decide how to proceed.",
+      };
+    }
   }
   return null;
 }
@@ -1134,6 +1146,7 @@ async function main() {
 
 export {
   issueStatusLabelFor,
+  detectBlocker,
 };
 
 // Run main() only when invoked as the entry script — but resolve symlinks first.
