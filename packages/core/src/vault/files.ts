@@ -62,5 +62,6 @@ export function basenameOf(relPath: string): string {
 }
 
 export function isIndexFile(relPath: string): boolean {
-  return basenameOf(relPath).endsWith("Index");
+  const base = basenameOf(relPath);
+  return base === "index" || base.endsWith("Index");
 }

@@ -27,6 +27,8 @@ tags: []
 created: "{{date}}"
 updated: "{{date}}"
 summary: ""
+description: ""
+timestamp: "{{date}}T00:00:00Z"
 ---
 
 # {{title}}
@@ -35,6 +37,26 @@ summary: ""
 const AREAS_INDEX = `# Areas Index
 
 Ongoing life domains without a finish line — vehicle, insurance, taxes, travel, health, housing, finance, family, legal/admin.
+`;
+
+const OKF_INDEX = `---
+okf_version: "0.1"
+---
+
+# Zenod Vault
+
+This vault is a Zenod profile of Open Knowledge Format (OKF): markdown concept pages with YAML frontmatter, plus Zenod's stricter evidence, citation, lint, and git-audit guarantees.
+
+## Concepts
+
+- [Projects](Projects/) - finite work and outcomes.
+- [Areas](Areas/) - ongoing life domains.
+- [Notes](Notes/) - reusable knowledge.
+
+## Evidence
+
+- [Log](Log/) - append-only evidence receipts.
+- [_attachments](_attachments/) - write-once source artifacts.
 `;
 
 /**
@@ -48,6 +70,7 @@ export async function ensureSchemaV1(vaultPath: string): Promise<string[]> {
 
   const candidates: Array<[string, string]> = [
     [CONFIG_PATH, DEFAULT_CONFIG],
+    ["index.md", OKF_INDEX],
     ["Areas/Areas Index.md", AREAS_INDEX],
     ["_templates/Area.md", AREA_TEMPLATE],
   ];

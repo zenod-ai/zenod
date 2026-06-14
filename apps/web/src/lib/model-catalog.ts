@@ -34,6 +34,29 @@ export const MODEL_CATALOG: Record<Provider, ModelInfo[]> = {
     { id: "gpt-4.1-mini", label: "GPT-4.1 mini", inputPerM: 0.4, outputPerM: 1.6 },
     { id: "gpt-4.1-nano", label: "GPT-4.1 nano", inputPerM: 0.1, outputPerM: 0.4, note: "Cheapest" },
   ],
+  // OpenRouter model slugs are "vendor/model". Curated top picks across vendors —
+  // strong + good value, roughly capable → cheap (refreshed 2026-06). Any
+  // OpenRouter model still works via "Custom model ID…".
+  openrouter: [
+    { id: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", inputPerM: 0.44, outputPerM: 0.87, note: "Flagship" },
+    { id: "minimax/minimax-m3", label: "MiniMax M3", inputPerM: 0.3, outputPerM: 1.2, note: "Strong & cheap" },
+    { id: "qwen/qwen3.7-plus", label: "Qwen3.7 Plus", inputPerM: 0.32, outputPerM: 1.28, note: "Capable" },
+    { id: "moonshotai/kimi-k2-thinking", label: "Kimi K2 Thinking", inputPerM: 0.6, outputPerM: 2.5, note: "Reasoning" },
+    { id: "z-ai/glm-4.7", label: "GLM 4.7", inputPerM: 0.4, outputPerM: 1.75 },
+    { id: "x-ai/grok-4.3", label: "Grok 4.3", inputPerM: 1.25, outputPerM: 2.5 },
+    { id: "deepseek/deepseek-r1-0528", label: "DeepSeek R1", inputPerM: 0.5, outputPerM: 2.15, note: "Reasoning" },
+    { id: "deepseek/deepseek-chat", label: "DeepSeek V3", inputPerM: 0.2, outputPerM: 0.8, note: "Cheap & capable" },
+    { id: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick", inputPerM: 0.15, outputPerM: 0.6, note: "Cheap" },
+    { id: "google/gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", inputPerM: 0.25, outputPerM: 1.5, note: "Fast & cheap" },
+  ],
+  // Groq runs OpenAI-compatible chat completions at very high speed. Curated
+  // shortlist; any Groq model works via "Custom model ID…".
+  groq: [
+    { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B", inputPerM: 0.59, outputPerM: 0.79, note: "Balanced" },
+    { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B", inputPerM: 0.05, outputPerM: 0.08, note: "Fast & cheap" },
+    { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B", inputPerM: 0.15, outputPerM: 0.75 },
+    { id: "moonshotai/kimi-k2-instruct", label: "Kimi K2", inputPerM: 1, outputPerM: 3 },
+  ],
 }
 
 /**
@@ -43,6 +66,8 @@ export const MODEL_CATALOG: Record<Provider, ModelInfo[]> = {
 export const PROVIDER_DEFAULT_MODEL: Record<Provider, { ask: string; classify: string }> = {
   anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5" },
   openai: { ask: "gpt-4o", classify: "gpt-4o-mini" },
+  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat" },
+  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant" },
 }
 
 export function findModel(provider: Provider, id: string): ModelInfo | undefined {

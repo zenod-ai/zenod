@@ -19,7 +19,39 @@ import type {
   WorkLoopResult,
 } from "./types.js";
 
-export type Provider = "anthropic" | "openai";
+export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
+
+/**
+ * OpenAI-compatible third-party gateways. They speak the Chat Completions API,
+ * so we reach them through `@ai-sdk/openai` with a custom baseURL and the
+ * `.chat()` model (the default model uses the Responses API, which these
+ * providers do not implement).
+ */
+const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<Provider, string>> = {
+  openrouter: "https://openrouter.ai/api/v1",
+  groq: "https://api.groq.com/openai/v1",
+};
+
+/** The five LLM operations, tagged on every usage report for cost analytics. */
+export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog";
+
+/**
+ * Real, provider-billed token usage for one LLM call — read from the AI SDK
+ * result, not estimated. The cache split matters for cost: reads bill at
+ * ~0.1x the input rate, writes at ~1.25x, so they're tracked separately.
+ */
+export interface LlmUsageReport {
+  operation: LlmOperation;
+  provider: Provider;
+  model: string;
+  /** Uncached input tokens, billed at the standard input rate. */
+  inputTokens: number;
+  outputTokens: number;
+  /** Cache-read input tokens (billed ~0.1x input). */
+  cachedInputTokens: number;
+  /** Cache-write input tokens (billed ~1.25x input). */
+  cacheCreationInputTokens: number;
+}
 
 export interface AiLlmOptions {
   provider: Provider;
@@ -28,16 +60,59 @@ export interface AiLlmOptions {
   askModel?: string;
   /** Classification pass model. */
   classifyModel?: string;
+  /**
+   * Tool-step budget for an answer turn. The model is told this limit and the
+   * final step forces a text answer. Clamped to [MIN_MAX_STEPS, MAX_MAX_STEPS];
+   * undefined uses DEFAULT_MAX_STEPS.
+   */
+  maxSteps?: number;
+  /**
+   * Optional sink for real, provider-billed token usage per call. The server
+   * wires this to a durable usage store for cost analytics. It must never
+   * throw into the call path — a metering failure must not break a chat turn.
+   */
+  onUsage?: (report: LlmUsageReport) => void;
 }
 
 /** Per-provider default models. Both are user-overridable in settings. */
 export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string }> = {
   anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5" },
   openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini" },
+  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat" },
+  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant" },
 };
 
-export const MAX_STEPS = 6;
+/**
+ * Default tool-step budget for an answer turn when none is configured. The
+ * model is *told* this budget and the last step forces a text answer, so it
+ * plans its tool calls and can never run out mid-loop and reply with nothing.
+ * Configurable per server via the "Max tool steps per reply" setting.
+ */
+export const DEFAULT_MAX_STEPS = 8;
+export const MIN_MAX_STEPS = 2;
+export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
+
+/** Clamp a configured step budget to a sane range; falls back to the default. */
+export function clampMaxSteps(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return DEFAULT_MAX_STEPS;
+  return Math.max(MIN_MAX_STEPS, Math.min(MAX_MAX_STEPS, Math.round(value)));
+}
+
+type ModelFactory = (id: string) => Parameters<typeof generateText>[0]["model"];
+
+/**
+ * Build the per-provider model factory. Anthropic and OpenAI use their native
+ * providers; OpenRouter and Groq are OpenAI-compatible gateways reached via the
+ * OpenAI provider with a custom baseURL and the Chat Completions model.
+ */
+function createModelFactory(provider: Provider, apiKey: string): ModelFactory {
+  if (provider === "anthropic") return createAnthropic({ apiKey });
+  if (provider === "openai") return createOpenAI({ apiKey });
+  const baseURL = OPENAI_COMPATIBLE_BASE_URLS[provider];
+  const compatible = createOpenAI(baseURL ? { apiKey, baseURL } : { apiKey });
+  return (id: string) => compatible.chat(id);
+}
 
 /** Tool callbacks may fail (bad path, immutable tier); surface the error to the model instead of aborting the loop. */
 function caught(run: () => Promise<string>): Promise<string> {
@@ -150,17 +225,61 @@ export { backlogCandidateSchema, backlogExtractSchema };
  */
 export class AiSdkBrainLlm implements BrainLlm {
   private readonly askModelId: string;
+  private readonly maxSteps: number;
   private readonly classifyModelId: string;
+  private readonly provider: Provider;
+  private readonly onUsage: ((report: LlmUsageReport) => void) | undefined;
   private readonly model: (id: string) => Parameters<typeof generateText>[0]["model"];
+
+  /**
+   * Anthropic prompt-cache breakpoint for the big, stable system prefix (the
+   * vault briefing). Repeated turns within the 5-minute window read it at
+   * ~0.1x instead of re-billing the full prefix every message. Non-Anthropic
+   * providers ignore the `anthropic` namespace, so attaching it is always safe.
+   */
+  private readonly cacheBreakpoint = { anthropic: { cacheControl: { type: "ephemeral" } } };
 
   constructor(options: AiLlmOptions) {
     const defaults = PROVIDER_DEFAULTS[options.provider];
     this.askModelId = options.askModel || defaults.ask;
     this.classifyModelId = options.classifyModel || defaults.classify;
-    this.model =
-      options.provider === "openai"
-        ? createOpenAI({ apiKey: options.apiKey })
-        : createAnthropic({ apiKey: options.apiKey });
+    this.maxSteps = clampMaxSteps(options.maxSteps);
+    this.provider = options.provider;
+    this.onUsage = options.onUsage;
+    this.model = createModelFactory(options.provider, options.apiKey);
+  }
+
+  /**
+   * Forward real token usage from an AI SDK result to the usage sink. Reads
+   * the standardized `usage` fields plus Anthropic's cache split from
+   * `providerMetadata`. Swallows its own errors — metering never breaks a turn.
+   */
+  private reportUsage(
+    operation: LlmOperation,
+    modelId: string,
+    usage:
+      | { inputTokens?: number | undefined; outputTokens?: number | undefined; cachedInputTokens?: number | undefined }
+      | undefined,
+    providerMetadata: Record<string, unknown> | undefined,
+  ): void {
+    if (!this.onUsage) return;
+    const anthropic = (providerMetadata?.anthropic ?? {}) as {
+      cacheCreationInputTokens?: number;
+      cacheReadInputTokens?: number;
+    };
+    try {
+      this.onUsage({
+        operation,
+        provider: this.provider,
+        model: modelId,
+        inputTokens: usage?.inputTokens ?? 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        cachedInputTokens: usage?.cachedInputTokens ?? anthropic.cacheReadInputTokens ?? 0,
+        cacheCreationInputTokens: anthropic.cacheCreationInputTokens ?? 0,
+      });
+    } catch {
+      // Metering must never break the call path.
+    }
   }
 
   async classify(input: ClassifyInput): Promise<Classification> {
@@ -168,7 +287,7 @@ export class AiSdkBrainLlm implements BrainLlm {
       .map((p) => `${p.path} | ${p.title} | tags: ${p.tags.join(",")} | ${p.summary}`)
       .join("\n");
 
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model: this.model(this.classifyModelId),
       schema: classificationSchema,
       system: [
@@ -188,6 +307,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         .filter(Boolean)
         .join("\n\n"),
     });
+    this.reportUsage("classify", this.classifyModelId, usage, providerMetadata);
 
     return {
       confidence: typeof object.confidence === "number" ? object.confidence : 0,
@@ -205,12 +325,12 @@ export class AiSdkBrainLlm implements BrainLlm {
           .join("\n")}`
       : "";
 
-    const { text } = await generateText({
+    const { text, usage, providerMetadata } = await generateText({
       model: this.model(this.askModelId),
       system: [
         "You are the librarian of a personal knowledge vault. Produce the COMPLETE new content of one meaning page, integrating a new piece of evidence.",
         "Hard rules (validated by code, not negotiable):",
-        "- YAML frontmatter with exactly these keys: title, type, tags, created, updated (YYYY-MM-DD), summary (one dense line written for a cold LLM reader).",
+        "- YAML frontmatter with exactly these keys: title, type, tags, created, updated (YYYY-MM-DD), summary (one dense line written for a cold LLM reader), description (same value as summary, for OKF consumers), timestamp (ISO 8601 datetime for updated at 00:00:00Z unless a better source time is known).",
         `- The 'type' field MUST be exactly: ${input.requiredType}`,
         `- 'tags' may only use this vocabulary: ${input.tagVocabulary.join(", ")}`,
         `- Every claim derived from the evidence must cite it inline: (${input.citation})`,
@@ -229,12 +349,13 @@ export class AiSdkBrainLlm implements BrainLlm {
         `Citation token for this evidence: ${input.citation}${retryContext}`,
       ].join("\n\n"),
     });
+    this.reportUsage("compose", this.askModelId, usage, providerMetadata);
 
     return text.replace(/^```(?:markdown|md)?\n/, "").replace(/\n```\s*$/, "").trimEnd() + "\n";
   }
 
   async extractBacklog(input: BacklogExtractInput): Promise<BacklogExtractResult> {
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model: this.model(this.classifyModelId),
       schema: backlogExtractSchema,
       system: [
@@ -252,6 +373,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         input.content,
       ].join("\n\n"),
     });
+    this.reportUsage("extractBacklog", this.classifyModelId, usage, providerMetadata);
 
     return {
       candidates: object.candidates.map((candidate) => {
@@ -456,11 +578,30 @@ export class AiSdkBrainLlm implements BrainLlm {
         : "",
     ].filter(Boolean);
 
+    // Tell the model its tool budget so it plans instead of getting silently
+    // guillotined mid-loop. The last step forces a text answer (prepareStep
+    // below), so usable tool-calling rounds = maxSteps - 1.
+    const toolRounds = Math.max(1, this.maxSteps - 1);
+    const budgetNote = [
+      `TOOL BUDGET: you have at most ${toolRounds} round${toolRounds === 1 ? "" : "s"} of tool calls this turn, then you MUST write your final answer.`,
+      "Plan accordingly: search and read early, ask for everything you need up front rather than one tool at a time, and never spend your last round on a tool call.",
+      "If you are near the limit, stop gathering and answer with what you have — a clearly-caveated partial answer always beats no answer.",
+    ].join(" ");
+    const systemText = [input.vaultBriefing, ...briefingExtras, budgetNote].filter(Boolean).join("\n\n");
     const config = {
       model: this.model(this.askModelId),
-      system: briefingExtras.length > 0 ? `${input.vaultBriefing}\n\n${briefingExtras.join("\n\n")}` : input.vaultBriefing,
-      messages,
-      stopWhen: stepCountIs(MAX_STEPS),
+      // System prefix as a cached message rather than top-level `system`, so the
+      // (large, stable) vault briefing is reused across turns instead of re-billed.
+      messages: [
+        { role: "system", content: systemText, providerOptions: this.cacheBreakpoint },
+        ...messages,
+      ] as ModelMessage[],
+      stopWhen: stepCountIs(this.maxSteps),
+      // Hard guarantee against the empty-reply failure: on the final step,
+      // disable tools so the model is forced to produce text from what it has.
+      // It can plan around this because the budget is in its system prompt.
+      prepareStep: ({ stepNumber }: { stepNumber: number }) =>
+        stepNumber >= this.maxSteps - 1 ? { toolChoice: "none" as const } : {},
       tools: {
         ...taskToolSet,
         ...driveToolSet,
@@ -513,11 +654,13 @@ export class AiSdkBrainLlm implements BrainLlm {
           throw err instanceof Error ? err : new Error(extractErrorMessage(err));
         }
       }
+      this.reportUsage("answer", this.askModelId, await result.totalUsage, await result.providerMetadata);
       return { text, readPaths: [...readPaths] };
     }
 
-    const { text } = await generateText(config);
-    return { text, readPaths: [...readPaths] };
+    const result = await generateText(config);
+    this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata);
+    return { text: result.text, readPaths: [...readPaths] };
   }
 
   async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {
@@ -530,7 +673,7 @@ export class AiSdkBrainLlm implements BrainLlm {
             "MODE: EXECUTE. Carry out the approved plan below against the vault, using the write tools.",
             "Hard rules:",
             "- Log/ and _attachments/ are immutable evidence — never write, move, or delete there (tools will reject it).",
-            "- Meaning pages (Projects/, Areas/, Notes/) need valid frontmatter: title, type (project|area|note matching the folder), tags, created, updated, summary.",
+            "- Meaning pages (Projects/, Areas/, Notes/) need valid frontmatter: title, type (project|area|note matching the folder), tags, created, updated, summary. New pages should also include OKF-compatible description and timestamp fields.",
             "- When you move or rename a page, update wikilinks that point to it by full path.",
             "- Stay within the plan; skip a step (and say so) rather than improvising a different change.",
             "- The engine validates and commits when you finish — do not narrate git operations.",
@@ -587,25 +730,32 @@ export class AiSdkBrainLlm implements BrainLlm {
         }
       : {};
 
-    const { text } = await generateText({
+    const promptText = [
+      `Objective: ${input.objective}`,
+      input.plan ? `Approved plan:\n${input.plan}` : "",
+      input.previousErrors?.length
+        ? `Your previous attempt failed validation — fix ALL of these in the working tree:\n${input.previousErrors
+            .map((e) => `- ${e.path} [${e.rule}] ${e.message}`)
+            .join("\n")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const result = await generateText({
       model: this.model(this.askModelId),
-      system,
-      prompt: [
-        `Objective: ${input.objective}`,
-        input.plan ? `Approved plan:\n${input.plan}` : "",
-        input.previousErrors?.length
-          ? `Your previous attempt failed validation — fix ALL of these in the working tree:\n${input.previousErrors
-              .map((e) => `- ${e.path} [${e.rule}] ${e.message}`)
-              .join("\n")}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
+      // Cache the briefing-laden system prefix: propose and execute (plus any
+      // execute retries) run back-to-back with the same briefing → cache reads.
+      messages: [
+        { role: "system", content: system, providerOptions: this.cacheBreakpoint },
+        { role: "user", content: promptText },
+      ] as ModelMessage[],
       stopWhen: stepCountIs(MAX_WORK_STEPS),
       tools: { ...readToolSet, ...writeToolSet },
     });
+    this.reportUsage("work", this.askModelId, result.totalUsage, result.providerMetadata);
 
-    return { text };
+    return { text: result.text };
   }
 }
 

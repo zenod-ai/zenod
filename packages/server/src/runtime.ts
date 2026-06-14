@@ -19,11 +19,13 @@ import {
   type CleanSlateResult,
   type ExternalTaskingTools,
   type LintReport,
+  type LlmUsageReport,
   type TokenCostMeasurement,
 } from "zenod";
 import { installationToken } from "./githubApp.js";
 import { buildDriveTools } from "./driveTools.js";
 import { IngestStore } from "./ingestStore.js";
+import { UsageStore } from "./usageStore.js";
 import { IngestQueue } from "./ingestQueue.js";
 import { OAuthStore } from "./oauthStore.js";
 import { Settings, type Provider } from "./settings.js";
@@ -48,6 +50,7 @@ export class Runtime {
   readonly whatsapp: WhatsAppGateway;
   readonly ingestStore: IngestStore;
   readonly ingestQueue: IngestQueue;
+  readonly usageStore: UsageStore;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
 
@@ -67,6 +70,7 @@ export class Runtime {
     // as "interrupted"; resume() then drains anything still queued.
     this.ingestStore = new IngestStore(join(dataDir, "ingest.sqlite"));
     this.ingestQueue = new IngestQueue(this.ingestStore, this.settings, () => this.getEngine());
+    this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
   }
 
   get workdir(): string {
@@ -111,6 +115,13 @@ export class Runtime {
       apiKey: this.settings.activeApiKey()!,
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
       ...(this.settings.get("model_classify") ? { classifyModel: this.settings.get("model_classify")! } : {}),
+      ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
+      // Always persist real per-call token usage for cost analytics (GET
+      // /api/usage). ZENOD_LLM_COST_LOG=1 additionally tails it to stdout.
+      onUsage: (report) => {
+        this.usageStore.record(report);
+        if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report);
+      },
     });
     // The chat/MCP Drive tools enqueue onto the background ingest queue.
     const driveTools = buildDriveTools(this.settings, this.ingestQueue);
@@ -273,7 +284,23 @@ export class Runtime {
     this.state.close();
     this.whatsappStore.close();
     this.ingestStore.close();
+    this.usageStore.close();
   }
+}
+
+/** One-line real-usage tail (opt-in via ZENOD_LLM_COST_LOG=1). */
+function logLlmUsage(report: LlmUsageReport): void {
+  console.log(
+    [
+      "[llm-usage]",
+      `operation=${report.operation}`,
+      `model=${report.model}`,
+      `input=${report.inputTokens}`,
+      `output=${report.outputTokens}`,
+      `cache_read=${report.cachedInputTokens}`,
+      `cache_write=${report.cacheCreationInputTokens}`,
+    ].join(" "),
+  );
 }
 
 function logTokenCost(measurement: TokenCostMeasurement): void {
@@ -320,14 +347,19 @@ export async function testProviderKey(
   provider: Provider,
   apiKey: string,
 ): Promise<{ ok: boolean; message: string }> {
-  const config =
+  const bearer = { Authorization: `Bearer ${apiKey}` };
+  const config: { url: string; headers: Record<string, string>; name: string } =
     provider === "openai"
-      ? { url: "https://api.openai.com/v1/models", headers: { Authorization: `Bearer ${apiKey}` }, name: "OpenAI" }
-      : {
-          url: "https://api.anthropic.com/v1/models",
-          headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-          name: "Anthropic",
-        };
+      ? { url: "https://api.openai.com/v1/models", headers: bearer, name: "OpenAI" }
+      : provider === "openrouter"
+        ? { url: "https://openrouter.ai/api/v1/models", headers: bearer, name: "OpenRouter" }
+        : provider === "groq"
+          ? { url: "https://api.groq.com/openai/v1/models", headers: bearer, name: "Groq" }
+          : {
+              url: "https://api.anthropic.com/v1/models",
+              headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+              name: "Anthropic",
+            };
   try {
     const response = await fetch(config.url, { headers: config.headers });
     if (response.ok) return { ok: true, message: "key accepted" };

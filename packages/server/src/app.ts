@@ -29,7 +29,7 @@ import { parseServiceAccount, testDrive } from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";
 import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
-import { SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
+import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
 
 export interface AppOptions {
@@ -156,8 +156,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const body = await c.req
       .json<{ provider?: Provider; api_key?: string }>()
       .catch(() => ({}) as Record<string, string>);
-    const provider: Provider = body.provider === "openai" ? "openai" : body.provider === "anthropic" ? "anthropic" : settings.provider();
-    const storedKey = provider === "openai" ? settings.get("openai_api_key") : settings.get("anthropic_api_key");
+    const requested = body.provider;
+    const provider: Provider =
+      requested === "openai" || requested === "anthropic" || requested === "openrouter" || requested === "groq"
+        ? requested
+        : settings.provider();
+    const storedKey = settings.get(PROVIDER_KEY[provider]);
     const key = (body.api_key && !body.api_key.includes("••••") ? body.api_key : null) || storedKey;
     if (!key) return c.json({ ok: false, message: "API key is required" });
     return c.json(await testProviderKey(provider, key));
@@ -243,6 +247,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const job = runtime.ingestQueue.cancel(c.req.param("id"));
     if (!job) return c.json({ error: "job not found" }, 404);
     return c.json({ job });
+  });
+
+  // Real (provider-billed) LLM cost analytics: tokens + USD by operation and
+  // model, for the last 24h and 7d. Populated by every engine LLM call.
+  app.get("/api/usage", (c) => {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    return c.json({
+      today: runtime.usageStore.summary(now - day),
+      last7d: runtime.usageStore.summary(now - 7 * day),
+    });
   });
 
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
@@ -515,13 +530,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         // (Cloudflare/Traefik ~100s idle) drops the connection → "network error".
         const heartbeat = setInterval(() => send({ type: "ping" }), 15_000);
         try {
-          const reply = await engine.handleTasking({ text: message, surface: "web", conversationKey: "default" });
-          send({ type: "delta", text: reply.text });
-          for (const action of reply.actions) {
-            console.log(`[chat] action: ${action.tool}`);
-            send({ type: "tool", phase: "end", tool: action.tool, label: action.tool });
-          }
-          send({ type: "done", sources: [], actions: reply.actions });
+          const reply = await engine.chat(message, "web", {
+            onDelta: (delta) => send({ type: "delta", text: delta }),
+            onToolEvent: (event) => {
+              console.log(`[chat] tool ${event.phase}: ${event.tool} — ${event.label}`);
+              send({ type: "tool", phase: event.phase, tool: event.tool, label: event.label });
+            },
+          });
+          send({ type: "done", sources: reply.sources, ...(reply.stored ? { stored: reply.stored } : {}) });
         } catch (err) {
           console.error("[chat] stream failed:", err);
           send({ type: "error", message: err instanceof Error ? err.message : "chat failed" });

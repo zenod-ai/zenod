@@ -80,6 +80,40 @@ describe("lintVault", () => {
     expect(report.errors.map((e) => e.rule)).toContain("links/orphan");
   });
 
+  it("accepts OKF-compatible frontmatter and standard markdown concept links", async () => {
+    await writeFile(
+      join(vault, "Notes/Okf.md"),
+      [
+        "---",
+        "title: OKF",
+        "type: note",
+        "tags: [insurance]",
+        "created: 2026-06-14",
+        "updated: 2026-06-14",
+        "summary: OKF-compatible page.",
+        "description: OKF-compatible page.",
+        'timestamp: "2026-06-14T00:00:00Z"',
+        "---",
+        "",
+        "# OKF",
+        "",
+        "Related: [Insurance](/Areas/Insurance.md)",
+        "",
+      ].join("\n"),
+    );
+    const report = await lintVault(vault, ["Notes/Okf.md"]);
+    expect(report.errors).toEqual([]);
+  });
+
+  it("validates OKF timestamp when present", async () => {
+    await writeFile(
+      join(vault, "Notes/BadTimestamp.md"),
+      `---\ntitle: BadTimestamp\ntype: note\ntags: [insurance]\ncreated: 2026-06-14\nupdated: 2026-06-14\nsummary: Bad timestamp.\ndescription: Bad timestamp.\ntimestamp: yesterday\n---\n\nRelated: [Insurance](/Areas/Insurance.md)\n`,
+    );
+    const report = await lintVault(vault, ["Notes/BadTimestamp.md"]);
+    expect(report.errors.map((e) => e.message)).toContain("timestamp must be an ISO 8601 datetime");
+  });
+
   it("does not count an evidence citation as an orphan-saving link", async () => {
     await writeFile(
       join(vault, "Notes/CitesOnly.md"),

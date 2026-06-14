@@ -38,9 +38,9 @@ Anti-slop answer: **provenance is first-class.** Human-authored vs agent-written
 1. **Two tiers.** Immutable captures (`Inbox/`, `Log/`, `_attachments/` — append-only, never edited, source-linked) and distilled pages (`Areas/`, `Projects/`, `Notes/` — entity-centric, regenerable, every claim citing its captures).
 2. **Shallow purpose folders only.** Folders are coarse routing; deep hierarchy fails agents.
 3. **Links over folders.** Every distilled page links to related pages; orphans fail validation.
-4. **Minimal enforced frontmatter**: title, type, tags (controlled vocabulary), created, updated, summary. Enables cheap two-pass retrieval: scan titles/tags/summaries first, open bodies only when needed.
+4. **Minimal enforced frontmatter**: title, type, tags (controlled vocabulary), created, updated, summary. New/rewritten pages also carry OKF-compatible `description` and `timestamp` aliases. Enables cheap two-pass retrieval: scan titles/tags/summaries first, open bodies only when needed.
 5. **Schema doc at root** (AGENTS.md) — the agent reads it first; validation code enforces it regardless.
-6. **Meta-schema fixed; taxonomy evolves by proposal.** Folder set, frontmatter keys, naming, linking rules change only via versioned migrations. Tags/MOCs evolve through explicit, logged proposals.
+6. **Meta-schema fixed; taxonomy evolves by proposal.** Folder set, frontmatter keys, naming, linking rules change only via versioned migrations. Tags/MOCs evolve through explicit, logged proposals. Zenod is a strict OKF profile: OKF compatibility is an interoperability layer, not permission to weaken Zenod lint.
 7. **Entity pages are the primary write target.** Distillation lands on interlinked entity/topic pages, not a journal — the Log stays as a raw source, so knowledge compounds instead of accumulating.
 8. **Write distilled pages for LLM readers**: dense, self-contained, explicit links — a page must survive being dropped cold into a context window with no implicit shared context.
 

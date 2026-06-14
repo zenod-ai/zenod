@@ -37,7 +37,7 @@ import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
-import { normalizeCreateIssueLabels, normalizeLabelIssueLabels } from "../taskingPolicy.js";
+import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
 
 /**
  * The conversation key for a surface. One continuous thread per surface today;
@@ -95,6 +95,8 @@ tags: []
 created: "{{date}}"
 updated: "{{date}}"
 summary: ""
+description: ""
+timestamp: "{{date}}T00:00:00Z"
 ---
 
 # {{title}}
@@ -189,15 +191,25 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
     const text = [
       "You are Zeno, the user's personal memory agent. Answer questions about their knowledge vault.",
-      "Search before answering; read the notes you cite; never invent vault content.",
+      // The index below is a map, not the territory — a weaker model will happily
+      // answer from it and skip the tools. Make tool use a hard, non-negotiable
+      // contract so search_vault/read_note actually fire on every vault question.
+      [
+        "TOOL CONTRACT — applies to every question about the vault's contents, no exceptions:",
+        "1. You MUST call search_vault BEFORE you write any answer. Do not narrate 'let me search' and then answer — actually call the tool first, then answer from its results.",
+        "2. You MUST call read_note on the notes/logs you rely on before quoting, summarizing, or citing them. Never describe a note's contents from its title or summary alone.",
+        "3. The page/log/attachment lists in this briefing are ONLY a table of contents so you know what to search for and read. They are NOT a source you may quote, count, rank, or answer from. Anything you state about vault content must come from a tool result in THIS turn.",
+        "4. To conclude something is absent, you must have run search_vault (and retried with different terms) this turn — never infer absence from this index.",
+        "The only questions exempt are pure chit-chat with no reference to the user's notes, projects, logs, or memory.",
+      ].join("\n"),
       "The vault has two tiers. Meaning pages (Projects/, Areas/, Notes/) hold distilled knowledge. The evidence tier holds the originals: Log/ daily files contain immutable receipts — verbatim transcripts, quotes, and source links (e.g. Google Drive URLs) — and _attachments/ holds raw artifacts (images, documents).",
       "For provenance questions (where is the original / audio / transcript / source?), read the Log file bodies and the '## Sources' section of meaning pages — that is where artifact locations live.",
       "Summaries are lossy. Before concluding something is not in the vault, read the full bodies of the top search hits, and search again with different terms.",
       "Cite sources inline as vault paths. Be direct and concise.",
       agents ? `Vault doctrine:\n${agents}` : "",
-      `Meaning pages (${meaningPages.length}/${snapshot.pages.length}; search_vault can retrieve omitted pages):\n${index || "(none yet)"}`,
-      `Recent evidence logs (${logFiles.length}/${allLogFiles.length}; search_vault can retrieve older logs):\n${logs || "(none yet)"}`,
-      `Recent attachments (${attachmentFiles.length}/${allAttachmentFiles.length}; search_vault can retrieve omitted attachment paths):\n${attachments || "(none yet)"}`,
+      `MAP — meaning pages (${meaningPages.length}/${snapshot.pages.length}). A table of contents only; call search_vault/read_note to use any of these, and search_vault to reach the omitted ones:\n${index || "(none yet)"}`,
+      `MAP — recent evidence logs (${logFiles.length}/${allLogFiles.length}). Filenames only; call read_note to see a log's contents, search_vault to reach older logs:\n${logs || "(none yet)"}`,
+      `MAP — recent attachments (${attachmentFiles.length}/${allAttachmentFiles.length}). Paths only; search_vault reaches the omitted ones:\n${attachments || "(none yet)"}`,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -426,6 +438,20 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const recordAction = (tool: string, input: Record<string, unknown>, result: string) => {
       record?.({ tool, input, result });
     };
+    // Mutation tools must leave a recorded action whether they succeed OR throw,
+    // so the reply can be reconciled against what really happened — a failed
+    // create must never be narratable as success. The error is still re-thrown
+    // so the LLM tool layer surfaces it to the model as before.
+    const runMutation = async (tool: string, input: Record<string, unknown>, run: () => Promise<string>): Promise<string> => {
+      try {
+        const result = await run();
+        recordAction(tool, input, result);
+        return result;
+      } catch (err) {
+        recordAction(tool, input, `ERROR: ${(err as Error).message}`);
+        throw err;
+      }
+    };
     return {
       captureNote: async (content: string, hints?: string[]) => {
         const result = await store({ content, source: surface, ...(hints?.length ? { hints } : {}) });
@@ -461,28 +487,28 @@ export function createEngine(options: EngineOptions): BrainEngine {
       },
       createIssue: async (input) => {
         const normalized = { ...input, repo: input.repo || defaultRepo(), labels: normalizeCreateIssueLabels(input.labels) };
-        const result = options.taskingTools
-          ? await options.taskingTools.createIssue({
-              title: normalized.title,
-              body: normalized.body,
-              ...(normalized.repo ? { repo: normalized.repo } : {}),
-              labels: normalized.labels,
-            })
-          : noExternalTool("createIssue");
-        recordAction("createIssue", normalized, result);
-        return result;
+        return runMutation("createIssue", normalized, () =>
+          options.taskingTools
+            ? options.taskingTools.createIssue({
+                title: normalized.title,
+                body: normalized.body,
+                ...(normalized.repo ? { repo: normalized.repo } : {}),
+                labels: normalized.labels,
+              })
+            : Promise.resolve(noExternalTool("createIssue")),
+        );
       },
       labelIssue: async (input) => {
         const normalized = { ...input, repo: input.repo || defaultRepo(), labels: normalizeLabelIssueLabels(input.labels) };
-        const result = options.taskingTools
-          ? await options.taskingTools.labelIssue({
-              issueNumber: normalized.issueNumber,
-              labels: normalized.labels,
-              ...(normalized.repo ? { repo: normalized.repo } : {}),
-            })
-          : noExternalTool("labelIssue");
-        recordAction("labelIssue", normalized, result);
-        return result;
+        return runMutation("labelIssue", normalized, () =>
+          options.taskingTools
+            ? options.taskingTools.labelIssue({
+                issueNumber: normalized.issueNumber,
+                labels: normalized.labels,
+                ...(normalized.repo ? { repo: normalized.repo } : {}),
+              })
+            : Promise.resolve(noExternalTool("labelIssue")),
+        );
       },
       queryBacklog: async (query?: string) => {
         const result = options.taskingTools
@@ -506,14 +532,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
       // promotion IS the approval.
       approveQueue: async (input: { repo: string; issueNumbers: number[] }) => {
         const normalized = { ...input, repo: input.repo || defaultRepo() };
-        const result = options.taskingTools
-          ? await options.taskingTools.approveQueue({
-              issueNumbers: normalized.issueNumbers,
-              ...(normalized.repo ? { repo: normalized.repo } : {}),
-            })
-          : noExternalTool("approveQueue");
-        recordAction("approveQueue", normalized, result);
-        return result;
+        return runMutation("approveQueue", normalized, () =>
+          options.taskingTools
+            ? options.taskingTools.approveQueue({
+                issueNumbers: normalized.issueNumbers,
+                ...(normalized.repo ? { repo: normalized.repo } : {}),
+              })
+            : Promise.resolve(noExternalTool("approveQueue")),
+        );
       },
       // The ONLY path that sets status:approved-merge — promotes
       // needs-review→approved-merge on explicit human approval relayed through
@@ -521,14 +547,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
       // (monitor) watches to merge the PR on green CI.
       approveMerge: async (input: { repo: string; issueNumbers: number[] }) => {
         const normalized = { ...input, repo: input.repo || defaultRepo() };
-        const result = options.taskingTools
-          ? await options.taskingTools.approveMerge({
-              issueNumbers: normalized.issueNumbers,
-              ...(normalized.repo ? { repo: normalized.repo } : {}),
-            })
-          : noExternalTool("approveMerge");
-        recordAction("approveMerge", normalized, result);
-        return result;
+        return runMutation("approveMerge", normalized, () =>
+          options.taskingTools
+            ? options.taskingTools.approveMerge({
+                issueNumbers: normalized.issueNumbers,
+                ...(normalized.repo ? { repo: normalized.repo } : {}),
+              })
+            : Promise.resolve(noExternalTool("approveMerge")),
+        );
       },
     };
   }
@@ -828,6 +854,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
+  // The model can finish a turn with no closing text — most often when it
+  // exhausts its step budget mid-tool-call (generateText then returns ""). An
+  // empty reply is silently dropped by the WhatsApp gateway and looks like Zeno
+  // ignoring the user, so always produce *something*: the real tool results if
+  // any ran, otherwise an honest retry notice. Reconciliation runs first so a
+  // fabricated mutation is still corrected before we consider falling back.
+  function finalizeReply(rawText: string, actions: TaskingAction[]): string {
+    const text = reconcileTaskingReply(rawText, actions);
+    if (text.trim()) return text;
+    const summary = summarizeActionsForReply(actions);
+    return summary
+      ? `${summary}\n\n(That's what I did — I ran out of room to write a fuller reply.)`
+      : "I couldn't compose a reply to that one — mind rephrasing or sending it again?";
+  }
+
   async function chat(
     message: string,
     surface: Surface,
@@ -850,7 +891,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       stored = await store({ content: message, source: surface });
     }
 
-    const taskTools = buildTaskTools(surface);
+    const actions: TaskingAction[] = [];
+    const taskTools = buildTaskTools(surface, (action) => actions.push(action));
     const briefing = await vaultBriefing();
     reportTokenCost("chat", [briefing.text, ...window.map((m) => m.text), message], briefing);
 
@@ -866,10 +908,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
       taskTools,
       options.driveTools,
     );
-    await state.appendMessage(cid, "assistant", result.text, surface);
+    // Same grounding guard as handleTasking — a fabricated "Created issue #N"
+    // must not survive into the web chat either.
+    const text = finalizeReply(result.text, actions);
+    await state.appendMessage(cid, "assistant", text, surface);
 
     return {
-      text: result.text,
+      text,
       sources: result.readPaths.map((path) => ({ path, githubUrl: githubUrl(location, path) })),
       ...(stored ? { stored } : {}),
     };
@@ -894,8 +939,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
       buildTaskTools(input.surface, (action) => actions.push(action)),
       options.driveTools,
     );
-    await state.appendMessage(cid, "assistant", result.text, input.surface);
-    return { text: result.text, actions };
+    // Never let the reply assert a creation/mutation the tools didn't actually
+    // perform — the user-facing issue number/url must come from a real result.
+    const text = finalizeReply(result.text, actions);
+    await state.appendMessage(cid, "assistant", text, input.surface);
+    return { text, actions };
   }
 
   return {

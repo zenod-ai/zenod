@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import {
   api,
   errorMessage,
+  providerLabel,
   type GithubAppStatus,
   type Provider,
   type SettingsResponse,
@@ -49,6 +50,12 @@ import {
   findModel,
 } from "@/lib/model-catalog"
 
+type ApiKeyField =
+  | "anthropic_api_key"
+  | "openai_api_key"
+  | "openrouter_api_key"
+  | "groq_api_key"
+
 type FormState = {
   vault_repo: string
   vault_branch: string
@@ -56,9 +63,16 @@ type FormState = {
   provider: Provider
   anthropic_api_key: string
   openai_api_key: string
+  openrouter_api_key: string
+  groq_api_key: string
   model_ask: string
   model_classify: string
+  model_max_steps: string
 }
+
+const MAX_STEPS_DEFAULT = 8
+const MAX_STEPS_MIN = 2
+const MAX_STEPS_MAX = 20
 
 function toFormState(settings: SettingsValues): FormState {
   return {
@@ -68,24 +82,33 @@ function toFormState(settings: SettingsValues): FormState {
     provider: settings.provider,
     anthropic_api_key: settings.anthropic_api_key ?? "",
     openai_api_key: settings.openai_api_key ?? "",
+    openrouter_api_key: settings.openrouter_api_key ?? "",
+    groq_api_key: settings.groq_api_key ?? "",
     model_ask: settings.model_ask ?? "",
     model_classify: settings.model_classify ?? "",
+    model_max_steps: settings.model_max_steps ?? "",
   }
 }
 
-const KEY_FIELD: Record<Provider, "anthropic_api_key" | "openai_api_key"> = {
+const KEY_FIELD: Record<Provider, ApiKeyField> = {
   anthropic: "anthropic_api_key",
   openai: "openai_api_key",
+  openrouter: "openrouter_api_key",
+  groq: "groq_api_key",
 }
 
 const KEY_LABEL: Record<Provider, string> = {
   anthropic: "Anthropic API key",
   openai: "OpenAI API key",
+  openrouter: "OpenRouter API key",
+  groq: "Groq API key",
 }
 
 const KEY_PLACEHOLDER: Record<Provider, string> = {
   anthropic: "sk-ant-…",
   openai: "sk-…",
+  openrouter: "sk-or-…",
+  groq: "gsk_…",
 }
 
 const CUSTOM = "__custom__"
@@ -151,9 +174,7 @@ function ModelSelect({
           </SelectItem>
           <SelectSeparator />
           <SelectGroup>
-            <SelectLabel>
-              {provider === "openai" ? "OpenAI" : "Anthropic"} models
-            </SelectLabel>
+            <SelectLabel>{providerLabel(provider)} models</SelectLabel>
             {catalog.map((m) => (
               <SelectItem key={m.id} value={m.id}>
                 {m.label}
@@ -208,6 +229,9 @@ export function KeysTab({
 
   const keyField = KEY_FIELD[form.provider]
   const apiKeyValue = form[keyField]
+  // A stored secret arrives masked ("••••…"), which still counts as present;
+  // only a truly empty field means the selected provider has no key.
+  const apiKeyMissing = apiKeyValue.trim() === ""
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }))
@@ -259,6 +283,12 @@ export function KeysTab({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (apiKeyMissing) {
+      toast.error(`${KEY_LABEL[form.provider]} is required`, {
+        description: `Add a key for ${providerLabel(form.provider)} before saving.`,
+      })
+      return
+    }
     setSaving(true)
     try {
       const result = await api<SettingsResponse>("/api/settings", {
@@ -367,11 +397,14 @@ export function KeysTab({
                 <SelectContent>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
                   <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                  <SelectItem value="groq">Groq</SelectItem>
                 </SelectContent>
               </Select>
               <FieldDescription>
-                Switching provider — clear the model fields to use that
-                provider&apos;s defaults, or set explicit model IDs.
+                Switching provider changes the model list below. Clear the model
+                fields to use that provider&apos;s defaults, or pick/enter model
+                IDs. OpenRouter and Groq are OpenAI-compatible.
               </FieldDescription>
             </Field>
             <Field>
@@ -402,6 +435,12 @@ export function KeysTab({
                   Test
                 </Button>
               </div>
+              {apiKeyMissing ? (
+                <FieldDescription className="text-destructive">
+                  {KEY_LABEL[form.provider]} is required to use{" "}
+                  {providerLabel(form.provider)}.
+                </FieldDescription>
+              ) : null}
               {llmResult !== null && <TestNote result={llmResult} />}
             </Field>
             <FieldSeparator />
@@ -433,10 +472,47 @@ export function KeysTab({
                 Used to classify incoming evidence.
               </FieldDescription>
             </Field>
+            <Field>
+              <FieldLabel htmlFor="keys-max-steps">
+                Max tool steps per reply
+              </FieldLabel>
+              <Input
+                id="keys-max-steps"
+                type="number"
+                inputMode="numeric"
+                min={MAX_STEPS_MIN}
+                max={MAX_STEPS_MAX}
+                step={1}
+                placeholder={String(MAX_STEPS_DEFAULT)}
+                value={form.model_max_steps}
+                onChange={(event) =>
+                  update("model_max_steps", event.target.value)
+                }
+                onBlur={(event) => {
+                  const raw = event.target.value.trim()
+                  if (raw === "") return
+                  const clamped = Math.max(
+                    MAX_STEPS_MIN,
+                    Math.min(MAX_STEPS_MAX, Math.round(Number(raw)))
+                  )
+                  update(
+                    "model_max_steps",
+                    Number.isFinite(clamped) ? String(clamped) : ""
+                  )
+                }}
+              />
+              <FieldDescription>
+                How many rounds of tool calls (search, read, create…) the model
+                may make before it must answer. The model is told this budget so
+                it plans, and the final step always produces a reply — higher is
+                more thorough but slower and costlier. Default {MAX_STEPS_DEFAULT}
+                ; leave blank to use it.
+              </FieldDescription>
+            </Field>
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-end">
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || apiKeyMissing}>
             {saving ? <Spinner /> : <SaveIcon data-icon="inline-start" />}
             Save changes
           </Button>

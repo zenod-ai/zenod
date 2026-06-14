@@ -51,11 +51,22 @@ const STEPS = ["Password", "Vault", "Model", "Connect"] as const
 const KEY_LABEL: Record<Provider, string> = {
   anthropic: "Anthropic API key",
   openai: "OpenAI API key",
+  openrouter: "OpenRouter API key",
+  groq: "Groq API key",
 }
 
 const KEY_PLACEHOLDER: Record<Provider, string> = {
   anthropic: "sk-ant-…",
   openai: "sk-…",
+  openrouter: "sk-or-…",
+  groq: "gsk_…",
+}
+
+const KEY_FIELD: Record<Provider, string> = {
+  anthropic: "anthropic_api_key",
+  openai: "openai_api_key",
+  openrouter: "openrouter_api_key",
+  groq: "groq_api_key",
 }
 
 function Stepper({ current }: { current: number }) {
@@ -384,8 +395,7 @@ function ModelStep({ onDone }: { onDone: () => void }) {
     setSaving(true)
     setError(null)
     try {
-      const keyField =
-        provider === "openai" ? "openai_api_key" : "anthropic_api_key"
+      const keyField = KEY_FIELD[provider]
       await api("/api/settings", {
         method: "PUT",
         body: { provider, [keyField]: apiKey },
@@ -420,6 +430,8 @@ function ModelStep({ onDone }: { onDone: () => void }) {
               <SelectContent>
                 <SelectItem value="anthropic">Anthropic</SelectItem>
                 <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="openrouter">OpenRouter</SelectItem>
+                <SelectItem value="groq">Groq</SelectItem>
               </SelectContent>
             </Select>
           </Field>

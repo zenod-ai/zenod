@@ -74,7 +74,7 @@ export type AuthStatus = {
   configured: boolean
 }
 
-export type Provider = "anthropic" | "openai"
+export type Provider = "anthropic" | "openai" | "openrouter" | "groq"
 
 export type SettingsValues = {
   vault_repo: string | null
@@ -83,8 +83,10 @@ export type SettingsValues = {
   provider: Provider
   anthropic_api_key: string | null
   openai_api_key: string | null
+  openrouter_api_key: string | null
   model_ask: string | null
   model_classify: string | null
+  model_max_steps: string | null
   google_service_account_json: string | null
   google_drive_folder_id: string | null
   groq_api_key: string | null
@@ -443,6 +445,13 @@ export function isMaskedSecret(value: string): boolean {
   return value.startsWith("•")
 }
 
+export const PROVIDER_LABELS: Record<Provider, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+  groq: "Groq",
+}
+
 export function providerLabel(provider: Provider): string {
-  return provider === "openai" ? "OpenAI" : "Anthropic"
+  return PROVIDER_LABELS[provider]
 }

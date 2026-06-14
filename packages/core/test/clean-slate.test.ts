@@ -35,6 +35,7 @@ describe("cleanSlateVault", () => {
     expect(result.initialCommitSha).not.toBe(result.setupCommitSha);
     expect(result.initialPaths).toContain("README.md");
     expect(result.initialPaths).toContain("AGENTS.md");
+    expect(result.initialPaths).toContain("index.md");
     expect(result.setupPaths).toEqual([".brain/config.yml", "Areas/Areas Index.md", "_templates/Area.md"]);
     expect(result.topLevelPaths).toContain("Inbox/");
     expect(result.topLevelPaths).toContain("Log/");
@@ -47,6 +48,7 @@ describe("cleanSlateVault", () => {
       "clean-slate: initial vault",
     ]);
     expect(await git.show([`${result.initialCommitSha}:README.md`])).toContain("clean slate");
+    expect(await git.show([`${result.initialCommitSha}:index.md`])).toContain('okf_version: "0.1"');
     expect(await git.show([`${result.setupCommitSha}:.brain/config.yml`])).toContain("schema_version: 1");
   });
 

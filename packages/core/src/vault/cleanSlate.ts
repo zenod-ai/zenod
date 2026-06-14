@@ -30,7 +30,7 @@ export interface CleanSlateResult {
 const INITIAL_PATHS = [
   "README.md",
   "AGENTS.md",
-  "Index.md",
+  "index.md",
   "Inbox/.gitkeep",
   "Log/.gitkeep",
   "Projects/.gitkeep",
@@ -43,7 +43,7 @@ const INITIAL_PATHS = [
 const TOP_LEVEL_PATHS = [
   "README.md",
   "AGENTS.md",
-  "Index.md",
+  "index.md",
   "Inbox/",
   "Log/",
   "Projects/",
@@ -67,6 +67,7 @@ This vault starts as a clean slate for Zenod.
 - Capture unresolved material in \`Inbox/\`.
 - Preserve source evidence in append-only \`Log/\` files and \`_attachments/\`.
 - Distill durable meaning into \`Projects/\`, \`Areas/\`, and \`Notes/\`.
+- Expose the vault as a strict Open Knowledge Format (OKF) profile through \`index.md\` and compatible frontmatter.
 - Use git history to inspect or revert each setup step.
 `;
 }
@@ -76,13 +77,18 @@ function agents(): string {
 
 - Preserve evidence. Do not rewrite existing \`Log/\` entries or files in \`_attachments/\`.
 - Cite evidence from meaning pages with links to \`Log/YYYY-MM-DD.md\` anchors.
+- Keep meaning-page frontmatter OKF-compatible: \`type\` is required by OKF; \`description\` mirrors Zenod \`summary\`; \`timestamp\` mirrors the last meaningful update.
 - Ask before guessing when a capture cannot be filed confidently.
 - Keep user-authored meaning pages in \`Projects/\`, \`Areas/\`, and \`Notes/\`.
 `;
 }
 
 function index(created: string): string {
-  return `# Index
+  return `---
+okf_version: "0.1"
+---
+
+# Index
 
 Created ${created} as a Zenod clean-slate vault.
 
@@ -133,7 +139,7 @@ export async function cleanSlateVault(repo: VaultRepo, options: CleanSlateOption
   const created = dateString(options.now?.() ?? new Date());
   await writeInitialFile(repo.path, "README.md", readme());
   await writeInitialFile(repo.path, "AGENTS.md", agents());
-  await writeInitialFile(repo.path, "Index.md", index(created));
+  await writeInitialFile(repo.path, "index.md", index(created));
   for (const relPath of INITIAL_PATHS) {
     if (relPath.endsWith(".gitkeep")) await writeInitialFile(repo.path, relPath, "");
   }
