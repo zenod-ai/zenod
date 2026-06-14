@@ -14,6 +14,7 @@ export const SETTING_KEYS = [
   "provider",
   "anthropic_api_key",
   "openai_api_key",
+  "openrouter_api_key",
   "model_ask",
   "model_classify",
   "google_service_account_json",
@@ -24,12 +25,21 @@ export const SETTING_KEYS = [
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
-export type Provider = "anthropic" | "openai";
+export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
+
+/** The settings key holding each provider's API key. */
+export const PROVIDER_KEY: Record<Provider, SettingKey> = {
+  anthropic: "anthropic_api_key",
+  openai: "openai_api_key",
+  openrouter: "openrouter_api_key",
+  groq: "groq_api_key",
+};
 
 const SECRET_KEYS: ReadonlySet<string> = new Set([
   "github_token",
   "anthropic_api_key",
   "openai_api_key",
+  "openrouter_api_key",
   "google_service_account_json",
   "groq_api_key",
 ]);
@@ -41,6 +51,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   provider: "ZENOD_PROVIDER",
   anthropic_api_key: "ANTHROPIC_API_KEY",
   openai_api_key: "OPENAI_API_KEY",
+  openrouter_api_key: "OPENROUTER_API_KEY",
   model_ask: "ZENOD_MODEL_ASK",
   model_classify: "ZENOD_MODEL_CLASSIFY",
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
@@ -108,12 +119,13 @@ export class Settings {
 
   /** Active model provider — defaults to Anthropic. */
   provider(): Provider {
-    return this.get("provider") === "openai" ? "openai" : "anthropic";
+    const value = this.get("provider");
+    return value === "openai" || value === "openrouter" || value === "groq" ? value : "anthropic";
   }
 
   /** The API key for the active provider. */
   activeApiKey(): string | null {
-    return this.provider() === "openai" ? this.get("openai_api_key") : this.get("anthropic_api_key");
+    return this.get(PROVIDER_KEY[this.provider()]);
   }
 
   /** Google Drive is connected: a service account to read with. */

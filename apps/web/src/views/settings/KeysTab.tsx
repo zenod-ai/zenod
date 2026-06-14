@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import {
   api,
   errorMessage,
+  providerLabel,
   type GithubAppStatus,
   type Provider,
   type SettingsResponse,
@@ -49,6 +50,12 @@ import {
   findModel,
 } from "@/lib/model-catalog"
 
+type ApiKeyField =
+  | "anthropic_api_key"
+  | "openai_api_key"
+  | "openrouter_api_key"
+  | "groq_api_key"
+
 type FormState = {
   vault_repo: string
   vault_branch: string
@@ -56,6 +63,8 @@ type FormState = {
   provider: Provider
   anthropic_api_key: string
   openai_api_key: string
+  openrouter_api_key: string
+  groq_api_key: string
   model_ask: string
   model_classify: string
 }
@@ -68,24 +77,32 @@ function toFormState(settings: SettingsValues): FormState {
     provider: settings.provider,
     anthropic_api_key: settings.anthropic_api_key ?? "",
     openai_api_key: settings.openai_api_key ?? "",
+    openrouter_api_key: settings.openrouter_api_key ?? "",
+    groq_api_key: settings.groq_api_key ?? "",
     model_ask: settings.model_ask ?? "",
     model_classify: settings.model_classify ?? "",
   }
 }
 
-const KEY_FIELD: Record<Provider, "anthropic_api_key" | "openai_api_key"> = {
+const KEY_FIELD: Record<Provider, ApiKeyField> = {
   anthropic: "anthropic_api_key",
   openai: "openai_api_key",
+  openrouter: "openrouter_api_key",
+  groq: "groq_api_key",
 }
 
 const KEY_LABEL: Record<Provider, string> = {
   anthropic: "Anthropic API key",
   openai: "OpenAI API key",
+  openrouter: "OpenRouter API key",
+  groq: "Groq API key",
 }
 
 const KEY_PLACEHOLDER: Record<Provider, string> = {
   anthropic: "sk-ant-…",
   openai: "sk-…",
+  openrouter: "sk-or-…",
+  groq: "gsk_…",
 }
 
 const CUSTOM = "__custom__"
@@ -151,9 +168,7 @@ function ModelSelect({
           </SelectItem>
           <SelectSeparator />
           <SelectGroup>
-            <SelectLabel>
-              {provider === "openai" ? "OpenAI" : "Anthropic"} models
-            </SelectLabel>
+            <SelectLabel>{providerLabel(provider)} models</SelectLabel>
             {catalog.map((m) => (
               <SelectItem key={m.id} value={m.id}>
                 {m.label}
@@ -367,11 +382,14 @@ export function KeysTab({
                 <SelectContent>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
                   <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                  <SelectItem value="groq">Groq</SelectItem>
                 </SelectContent>
               </Select>
               <FieldDescription>
-                Switching provider — clear the model fields to use that
-                provider&apos;s defaults, or set explicit model IDs.
+                Switching provider changes the model list below. Clear the model
+                fields to use that provider&apos;s defaults, or pick/enter model
+                IDs. OpenRouter and Groq are OpenAI-compatible.
               </FieldDescription>
             </Field>
             <Field>

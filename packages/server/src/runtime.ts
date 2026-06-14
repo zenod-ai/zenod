@@ -346,14 +346,19 @@ export async function testProviderKey(
   provider: Provider,
   apiKey: string,
 ): Promise<{ ok: boolean; message: string }> {
-  const config =
+  const bearer = { Authorization: `Bearer ${apiKey}` };
+  const config: { url: string; headers: Record<string, string>; name: string } =
     provider === "openai"
-      ? { url: "https://api.openai.com/v1/models", headers: { Authorization: `Bearer ${apiKey}` }, name: "OpenAI" }
-      : {
-          url: "https://api.anthropic.com/v1/models",
-          headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-          name: "Anthropic",
-        };
+      ? { url: "https://api.openai.com/v1/models", headers: bearer, name: "OpenAI" }
+      : provider === "openrouter"
+        ? { url: "https://openrouter.ai/api/v1/models", headers: bearer, name: "OpenRouter" }
+        : provider === "groq"
+          ? { url: "https://api.groq.com/openai/v1/models", headers: bearer, name: "Groq" }
+          : {
+              url: "https://api.anthropic.com/v1/models",
+              headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+              name: "Anthropic",
+            };
   try {
     const response = await fetch(config.url, { headers: config.headers });
     if (response.ok) return { ok: true, message: "key accepted" };

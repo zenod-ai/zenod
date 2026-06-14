@@ -29,7 +29,7 @@ import { parseServiceAccount, testDrive } from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";
 import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
-import { SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
+import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
 
 export interface AppOptions {
@@ -156,8 +156,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const body = await c.req
       .json<{ provider?: Provider; api_key?: string }>()
       .catch(() => ({}) as Record<string, string>);
-    const provider: Provider = body.provider === "openai" ? "openai" : body.provider === "anthropic" ? "anthropic" : settings.provider();
-    const storedKey = provider === "openai" ? settings.get("openai_api_key") : settings.get("anthropic_api_key");
+    const requested = body.provider;
+    const provider: Provider =
+      requested === "openai" || requested === "anthropic" || requested === "openrouter" || requested === "groq"
+        ? requested
+        : settings.provider();
+    const storedKey = settings.get(PROVIDER_KEY[provider]);
     const key = (body.api_key && !body.api_key.includes("••••") ? body.api_key : null) || storedKey;
     if (!key) return c.json({ ok: false, message: "API key is required" });
     return c.json(await testProviderKey(provider, key));

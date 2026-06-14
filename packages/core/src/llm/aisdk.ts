@@ -19,7 +19,18 @@ import type {
   WorkLoopResult,
 } from "./types.js";
 
-export type Provider = "anthropic" | "openai";
+export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
+
+/**
+ * OpenAI-compatible third-party gateways. They speak the Chat Completions API,
+ * so we reach them through `@ai-sdk/openai` with a custom baseURL and the
+ * `.chat()` model (the default model uses the Responses API, which these
+ * providers do not implement).
+ */
+const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<Provider, string>> = {
+  openrouter: "https://openrouter.ai/api/v1",
+  groq: "https://api.groq.com/openai/v1",
+};
 
 /** The five LLM operations, tagged on every usage report for cost analytics. */
 export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog";
@@ -61,10 +72,27 @@ export interface AiLlmOptions {
 export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string }> = {
   anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5" },
   openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini" },
+  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat" },
+  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant" },
 };
 
 export const MAX_STEPS = 6;
 export const MAX_WORK_STEPS = 12;
+
+type ModelFactory = (id: string) => Parameters<typeof generateText>[0]["model"];
+
+/**
+ * Build the per-provider model factory. Anthropic and OpenAI use their native
+ * providers; OpenRouter and Groq are OpenAI-compatible gateways reached via the
+ * OpenAI provider with a custom baseURL and the Chat Completions model.
+ */
+function createModelFactory(provider: Provider, apiKey: string): ModelFactory {
+  if (provider === "anthropic") return createAnthropic({ apiKey });
+  if (provider === "openai") return createOpenAI({ apiKey });
+  const baseURL = OPENAI_COMPATIBLE_BASE_URLS[provider];
+  const compatible = createOpenAI(baseURL ? { apiKey, baseURL } : { apiKey });
+  return (id: string) => compatible.chat(id);
+}
 
 /** Tool callbacks may fail (bad path, immutable tier); surface the error to the model instead of aborting the loop. */
 function caught(run: () => Promise<string>): Promise<string> {
@@ -196,10 +224,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     this.classifyModelId = options.classifyModel || defaults.classify;
     this.provider = options.provider;
     this.onUsage = options.onUsage;
-    this.model =
-      options.provider === "openai"
-        ? createOpenAI({ apiKey: options.apiKey })
-        : createAnthropic({ apiKey: options.apiKey });
+    this.model = createModelFactory(options.provider, options.apiKey);
   }
 
   /**
