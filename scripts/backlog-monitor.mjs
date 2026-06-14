@@ -1,40 +1,34 @@
 #!/usr/bin/env node
-// Backlog monitor (#27) — the single process that runs the chat-trigger loop.
+// Backlog monitor — the chat-trigger loop over the CENTRAL backlog (#61).
 //
-// Architecture: GitHub is the queue + state + comms surface. Zenod agents can
-// create and label proposed tickets, but only a human applies `status:queued`.
-// THIS monitor — running
-// in the EXTERNAL agent-runner container, never killed by an app redeploy —
-// reacts to label state with three motions:
+// The central backlog lives on Zenod's own repo (obsidian-brain). Zenod writes
+// ONLY there. This monitor (external agent-runner, never killed by an app
+// redeploy) watches the central backlog and BRIDGES each queued ticket to its
+// `target:` repo, where Codex actually works the code:
 //
-//   1. LAUNCH  : owner:agent + status:queued  -> launch Codex via fanout
-//                (the fanout flips queued -> running and opens draft PRs).
-//   2. FAN-IN  : a multi-issue fanout batch reaching needs-review -> launch
-//                one N+1 integration worker over every completed branch.
-//   3. OUTCOME : status:needs-review | status:blocked -> ping the owner on
-//                WhatsApp (via the app's /api/notify) with the PR / the
-//                blocking question. Each issue is pinged once per state.
+//   LAUNCH  : central owner:agent + status:queued -> materialize an execution
+//             issue on the ticket's target repo, run the fanout there, flip the
+//             central ticket to status:running.
+//   OUTCOME : the execution issue reaches needs-review/blocked -> mirror that
+//             onto the central ticket and ping the owner (PR link / question).
 //
-// Trigger model is poke + poll: a tiny HTTP listener gives an instant refresh
-// (POST /poke), and a slow poll underneath guarantees nothing is ever missed
-// (e.g. a human labelling an issue `queued` straight in GitHub).
+// Zenod never touches the target repo; only Codex (broad VPS access) does.
+// Trigger model: poke (POST /poke) + poll.
 //
 // Config via env:
-//   ZENOD_REPO        default zenod-ai/zenod
-//   ZENOD_WORKDIR     default /runner/work/zenod
-//   ZENOD_APP_URL     e.g. https://app.zenod.dev   (for /api/notify)
-//   ZENOD_API_TOKEN   the app's bearer token       (for /api/notify)
-//   ZENOD_POLL_MS     default 120000
-//   ZENOD_POKE_PORT   default 8787
-//   ZENOD_CONCURRENCY default 3
-//   ZENOD_STATE       default <workdir>/.fanout/monitor-state.json
+//   ZENOD_BACKLOG_REPO  the CENTRAL backlog repo (default AlfaBlok/obsidian-brain)
+//   ZENOD_REPO          default target repo for code work + fan-in (default zenod-ai/zenod)
+//   ZENOD_WORKDIR       the target-repo checkout for the fanout (default /runner/work/zenod)
+//   ZENOD_APP_URL / ZENOD_API_TOKEN   for /api/notify
+//   ZENOD_POLL_MS / ZENOD_POKE_PORT / ZENOD_CONCURRENCY / ZENOD_STATE / ZENOD_BASE
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 
-const REPO = process.env.ZENOD_REPO || "zenod-ai/zenod";
+const BACKLOG = process.env.ZENOD_BACKLOG_REPO || "AlfaBlok/obsidian-brain";
+const REPO = process.env.ZENOD_REPO || "zenod-ai/zenod"; // default target repo + fan-in repo
 const WORKDIR = process.env.ZENOD_WORKDIR || "/runner/work/zenod";
 const APP_URL = (process.env.ZENOD_APP_URL || "").replace(/\/$/, "");
 const API_TOKEN = process.env.ZENOD_API_TOKEN || "";
@@ -63,29 +57,15 @@ function loadState() {
 }
 function normalizeState(state) {
   return {
-    launched: state?.launched ?? {}, // issue -> true
-    notified: state?.notified ?? {}, // issue -> last-status
-    fanInBatches: state?.fanInBatches ?? {}, // batch key -> integration status
+    launched: state?.launched ?? {},
+    notified: state?.notified ?? {},
+    fanInBatches: state?.fanInBatches ?? {},
+    bridges: state?.bridges ?? {}, // central # -> { target, exec, mirrored }
   };
 }
 function saveState(s) {
   mkdirSync(dirname(STATE_PATH), { recursive: true });
   writeFileSync(STATE_PATH, JSON.stringify(s, null, 2));
-}
-
-// owner:agent issues with their current status:* label.
-function listAgentIssues() {
-  const out = gh([
-    "issue", "list", "--repo", REPO, "--state", "open",
-    "--label", "owner:agent", "--limit", "100",
-    "--json", "number,title,labels,url",
-  ]);
-  return JSON.parse(out).map((i) => ({
-    number: i.number,
-    title: i.title,
-    url: i.url,
-    status: (i.labels || []).map((l) => l.name).find((n) => n.startsWith("status:")) || null,
-  }));
 }
 
 async function notify(text) {
@@ -105,21 +85,94 @@ async function notify(text) {
   }
 }
 
-function latestComment(number) {
+// ---- central backlog (obsidian-brain) ----
+
+// owner:agent central issues with their status + target repo.
+function listCentralIssues() {
+  const out = gh([
+    "issue", "list", "--repo", BACKLOG, "--state", "open",
+    "--label", "owner:agent", "--limit", "100",
+    "--json", "number,title,labels,url,body",
+  ]);
+  return JSON.parse(out).map((i) => {
+    const names = (i.labels || []).map((l) => l.name);
+    const target = names.find((n) => n.startsWith("target:"));
+    return {
+      number: i.number,
+      title: i.title,
+      url: i.url,
+      body: i.body || "",
+      status: names.find((n) => n.startsWith("status:")) || null,
+      target: target ? target.slice("target:".length) : REPO,
+    };
+  });
+}
+
+function setCentralStatus(number, from, to) {
   try {
-    const out = gh(["issue", "view", String(number), "--repo", REPO, "--json", "comments"]);
-    const comments = JSON.parse(out).comments || [];
-    return comments.length ? comments[comments.length - 1].body : "";
+    if (from) gh(["issue", "edit", String(number), "--repo", BACKLOG, "--remove-label", from]);
+    gh(["issue", "edit", String(number), "--repo", BACKLOG, "--add-label", to]);
+  } catch (e) {
+    log(`setCentralStatus #${number} -> ${to} failed:`, e.message);
+  }
+}
+
+// Materialize the central ticket as an execution issue on its target repo.
+function materializeExec(central) {
+  const body = [
+    `_Execution copy of central backlog item ${central.url} — the central ticket is the source of truth._`,
+    "",
+    central.body,
+  ].join("\n");
+  const out = gh([
+    "issue", "create", "--repo", central.target,
+    "--title", `[central #${central.number}] ${central.title}`,
+    "--body", body, "--label", "owner:agent,status:queued",
+  ]);
+  const m = out.match(/\/issues\/(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
+function launchFanout(target, execNumber) {
+  const args = [
+    "start", "--repo", target, "--issues", String(execNumber),
+    "--workdir", WORKDIR, "--draft-pr", "--github-status",
+    "--concurrency", String(CONCURRENCY),
+  ];
+  const child = spawn("zenod-fanout-codex", args, { stdio: "ignore", detached: true });
+  child.unref();
+  log(`launched fanout for ${target}#${execNumber}`);
+}
+
+function execStatusAndComment(target, execNumber) {
+  try {
+    const out = gh(["issue", "view", String(execNumber), "--repo", target, "--json", "labels,comments"]);
+    const o = JSON.parse(out);
+    const status = (o.labels || []).map((l) => l.name).find((n) => n.startsWith("status:")) || null;
+    const comments = o.comments || [];
+    return { status, lastComment: comments.length ? comments[comments.length - 1].body : "" };
+  } catch {
+    return { status: null, lastComment: "" };
+  }
+}
+
+function prUrlForExec(target, execNumber) {
+  try {
+    const out = gh(["pr", "list", "--repo", target, "--state", "open", "--json", "url,headRefName", "--limit", "100"]);
+    const pr = JSON.parse(out).find((p) => p.headRefName.includes(`issue-${execNumber}-`));
+    return pr ? pr.url : "";
   } catch {
     return "";
   }
 }
 
-function prUrlForIssue(number) {
+// ---- fan-in (#41), preserved for re-integration in the central model ----
+
+function latestComment(number, repo = REPO) {
   try {
-    const out = gh(["pr", "list", "--repo", REPO, "--state", "open", "--json", "url,headRefName", "--limit", "100"]);
-    const pr = JSON.parse(out).find((p) => p.headRefName.includes(`issue-${number}-`));
-    return pr ? pr.url : "";
+    const out = gh(["issue", "view", String(number), "--repo", repo, "--json", "comments"]);
+    const comments = JSON.parse(out).comments || [];
+    return comments.length ? comments[comments.length - 1].body : "";
   } catch {
     return "";
   }
@@ -140,9 +193,7 @@ function batchKey(numbers) {
 
 function activeFanInBatchForIssue(state, number) {
   return Object.values(state.fanInBatches ?? {}).find(
-    (batch) =>
-      batch.issues?.includes(number) &&
-      !["complete", "blocked", "failed"].includes(batch.status),
+    (batch) => batch.issues?.includes(number) && !["complete", "blocked", "failed"].includes(batch.status),
   );
 }
 
@@ -170,22 +221,6 @@ function ensureFanInBatch(state, numbers) {
   };
   state.fanInBatches[key] = batch;
   return batch;
-}
-
-function launch(numbers) {
-  const args = [
-    "start", "--repo", REPO, "--issues", numbers.join(","),
-    "--workdir", WORKDIR,
-    // --draft-pr: push branch + open draft PR. --github-status: flip the
-    // issue's status:* labels (queued→running→needs-review/blocked) — the
-    // monitor's outcome motion reads those labels, so this is required.
-    "--draft-pr", "--github-status",
-    "--concurrency", String(CONCURRENCY),
-  ];
-  // Detached: the fanout run is long; the monitor must stay responsive.
-  const child = spawn("zenod-fanout-codex", args, { stdio: "ignore", detached: true });
-  child.unref();
-  log("launched fanout for", numbers.join(", "));
 }
 
 function integrationPrompt(batch, branchRefs) {
@@ -250,7 +285,6 @@ If blocked, include:
 
 function prepareIntegrationWorktree(batch) {
   rmSync(batch.integrationWorktree, { recursive: true, force: true });
-  gh(["repo", "view", REPO, "--json", "nameWithOwner"]);
   spawnSync("git", ["fetch", "origin", BASE_BRANCH], { cwd: WORKDIR, stdio: "ignore" });
   spawnSync("git", ["branch", "-D", batch.integrationBranch], { cwd: WORKDIR, stdio: "ignore" });
   const result = spawnSync("git", ["worktree", "add", "-b", batch.integrationBranch, batch.integrationWorktree, `origin/${BASE_BRANCH}`], {
@@ -283,19 +317,12 @@ function launchIntegration(batch, issuesByNumber) {
     log("fan-in blocked:", batch.blocker);
     return false;
   }
-
   mkdirSync(dirname(batch.promptPath), { recursive: true });
   prepareIntegrationWorktree(batch);
   writeFileSync(batch.promptPath, `${integrationPrompt(batch, branchRefs)}\n`);
   const args = [
-    "exec",
-    "--json",
-    "--cd",
-    batch.integrationWorktree,
-    "--dangerously-bypass-approvals-and-sandbox",
-    "--output-last-message",
-    batch.finalPath,
-    "-",
+    "exec", "--json", "--cd", batch.integrationWorktree,
+    "--dangerously-bypass-approvals-and-sandbox", "--output-last-message", batch.finalPath, "-",
   ];
   const child = spawn("codex", args, { cwd: batch.integrationWorktree, stdio: ["pipe", "ignore", "ignore"], detached: true });
   child.stdin.end(readFileSync(batch.promptPath, "utf8"));
@@ -319,9 +346,9 @@ function detectIntegrationStatus(finalText) {
       // Fall back to text matching below.
     }
   }
-  if (/status:\s*blocked|\"status\"\s*:\s*\"blocked\"/i.test(finalText)) return "blocked";
-  if (/status:\s*failed|\"status\"\s*:\s*\"failed\"/i.test(finalText)) return "failed";
-  if (/status:\s*complete|\"status\"\s*:\s*\"complete\"/i.test(finalText)) return "complete";
+  if (/status:\s*blocked|"status"\s*:\s*"blocked"/i.test(finalText)) return "blocked";
+  if (/status:\s*failed|"status"\s*:\s*"failed"/i.test(finalText)) return "failed";
+  if (/status:\s*complete|"status"\s*:\s*"complete"/i.test(finalText)) return "complete";
   return "complete";
 }
 
@@ -349,58 +376,67 @@ function updateFanInBatches(state, issues, options = {}) {
   }
 }
 
+// ---- main loop: the central-backlog bridge ----
+
 let scanning = false;
 async function scan(reason) {
   if (scanning) return;
   scanning = true;
   try {
     const state = loadState();
-    const issues = listAgentIssues();
+    const issues = listCentralIssues();
 
-    // 1. LAUNCH motion
-    const toLaunch = issues
-      .filter((i) => i.status === "status:queued" && !state.launched[i.number])
-      .map((i) => i.number);
-    if (toLaunch.length) {
-      launch(toLaunch);
-      for (const n of toLaunch) state.launched[n] = true;
-      ensureFanInBatch(state, toLaunch);
-      await notify(`🚀 Zenod queued Codex on ${toLaunch.map((n) => `#${n}`).join(", ")}. I'll message you when each lands.`);
-    }
-
-    updateFanInBatches(state, issues);
-
-    // 2. OUTCOME motion — ping once per terminal state.
-    for (const i of issues) {
-      if (i.status === "status:needs-review" && state.notified[i.number] !== "needs-review") {
-        if (reviewHeldByFanInBatch(state, i.number)) continue;
-        const pr = prUrlForIssue(i.number);
-        await notify(`✅ #${i.number} ${i.title} — ready for review${pr ? `: ${pr}` : "."}`);
-        state.notified[i.number] = "needs-review";
-        delete state.launched[i.number];
-      } else if (i.status === "status:blocked" && state.notified[i.number] !== "blocked") {
-        const q = latestComment(i.number).slice(0, 280);
-        await notify(`⛔ #${i.number} ${i.title} — blocked, needs your decision${q ? `:\n${q}` : "."}`);
-        state.notified[i.number] = "blocked";
-        delete state.launched[i.number];
-      } else if (i.status === "status:queued" && state.notified[i.number]) {
-        // Re-queued after a block/review — allow it to notify again next time.
-        delete state.notified[i.number];
+    // LAUNCH: a queued central ticket -> materialize on its target repo + run Codex.
+    let launched = 0;
+    for (const c of issues) {
+      if (c.status === "status:queued" && !state.bridges[c.number]) {
+        const exec = materializeExec(c);
+        if (!exec) {
+          log(`materialize failed for central #${c.number}`);
+          continue;
+        }
+        launchFanout(c.target, exec);
+        setCentralStatus(c.number, "status:queued", "status:running");
+        state.bridges[c.number] = { target: c.target, exec, mirrored: null };
+        launched++;
+        await notify(`🚀 Queued Codex on #${c.number} ${c.title} (working ${c.target}). I'll message you when it lands.`);
       }
     }
 
-    for (const batch of Object.values(state.fanInBatches ?? {})) {
-      if (batch.status === "complete" && state.notified[`fan-in:${batch.key}`] !== "complete") {
-        await notify(`✅ Fan-in ${batch.key} — integration pass complete on \`${batch.integrationBranch}\`.`);
-        state.notified[`fan-in:${batch.key}`] = "complete";
-      } else if (["blocked", "failed"].includes(batch.status) && state.notified[`fan-in:${batch.key}`] !== batch.status) {
-        await notify(`⛔ Fan-in ${batch.key} — ${batch.status}${batch.blocker ? `: ${batch.blocker}` : ". Inspect the integration final handoff."}`);
-        state.notified[`fan-in:${batch.key}`] = batch.status;
+    // OUTCOME: mirror the execution issue's terminal state back to the central ticket.
+    for (const c of issues) {
+      const bridge = state.bridges[c.number];
+      if (!bridge || bridge.mirrored) continue;
+      const es = execStatusAndComment(bridge.target, bridge.exec);
+      if (es.status === "status:needs-review") {
+        const pr = prUrlForExec(bridge.target, bridge.exec);
+        setCentralStatus(c.number, "status:running", "status:needs-review");
+        await notify(`✅ #${c.number} ${c.title} — ready for review${pr ? `: ${pr}` : "."}`);
+        bridge.mirrored = "needs-review";
+      } else if (es.status === "status:blocked") {
+        const q = (es.lastComment || "").slice(0, 280);
+        setCentralStatus(c.number, "status:running", "status:blocked");
+        if (q) {
+          try {
+            gh(["issue", "comment", String(c.number), "--repo", BACKLOG, "--body", `Blocked (execution ${bridge.target}#${bridge.exec}):\n\n${q}`]);
+          } catch {
+            // best-effort
+          }
+        }
+        await notify(`⛔ #${c.number} ${c.title} — blocked, needs your decision${q ? `:\n${q}` : "."}`);
+        bridge.mirrored = "blocked";
+      }
+    }
+
+    // Re-queued after a review/block -> let it run again.
+    for (const c of issues) {
+      if (c.status === "status:queued" && state.bridges[c.number]?.mirrored) {
+        delete state.bridges[c.number];
       }
     }
 
     saveState(state);
-    log(`scan (${reason}): ${issues.length} agent issues, launched ${toLaunch.length}`);
+    log(`scan (${reason}): ${issues.length} central issues, launched ${launched}`);
   } catch (e) {
     log("scan error:", e.message);
   } finally {
@@ -421,7 +457,7 @@ function main() {
     }
   }).listen(POKE_PORT, () => log(`poke listener on :${POKE_PORT}`));
 
-  log(`starting — repo=${REPO} poll=${POLL_MS}ms app=${APP_URL || "(none)"}`);
+  log(`starting — backlog=${BACKLOG} target_default=${REPO} poll=${POLL_MS}ms app=${APP_URL || "(none)"}`);
   void scan("startup");
   setInterval(() => void scan("poll"), POLL_MS);
 }
@@ -435,6 +471,7 @@ export {
   detectIntegrationStatus,
   reviewHeldByFanInBatch,
   updateFanInBatches,
+  latestComment,
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
