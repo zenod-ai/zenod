@@ -223,6 +223,9 @@ export function KeysTab({
 
   const keyField = KEY_FIELD[form.provider]
   const apiKeyValue = form[keyField]
+  // A stored secret arrives masked ("••••…"), which still counts as present;
+  // only a truly empty field means the selected provider has no key.
+  const apiKeyMissing = apiKeyValue.trim() === ""
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }))
@@ -274,6 +277,12 @@ export function KeysTab({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (apiKeyMissing) {
+      toast.error(`${KEY_LABEL[form.provider]} is required`, {
+        description: `Add a key for ${providerLabel(form.provider)} before saving.`,
+      })
+      return
+    }
     setSaving(true)
     try {
       const result = await api<SettingsResponse>("/api/settings", {
@@ -420,6 +429,12 @@ export function KeysTab({
                   Test
                 </Button>
               </div>
+              {apiKeyMissing ? (
+                <FieldDescription className="text-destructive">
+                  {KEY_LABEL[form.provider]} is required to use{" "}
+                  {providerLabel(form.provider)}.
+                </FieldDescription>
+              ) : null}
               {llmResult !== null && <TestNote result={llmResult} />}
             </Field>
             <FieldSeparator />
@@ -454,7 +469,7 @@ export function KeysTab({
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-end">
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || apiKeyMissing}>
             {saving ? <Spinner /> : <SaveIcon data-icon="inline-start" />}
             Save changes
           </Button>
