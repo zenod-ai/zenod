@@ -45,6 +45,23 @@ export interface StoreResult {
   backlog?: BacklogDigestResult;
 }
 
+export type TokenCostOperation = "classify" | "compose" | "ask" | "chat" | "tasking" | "work";
+
+export interface TokenCostMeasurement {
+  /** Operation about to call the LLM. Values are estimated before provider billing. */
+  operation: TokenCostOperation;
+  /** More specific stage, e.g. "proposal", "execute", "retry", or "store". */
+  stage?: string;
+  /** Approximate input tokens sent by Zenod-owned prompt/context. */
+  estimatedInputTokens: number;
+  /** Approximate tokens from vaultBriefing(), broken out because it was the main unbounded cost. */
+  estimatedBriefingTokens: number;
+  /** Raw character count for the bounded briefing text. */
+  briefingChars: number;
+  /** How much vault metadata the briefing included vs omitted. */
+  briefingSections?: Record<string, { included: number; total: number; omitted: number }>;
+}
+
 export interface Answer {
   text: string;
   sources: SourceRef[];

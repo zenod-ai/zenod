@@ -19,9 +19,15 @@ vi.mock("ai", async (importActual) => {
   };
 });
 
-import { createBrainLlm } from "../src/llm/aisdk.js";
+import { createBrainLlm, MAX_STEPS, MAX_WORK_STEPS, PROVIDER_DEFAULTS } from "../src/llm/aisdk.js";
 
 describe("aisdk streaming error handling", () => {
+  it("uses the cheaper OpenAI model and bounded loop caps by default", () => {
+    expect(PROVIDER_DEFAULTS.openai).toEqual({ ask: "gpt-4o-mini", classify: "gpt-4o-mini" });
+    expect(MAX_STEPS).toBe(6);
+    expect(MAX_WORK_STEPS).toBe(12);
+  });
+
   it("re-throws a provider error part instead of resolving with empty text", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "test-key" });
     await expect(

@@ -18,6 +18,7 @@ import {
   type CleanSlateResult,
   type ExternalTaskingTools,
   type LintReport,
+  type TokenCostMeasurement,
 } from "zenod";
 import { installationToken } from "./githubApp.js";
 import { buildDriveTools } from "./driveTools.js";
@@ -122,6 +123,7 @@ export class Runtime {
       },
       ...(driveTools ? { driveTools } : {}),
       taskingTools: this.buildTaskingTools(),
+      ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
     });
     return this.engine;
   }
@@ -270,6 +272,27 @@ export class Runtime {
     this.whatsappStore.close();
     this.ingestStore.close();
   }
+}
+
+function logTokenCost(measurement: TokenCostMeasurement): void {
+  const sections = measurement.briefingSections
+    ? Object.entries(measurement.briefingSections)
+        .map(([name, section]) => `${name}=${section.included}/${section.total}`)
+        .join(" ")
+    : "";
+  console.log(
+    [
+      "[llm-cost]",
+      `operation=${measurement.operation}`,
+      measurement.stage ? `stage=${measurement.stage}` : "",
+      `estimated_input_tokens=${measurement.estimatedInputTokens}`,
+      `briefing_tokens=${measurement.estimatedBriefingTokens}`,
+      `briefing_chars=${measurement.briefingChars}`,
+      sections,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
 }
 
 /** Verify a GitHub token can see the vault repo. */

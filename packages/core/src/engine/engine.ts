@@ -20,6 +20,8 @@ import type {
   TaskingAction,
   TaskingReply,
   TaskingSurface,
+  TokenCostMeasurement,
+  TokenCostOperation,
   WorkInput,
   WorkResult,
 } from "../types.js";
@@ -70,11 +72,21 @@ export interface EngineOptions {
    * indefinitely. 0 = pull on every read (tests).
    */
   readSyncTtlMs?: number;
+  /**
+   * Optional LLM cost instrumentation. Estimates are based on prompt text
+   * before the provider call; provider-side tool schema overhead and billing
+   * tokenizers may differ, but the briefing share is measured consistently.
+   */
+  onTokenCost?: (measurement: TokenCostMeasurement) => void;
 }
 
 const COMPOSE_RETRIES = 2;
 const WORK_RETRIES = 2;
 const DEFAULT_READ_SYNC_TTL_MS = 60_000;
+const MAX_BRIEFING_MEANING_PAGES = 80;
+const MAX_BRIEFING_LOG_FILES = 20;
+const MAX_BRIEFING_ATTACHMENTS = 40;
+const MAX_BRIEFING_SUMMARY_CHARS = 240;
 
 const DEFAULT_TEMPLATE = `---
 title: "{{title}}"
@@ -87,6 +99,13 @@ summary: ""
 
 # {{title}}
 `;
+
+interface Briefing {
+  text: string;
+  estimatedTokens: number;
+  chars: number;
+  sections: NonNullable<TokenCostMeasurement["briefingSections"]>;
+}
 
 export function createEngine(options: EngineOptions): BrainEngine {
   const { repo, llm, state } = options;
@@ -112,15 +131,63 @@ export function createEngine(options: EngineOptions): BrainEngine {
     });
   }
 
-  async function vaultBriefing(): Promise<string> {
+  function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+  }
+
+  function truncateInline(value: string, maxChars: number): string {
+    const clean = value.replace(/\s+/g, " ").trim();
+    if (clean.length <= maxChars) return clean;
+    return `${clean.slice(0, maxChars - 12).trimEnd()} [truncated]`;
+  }
+
+  function reportTokenCost(
+    operation: TokenCostOperation,
+    parts: string[],
+    briefing?: Briefing,
+    stage?: string,
+  ): void {
+    options.onTokenCost?.({
+      operation,
+      ...(stage ? { stage } : {}),
+      estimatedInputTokens: estimateTokens(parts.join("\n\n")),
+      estimatedBriefingTokens: briefing?.estimatedTokens ?? 0,
+      briefingChars: briefing?.chars ?? 0,
+      ...(briefing ? { briefingSections: briefing.sections } : {}),
+    });
+  }
+
+  async function vaultBriefing(): Promise<Briefing> {
     const agents = await readFile(join(vaultPath, "AGENTS.md"), "utf8").catch(() => "");
     const snapshot = await scanVault(vaultPath);
-    const index = snapshot.pages
-      .map((p) => `${p.path} — ${p.title} [${p.tags.join(",")}]: ${p.summary}`)
+    const allLogFiles = snapshot.files.filter((f) => f.startsWith("Log/"));
+    const allAttachmentFiles = await listAttachmentFiles(vaultPath);
+    const meaningPages = snapshot.pages.slice(0, MAX_BRIEFING_MEANING_PAGES);
+    const logFiles = allLogFiles.slice(-MAX_BRIEFING_LOG_FILES);
+    const attachmentFiles = allAttachmentFiles.slice(-MAX_BRIEFING_ATTACHMENTS);
+    const index = meaningPages
+      .map((p) => `${p.path} — ${p.title} [${p.tags.join(",")}]: ${truncateInline(p.summary, MAX_BRIEFING_SUMMARY_CHARS)}`)
       .join("\n");
-    const logs = snapshot.files.filter((f) => f.startsWith("Log/")).join("\n");
-    const attachments = (await listAttachmentFiles(vaultPath)).join("\n");
-    return [
+    const logs = logFiles.join("\n");
+    const attachments = attachmentFiles.join("\n");
+    const sections: Briefing["sections"] = {
+      meaningPages: {
+        included: meaningPages.length,
+        total: snapshot.pages.length,
+        omitted: Math.max(0, snapshot.pages.length - meaningPages.length),
+      },
+      evidenceLogs: {
+        included: logFiles.length,
+        total: allLogFiles.length,
+        omitted: Math.max(0, allLogFiles.length - logFiles.length),
+      },
+      attachments: {
+        included: attachmentFiles.length,
+        total: allAttachmentFiles.length,
+        omitted: Math.max(0, allAttachmentFiles.length - attachmentFiles.length),
+      },
+    };
+    const text = [
       "You are Zeno, the user's personal memory agent. Answer questions about their knowledge vault.",
       "Search before answering; read the notes you cite; never invent vault content.",
       "The vault has two tiers. Meaning pages (Projects/, Areas/, Notes/) hold distilled knowledge. The evidence tier holds the originals: Log/ daily files contain immutable receipts — verbatim transcripts, quotes, and source links (e.g. Google Drive URLs) — and _attachments/ holds raw artifacts (images, documents).",
@@ -128,12 +195,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
       "Summaries are lossy. Before concluding something is not in the vault, read the full bodies of the top search hits, and search again with different terms.",
       "Cite sources inline as vault paths. Be direct and concise.",
       agents ? `Vault doctrine:\n${agents}` : "",
-      `Meaning pages:\n${index || "(none yet)"}`,
-      `Evidence logs:\n${logs || "(none yet)"}`,
-      `Attachments:\n${attachments || "(none yet)"}`,
+      `Meaning pages (${meaningPages.length}/${snapshot.pages.length}; search_vault can retrieve omitted pages):\n${index || "(none yet)"}`,
+      `Recent evidence logs (${logFiles.length}/${allLogFiles.length}; search_vault can retrieve older logs):\n${logs || "(none yet)"}`,
+      `Recent attachments (${attachmentFiles.length}/${allAttachmentFiles.length}; search_vault can retrieve omitted attachment paths):\n${attachments || "(none yet)"}`,
     ]
       .filter(Boolean)
       .join("\n\n");
+    return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
   function readTools() {
@@ -474,8 +542,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function work(input: WorkInput): Promise<WorkResult> {
     if (!input.plan) {
       await syncForRead();
+      const briefing = await vaultBriefing();
+      reportTokenCost("work", [briefing.text, input.objective], briefing, "proposal");
       const result = await llm.work(
-        { objective: input.objective, vaultBriefing: await vaultBriefing() },
+        { objective: input.objective, vaultBriefing: briefing.text },
         readTools(),
       );
       return { mode: "proposal", text: result.text, committed: false };
@@ -485,13 +555,25 @@ export function createEngine(options: EngineOptions): BrainEngine {
       await repo.pull().catch(() => {});
       lastSyncMs = now().getTime();
 
+      const briefing = await vaultBriefing();
       let loopInput = {
         objective: input.objective,
         plan: input.plan,
-        vaultBriefing: await vaultBriefing(),
+        vaultBriefing: briefing.text,
       } as import("../llm/types.js").WorkLoopInput;
 
       for (let attempt = 0; attempt <= WORK_RETRIES; attempt++) {
+        reportTokenCost(
+          "work",
+          [
+            briefing.text,
+            input.objective,
+            input.plan ?? "",
+            ...(loopInput.previousErrors?.map((e) => `${e.path} [${e.rule}] ${e.message}`) ?? []),
+          ],
+          briefing,
+          attempt === 0 ? "execute" : "retry",
+        );
         const result = await llm.work(loopInput, readTools(), writeTools());
 
         const changes = await repo.pendingChanges();
@@ -571,6 +653,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const snapshot = await scanVault(vaultPath);
       let classification: Classification;
       try {
+        reportTokenCost("classify", [
+          input.content,
+          ...(input.hints ?? []),
+          snapshot.pages.map((p) => `${p.path} | ${p.title} | ${p.tags.join(",")} | ${p.summary}`).join("\n"),
+          config.tags.join(", "),
+        ]);
         classification = await llm.classify({
           content: input.content,
           hints: input.hints ?? [],
@@ -626,6 +714,20 @@ export function createEngine(options: EngineOptions): BrainEngine {
           let lastErrors = undefined as import("../types.js").LintError[] | undefined;
           let composed = false;
           for (let attempt = 0; attempt <= COMPOSE_RETRIES; attempt++) {
+            reportTokenCost(
+              "compose",
+              [
+                page.path,
+                currentContent ?? template,
+                evidence.entry,
+                citation,
+                config.tags.join(", "),
+                input.content,
+                ...(lastErrors?.map((e) => `${e.path} [${e.rule}] ${e.message}`) ?? []),
+              ],
+              undefined,
+              attempt === 0 ? "store" : "retry",
+            );
             const next = await llm.composePage({
               path: page.path,
               currentContent,
@@ -714,8 +816,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   async function ask(question: string): Promise<Answer> {
     await syncForRead();
+    const briefing = await vaultBriefing();
+    reportTokenCost("ask", [briefing.text, question], briefing);
     const result = await llm.answer(
-      { question, vaultBriefing: await vaultBriefing(), conversation: [] },
+      { question, vaultBriefing: briefing.text, conversation: [] },
       readTools(),
     );
     return {
@@ -747,11 +851,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
 
     const taskTools = buildTaskTools(surface);
+    const briefing = await vaultBriefing();
+    reportTokenCost("chat", [briefing.text, ...window.map((m) => m.text), message], briefing);
 
     const result = await llm.answer(
       {
         question: message,
-        vaultBriefing: await vaultBriefing(),
+        vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
         ...(chatOptions.onToolEvent ? { onToolEvent: chatOptions.onToolEvent } : {}),
@@ -776,10 +882,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
     await state.appendMessage(cid, "user", input.text, input.surface);
 
     const actions: TaskingAction[] = [];
+    const briefing = await vaultBriefing();
+    reportTokenCost("tasking", [briefing.text, ...window.map((m) => m.text), input.text], briefing);
     const result = await llm.answer(
       {
         question: input.text,
-        vaultBriefing: await vaultBriefing(),
+        vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
       },
       readTools(),
