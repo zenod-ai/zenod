@@ -36,6 +36,8 @@ Design directions to resolve (to be specced, this drives M1/M1.5 and the retriev
 - Treat artifact provenance (where the raw thing lives — held in `_attachments/` or referenced by external link) as a first-class, queryable field, not free text buried in a receipt.
 - Keep the substrate legible to mining agents: stable refs, predictable frontmatter, links over folders.
 
+See [FILING-LATENCY-SCHEMA.md](FILING-LATENCY-SCHEMA.md) for the current filing pipeline map, latency drivers, and the proposed capture-record schema iteration.
+
 ## Milestones
 
 ### M0 — Self-hosted Zenod, deployed and useful (current)
