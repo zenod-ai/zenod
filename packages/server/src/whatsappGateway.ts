@@ -951,25 +951,12 @@ export class WhatsAppGateway {
       this.options.store.markMessageStatus(event.messageId, "replied");
       await this.sendReply(event, reply.text, "sent");
 
-      // Provenance (best-effort, background): capture the transcript as evidence
-      // so substantive notes remain artifacts. Runs AFTER the reply is sent and
-      // never blocks it.
-      void engine
-        .store({
-          content: [
-            `WhatsApp ${event.mediaType ?? "media"} from ${event.senderName || event.senderId}.`,
-            `Source message: ${event.messageId}`,
-            `Source chat: ${event.chatId}`,
-            `Received timestamp: ${String(event.timestamp ?? "unknown")}`,
-            "",
-            input.text,
-          ].join("\n"),
-          source: "whatsapp",
-          verbatim: true,
-        })
-        // Background provenance only — the message is already "replied"; filing
-        // must not change the user-facing status. Surface failures via the log.
-        .catch((err: unknown) => console.error("[whatsapp] evidence capture failed:", err));
+      // Filing is NOT automatic (#68). The transcript of every interaction is
+      // already persisted in the conversation state — we do NOT push every
+      // prompt into the memory vault (that flooded the vault and ran a ~2-min
+      // librarian pipeline per message). Filing happens only when the user
+      // explicitly asks ("file the last few messages"), via a capture tool, in
+      // the background — keeping responses snappy and the vault curated.
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.options.store.markMessageStatus(event.messageId, "failed");

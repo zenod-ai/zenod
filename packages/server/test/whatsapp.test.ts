@@ -544,11 +544,10 @@ describe("WhatsAppGateway", () => {
       expect(calls.some((c) => c.includes("queue 51 and 53"))).toBe(true);
       expect(socket.sent[1]!.text).toContain("queue 51 and 53");
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(1);
-      // Provenance: the transcript is still captured as evidence (background).
-      await waitFor(() => stored.length, (count) => count === 1);
-      expect(stored[0]!.source).toBe("whatsapp");
-      expect(stored[0]!.verbatim).toBe(true);
-      expect(stored[0]!.content).toContain("queue 51 and 53");
+      // Filing is NOT automatic (#68) — a voice note is acted on, not pushed
+      // into the vault. The transcript lives in conversation state; explicit
+      // "file this" requests do the filing, on demand.
+      expect(stored).toHaveLength(0);
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
       runtime.close();
