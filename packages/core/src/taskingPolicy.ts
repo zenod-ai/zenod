@@ -1,3 +1,4 @@
+export const OWNER_AGENT = "owner:agent";
 export const STATUS_PROPOSED = "status:proposed";
 export const STATUS_QUEUED = "status:queued";
 export const STATUS_NEEDS_REVIEW = "status:needs-review";
