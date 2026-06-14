@@ -133,6 +133,22 @@ function materializeExec(central) {
   return m ? Number(m[1]) : null;
 }
 
+// Synchronous spawnability probe for the fanout launcher. Only spawn-level errors
+// (ENOENT/EACCES) populate probe.error; a nonzero exit does not. We check this ONCE
+// per scan before materializing any exec issue, so a broken launcher never crashes the
+// monitor and never leaks orphan exec issues.
+function launcherHealthy() {
+  const probe = spawnSync("zenod-fanout-codex", ["status", "--run", "__preflight__", "--workdir", WORKDIR], {
+    stdio: "ignore",
+    timeout: 10000,
+  });
+  if (probe.error) {
+    log(`fanout launcher not spawnable: ${probe.error.code || probe.error.message} — skipping launch motion this scan`);
+    return false;
+  }
+  return true;
+}
+
 function launchFanout(target, execNumber) {
   const args = [
     "start", "--repo", target, "--issues", String(execNumber),
@@ -140,6 +156,9 @@ function launchFanout(target, execNumber) {
     "--concurrency", String(CONCURRENCY),
   ];
   const child = spawn("zenod-fanout-codex", args, { stdio: "ignore", detached: true });
+  // Belt-and-suspenders: catch any late async spawn error so it can never become an
+  // unhandled 'error' event that crashes the whole monitor.
+  child.on("error", (err) => log(`fanout spawn error (post-probe) for ${target}#${execNumber}: ${err.code || err.message}`));
   child.unref();
   log(`launched fanout for ${target}#${execNumber}`);
 }
@@ -387,19 +406,25 @@ async function scan(reason) {
     const issues = listCentralIssues();
 
     // LAUNCH: a queued central ticket -> materialize on its target repo + run Codex.
+    // Gate the whole motion on launcher health, checked ONCE per scan BEFORE any
+    // materialize — so a broken launcher never crashes the monitor and never leaks
+    // orphan exec issues. Tickets simply stay queued and retry on a later scan.
     let launched = 0;
-    for (const c of issues) {
-      if (c.status === "status:queued" && !state.bridges[c.number]) {
-        const exec = materializeExec(c);
-        if (!exec) {
-          log(`materialize failed for central #${c.number}`);
-          continue;
+    const pendingLaunch = issues.some((c) => c.status === "status:queued" && !state.bridges[c.number]);
+    if (pendingLaunch && launcherHealthy()) {
+      for (const c of issues) {
+        if (c.status === "status:queued" && !state.bridges[c.number]) {
+          const exec = materializeExec(c);
+          if (!exec) {
+            log(`materialize failed for central #${c.number}`);
+            continue;
+          }
+          launchFanout(c.target, exec);
+          setCentralStatus(c.number, "status:queued", "status:running");
+          state.bridges[c.number] = { target: c.target, exec, mirrored: null };
+          launched++;
+          await notify(`🚀 Queued Codex on #${c.number} ${c.title} (working ${c.target}). I'll message you when it lands.`);
         }
-        launchFanout(c.target, exec);
-        setCentralStatus(c.number, "status:queued", "status:running");
-        state.bridges[c.number] = { target: c.target, exec, mirrored: null };
-        launched++;
-        await notify(`🚀 Queued Codex on #${c.number} ${c.title} (working ${c.target}). I'll message you when it lands.`);
       }
     }
 

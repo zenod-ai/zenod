@@ -10,3 +10,4 @@ coverage/
 *.sqlite
 *.sqlite-*
 .zenod-data/
+.fanout/

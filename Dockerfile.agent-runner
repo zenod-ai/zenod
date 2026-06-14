@@ -1,0 +1,43 @@
+# Dedicated Codex fan-out runner.
+#
+# This image is intentionally separate from the Zenod app container: Zenod owns
+# memory/ingest/MCP, while this runner owns repo worktrees, Codex workers, and
+# GitHub PR/comment side effects.
+FROM node:22-bookworm-slim
+
+ARG CODEX_VERSION=0.137.0
+
+ENV NODE_ENV=production \
+    HOME=/runner \
+    CODEX_HOME=/runner/codex-home \
+    GH_CONFIG_DIR=/runner/gh \
+    FANOUT_WORKDIR=/runner/work \
+    NPM_CONFIG_UPDATE_NOTIFIER=false
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      bash \
+      ca-certificates \
+      curl \
+      gh \
+      git \
+      jq \
+      openssh-client \
+      procps \
+      ripgrep \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /runner/work /runner/codex-home /runner/gh /opt/zenod/scripts
+
+RUN npm install -g "@openai/codex@${CODEX_VERSION}" \
+ && codex --version
+
+COPY scripts/fanout-codex.mjs /opt/zenod/scripts/fanout-codex.mjs
+RUN chmod +x /opt/zenod/scripts/fanout-codex.mjs \
+ && ln -s /opt/zenod/scripts/fanout-codex.mjs /usr/local/bin/zenod-fanout-codex
+
+WORKDIR /runner/work
+
+VOLUME ["/runner/work", "/runner/codex-home", "/runner/gh"]
+
+CMD ["bash", "-lc", "echo 'zenod-agent-runner ready'; sleep infinity"]
