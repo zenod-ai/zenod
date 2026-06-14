@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
-import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -1136,7 +1136,21 @@ export {
   issueStatusLabelFor,
 };
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Run main() only when invoked as the entry script — but resolve symlinks first.
+// The CLI is invoked via the `zenod-fanout-codex` symlink, so process.argv[1] is
+// the symlink path while fileURLToPath(import.meta.url) is the real path; without
+// realpath-ing argv[1] the guard is false under the symlink and main() silently
+// never runs (clean exit 0, zero work). Tests import this module, so the guard
+// must still NOT run main() on import.
+const entryPath = (() => {
+  if (!process.argv[1]) return null;
+  try {
+    return realpathSync(process.argv[1]);
+  } catch {
+    return process.argv[1];
+  }
+})();
+if (entryPath && fileURLToPath(import.meta.url) === entryPath) {
   main().catch((err) => {
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
