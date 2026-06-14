@@ -223,21 +223,36 @@ function execForCentral(target, centralNumber) {
   }
 }
 
-// PR merge readiness: open/merged state, CI rollup (pending/failed), mergeability.
-function prMergeReadiness(target, prNumber) {
+// Smart-merge-gate readiness for a PR: state, draft, mergeability, CI rollup, AND
+// how many commits it is BEHIND base. behind>0 means its green CI ran against a
+// stale main — we must update-branch + re-CI before trusting it. We compute behind
+// ourselves (via compare of SHAs) so the gate works regardless of branch protection.
+function prGate(target, prNumber) {
   try {
-    const out = gh(["pr", "view", String(prNumber), "--repo", target, "--json", "state,mergeable,statusCheckRollup"]);
+    const out = gh(["pr", "view", String(prNumber), "--repo", target, "--json", "state,isDraft,mergeable,headRefOid,baseRefName,statusCheckRollup"]);
     const o = JSON.parse(out);
     const checks = o.statusCheckRollup || [];
     const norm = checks.map((c) => String(c.conclusion || c.state || c.status || "").toUpperCase());
     const PENDING = new Set(["", "PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "WAITING", "REQUESTED", "ACTION_REQUIRED"]);
     const FAILED = new Set(["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE", "STALE"]);
+    let behind = null;
+    if (o.state === "OPEN") {
+      try {
+        const baseSha = gh(["api", `repos/${target}/commits/${o.baseRefName}`, "--jq", ".sha"]).trim();
+        // compare base...head → behind_by = commits in base not in head = how far head trails main
+        behind = Number(gh(["api", `repos/${target}/compare/${baseSha}...${o.headRefOid}`, "--jq", ".behind_by"]).trim());
+      } catch {
+        behind = null; // unknown; treated as "wait" below
+      }
+    }
     return {
       state: o.state, // OPEN | MERGED | CLOSED
+      isDraft: o.isDraft === true,
       mergeable: o.mergeable, // MERGEABLE | CONFLICTING | UNKNOWN
       pending: norm.some((s) => PENDING.has(s)),
       failed: norm.some((s) => FAILED.has(s)),
       checks: checks.length,
+      behind, // number of commits behind base, or null if unknown
     };
   } catch {
     return null;
@@ -529,9 +544,16 @@ async function scan(reason) {
       }
     }
 
-    // MERGE: the human approved the PR via Zenod (status:approved-merge). Zenod
-    // never merges — it relays the trigger; the controller (this monitor) merges
-    // the PR on GREEN CI, then marks the central ticket merged and closes it.
+    // MERGE: the human approved (status:approved-merge). Zenod never merges — it
+    // relays the trigger; the controller (this monitor) lands the PR. This is a
+    // SMART MERGE GATE / merge-queue: integration happens per-PR at merge time.
+    // Concurrent, independently-queued workers each land safely with NO fan-in,
+    // because before merging we (a) bring the PR up to date with main and (b)
+    // require GREEN CI on the UPDATED branch — so a PR whose green ran against a
+    // stale main is re-verified against what it will actually merge into. A
+    // textual/semantic clash surfaces here as a conflict or a red re-run. At most
+    // ONE merge per scan keeps main stable while the loop runs.
+    let mergedThisScan = false;
     for (const c of issues) {
       if (c.status !== "status:approved-merge") continue;
       // Fast path: the bridge. Durable fallback: recover exec from the title.
@@ -551,11 +573,13 @@ async function scan(reason) {
         log(`merge: no open PR for ${bridge.target}#${bridge.exec} (central #${c.number})`);
         continue;
       }
-      const r = prMergeReadiness(bridge.target, prNum);
-      if (!r) {
-        log(`merge: could not read PR ${prUrl}`);
-        continue;
-      }
+      // Notify only on state TRANSITIONS, so a multi-scan wait doesn't spam.
+      const note = async (key, text) => {
+        if (bridge.mergeNote !== key) {
+          bridge.mergeNote = key;
+          await notify(text);
+        }
+      };
       const finalizeMerged = async () => {
         setCentralStatus(c.number, "status:approved-merge", "status:merged");
         try {
@@ -566,47 +590,78 @@ async function scan(reason) {
         bridge.mirrored = "merged";
         await notify(`🎉 #${c.number} ${c.title} — merged: ${prUrl}`);
       };
-      if (r.state === "MERGED") {
+
+      const g = prGate(bridge.target, prNum);
+      if (!g) {
+        log(`merge: could not read PR ${prUrl}`);
+        continue;
+      }
+      if (g.state === "MERGED") {
         await finalizeMerged();
         continue;
       }
-      if (r.failed || r.mergeable === "CONFLICTING") {
-        if (!bridge.mergeBlockedNotified) {
-          bridge.mergeBlockedNotified = true;
-          await notify(`⚠️ #${c.number} ${c.title} — can't merge: ${r.mergeable === "CONFLICTING" ? "branch has conflicts" : "CI is failing"}. ${prUrl}`);
-        }
+      if (g.state === "CLOSED") {
+        await note("closed", `⚠️ #${c.number} ${c.title} — PR was closed without merging. ${prUrl}`);
         continue;
       }
-      if (r.pending || r.mergeable === "UNKNOWN") {
-        if (!bridge.mergeWaitNotified) {
-          bridge.mergeWaitNotified = true;
-          await notify(`⏳ #${c.number} ${c.title} — approved; waiting on green CI before merge. ${prUrl}`);
-        }
+      // Hard blockers — need a human or a resolve worker, not a retry.
+      if (g.mergeable === "CONFLICTING") {
+        await note("conflict", `⛔ #${c.number} ${c.title} — branch conflicts with main; needs a rebase/resolve. ${prUrl}`);
         continue;
       }
-      // Green + mergeable -> merge now (squash). A failed branch-delete after a
-      // successful merge must not read as a merge failure, so re-check state.
-      let merged = false;
-      try {
-        // Fanout opens DRAFT PRs (humans review via the approve_merge gate); a
-        // draft can't be merged, so mark it ready at merge time. Idempotent.
+      if (g.failed) {
+        await note("failed", `⛔ #${c.number} ${c.title} — CI is failing; can't merge. ${prUrl}`);
+        continue;
+      }
+      // Fanout opens DRAFT PRs (review is the approve_merge gate); ready it first.
+      if (g.isDraft) {
         try {
           gh(["pr", "ready", String(prNum), "--repo", bridge.target]);
         } catch {
           // already ready
         }
+        await note("verify", `⏳ #${c.number} ${c.title} — verifying against latest main before merge. ${prUrl}`);
+        continue;
+      }
+      // Mergeability/behind not yet known → wait a scan.
+      if (g.behind === null || g.mergeable === "UNKNOWN") {
+        await note("verify", `⏳ #${c.number} ${c.title} — verifying mergeability. ${prUrl}`);
+        continue;
+      }
+      // STALE: behind main → its green CI ran against an old main. Merge main in
+      // (update-branch), which re-triggers CI; land only after it goes green.
+      if (g.behind > 0) {
+        try {
+          gh(["api", "-X", "PUT", `repos/${bridge.target}/pulls/${prNum}/update-branch`]);
+          await note("verify", `⏳ #${c.number} ${c.title} — bringing branch up to latest main + re-running CI before merge. ${prUrl}`);
+        } catch {
+          await note("conflict", `⛔ #${c.number} ${c.title} — couldn't update branch to main (likely a conflict); needs resolve. ${prUrl}`);
+        }
+        continue;
+      }
+      // Up to date but CI still running on the merged-in result → wait.
+      if (g.pending) {
+        await note("verify", `⏳ #${c.number} ${c.title} — verifying against latest main (CI running). ${prUrl}`);
+        continue;
+      }
+      // behind==0, mergeable, GREEN on the up-to-date branch → safe to land.
+      if (mergedThisScan) continue; // one merge per scan; the rest re-verify next pass
+      let merged = false;
+      try {
         gh(["pr", "merge", String(prNum), "--repo", bridge.target, "--squash", "--delete-branch"]);
         merged = true;
       } catch (e) {
-        const after = prMergeReadiness(bridge.target, prNum);
+        const after = prGate(bridge.target, prNum);
         if (after && after.state === "MERGED") merged = true;
-        else if (!bridge.mergeErrNotified) {
-          bridge.mergeErrNotified = true;
-          await notify(`⚠️ #${c.number} ${c.title} — merge failed: ${String(e.message).slice(0, 180)}. ${prUrl}`);
+        else {
+          await note("mergeerr", `⚠️ #${c.number} ${c.title} — merge failed: ${String(e.message).slice(0, 160)}. ${prUrl}`);
           log(`merge failed for ${prUrl}: ${e.message}`);
         }
       }
-      if (merged) await finalizeMerged();
+      if (merged) {
+        mergedThisScan = true;
+        await finalizeMerged();
+      }
     }
 
     // Re-queued after a review/block -> let it run again.
