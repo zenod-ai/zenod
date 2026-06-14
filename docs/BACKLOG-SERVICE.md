@@ -42,6 +42,14 @@ The lifecycle vocabulary is:
 - `owner:human`: not agent-runnable until a human changes ownership
 - `archived`: excluded from service even if other labels are present
 
+## Merge Gate
+
+The queue gate remains human-only: only explicit approval may promote work into `owner:agent` + `status:queued`.
+
+Merging defaults to manual. In manual mode, a reviewable PR sits at `status:needs-review` until the human `approve_merge` relay moves it to `status:approved-merge`; the backlog monitor then sends the PR through the smart merge gate.
+
+Auto-merge is opt-in. The monitor can enable it globally with persisted `autoMerge: true` in monitor state, with `ZENOD_AUTO_MERGE=1`, or per ticket with an `auto-merge` label. In auto mode, `status:needs-review` tickets with PRs enter the same smart merge gate without first adding `status:approved-merge`. The gate still updates the branch onto `main`, waits for CI on the updated branch, and stops on conflicts, failing CI, closed PRs, or merge errors. Merge attempts are recorded in monitor state with `autoMerge: true|false` and their outcome.
+
 ## Queueing and Testing Gate
 
 Issues become queued only through an explicit human readiness signal: `approve_queue` promotes tickets to `owner:agent` + `status:queued`. Agents, chat tasking tools, and digest/groom workers may read, search, digest, analyze, comment, and create or edit proposed tickets, but their generic GitHub issue mutation tools normalize work into `status:proposed` and must never apply `status:queued`. Mining backlog records alone does not make work runnable.
