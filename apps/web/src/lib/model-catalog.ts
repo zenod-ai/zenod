@@ -34,14 +34,20 @@ export const MODEL_CATALOG: Record<Provider, ModelInfo[]> = {
     { id: "gpt-4.1-mini", label: "GPT-4.1 mini", inputPerM: 0.4, outputPerM: 1.6 },
     { id: "gpt-4.1-nano", label: "GPT-4.1 nano", inputPerM: 0.1, outputPerM: 0.4, note: "Cheapest" },
   ],
-  // OpenRouter model slugs are "vendor/model". This is a curated shortlist of
-  // strong, cheap options; any OpenRouter model works via "Custom model ID…".
+  // OpenRouter model slugs are "vendor/model". Curated top picks across vendors —
+  // strong + good value, roughly capable → cheap (refreshed 2026-06). Any
+  // OpenRouter model still works via "Custom model ID…".
   openrouter: [
-    { id: "deepseek/deepseek-chat", label: "DeepSeek V3", inputPerM: 0.14, outputPerM: 0.28, note: "Cheap & capable" },
-    { id: "deepseek/deepseek-r1", label: "DeepSeek R1", inputPerM: 0.55, outputPerM: 2.19, note: "Reasoning" },
-    { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B", inputPerM: 0.12, outputPerM: 0.3 },
-    { id: "qwen/qwen-2.5-72b-instruct", label: "Qwen 2.5 72B", inputPerM: 0.12, outputPerM: 0.39 },
-    { id: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", inputPerM: 0.1, outputPerM: 0.4, note: "Fast & cheap" },
+    { id: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", inputPerM: 0.44, outputPerM: 0.87, note: "Flagship" },
+    { id: "minimax/minimax-m3", label: "MiniMax M3", inputPerM: 0.3, outputPerM: 1.2, note: "Strong & cheap" },
+    { id: "qwen/qwen3.7-plus", label: "Qwen3.7 Plus", inputPerM: 0.32, outputPerM: 1.28, note: "Capable" },
+    { id: "moonshotai/kimi-k2-thinking", label: "Kimi K2 Thinking", inputPerM: 0.6, outputPerM: 2.5, note: "Reasoning" },
+    { id: "z-ai/glm-4.7", label: "GLM 4.7", inputPerM: 0.4, outputPerM: 1.75 },
+    { id: "x-ai/grok-4.3", label: "Grok 4.3", inputPerM: 1.25, outputPerM: 2.5 },
+    { id: "deepseek/deepseek-r1-0528", label: "DeepSeek R1", inputPerM: 0.5, outputPerM: 2.15, note: "Reasoning" },
+    { id: "deepseek/deepseek-chat", label: "DeepSeek V3", inputPerM: 0.2, outputPerM: 0.8, note: "Cheap & capable" },
+    { id: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick", inputPerM: 0.15, outputPerM: 0.6, note: "Cheap" },
+    { id: "google/gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", inputPerM: 0.25, outputPerM: 1.5, note: "Fast & cheap" },
   ],
   // Groq runs OpenAI-compatible chat completions at very high speed. Curated
   // shortlist; any Groq model works via "Custom model ID…".
