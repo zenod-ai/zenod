@@ -56,6 +56,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   // Resume any ingest jobs left queued before the last restart.
   runtime.ingestQueue.resume();
+  // Likewise drain any agentic MCP jobs (task_brain/run_task) left queued.
+  runtime.taskJobQueue.resume();
 
   app.onError((err, c) => {
     if (err instanceof NotConfiguredError) return c.json({ error: err.message, code: "not_configured" }, 409);
@@ -245,6 +247,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.post("/api/ingest/jobs/:id/cancel", (c) => {
     const job = runtime.ingestQueue.cancel(c.req.param("id"));
+    if (!job) return c.json({ error: "job not found" }, 404);
+    return c.json({ job });
+  });
+
+  // Background agentic MCP jobs (task_brain/run_task) — surfaced so the owner
+  // can see what concurrent MCP callers queued, and in what state, instead of
+  // the jobs being invisible (only the LLM-usage ledger hinted at them before).
+  app.get("/api/tasks/jobs", (c) => c.json({ jobs: runtime.taskJobQueue.recent() }));
+
+  app.get("/api/tasks/jobs/:id", (c) => {
+    const job = runtime.taskJobQueue.get(c.req.param("id"));
     if (!job) return c.json({ error: "job not found" }, 404);
     return c.json({ job });
   });
@@ -595,6 +608,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       () => buildDriveTools(settings, runtime.ingestQueue),
       () => runtime.cleanSlate(),
       (input) => chatTestAudit.recordChatTestRun(input),
+      {
+        enqueue: (kind, input) => runtime.taskJobQueue.enqueue(kind, input),
+        get: (id) => runtime.taskJobQueue.get(id),
+      },
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

@@ -1,7 +1,54 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools } from "zenod";
+import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type TaskingReply, type WorkResult } from "zenod";
 import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
+import type { TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
+
+/**
+ * The long agentic tools (task_brain, run_task) run a multi-minute LLM loop, so
+ * they enqueue a background job and return its id at once; the caller polls
+ * get_task_result. This is the queue seam the MCP server talks to.
+ */
+export interface TaskJobs {
+  enqueue(kind: TaskJobKind, input: TaskJobInput): TaskJob;
+  get(id: string): TaskJob | null;
+}
+
+/** Human-facing text for a finished task_brain job — mirrors the old reply. */
+function formatTaskingReply(result: TaskingReply): string {
+  const actions =
+    result.actions.length > 0
+      ? ["", "Actions:", ...result.actions.map((action) => `- ${action.tool}: ${action.result}`)]
+      : [];
+  return [result.text, ...actions].join("\n");
+}
+
+/** The immediate reply when a long agentic tool enqueues a background job. */
+function enqueuedResponse(job: TaskJob) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: `Queued job ${job.id} (status: ${job.status}). This runs in the background — poll get_task_result with this jobId until status is 'done'.`,
+      },
+    ],
+    structuredContent: { jobId: job.id, kind: job.kind, status: job.status },
+  };
+}
+
+/** Human-facing text for a finished run_task job — mirrors the old reply. */
+function formatWorkResult(result: WorkResult): string {
+  const lines =
+    result.mode === "proposal"
+      ? [`PLAN (relay to the user for approval, then call run_task again with approvedPlan):`, result.text]
+      : [
+          result.mode === "failed" ? "FAILED (rolled back, nothing committed)" : result.committed ? "EXECUTED" : "EXECUTED (no changes were needed)",
+          result.text,
+          ...(result.commitSha ? [`commit: ${result.commitSha}`] : []),
+          ...(result.changedPaths?.length ? [`changed: ${result.changedPaths.join(", ")}`] : []),
+        ];
+  return lines.join("\n");
+}
 
 /**
  * The Zenod MCP tool surface (docs/M0-SPEC.md): no raw file CRUD. Drive tools
@@ -13,6 +60,7 @@ export function buildMcpServer(
   getDriveTools?: () => DriveSourceTools | undefined,
   cleanSlate?: () => Promise<CleanSlateResult>,
   recordChatTestRun?: (input: ChatTestAuditInput) => ChatTestAuditRecord,
+  taskJobs?: TaskJobs,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -162,7 +210,7 @@ export function buildMcpServer(
     {
       title: "Task the brain",
       description:
-        "Send an instruction-bearing message through the shared tasking loop used by WhatsApp, Web, MCP, and self-tests. Use for requests to file/capture notes, run a digest, create or label GitHub issues, query backlog status, or service/select backlog work.",
+        "Send an instruction-bearing message through the shared tasking loop used by WhatsApp, Web, MCP, and self-tests. Use for requests to file/capture notes, run a digest, create or label GitHub issues, query backlog status, or service/select backlog work. ASYNC: this runs a multi-minute agent loop, so it returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the reply and actions. Queue one instruction per call; jobs run one at a time.",
       inputSchema: {
         text: z.string().min(1).describe("The user's instruction or status question"),
         conversationKey: z.string().min(1).optional().describe("Correlation/thread key; defaults to mcp"),
@@ -170,13 +218,15 @@ export function buildMcpServer(
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     async ({ text, conversationKey }) => {
+      const input: TaskJobInput = { text, ...(conversationKey ? { conversationKey } : {}) };
+      if (taskJobs) {
+        const job = taskJobs.enqueue("task", input);
+        return enqueuedResponse(job);
+      }
+      // No queue wired (e.g. a minimal embedding) — run synchronously.
       const engine = await getEngine();
       const result = await engine.handleTasking({ text, surface: "mcp", conversationKey: conversationKey ?? "mcp" });
-      const actions =
-        result.actions.length > 0
-          ? ["", "Actions:", ...result.actions.map((action) => `- ${action.tool}: ${action.result}`)]
-          : [];
-      return { content: [{ type: "text", text: [result.text, ...actions].join("\n") }], structuredContent: { ...result } };
+      return { content: [{ type: "text", text: formatTaskingReply(result) }], structuredContent: { ...result } };
     },
   );
 
@@ -185,7 +235,7 @@ export function buildMcpServer(
     {
       title: "Run a vault task",
       description:
-        "Give the librarian an objective that requires reorganizing the vault (sweep the Inbox, merge duplicate pages, refile or archive notes, fix structure). Two-step contract: call WITHOUT approvedPlan first — the librarian surveys read-only and returns a concrete plan; show that plan to the user. Once the user approves, call again with the (possibly user-edited) plan as approvedPlan — the librarian executes it on the vault working tree, the engine validates (lint + evidence immutability) and lands everything as ONE commit, or rolls back fully. Log/ and _attachments/ are immutable and can never be changed by this tool. NEVER pass approvedPlan without explicit user approval of that plan.",
+        "Give the librarian an objective that requires reorganizing the vault (sweep the Inbox, merge duplicate pages, refile or archive notes, fix structure). Two-step contract: call WITHOUT approvedPlan first — the librarian surveys read-only and returns a concrete plan; show that plan to the user. Once the user approves, call again with the (possibly user-edited) plan as approvedPlan — the librarian executes it on the vault working tree, the engine validates (lint + evidence immutability) and lands everything as ONE commit, or rolls back fully. Log/ and _attachments/ are immutable and can never be changed by this tool. NEVER pass approvedPlan without explicit user approval of that plan. ASYNC: both steps run a multi-minute agent loop, so each call returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the plan (propose step) or the execution result.",
       inputSchema: {
         objective: z.string().min(1).describe("What to accomplish, e.g. 'sweep the Inbox: file, archive, or delete each item'"),
         approvedPlan: z
@@ -197,20 +247,62 @@ export function buildMcpServer(
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
     async ({ objective, approvedPlan }) => {
+      const input: TaskJobInput = { objective, ...(approvedPlan ? { plan: approvedPlan } : {}) };
+      if (taskJobs) {
+        const job = taskJobs.enqueue("work", input);
+        return enqueuedResponse(job);
+      }
+      // No queue wired (e.g. a minimal embedding) — run synchronously.
       const engine = await getEngine();
       const result = await engine.work({ objective, ...(approvedPlan ? { plan: approvedPlan } : {}) });
-      const lines =
-        result.mode === "proposal"
-          ? [`PLAN (relay to the user for approval, then call run_task again with approvedPlan):`, result.text]
-          : [
-              result.mode === "failed" ? "FAILED (rolled back, nothing committed)" : result.committed ? "EXECUTED" : "EXECUTED (no changes were needed)",
-              result.text,
-              ...(result.commitSha ? [`commit: ${result.commitSha}`] : []),
-              ...(result.changedPaths?.length ? [`changed: ${result.changedPaths.join(", ")}`] : []),
-            ];
-      return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
+      return { content: [{ type: "text", text: formatWorkResult(result) }], structuredContent: { ...result } };
     },
   );
+
+  if (taskJobs) {
+    server.registerTool(
+      "get_task_result",
+      {
+        title: "Get task result",
+        description:
+          "Poll a background job started by task_brain or run_task, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, or the plan/execution result for a run_task job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
+        inputSchema: { jobId: z.string().min(1).describe("The jobId returned by task_brain or run_task") },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ jobId }) => {
+        const job = taskJobs.get(jobId);
+        if (!job) {
+          return {
+            content: [{ type: "text", text: `No job found for id ${jobId}.` }],
+            structuredContent: { found: false, jobId },
+            isError: true,
+          };
+        }
+        const resultText =
+          job.status === "done" && job.result
+            ? job.kind === "task"
+              ? formatTaskingReply(job.result as TaskingReply)
+              : formatWorkResult(job.result as WorkResult)
+            : job.status === "error"
+              ? `ERROR: ${job.error ?? "unknown error"}`
+              : job.status === "interrupted"
+                ? `INTERRUPTED: ${job.error ?? "a server restart killed this job"} — re-issue the original call.`
+                : `Status: ${job.status}. Not finished yet — poll get_task_result again shortly.`;
+        return {
+          content: [{ type: "text", text: resultText }],
+          structuredContent: {
+            found: true,
+            jobId: job.id,
+            kind: job.kind,
+            status: job.status,
+            result: job.result ?? null,
+            error: job.error,
+          },
+          isError: job.status === "error",
+        };
+      },
+    );
+  }
 
   if (cleanSlate) {
     server.registerTool(
