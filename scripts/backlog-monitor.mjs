@@ -108,9 +108,27 @@ function listCentralIssues() {
   });
 }
 
-function setCentralStatus(number, from, to) {
+// Idempotently ensure a label exists in the repo (gh edit --add-label fails on a
+// label the repo doesn't have yet — e.g. status:merged on first use).
+function ensureLabel(repo, name) {
   try {
-    if (from) gh(["issue", "edit", String(number), "--repo", BACKLOG, "--remove-label", from]);
+    gh(["label", "create", name, "--repo", repo, "--force"]);
+  } catch (e) {
+    log(`ensureLabel ${name} on ${repo} (ignored):`, e.message);
+  }
+}
+
+function setCentralStatus(number, from, to) {
+  // Remove is best-effort: it must not block the add if the old label is absent.
+  if (from) {
+    try {
+      gh(["issue", "edit", String(number), "--repo", BACKLOG, "--remove-label", from]);
+    } catch (e) {
+      log(`setCentralStatus #${number} remove ${from} (ignored):`, e.message);
+    }
+  }
+  ensureLabel(BACKLOG, to);
+  try {
     gh(["issue", "edit", String(number), "--repo", BACKLOG, "--add-label", to]);
   } catch (e) {
     log(`setCentralStatus #${number} -> ${to} failed:`, e.message);
@@ -492,6 +510,18 @@ async function scan(reason) {
         }
         await notify(`⛔ #${c.number} ${c.title} — blocked, needs your decision${q ? `:\n${q}` : "."}`);
         bridge.mirrored = "blocked";
+      } else if (es.status === "status:complete") {
+        // Worker finished. If it produced a PR, it's reviewable like needs-review;
+        // if it made no code change (no commits / nothing to do), say so plainly
+        // instead of stranding the central ticket at running.
+        const pr = prUrlForExec(bridge.target, bridge.exec);
+        setCentralStatus(c.number, "status:running", "status:needs-review");
+        await notify(
+          pr
+            ? `✅ #${c.number} ${c.title} — complete, ready for review: ${pr}`
+            : `ℹ️ #${c.number} ${c.title} — worker completed with no code change (nothing to do / already satisfied). ${bridge.target}#${bridge.exec}`,
+        );
+        bridge.mirrored = pr ? "needs-review" : "complete-no-pr";
       }
     }
 
