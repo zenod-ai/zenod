@@ -554,6 +554,13 @@ async function scan(reason) {
       // successful merge must not read as a merge failure, so re-check state.
       let merged = false;
       try {
+        // Fanout opens DRAFT PRs (humans review via the approve_merge gate); a
+        // draft can't be merged, so mark it ready at merge time. Idempotent.
+        try {
+          gh(["pr", "ready", String(prNum), "--repo", bridge.target]);
+        } catch {
+          // already ready
+        }
         gh(["pr", "merge", String(prNum), "--repo", bridge.target, "--squash", "--delete-branch"]);
         merged = true;
       } catch (e) {
