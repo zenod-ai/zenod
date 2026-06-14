@@ -116,6 +116,26 @@ describe("server API", () => {
     expect((await res.json()).code).toBe("not_configured");
   });
 
+  it("transcribes authenticated web voice-note uploads", async () => {
+    const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    try {
+      const form = new FormData();
+      form.append("audio", new Blob([Buffer.from("fake-audio")], { type: "audio/webm" }), "voice.webm");
+      const res = await app.request("/api/chat/voice/transcribe", {
+        method: "POST",
+        headers,
+        body: form,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.transcript).toBe("remember to renew the travel insurance");
+      expect(body.provider).toContain("whisper.cpp");
+    } finally {
+      delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+    }
+  });
+
   it("chat exposes clean-slate preview and explicit confirmation", async () => {
     const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
     runtime.cleanSlate = async () => ({

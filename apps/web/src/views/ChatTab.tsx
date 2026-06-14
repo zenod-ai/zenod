@@ -1,5 +1,13 @@
 import * as React from "react"
-import { BrainIcon, CheckIcon, ExternalLinkIcon, SendIcon, Trash2Icon } from "lucide-react"
+import {
+  BrainIcon,
+  CheckIcon,
+  ExternalLinkIcon,
+  MicIcon,
+  SendIcon,
+  SquareIcon,
+  Trash2Icon,
+} from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -8,6 +16,7 @@ import {
   chatStream,
   errorMessage,
   isNotConfigured,
+  transcribeVoiceNote,
   type ChatHistoryResponse,
   type ChatSource,
   type ChatStored,
@@ -103,13 +112,45 @@ function StoredReceipt({ stored }: { stored: ChatStored }) {
   )
 }
 
+const VOICE_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+]
+
+function preferredAudioMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined
+  return VOICE_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type))
+}
+
+function voiceFilename(type: string): string {
+  const extension = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm"
+  return `web-voice-note-${Date.now()}.${extension}`
+}
+
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`
+}
+
 export function ChatTab() {
   const [messages, setMessages] = React.useState<Message[]>([])
   const [input, setInput] = React.useState("")
   const [busy, setBusy] = React.useState(false)
   const [clearing, setClearing] = React.useState(false)
+  const [recording, setRecording] = React.useState(false)
+  const [recordingSeconds, setRecordingSeconds] = React.useState(0)
+  const [voiceTranscribing, setVoiceTranscribing] = React.useState(false)
+  const [voiceError, setVoiceError] = React.useState<string | null>(null)
   const endRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = React.useRef<MediaStream | null>(null)
+  const voiceChunksRef = React.useRef<Blob[]>([])
+  const recordingStartedAtRef = React.useRef(0)
+  const recordingTimerRef = React.useRef<number | null>(null)
 
   // Rehydrate the thread from the server so navigating away and back keeps context.
   React.useEffect(() => {
@@ -131,8 +172,30 @@ export function ChatTab() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [messages, busy])
 
+  React.useEffect(() => {
+    return () => {
+      clearRecordingTimer()
+      stopMediaStream()
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop()
+      }
+    }
+  }, [])
+
+  function clearRecordingTimer() {
+    if (recordingTimerRef.current !== null) {
+      window.clearInterval(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+  }
+
+  function stopMediaStream() {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+    mediaStreamRef.current = null
+  }
+
   async function clearThread() {
-    if (busy || clearing) return
+    if (busy || clearing || recording || voiceTranscribing) return
     setClearing(true)
     try {
       await api("/api/chat", { method: "DELETE" })
@@ -155,10 +218,11 @@ export function ChatTab() {
     })
   }
 
-  async function send() {
-    const message = input.trim()
+  async function sendMessage(messageText: string, options: { clearInput?: boolean } = {}) {
+    const message = messageText.trim()
     if (!message || busy) return
-    setInput("")
+    if (options.clearInput !== false) setInput("")
+    setVoiceError(null)
     // Append the user turn plus an empty assistant bubble to stream into.
     setMessages((current) => [
       ...current,
@@ -190,6 +254,89 @@ export function ChatTab() {
     } finally {
       setBusy(false)
       textareaRef.current?.focus()
+    }
+  }
+
+  async function send() {
+    await sendMessage(input)
+  }
+
+  async function startVoiceRecording() {
+    if (busy || voiceTranscribing || recording) return
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setVoiceError("Voice recording is not supported in this browser.")
+      return
+    }
+
+    try {
+      setVoiceError(null)
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = preferredAudioMimeType()
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+
+      voiceChunksRef.current = []
+      mediaStreamRef.current = stream
+      mediaRecorderRef.current = recorder
+      recorder.addEventListener("dataavailable", (event) => {
+        if (event.data.size > 0) voiceChunksRef.current.push(event.data)
+      })
+      recorder.addEventListener("error", () => {
+        setVoiceError("Recording failed.")
+        setRecording(false)
+        clearRecordingTimer()
+        stopMediaStream()
+      })
+
+      recordingStartedAtRef.current = Date.now()
+      setRecordingSeconds(0)
+      setRecording(true)
+      recorder.start()
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingSeconds(Math.max(0, Math.floor((Date.now() - recordingStartedAtRef.current) / 1000)))
+      }, 250)
+    } catch (err) {
+      stopMediaStream()
+      mediaRecorderRef.current = null
+      setRecording(false)
+      setVoiceError(errorMessage(err))
+    }
+  }
+
+  async function stopVoiceRecording() {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state === "inactive") return
+
+    setRecording(false)
+    clearRecordingTimer()
+
+    try {
+      const audio = await new Promise<Blob>((resolve, reject) => {
+        const type = recorder.mimeType || voiceChunksRef.current[0]?.type || "audio/webm"
+        recorder.addEventListener(
+          "stop",
+          () => resolve(new Blob(voiceChunksRef.current, { type })),
+          { once: true }
+        )
+        recorder.addEventListener("error", () => reject(new Error("Recording failed.")), {
+          once: true,
+        })
+        recorder.stop()
+      })
+      stopMediaStream()
+      mediaRecorderRef.current = null
+
+      if (audio.size === 0) throw new Error("Recording was empty.")
+
+      setVoiceTranscribing(true)
+      const { transcript } = await transcribeVoiceNote(audio, voiceFilename(audio.type))
+      setVoiceTranscribing(false)
+      await sendMessage(transcript, { clearInput: false })
+    } catch (err) {
+      setVoiceError(errorMessage(err))
+    } finally {
+      setVoiceTranscribing(false)
+      stopMediaStream()
+      mediaRecorderRef.current = null
     }
   }
 
@@ -284,35 +431,80 @@ export function ChatTab() {
         </div>
 
         <form
-          className="flex items-end gap-2"
+          className="flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault()
             void send()
           }}
         >
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            placeholder="Ask your vault, or say 'remember this: …'"
-            rows={1}
-            className="min-h-9 resize-none rounded-xl border-transparent bg-muted/60 px-3.5 focus-visible:border-transparent focus-visible:bg-muted focus-visible:ring-0 dark:bg-input/30 dark:focus-visible:bg-input/50"
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault()
-                void send()
+          {(recording || voiceTranscribing || voiceError) && (
+            <div
+              className={
+                voiceError
+                  ? "text-xs text-destructive"
+                  : "flex items-center gap-2 text-xs text-muted-foreground"
               }
-            }}
-          />
-          <Button
-            type="submit"
-            size="icon"
-            className="rounded-full transition-all active:scale-95"
-            disabled={busy || input.trim() === ""}
-          >
-            <SendIcon />
-            <span className="sr-only">Send</span>
-          </Button>
+            >
+              {recording && (
+                <>
+                  <span className="size-2 rounded-full bg-destructive animate-pulse" />
+                  Recording {formatDuration(recordingSeconds)}
+                </>
+              )}
+              {voiceTranscribing && (
+                <>
+                  <Spinner className="size-3.5" />
+                  Transcribing voice note…
+                </>
+              )}
+              {voiceError}
+            </div>
+          )}
+          <div className="flex items-end gap-2">
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              placeholder="Ask your vault, or say 'remember this: …'"
+              rows={1}
+              disabled={voiceTranscribing}
+              className="min-h-9 resize-none rounded-xl border-transparent bg-muted/60 px-3.5 focus-visible:border-transparent focus-visible:bg-muted focus-visible:ring-0 dark:bg-input/30 dark:focus-visible:bg-input/50"
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault()
+                  void send()
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant={recording ? "destructive" : "ghost"}
+              size="icon"
+              aria-pressed={recording}
+              className={
+                recording
+                  ? "rounded-full bg-destructive text-white transition-all hover:bg-destructive/90 active:scale-95 dark:text-white"
+                  : "rounded-full transition-all active:scale-95"
+              }
+              disabled={busy || voiceTranscribing}
+              onClick={() => {
+                if (recording) void stopVoiceRecording()
+                else void startVoiceRecording()
+              }}
+            >
+              {recording ? <SquareIcon className="size-4 fill-current" /> : <MicIcon />}
+              <span className="sr-only">{recording ? "Stop and send voice note" : "Record voice note"}</span>
+            </Button>
+            <Button
+              type="submit"
+              size="icon"
+              className="rounded-full transition-all active:scale-95"
+              disabled={busy || recording || voiceTranscribing || input.trim() === ""}
+            >
+              <SendIcon />
+              <span className="sr-only">Send</span>
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>

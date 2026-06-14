@@ -27,7 +27,7 @@ import {
 import { buildMcpServer } from "./mcp.js";
 import { parseServiceAccount, testDrive } from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";
-import { prepareModel, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
+import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
@@ -36,6 +36,8 @@ export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
   webDist?: string;
 }
+
+const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
 
 export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
   const app = new Hono<{ Bindings: HttpBindings }>();
@@ -208,6 +210,24 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.get("/api/transcription/models", (c) =>
     c.json({ models: WHISPER_MODELS, selected: settings.whisperModel() }),
   );
+
+  app.post("/api/chat/voice/transcribe", async (c) => {
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get("audio");
+    if (!(file instanceof File)) return c.json({ error: "audio file is required" }, 400);
+    if (file.size <= 0) return c.json({ error: "audio file is empty" }, 400);
+    if (file.size > MAX_WEB_VOICE_NOTE_BYTES) return c.json({ error: "audio file is too large" }, 413);
+
+    const data = Buffer.from(await file.arrayBuffer());
+    const result = await transcribeAudio(data, file.name || "web-voice-note.webm", {
+      model: settings.whisperModel(),
+      groqApiKey: settings.get("groq_api_key"),
+      openaiApiKey: settings.get("openai_api_key"),
+      useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
+    });
+    if (!result.success) return c.json({ error: `could not transcribe voice note: ${result.error}` }, 422);
+    return c.json({ transcript: result.transcript, provider: result.provider });
+  });
 
   // Background ingest jobs — the Ingestion panel polls this so a long
   // transcription is visible from any tab and survives navigation/refresh.

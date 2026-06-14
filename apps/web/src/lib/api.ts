@@ -295,6 +295,42 @@ export type ChatReply = {
   stored?: ChatStored
 }
 
+export type VoiceTranscriptionResponse = {
+  transcript: string
+  provider: string
+}
+
+export async function transcribeVoiceNote(
+  audio: Blob,
+  filename: string
+): Promise<VoiceTranscriptionResponse> {
+  const body = new FormData()
+  body.append("audio", audio, filename)
+
+  const response = await fetch("/api/chat/voice/transcribe", {
+    method: "POST",
+    body,
+  })
+
+  let data: unknown = null
+  try {
+    data = await response.json()
+  } catch {
+    // Some failures may not include a JSON body.
+  }
+
+  if (!response.ok) {
+    const payload = data as { error?: string; code?: string } | null
+    throw new ApiError(
+      response.status,
+      payload?.error ?? response.statusText,
+      payload?.code
+    )
+  }
+
+  return data as VoiceTranscriptionResponse
+}
+
 export type ChatToolEvent = {
   phase: "start" | "end" | "error"
   tool: string
