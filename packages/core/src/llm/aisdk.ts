@@ -284,6 +284,55 @@ export class AiSdkBrainLlm implements BrainLlm {
     }
   }
 
+  /**
+   * Recover a turn that ran its tools but produced no final text. Reasoning
+   * models (e.g. grok) sometimes spend their whole output budget on reasoning
+   * + tool calls and end the turn without writing an answer block, so
+   * `result.text` is empty even though the work is done and the tool results
+   * are sitting in context. The `prepareStep` force-text guard only covers
+   * running OUT of steps — it never fires when the model stops voluntarily.
+   * Re-prompt once with tools disabled to make the model write the answer it
+   * already gathered. Returns "" if it still yields nothing, so the engine's
+   * finalizeReply shows a graceful fallback rather than a silent empty bubble.
+   */
+  private async recoverEmptyAnswer(
+    model: Parameters<typeof generateText>[0]["model"],
+    priorMessages: ModelMessage[],
+    responseMessages: ModelMessage[],
+    reasoning: string,
+    onTextDelta?: (delta: string) => void,
+  ): Promise<string> {
+    console.warn(
+      `[answer] empty final text after ${responseMessages.length} response message(s)` +
+        (reasoning ? ` (${reasoning.length} chars of reasoning dropped)` : "") +
+        "; forcing a closing text step",
+    );
+    try {
+      const retry = await generateText({
+        model,
+        messages: [
+          ...priorMessages,
+          ...responseMessages,
+          {
+            role: "user",
+            content:
+              "Write your final answer now as plain text, based on what you found above. Do not call any tools.",
+          },
+        ],
+        toolChoice: "none",
+      });
+      this.reportUsage("answer", this.askModelId, retry.totalUsage, retry.providerMetadata);
+      if (retry.text.trim()) {
+        onTextDelta?.(retry.text);
+        return retry.text;
+      }
+      console.warn("[answer] forced closing step still produced empty text");
+    } catch (err) {
+      console.warn(`[answer] forced closing step failed: ${(err as Error).message}`);
+    }
+    return "";
+  }
+
   async classify(input: ClassifyInput): Promise<Classification> {
     const index = input.pageIndex
       .map((p) => `${p.path} | ${p.title} | tags: ${p.tags.join(",")} | ${p.summary}`)
@@ -647,10 +696,15 @@ export class AiSdkBrainLlm implements BrainLlm {
       // stream ends, so the turn finishes only once the work is done.
       const result = streamText(config);
       let text = "";
+      let reasoning = "";
       for await (const part of result.fullStream) {
         if (part.type === "text-delta") {
           text += part.text;
           input.onTextDelta?.(part.text);
+        } else if (part.type === "reasoning-delta") {
+          // Reasoning is internal and never shown, but tracked so an
+          // empty-text recovery can report how much thinking was discarded.
+          reasoning += part.text;
         } else if (part.type === "tool-call") {
           // readPaths is tracked by the read_note tool's execute wrapper below.
           input.onToolEvent?.({ phase: "start", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
@@ -668,12 +722,31 @@ export class AiSdkBrainLlm implements BrainLlm {
         }
       }
       this.reportUsage("answer", this.askModelId, await result.totalUsage, await result.providerMetadata);
+      if (!text.trim()) {
+        const response = await result.response;
+        text = await this.recoverEmptyAnswer(
+          config.model,
+          config.messages,
+          response.messages,
+          reasoning,
+          input.onTextDelta,
+        );
+      }
       return { text, readPaths: [...readPaths] };
     }
 
     const result = await generateText(config);
     this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata);
-    return { text: result.text, readPaths: [...readPaths] };
+    let text = result.text;
+    if (!text.trim()) {
+      text = await this.recoverEmptyAnswer(
+        config.model,
+        config.messages,
+        result.response.messages,
+        result.reasoningText ?? "",
+      );
+    }
+    return { text, readPaths: [...readPaths] };
   }
 
   async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {
