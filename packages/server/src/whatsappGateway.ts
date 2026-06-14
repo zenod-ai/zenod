@@ -726,8 +726,18 @@ export class WhatsAppGateway {
         surface: "whatsapp",
         conversationKey: normalizeWhatsAppIdentifier(event.senderId) || event.senderId,
       });
-      await this.sendReply(event, reply.text, "sent");
-      this.options.store.markMessageStatus(event.messageId, "replied");
+      // The engine now guarantees a non-empty reply, but never record a false
+      // "replied": if the text is blank, sendReply's empty-text guard would
+      // drop it silently while we'd still stamp success — the exact failure
+      // that made Zeno look connected-but-mute. Treat blank as a real failure.
+      if (reply.text.trim()) {
+        await this.sendReply(event, reply.text, "sent");
+        this.options.store.markMessageStatus(event.messageId, "replied");
+      } else {
+        await this.sendReply(event, "⚠️ I got your message but couldn't compose a reply — please try again.", "error").catch(() => {});
+        this.options.store.markMessageStatus(event.messageId, "failed");
+        console.error(`[whatsapp] empty reply for ${event.messageId} — sent fallback notice`);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.options.store.markMessageStatus(event.messageId, "failed");

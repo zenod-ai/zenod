@@ -79,6 +79,20 @@ function createError(actions: ReadonlyArray<RecordedAction>): string | undefined
 const fmt = (nums: number[]): string => nums.map((n) => `#${n}`).join(", ");
 
 /**
+ * Build a user-facing reply from the tool results when the model produced no
+ * final text (e.g. it exhausted its step budget mid-tool-call, leaving
+ * generateText with an empty string). Returns null when there's nothing useful
+ * to say, so the caller can fall back to a generic notice. Without this a
+ * WhatsApp turn that ran tools but never wrote a closing sentence is silently
+ * dropped by the gateway's empty-text guard.
+ */
+export function summarizeActionsForReply(actions: ReadonlyArray<RecordedAction>): string | null {
+  const lines = actions.map((action) => action.result.trim()).filter((result) => result.length > 0 && !/^ERROR:/.test(result));
+  if (lines.length === 0) return null;
+  return lines.join("\n\n");
+}
+
+/**
  * Reconcile a tasking reply against the tools that actually ran this turn.
  * Returns the reply unchanged when its mutation claims check out, or prepends a
  * correction when it asserts a creation/mutation that no tool result backs.

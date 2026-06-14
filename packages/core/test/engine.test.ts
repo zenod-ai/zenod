@@ -88,6 +88,20 @@ class FakeLlm implements BrainLlm {
       });
       return { text: url, readPaths: [] };
     }
+    if (taskTools && input.question.startsWith("EMPTYAFTERCREATE:")) {
+      // The model ran a tool but produced no closing text (exhausted its step
+      // budget mid-tool-call) — generateText returns "" here.
+      await taskTools.createIssue({
+        repo: "zenod-ai/zenod",
+        title: input.question.slice("EMPTYAFTERCREATE:".length).trim(),
+        body: "Created from tasking test.",
+        labels: ["from-tasking"],
+      });
+      return { text: "", readPaths: [] };
+    }
+    if (taskTools && input.question.startsWith("EMPTYNOOP:")) {
+      return { text: "   ", readPaths: [] };
+    }
     if (taskTools && input.question.startsWith("FABRICATECREATE:")) {
       // Reproduce the real bug: the create call fails, but the model swallows the
       // error and narrates a confident, fully-fabricated success (number + url).
@@ -756,6 +770,44 @@ describe("BrainEngine", () => {
     // The failed attempt is recorded for audit instead of silently dropped.
     const create = reply.actions.find((action) => action.tool === "createIssue");
     expect(create?.result).toMatch(/^ERROR:.*403/);
+  });
+
+  it("never returns an empty WhatsApp reply — falls back to the real tool results", async () => {
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        async createIssue() {
+          return "Created issue #25: https://github.com/zenod-ai/zenod/issues/25";
+        },
+        async labelIssue() {
+          return "labeled";
+        },
+        async queryBacklog() {
+          return "";
+        },
+        async serviceBacklog() {
+          return "";
+        },
+        async approveQueue() {
+          return "queued";
+        },
+      },
+    });
+
+    const reply = await e.handleTasking({ text: "EMPTYAFTERCREATE: Real task", surface: "whatsapp", conversationKey: "empty1" });
+
+    expect(reply.text.trim()).not.toBe("");
+    expect(reply.text).toContain("Created issue #25");
+  });
+
+  it("never returns an empty reply even when no tools ran — sends a retry notice", async () => {
+    const reply = await engine().handleTasking({ text: "EMPTYNOOP: nothing", surface: "whatsapp", conversationKey: "empty2" });
+
+    expect(reply.text.trim()).not.toBe("");
+    expect(reply.text).toMatch(/rephrasing|try|again/i);
   });
 
   it("leaves a genuine 'Created issue #N' reply untouched", async () => {

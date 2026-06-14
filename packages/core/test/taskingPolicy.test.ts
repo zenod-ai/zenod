@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reconcileTaskingReply, type RecordedAction } from "../src/taskingPolicy.js";
+import { reconcileTaskingReply, summarizeActionsForReply, type RecordedAction } from "../src/taskingPolicy.js";
 
 const created = (n: number, repo = "AlfaBlok/obsidian-brain"): RecordedAction => ({
   tool: "createIssue",
@@ -61,5 +61,17 @@ describe("reconcileTaskingReply", () => {
     const reply = "Queued #51 as you asked.";
     const out = reconcileTaskingReply(reply, [{ tool: "approveQueue", result: "Queued #51 — the monitor will pick them up." }]);
     expect(out).toBe(reply);
+  });
+});
+
+describe("summarizeActionsForReply", () => {
+  it("returns the real tool receipts when the model produced no text", () => {
+    const actions: RecordedAction[] = [created(25, "zenod-ai/zenod"), { tool: "labelIssue", result: "Labeled issue #25" }];
+    expect(summarizeActionsForReply(actions)).toContain("Created issue #25");
+  });
+
+  it("skips errors and returns null when nothing useful happened", () => {
+    expect(summarizeActionsForReply([{ tool: "createIssue", result: "ERROR: boom" }])).toBeNull();
+    expect(summarizeActionsForReply([])).toBeNull();
   });
 });

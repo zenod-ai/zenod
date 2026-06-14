@@ -37,7 +37,7 @@ import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
-import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply } from "../taskingPolicy.js";
+import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
 
 /**
  * The conversation key for a surface. One continuous thread per surface today;
@@ -854,6 +854,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
+  // The model can finish a turn with no closing text — most often when it
+  // exhausts its step budget mid-tool-call (generateText then returns ""). An
+  // empty reply is silently dropped by the WhatsApp gateway and looks like Zeno
+  // ignoring the user, so always produce *something*: the real tool results if
+  // any ran, otherwise an honest retry notice. Reconciliation runs first so a
+  // fabricated mutation is still corrected before we consider falling back.
+  function finalizeReply(rawText: string, actions: TaskingAction[]): string {
+    const text = reconcileTaskingReply(rawText, actions);
+    if (text.trim()) return text;
+    const summary = summarizeActionsForReply(actions);
+    return summary
+      ? `${summary}\n\n(That's what I did — I ran out of room to write a fuller reply.)`
+      : "I couldn't compose a reply to that one — mind rephrasing or sending it again?";
+  }
+
   async function chat(
     message: string,
     surface: Surface,
@@ -895,7 +910,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     );
     // Same grounding guard as handleTasking — a fabricated "Created issue #N"
     // must not survive into the web chat either.
-    const text = reconcileTaskingReply(result.text, actions);
+    const text = finalizeReply(result.text, actions);
     await state.appendMessage(cid, "assistant", text, surface);
 
     return {
@@ -926,7 +941,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     );
     // Never let the reply assert a creation/mutation the tools didn't actually
     // perform — the user-facing issue number/url must come from a real result.
-    const text = reconcileTaskingReply(result.text, actions);
+    const text = finalizeReply(result.text, actions);
     await state.appendMessage(cid, "assistant", text, input.surface);
     return { text, actions };
   }
