@@ -415,6 +415,40 @@ export class WhatsAppGateway {
     }, delayMs);
   }
 
+  /** A failed send/presence call that means the socket is closed underneath us. */
+  private isConnectionClosedError(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/connection closed|connection terminated|connection lost|socket (is )?closed|not open|websocket/i.test(message)) {
+      return true;
+    }
+    const code = Number((err as { output?: { statusCode?: unknown } } | undefined)?.output?.statusCode);
+    // 428 (Precondition Required) is Baileys' "connection closed/replaced".
+    return code === 428 || code === DisconnectReason.connectionClosed || code === DisconnectReason.connectionLost;
+  }
+
+  /**
+   * Watchdog: a sendMessage/sendPresenceUpdate can throw "Connection Closed"
+   * while Baileys never emits a connection.update:close (the socket goes
+   * half-dead — e.g. after a session conflict). With no close event,
+   * handleConnectionClose/scheduleReconnect never run, so the gateway sits dead:
+   * the typing indicator lingers and nothing sends. Detect it from the failed
+   * send, tear the dead socket down, and force a reconnect so it self-heals.
+   */
+  private recoverFromSendError(err: unknown): void {
+    if (this.reconnectTimer) return; // a reconnect is already scheduled
+    if (!this.isConnectionClosedError(err)) return;
+    if (!this.options.settings.whatsappSettings().enabled) return;
+    const dead = this.socket;
+    this.socket = null;
+    try {
+      dead?.end?.();
+    } catch {
+      // already torn down
+    }
+    console.warn("[whatsapp] send failed on a closed socket with no close event — forcing reconnect");
+    this.scheduleReconnect("WhatsApp socket went unresponsive — reconnecting…", 1_000);
+  }
+
   private async handleConnectionClose(socket: SocketLike, statusCode: number): Promise<void> {
     if (statusCode === DisconnectReason.restartRequired) {
       this.state = "disconnected";
@@ -534,6 +568,7 @@ export class WhatsAppGateway {
           status: "failed",
           errorText: err instanceof Error ? err.message : String(err),
         });
+        this.recoverFromSendError(err);
       }
     }
     return { sent: recipients.length, recipients };
@@ -592,6 +627,7 @@ export class WhatsAppGateway {
     if (!jid || !this.socket?.sendPresenceUpdate) return;
     await this.socket.sendPresenceUpdate(typing ? "composing" : "paused", jid).catch((err: unknown) => {
       console.warn("[whatsapp] could not update typing state:", err);
+      this.recoverFromSendError(err);
     });
   }
 
@@ -1007,6 +1043,7 @@ export class WhatsAppGateway {
         status: "failed",
         errorText: err instanceof Error ? err.message : String(err),
       });
+      this.recoverFromSendError(err);
       throw err;
     }
   }

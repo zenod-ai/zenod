@@ -276,6 +276,56 @@ describe("WhatsAppGateway", () => {
     }
   });
 
+  it("forces a reconnect when a send fails on a half-dead socket (no close event)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-watchdog-"));
+    const runtime = new Runtime(dir);
+    const dead = new FakeSocket();
+    // The socket is closed underneath us but never emits connection.update:close.
+    dead.sendMessage = async () => {
+      throw Object.assign(new Error("Connection Closed"), { output: { statusCode: 428 } });
+    };
+    const fresh = new FakeSocket();
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => {
+        created += 1;
+        return created === 1 ? dead : fresh;
+      },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      dead.emitter.emit("connection.update", { connection: "open" });
+      expect(created).toBe(1);
+
+      // The reply send throws "Connection Closed" — the watchdog should tear the
+      // dead socket down and reconnect (a 1s scheduled retry) instead of hanging.
+      await gateway.handleMessages([textMessage()], "notify");
+      expect(runtime.whatsappStore.countOutboundAudits("failed")).toBeGreaterThan(0);
+
+      const reconnected = await Promise.race([
+        (async () => {
+          for (let i = 0; i < 40; i++) {
+            if (created >= 2) return true;
+            await new Promise((r) => setTimeout(r, 50));
+          }
+          return false;
+        })(),
+        new Promise<boolean>((r) => setTimeout(() => r(false), 2_500)),
+      ]);
+      expect(reconnected).toBe(true);
+    } finally {
+      gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("notifyOwner proactively messages the allowed senders (#35 ping primitive)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-notify-"));
     const runtime = new Runtime(dir);
