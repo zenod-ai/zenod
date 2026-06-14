@@ -33,11 +33,11 @@ export interface AiLlmOptions {
 /** Per-provider default models. Both are user-overridable in settings. */
 export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string }> = {
   anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5" },
-  openai: { ask: "gpt-4o", classify: "gpt-4o-mini" },
+  openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini" },
 };
 
-const MAX_STEPS = 15;
-const MAX_WORK_STEPS = 40;
+export const MAX_STEPS = 6;
+export const MAX_WORK_STEPS = 12;
 
 /** Tool callbacks may fail (bad path, immutable tier); surface the error to the model instead of aborting the loop. */
 function caught(run: () => Promise<string>): Promise<string> {

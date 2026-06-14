@@ -33,6 +33,8 @@ export type {
   TaskingInput,
   TaskingReply,
   TaskingSurface,
+  TokenCostMeasurement,
+  TokenCostOperation,
 } from "./types.js";
 
 export { loadBrainConfig, ConfigError, CONFIG_PATH, type BrainConfig } from "./vault/config.js";

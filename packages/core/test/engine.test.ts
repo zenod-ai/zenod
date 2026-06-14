@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
+import type { TokenCostMeasurement } from "../src/types.js";
 import type {
   AnswerInput,
   AnswerResult,
@@ -31,6 +32,8 @@ class FakeLlm implements BrainLlm {
   composeCalls = 0;
   confidence = 0.95;
   failComposeAttempts = 0;
+  answerInputs: AnswerInput[] = [];
+  workInputs: WorkLoopInput[] = [];
 
   async classify(_input: ClassifyInput): Promise<Classification> {
     this.classifyCalls++;
@@ -68,6 +71,7 @@ class FakeLlm implements BrainLlm {
   }
 
   async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult> {
+    this.answerInputs.push(input);
     if (taskTools && input.question.startsWith("BACKLOG:")) {
       const result = await taskTools.digestBacklog({
         rawText: input.question.slice(8).trim(),
@@ -140,6 +144,7 @@ class FakeLlm implements BrainLlm {
 
   async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {
     this.workCalls++;
+    this.workInputs.push(input);
     if (!writeTools) {
       return { text: `PLAN for "${input.objective}":\n- delete Inbox/junk.md — test scratch` };
     }
@@ -365,6 +370,69 @@ describe("BrainEngine", () => {
     expect(answer.text).toContain("Axa");
     expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
     expect(answer.sources[0]?.githubUrl).toContain("github.com/zenod-ai/fixture");
+  });
+
+  it("bounds vaultBriefing and reports briefing token cost separately", async () => {
+    await mkdir(join(repo.path, "Notes"), { recursive: true });
+    await mkdir(join(repo.path, "Log"), { recursive: true });
+    await mkdir(join(repo.path, "_attachments/generated"), { recursive: true });
+
+    for (let i = 1; i <= 100; i++) {
+      const n = String(i).padStart(3, "0");
+      await writeFile(
+        join(repo.path, `Notes/Generated-${n}.md`),
+        [
+          "---",
+          `title: Generated ${n}`,
+          "type: note",
+          "tags: []",
+          "created: 2026-06-13",
+          "updated: 2026-06-13",
+          `summary: ${"Long generated summary ".repeat(30)}${n}.`,
+          "---",
+          "",
+          `# Generated ${n}`,
+          "",
+          "Synthetic content for briefing cap tests. Related: [[Notes/Axa|Axa]]",
+          "",
+        ].join("\n"),
+      );
+    }
+    for (let i = 1; i <= 30; i++) {
+      const day = String(i).padStart(2, "0");
+      await writeFile(join(repo.path, `Log/2026-07-${day}.md`), `# 2026-07-${day}\n\nentry ^e-${String(i).padStart(6, "0")}\n`);
+    }
+    for (let i = 1; i <= 50; i++) {
+      await writeFile(join(repo.path, `_attachments/generated/file-${String(i).padStart(3, "0")}.txt`), "artifact\n");
+    }
+    await simpleGit(repo.path).add(["-A"]).commit("seed large vault").push("origin", "main");
+
+    const measurements: TokenCostMeasurement[] = [];
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      onTokenCost: (measurement) => measurements.push(measurement),
+    });
+
+    await e.ask("what is in generated note 99?");
+
+    const briefing = llm.answerInputs.at(-1)?.vaultBriefing ?? "";
+    expect(briefing).toContain("Meaning pages (80/");
+    expect(briefing).toContain("Recent evidence logs (20/");
+    expect(briefing).toContain("Recent attachments (40/");
+    expect(briefing).not.toContain("Generated 099");
+    expect(briefing).not.toContain("Log/2026-07-01.md");
+    expect(briefing).not.toContain("_attachments/generated/file-001.txt");
+
+    const askCost = measurements.find((m) => m.operation === "ask");
+    expect(askCost?.estimatedBriefingTokens).toBeGreaterThan(0);
+    expect(askCost?.estimatedInputTokens).toBeGreaterThan(askCost?.estimatedBriefingTokens ?? 0);
+    expect(askCost?.briefingSections?.meaningPages.included).toBe(80);
+    expect(askCost?.briefingSections?.meaningPages.omitted).toBeGreaterThan(0);
+    expect(askCost?.briefingSections?.evidenceLogs.included).toBe(20);
+    expect(askCost?.briefingSections?.attachments.included).toBe(40);
   });
 
   it("digests raw transcript text into structured backlog candidates with source refs", async () => {
