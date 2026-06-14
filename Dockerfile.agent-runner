@@ -36,6 +36,15 @@ COPY scripts/fanout-codex.mjs /opt/zenod/scripts/fanout-codex.mjs
 RUN chmod +x /opt/zenod/scripts/fanout-codex.mjs \
  && ln -s /opt/zenod/scripts/fanout-codex.mjs /usr/local/bin/zenod-fanout-codex
 
+# Route git's HTTPS credentials through gh, baked into the IMAGE (--system =
+# /etc/gitconfig) so it survives container recreation. HOME=/runner is NOT a
+# volume, so `gh auth setup-git` (which writes ~/.gitconfig) is lost on every
+# recreate — which silently breaks `git push` for workers while gh-API calls
+# keep working (they read the /runner/gh volume). The helper itself needs no
+# token at build time; gh reads the token from /runner/gh at push time.
+RUN git config --system credential."https://github.com".helper "!gh auth git-credential" \
+ && git config --system credential."https://gist.github.com".helper "!gh auth git-credential"
+
 WORKDIR /runner/work
 
 VOLUME ["/runner/work", "/runner/codex-home", "/runner/gh"]
