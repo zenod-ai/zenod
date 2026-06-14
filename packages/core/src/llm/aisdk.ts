@@ -406,6 +406,11 @@ export class AiSdkBrainLlm implements BrainLlm {
             }),
             execute: async ({ content, hints }) => {
               const result = await taskTools.captureNote(content, hints ?? undefined);
+              if (result.queued) {
+                // Filing runs in the background and is NOT committed yet — tell
+                // the model so it acknowledges without claiming a completed file.
+                return "Queued: the note is being filed to the vault in the background and will commit shortly. Do not claim it is already filed/committed — just acknowledge it's being captured.";
+              }
               return [
                 `Filed: ${result.evidenceRef}`,
                 ...(result.pagesTouched.length > 0 ? [`Pages: ${result.pagesTouched.join(", ")}`] : []),
