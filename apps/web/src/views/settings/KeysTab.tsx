@@ -67,7 +67,12 @@ type FormState = {
   groq_api_key: string
   model_ask: string
   model_classify: string
+  model_max_steps: string
 }
+
+const MAX_STEPS_DEFAULT = 8
+const MAX_STEPS_MIN = 2
+const MAX_STEPS_MAX = 20
 
 function toFormState(settings: SettingsValues): FormState {
   return {
@@ -81,6 +86,7 @@ function toFormState(settings: SettingsValues): FormState {
     groq_api_key: settings.groq_api_key ?? "",
     model_ask: settings.model_ask ?? "",
     model_classify: settings.model_classify ?? "",
+    model_max_steps: settings.model_max_steps ?? "",
   }
 }
 
@@ -464,6 +470,43 @@ export function KeysTab({
               />
               <FieldDescription>
                 Used to classify incoming evidence.
+              </FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="keys-max-steps">
+                Max tool steps per reply
+              </FieldLabel>
+              <Input
+                id="keys-max-steps"
+                type="number"
+                inputMode="numeric"
+                min={MAX_STEPS_MIN}
+                max={MAX_STEPS_MAX}
+                step={1}
+                placeholder={String(MAX_STEPS_DEFAULT)}
+                value={form.model_max_steps}
+                onChange={(event) =>
+                  update("model_max_steps", event.target.value)
+                }
+                onBlur={(event) => {
+                  const raw = event.target.value.trim()
+                  if (raw === "") return
+                  const clamped = Math.max(
+                    MAX_STEPS_MIN,
+                    Math.min(MAX_STEPS_MAX, Math.round(Number(raw)))
+                  )
+                  update(
+                    "model_max_steps",
+                    Number.isFinite(clamped) ? String(clamped) : ""
+                  )
+                }}
+              />
+              <FieldDescription>
+                How many rounds of tool calls (search, read, create…) the model
+                may make before it must answer. The model is told this budget so
+                it plans, and the final step always produces a reply — higher is
+                more thorough but slower and costlier. Default {MAX_STEPS_DEFAULT}
+                ; leave blank to use it.
               </FieldDescription>
             </Field>
           </FieldGroup>

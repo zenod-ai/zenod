@@ -17,6 +17,7 @@ export const SETTING_KEYS = [
   "openrouter_api_key",
   "model_ask",
   "model_classify",
+  "model_max_steps",
   "google_service_account_json",
   "google_drive_folder_id",
   "groq_api_key",
@@ -54,6 +55,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   openrouter_api_key: "OPENROUTER_API_KEY",
   model_ask: "ZENOD_MODEL_ASK",
   model_classify: "ZENOD_MODEL_CLASSIFY",
+  model_max_steps: "ZENOD_MODEL_MAX_STEPS",
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
   google_drive_folder_id: "GOOGLE_DRIVE_FOLDER_ID",
   groq_api_key: "GROQ_API_KEY",
@@ -115,6 +117,14 @@ export class Settings {
     return Boolean(
       this.getRaw("github_app_id") && this.getRaw("github_app_private_key") && this.getRaw("github_app_installation_id"),
     );
+  }
+
+  /** Configured tool-step budget per reply; undefined = engine default. */
+  maxSteps(): number | undefined {
+    const value = this.get("model_max_steps");
+    if (!value) return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
 
   /** Active model provider — defaults to Anthropic. */

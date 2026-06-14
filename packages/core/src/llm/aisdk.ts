@@ -61,6 +61,12 @@ export interface AiLlmOptions {
   /** Classification pass model. */
   classifyModel?: string;
   /**
+   * Tool-step budget for an answer turn. The model is told this limit and the
+   * final step forces a text answer. Clamped to [MIN_MAX_STEPS, MAX_MAX_STEPS];
+   * undefined uses DEFAULT_MAX_STEPS.
+   */
+  maxSteps?: number;
+  /**
    * Optional sink for real, provider-billed token usage per call. The server
    * wires this to a durable usage store for cost analytics. It must never
    * throw into the call path — a metering failure must not break a chat turn.
@@ -76,8 +82,22 @@ export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string
   groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant" },
 };
 
-export const MAX_STEPS = 6;
+/**
+ * Default tool-step budget for an answer turn when none is configured. The
+ * model is *told* this budget and the last step forces a text answer, so it
+ * plans its tool calls and can never run out mid-loop and reply with nothing.
+ * Configurable per server via the "Max tool steps per reply" setting.
+ */
+export const DEFAULT_MAX_STEPS = 8;
+export const MIN_MAX_STEPS = 2;
+export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
+
+/** Clamp a configured step budget to a sane range; falls back to the default. */
+export function clampMaxSteps(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return DEFAULT_MAX_STEPS;
+  return Math.max(MIN_MAX_STEPS, Math.min(MAX_MAX_STEPS, Math.round(value)));
+}
 
 type ModelFactory = (id: string) => Parameters<typeof generateText>[0]["model"];
 
@@ -205,6 +225,7 @@ export { backlogCandidateSchema, backlogExtractSchema };
  */
 export class AiSdkBrainLlm implements BrainLlm {
   private readonly askModelId: string;
+  private readonly maxSteps: number;
   private readonly classifyModelId: string;
   private readonly provider: Provider;
   private readonly onUsage: ((report: LlmUsageReport) => void) | undefined;
@@ -222,6 +243,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     const defaults = PROVIDER_DEFAULTS[options.provider];
     this.askModelId = options.askModel || defaults.ask;
     this.classifyModelId = options.classifyModel || defaults.classify;
+    this.maxSteps = clampMaxSteps(options.maxSteps);
     this.provider = options.provider;
     this.onUsage = options.onUsage;
     this.model = createModelFactory(options.provider, options.apiKey);
@@ -556,8 +578,16 @@ export class AiSdkBrainLlm implements BrainLlm {
         : "",
     ].filter(Boolean);
 
-    const systemText =
-      briefingExtras.length > 0 ? `${input.vaultBriefing}\n\n${briefingExtras.join("\n\n")}` : input.vaultBriefing;
+    // Tell the model its tool budget so it plans instead of getting silently
+    // guillotined mid-loop. The last step forces a text answer (prepareStep
+    // below), so usable tool-calling rounds = maxSteps - 1.
+    const toolRounds = Math.max(1, this.maxSteps - 1);
+    const budgetNote = [
+      `TOOL BUDGET: you have at most ${toolRounds} round${toolRounds === 1 ? "" : "s"} of tool calls this turn, then you MUST write your final answer.`,
+      "Plan accordingly: search and read early, ask for everything you need up front rather than one tool at a time, and never spend your last round on a tool call.",
+      "If you are near the limit, stop gathering and answer with what you have — a clearly-caveated partial answer always beats no answer.",
+    ].join(" ");
+    const systemText = [input.vaultBriefing, ...briefingExtras, budgetNote].filter(Boolean).join("\n\n");
     const config = {
       model: this.model(this.askModelId),
       // System prefix as a cached message rather than top-level `system`, so the
@@ -566,7 +596,12 @@ export class AiSdkBrainLlm implements BrainLlm {
         { role: "system", content: systemText, providerOptions: this.cacheBreakpoint },
         ...messages,
       ] as ModelMessage[],
-      stopWhen: stepCountIs(MAX_STEPS),
+      stopWhen: stepCountIs(this.maxSteps),
+      // Hard guarantee against the empty-reply failure: on the final step,
+      // disable tools so the model is forced to produce text from what it has.
+      // It can plan around this because the budget is in its system prompt.
+      prepareStep: ({ stepNumber }: { stepNumber: number }) =>
+        stepNumber >= this.maxSteps - 1 ? { toolChoice: "none" as const } : {},
       tools: {
         ...taskToolSet,
         ...driveToolSet,
