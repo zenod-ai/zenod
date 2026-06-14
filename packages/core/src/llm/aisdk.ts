@@ -391,6 +391,18 @@ export class AiSdkBrainLlm implements BrainLlm {
             }),
             execute: ({ repo, issueNumbers }) => caught(() => taskTools.approveQueue({ repo: repo ?? "", issueNumbers })),
           }),
+          approve_merge: tool({
+            description:
+              "Approve merging the pull request(s) produced for backlog tickets currently at status:needs-review. Flips them to status:approved-merge so the controller merges the PR on green CI. THIS IS THE ONLY TOOL THAT CAN APPROVE A MERGE. Call it ONLY when the human has EXPLICITLY approved specific tickets to merge by number in this conversation (e.g. 'merge #44', 'yes, ship 51 and 53'). Never infer approval; never merge on a vague request. You do not merge directly — the controller merges on green and reports back. After approving, tell the user exactly which tickets were approved to merge.",
+            inputSchema: z.object({
+              repo: z.string().nullable().describe("owner/repo of the backlog ticket; null uses the configured vault/project repo"),
+              issueNumbers: z
+                .array(z.number().int().positive())
+                .min(1)
+                .describe("the backlog ticket numbers the human explicitly approved to merge now"),
+            }),
+            execute: ({ repo, issueNumbers }) => caught(() => taskTools.approveMerge({ repo: repo ?? "", issueNumbers })),
+          }),
           query_backlog: tool({
             description:
               "Return real status for open backlog/issues. Use when the user asks where things stand, open issue status, backlog status, blockers, or what is ready next.",
