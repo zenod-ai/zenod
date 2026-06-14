@@ -1,7 +1,16 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ChatTestAuditInput, ChatTestAuditRecord, ConversationMessage, SourceRef, StateStore, Surface } from "../types.js";
+import type {
+  ChatTestAuditInput,
+  ChatTestAuditRecord,
+  ConversationMessage,
+  ConversationSearchHit,
+  ConversationSearchOptions,
+  SourceRef,
+  StateStore,
+  Surface,
+} from "../types.js";
 import type { ChatToolEvent } from "../llm/types.js";
 
 const WINDOW_MESSAGES = 20;
@@ -98,6 +107,82 @@ export class SqliteStateStore implements StateStore {
 
   async clearConversation(conversationId: string): Promise<void> {
     this.db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(conversationId);
+  }
+
+  async searchConversations(query: string, options: ConversationSearchOptions = {}): Promise<ConversationSearchHit[]> {
+    // Deterministic LIKE search (no FTS extension in node:sqlite). Strip LIKE
+    // wildcards so user input can't smuggle them in, dedupe, and cap the term
+    // count so a rambling query can't blow up the WHERE clause.
+    const terms = Array.from(
+      new Set(
+        query
+          .toLowerCase()
+          .split(/\s+/)
+          .map((t) => t.replace(/[%_]/g, " ").trim())
+          .filter((t) => t.length >= 2),
+      ),
+    ).slice(0, 8);
+    if (terms.length === 0) return [];
+
+    const surfaces = (options.surfaces ?? []).filter(Boolean);
+    const limit = Math.min(Math.max(Math.trunc(options.limit ?? 6), 1), 20);
+
+    const where = [`(${terms.map(() => "lower(text) LIKE ?").join(" OR ")})`];
+    const params: Array<string | number> = terms.map((t) => `%${t}%`);
+    if (surfaces.length) {
+      where.push(`surface IN (${surfaces.map(() => "?").join(", ")})`);
+      params.push(...surfaces);
+    }
+    // Pull a generous pool of the most recent matching messages, then group and
+    // rank in JS. The pool bounds work for a hot query without missing matches
+    // in any single conversation we ultimately surface.
+    const POOL = 400;
+    params.push(POOL);
+    const rows = this.db
+      .prepare(
+        `SELECT id, conversation_id AS conversationId, role, text, surface, at FROM messages
+         WHERE ${where.join(" AND ")}
+         ORDER BY at DESC, id DESC LIMIT ?`,
+      )
+      .all(...params) as Array<{
+      id: number;
+      conversationId: string;
+      role: "user" | "assistant";
+      text: string;
+      surface: Surface;
+      at: number;
+    }>;
+
+    type Group = { surface: Surface; lastAt: number; score: number; rows: typeof rows };
+    const groups = new Map<string, Group>();
+    for (const r of rows) {
+      const lower = r.text.toLowerCase();
+      const score = terms.reduce((n, t) => (lower.includes(t) ? n + 1 : n), 0);
+      const g = groups.get(r.conversationId);
+      if (g) {
+        g.rows.push(r);
+        g.score = Math.max(g.score, score);
+        g.lastAt = Math.max(g.lastAt, r.at);
+      } else {
+        groups.set(r.conversationId, { surface: r.surface, lastAt: r.at, score, rows: [r] });
+      }
+    }
+
+    const MESSAGES_PER_HIT = 12;
+    return Array.from(groups.entries())
+      .sort((a, b) => b[1].score - a[1].score || b[1].lastAt - a[1].lastAt)
+      .slice(0, limit)
+      .map(([conversationId, g]) => ({
+        conversationId,
+        surface: g.surface,
+        matchCount: g.rows.length,
+        lastAt: new Date(g.lastAt),
+        messages: g.rows
+          .slice()
+          .sort((a, b) => a.at - b.at || a.id - b.id)
+          .slice(-MESSAGES_PER_HIT)
+          .map((r) => ({ role: r.role, text: r.text, surface: r.surface, at: new Date(r.at) })),
+      }));
   }
 
   recordChatTestRun(input: ChatTestAuditInput): ChatTestAuditRecord {

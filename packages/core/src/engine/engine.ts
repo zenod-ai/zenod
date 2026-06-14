@@ -48,6 +48,35 @@ export function conversationId(surface: Surface, key = "default"): string {
   return `${surface}:${safeKey}`;
 }
 
+/** Human-readable channel name for chat-search results. */
+function channelName(surface: Surface): string {
+  switch (surface) {
+    case "whatsapp":
+      return "WhatsApp";
+    case "web":
+      return "Web chat";
+    case "mcp":
+      return "MCP";
+    case "cli":
+      return "CLI";
+    case "drive":
+      return "Drive";
+    case "selftest":
+      return "Self-test";
+    default:
+      return surface;
+  }
+}
+
+function formatChatTimestamp(d: Date): string {
+  return `${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+function chatSnippet(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > 240 ? `${flat.slice(0, 240)}…` : flat;
+}
+
 export interface EngineOptions {
   repo: VaultRepo;
   llm: BrainLlm;
@@ -206,6 +235,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       "For provenance questions (where is the original / audio / transcript / source?), read the Log file bodies and the '## Sources' section of meaning pages — that is where artifact locations live.",
       "Summaries are lossy. Before concluding something is not in the vault, read the full bodies of the top search hits, and search again with different terms.",
       "Cite sources inline as vault paths. Be direct and concise.",
+      "Beyond the vault, you can call search_chats to search your own past conversations with the user across every channel (WhatsApp, web, CLI, MCP) — not just this thread. Use it when the user refers to something discussed earlier ('the issue we talked about', 'we were speaking about…', 'what did I say yesterday'), especially when it may have happened on a different channel than the one you're replying on. The current thread's recent turns are already in context; search_chats reaches older turns and other channels. The vault holds durable knowledge; chats are the running conversation — check both when a question could be answered by either.",
       agents ? `Vault doctrine:\n${agents}` : "",
       `MAP — meaning pages (${meaningPages.length}/${snapshot.pages.length}). A table of contents only; call search_vault/read_note to use any of these, and search_vault to reach the omitted ones:\n${index || "(none yet)"}`,
       `MAP — recent evidence logs (${logFiles.length}/${allLogFiles.length}). Filenames only; call read_note to see a log's contents, search_vault to reach older logs:\n${logs || "(none yet)"}`,
@@ -231,6 +261,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
       listPages: async () => {
         const snapshot = await scanVault(vaultPath);
         return snapshot.pages.map((p) => `${p.path} — ${p.title}: ${p.summary}`).join("\n") || "(none)";
+      },
+      searchChats: async (query: string) => {
+        const hits = await state.searchConversations(query, { limit: 6 });
+        if (hits.length === 0) return "no results";
+        return hits
+          .map((hit) => {
+            const header = `[${channelName(hit.surface)}] ${hit.matchCount} matching message${
+              hit.matchCount === 1 ? "" : "s"
+            }, latest ${formatChatTimestamp(hit.lastAt)}`;
+            const lines = hit.messages
+              .map((m) => `  ${m.role === "user" ? "User" : "Zeno"} (${formatChatTimestamp(m.at)}): ${chatSnippet(m.text)}`)
+              .join("\n");
+            return `${header}\n${lines}`;
+          })
+          .join("\n\n");
       },
     };
   }

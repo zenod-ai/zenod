@@ -1046,3 +1046,41 @@ describe("SqliteStateStore window", () => {
     store.close();
   });
 });
+
+describe("SqliteStateStore.searchConversations", () => {
+  it("finds matches across channels, grouped and ranked by relevance then recency", async () => {
+    const store = new SqliteStateStore(":memory:");
+    await store.appendMessage("whatsapp:34600", "user", "should we open an issue in the AlfaBlok repo?", "whatsapp");
+    await store.appendMessage("whatsapp:34600", "assistant", "yes — tracking the Idealista scraper source repo gap", "whatsapp");
+    await store.appendMessage("web:default", "user", "we were speaking about adding an issue in that repo", "web");
+    await store.appendMessage("web:default", "assistant", "no GitHub issue was created in the conversation", "web");
+    await store.appendMessage("cli:default", "user", "unrelated weather chatter", "cli");
+
+    const hits = await store.searchConversations("issue repo");
+
+    // Both the whatsapp and web conversations matched; the cli one did not.
+    expect(hits.map((h) => h.conversationId).sort()).toEqual(["web:default", "whatsapp:34600"]);
+    const wa = hits.find((h) => h.surface === "whatsapp");
+    expect(wa?.matchCount).toBe(2);
+    expect(wa?.messages.map((m) => m.text)).toEqual([
+      "should we open an issue in the AlfaBlok repo?",
+      "yes — tracking the Idealista scraper source repo gap",
+    ]);
+
+    store.close();
+  });
+
+  it("can restrict to specific channels and ignores too-short query terms", async () => {
+    const store = new SqliteStateStore(":memory:");
+    await store.appendMessage("whatsapp:1", "user", "the launch post draft", "whatsapp");
+    await store.appendMessage("web:default", "user", "the launch post draft", "web");
+
+    const onlyWeb = await store.searchConversations("launch", { surfaces: ["web"] });
+    expect(onlyWeb.map((h) => h.surface)).toEqual(["web"]);
+
+    // Single-character terms are dropped; "a" alone yields no usable query.
+    expect(await store.searchConversations("a")).toEqual([]);
+
+    store.close();
+  });
+});

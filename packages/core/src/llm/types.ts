@@ -111,6 +111,8 @@ export interface VaultReadTools {
   searchVault(query: string): Promise<string>;
   readNote(path: string): Promise<string>;
   listPages(): Promise<string>;
+  /** Search the user's past conversations across every channel (WhatsApp, web, …). */
+  searchChats(query: string): Promise<string>;
 }
 
 /**

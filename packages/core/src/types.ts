@@ -300,6 +300,13 @@ export interface StateStore {
   recentWindow(conversationId: string): Promise<ConversationMessage[]>;
   /** Delete every message in a conversation. */
   clearConversation(conversationId: string): Promise<void>;
+  /**
+   * Search across every stored conversation, all channels. Matches messages
+   * containing the query terms, grouped by conversation and ranked by relevance
+   * then recency. This is how the agent recalls a past discussion that lives in
+   * chat history (WhatsApp, web, …) rather than in the vault.
+   */
+  searchConversations(query: string, options?: ConversationSearchOptions): Promise<ConversationSearchHit[]>;
 }
 
 export interface ConversationMessage {
@@ -307,4 +314,22 @@ export interface ConversationMessage {
   text: string;
   surface: Surface;
   at: Date;
+}
+
+export interface ConversationSearchOptions {
+  /** Restrict to these channels; omitted or empty means search all of them. */
+  surfaces?: Surface[];
+  /** Max conversations to return (default 6, hard cap 20). */
+  limit?: number;
+}
+
+export interface ConversationSearchHit {
+  conversationId: string;
+  surface: Surface;
+  /** How many messages in this conversation matched the query. */
+  matchCount: number;
+  /** Timestamp of the most recent matching message. */
+  lastAt: Date;
+  /** The matching messages, oldest first, capped per conversation. */
+  messages: ConversationMessage[];
 }

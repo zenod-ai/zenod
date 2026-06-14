@@ -136,6 +136,8 @@ function toolLabel(toolName: string, input: unknown): string {
       return typeof args.path === "string" ? `Reading ${args.path}` : "Reading a note";
     case "list_pages":
       return "Listing vault pages";
+    case "search_chats":
+      return typeof args.query === "string" ? `Searching past chats for “${args.query}”` : "Searching past chats";
     case "list_drive_files":
       return "Listing your Google Drive";
     case "ingest_drive_file":
@@ -629,6 +631,12 @@ export class AiSdkBrainLlm implements BrainLlm {
           description: "List all meaning pages with their titles, tags, and summaries.",
           inputSchema: z.object({}),
           execute: () => tools.listPages(),
+        }),
+        search_chats: tool({
+          description:
+            "Search your past conversations with the user across ALL channels (WhatsApp, web, CLI, MCP) — not just the current thread. Returns matching messages grouped by conversation, with channel and timestamp. Use this when the user refers to something said earlier ('the issue we discussed', 'we were speaking about…', 'what did I say yesterday'), especially when it may have happened on a different channel. This is conversation history, distinct from search_vault (durable notes); reach for both when either could hold the answer.",
+          inputSchema: z.object({ query: z.string() }),
+          execute: ({ query }) => tools.searchChats(query),
         }),
       },
     };
