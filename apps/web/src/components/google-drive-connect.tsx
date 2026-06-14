@@ -183,7 +183,7 @@ export function GoogleDriveConnect() {
       await loadStatus()
       toast.success("Google Drive connected", {
         description:
-          "Ask Zeno in the Chat tab to list or ingest your Drive files.",
+          "Ask Zeno in the Chat tab to list or transcribe your Drive files.",
       })
     } catch (err) {
       toast.error("Could not save the connection", {
@@ -228,7 +228,7 @@ export function GoogleDriveConnect() {
         </CardTitle>
         <CardDescription>
           Your shared Drive folder becomes Zeno&apos;s inbox: drop voice notes
-          or documents there and ask Zeno to ingest them — audio is
+          or documents there and ask Zeno to transcribe them — audio is
           transcribed, filed into the vault as evidence, and the original is
           moved to an Archive/ subfolder in Drive (the vault keeps the link).
         </CardDescription>
@@ -306,11 +306,11 @@ export function GoogleDriveConnect() {
               <Step n={2}>
                 Paste the key file below — its email appears; share your Drive
                 folder with that email as <strong>Editor</strong> (lets Zeno
-                archive ingested files; Viewer works but skips archiving).
+                archive transcribed files; Viewer works but skips archiving).
               </Step>
               <Step n={3}>
                 Test, save, and you&apos;re connected — from then on Zeno can
-                list and ingest that folder whenever you ask in chat.
+                list and transcribe that folder whenever you ask in chat.
               </Step>
             </div>
 
@@ -368,7 +368,7 @@ export function GoogleDriveConnect() {
             <FieldDescription>
               Voice notes are transcribed locally with whisper.cpp
               (large-v3-turbo), built into this server — no API key, no
-              per-minute cost. The model downloads once on the first ingest.
+              per-minute cost. The model downloads once on the first transcription.
             </FieldDescription>
 
             {testResult !== null && (

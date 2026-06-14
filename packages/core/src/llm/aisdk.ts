@@ -64,7 +64,7 @@ function toolLabel(toolName: string, input: unknown): string {
     case "list_drive_files":
       return "Listing your Google Drive";
     case "ingest_drive_file":
-      return "Queuing a Google Drive file for ingestion";
+      return "Queuing a Google Drive file for transcription";
     case "propose_vault_task":
       return "Planning vault changes";
     case "execute_vault_task":
@@ -434,7 +434,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           }),
           ingest_drive_file: tool({
             description:
-              "Queue one Google Drive file (by file ID from list_drive_files) for background ingestion: it downloads, transcribes audio voice notes with the configured transcription provider (Groq when set, otherwise local whisper.cpp), files the transcript into the vault as evidence + meaning, commits, and archives the original — all in a background worker that survives the user navigating away. Returns immediately with the job id and status; it does NOT wait for completion. Call once per file. Tell the user the files are queued/processing and that live progress is in the Ingestion panel (Connections tab).",
+              "Queue one Google Drive file (by file ID from list_drive_files) for background transcription: it downloads, transcribes audio voice notes with the configured transcription provider (Groq when set, otherwise local whisper.cpp), files the transcript into the vault as evidence + meaning, commits, and archives the original — all in a background worker that survives the user navigating away. Returns immediately with the job id and status; it does NOT wait for completion. Call once per file. Tell the user the files are queued/processing and that live progress is in the Transcription panel.",
             inputSchema: z.object({
               fileId: z.string().describe("the Drive file ID"),
               hints: z
@@ -452,7 +452,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         ? "You CAN act on explicit tasking instructions using tools: capture_note files notes, digest_backlog/run digest mines structured backlog candidates, create_issue and label_issue manage GitHub issues, query_backlog reports open backlog/status, and service_backlog selects eligible work without launching a runner. propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute vault writes without explicit approval; creating a GitHub issue is allowed when the user explicitly asks to create/open/file one."
         : "",
       driveTools
-        ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background ingestion (download, configured transcription provider for audio, filing, archiving). When the user asks to ingest their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Ingestion panel (Connections tab), and the transcripts land in the vault when done."
+        ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background transcription (download, configured transcription provider for audio, filing, archiving). When the user asks to transcribe their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Transcription panel, and the transcripts land in the vault when done."
         : "",
     ].filter(Boolean);
 

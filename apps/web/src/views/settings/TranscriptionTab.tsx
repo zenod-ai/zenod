@@ -11,7 +11,7 @@ import {
   type WhisperModelInfo,
 } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import { IngestionPanel } from "@/components/ingestion-panel"
+import { TranscriptionPanel } from "@/components/transcription-panel"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -361,13 +361,13 @@ function TranscriptionModelCard() {
   )
 }
 
-export function IngestionTab() {
+export function TranscriptionTab() {
   return (
     <div className="flex flex-col gap-6">
       <GroqTranscriptionCard />
       <OpenAiLongTranscriptionCard />
       <TranscriptionModelCard />
-      <IngestionPanel />
+      <TranscriptionPanel />
     </div>
   )
 }

@@ -175,7 +175,7 @@ export interface VaultTaskTools {
  */
 export interface DriveSourceTools {
   listDriveFiles(query?: string): Promise<string>;
-  /** Enqueue a file for background ingestion; returns immediately with the job status. */
+  /** Enqueue a file for background transcription; returns immediately with the job status. */
   ingestDriveFile(fileId: string, hints?: string[]): Promise<string>;
 }
 

@@ -235,7 +235,7 @@ describe("drive tools + API", () => {
     expect(listing).toContain("id: file-1");
 
     const report = await tools.ingestDriveFile("file-1", ["insurance"]);
-    expect(report).toContain('Queued "Zenod voice note.m4a" for ingestion');
+    expect(report).toContain('Queued "Zenod voice note.m4a" for transcription');
 
     const done = await waitFor(
       () => runtime.ingestStore.recent(1)[0],

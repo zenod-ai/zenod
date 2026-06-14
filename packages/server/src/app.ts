@@ -229,7 +229,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ transcript: result.transcript, provider: result.provider });
   });
 
-  // Background ingest jobs — the Ingestion panel polls this so a long
+  // Background ingest jobs — the Transcription panel polls this so a long
   // transcription is visible from any tab and survives navigation/refresh.
   app.get("/api/ingest/jobs", (c) => c.json({ jobs: runtime.ingestStore.recent() }));
 

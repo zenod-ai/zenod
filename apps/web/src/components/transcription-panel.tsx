@@ -185,12 +185,12 @@ function JobRow({
 }
 
 /**
- * Live view of background Drive-ingestion jobs. Because the work runs in a
+ * Live view of background Drive transcription jobs. Because the work runs in a
  * server-side queue (not the chat request), this panel reflects the true
  * state from any tab and survives navigation, refresh, and redeploys — the
  * answer to "is it still running / did it finish?".
  */
-export function IngestionPanel() {
+export function TranscriptionPanel() {
   const [jobs, setJobs] = React.useState<IngestJob[] | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
@@ -263,7 +263,7 @@ export function IngestionPanel() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          Ingestion
+          Transcription
           {activeCount > 0 && (
             <Badge variant="secondary">
               <Spinner className="size-3" />
@@ -286,9 +286,9 @@ export function IngestionPanel() {
               <EmptyMedia variant="icon">
                 <RefreshCwIcon />
               </EmptyMedia>
-              <EmptyTitle>No ingestions yet</EmptyTitle>
+              <EmptyTitle>No transcriptions yet</EmptyTitle>
               <EmptyDescription>
-                Ask Zeno in chat to ingest your Drive voice notes — they&apos;ll
+                Ask Zeno in chat to transcribe your Drive voice notes — they&apos;ll
                 appear here with live progress.
               </EmptyDescription>
             </EmptyHeader>
