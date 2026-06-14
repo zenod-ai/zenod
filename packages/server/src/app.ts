@@ -530,13 +530,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         // (Cloudflare/Traefik ~100s idle) drops the connection → "network error".
         const heartbeat = setInterval(() => send({ type: "ping" }), 15_000);
         try {
-          const reply = await engine.handleTasking({ text: message, surface: "web", conversationKey: "default" });
-          send({ type: "delta", text: reply.text });
-          for (const action of reply.actions) {
-            console.log(`[chat] action: ${action.tool}`);
-            send({ type: "tool", phase: "end", tool: action.tool, label: action.tool });
-          }
-          send({ type: "done", sources: [], actions: reply.actions });
+          const reply = await engine.chat(message, "web", {
+            onDelta: (delta) => send({ type: "delta", text: delta }),
+            onToolEvent: (event) => {
+              console.log(`[chat] tool ${event.phase}: ${event.tool} — ${event.label}`);
+              send({ type: "tool", phase: event.phase, tool: event.tool, label: event.label });
+            },
+          });
+          send({ type: "done", sources: reply.sources, ...(reply.stored ? { stored: reply.stored } : {}) });
         } catch (err) {
           console.error("[chat] stream failed:", err);
           send({ type: "error", message: err instanceof Error ? err.message : "chat failed" });

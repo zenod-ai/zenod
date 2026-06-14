@@ -171,6 +171,53 @@ describe("server API", () => {
     expect(body.cleanSlate.setupCommitSha).toBe("2".repeat(40));
   });
 
+  it("chat stream forwards live tool events and text deltas from engine.chat", async () => {
+    const calls: Array<{ message: string; surface: string }> = [];
+    runtime.getEngine = async () =>
+      ({
+        async chat(message, surface, options) {
+          calls.push({ message, surface });
+          if (typeof options === "object") {
+            options.onToolEvent?.({ phase: "start", tool: "search_vault", label: "Searching the vault" });
+            options.onDelta?.("Found ");
+            options.onToolEvent?.({ phase: "end", tool: "search_vault", label: "Searching the vault" });
+            options.onDelta?.("notes.");
+          }
+          return {
+            text: "Found notes.",
+            sources: [{ path: "Projects/Zenod.md", githubUrl: "https://example.test/Projects/Zenod.md" }],
+          };
+        },
+        async handleTasking() {
+          throw new Error("web chat stream should not use handleTasking");
+        },
+      }) as unknown as BrainEngine;
+
+    const res = await app.request("/api/chat/stream", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${runtime.settings.apiToken()}` },
+      body: JSON.stringify({ message: "find zenod notes" }),
+    });
+
+    expect(res.status).toBe(200);
+    const events = (await res.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+
+    expect(events).toEqual([
+      { type: "tool", phase: "start", tool: "search_vault", label: "Searching the vault" },
+      { type: "delta", text: "Found " },
+      { type: "tool", phase: "end", tool: "search_vault", label: "Searching the vault" },
+      { type: "delta", text: "notes." },
+      {
+        type: "done",
+        sources: [{ path: "Projects/Zenod.md", githubUrl: "https://example.test/Projects/Zenod.md" }],
+      },
+    ]);
+    expect(calls).toEqual([{ message: "find zenod notes", surface: "web" }]);
+  });
+
   it("test chat runs through engine.chat with explicit context and audit readback", async () => {
     const calls: Array<{ message: string; surface: string; conversationKey?: string }> = [];
     runtime.getEngine = async () =>
