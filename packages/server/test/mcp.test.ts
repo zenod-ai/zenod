@@ -113,6 +113,26 @@ describe("MCP endpoint", () => {
     return client.connect(transport).then(() => client);
   }
 
+  /** Enqueue a job via an async tool, then poll get_task_result until terminal. */
+  async function runAsyncTool(
+    client: Client,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const enqueued = await client.callTool({ name, arguments: args });
+    const { jobId, status } = enqueued.structuredContent as { jobId: string; status: string };
+    expect(jobId).toBeTruthy();
+    expect(status).toBe("queued");
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const poll = await client.callTool({ name: "get_task_result", arguments: { jobId } });
+      const job = poll.structuredContent as { status: string; result: Record<string, unknown> | null };
+      if (job.status === "done") return job.result!;
+      if (job.status === "error" || job.status === "interrupted") throw new Error(`job ${jobId} ${job.status}`);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error(`job ${jobId} did not finish`);
+  }
+
   it("rejects connections without the bearer token", async () => {
     const transport = new StreamableHTTPClientTransport(url);
     const client = new Client({ name: "anon", version: "0.0.0" });
@@ -128,6 +148,7 @@ describe("MCP endpoint", () => {
       "clean_slate_vault",
       "digest_backlog",
       "get_memory",
+      "get_task_result",
       "run_task",
       "search_memory",
       "store_memory",
@@ -166,23 +187,33 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
-  it("run_task proposes without a plan and executes with one", async () => {
+  it("run_task proposes without a plan and executes with one (async + poll)", async () => {
     const client = await connect();
 
-    const propose = await client.callTool({ name: "run_task", arguments: { objective: "sweep the Inbox" } });
-    const proposal = propose.structuredContent as { mode: string; committed: boolean; text: string };
+    const proposal = (await runAsyncTool(client, "run_task", { objective: "sweep the Inbox" })) as {
+      mode: string;
+      committed: boolean;
+      text: string;
+    };
     expect(proposal.mode).toBe("proposal");
     expect(proposal.committed).toBe(false);
 
-    const execute = await client.callTool({
-      name: "run_task",
-      arguments: { objective: "sweep the Inbox", approvedPlan: proposal.text },
-    });
-    const executed = execute.structuredContent as { mode: string; committed: boolean; commitSha?: string };
+    const executed = (await runAsyncTool(client, "run_task", {
+      objective: "sweep the Inbox",
+      approvedPlan: proposal.text,
+    })) as { mode: string; committed: boolean; commitSha?: string };
     expect(executed.mode).toBe("executed");
     expect(executed.committed).toBe(true);
     expect(executed.commitSha).toBe("1".repeat(40));
 
+    await client.close();
+  });
+
+  it("get_task_result reports a not-found job", async () => {
+    const client = await connect();
+    const poll = await client.callTool({ name: "get_task_result", arguments: { jobId: "does-not-exist" } });
+    expect((poll.structuredContent as { found: boolean }).found).toBe(false);
+    expect(poll.isError).toBe(true);
     await client.close();
   });
 
@@ -220,13 +251,13 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
-  it("task_brain routes instructions through the shared tasking entrypoint", async () => {
+  it("task_brain routes instructions through the shared tasking entrypoint (async + poll)", async () => {
     const client = await connect();
-    const result = await client.callTool({
-      name: "task_brain",
-      arguments: { text: "create an issue for the digest gap", conversationKey: "mcp-test" },
-    });
-    expect(JSON.stringify(result.content)).toContain("Tasked: create an issue for the digest gap");
+    const result = (await runAsyncTool(client, "task_brain", {
+      text: "create an issue for the digest gap",
+      conversationKey: "mcp-test",
+    })) as { text: string };
+    expect(result.text).toBe("Tasked: create an issue for the digest gap");
     await client.close();
   });
 

@@ -27,6 +27,8 @@ import { buildDriveTools } from "./driveTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore } from "./usageStore.js";
 import { IngestQueue } from "./ingestQueue.js";
+import { TaskJobStore } from "./taskJobStore.js";
+import { TaskJobQueue } from "./taskJobQueue.js";
 import { OAuthStore } from "./oauthStore.js";
 import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
@@ -50,6 +52,8 @@ export class Runtime {
   readonly whatsapp: WhatsAppGateway;
   readonly ingestStore: IngestStore;
   readonly ingestQueue: IngestQueue;
+  readonly taskJobStore: TaskJobStore;
+  readonly taskJobQueue: TaskJobQueue;
   readonly usageStore: UsageStore;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
@@ -70,6 +74,12 @@ export class Runtime {
     // as "interrupted"; resume() then drains anything still queued.
     this.ingestStore = new IngestStore(join(dataDir, "ingest.sqlite"));
     this.ingestQueue = new IngestQueue(this.ingestStore, this.settings, () => this.getEngine());
+    // Long agentic MCP jobs (task_brain, run_task) enqueue here and the caller
+    // polls — the same durable-queue + boot-recovery shape as ingest. The store
+    // constructor marks any job left mid-flight by a restart as "interrupted";
+    // resume() then drains anything still queued.
+    this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"));
+    this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine());
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
   }
 
@@ -284,6 +294,7 @@ export class Runtime {
     this.state.close();
     this.whatsappStore.close();
     this.ingestStore.close();
+    this.taskJobStore.close();
     this.usageStore.close();
   }
 }
