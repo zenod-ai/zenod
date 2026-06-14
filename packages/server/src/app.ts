@@ -245,6 +245,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ job });
   });
 
+  // Real (provider-billed) LLM cost analytics: tokens + USD by operation and
+  // model, for the last 24h and 7d. Populated by every engine LLM call.
+  app.get("/api/usage", (c) => {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    return c.json({
+      today: runtime.usageStore.summary(now - day),
+      last7d: runtime.usageStore.summary(now - 7 * day),
+    });
+  });
+
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
 
   app.put("/api/whatsapp/settings", async (c) => {

@@ -21,6 +21,27 @@ import type {
 
 export type Provider = "anthropic" | "openai";
 
+/** The five LLM operations, tagged on every usage report for cost analytics. */
+export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog";
+
+/**
+ * Real, provider-billed token usage for one LLM call — read from the AI SDK
+ * result, not estimated. The cache split matters for cost: reads bill at
+ * ~0.1x the input rate, writes at ~1.25x, so they're tracked separately.
+ */
+export interface LlmUsageReport {
+  operation: LlmOperation;
+  provider: Provider;
+  model: string;
+  /** Uncached input tokens, billed at the standard input rate. */
+  inputTokens: number;
+  outputTokens: number;
+  /** Cache-read input tokens (billed ~0.1x input). */
+  cachedInputTokens: number;
+  /** Cache-write input tokens (billed ~1.25x input). */
+  cacheCreationInputTokens: number;
+}
+
 export interface AiLlmOptions {
   provider: Provider;
   apiKey: string;
@@ -28,6 +49,12 @@ export interface AiLlmOptions {
   askModel?: string;
   /** Classification pass model. */
   classifyModel?: string;
+  /**
+   * Optional sink for real, provider-billed token usage per call. The server
+   * wires this to a durable usage store for cost analytics. It must never
+   * throw into the call path — a metering failure must not break a chat turn.
+   */
+  onUsage?: (report: LlmUsageReport) => void;
 }
 
 /** Per-provider default models. Both are user-overridable in settings. */
@@ -151,16 +178,61 @@ export { backlogCandidateSchema, backlogExtractSchema };
 export class AiSdkBrainLlm implements BrainLlm {
   private readonly askModelId: string;
   private readonly classifyModelId: string;
+  private readonly provider: Provider;
+  private readonly onUsage: ((report: LlmUsageReport) => void) | undefined;
   private readonly model: (id: string) => Parameters<typeof generateText>[0]["model"];
+
+  /**
+   * Anthropic prompt-cache breakpoint for the big, stable system prefix (the
+   * vault briefing). Repeated turns within the 5-minute window read it at
+   * ~0.1x instead of re-billing the full prefix every message. Non-Anthropic
+   * providers ignore the `anthropic` namespace, so attaching it is always safe.
+   */
+  private readonly cacheBreakpoint = { anthropic: { cacheControl: { type: "ephemeral" } } };
 
   constructor(options: AiLlmOptions) {
     const defaults = PROVIDER_DEFAULTS[options.provider];
     this.askModelId = options.askModel || defaults.ask;
     this.classifyModelId = options.classifyModel || defaults.classify;
+    this.provider = options.provider;
+    this.onUsage = options.onUsage;
     this.model =
       options.provider === "openai"
         ? createOpenAI({ apiKey: options.apiKey })
         : createAnthropic({ apiKey: options.apiKey });
+  }
+
+  /**
+   * Forward real token usage from an AI SDK result to the usage sink. Reads
+   * the standardized `usage` fields plus Anthropic's cache split from
+   * `providerMetadata`. Swallows its own errors — metering never breaks a turn.
+   */
+  private reportUsage(
+    operation: LlmOperation,
+    modelId: string,
+    usage:
+      | { inputTokens?: number | undefined; outputTokens?: number | undefined; cachedInputTokens?: number | undefined }
+      | undefined,
+    providerMetadata: Record<string, unknown> | undefined,
+  ): void {
+    if (!this.onUsage) return;
+    const anthropic = (providerMetadata?.anthropic ?? {}) as {
+      cacheCreationInputTokens?: number;
+      cacheReadInputTokens?: number;
+    };
+    try {
+      this.onUsage({
+        operation,
+        provider: this.provider,
+        model: modelId,
+        inputTokens: usage?.inputTokens ?? 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        cachedInputTokens: usage?.cachedInputTokens ?? anthropic.cacheReadInputTokens ?? 0,
+        cacheCreationInputTokens: anthropic.cacheCreationInputTokens ?? 0,
+      });
+    } catch {
+      // Metering must never break the call path.
+    }
   }
 
   async classify(input: ClassifyInput): Promise<Classification> {
@@ -168,7 +240,7 @@ export class AiSdkBrainLlm implements BrainLlm {
       .map((p) => `${p.path} | ${p.title} | tags: ${p.tags.join(",")} | ${p.summary}`)
       .join("\n");
 
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model: this.model(this.classifyModelId),
       schema: classificationSchema,
       system: [
@@ -188,6 +260,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         .filter(Boolean)
         .join("\n\n"),
     });
+    this.reportUsage("classify", this.classifyModelId, usage, providerMetadata);
 
     return {
       confidence: typeof object.confidence === "number" ? object.confidence : 0,
@@ -205,7 +278,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           .join("\n")}`
       : "";
 
-    const { text } = await generateText({
+    const { text, usage, providerMetadata } = await generateText({
       model: this.model(this.askModelId),
       system: [
         "You are the librarian of a personal knowledge vault. Produce the COMPLETE new content of one meaning page, integrating a new piece of evidence.",
@@ -229,12 +302,13 @@ export class AiSdkBrainLlm implements BrainLlm {
         `Citation token for this evidence: ${input.citation}${retryContext}`,
       ].join("\n\n"),
     });
+    this.reportUsage("compose", this.askModelId, usage, providerMetadata);
 
     return text.replace(/^```(?:markdown|md)?\n/, "").replace(/\n```\s*$/, "").trimEnd() + "\n";
   }
 
   async extractBacklog(input: BacklogExtractInput): Promise<BacklogExtractResult> {
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model: this.model(this.classifyModelId),
       schema: backlogExtractSchema,
       system: [
@@ -252,6 +326,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         input.content,
       ].join("\n\n"),
     });
+    this.reportUsage("extractBacklog", this.classifyModelId, usage, providerMetadata);
 
     return {
       candidates: object.candidates.map((candidate) => {
@@ -456,10 +531,16 @@ export class AiSdkBrainLlm implements BrainLlm {
         : "",
     ].filter(Boolean);
 
+    const systemText =
+      briefingExtras.length > 0 ? `${input.vaultBriefing}\n\n${briefingExtras.join("\n\n")}` : input.vaultBriefing;
     const config = {
       model: this.model(this.askModelId),
-      system: briefingExtras.length > 0 ? `${input.vaultBriefing}\n\n${briefingExtras.join("\n\n")}` : input.vaultBriefing,
-      messages,
+      // System prefix as a cached message rather than top-level `system`, so the
+      // (large, stable) vault briefing is reused across turns instead of re-billed.
+      messages: [
+        { role: "system", content: systemText, providerOptions: this.cacheBreakpoint },
+        ...messages,
+      ] as ModelMessage[],
       stopWhen: stepCountIs(MAX_STEPS),
       tools: {
         ...taskToolSet,
@@ -513,11 +594,13 @@ export class AiSdkBrainLlm implements BrainLlm {
           throw err instanceof Error ? err : new Error(extractErrorMessage(err));
         }
       }
+      this.reportUsage("answer", this.askModelId, await result.totalUsage, await result.providerMetadata);
       return { text, readPaths: [...readPaths] };
     }
 
-    const { text } = await generateText(config);
-    return { text, readPaths: [...readPaths] };
+    const result = await generateText(config);
+    this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata);
+    return { text: result.text, readPaths: [...readPaths] };
   }
 
   async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {
@@ -587,25 +670,32 @@ export class AiSdkBrainLlm implements BrainLlm {
         }
       : {};
 
-    const { text } = await generateText({
+    const promptText = [
+      `Objective: ${input.objective}`,
+      input.plan ? `Approved plan:\n${input.plan}` : "",
+      input.previousErrors?.length
+        ? `Your previous attempt failed validation — fix ALL of these in the working tree:\n${input.previousErrors
+            .map((e) => `- ${e.path} [${e.rule}] ${e.message}`)
+            .join("\n")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const result = await generateText({
       model: this.model(this.askModelId),
-      system,
-      prompt: [
-        `Objective: ${input.objective}`,
-        input.plan ? `Approved plan:\n${input.plan}` : "",
-        input.previousErrors?.length
-          ? `Your previous attempt failed validation — fix ALL of these in the working tree:\n${input.previousErrors
-              .map((e) => `- ${e.path} [${e.rule}] ${e.message}`)
-              .join("\n")}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
+      // Cache the briefing-laden system prefix: propose and execute (plus any
+      // execute retries) run back-to-back with the same briefing → cache reads.
+      messages: [
+        { role: "system", content: system, providerOptions: this.cacheBreakpoint },
+        { role: "user", content: promptText },
+      ] as ModelMessage[],
       stopWhen: stepCountIs(MAX_WORK_STEPS),
       tools: { ...readToolSet, ...writeToolSet },
     });
+    this.reportUsage("work", this.askModelId, result.totalUsage, result.providerMetadata);
 
-    return { text };
+    return { text: result.text };
   }
 }
 

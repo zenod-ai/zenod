@@ -75,6 +75,8 @@ export {
   createBrainLlm,
   PROVIDER_DEFAULTS,
   type AiLlmOptions,
+  type LlmOperation,
+  type LlmUsageReport,
   type Provider,
 } from "./llm/aisdk.js";
 export type {
