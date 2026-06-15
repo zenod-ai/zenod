@@ -38,6 +38,10 @@ services:
     environment:
       ZENOD_APP_URL: ${ZENOD_APP_URL:-https://app.zenod.dev}
       ZENOD_API_TOKEN: ${ZENOD_API_TOKEN}
+      # Point Codex at the post+read X endpoint so agents can actually tweet
+      # (not just read). The entrypoint var is named *_READONLY_URL but it's
+      # simply "the endpoint Codex registers" — set here to the posting instance.
+      X_MCP_READONLY_URL: http://x-mcp-postread:8000/mcp
     # Monitor supervisor (was the old container's run command). The ENTRYPOINT
     # runs first (writes the Codex X config), then execs this.
     command:

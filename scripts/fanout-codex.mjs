@@ -350,6 +350,7 @@ Hard rules:
 - Do not push, open a PR, merge, or close the issue. The controller will handle git fan-in.
 - Do not run destructive git commands such as git reset --hard or git checkout -- unless explicitly needed and limited to files you created.
 - Preserve unrelated user changes if any exist.
+- X/Twitter posting is gated by intent, not capability: only use the \`x\` MCP tool's posting actions (e.g. createTweet, deleteTweetById) when a human's direct instruction in this issue/GOAL explicitly asks you to post to X. Reading from X is always allowed; never post, delete, or otherwise write to X on your own initiative.
 - Add focused tests when behavior changes.
 - Run relevant tests/builds. If you cannot, explain exactly why.
 - If blocked by a human/product decision, stop and make that explicit instead of guessing.
