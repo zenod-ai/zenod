@@ -18,6 +18,10 @@ CODEX_HOME="${CODEX_HOME:-/runner/codex-home}"
 CLAUDE_CONFIG="${HOME:-/runner}/.claude.json"
 X_MCP_READONLY_URL="${X_MCP_READONLY_URL:-http://x-mcp-readonly:8000/mcp}"
 X_MCP_POSTREAD_URL="${X_MCP_POSTREAD_URL:-http://x-mcp-postread:8000/mcp}"
+# Zenod's own MCP endpoint, so the agent can read the vault/brain (ask_brain,
+# search_memory, get_memory, ...). Bearer = ZENOD_API_TOKEN (already in the
+# runner env, same token the monitor uses). Derived from ZENOD_APP_URL.
+ZENOD_MCP_URL="${ZENOD_MCP_URL:-${ZENOD_APP_URL:-https://app.zenod.dev}/mcp}"
 
 BEGIN_MARK="# >>> zenod x-mcp (managed) >>>"
 END_MARK="# <<< zenod x-mcp (managed) <<<"
@@ -32,6 +36,12 @@ provision_codex() {
 ${BEGIN_MARK}
 [mcp_servers.x]
 url = "${X_MCP_READONLY_URL}"
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+
+[mcp_servers.zenod]
+url = "${ZENOD_MCP_URL}"
+bearer_token_env_var = "ZENOD_API_TOKEN"
 startup_timeout_sec = 30
 tool_timeout_sec = 120
 ${END_MARK}
@@ -49,6 +59,7 @@ EOF
   printf '\n%s\n' "${block}" >> "${tmp}"
   mv "${tmp}" "${config}"
   log "codex: wrote [mcp_servers.x] -> ${X_MCP_READONLY_URL}"
+  log "codex: wrote [mcp_servers.zenod] -> ${ZENOD_MCP_URL}"
 }
 
 provision_claude() {

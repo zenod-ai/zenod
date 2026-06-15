@@ -351,6 +351,7 @@ Hard rules:
 - Do not run destructive git commands such as git reset --hard or git checkout -- unless explicitly needed and limited to files you created.
 - Preserve unrelated user changes if any exist.
 - X/Twitter posting is gated by intent, not capability: only use the \`x\` MCP tool's posting actions (e.g. createTweet, deleteTweetById) when a human's direct instruction in this issue/GOAL explicitly asks you to post to X. Reading from X is always allowed; never post, delete, or otherwise write to X on your own initiative.
+- Zenod vault access: use the \`zenod\` MCP tools to READ context freely (ask_brain, search_memory, get_memory) — prefer them for grounding work in the user's launch notes, positioning, and decisions. Do NOT use Zenod write/destructive tools (store_memory, ingest_drive_file, clean_slate_vault, etc.) unless a human's direct instruction explicitly asks.
 - Add focused tests when behavior changes.
 - Run relevant tests/builds. If you cannot, explain exactly why.
 - If blocked by a human/product decision, stop and make that explicit instead of guessing.
