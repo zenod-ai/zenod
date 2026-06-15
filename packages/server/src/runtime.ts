@@ -196,6 +196,19 @@ export class Runtime {
       ].join("\n");
     };
 
+    // Best-effort instant refresh: the agent-runner's monitor exposes POST /poke
+    // for an immediate scan instead of waiting up to one poll interval (~2 min).
+    // Fire-and-forget; if the runner is unreachable or unset, the poll still
+    // picks the work up. Set ZENOD_RUNNER_POKE_URL (e.g. http://zenod-agent-runner:8787).
+    const pokeRunner = (): void => {
+      const base = process.env.ZENOD_RUNNER_POKE_URL?.trim();
+      if (!base) return;
+      void fetch(`${base.replace(/\/$/, "")}/poke`, {
+        method: "POST",
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => {});
+    };
+
     return {
       createIssue: async ({ repo, title, body, labels }) => {
         const target = repo || defaultRepo();
@@ -236,7 +249,8 @@ export class Runtime {
           });
           queued.push(n);
         }
-        return `Queued ${queued.map((n) => `#${n}`).join(", ")} — the monitor will pick them up.`;
+        pokeRunner(); // instant refresh instead of waiting for the monitor's ~2-min poll
+        return `Queued ${queued.map((n) => `#${n}`).join(", ")} — poked the runner to start now (falls back to its poll).`;
       },
       // The only path that sets status:approved-merge — explicit human approval.
       // Removes status:needs-review (404 fine if absent) and adds approved-merge.
