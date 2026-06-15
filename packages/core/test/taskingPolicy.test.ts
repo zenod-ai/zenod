@@ -29,6 +29,18 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, [created(25, "zenod-ai/zenod")])).toBe(reply);
   });
 
+  it("adds the direct issue URL when a genuine creation reply only cites the number", () => {
+    const reply = "Done — created issue #25 for you.";
+    const out = reconcileTaskingReply(reply, [created(25, "zenod-ai/zenod")]);
+    expect(out).toBe(`Created issue #25: https://github.com/zenod-ai/zenod/issues/25\n\n${reply}`);
+  });
+
+  it("adds the direct issue URL when a genuine creation reply omits the number", () => {
+    const reply = "Done — created the ticket.";
+    const out = reconcileTaskingReply(reply, [created(25, "zenod-ai/zenod")]);
+    expect(out).toBe(`Created issue #25: https://github.com/zenod-ai/zenod/issues/25\n\n${reply}`);
+  });
+
   it("corrects a creation that cites the wrong number", () => {
     const reply = "Done — created issue #58 for you.";
     const out = reconcileTaskingReply(reply, [created(61)]);
