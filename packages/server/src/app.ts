@@ -32,6 +32,7 @@ import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } fr
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
+import { listOpenRouterTranscriptionModels } from "./openrouterModels.js";
 
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
@@ -220,6 +221,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // The selectable transcription qualities (id, label, note, sizeMb).
   app.get("/api/transcription/models", (c) =>
     c.json({ models: WHISPER_MODELS, selected: settings.whisperModel() }),
+  );
+
+  app.get("/api/transcription/openrouter-models", async (c) =>
+    c.json({
+      models: await listOpenRouterTranscriptionModels({ limit: 20 }),
+      selected: settings.openrouterTranscriptionModel(),
+    }),
   );
 
   app.post("/api/chat/voice/transcribe", async (c) => {

@@ -5,6 +5,8 @@ import { toast } from "sonner"
 import {
   api,
   errorMessage,
+  type OpenRouterTranscriptionModelInfo,
+  type OpenRouterTranscriptionModelsResponse,
   type SettingsResponse,
   type TranscriptionModelsResponse,
   type TranscriptionStatus,
@@ -140,12 +142,96 @@ function sizeLabel(mb: number): string {
 }
 
 type LongTranscriptionProvider = "openrouter" | "openai" | "local"
+const CUSTOM_MODEL = "__custom__"
+
+const money = (value: number) =>
+  `$${value >= 100 ? value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : value.toFixed(value >= 1 ? 2 : 4)}`
+
+function openRouterCostShort(model: OpenRouterTranscriptionModelInfo): string {
+  return `${money(model.inputPerMTokens)}/M in · ${money(model.estimatedCostPerMinute)}/min est.`
+}
 
 function resolveLongProvider(settings: SettingsResponse["settings"]): LongTranscriptionProvider {
   const configured = settings.long_transcription_provider
   if (configured === "openrouter" || configured === "openai" || configured === "local") return configured
   if (settings.openrouter_api_key !== null) return "openrouter"
   return settings.openai_api_key !== null && settings.openai_long_transcription !== "false" ? "openai" : "local"
+}
+
+function OpenRouterTranscriptionModelSelect({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [models, setModels] = React.useState<OpenRouterTranscriptionModelInfo[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const known = value !== "" && models.some((m) => m.id === value)
+  const isCustomValue = value !== "" && models.length > 0 && !known
+  const [customRequested, setCustomRequested] = React.useState(false)
+  const customMode = customRequested || isCustomValue
+
+  React.useEffect(() => {
+    void api<OpenRouterTranscriptionModelsResponse>("/api/transcription/openrouter-models")
+      .then((result) => {
+        setModels(result.models)
+      })
+      .catch(() => {
+        /* Custom input remains available below. */
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const selectValue = customMode ? CUSTOM_MODEL : known ? value : models[0]?.id
+  const selected = models.find((m) => m.id === value)
+
+  function handleSelect(next: string) {
+    if (next === CUSTOM_MODEL) {
+      setCustomRequested(true)
+      return
+    }
+    setCustomRequested(false)
+    onChange(next)
+  }
+
+  return (
+    <>
+      <Select value={selectValue} onValueChange={handleSelect} disabled={loading || models.length === 0}>
+        <SelectTrigger id="openrouter-transcription-model" className="w-full">
+          <SelectValue placeholder={loading ? "Loading OpenRouter models…" : "Choose a transcription model"} />
+        </SelectTrigger>
+        <SelectContent>
+          {models.map((model) => (
+            <SelectItem key={model.id} value={model.id}>
+              {model.name}
+              {model.popularityLabel ? ` · ${model.popularityLabel}` : ""} — {openRouterCostShort(model)}
+            </SelectItem>
+          ))}
+          <SelectItem value={CUSTOM_MODEL}>Custom model ID…</SelectItem>
+        </SelectContent>
+      </Select>
+      {(customMode || models.length === 0) && (
+        <Input
+          className="mt-2"
+          autoComplete="off"
+          placeholder="openai/whisper-large-v3-turbo"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+      {selected ? (
+        <FieldDescription>
+          {money(selected.inputPerMTokens)} input · {money(selected.outputPerMTokens)} output per 1M tokens;
+          estimated {money(selected.estimatedCostPerMinute)} per minute of audio.
+        </FieldDescription>
+      ) : (
+        <FieldDescription>
+          Preloads OpenRouter&apos;s ranked speech-to-text models; custom model IDs still work.
+        </FieldDescription>
+      )}
+    </>
+  )
 }
 
 function LongTranscriptionProviderCard() {
@@ -243,17 +329,7 @@ function LongTranscriptionProviderCard() {
         {effectiveProvider === "openrouter" && (
           <Field>
             <FieldLabel htmlFor="openrouter-transcription-model">OpenRouter model</FieldLabel>
-            <Input
-              id="openrouter-transcription-model"
-              autoComplete="off"
-              placeholder="openai/whisper-large-v3-turbo"
-              value={model}
-              onChange={(event) => setModel(event.target.value)}
-            />
-            <FieldDescription>
-              Speech-to-text model slug from OpenRouter, for example
-              openai/whisper-large-v3-turbo.
-            </FieldDescription>
+            <OpenRouterTranscriptionModelSelect value={model} onChange={setModel} />
           </Field>
         )}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">

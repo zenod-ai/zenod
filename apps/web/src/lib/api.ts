@@ -151,6 +151,20 @@ export type TranscriptionModelsResponse = {
   selected: string
 }
 
+export type OpenRouterTranscriptionModelInfo = {
+  id: string
+  name: string
+  inputPerMTokens: number
+  outputPerMTokens: number
+  estimatedCostPerMinute: number
+  popularityLabel: string | null
+}
+
+export type OpenRouterTranscriptionModelsResponse = {
+  models: OpenRouterTranscriptionModelInfo[]
+  selected: string
+}
+
 export type IngestStatus =
   | "queued"
   | "downloading"
