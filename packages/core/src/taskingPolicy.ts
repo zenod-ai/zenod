@@ -47,10 +47,23 @@ const MUTATION_VERBS = "created|filed|opened|raised|logged|queued|merged|approve
 const CREATION_VERBS = "created|filed|opened|raised|logged";
 
 // A mutation verb is only a *claim about this turn* when it's active voice. A
-// be-verb/modal/infinitive immediately before it marks a description, not a
-// receipt: "issues are created with status:proposed", "can be filed", "to open".
-// Without this, listing capabilities or quoting docs tripped a false correction.
-const DESCRIPTIVE_LEAD = /\b(is|are|was|were|be|been|being|get|gets|got|can|could|will|would|to|cannot|can't|not)\s*$/i;
+// be-verb/modal/infinitive before it marks a description, not a receipt:
+// "issues are created with status:proposed", "can be filed", "to open". An
+// adverb may sit between the lead and the verb ("#76 is indeed approved",
+// "is already queued") — still a state description, not a this-turn receipt —
+// so allow one. Without this, listing capabilities, quoting docs, or merely
+// confirming a ticket's existing status tripped a false correction.
+const DESCRIPTIVE_ADVERBS = "indeed|already|now|currently|still|also|truly|certainly|definitely|clearly|recently|just|previously";
+// Coordinated participles share the same descriptive subject — "is approved/queued",
+// "was filed and queued" — so once the head is excused by the be-verb, excuse the
+// trailing chain joined by a slash, comma, or and/or too. Otherwise only the first
+// participle was treated as a description and the second still tripped a correction.
+const DESCRIPTIVE_LEAD = new RegExp(
+  `\\b(is|are|was|were|be|been|being|get|gets|got|can|could|will|would|to|cannot|can't|not)\\s*` +
+    `(?:(?:${DESCRIPTIVE_ADVERBS})\\s+)*` +
+    `(?:(?:${MUTATION_VERBS})\\s*(?:[/,]\\s*|\\s+(?:and|or)\\s+))*$`,
+  "i",
+);
 
 /**
  * The model's own this-turn assertions — with markdown blockquotes and fenced
@@ -82,13 +95,17 @@ function hasActiveClaim(prose: string, verbs: string): boolean {
  * the reply does not count, so describing the backlog never trips the guard.
  */
 function numbersClaimedAdjacent(prose: string, verbs: string): Set<number> {
-  const verb = new RegExp(`\\b(${verbs})\\b`, "i");
+  const verbRe = new RegExp(`\\b(${verbs})\\b`, "gi");
   const nums = new Set<number>();
   for (const line of prose.split("\n")) {
-    if (!verb.test(line)) continue;
+    // Only active-voice verbs count — a verb in descriptive position ("#76 is
+    // already queued") names the existing state, not a receipt for this turn.
+    const activeAt = [...line.matchAll(verbRe)]
+      .filter((vm) => !DESCRIPTIVE_LEAD.test(line.slice(Math.max(0, vm.index - 28), vm.index)))
+      .map((vm) => vm.index);
+    if (activeAt.length === 0) continue;
     for (const m of line.matchAll(/#(\d+)\b/g)) {
-      const around = line.slice(Math.max(0, m.index - 24), m.index + 24);
-      if (verb.test(around)) nums.add(Number(m[1]));
+      if (activeAt.some((v) => Math.abs(v - m.index) <= 24)) nums.add(Number(m[1]));
     }
     for (const m of line.matchAll(/\/issues\/(\d+)\b/g)) nums.add(Number(m[1]));
   }

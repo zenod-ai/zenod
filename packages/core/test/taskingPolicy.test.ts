@@ -69,6 +69,26 @@ describe("reconcileTaskingReply", () => {
     expect(out).toContain("couldn't confirm #99");
   });
 
+  it("does not correct a status confirmation with an adverb between be-verb and participle (the #76 false positive)", () => {
+    const reply =
+      "#76 is indeed approved/queued.\n\n" +
+      "#80 is explicitly a research spike / plan ticket, not a code-merge ticket. There is no PR planned for #80.";
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
+  it("does not correct coordinated participles joined by 'and' under a be-verb", () => {
+    const reply = "#51 was already filed and queued earlier this week.";
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
+  it("still flags an active-voice receipt even when other lines describe status", () => {
+    const reply = "#76 is already queued.\nQueued #99 — the monitor will pick it up.";
+    const out = reconcileTaskingReply(reply, []);
+    const banner = out.split("\n")[0];
+    expect(banner).toContain("couldn't confirm #99");
+    expect(banner).not.toContain("#76"); // the descriptive #76 is not flagged
+  });
+
   it("treats a queryBacklog result as backing for a referenced number", () => {
     const reply = "Queued #51 as you asked.";
     const out = reconcileTaskingReply(reply, [{ tool: "approveQueue", result: "Queued #51 — the monitor will pick them up." }]);

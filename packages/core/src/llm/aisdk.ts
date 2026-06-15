@@ -587,7 +587,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           }),
           query_backlog: tool({
             description:
-              "Return real status for open backlog/issues. Use when the user asks where things stand, open issue status, backlog status, blockers, or what is ready next.",
+              "Return real status for open backlog/issues. Use when the user asks where things stand, open issue status, backlog status, blockers, or what is ready next. ALSO call this BEFORE you confirm, restate, or 'confirm' a specific ticket's status (e.g. the user asks 'is #76 approved?', 'confirm what's queued', 'what's in the merge') — ground the answer in this turn's live backlog rather than restating status from memory or earlier conversation. Asserting a ticket is approved/queued/merged/blocked without a tool result behind it gets flagged to the user as unconfirmed.",
             inputSchema: z.object({
               query: z.string().nullable().describe("optional status scope; null for general open backlog/issues"),
             }),
