@@ -19,6 +19,7 @@ RUN apt-get update \
       bash \
       ca-certificates \
       curl \
+      gawk \
       gh \
       git \
       jq \
@@ -36,6 +37,11 @@ COPY scripts/fanout-codex.mjs /opt/zenod/scripts/fanout-codex.mjs
 RUN chmod +x /opt/zenod/scripts/fanout-codex.mjs \
  && ln -s /opt/zenod/scripts/fanout-codex.mjs /usr/local/bin/zenod-fanout-codex
 
+# Idempotently provisions the X MCP client config (Codex read-only, Claude
+# post+read) into the CODEX_HOME/HOME volumes on every start, then execs the CMD.
+COPY scripts/agent-runner-entrypoint.sh /opt/zenod/scripts/agent-runner-entrypoint.sh
+RUN chmod +x /opt/zenod/scripts/agent-runner-entrypoint.sh
+
 # Route git's HTTPS credentials through gh, baked into the IMAGE (--system =
 # /etc/gitconfig) so it survives container recreation. HOME=/runner is NOT a
 # volume, so `gh auth setup-git` (which writes ~/.gitconfig) is lost on every
@@ -49,4 +55,5 @@ WORKDIR /runner/work
 
 VOLUME ["/runner/work", "/runner/codex-home", "/runner/gh"]
 
+ENTRYPOINT ["/opt/zenod/scripts/agent-runner-entrypoint.sh"]
 CMD ["bash", "-lc", "echo 'zenod-agent-runner ready'; sleep infinity"]

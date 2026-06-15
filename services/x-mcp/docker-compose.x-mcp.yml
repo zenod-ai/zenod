@@ -1,0 +1,67 @@
+# Two instances of the vendored X MCP image, differing ONLY by tool allowlist.
+#
+#   x-mcp-readonly  -> what autonomous Codex fan-out workers see (read tools only)
+#   x-mcp-postread  -> attended use only (Claude CLI / Zenod engine approval flow):
+#                      read tools PLUS createTweet/deleteTweetById
+#
+# The gate is topology, not prompts: Codex workers run with approvals bypassed, so
+# the only robust way to keep posting gated is to never expose write tools on the
+# endpoint they reach. Both instances auth as the same user via long-lived OAuth1
+# tokens, so sharing one X app's tokens across both is fine (no refresh contention).
+#
+# The network `zenod-x-net` is created by this compose (exact name, no project
+# prefix) so the runner can join it later with:
+#   docker network connect zenod-x-net zenod-agent-runner
+#
+# Creds: the five X_* values are interpolated from the environment. Standalone,
+# put them in services/x-mcp/.env (compose auto-loads it); under Dokploy, set
+# them in the compose's Environment (Dokploy writes the same .env next to this
+# file). See .env.example.
+
+networks:
+  zenod-x-net:
+    name: zenod-x-net
+
+services:
+  x-mcp-readonly:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        XMCP_REF: "63d34362d88ed9f94d54ccd5ecd5bb4d12e11759"
+    image: zenod-x-mcp
+    container_name: x-mcp-readonly
+    environment:
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
+      X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY}
+      X_OAUTH_CONSUMER_SECRET: ${X_OAUTH_CONSUMER_SECRET}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN}
+      X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
+      X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
+      # READ ONLY — no write operationIds. Confirm ids against the startup tool log.
+      X_API_TOOL_ALLOWLIST: "findTweetById,findTweetsById,tweetsRecentSearch,usersIdTweets,findUserById,findUserByUsername,findMyUser"
+    networks: [zenod-x-net]
+    restart: unless-stopped
+
+  x-mcp-postread:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        XMCP_REF: "63d34362d88ed9f94d54ccd5ecd5bb4d12e11759"
+    image: zenod-x-mcp
+    container_name: x-mcp-postread
+    environment:
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
+      X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY}
+      X_OAUTH_CONSUMER_SECRET: ${X_OAUTH_CONSUMER_SECRET}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN}
+      X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
+      X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
+      # READ + POST. createTweet is the gated capability; deleteTweetById lets an
+      # attended operator undo. Trim to just createTweet if delete should be off.
+      X_API_TOOL_ALLOWLIST: "findTweetById,findTweetsById,tweetsRecentSearch,usersIdTweets,findUserById,findUserByUsername,findMyUser,createTweet,deleteTweetById"
+    networks: [zenod-x-net]
+    restart: unless-stopped
