@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type TaskingReply, type WorkResult } from "zenod";
+import type { EditGithubIssueInput, EditGithubIssueResult } from "./githubApp.js";
 import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
 import type { TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
 
@@ -13,6 +14,8 @@ export interface TaskJobs {
   enqueue(kind: TaskJobKind, input: TaskJobInput): TaskJob;
   get(id: string): TaskJob | null;
 }
+
+export type GithubIssueEditor = (input: EditGithubIssueInput) => Promise<EditGithubIssueResult>;
 
 /** Human-facing text for a finished task_brain job — mirrors the old reply. */
 function formatTaskingReply(result: TaskingReply): string {
@@ -61,6 +64,7 @@ export function buildMcpServer(
   cleanSlate?: () => Promise<CleanSlateResult>,
   recordChatTestRun?: (input: ChatTestAuditInput) => ChatTestAuditRecord,
   taskJobs?: TaskJobs,
+  editGithubIssue?: GithubIssueEditor,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -385,6 +389,47 @@ export function buildMcpServer(
       return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
     },
   );
+
+  if (editGithubIssue) {
+    server.registerTool(
+      "edit_github_issue",
+      {
+        title: "Edit a GitHub issue",
+        description:
+          "Edit one issue in the configured GitHub repository: update title/body, add/remove/set labels, post a comment, replace assignees, or update the lifecycle status label. Examples: {issueNumber: 52, title: 'Clarify launch scope'} edits the title; {issueNumber: 52, labelsAdd: ['owner:agent'], status: 'proposed'} assigns agent ownership while keeping the ticket proposed; {issueNumber: 52, comment: 'Blocked on API decision.'} posts a comment. Governance: generic label edits normalize status:queued and status:approved-merge to status:proposed. Setting status:queued requires direct user approval for this exact numbered issue and queueApproval=true. status:approved-merge is not available here; use the merge approval gate.",
+        inputSchema: {
+          repo: z.string().min(1).optional().describe("owner/repo. Defaults to the configured vault repo."),
+          issueNumber: z.number().int().positive().describe("GitHub issue number to edit."),
+          title: z.string().min(1).optional().describe("New issue title."),
+          body: z.string().optional().describe("New issue body."),
+          labelsAdd: z.array(z.string().min(1)).optional().describe("Labels to add. Gated status labels are normalized to status:proposed."),
+          labelsRemove: z.array(z.string().min(1)).optional().describe("Labels to remove if present."),
+          labelsSet: z.array(z.string().min(1)).optional().describe("Replace all issue labels with this set. Gated status labels are normalized to status:proposed."),
+          comment: z.string().min(1).optional().describe("Comment body to post on the issue."),
+          assignees: z.array(z.string().min(1)).optional().describe("Replace assignees with these GitHub logins. Empty array clears assignees."),
+          status: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Lifecycle status label, with or without 'status:' prefix, e.g. proposed, blocked, needs-review, queued."),
+          queueApproval: z
+            .boolean()
+            .optional()
+            .describe("Set true only after the user explicitly approved queueing this exact numbered issue."),
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      },
+      async (input) => {
+        const result = await editGithubIssue(input);
+        const lines = [
+          `Edited ${result.repo}#${result.issueNumber}: ${result.issueUrl}`,
+          ...(result.operations.length ? [`operations: ${result.operations.join(", ")}`] : ["operations: none"]),
+          ...(result.labels ? [`labels: ${result.labels.join(", ")}`] : []),
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
+      },
+    );
+  }
 
   const driveTools = getDriveTools?.();
   if (driveTools) {

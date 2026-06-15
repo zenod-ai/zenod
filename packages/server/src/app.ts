@@ -20,6 +20,7 @@ import {
   appStatus,
   buildManifest,
   disconnectApp,
+  editGithubIssue,
   exchangeManifestCode,
   installationToken,
   listInstallationRepos,
@@ -612,6 +613,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         enqueue: (kind, input) => runtime.taskJobQueue.enqueue(kind, input),
         get: (id) => runtime.taskJobQueue.get(id),
       },
+      (input) => editGithubIssue(settings, input),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

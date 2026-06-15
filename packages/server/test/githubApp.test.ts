@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appJwt, appStatus, buildManifest, disconnectApp, installationToken } from "../src/githubApp.js";
+import { appJwt, appStatus, buildManifest, disconnectApp, editGithubIssue, installationToken } from "../src/githubApp.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -151,5 +151,145 @@ describe("GitHub App flow", () => {
     });
     const body = await res.json();
     expect(body.manifest.redirect_url).toBe("https://app.zenod.dev/api/github/app/callback");
+  });
+
+  it("edits issue fields, labels, status, assignees, and comments through GitHub", async () => {
+    const settings = runtime.settings;
+    settings.set("vault_repo", "zenod-ai/fixture");
+    settings.set("github_token", "ghp_test");
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const path = String(url).replace("https://api.github.com", "");
+      if (path === "/repos/zenod-ai/fixture/issues/52" && !init?.method) {
+        return new Response(
+          JSON.stringify({
+            html_url: "https://github.com/zenod-ai/fixture/issues/52",
+            labels: [{ name: "status:proposed" }, { name: "owner:human" }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/52" && init?.method === "PATCH") {
+        return new Response(
+          JSON.stringify({
+            html_url: "https://github.com/zenod-ai/fixture/issues/52",
+            labels: [{ name: "status:proposed" }, { name: "owner:human" }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/52/labels/owner%3Ahuman" && init?.method === "DELETE") {
+        return new Response(JSON.stringify([{ name: "status:proposed" }]), { status: 200 });
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/52/labels" && init?.method === "POST") {
+        return new Response(
+          JSON.stringify([
+            { name: "status:proposed" },
+            { name: "owner:agent" },
+          ]),
+          { status: 200 },
+        );
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/52/labels" && init?.method === "PUT") {
+        return new Response(
+          JSON.stringify([
+            { name: "owner:agent" },
+            { name: "status:blocked" },
+          ]),
+          { status: 200 },
+        );
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/52/comments" && init?.method === "POST") {
+        return new Response(JSON.stringify({ html_url: "https://github.com/zenod-ai/fixture/issues/52#comment" }), { status: 201 });
+      }
+      return new Response(`unexpected ${init?.method ?? "GET"} ${path}`, { status: 500 });
+    });
+
+    const result = await editGithubIssue(settings, {
+      issueNumber: 52,
+      title: "Clarify launch scope",
+      body: "Updated body",
+      assignees: ["octo"],
+      labelsRemove: ["owner:human"],
+      labelsAdd: ["owner:agent"],
+      status: "blocked",
+      comment: "Blocked on a product decision.",
+    });
+
+    expect(result).toMatchObject({
+      repo: "zenod-ai/fixture",
+      issueNumber: 52,
+      issueUrl: "https://github.com/zenod-ai/fixture/issues/52",
+      labels: ["owner:agent", "status:blocked"],
+    });
+    expect(result.operations).toEqual([
+      "updated title",
+      "updated body",
+      "replaced assignees",
+      "removed labels",
+      "added labels",
+      "set status:blocked",
+      "posted comment",
+    ]);
+
+    const patch = fetchMock.mock.calls.find((call) => String(call[0]).endsWith("/issues/52") && call[1]?.method === "PATCH")!;
+    expect(JSON.parse(String(patch[1]!.body))).toEqual({
+      title: "Clarify launch scope",
+      body: "Updated body",
+      assignees: ["octo"],
+    });
+    const addLabels = fetchMock.mock.calls.find((call) => String(call[0]).endsWith("/issues/52/labels") && call[1]?.method === "POST")!;
+    expect(JSON.parse(String(addLabels[1]!.body))).toEqual({ labels: ["owner:agent"] });
+    const setStatus = fetchMock.mock.calls.filter((call) => String(call[0]).endsWith("/issues/52/labels") && call[1]?.method === "PUT").at(-1)!;
+    expect(JSON.parse(String(setStatus[1]!.body))).toEqual({ labels: ["owner:agent", "status:blocked"] });
+  });
+
+  it("requires explicit queue approval before setting status:queued", async () => {
+    const settings = runtime.settings;
+    settings.set("vault_repo", "zenod-ai/fixture");
+    settings.set("github_token", "ghp_test");
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      if (init?.method === "PUT") {
+        return new Response(JSON.stringify([{ name: "owner:agent" }, { name: "status:queued" }]), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({
+          html_url: "https://github.com/zenod-ai/fixture/issues/53",
+          labels: [{ name: "status:proposed" }, { name: "owner:agent" }],
+        }),
+        { status: 200 },
+      );
+    });
+
+    await expect(editGithubIssue(settings, { issueNumber: 53, status: "queued" })).rejects.toThrow(/requires explicit user approval/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await editGithubIssue(settings, { issueNumber: 53, status: "queued", queueApproval: true });
+    const put = fetchMock.mock.calls.find((call) => call[1]?.method === "PUT")!;
+    expect(JSON.parse(String(put[1]!.body))).toEqual({ labels: ["owner:agent", "status:queued"] });
+  });
+
+  it("normalizes gated labels in generic label edits", async () => {
+    const settings = runtime.settings;
+    settings.set("vault_repo", "zenod-ai/fixture");
+    settings.set("github_token", "ghp_test");
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const path = String(url).replace("https://api.github.com", "");
+      if (path === "/repos/zenod-ai/fixture/issues/54" && !init?.method) {
+        return new Response(JSON.stringify({ html_url: "https://github.com/zenod-ai/fixture/issues/54", labels: [] }), { status: 200 });
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/54/labels" && init?.method === "POST") {
+        return new Response(JSON.stringify([{ name: "status:proposed" }, { name: "owner:agent" }]), { status: 200 });
+      }
+      return new Response(`unexpected ${init?.method ?? "GET"} ${path}`, { status: 500 });
+    });
+
+    const result = await editGithubIssue(settings, { issueNumber: 54, labelsAdd: ["owner:agent", "status:queued"] });
+
+    expect(result.labels).toEqual(["status:proposed", "owner:agent"]);
+    const post = fetchMock.mock.calls.find((call) => call[1]?.method === "POST")!;
+    expect(JSON.parse(String(post[1]!.body))).toEqual({ labels: ["owner:agent", "status:proposed"] });
   });
 });
