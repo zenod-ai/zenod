@@ -18,9 +18,11 @@ docker build -f Dockerfile.agent-runner --build-arg CODEX_VERSION=0.137.0 -t zen
 
 Use durable volumes. `CODEX_HOME` and `GH_CONFIG_DIR` must persist so auth survives container restarts. Attach the shared `zenod-x-net` network so the runner can reach the X MCP instances by service name (see [X MCP wiring](#x-mcp-wiring)).
 
-```sh
-docker network create zenod-x-net   # once; no-op if it already exists
+The `zenod-x-net` network is created by the X MCP compose (`services/x-mcp/`), so deploy that
+first. If the runner is already running, attach it without recreating: `docker network connect
+zenod-x-net zenod-agent-runner`.
 
+```sh
 docker volume create zenod-agent-work
 docker volume create zenod-agent-codex-home
 docker volume create zenod-agent-gh

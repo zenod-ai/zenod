@@ -39,20 +39,20 @@ there's no refresh contention.
 2. **Secrets.** Copy `.env.example` → `.env` and fill it in (local), or set the same keys as
    Dokploy app secrets (production). Never commit a filled-in `.env`.
 
-3. **Network.** Once on the host: `docker network create zenod-x-net`. The runner attaches to
-   the same network (see `docs/AGENT-RUNNER.md`).
+3. **Network.** The compose creates the `zenod-x-net` network itself (exact name, no project
+   prefix). The runner joins it afterwards with `docker network connect zenod-x-net
+   zenod-agent-runner` — see `docs/AGENT-RUNNER.md`.
 
 ## Run
 
 ```sh
-# from services/x-mcp/
-docker network create zenod-x-net      # once
+# from services/x-mcp/ (compose auto-loads .env for the X_* values)
 docker compose -f docker-compose.x-mcp.yml up -d --build
 ```
 
-In Dokploy this is two apps built from this `Dockerfile` with the same `XMCP_REF`, both on
-`zenod-x-net`, differing only by `X_API_TOOL_ALLOWLIST` (read-only vs read+post). Deploy is
-push-triggered like the rest of the stack.
+In Dokploy this is a single **Compose** service (project `zenod`) built from
+`docker-compose.x-mcp.yml`: both instances come up together, the `X_*` secrets go in the
+compose's Environment, and `autoDeploy` rebuilds on push like the rest of the stack.
 
 ## Tool allowlist
 

@@ -9,12 +9,17 @@
 # endpoint they reach. Both instances auth as the same user via long-lived OAuth1
 # tokens, so sharing one X app's tokens across both is fine (no refresh contention).
 #
-# Prereq (once on the host):   docker network create zenod-x-net
-# Shared creds live in services/x-mcp/.env (see .env.example).
+# The network `zenod-x-net` is created by this compose (exact name, no project
+# prefix) so the runner can join it later with:
+#   docker network connect zenod-x-net zenod-agent-runner
+#
+# Creds: the five X_* values are interpolated from the environment. Standalone,
+# put them in services/x-mcp/.env (compose auto-loads it); under Dokploy, set
+# them in the compose's Environment (Dokploy writes the same .env next to this
+# file). See .env.example.
 
 networks:
   zenod-x-net:
-    external: true
     name: zenod-x-net
 
 services:
@@ -26,10 +31,14 @@ services:
         XMCP_REF: "63d34362d88ed9f94d54ccd5ecd5bb4d12e11759"
     image: zenod-x-mcp
     container_name: x-mcp-readonly
-    env_file: .env
     environment:
       MCP_HOST: "0.0.0.0"
       MCP_PORT: "8000"
+      X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY}
+      X_OAUTH_CONSUMER_SECRET: ${X_OAUTH_CONSUMER_SECRET}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN}
+      X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
+      X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
       # READ ONLY — no write operationIds. Confirm ids against the startup tool log.
       X_API_TOOL_ALLOWLIST: "findTweetById,findTweetsById,tweetsRecentSearch,usersIdTweets,findUserById,findUserByUsername,findMyUser"
     networks: [zenod-x-net]
@@ -43,10 +52,14 @@ services:
         XMCP_REF: "63d34362d88ed9f94d54ccd5ecd5bb4d12e11759"
     image: zenod-x-mcp
     container_name: x-mcp-postread
-    env_file: .env
     environment:
       MCP_HOST: "0.0.0.0"
       MCP_PORT: "8000"
+      X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY}
+      X_OAUTH_CONSUMER_SECRET: ${X_OAUTH_CONSUMER_SECRET}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN}
+      X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
+      X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
       # READ + POST. createTweet is the gated capability; deleteTweetById lets an
       # attended operator undo. Trim to just createTweet if delete should be off.
       X_API_TOOL_ALLOWLIST: "findTweetById,findTweetsById,tweetsRecentSearch,usersIdTweets,findUserById,findUserByUsername,findMyUser,createTweet,deleteTweetById"
