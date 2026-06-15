@@ -265,17 +265,25 @@ function clarityCheck(issue) {
   if (!issue.title?.trim()) failures.push("missing title");
   if (!body.trim()) failures.push("missing body");
   if (!names.includes("owner:agent")) failures.push("missing owner:agent label");
-  if (!/(acceptance criteria|done when|requirements?|test[s]? \/ verification|verification|deliverables?|outcomes?|definition of done)/i.test(body)) {
-    failures.push("missing acceptance criteria or clear done condition");
-  }
-  // Scope is satisfied either by an explicit scope section OR by concrete code-surface
-  // references (file paths) that bound what the worker should touch.
-  const hasPathRefs = /(\b(?:packages|apps|src|scripts|lib|test|tests)\/[\w./-]+|\w+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|md))/i.test(body);
-  if (!/(scope|out of scope|requirements?|deliverables?)/i.test(body) && !hasPathRefs) {
-    failures.push("missing scope boundaries");
-  }
-  if (!/(source basis|source refs?|source context|log\/|projects\/|notes\/|github)/i.test(body) && !hasPathRefs) {
-    failures.push("missing source context references");
+  // Action tickets (post a tweet, send a message, etc.) are self-describing and
+  // don't carry code-ticket structure (file paths, acceptance criteria, scope
+  // boundaries). Recognize them by an action label and require only a clear
+  // instruction — the code-surface checks below are for implementation tickets.
+  const ACTION_LABELS = new Set(["twitter", "x", "social", "post", "action", "announcement"]);
+  const isActionTicket = names.some((n) => ACTION_LABELS.has(n.toLowerCase()));
+  if (!isActionTicket) {
+    if (!/(acceptance criteria|done when|requirements?|test[s]? \/ verification|verification|deliverables?|outcomes?|definition of done)/i.test(body)) {
+      failures.push("missing acceptance criteria or clear done condition");
+    }
+    // Scope is satisfied either by an explicit scope section OR by concrete code-surface
+    // references (file paths) that bound what the worker should touch.
+    const hasPathRefs = /(\b(?:packages|apps|src|scripts|lib|test|tests)\/[\w./-]+|\w+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|md))/i.test(body);
+    if (!/(scope|out of scope|requirements?|deliverables?)/i.test(body) && !hasPathRefs) {
+      failures.push("missing scope boundaries");
+    }
+    if (!/(source basis|source refs?|source context|log\/|projects\/|notes\/|github)/i.test(body) && !hasPathRefs) {
+      failures.push("missing source context references");
+    }
   }
   if (body.length > 12000) warnings.push("large issue body; consider splitting if worker blocks");
   if (issue.number === 19) warnings.push("broad issue; v1 prompt constrains work to schema/tool/tests and conservative integration");
