@@ -248,6 +248,18 @@ export type WhatsAppStatus = {
   }
 }
 
+export type TelegramStatus = {
+  enabled: boolean
+  state: "disabled" | "disconnected" | "connected" | "error"
+  botUsername: string | null
+  hasToken: boolean
+  lastActivity: number | null
+  lastError: string | null
+  allowedUsers: string[]
+  acceptAll: boolean
+  rich: boolean
+}
+
 export type SettingsResponse = {
   settings: SettingsValues
   configured: boolean

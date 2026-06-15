@@ -5,8 +5,8 @@
 
 import type { ChatToolEvent } from "./llm/types.js";
 
-export type Surface = "cli" | "mcp" | "whatsapp" | "web" | "drive" | "selftest";
-export type TaskingSurface = "whatsapp" | "web" | "mcp" | "selftest";
+export type Surface = "cli" | "mcp" | "whatsapp" | "telegram" | "web" | "drive" | "selftest";
+export type TaskingSurface = "whatsapp" | "telegram" | "web" | "mcp" | "selftest";
 
 export interface StoreInput {
   /** The memory to store: a message, a fact, a capture. */

@@ -1,0 +1,337 @@
+import type { BrainEngine } from "zenod";
+import type { Settings } from "./settings.js";
+import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
+
+export type TelegramConnectionState = "disabled" | "disconnected" | "connected" | "error";
+
+export interface TelegramStatus {
+  enabled: boolean;
+  state: TelegramConnectionState;
+  botUsername: string | null;
+  hasToken: boolean;
+  lastActivity: number | null;
+  lastError: string | null;
+  allowedUsers: string[];
+  acceptAll: boolean;
+  rich: boolean;
+}
+
+/** The slice of the Bot API we use, narrowed to what the gateway reads. */
+interface TelegramUser {
+  id: number;
+  is_bot?: boolean;
+  first_name?: string;
+  username?: string;
+}
+interface TelegramChat {
+  id: number;
+  type?: string;
+}
+interface TelegramMessage {
+  message_id: number;
+  date: number;
+  from?: TelegramUser;
+  chat: TelegramChat;
+  text?: string;
+  caption?: string;
+  voice?: unknown;
+  photo?: unknown;
+  document?: unknown;
+}
+interface TelegramUpdate {
+  update_id: number;
+  message?: TelegramMessage;
+}
+interface ApiResponse<T> {
+  ok: boolean;
+  result?: T;
+  description?: string;
+  error_code?: number;
+}
+
+const POLL_TIMEOUT_SECONDS = 50;
+const PLAIN_MESSAGE_LIMIT = 4096;
+
+/**
+ * Telegram channel — a third feeder into the shared engine path (alongside the
+ * WhatsApp gateway and the web /api/chat route). It long-polls the Bot API for
+ * messages and replies through `engine.handleTasking`, so downstream processing
+ * and per-chat context are identical to WhatsApp.
+ *
+ * Deliberately minimal vs the WhatsApp gateway: no QR pairing (a BotFather token
+ * is the only credential), no read receipts, no session files. Config is
+ * env-seeded (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`) — there is no
+ * bespoke UI. Rich replies copy Hermes: the engine's markdown is passed straight
+ * to `sendRichMessage`, with a transparent fall back to plain `sendMessage`.
+ */
+export class TelegramGateway {
+  private state: TelegramConnectionState = "disconnected";
+  private botUsername: string | null = null;
+  private lastError: string | null = null;
+  private lastActivity: number | null = null;
+  private offset = 0;
+  private running = false;
+  private abort: AbortController | null = null;
+  private loop: Promise<void> | null = null;
+
+  constructor(
+    private readonly options: {
+      settings: Settings;
+      getEngine: () => Promise<BrainEngine>;
+      fetchImpl?: typeof fetch;
+    },
+  ) {}
+
+  private get fetchImpl(): typeof fetch {
+    return this.options.fetchImpl ?? fetch;
+  }
+
+  private settings(): TelegramSettings {
+    return this.options.settings.telegramSettings();
+  }
+
+  status(): TelegramStatus {
+    const settings = this.settings();
+    return {
+      enabled: settings.enabled,
+      state: settings.enabled ? this.state : "disabled",
+      botUsername: this.botUsername,
+      hasToken: Boolean(this.options.settings.telegramBotToken()),
+      lastActivity: this.lastActivity,
+      lastError: this.lastError,
+      allowedUsers: settings.allowedUsers,
+      acceptAll: settings.acceptAll,
+      rich: settings.rich,
+    };
+  }
+
+  async startIfEnabled(): Promise<void> {
+    if (this.settings().enabled) await this.start();
+  }
+
+  async start(): Promise<void> {
+    if (this.running) return;
+    const token = this.options.settings.telegramBotToken();
+    if (!token) {
+      this.state = "error";
+      this.lastError = "No Telegram bot token configured (set TELEGRAM_BOT_TOKEN).";
+      return;
+    }
+    this.lastError = null;
+    // Validate the token and learn the bot's @username before polling.
+    const me = await this.callApi<TelegramUser>("getMe", {}).catch((err: unknown) => {
+      this.state = "error";
+      this.lastError = `Telegram getMe failed: ${err instanceof Error ? err.message : String(err)}`;
+      return null;
+    });
+    if (!me) return;
+    this.botUsername = me.username ?? null;
+    this.state = "connected";
+    // Skip any backlog accumulated while we were down: advance the offset past
+    // the newest pending update so a restart doesn't reply to stale messages.
+    await this.primeOffset();
+    this.running = true;
+    this.abort = new AbortController();
+    this.loop = this.pollLoop();
+  }
+
+  async disconnect(): Promise<void> {
+    this.options.settings.setTelegramSettings({ enabled: false });
+    await this.close();
+  }
+
+  async close(): Promise<void> {
+    this.running = false;
+    this.abort?.abort();
+    this.abort = null;
+    const loop = this.loop;
+    this.loop = null;
+    this.state = "disconnected";
+    await loop?.catch(() => {});
+  }
+
+  /** Fetch the latest pending update (if any) and set the offset just past it. */
+  private async primeOffset(): Promise<void> {
+    try {
+      const updates = await this.callApi<TelegramUpdate[]>("getUpdates", { offset: -1, timeout: 0 });
+      const last = updates?.[updates.length - 1];
+      if (last) this.offset = last.update_id + 1;
+    } catch {
+      // Non-fatal: a transient error here just means we may process one batch of
+      // backlog on first poll. The loop's own error handling takes over.
+    }
+  }
+
+  private async pollLoop(): Promise<void> {
+    while (this.running) {
+      try {
+        const updates = await this.callApi<TelegramUpdate[]>(
+          "getUpdates",
+          { offset: this.offset, timeout: POLL_TIMEOUT_SECONDS, allowed_updates: ["message"] },
+          (POLL_TIMEOUT_SECONDS + 15) * 1000,
+        );
+        if (this.state !== "connected") {
+          this.state = "connected";
+          this.lastError = null;
+        }
+        for (const update of updates ?? []) {
+          this.offset = update.update_id + 1;
+          if (update.message) await this.handleMessage(update.message);
+        }
+      } catch (err) {
+        if (!this.running) break; // aborted by close()
+        this.state = "error";
+        this.lastError = err instanceof Error ? err.message : String(err);
+        console.error("[telegram] poll failed:", this.lastError);
+        await this.delay(3000); // brief backoff before retrying
+      }
+    }
+  }
+
+  private async handleMessage(message: TelegramMessage): Promise<void> {
+    this.lastActivity = Date.now();
+    const chatId = message.chat.id;
+    const from = message.from;
+    const settings = this.settings();
+
+    if (!userIsAllowed({ id: from?.id, username: from?.username }, settings)) {
+      const who = from?.username ? `@${from.username}` : String(from?.id ?? "unknown");
+      console.info(`[telegram] ignored message from non-allowed user ${who}`);
+      return;
+    }
+
+    const text = (message.text ?? message.caption ?? "").trim();
+    if (!text) {
+      // v1 is text-only — voice/photo/document ingestion is a tracked follow-up.
+      await this.sendReply(
+        chatId,
+        "I can only handle text messages for now — media and voice notes are coming soon.",
+      ).catch(() => {});
+      return;
+    }
+
+    await this.sendChatAction(chatId, "typing");
+    const keepTyping = setInterval(() => void this.sendChatAction(chatId, "typing"), 4000);
+    keepTyping.unref?.();
+    try {
+      const engine = await this.options.getEngine();
+      const reply = await engine.handleTasking({
+        text,
+        surface: "telegram",
+        conversationKey: normalizeTelegramId(String(chatId)) || String(chatId),
+      });
+      if (reply.text.trim()) {
+        await this.sendReply(chatId, reply.text);
+      } else {
+        await this.sendReply(
+          chatId,
+          "⚠️ I got your message but couldn't compose a reply — please try again.",
+        ).catch(() => {});
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const providerIssue =
+        /quota|billing|rate.?limit|insufficient|api key|unauthor|401|429|overloaded|model provider|not configured/i.test(
+          detail,
+        );
+      const notice = providerIssue
+        ? "⚠️ I got your message, but the AI model is unavailable right now (out of quota, rate-limited, or misconfigured). Nothing was lost — please try again once that's sorted."
+        : "⚠️ I got your message, but hit an error while processing it. It's been logged — please try again in a moment.";
+      await this.sendReply(chatId, notice).catch(() => {});
+      console.error(`[telegram] reply failed for chat ${chatId}: ${detail}`);
+    } finally {
+      clearInterval(keepTyping);
+    }
+  }
+
+  /**
+   * Rich-then-plain reply. Copies Hermes: pass the engine's raw markdown to
+   * Bot API 10.1 `sendRichMessage` so tables/headings/lists/details render
+   * natively; on any rejection (unknown method on older Bot API, oversized
+   * payload >32 KB, malformed content) fall back transparently to plain
+   * `sendMessage`, which is chunked to Telegram's 4096-char limit.
+   *
+   * NOTE (spike): the exact `sendRichMessage` request field is not fully
+   * documented yet — we send `{ chat_id, text }` (markdown), matching how the
+   * sibling `sendMessage` is shaped and Hermes' "raw markdown" description.
+   * Confirm against a live bot on first test; the plain fallback guarantees
+   * delivery regardless. See zenod-ai/zenod#121.
+   */
+  private async sendReply(chatId: number, markdown: string): Promise<void> {
+    if (!markdown) return;
+    if (this.settings().rich) {
+      try {
+        await this.callApi("sendRichMessage", { chat_id: chatId, text: markdown });
+        return;
+      } catch (err) {
+        console.warn(
+          `[telegram] sendRichMessage rejected, falling back to plain: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    for (const chunk of chunkText(markdown, PLAIN_MESSAGE_LIMIT)) {
+      await this.callApi("sendMessage", { chat_id: chatId, text: chunk });
+    }
+  }
+
+  private async sendChatAction(chatId: number, action: string): Promise<void> {
+    await this.callApi("sendChatAction", { chat_id: chatId, action }).catch((err: unknown) => {
+      console.warn(`[telegram] sendChatAction failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  }
+
+  /** POST a Bot API method as JSON and unwrap `{ ok, result }`, throwing on failure. */
+  private async callApi<T>(method: string, body: Record<string, unknown>, timeoutMs = 15000): Promise<T> {
+    const token = this.options.settings.telegramBotToken();
+    if (!token) throw new Error("Telegram bot token is not configured");
+    const signals = [AbortSignal.timeout(timeoutMs)];
+    if (this.abort) signals.push(this.abort.signal);
+    const response = await this.fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.any(signals),
+    });
+    const json = (await response.json().catch(() => ({}))) as ApiResponse<T>;
+    if (!response.ok || !json.ok) {
+      throw new Error(`Telegram ${method} returned ${response.status}${json.description ? `: ${json.description}` : ""}`);
+    }
+    return json.result as T;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      timer.unref?.();
+      this.abort?.signal.addEventListener("abort", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+}
+
+/** Split text into chunks no longer than `limit`, preferring line boundaries. */
+export function chunkText(text: string, limit: number): string[] {
+  if (text.length <= limit) return [text];
+  const chunks: string[] = [];
+  let current = "";
+  for (const line of text.split("\n")) {
+    if (line.length > limit) {
+      if (current) {
+        chunks.push(current);
+        current = "";
+      }
+      for (let i = 0; i < line.length; i += limit) chunks.push(line.slice(i, i + limit));
+      continue;
+    }
+    if (current.length + line.length + 1 > limit) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = current ? `${current}\n${line}` : line;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}

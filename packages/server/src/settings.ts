@@ -5,6 +5,11 @@ import {
   parseStoredAllowedSenders,
   type WhatsAppSettings,
 } from "./whatsappConfig.js";
+import {
+  normalizeAllowedUsers,
+  parseStoredAllowedUsers,
+  type TelegramSettings,
+} from "./telegramConfig.js";
 
 /** Runtime settings persisted in SQLite; env vars seed them on first boot. */
 export const SETTING_KEYS = [
@@ -25,6 +30,11 @@ export const SETTING_KEYS = [
   "long_transcription_provider",
   "openrouter_transcription_model",
   "whisper_model",
+  "telegram_enabled",
+  "telegram_bot_token",
+  "telegram_allowed_users",
+  "telegram_accept_all",
+  "telegram_rich",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -45,6 +55,7 @@ const SECRET_KEYS: ReadonlySet<string> = new Set([
   "openrouter_api_key",
   "google_service_account_json",
   "groq_api_key",
+  "telegram_bot_token",
 ]);
 
 const ENV_SEEDS: Record<SettingKey, string> = {
@@ -65,6 +76,11 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   long_transcription_provider: "ZENOD_LONG_TRANSCRIPTION_PROVIDER",
   openrouter_transcription_model: "ZENOD_OPENROUTER_TRANSCRIPTION_MODEL",
   whisper_model: "ZENOD_WHISPER_MODEL",
+  telegram_enabled: "TELEGRAM_ENABLED",
+  telegram_bot_token: "TELEGRAM_BOT_TOKEN",
+  telegram_allowed_users: "TELEGRAM_ALLOWED_USERS",
+  telegram_accept_all: "TELEGRAM_ACCEPT_ALL",
+  telegram_rich: "TELEGRAM_RICH",
 };
 
 export class Settings {
@@ -193,6 +209,41 @@ export class Settings {
     this.setRaw("whatsapp_groups_enabled", next.groupsEnabled ? "true" : "false");
     this.setRaw("whatsapp_accept_all", next.acceptAll ? "true" : "false");
     return next;
+  }
+
+  /**
+   * Telegram channel config (env-seeded, no bespoke UI). Setting just
+   * TELEGRAM_BOT_TOKEN is enough to turn the channel on (Hermes-style) — set
+   * telegram_enabled=false to keep a token configured but the gateway off.
+   * Rich messages (Bot API 10.1 markdown passthrough) are on unless disabled.
+   */
+  telegramSettings(): TelegramSettings {
+    const token = this.get("telegram_bot_token");
+    const enabledRaw = this.get("telegram_enabled");
+    const enabled = enabledRaw === null ? Boolean(token) : enabledRaw === "true";
+    return {
+      enabled: enabled && Boolean(token),
+      allowedUsers: parseStoredAllowedUsers(this.get("telegram_allowed_users")),
+      acceptAll: this.get("telegram_accept_all") === "true",
+      rich: this.get("telegram_rich") !== "false",
+    };
+  }
+
+  setTelegramSettings(
+    input: Partial<Omit<TelegramSettings, "allowedUsers">> & { allowedUsers?: unknown; botToken?: string },
+  ): TelegramSettings {
+    if (input.botToken !== undefined) this.set("telegram_bot_token", input.botToken);
+    if (input.enabled !== undefined) this.set("telegram_enabled", input.enabled ? "true" : "false");
+    if (input.acceptAll !== undefined) this.set("telegram_accept_all", input.acceptAll ? "true" : "false");
+    if (input.rich !== undefined) this.set("telegram_rich", input.rich ? "true" : "false");
+    if (input.allowedUsers !== undefined) {
+      this.set("telegram_allowed_users", JSON.stringify(normalizeAllowedUsers(input.allowedUsers)));
+    }
+    return this.telegramSettings();
+  }
+
+  telegramBotToken(): string | null {
+    return this.get("telegram_bot_token");
   }
 
   /**
