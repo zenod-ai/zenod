@@ -33,6 +33,7 @@ import { OAuthStore } from "./oauthStore.js";
 import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
+import { TelegramGateway } from "./telegramGateway.js";
 
 export class NotConfiguredError extends Error {
   constructor() {
@@ -50,6 +51,7 @@ export class Runtime {
   readonly oauth: OAuthStore;
   readonly whatsappStore: WhatsAppStore;
   readonly whatsapp: WhatsAppGateway;
+  readonly telegram: TelegramGateway;
   readonly ingestStore: IngestStore;
   readonly ingestQueue: IngestQueue;
   readonly taskJobStore: TaskJobStore;
@@ -68,6 +70,10 @@ export class Runtime {
       dataDir: join(dataDir, "whatsapp"),
       settings: this.settings,
       store: this.whatsappStore,
+      getEngine: () => this.getEngine(),
+    });
+    this.telegram = new TelegramGateway({
+      settings: this.settings,
       getEngine: () => this.getEngine(),
     });
     // The IngestStore constructor marks any job left mid-flight by a restart
@@ -305,6 +311,7 @@ export class Runtime {
 
   close(): void {
     this.whatsapp.close();
+    void this.telegram.close();
     this.state.close();
     this.whatsappStore.close();
     this.ingestStore.close();

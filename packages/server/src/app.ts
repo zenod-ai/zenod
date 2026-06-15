@@ -49,6 +49,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     console.error("[whatsapp] startup failed:", err);
   });
 
+  void runtime.telegram.startIfEnabled().catch((err: unknown) => {
+    console.error("[telegram] startup failed:", err);
+  });
+
   // Pre-fetch the whisper model on boot when Drive is set up, so the one-time
   // ~1.5 GB download to the /data volume happens during setup — not inside the
   // user's first chat ingest. The /data volume persists across redeploys, so
@@ -282,6 +286,33 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
+
+  app.get("/api/telegram/status", (c) => c.json(runtime.telegram.status()));
+
+  app.put("/api/telegram/settings", async (c) => {
+    const body = await c.req
+      .json<{
+        enabled?: boolean;
+        botToken?: string;
+        allowedUsers?: string[] | string;
+        acceptAll?: boolean;
+        rich?: boolean;
+      }>()
+      .catch(() => ({}) as { enabled?: boolean; botToken?: string; allowedUsers?: string[] | string; acceptAll?: boolean; rich?: boolean });
+    settings.setTelegramSettings({
+      ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
+      // Only overwrite the stored token when a fresh, non-empty one is sent — the
+      // UI shows a masked placeholder and omits it on saves that don't change it.
+      ...(typeof body.botToken === "string" && body.botToken.trim() ? { botToken: body.botToken.trim() } : {}),
+      ...(body.allowedUsers !== undefined ? { allowedUsers: body.allowedUsers } : {}),
+      ...(typeof body.acceptAll === "boolean" ? { acceptAll: body.acceptAll } : {}),
+      ...(typeof body.rich === "boolean" ? { rich: body.rich } : {}),
+    });
+    // Restart so a new token/handle takes effect immediately (re-validates via getMe).
+    await runtime.telegram.close();
+    await runtime.telegram.startIfEnabled();
+    return c.json(runtime.telegram.status());
+  });
 
   app.put("/api/whatsapp/settings", async (c) => {
     const body = await c.req

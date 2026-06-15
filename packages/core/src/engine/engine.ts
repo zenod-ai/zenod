@@ -53,6 +53,8 @@ function channelName(surface: Surface): string {
   switch (surface) {
     case "whatsapp":
       return "WhatsApp";
+    case "telegram":
+      return "Telegram";
     case "web":
       return "Web chat";
     case "mcp":
