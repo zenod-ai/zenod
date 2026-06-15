@@ -27,6 +27,12 @@ type OpenRouterModel = {
 const OPENROUTER_MODELS_URL =
   process.env.ZENOD_OPENROUTER_MODELS_URL ?? "https://openrouter.ai/api/v1/models?output_modalities=all&sort=most-popular";
 const CACHE_TTL_MS = 30 * 60 * 1000;
+// OpenRouter reports transcription prices in mixed units with no unit flag in the
+// response: token-billed models (e.g. gpt-4o-transcribe, "priced per token") quote a
+// per-token rate that is always tiny (< $1e-4), while most STT models (whisper, voxtral,
+// mai-transcribe) quote a per-minute / duration rate. Split on magnitude so the label
+// shows the right unit — otherwise whisper-1's $0.006/min renders as an absurd "$6000/1M".
+const PER_TOKEN_MAX = 0.0001;
 
 const FALLBACK_TRANSCRIPTION_MODELS: OpenRouterTranscriptionModel[] = [
   fallbackModel("openai/gpt-4o-mini-transcribe", "OpenAI: GPT-4o Mini Transcribe", 1, 0.00000125, 0.000005),
@@ -114,17 +120,24 @@ function parsePrice(value: unknown): number | null {
 }
 
 function costLabel(pricing: OpenRouterTranscriptionModel["pricing"]): string {
-  const parts: string[] = [];
-  if (pricing.prompt !== null) parts.push(`input ${formatUsd(pricing.prompt)}`);
-  if (pricing.completion !== null && pricing.completion > 0) parts.push(`output ${formatUsd(pricing.completion)}`);
-  if (pricing.audio !== null && pricing.audio > 0) parts.push(`audio ${formatUsd(pricing.audio)}`);
-  if (pricing.request !== null && pricing.request > 0) parts.push(`request ${formatUsd(pricing.request)}`);
-  return parts.length > 0 ? parts.join(" · ") : "pricing unavailable";
+  const { prompt, completion } = pricing;
+  if (prompt === null || prompt === 0) {
+    if (pricing.request !== null && pricing.request > 0) return `${formatUsd(pricing.request)}/request`;
+    if (pricing.audio !== null && pricing.audio > 0) return `${formatUsd(pricing.audio)}/audio token`;
+    return "pricing unavailable";
+  }
+  if (prompt < PER_TOKEN_MAX) {
+    const parts = [`${formatUsd(prompt * 1_000_000)}/1M in`];
+    if (completion !== null && completion > 0) parts.push(`${formatUsd(completion * 1_000_000)}/1M out`);
+    return parts.join(" · ");
+  }
+  // duration-billed: the per-minute rate is the metric that matters for voice notes
+  return `${formatUsd(prompt)}/min audio`;
 }
 
 function formatUsd(value: number): string {
   if (value === 0) return "$0";
-  if (value < 0.00001) return `$${value.toExponential(2)}`;
-  if (value < 0.01) return `$${value.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
+  if (value >= 1) return `$${value.toFixed(2)}`;
+  if (value >= 0.01) return `$${value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}`;
   return `$${value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}`;
 }

@@ -460,12 +460,12 @@ describe("drive tools + API", () => {
       id: "openai/gpt-4o-mini-transcribe",
       name: "OpenAI: GPT-4o Mini Transcribe",
       popularityRank: 1,
-      costLabel: "input $1.25e-6 · output $5.00e-6",
+      costLabel: "$1.25/1M in · $5.00/1M out",
     });
     expect(body.models[1]).toMatchObject({
       id: "openai/whisper-large-v3",
       popularityRank: 2,
-      costLabel: "input $0.0015",
+      costLabel: "$0.0015/min audio",
     });
   });
 });
