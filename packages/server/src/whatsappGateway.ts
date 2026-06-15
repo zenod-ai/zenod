@@ -820,6 +820,9 @@ export class WhatsAppGateway {
         model: this.options.settings.whisperModel(),
         groqApiKey: this.options.settings.get("groq_api_key"),
         openaiApiKey: this.options.settings.get("openai_api_key"),
+        openrouterApiKey: this.options.settings.get("openrouter_api_key"),
+        openrouterModel: this.options.settings.openrouterTranscriptionModel(),
+        longTranscriptionProvider: this.options.settings.longTranscriptionProvider(),
         useOpenAiForLongAudio: this.options.settings.useOpenAiForLongTranscription(),
       });
       if (!transcription.success) {

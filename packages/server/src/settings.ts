@@ -22,6 +22,8 @@ export const SETTING_KEYS = [
   "google_drive_folder_id",
   "groq_api_key",
   "openai_long_transcription",
+  "long_transcription_provider",
+  "openrouter_transcription_model",
   "whisper_model",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -60,6 +62,8 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   google_drive_folder_id: "GOOGLE_DRIVE_FOLDER_ID",
   groq_api_key: "GROQ_API_KEY",
   openai_long_transcription: "ZENOD_OPENAI_LONG_TRANSCRIPTION",
+  long_transcription_provider: "ZENOD_LONG_TRANSCRIPTION_PROVIDER",
+  openrouter_transcription_model: "ZENOD_OPENROUTER_TRANSCRIPTION_MODEL",
   whisper_model: "ZENOD_WHISPER_MODEL",
 };
 
@@ -151,6 +155,17 @@ export class Settings {
   /** Long voice notes use OpenAI transcription by default when a key exists. */
   useOpenAiForLongTranscription(): boolean {
     return Boolean(this.get("openai_api_key") && this.get("openai_long_transcription") !== "false");
+  }
+
+  longTranscriptionProvider(): "openrouter" | "openai" | "local" {
+    const value = this.get("long_transcription_provider");
+    if (value === "openrouter" || value === "openai" || value === "local") return value;
+    if (this.get("openrouter_api_key")) return "openrouter";
+    return this.useOpenAiForLongTranscription() ? "openai" : "local";
+  }
+
+  openrouterTranscriptionModel(): string {
+    return this.get("openrouter_transcription_model") || "openai/whisper-large-v3-turbo";
   }
 
   whatsappSettings(): WhatsAppSettings {

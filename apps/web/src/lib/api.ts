@@ -120,6 +120,8 @@ export type SettingsValues = {
   google_drive_folder_id: string | null
   groq_api_key: string | null
   openai_long_transcription: string | null
+  long_transcription_provider: "openrouter" | "openai" | "local" | null
+  openrouter_transcription_model: string | null
 }
 
 export type DriveStatus = {
