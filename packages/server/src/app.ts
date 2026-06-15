@@ -200,7 +200,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       folderId: settings.get("google_drive_folder_id"),
       transcriptionProvider: [
         settings.get("groq_api_key") ? "groq for notes up to 5 min" : null,
-        settings.useOpenAiForLongTranscription() ? "openai for notes over 5 min" : "local whisper.cpp for long notes",
+        settings.longTranscriptionProvider() === "openrouter" && settings.get("openrouter_api_key")
+          ? `openrouter ${settings.openrouterTranscriptionModel()} for notes over 5 min and Groq fallback`
+          : settings.longTranscriptionProvider() === "openai" && settings.get("openai_api_key")
+            ? "openai for notes over 5 min"
+            : "local whisper.cpp for long notes",
       ]
         .filter(Boolean)
         .join("; "),
@@ -230,6 +234,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       model: settings.whisperModel(),
       groqApiKey: settings.get("groq_api_key"),
       openaiApiKey: settings.get("openai_api_key"),
+      openrouterApiKey: settings.get("openrouter_api_key"),
+      openrouterModel: settings.openrouterTranscriptionModel(),
+      longTranscriptionProvider: settings.longTranscriptionProvider(),
       useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
     });
     if (!result.success) return c.json({ error: `could not transcribe voice note: ${result.error}` }, 422);

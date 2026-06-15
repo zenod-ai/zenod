@@ -107,10 +107,12 @@ describe("drive client", () => {
 
 describe("transcription envelope", () => {
   it("fails cleanly when the local model is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("missing model", { status: 500 })));
     const result = await transcribeAudio(Buffer.from("x"), "a.m4a");
     expect(result.success).toBe(false);
     expect(result.provider).toBe("whisper.cpp");
     expect(result.error).toMatch(/model unavailable/);
+    vi.unstubAllGlobals();
   });
 
   it("transcribes through the local provider", async () => {
@@ -147,6 +149,39 @@ describe("transcription envelope", () => {
       success: true,
       transcript: "remember to renew the travel insurance",
       provider: "openai whisper-1",
+    });
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  });
+
+  it("uses OpenRouter for long audio when selected", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", {
+      groqApiKey: "gsk_test",
+      openrouterApiKey: "sk-or-test",
+      openrouterModel: "openai/whisper-large-v3",
+      longTranscriptionProvider: "openrouter",
+      durationSeconds: 301,
+    });
+    expect(result).toEqual({
+      success: true,
+      transcript: "remember to renew the travel insurance",
+      provider: "openrouter openai/whisper-large-v3",
+    });
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  });
+
+  it("keeps short audio on Groq when OpenRouter is configured", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", {
+      groqApiKey: "gsk_test",
+      openrouterApiKey: "sk-or-test",
+      longTranscriptionProvider: "openrouter",
+      durationSeconds: 120,
+    });
+    expect(result).toEqual({
+      success: true,
+      transcript: "remember to renew the travel insurance",
+      provider: "groq whisper-large-v3-turbo",
     });
     delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
   });
@@ -357,5 +392,24 @@ describe("drive tools + API", () => {
     expect(body.configured).toBe(true);
     expect(body.clientEmail).toBe("zenod@test-project.iam.gserviceaccount.com");
     expect(body.transcriptionProvider).toBe("local whisper.cpp for long notes");
+  });
+
+  it("exposes OpenRouter as the long-note and Groq fallback provider", async () => {
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("openrouter_api_key", "sk-or-test");
+    runtime.settings.set("openrouter_transcription_model", "openai/whisper-large-v3");
+    const app = createApp(runtime);
+    runtime.settings.setAdminPassword("hunter2hunter2");
+    const login = await app.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password: "hunter2hunter2" }),
+    });
+    const cookie = login.headers.get("set-cookie")!;
+    const status = await app.request("/api/drive/status", { headers: { cookie } });
+    expect(status.status).toBe(200);
+    const body = await status.json();
+    expect(body.transcriptionProvider).toBe(
+      "openrouter openai/whisper-large-v3 for notes over 5 min and Groq fallback",
+    );
   });
 });

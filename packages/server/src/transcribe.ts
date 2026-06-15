@@ -25,6 +25,8 @@ import { setTimeout as sleep } from "node:timers/promises";
  * All knobs are env-overridable for self-hosters on smaller boxes:
  *   GROQ_API_KEY           (unset: local-only)
  *   ZENOD_GROQ_STT_MODEL   (default: whisper-large-v3-turbo)
+ *   OPENROUTER_API_KEY     (optional: paid fallback/long-note STT)
+ *   ZENOD_OPENROUTER_TRANSCRIPTION_MODEL (default: openai/whisper-large-v3-turbo)
  *   ZENOD_WHISPER_BINARY   (default: whisper-cli, on PATH in the image)
  *   ZENOD_WHISPER_MODEL    (default: large-v3-turbo)
  *   ZENOD_WHISPER_MODEL_DIR(default: /data/models)
@@ -77,6 +79,13 @@ const OPENAI_STT_MODEL = process.env.ZENOD_OPENAI_STT_MODEL ?? "whisper-1";
 const OPENAI_STT_URL = process.env.ZENOD_OPENAI_BASE_URL
   ? `${process.env.ZENOD_OPENAI_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
   : "https://api.openai.com/v1/audio/transcriptions";
+export const DEFAULT_OPENROUTER_STT_MODEL =
+  process.env.ZENOD_OPENROUTER_TRANSCRIPTION_MODEL ??
+  process.env.ZENOD_OPENROUTER_STT_MODEL ??
+  "openai/whisper-large-v3-turbo";
+const OPENROUTER_STT_URL = process.env.ZENOD_OPENROUTER_BASE_URL
+  ? `${process.env.ZENOD_OPENROUTER_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
+  : "https://openrouter.ai/api/v1/audio/transcriptions";
 // Groq's free tier rejects uploads over 25 MB; stay safely under it whether
 // they count decimal or binary megabytes (multipart overhead included).
 const GROQ_MAX_UPLOAD_BYTES = 23_000_000;
@@ -415,6 +424,59 @@ async function transcribeWithOpenAI(
   }
 }
 
+async function transcribeWithOpenRouter(
+  data: Buffer,
+  filename: string,
+  apiKey: string,
+  model: string,
+  signal?: AbortSignal,
+): Promise<TranscriptionEnvelope> {
+  const dir = await mkdtemp(join(tmpdir(), "zenod-openrouter-"));
+  const input = join(dir, `in${extname(filename) || ".m4a"}`);
+  const mp3 = join(dir, "audio.mp3");
+  try {
+    await writeFile(input, data);
+    await run(
+      "ffmpeg",
+      ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "32k", mp3],
+      { signal },
+    );
+    const audio = await readFile(mp3);
+    const body: {
+      model: string;
+      input_audio: { data: string; format: "mp3" };
+      language?: string;
+    } = {
+      model,
+      input_audio: { data: audio.toString("base64"), format: "mp3" },
+    };
+    if (LANGUAGE !== "auto") body.language = LANGUAGE;
+    const timeout = AbortSignal.timeout(300_000);
+    const response = await fetch(OPENROUTER_STT_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+    if (!response.ok) {
+      const text = (await response.text().catch(() => "")).slice(0, 400);
+      return {
+        success: false,
+        provider: "openrouter",
+        error: `openrouter transcription failed (${response.status}): ${text}`,
+      };
+    }
+    const json = (await response.json().catch(() => null)) as { text?: unknown } | null;
+    const transcript = typeof json?.text === "string" ? json.text.trim() : "";
+    if (!transcript) return { success: false, provider: "openrouter", error: "transcription returned empty text" };
+    return { success: true, transcript, provider: `openrouter ${model}` };
+  } catch (err) {
+    return { success: false, provider: "openrouter", error: (err as Error).message };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 /**
  * Transcribe via Groq. ffmpeg compresses to 16 kHz mono FLAC first (lossless
  * at the sample rate Groq resamples to, ~4x smaller than WAV), then splits
@@ -486,6 +548,9 @@ export async function transcribeAudio(
         model?: string;
         groqApiKey?: string | null;
         openaiApiKey?: string | null;
+        openrouterApiKey?: string | null;
+        openrouterModel?: string | null;
+        longTranscriptionProvider?: "openrouter" | "openai" | "local";
         useOpenAiForLongAudio?: boolean;
         durationSeconds?: number;
         onProgress?: (percent: number) => void;
@@ -500,9 +565,16 @@ export async function transcribeAudio(
   // env var keeps standalone/test use working without a settings store.
   const groqApiKey = (typeof options === "function" ? undefined : options.groqApiKey) ?? process.env.GROQ_API_KEY;
   const openaiApiKey = (typeof options === "function" ? undefined : options.openaiApiKey) ?? process.env.OPENAI_API_KEY;
+  const openrouterApiKey =
+    (typeof options === "function" ? undefined : options.openrouterApiKey) ?? process.env.OPENROUTER_API_KEY;
+  const openrouterModel =
+    (typeof options === "function" ? undefined : options.openrouterModel) ?? DEFAULT_OPENROUTER_STT_MODEL;
+  const explicitLongProvider = typeof options === "function" ? undefined : options.longTranscriptionProvider;
   const useOpenAiForLongAudio = typeof options === "function" ? false : options.useOpenAiForLongAudio === true;
+  const longProvider =
+    explicitLongProvider ?? (openrouterApiKey ? "openrouter" : useOpenAiForLongAudio && openaiApiKey ? "openai" : "local");
   const fakeTranscript = (process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
-  const needsDuration = Boolean(groqApiKey || (useOpenAiForLongAudio && openaiApiKey));
+  const needsDuration = Boolean(groqApiKey || (longProvider === "openrouter" && openrouterApiKey) || (longProvider === "openai" && openaiApiKey));
   const durationSeconds =
     typeof options === "function" || fakeTranscript || !needsDuration
       ? typeof options === "function"
@@ -513,7 +585,9 @@ export async function transcribeAudio(
   if (fakeTranscript) {
     onProgress?.(100);
     const provider =
-      isLongAudio && useOpenAiForLongAudio && openaiApiKey
+      isLongAudio && longProvider === "openrouter" && openrouterApiKey
+        ? `openrouter ${openrouterModel}`
+        : isLongAudio && longProvider === "openai" && openaiApiKey
         ? `openai ${OPENAI_STT_MODEL}`
         : isLongAudio
           ? `whisper.cpp ${modelName}`
@@ -528,7 +602,11 @@ export async function transcribeAudio(
   }
 
   if (isLongAudio) {
-    if (useOpenAiForLongAudio && openaiApiKey) {
+    if (longProvider === "openrouter" && openrouterApiKey) {
+      const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
+      if (result.success || signal?.aborted) return result;
+      console.warn(`[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`);
+    } else if (longProvider === "openai" && openaiApiKey) {
       const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
       if (result.success || signal?.aborted) return result;
       console.warn(`[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`);
@@ -544,6 +622,11 @@ export async function transcribeAudio(
       return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
     } catch (err) {
       if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
+      if (longProvider === "openrouter" && openrouterApiKey) {
+        const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
+        if (result.success || signal?.aborted) return result;
+        console.warn(`[transcribe] openrouter fallback failed, falling back to whisper.cpp: ${result.error}`);
+      }
       console.warn(`[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`);
     }
   }

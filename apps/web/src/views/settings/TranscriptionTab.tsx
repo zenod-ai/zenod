@@ -139,43 +139,65 @@ function sizeLabel(mb: number): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`
 }
 
-function OpenAiLongTranscriptionCard() {
+type LongTranscriptionProvider = "openrouter" | "openai" | "local"
+
+function resolveLongProvider(settings: SettingsResponse["settings"]): LongTranscriptionProvider {
+  const configured = settings.long_transcription_provider
+  if (configured === "openrouter" || configured === "openai" || configured === "local") return configured
+  if (settings.openrouter_api_key !== null) return "openrouter"
+  return settings.openai_api_key !== null && settings.openai_long_transcription !== "false" ? "openai" : "local"
+}
+
+function LongTranscriptionProviderCard() {
+  const [hasOpenRouterKey, setHasOpenRouterKey] = React.useState(false)
   const [hasOpenAiKey, setHasOpenAiKey] = React.useState(false)
-  const [checked, setChecked] = React.useState(false)
-  const [saved, setSaved] = React.useState(false)
+  const [provider, setProvider] = React.useState<LongTranscriptionProvider>("local")
+  const [savedProvider, setSavedProvider] = React.useState<LongTranscriptionProvider>("local")
+  const [model, setModel] = React.useState("openai/whisper-large-v3-turbo")
+  const [savedModel, setSavedModel] = React.useState("openai/whisper-large-v3-turbo")
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     void api<SettingsResponse>("/api/settings")
       .then((result) => {
-        const hasKey = result.settings.openai_api_key !== null
-        const enabled = hasKey && result.settings.openai_long_transcription !== "false"
-        setHasOpenAiKey(hasKey)
-        setChecked(enabled)
-        setSaved(enabled)
+        const resolved = resolveLongProvider(result.settings)
+        const selectedModel = result.settings.openrouter_transcription_model ?? "openai/whisper-large-v3-turbo"
+        setHasOpenRouterKey(result.settings.openrouter_api_key !== null)
+        setHasOpenAiKey(result.settings.openai_api_key !== null)
+        setProvider(resolved)
+        setSavedProvider(resolved)
+        setModel(selectedModel)
+        setSavedModel(selectedModel)
       })
       .catch(() => {
-        /* leave disabled */
+        /* leave defaults */
       })
   }, [])
 
-  const effectiveChecked = hasOpenAiKey && checked
-  const dirty = effectiveChecked !== saved
+  const effectiveProvider =
+    provider === "openrouter" && !hasOpenRouterKey ? "local" : provider === "openai" && !hasOpenAiKey ? "local" : provider
+  const dirty = effectiveProvider !== savedProvider || (effectiveProvider === "openrouter" && model !== savedModel)
 
   async function handleSave() {
-    if (!hasOpenAiKey) return
     setSaving(true)
     try {
       const result = await api<SettingsResponse>("/api/settings", {
         method: "PUT",
-        body: { openai_long_transcription: effectiveChecked ? "true" : "false" },
+        body: {
+          long_transcription_provider: effectiveProvider,
+          openrouter_transcription_model: model.trim() || "openai/whisper-large-v3-turbo",
+          openai_long_transcription: effectiveProvider === "openai" ? "true" : "false",
+        },
       })
-      const hasKey = result.settings.openai_api_key !== null
-      const enabled = hasKey && result.settings.openai_long_transcription !== "false"
-      setHasOpenAiKey(hasKey)
-      setChecked(enabled)
-      setSaved(enabled)
-      toast.success(enabled ? "OpenAI enabled for long voice notes" : "Long voice notes will use local transcription")
+      const resolved = resolveLongProvider(result.settings)
+      const selectedModel = result.settings.openrouter_transcription_model ?? "openai/whisper-large-v3-turbo"
+      setHasOpenRouterKey(result.settings.openrouter_api_key !== null)
+      setHasOpenAiKey(result.settings.openai_api_key !== null)
+      setProvider(resolved)
+      setSavedProvider(resolved)
+      setModel(selectedModel)
+      setSavedModel(selectedModel)
+      toast.success("Long-note transcription saved")
     } catch (err) {
       toast.error("Could not save", { description: errorMessage(err) })
     } finally {
@@ -188,37 +210,66 @@ function OpenAiLongTranscriptionCard() {
       <CardHeader>
         <CardTitle>Long voice notes</CardTitle>
         <CardDescription>
-          For notes over 5 minutes, use OpenAI Whisper directly when an OpenAI
-          key is available. If this is off, long notes fall back to local
-          whisper.cpp, which is slower but does not use paid API calls.
+          Choose the paid or local fallback for notes over 5 minutes. Short
+          notes still try Groq first when a Groq key is saved; if Groq is
+          unavailable, OpenRouter can take over before local whisper.cpp.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <Field orientation="horizontal" data-disabled={!hasOpenAiKey}>
-          <input
-            id="openai-long-transcription"
-            type="checkbox"
-            className="mt-0.5 size-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
-            checked={effectiveChecked}
-            disabled={!hasOpenAiKey || saving}
-            onChange={(event) => setChecked(event.target.checked)}
-          />
-          <div className="flex flex-col gap-1">
-            <FieldLabel htmlFor="openai-long-transcription">Use OpenAI for notes over 5 minutes</FieldLabel>
-            <FieldDescription>
-              {hasOpenAiKey
-                ? "Short notes still try Groq first; long notes use OpenAI, with local whisper.cpp as fallback."
-                : "Add an OpenAI API key in Keys to enable this option. Long notes currently use local whisper.cpp."}
-            </FieldDescription>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <ClockIcon className="size-3.5" />
-              Threshold: 300 seconds.
-            </div>
-          </div>
+      <CardContent className="flex flex-col gap-4">
+        <Field>
+          <FieldLabel htmlFor="long-transcription-provider">Provider</FieldLabel>
+          <Select value={provider} onValueChange={(value) => setProvider(value as LongTranscriptionProvider)}>
+            <SelectTrigger id="long-transcription-provider" className="w-full">
+              <SelectValue placeholder="Choose a provider" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openrouter" disabled={!hasOpenRouterKey}>
+                OpenRouter
+              </SelectItem>
+              <SelectItem value="openai" disabled={!hasOpenAiKey}>
+                OpenAI
+              </SelectItem>
+              <SelectItem value="local">Local whisper.cpp</SelectItem>
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            {effectiveProvider === "openrouter"
+              ? "Uses your OpenRouter key for long notes and Groq fallback."
+              : effectiveProvider === "openai"
+                ? "Uses your OpenAI key for long notes; Groq fallback still goes local."
+                : "Long notes and Groq failures use the local model below."}
+          </FieldDescription>
         </Field>
+        {effectiveProvider === "openrouter" && (
+          <Field>
+            <FieldLabel htmlFor="openrouter-transcription-model">OpenRouter model</FieldLabel>
+            <Input
+              id="openrouter-transcription-model"
+              autoComplete="off"
+              placeholder="openai/whisper-large-v3-turbo"
+              value={model}
+              onChange={(event) => setModel(event.target.value)}
+            />
+            <FieldDescription>
+              Speech-to-text model slug from OpenRouter, for example
+              openai/whisper-large-v3-turbo.
+            </FieldDescription>
+          </Field>
+        )}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <ClockIcon className="size-3.5" />
+          Threshold: 300 seconds.
+        </div>
+        <FieldDescription>
+          {!hasOpenRouterKey && !hasOpenAiKey
+            ? "Add an OpenRouter or OpenAI API key in Keys to enable cloud fallback."
+            : !hasOpenRouterKey
+              ? "Add an OpenRouter API key in Keys to enable paid Groq fallback."
+              : null}
+        </FieldDescription>
       </CardContent>
       <CardFooter className="justify-end">
-        <Button type="button" disabled={saving || !dirty || !hasOpenAiKey} onClick={handleSave}>
+        <Button type="button" disabled={saving || !dirty} onClick={handleSave}>
           {saving ? <Spinner /> : <SaveIcon data-icon="inline-start" />}
           Save
         </Button>
@@ -365,7 +416,7 @@ export function TranscriptionTab() {
   return (
     <div className="flex flex-col gap-6">
       <GroqTranscriptionCard />
-      <OpenAiLongTranscriptionCard />
+      <LongTranscriptionProviderCard />
       <TranscriptionModelCard />
       <TranscriptionPanel />
     </div>
