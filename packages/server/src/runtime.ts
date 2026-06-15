@@ -75,6 +75,7 @@ export class Runtime {
     this.telegram = new TelegramGateway({
       settings: this.settings,
       getEngine: () => this.getEngine(),
+      dataDir: join(dataDir, "telegram"),
     });
     // The IngestStore constructor marks any job left mid-flight by a restart
     // as "interrupted"; resume() then drains anything still queued.

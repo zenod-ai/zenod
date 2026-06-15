@@ -81,18 +81,21 @@ function saveState(s) {
   writeFileSync(STATE_PATH, JSON.stringify(s, null, 2));
 }
 
-async function notify(text) {
+// `surface` (the ticket's origin chat channel, from its origin: label) routes
+// the ping back to where the work was requested. Omitted/null → the app falls
+// back to WhatsApp, the historical default.
+async function notify(text, surface) {
   if (!APP_URL || !API_TOKEN) {
-    log("NOTIFY (no app configured):", text);
+    log("NOTIFY (no app configured):", surface ? `[${surface}]` : "", text);
     return;
   }
   try {
     const res = await fetch(`${APP_URL}/api/notify`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${API_TOKEN}` },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(surface ? { text, surface } : { text }),
     });
-    log("notify ->", res.status, text.slice(0, 60));
+    log("notify ->", res.status, surface ? `[${surface}]` : "", text.slice(0, 60));
   } catch (e) {
     log("notify FAILED:", e.message);
   }
@@ -114,6 +117,7 @@ function listCentralIssues() {
   return JSON.parse(out).map((i) => {
     const names = (i.labels || []).map((l) => l.name);
     const target = names.find((n) => n.startsWith("target:"));
+    const origin = names.find((n) => n.startsWith("origin:"));
     return {
       number: i.number,
       title: i.title,
@@ -121,6 +125,7 @@ function listCentralIssues() {
       body: i.body || "",
       status: names.find((n) => n.startsWith("status:")) || null,
       target: target ? target.slice("target:".length) : REPO,
+      origin: origin ? origin.slice("origin:".length) : null, // chat channel the ticket came from
       autoMerge: names.includes("auto-merge") || names.includes("auto_merge"),
     };
   });
@@ -551,7 +556,7 @@ async function scan(reason) {
           setCentralStatus(c.number, "status:queued", "status:running");
           state.bridges[c.number] = { target: c.target, exec, mirrored: null };
           launched++;
-          await notify(pickupNotification(c));
+          await notify(pickupNotification(c), c.origin);
         }
       }
     }
@@ -564,7 +569,7 @@ async function scan(reason) {
       if (es.status === "status:needs-review") {
         const pr = prUrlForExec(bridge.target, bridge.exec);
         setCentralStatus(c.number, "status:running", "status:needs-review");
-        await notify(`✅ #${c.number} ${c.title} — ready for review${pr ? `: ${pr}` : "."}`);
+        await notify(`✅ #${c.number} ${c.title} — ready for review${pr ? `: ${pr}` : "."}`, c.origin);
         bridge.mirrored = "needs-review";
       } else if (es.status === "status:blocked") {
         const q = (es.lastComment || "").slice(0, 280);
@@ -576,7 +581,7 @@ async function scan(reason) {
             // best-effort
           }
         }
-        await notify(`⛔ #${c.number} ${c.title} — blocked, needs your decision${q ? `:\n${q}` : "."}`);
+        await notify(`⛔ #${c.number} ${c.title} — blocked, needs your decision${q ? `:\n${q}` : "."}`, c.origin);
         bridge.mirrored = "blocked";
       } else if (es.status === "status:complete") {
         // Worker finished. If it produced a PR, it's reviewable like needs-review;
@@ -588,6 +593,7 @@ async function scan(reason) {
           pr
             ? `✅ #${c.number} ${c.title} — complete, ready for review: ${pr}`
             : `ℹ️ #${c.number} ${c.title} — worker completed with no code change (nothing to do / already satisfied). ${bridge.target}#${bridge.exec}`,
+          c.origin,
         );
         bridge.mirrored = pr ? "needs-review" : "complete-no-pr";
       }
@@ -647,7 +653,7 @@ async function scan(reason) {
               // best-effort
             }
           }
-          await notify(text);
+          await notify(text, c.origin);
         }
       };
       const finalizeMerged = async () => {
@@ -659,7 +665,7 @@ async function scan(reason) {
           // best-effort
         }
         bridge.mirrored = "merged";
-        await notify(`🎉 #${c.number} ${c.title} — merged: ${prUrl}`);
+        await notify(`🎉 #${c.number} ${c.title} — merged: ${prUrl}`, c.origin);
       };
 
       const g = prGate(bridge.target, prNum);

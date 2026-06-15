@@ -1,3 +1,5 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { BrainEngine } from "zenod";
 import type { Settings } from "./settings.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
@@ -74,13 +76,55 @@ export class TelegramGateway {
   private abort: AbortController | null = null;
   private loop: Promise<void> | null = null;
 
+  /**
+   * Owner chat IDs we've actually seen DM the bot. Telegram can only push to a
+   * numeric chat_id (a @handle is NOT a valid send target), so to message the
+   * owner unprompted we remember the chat IDs of allowed inbound senders and
+   * persist them — surviving restarts that happen before the next inbound.
+   */
+  private knownChatIds = new Set<string>();
+  private knownChatsLoaded = false;
+
   constructor(
     private readonly options: {
       settings: Settings;
       getEngine: () => Promise<BrainEngine>;
+      dataDir?: string;
       fetchImpl?: typeof fetch;
     },
   ) {}
+
+  private get knownChatsPath(): string | null {
+    return this.options.dataDir ? join(this.options.dataDir, "known-chats.json") : null;
+  }
+
+  private loadKnownChats(): void {
+    if (this.knownChatsLoaded) return;
+    this.knownChatsLoaded = true;
+    const path = this.knownChatsPath;
+    if (!path) return;
+    try {
+      const ids = JSON.parse(readFileSync(path, "utf8")) as unknown;
+      if (Array.isArray(ids)) for (const id of ids) this.knownChatIds.add(String(id));
+    } catch {
+      // First run / unreadable: start empty and re-learn from inbound messages.
+    }
+  }
+
+  private rememberChat(chatId: number): void {
+    this.loadKnownChats();
+    const id = String(chatId);
+    if (this.knownChatIds.has(id)) return;
+    this.knownChatIds.add(id);
+    const path = this.knownChatsPath;
+    if (!path) return;
+    try {
+      mkdirSync(this.options.dataDir!, { recursive: true });
+      writeFileSync(path, JSON.stringify([...this.knownChatIds]));
+    } catch (err) {
+      console.warn(`[telegram] could not persist known chat ${id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   private get fetchImpl(): typeof fetch {
     return this.options.fetchImpl ?? fetch;
@@ -200,6 +244,9 @@ export class TelegramGateway {
       return;
     }
 
+    // Remember this owner's chat so the monitor can push proactive pings here.
+    this.rememberChat(chatId);
+
     const text = (message.text ?? message.caption ?? "").trim();
     if (!text) {
       // v1 is text-only — voice/photo/document ingestion is a tracked follow-up.
@@ -242,6 +289,36 @@ export class TelegramGateway {
     } finally {
       clearInterval(keepTyping);
     }
+  }
+
+  /**
+   * Proactively message the owner(s) with no inbound event — the Telegram twin
+   * of WhatsAppGateway.notifyOwner. The backlog monitor calls this (via
+   * POST /api/notify with surface:"telegram") so a Codex job landing/blocking is
+   * reported back on the channel the ticket was opened from. Targets are the
+   * union of chats we've seen the owner DM from and any numeric allowlist IDs
+   * (a @handle is not a valid send target, so it's skipped here).
+   */
+  async notifyOwner(text: string): Promise<{ sent: number; recipients: string[] }> {
+    if (!text?.trim()) return { sent: 0, recipients: [] };
+    if (!this.options.settings.telegramBotToken()) return { sent: 0, recipients: [] };
+    this.loadKnownChats();
+    const numericAllowed = this.settings().allowedUsers.filter((u) => /^-?\d+$/.test(u));
+    const targets = [...new Set([...this.knownChatIds, ...numericAllowed])];
+    const recipients: string[] = [];
+    for (const target of targets) {
+      const chatId = Number(target);
+      if (!Number.isFinite(chatId)) continue;
+      try {
+        for (const chunk of chunkText(text, PLAIN_MESSAGE_LIMIT)) {
+          await this.callApi("sendMessage", { chat_id: chatId, text: chunk });
+        }
+        recipients.push(target);
+      } catch (err) {
+        console.error(`[telegram] notifyOwner failed for chat ${target}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return { sent: recipients.length, recipients };
   }
 
   /**

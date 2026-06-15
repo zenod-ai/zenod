@@ -552,7 +552,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return result;
       },
       createIssue: async (input) => {
-        const normalized = { ...input, repo: input.repo || defaultRepo(), labels: normalizeCreateIssueLabels(input.labels) };
+        // Stamp the chat channel this ticket was opened from (whatsapp/telegram)
+        // as an `origin:` label, so the backlog monitor's later proactive pings
+        // ("Codex working on #N", needs-review, blocked, merged) go back to the
+        // SAME channel instead of always defaulting to WhatsApp. Only push-capable
+        // chat surfaces are stamped; web/cli/mcp have no proactive channel and
+        // fall back to the default notify target.
+        const originLabels = surface === "whatsapp" || surface === "telegram" ? [`origin:${surface}`] : [];
+        const normalized = { ...input, repo: input.repo || defaultRepo(), labels: normalizeCreateIssueLabels([...(input.labels ?? []), ...originLabels]) };
         return runMutation("createIssue", normalized, () =>
           options.taskingTools
             ? options.taskingTools.createIssue({

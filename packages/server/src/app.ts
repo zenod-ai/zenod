@@ -507,12 +507,21 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   // #35 ping primitive: the external backlog monitor POSTs here (bearer-authed
-  // like all /api/*) to make Zenod proactively message the owner over WhatsApp
-  // when a Codex job lands or blocks. The WhatsApp connection stays in the app.
+  // like all /api/*) to make Zenod proactively message the owner when a Codex
+  // job lands or blocks. The monitor passes `surface` (read from the ticket's
+  // origin: label) so the ping goes back to the channel the work was requested
+  // on — Telegram → Telegram, WhatsApp → WhatsApp. Unknown/absent surface (or a
+  // surface with no proactive channel, e.g. web) falls back to WhatsApp, the
+  // historical default. The WhatsApp/Telegram connections stay in the app.
   app.post("/api/notify", async (c) => {
-    const { text } = await c.req.json<{ text?: string }>().catch(() => ({ text: undefined }));
+    const { text, surface } = await c.req
+      .json<{ text?: string; surface?: string }>()
+      .catch(() => ({ text: undefined, surface: undefined }));
     if (!text?.trim()) return c.json({ error: "text is required" }, 400);
-    const result = await runtime.whatsapp.notifyOwner(text);
+    const result =
+      surface === "telegram"
+        ? await runtime.telegram.notifyOwner(text)
+        : await runtime.whatsapp.notifyOwner(text);
     return c.json(result);
   });
 
