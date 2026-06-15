@@ -60,3 +60,23 @@ Action classes:
 - APPROVAL-REQUIRED: promote `status:proposed` to `status:queued`, execute consequential work, merge to `main`, deploy.
 
 Use `status:needs-review` as the testing and verification gate. Do not add `status:needs-testing` unless review and test sign-off become separate workflow states. Agents may move from `running` to `needs-review` after local tests pass and a draft-ready branch exists; `complete` is reserved for human or controller verification.
+
+## Agent Issue Editing Tool
+
+The MCP surface exposes `edit_github_issue` for direct issue maintenance in the configured repository. It can update title/body, add/remove/replace labels, post comments, replace assignees, and change the lifecycle status label.
+
+Example uses:
+
+```json
+{ "issueNumber": 52, "title": "Clarify launch scope" }
+```
+
+```json
+{ "issueNumber": 52, "labelsAdd": ["owner:agent"], "status": "proposed" }
+```
+
+```json
+{ "issueNumber": 52, "comment": "Blocked on API ownership decision.", "status": "blocked" }
+```
+
+Generic label edits still normalize gated statuses (`status:queued`, `status:approved-merge`) to `status:proposed`. Directly setting `status:queued` requires explicit user approval for that exact numbered issue and `queueApproval: true`; `status:approved-merge` remains reserved for the merge approval gate.

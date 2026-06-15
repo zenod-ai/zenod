@@ -159,3 +159,186 @@ export function disconnectApp(settings: Settings): void {
   }
   tokenCache.clear();
 }
+
+export interface EditGithubIssueInput {
+  repo?: string;
+  issueNumber: number;
+  title?: string;
+  body?: string;
+  labelsAdd?: string[];
+  labelsRemove?: string[];
+  labelsSet?: string[];
+  comment?: string;
+  assignees?: string[];
+  status?: string;
+  queueApproval?: boolean;
+}
+
+export interface EditGithubIssueResult {
+  repo: string;
+  issueNumber: number;
+  issueUrl: string;
+  operations: string[];
+  labels?: string[];
+}
+
+interface GithubIssueResponse {
+  html_url: string;
+  labels: Array<{ name: string } | string>;
+}
+
+type GithubLabelsResponse = Array<{ name: string } | string>;
+
+const STATUS_PROPOSED = "status:proposed";
+const STATUS_QUEUED = "status:queued";
+const STATUS_APPROVED_MERGE = "status:approved-merge";
+const GATED_STATUSES = new Set([STATUS_QUEUED, STATUS_APPROVED_MERGE]);
+
+function normalizeLabelIssueLabels(labels: string[]): string[] {
+  return [...new Set(labels.map((label) => (GATED_STATUSES.has(label) ? STATUS_PROPOSED : label)))];
+}
+
+function repoPath(repo: string): string {
+  return encodeURIComponent(repo).replace("%2F", "/");
+}
+
+function normalizeStatusLabel(status: string): string {
+  const trimmed = status.trim();
+  if (!trimmed) throw new Error("status cannot be blank");
+  return trimmed.startsWith("status:") ? trimmed : `status:${trimmed}`;
+}
+
+function issueLabels(issue: GithubIssueResponse): string[] {
+  return issue.labels.map((label) => (typeof label === "string" ? label : label.name)).filter(Boolean);
+}
+
+function labelNames(labels: GithubLabelsResponse): string[] {
+  return labels.map((label) => (typeof label === "string" ? label : label.name)).filter(Boolean);
+}
+
+function replaceStatusLabel(labels: string[], status: string): string[] {
+  const withoutStatus = labels.filter((label) => !label.startsWith("status:"));
+  return [...new Set([...withoutStatus, status])];
+}
+
+async function configuredGithubToken(settings: Settings): Promise<string> {
+  if (settings.hasGithubApp()) return installationToken(settings);
+  const token = settings.get("github_token");
+  if (!token) throw new Error("GitHub token or app installation is required");
+  return token;
+}
+
+async function githubRequest<T>(settings: Settings, path: string, init: RequestInit = {}): Promise<T> {
+  const token = await configuredGithubToken(settings);
+  const response = await fetch(`https://api.github.com${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "zenod",
+      Accept: "application/vnd.github+json",
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`GitHub returned ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+/**
+ * Mutate one GitHub issue in the configured repository. Generic label edits
+ * reuse the agent-tasking policy: queue/merge-gated labels are normalized away.
+ * The only exception here is status:queued with queueApproval=true for this
+ * exact issue number, matching the explicit human queue gate.
+ */
+export async function editGithubIssue(settings: Settings, input: EditGithubIssueInput): Promise<EditGithubIssueResult> {
+  const repo = input.repo || settings.get("vault_repo");
+  if (!repo) throw new Error("No GitHub repository is configured.");
+  const issuePath = `/repos/${repoPath(repo)}/issues/${input.issueNumber}`;
+  const operations: string[] = [];
+  let issue = await githubRequest<GithubIssueResponse>(settings, issuePath);
+  const issueUrl = issue.html_url;
+  let labels = issueLabels(issue);
+
+  if (input.title !== undefined || input.body !== undefined || input.assignees !== undefined) {
+    issue = await githubRequest<GithubIssueResponse>(settings, issuePath, {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.body !== undefined ? { body: input.body } : {}),
+        ...(input.assignees !== undefined ? { assignees: input.assignees } : {}),
+      }),
+    });
+    labels = issueLabels(issue);
+    if (input.title !== undefined) operations.push("updated title");
+    if (input.body !== undefined) operations.push("updated body");
+    if (input.assignees !== undefined) operations.push("replaced assignees");
+  }
+
+  if (input.labelsSet) {
+    labels = normalizeLabelIssueLabels(input.labelsSet);
+    const labelResponse = await githubRequest<GithubLabelsResponse>(settings, `${issuePath}/labels`, {
+      method: "PUT",
+      body: JSON.stringify({ labels }),
+    });
+    labels = labelNames(labelResponse);
+    operations.push("set labels");
+  }
+
+  if (input.labelsRemove?.length) {
+    for (const label of input.labelsRemove) {
+      await githubRequest(settings, `${issuePath}/labels/${encodeURIComponent(label)}`, { method: "DELETE" }).catch((err: unknown) => {
+        if (!String((err as Error).message).includes("GitHub returned 404")) throw err;
+      });
+    }
+    labels = labels.filter((label) => !input.labelsRemove!.includes(label));
+    operations.push("removed labels");
+  }
+
+  if (input.labelsAdd?.length) {
+    const toAdd = normalizeLabelIssueLabels(input.labelsAdd);
+    const labelResponse = await githubRequest<GithubLabelsResponse>(settings, `${issuePath}/labels`, {
+      method: "POST",
+      body: JSON.stringify({ labels: toAdd }),
+    });
+    labels = labelNames(labelResponse);
+    operations.push("added labels");
+  }
+
+  if (input.status !== undefined) {
+    const requestedStatus = normalizeStatusLabel(input.status);
+    if (requestedStatus === STATUS_APPROVED_MERGE) {
+      throw new Error("status:approved-merge is only available through the approve_merge gate.");
+    }
+    if (requestedStatus === STATUS_QUEUED && !input.queueApproval) {
+      throw new Error("status:queued requires explicit user approval for this numbered issue; pass queueApproval=true only after that approval.");
+    }
+    const nextStatus = requestedStatus === STATUS_QUEUED ? STATUS_QUEUED : normalizeLabelIssueLabels([requestedStatus])[0] ?? STATUS_PROPOSED;
+    labels = replaceStatusLabel(labels, nextStatus);
+    const labelResponse = await githubRequest<GithubLabelsResponse>(settings, `${issuePath}/labels`, {
+      method: "PUT",
+      body: JSON.stringify({ labels }),
+    });
+    labels = labelNames(labelResponse);
+    operations.push(`set ${nextStatus}`);
+  }
+
+  if (input.comment) {
+    await githubRequest(settings, `${issuePath}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body: input.comment }),
+    });
+    operations.push("posted comment");
+  }
+
+  return {
+    repo,
+    issueNumber: input.issueNumber,
+    issueUrl,
+    operations,
+    labels,
+  };
+}
