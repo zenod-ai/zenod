@@ -27,6 +27,12 @@ function fakeBotApi(message: Record<string, unknown> | null, options: { richOk?:
   let delivered = false;
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    // The file-download endpoint (/file/bot<token>/<path>) returns raw bytes, not
+    // the JSON envelope — serve fake audio so downloadFile() can read a buffer.
+    if (url.includes("/file/bot")) {
+      calls.push({ method: "download", body: {} });
+      return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 });
+    }
     const method = url.split("/").pop() ?? "";
     const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
     calls.push({ method, body });
@@ -48,6 +54,7 @@ function fakeBotApi(message: Record<string, unknown> | null, options: { richOk?:
       await new Promise((resolve) => setTimeout(resolve, 25));
       return reply([]);
     }
+    if (method === "getFile") return reply({ file_path: "voice/file_1.oga" });
     if (method === "sendRichMessage") return reply({ message_id: 1 }, options.richOk ?? true);
     return reply({ message_id: 1 }); // sendMessage, sendChatAction
   }) as unknown as typeof fetch;
@@ -152,6 +159,30 @@ describe("TelegramGateway", () => {
       expect(String(richMessage.markdown)).toContain("| Task | Status |");
       expect(gateway.status().botUsername).toBe("zenod_test_bot");
     } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("transcribes a voice note and routes the transcript through handleTasking", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
+    const runtime = new Runtime(dir);
+    const seen: string[] = [];
+    // A voice message has no text/caption — only a downloadable file reference.
+    const voiceMessage = tgMessage({ text: undefined, voice: { file_id: "AUDIO123", file_unique_id: "u1", mime_type: "audio/ogg" } });
+    const { fetchImpl, calls } = fakeBotApi(voiceMessage);
+    runtime.settings.setTelegramSettings({ botToken: "TEST:TOKEN", allowedUsers: ["555"], enabled: true, rich: true });
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "file the launch notes";
+    const gateway = new TelegramGateway({ settings: runtime.settings, getEngine: async () => fakeEngine(seen), fetchImpl });
+    try {
+      await gateway.start();
+      await waitFor(() => seen.length > 0);
+      expect(calls.some((c) => c.method === "getFile")).toBe(true);
+      expect(calls.some((c) => c.method === "download")).toBe(true);
+      expect(seen).toEqual(["telegram:555:Telegram voice note transcript from @tester:\n\nfile the launch notes"]);
+    } finally {
+      delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
       await gateway.close();
       runtime.close();
       await rm(dir, { recursive: true, force: true });

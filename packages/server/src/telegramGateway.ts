@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrainEngine } from "zenod";
 import type { Settings } from "./settings.js";
+import { transcribeAudio } from "./transcribe.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 
 export type TelegramConnectionState = "disabled" | "disconnected" | "connected" | "error";
@@ -29,6 +30,14 @@ interface TelegramChat {
   id: number;
   type?: string;
 }
+/** A downloadable Telegram file reference (voice notes, audio, etc.). */
+interface TelegramFile {
+  file_id: string;
+  file_unique_id?: string;
+  mime_type?: string;
+  file_size?: number;
+  duration?: number;
+}
 interface TelegramMessage {
   message_id: number;
   date: number;
@@ -36,7 +45,8 @@ interface TelegramMessage {
   chat: TelegramChat;
   text?: string;
   caption?: string;
-  voice?: unknown;
+  voice?: TelegramFile;
+  audio?: TelegramFile;
   photo?: unknown;
   document?: unknown;
 }
@@ -247,12 +257,39 @@ export class TelegramGateway {
     // Remember this owner's chat so the monitor can push proactive pings here.
     this.rememberChat(chatId);
 
-    const text = (message.text ?? message.caption ?? "").trim();
+    let text = (message.text ?? message.caption ?? "").trim();
+
+    // Voice/audio notes mirror the WhatsApp path: transcribe through the SAME
+    // global pipeline (shared whisper model + provider settings) and treat the
+    // transcript as a typed prompt. A transcribed note IS a prompt — there is no
+    // behavioral difference from typing, so it flows into the same tasking loop.
+    const voice = message.voice ?? message.audio;
+    if (!text && voice?.file_id) {
+      await this.sendChatAction(chatId, "typing");
+      const transcript = await this.transcribeVoice(voice).catch((err: unknown) => {
+        console.error(
+          `[telegram] transcription failed for chat ${chatId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+      });
+      if (!transcript) {
+        await this.sendReply(
+          chatId,
+          "⚠️ I got your voice note, but couldn't transcribe it — please try again.",
+        ).catch(() => {});
+        return;
+      }
+      const sender = from?.username
+        ? `@${from.username}`
+        : from?.first_name || String(from?.id ?? "unknown");
+      text = `Telegram voice note transcript from ${sender}:\n\n${transcript}`;
+    }
+
     if (!text) {
-      // v1 is text-only — voice/photo/document ingestion is a tracked follow-up.
+      // Non-audio media (photo/document) isn't ingested yet — a tracked follow-up.
       await this.sendReply(
         chatId,
-        "I can only handle text messages for now — media and voice notes are coming soon.",
+        "I can only handle text and voice messages for now — photo and document ingestion is coming soon.",
       ).catch(() => {});
       return;
     }
@@ -289,6 +326,52 @@ export class TelegramGateway {
     } finally {
       clearInterval(keepTyping);
     }
+  }
+
+  /**
+   * Download a Telegram voice/audio file and transcribe it through the shared
+   * pipeline. Reuses the SAME global whisper model and provider settings the
+   * WhatsApp gateway uses (`this.options.settings`), so model selection is a
+   * single setting for all routes. Returns the transcript text or throws.
+   */
+  private async transcribeVoice(file: TelegramFile): Promise<string> {
+    const { data, ext } = await this.downloadFile(file.file_id);
+    const filename = `${file.file_unique_id ?? file.file_id}.${ext}`;
+    const transcription = await transcribeAudio(data, filename, {
+      model: this.options.settings.whisperModel(),
+      groqApiKey: this.options.settings.get("groq_api_key"),
+      openaiApiKey: this.options.settings.get("openai_api_key"),
+      openrouterApiKey: this.options.settings.get("openrouter_api_key"),
+      openrouterModel: this.options.settings.openrouterTranscriptionModel(),
+      longTranscriptionProvider: this.options.settings.longTranscriptionProvider(),
+      useOpenAiForLongAudio: this.options.settings.useOpenAiForLongTranscription(),
+    });
+    if (!transcription.success || !transcription.transcript) {
+      throw new Error(transcription.error || "transcription returned no text");
+    }
+    return transcription.transcript;
+  }
+
+  /**
+   * Resolve a Telegram `file_id` to its bytes. The Bot API is two-step: `getFile`
+   * returns a `file_path`, which is then fetched from the file-download endpoint.
+   * Returns the buffer plus the real file extension (from the path) so ffmpeg
+   * gets an accurate format hint. Capped by Telegram's 20 MB download limit.
+   */
+  private async downloadFile(fileId: string): Promise<{ data: Buffer; ext: string }> {
+    const token = this.options.settings.telegramBotToken();
+    if (!token) throw new Error("Telegram bot token is not configured");
+    const file = await this.callApi<{ file_path?: string }>("getFile", { file_id: fileId });
+    if (!file.file_path) throw new Error("Telegram getFile returned no file_path");
+    const signals = [AbortSignal.timeout(60000)];
+    if (this.abort) signals.push(this.abort.signal);
+    const response = await this.fetchImpl(`https://api.telegram.org/file/bot${token}/${file.file_path}`, {
+      signal: AbortSignal.any(signals),
+    });
+    if (!response.ok) throw new Error(`Telegram file download returned ${response.status}`);
+    const data = Buffer.from(await response.arrayBuffer());
+    const ext = file.file_path.includes(".") ? file.file_path.split(".").pop()! : "ogg";
+    return { data, ext };
   }
 
   /**
