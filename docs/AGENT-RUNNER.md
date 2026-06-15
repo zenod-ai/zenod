@@ -16,19 +16,24 @@ docker build -f Dockerfile.agent-runner --build-arg CODEX_VERSION=0.137.0 -t zen
 
 ## Run
 
-Use durable volumes. `CODEX_HOME` and `GH_CONFIG_DIR` must persist so auth survives container restarts.
+Use durable volumes. `CODEX_HOME` and `GH_CONFIG_DIR` must persist so auth survives container restarts. Attach the shared `zenod-x-net` network so the runner can reach the X MCP instances by service name (see [X MCP wiring](#x-mcp-wiring)).
 
 ```sh
+docker network create zenod-x-net   # once; no-op if it already exists
+
 docker volume create zenod-agent-work
 docker volume create zenod-agent-codex-home
 docker volume create zenod-agent-gh
 
 docker run -d --name zenod-agent-runner \
+  --network zenod-x-net \
   -v zenod-agent-work:/runner/work \
   -v zenod-agent-codex-home:/runner/codex-home \
   -v zenod-agent-gh:/runner/gh \
   zenod-agent-runner
 ```
+
+The image's entrypoint (`scripts/agent-runner-entrypoint.sh`) idempotently writes the X MCP client config into the `codex-home`/`HOME` volumes on every start, then runs the CMD.
 
 ## Auth
 
@@ -107,3 +112,37 @@ docker exec zenod-agent-runner zenod-fanout-codex start \
 ```
 
 No command in this flow merges to `main`.
+
+## X MCP wiring
+
+The runner consumes the vendored X (Twitter) MCP server (`services/x-mcp/`) as an MCP **client**. Two instances run on the shared `zenod-x-net` network, differing only by tool allowlist:
+
+- **`x-mcp-readonly`** — wired into Codex (`$CODEX_HOME/config.toml`, `[mcp_servers.x]`). Autonomous fan-out workers run with approvals bypassed, so they get **read tools only** — they can research X but cannot post.
+- **`x-mcp-postread`** — wired into Claude CLI (`$HOME/.claude.json`, `mcpServers.x`). Posting (`createTweet`) lives here, for **attended** use only (Claude CLI is interactive / has its own approval prompts).
+
+The gate is topology, not prompt instructions: posting is simply absent from the endpoint the autonomous worker reaches. Bring the instances up from `services/x-mcp/` (`docker compose -f docker-compose.x-mcp.yml up -d`, or two Dokploy apps on `zenod-x-net`) before relying on X tools. Override the default endpoints with `X_MCP_READONLY_URL` / `X_MCP_POSTREAD_URL` env vars on the runner if needed.
+
+Verify after start:
+
+```sh
+docker exec zenod-agent-runner cat /runner/codex-home/config.toml   # [mcp_servers.x] -> x-mcp-readonly
+docker exec zenod-agent-runner cat /runner/.claude.json             # mcpServers.x   -> x-mcp-postread
+docker exec zenod-agent-runner codex mcp list                       # x: read tools only
+```
+
+## Rebuild / recreate (preserving state)
+
+Picking up entrypoint, Dockerfile, or `fanout-codex.mjs` changes means rebuilding the image and recreating the container. The three named volumes carry all state (Codex/gh auth, worktrees), so recreation is safe as long as you reuse them:
+
+```sh
+docker build -f Dockerfile.agent-runner -t zenod-agent-runner .
+docker rm -f zenod-agent-runner
+docker run -d --name zenod-agent-runner \
+  --network zenod-x-net \
+  -v zenod-agent-work:/runner/work \
+  -v zenod-agent-codex-home:/runner/codex-home \
+  -v zenod-agent-gh:/runner/gh \
+  zenod-agent-runner
+```
+
+The entrypoint re-applies the X MCP config to the existing `codex-home` volume on start (it strips and rewrites only its own sentinel-marked block, leaving the rest of `config.toml` intact).
