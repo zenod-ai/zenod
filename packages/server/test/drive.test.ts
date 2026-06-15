@@ -412,4 +412,60 @@ describe("drive tools + API", () => {
       "openrouter openai/whisper-large-v3 for notes over 5 min and Groq fallback",
     );
   });
+
+  it("exposes popular OpenRouter transcription models with cost metadata", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        expect(String(input)).toContain("sort=most-popular");
+        return Response.json({
+          data: [
+            {
+              id: "google/gemini-3-flash-preview",
+              name: "Google: Gemini 3 Flash Preview",
+              architecture: { modality: "text+image+audio+video->text" },
+              pricing: { prompt: "0.0000005", completion: "0.000003" },
+            },
+            {
+              id: "openai/gpt-4o-mini-transcribe",
+              name: "OpenAI: GPT-4o Mini Transcribe",
+              architecture: { modality: "audio->transcription" },
+              pricing: { prompt: "0.00000125", completion: "0.000005" },
+            },
+            {
+              id: "openai/whisper-large-v3",
+              name: "OpenAI: Whisper Large V3",
+              architecture: { modality: "audio->transcription" },
+              pricing: { prompt: "0.0015", completion: "0" },
+            },
+          ],
+        });
+      }),
+    );
+    runtime.settings.set("openrouter_transcription_model", "openai/whisper-large-v3");
+    const app = createApp(runtime);
+    runtime.settings.setAdminPassword("hunter2hunter2");
+    const login = await app.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password: "hunter2hunter2" }),
+    });
+    const cookie = login.headers.get("set-cookie")!;
+    const response = await app.request("/api/transcription/openrouter-models", { headers: { cookie } });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.selected).toBe("openai/whisper-large-v3");
+    expect(body.fallback).toBe(false);
+    expect(body.models).toHaveLength(2);
+    expect(body.models[0]).toMatchObject({
+      id: "openai/gpt-4o-mini-transcribe",
+      name: "OpenAI: GPT-4o Mini Transcribe",
+      popularityRank: 1,
+      costLabel: "$1.25/1M in · $5.00/1M out",
+    });
+    expect(body.models[1]).toMatchObject({
+      id: "openai/whisper-large-v3",
+      popularityRank: 2,
+      costLabel: "$0.0015/min audio",
+    });
+  });
 });
