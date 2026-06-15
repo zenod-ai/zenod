@@ -39,8 +39,9 @@ services:
       X_BEARER_TOKEN: ${X_BEARER_TOKEN}
       X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
       X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
-      # READ ONLY — no write operationIds. Confirm ids against the startup tool log.
-      X_API_TOOL_ALLOWLIST: "findTweetById,findTweetsById,tweetsRecentSearch,usersIdTweets,findUserById,findUserByUsername,findMyUser"
+      # READ ONLY — verified operationIds from the pinned X OpenAPI spec ("Posts"
+      # naming, not "Tweet"). A wrong id silently filters to "Loaded 0 tools".
+      X_API_TOOL_ALLOWLIST: "getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions"
     networks: [zenod-x-net]
     restart: unless-stopped
 
@@ -60,8 +61,8 @@ services:
       X_BEARER_TOKEN: ${X_BEARER_TOKEN}
       X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
       X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
-      # READ + POST. createTweet is the gated capability; deleteTweetById lets an
-      # attended operator undo. Trim to just createTweet if delete should be off.
-      X_API_TOOL_ALLOWLIST: "findTweetById,findTweetsById,tweetsRecentSearch,usersIdTweets,findUserById,findUserByUsername,findMyUser,createTweet,deleteTweetById"
+      # READ + POST. createPosts is the posting capability; deletePosts lets an
+      # operator undo. Verified operationIds from the pinned X OpenAPI spec.
+      X_API_TOOL_ALLOWLIST: "getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions,createPosts,deletePosts"
     networks: [zenod-x-net]
     restart: unless-stopped
