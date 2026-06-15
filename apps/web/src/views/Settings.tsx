@@ -11,6 +11,7 @@ import { ConnectionsTab } from "@/views/settings/ConnectionsTab"
 import { CostsTab } from "@/views/settings/CostsTab"
 import { TranscriptionTab } from "@/views/settings/TranscriptionTab"
 import { KeysTab } from "@/views/settings/KeysTab"
+import { TestTab } from "@/views/settings/TestTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 
 export function Settings({
@@ -19,7 +20,7 @@ export function Settings({
   onLoggedOut,
 }: {
   initialSettings: SettingsValues
-  initialTab?: "chat" | "vault" | "keys" | "transcription" | "connections" | "costs"
+  initialTab?: "chat" | "vault" | "keys" | "transcription" | "connections" | "costs" | "test"
   onLoggedOut: () => void
 }) {
   const [loggingOut, setLoggingOut] = React.useState(false)
@@ -71,6 +72,7 @@ export function Settings({
           <TabsTrigger value="transcription">Transcription</TabsTrigger>
           <TabsTrigger value="connections">Connections</TabsTrigger>
           <TabsTrigger value="costs">Costs</TabsTrigger>
+          <TabsTrigger value="test">Test</TabsTrigger>
         </TabsList>
         <TabsContent value="chat" className="mt-4">
           <ChatTab />
@@ -89,6 +91,9 @@ export function Settings({
         </TabsContent>
         <TabsContent value="costs" className="mt-4">
           <CostsTab />
+        </TabsContent>
+        <TabsContent value="test" className="mt-4">
+          <TestTab />
         </TabsContent>
       </Tabs>
     </div>
