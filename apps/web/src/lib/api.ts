@@ -74,6 +74,35 @@ export type AuthStatus = {
   configured: boolean
 }
 
+/** One row of the /api/usage breakdown — aggregated per operation or per model. */
+export type UsageBucket = {
+  key: string
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number
+  cacheCreationInputTokens: number
+  costUsd: number
+}
+
+export type UsageSummary = {
+  /** Window start (epoch ms); rows at or after this are included. */
+  since: number
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number
+  cacheCreationInputTokens: number
+  costUsd: number
+  byOperation: UsageBucket[]
+  byModel: UsageBucket[]
+}
+
+export type UsageResponse = {
+  today: UsageSummary
+  last7d: UsageSummary
+}
+
 export type Provider = "anthropic" | "openai" | "openrouter" | "groq"
 
 export type SettingsValues = {
