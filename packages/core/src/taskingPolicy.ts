@@ -120,6 +120,10 @@ function createReceipts(actions: ReadonlyArray<RecordedAction>): string[] {
     .map((action) => action.result);
 }
 
+function hasIssueUrl(text: string, issueNumber: number): boolean {
+  return new RegExp(`https://github\\.com/[^\\s)]+/[^\\s)]+/issues/${issueNumber}\\b`).test(text);
+}
+
 function createError(actions: ReadonlyArray<RecordedAction>): string | undefined {
   const failed = [...actions].reverse().find((action) => action.tool === "createIssue" && /^ERROR:/.test(action.result));
   return failed?.result.replace(/^ERROR:\s*/, "");
@@ -178,6 +182,17 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // one actually created (e.g. said #58, really created #61).
   if (claimsCreation && presented.size > 0 && ![...createdNums].some((n) => presented.has(n))) {
     return `⚠️ Correction — the issue I actually created is below; the number cited in the text is wrong:\n${receipts.join("\n")}\n\n${text}`;
+  }
+
+  // A creation did happen and the number is right (or omitted), but the model's
+  // prose dropped the direct URL. Preserve the reply while making the durable
+  // GitHub receipt impossible to miss in WhatsApp and other plain-text channels.
+  if (claimsCreation && receipts.length > 0) {
+    const missingReceipts = receipts.filter((receipt) => {
+      const issueNumber = Number(/^Created issue #(\d+):/.exec(receipt)![1]);
+      return !hasIssueUrl(prose, issueNumber);
+    });
+    if (missingReceipts.length > 0) return `${missingReceipts.join("\n")}\n\n${text}`;
   }
 
   // Any other mutation claim that cites an issue number no tool produced or
