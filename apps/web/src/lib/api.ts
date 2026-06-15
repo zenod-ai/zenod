@@ -151,6 +151,26 @@ export type TranscriptionModelsResponse = {
   selected: string
 }
 
+export type OpenRouterTranscriptionModel = {
+  id: string
+  name: string
+  popularityRank: number
+  pricing: {
+    prompt: number | null
+    completion: number | null
+    audio: number | null
+    request: number | null
+  }
+  costLabel: string
+}
+
+export type OpenRouterTranscriptionModelsResponse = {
+  models: OpenRouterTranscriptionModel[]
+  selected: string
+  cached: boolean
+  fallback: boolean
+}
+
 export type IngestStatus =
   | "queued"
   | "downloading"

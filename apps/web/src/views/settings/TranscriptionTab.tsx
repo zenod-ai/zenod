@@ -5,6 +5,8 @@ import { toast } from "sonner"
 import {
   api,
   errorMessage,
+  type OpenRouterTranscriptionModel,
+  type OpenRouterTranscriptionModelsResponse,
   type SettingsResponse,
   type TranscriptionModelsResponse,
   type TranscriptionStatus,
@@ -155,28 +157,56 @@ function LongTranscriptionProviderCard() {
   const [savedProvider, setSavedProvider] = React.useState<LongTranscriptionProvider>("local")
   const [model, setModel] = React.useState("openai/whisper-large-v3-turbo")
   const [savedModel, setSavedModel] = React.useState("openai/whisper-large-v3-turbo")
+  const [models, setModels] = React.useState<OpenRouterTranscriptionModel[]>([])
+  const [modelsFallback, setModelsFallback] = React.useState(false)
+  const [modelsLoading, setModelsLoading] = React.useState(true)
+  const [modelsError, setModelsError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
-    void api<SettingsResponse>("/api/settings")
+    void Promise.all([
+      api<SettingsResponse>("/api/settings"),
+      api<OpenRouterTranscriptionModelsResponse>("/api/transcription/openrouter-models"),
+    ])
       .then((result) => {
-        const resolved = resolveLongProvider(result.settings)
-        const selectedModel = result.settings.openrouter_transcription_model ?? "openai/whisper-large-v3-turbo"
-        setHasOpenRouterKey(result.settings.openrouter_api_key !== null)
-        setHasOpenAiKey(result.settings.openai_api_key !== null)
+        const [settingsResult, modelsResult] = result
+        const resolved = resolveLongProvider(settingsResult.settings)
+        const selectedModel = settingsResult.settings.openrouter_transcription_model ?? modelsResult.selected
+        setHasOpenRouterKey(settingsResult.settings.openrouter_api_key !== null)
+        setHasOpenAiKey(settingsResult.settings.openai_api_key !== null)
         setProvider(resolved)
         setSavedProvider(resolved)
         setModel(selectedModel)
         setSavedModel(selectedModel)
+        setModels(modelsResult.models)
+        setModelsFallback(modelsResult.fallback)
+        setModelsError(null)
       })
-      .catch(() => {
-        /* leave defaults */
+      .catch((err) => {
+        setModelsError(errorMessage(err))
+      })
+      .finally(() => {
+        setModelsLoading(false)
       })
   }, [])
 
   const effectiveProvider =
     provider === "openrouter" && !hasOpenRouterKey ? "local" : provider === "openai" && !hasOpenAiKey ? "local" : provider
-  const dirty = effectiveProvider !== savedProvider || (effectiveProvider === "openrouter" && model !== savedModel)
+  const modelOptions = React.useMemo(() => {
+    if (models.some((option) => option.id === model)) return models
+    return [
+      {
+        id: model,
+        name: model,
+        popularityRank: models.length + 1,
+        pricing: { prompt: null, completion: null, audio: null, request: null },
+        costLabel: "custom saved model",
+      },
+      ...models,
+    ]
+  }, [model, models])
+  const currentModel = modelOptions.find((option) => option.id === model)
+  const dirty = effectiveProvider !== savedProvider || model !== savedModel
 
   async function handleSave() {
     setSaving(true)
@@ -241,21 +271,35 @@ function LongTranscriptionProviderCard() {
           </FieldDescription>
         </Field>
         {effectiveProvider === "openrouter" && (
-          <Field>
-            <FieldLabel htmlFor="openrouter-transcription-model">OpenRouter model</FieldLabel>
-            <Input
-              id="openrouter-transcription-model"
-              autoComplete="off"
-              placeholder="openai/whisper-large-v3-turbo"
-              value={model}
-              onChange={(event) => setModel(event.target.value)}
-            />
-            <FieldDescription>
-              Speech-to-text model slug from OpenRouter, for example
-              openai/whisper-large-v3-turbo.
-            </FieldDescription>
-          </Field>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <ZapIcon className="size-3.5" />
+            OpenRouter will run the selected speech-to-text model below.
+          </div>
         )}
+        <Field>
+          <FieldLabel htmlFor="openrouter-transcription-model">OpenRouter transcription model</FieldLabel>
+          <Select value={model} onValueChange={setModel} disabled={modelsLoading || modelOptions.length === 0}>
+            <SelectTrigger id="openrouter-transcription-model" className="w-full">
+              <SelectValue placeholder={modelsLoading ? "Loading OpenRouter models" : "Choose a transcription model"} />
+            </SelectTrigger>
+            <SelectContent>
+              {modelOptions.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.name} — popularity #{option.popularityRank} · {option.costLabel}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            {modelsLoading
+              ? "Loading the top OpenRouter speech-to-text models by popularity."
+              : modelsError
+                ? `Could not load the live OpenRouter catalog: ${modelsError}`
+                : currentModel
+                  ? `${currentModel.id} · ${currentModel.costLabel}${modelsFallback ? " · fallback catalog" : ""}`
+                  : "Top OpenRouter speech-to-text models by popularity."}
+          </FieldDescription>
+        </Field>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <ClockIcon className="size-3.5" />
           Threshold: 300 seconds.
