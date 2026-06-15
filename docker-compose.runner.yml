@@ -1,0 +1,52 @@
+# Agent-runner as a Dokploy Compose service.
+#
+# Built from Dockerfile.agent-runner in THIS repo and deployed by push to main
+# (Dokploy compose `zenod-runner`: autoDeploy + push webhook). This replaces the
+# old hand-run container so the runner is rebuilt-from-code, never by hand.
+#
+# The image entrypoint (scripts/agent-runner-entrypoint.sh) registers the X MCP
+# server in Codex on every start, so X stays wired across every redeploy with
+# nothing manual. It reuses the existing auth volumes (codex login + gh auth
+# survive) and joins zenod-x-net (created by the x-mcp compose) to reach X.
+
+networks:
+  zenod-x-net:
+    external: true
+    name: zenod-x-net
+
+volumes:
+  zenod-agent-work:
+    external: true
+  zenod-agent-codex-home:
+    external: true
+  zenod-agent-gh:
+    external: true
+
+services:
+  zenod-agent-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-runner
+    image: zenod-agent-runner:dokploy
+    container_name: zenod-agent-runner
+    restart: unless-stopped
+    networks: [zenod-x-net]
+    volumes:
+      - zenod-agent-work:/runner/work
+      - zenod-agent-codex-home:/runner/codex-home
+      - zenod-agent-gh:/runner/gh
+    environment:
+      ZENOD_APP_URL: ${ZENOD_APP_URL:-https://app.zenod.dev}
+      ZENOD_API_TOKEN: ${ZENOD_API_TOKEN}
+    # Monitor supervisor (was the old container's run command). The ENTRYPOINT
+    # runs first (writes the Codex X config), then execs this.
+    command:
+      - bash
+      - -lc
+      - |
+        while true; do
+          echo "[supervisor] starting monitor $(date -u +%FT%TZ)" >> /runner/work/zenod/.fanout/monitor.log
+          cd /runner/work/zenod && node scripts/backlog-monitor.mjs >> /runner/work/zenod/.fanout/monitor.log 2>&1
+          echo "[supervisor] monitor exited rc=$? restart in 5s $(date -u +%FT%TZ)" >> /runner/work/zenod/.fanout/monitor.log
+          sleep 5
+        done
