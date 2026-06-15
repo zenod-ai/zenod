@@ -529,11 +529,15 @@ export class AiSdkBrainLlm implements BrainLlm {
           }),
           create_issue: tool({
             description:
-              "Create a GitHub issue when the user asks to create/open/file an issue. Agent-created issues are proposals only: use status:proposed, never status:queued. Use the configured repository unless the user specifies another owner/repo. Return the issue URL to the user.",
+              "Create a GitHub issue when the user asks to create/open/file one. The issue MUST be runnable by an autonomous agent: a clear objective, explicit scope (in/out of scope), and a done-condition / acceptance criteria. For code work, name the relevant files/surfaces; for actions (post a tweet, send a message, etc.) state the exact action and whether to execute it directly or draft for approval. If the user's request is missing any of this, ASK one short clarifying question and DO NOT create the issue yet — never file a ticket that can't be run. Agent-created issues are proposals only: use status:proposed, never status:queued. Use the configured repository unless the user specifies another owner/repo. Return the issue URL to the user.",
             inputSchema: z.object({
               repo: z.string().nullable().describe("owner/repo target; null uses the configured vault/project repo"),
               title: z.string().describe("issue title"),
-              body: z.string().describe("issue body with context and acceptance criteria"),
+              body: z
+                .string()
+                .describe(
+                  "Runnable issue body. Must contain: ## Objective, ## Scope (in scope / out of scope), ## Acceptance criteria (done when …), and source context (vault paths or links the worker should read). Keep it tight.",
+                ),
               labels: z.array(z.string()).nullable().describe("labels to apply at creation time; null for none"),
             }),
             execute: ({ repo, title, body, labels }) =>
@@ -627,7 +631,7 @@ export class AiSdkBrainLlm implements BrainLlm {
 
     const briefingExtras = [
       taskTools
-        ? "You CAN act on explicit tasking instructions using tools: capture_note files notes, digest_backlog/run digest mines structured backlog candidates, create_issue and label_issue manage GitHub issues, query_backlog reports open backlog/status, and service_backlog selects eligible work without launching a runner. propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute vault writes without explicit approval; creating a GitHub issue is allowed when the user explicitly asks to create/open/file one."
+        ? "You CAN act on explicit tasking instructions using tools: capture_note files notes, digest_backlog/run digest mines structured backlog candidates, create_issue and label_issue manage GitHub issues, query_backlog reports open backlog/status, and service_backlog selects eligible work without launching a runner. propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute vault writes without explicit approval; creating a GitHub issue is allowed when the user explicitly asks to create/open/file one. Tickets you create are worked by autonomous agents, so they must be runnable: every issue needs an objective, explicit scope, and a done-condition/acceptance criteria (plus the files for code work, or the exact action + execute-vs-draft for action tasks like posting). If the user's request lacks any of that, ask ONE short clarifying question and do not file the issue until it is runnable — never create a ticket that would just bounce back as needs-clarification."
         : "",
       driveTools
         ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background transcription (download, configured transcription provider for audio, filing, archiving). When the user asks to transcribe their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Transcription panel, and the transcripts land in the vault when done."
