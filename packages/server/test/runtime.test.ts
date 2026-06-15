@@ -8,8 +8,11 @@ import { Runtime } from "../src/runtime.js";
 describe("runtime tasking tools", () => {
   let dir: string;
   let runtime: Runtime;
+  let runnerPokeUrl: string | undefined;
 
   beforeEach(async () => {
+    runnerPokeUrl = process.env.ZENOD_RUNNER_POKE_URL;
+    delete process.env.ZENOD_RUNNER_POKE_URL;
     dir = await mkdtemp(join(tmpdir(), "zenod-runtime-"));
     runtime = new Runtime(dir);
     runtime.settings.set("vault_repo", "zenod-ai/fixture");
@@ -18,6 +21,8 @@ describe("runtime tasking tools", () => {
 
   afterEach(async () => {
     vi.unstubAllGlobals();
+    if (runnerPokeUrl === undefined) delete process.env.ZENOD_RUNNER_POKE_URL;
+    else process.env.ZENOD_RUNNER_POKE_URL = runnerPokeUrl;
     runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
@@ -47,5 +52,27 @@ describe("runtime tasking tools", () => {
     expect(JSON.parse(String(calls[1]?.init.body))).toEqual({
       labels: ["owner:agent", "status:queued"],
     });
+  });
+
+  it("createIssue returns the direct GitHub issue URL from the API response", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init: RequestInit = {}) => {
+        calls.push({ url: String(url), init });
+        return new Response(JSON.stringify({ number: 82, html_url: "https://github.com/zenod-ai/fixture/issues/82" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+    const result = await tools.createIssue({ title: "Test issue", body: "## Objective\nTest", labels: ["owner:agent"] });
+
+    expect(result).toBe("Created issue #82: https://github.com/zenod-ai/fixture/issues/82");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toContain("/repos/zenod-ai/fixture/issues");
+    expect(calls[0]?.init.method).toBe("POST");
   });
 });
