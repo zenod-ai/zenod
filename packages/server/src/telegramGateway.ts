@@ -251,17 +251,17 @@ export class TelegramGateway {
    * payload >32 KB, malformed content) fall back transparently to plain
    * `sendMessage`, which is chunked to Telegram's 4096-char limit.
    *
-   * NOTE (spike): the exact `sendRichMessage` request field is not fully
-   * documented yet — we send `{ chat_id, text }` (markdown), matching how the
-   * sibling `sendMessage` is shaped and Hermes' "raw markdown" description.
-   * Confirm against a live bot on first test; the plain fallback guarantees
-   * delivery regardless. See zenod-ai/zenod#121.
+   * The rich content is the `rich_message` parameter — an InputRichMessage
+   * object whose `markdown` field carries the RAW agent markdown (NOT a `text`
+   * field; unknown params are silently ignored, which only yields partial
+   * inline parsing and drops tables/headings). Matches Hermes'
+   * `gateway/platforms/telegram.py`. See zenod-ai/zenod#121.
    */
   private async sendReply(chatId: number, markdown: string): Promise<void> {
     if (!markdown) return;
     if (this.settings().rich) {
       try {
-        await this.callApi("sendRichMessage", { chat_id: chatId, text: markdown });
+        await this.callApi("sendRichMessage", { chat_id: chatId, rich_message: { markdown } });
         return;
       } catch (err) {
         console.warn(

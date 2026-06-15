@@ -148,7 +148,8 @@ describe("TelegramGateway", () => {
       expect(seen).toEqual(["telegram:555:summarize the deploy"]);
       const rich = calls.find((c) => c.method === "sendRichMessage")!;
       expect(rich.body.chat_id).toBe(555);
-      expect(String(rich.body.text)).toContain("| Task | Status |");
+      const richMessage = rich.body.rich_message as { markdown?: string };
+      expect(String(richMessage.markdown)).toContain("| Task | Status |");
       expect(gateway.status().botUsername).toBe("zenod_test_bot");
     } finally {
       await gateway.close();
