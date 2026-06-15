@@ -13,6 +13,11 @@ networks:
   zenod-x-net:
     external: true
     name: zenod-x-net
+  # Dokploy's attachable overlay — lets the Zenod app reach this runner by name
+  # (zenod-agent-runner:8787) to POST /poke on queue. The app is a Swarm service
+  # on this network; joining it here bridges the two.
+  dokploy-network:
+    external: true
 
 volumes:
   zenod-agent-work:
@@ -30,7 +35,7 @@ services:
     image: zenod-agent-runner:dokploy
     container_name: zenod-agent-runner
     restart: unless-stopped
-    networks: [zenod-x-net]
+    networks: [zenod-x-net, dokploy-network]
     volumes:
       - zenod-agent-work:/runner/work
       - zenod-agent-codex-home:/runner/codex-home
