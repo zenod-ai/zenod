@@ -268,7 +268,7 @@ export class Runtime {
       if (!repo) return "No GitHub repository is configured.";
       const issues = await githubJson<
         Array<{ number: number; title: string; html_url: string; labels: Array<{ name: string }>; updated_at: string }>
-      >(`/repos/${encodeURIComponent(repo).replace("%2F", "/")}/issues?state=open&per_page=30&sort=updated&direction=desc`);
+      >(`/repos/${encodeURIComponent(repo).replace("%2F", "/")}/issues?state=open&per_page=100&sort=updated&direction=desc`);
       // A purely-numeric query (e.g. "95" or "#95") is an issue-number lookup, not a
       // text search — match it against issue.number so "find #95" works.
       const q = query?.trim();
