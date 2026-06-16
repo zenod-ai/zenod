@@ -10,26 +10,32 @@
 # See docs/SUITE-AGENT-PATTERN.md.
 #
 # The send capabilities live in their OWN deployed MCP connectors that Outbound
-# reaches over dokploy-network (group-by-job: one agent composed from several
-# internal MCP servers). Point each at its connector with the OUTBOUND_*_MCP_URL
-# env. A connector whose URL is unset is simply "not connected yet" — the tool
-# reports it and never fakes a send, so Reddit/email can land as a follow-up once
-# their containers are deployed.
+# reaches over the docker network. Point each at its connector with the
+# OUTBOUND_*_MCP_URL env. A connector whose URL is unset is simply "not connected
+# yet" — the tool reports it and never fakes a send, so the X/Reddit/email channels
+# can be wired in one at a time as their containers come online.
 #
-#   X (Twitter)  -> the vendored x-mcp (services/x-mcp), POST instance. Reuse the
-#                   write-capable endpoint (createPosts), e.g. http://x-mcp-postread:8000/mcp.
-#                   Join the x-mcp's network (zenod-x-net) below to reach it.
-#   Reddit       -> a reddit-mcp (vendor like x-mcp; FOLLOW-UP, not yet deployed).
-#   Email        -> a mail-mcp (clone the x-mcp shape; FOLLOW-UP, not yet deployed).
+# DECOUPLED BY DESIGN: this service boots on `dokploy-network` ALONE and needs NO
+# connector to start (it just idles un-provisioned). Wiring X is a SEPARATE step so
+# standing up this container never depends on x-mcp being deployed first:
+#
+#   X (Twitter)  -> the vendored x-mcp (services/x-mcp), POST instance (createPosts).
+#                   To connect it: deploy x-mcp (it creates the `zenod-x-net`
+#                   network), then add `zenod-x-net` to this service's networks (see
+#                   the commented block below) AND set OUTBOUND_X_MCP_URL. Until
+#                   then post_tweet reports "X is not connected yet". (issue #180)
+#   Reddit       -> a reddit-mcp (vendor like x-mcp; FOLLOW-UP, issue #185).
+#   Email        -> a mail-mcp (clone the x-mcp shape; FOLLOW-UP, issue #185).
 
 networks:
   dokploy-network:
     external: true
-  # The x-mcp compose creates this network (services/x-mcp). Join it so Outbound
-  # can reach x-mcp-postread by name. Comment out (and the OUTBOUND_X_MCP_URL env)
-  # until x-mcp is deployed.
-  zenod-x-net:
-    external: true
+  # Uncomment once x-mcp is deployed (it owns/creates this network) so Outbound can
+  # reach x-mcp-postread by name — then add it to the service `networks` list below
+  # and set OUTBOUND_X_MCP_URL. Keeping it out by default means this container boots
+  # even when x-mcp is not up (no "external network not found" failure).
+  # zenod-x-net:
+  #   external: true
 
 volumes:
   zenod-outbound-data:
@@ -42,7 +48,9 @@ services:
     image: zenod-outbound:dokploy
     container_name: zenod-outbound
     restart: unless-stopped
-    networks: [dokploy-network, zenod-x-net]
+    # dokploy-network only by default. Add `zenod-x-net` here (and uncomment it
+    # above + set OUTBOUND_X_MCP_URL) to connect the X connector — see issue #180.
+    networks: [dokploy-network]
     volumes:
       - zenod-outbound-data:/data
     environment:
@@ -50,12 +58,12 @@ services:
       ZENOD_AWAIT_PROVISION: "1"
       ZENOD_DATA_DIR: /data
       PORT: "8080"
-      # X connector (the vendored x-mcp POST instance). Unset → post_tweet reports
-      # "X is not connected yet" instead of posting.
-      OUTBOUND_X_MCP_URL: http://x-mcp-postread:8000/mcp
-      # Reddit + email connectors — FOLLOW-UP (their containers are not deployed
-      # yet). Leave unset so the tools report "not connected" rather than faking a
-      # send; set them once the connectors exist.
+      # X connector (the vendored x-mcp POST instance). Wire this together with the
+      # `zenod-x-net` network above once x-mcp is deployed (issue #180). Until set,
+      # post_tweet reports "X is not connected yet" instead of posting.
+      # OUTBOUND_X_MCP_URL: http://x-mcp-postread:8000/mcp
+      # Reddit + email connectors — FOLLOW-UP (issue #185). Leave unset so the tools
+      # report "not connected" rather than faking a send; set them once deployed.
       # OUTBOUND_REDDIT_MCP_URL: http://reddit-mcp:8000/mcp
       # OUTBOUND_MAIL_MCP_URL: http://mail-mcp:8000/mcp
     expose:
