@@ -23,3 +23,23 @@ export const ZENOD_AGENT: AgentDefinition = {
   tagline: "Self-hosted memory agent",
   persona: "You are Zeno, the user's personal memory agent. Answer questions about their knowledge vault.",
 };
+
+/** Backlog agent — same shell + tools, different identity/persona. */
+export const ARCHUS_AGENT: AgentDefinition = {
+  name: "archus",
+  displayName: "Archus",
+  tagline: "Backlog agent",
+  persona:
+    "You are Archus, the backlog agent. You read, organize, and act on the user's GitHub backlog across their repositories.",
+};
+
+/** Known agents, selectable at the entry point so one image can run as any of them. */
+export const AGENTS: Record<string, AgentDefinition> = {
+  zenod: ZENOD_AGENT,
+  archus: ARCHUS_AGENT,
+};
+
+/** Resolve the agent for this process from an id (e.g. the AGENT env var); defaults to Zenod. */
+export function resolveAgent(id: string | undefined | null): AgentDefinition {
+  return (id ? AGENTS[id.trim().toLowerCase()] : undefined) ?? ZENOD_AGENT;
+}
