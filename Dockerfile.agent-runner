@@ -37,6 +37,13 @@ COPY scripts/fanout-codex.mjs /opt/zenod/scripts/fanout-codex.mjs
 RUN chmod +x /opt/zenod/scripts/fanout-codex.mjs \
  && ln -s /opt/zenod/scripts/fanout-codex.mjs /usr/local/bin/zenod-fanout-codex
 
+# Bake the backlog monitor into the IMAGE so a push to main actually redeploys
+# its code. The supervisor runs THIS copy (not the /runner/work/zenod volume
+# checkout, which an image rebuild never touches) — otherwise monitor changes
+# silently never ship even though the runner "redeployed". The monitor still
+# uses ZENOD_WORKDIR (the volume checkout) for git worktrees/fanout.
+COPY scripts/backlog-monitor.mjs /opt/zenod/scripts/backlog-monitor.mjs
+
 # Idempotently provisions the X MCP client config (Codex read-only, Claude
 # post+read) into the CODEX_HOME/HOME volumes on every start, then execs the CMD.
 COPY scripts/agent-runner-entrypoint.sh /opt/zenod/scripts/agent-runner-entrypoint.sh

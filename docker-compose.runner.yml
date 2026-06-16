@@ -49,13 +49,20 @@ services:
       X_MCP_READONLY_URL: http://x-mcp-postread:8000/mcp
     # Monitor supervisor (was the old container's run command). The ENTRYPOINT
     # runs first (writes the Codex X config), then execs this.
+    #
+    # Run the IMAGE copy of the monitor (/opt/zenod/scripts) — baked fresh on
+    # every push — NOT scripts/backlog-monitor.mjs from the /runner/work/zenod
+    # volume checkout, which an image rebuild never refreshes (so monitor edits
+    # would silently never ship). cwd stays the work checkout for git context;
+    # the monitor reads ZENOD_WORKDIR for its worktree/fanout operations.
     command:
       - bash
       - -lc
       - |
+        mkdir -p /runner/work/zenod/.fanout
         while true; do
           echo "[supervisor] starting monitor $(date -u +%FT%TZ)" >> /runner/work/zenod/.fanout/monitor.log
-          cd /runner/work/zenod && node scripts/backlog-monitor.mjs >> /runner/work/zenod/.fanout/monitor.log 2>&1
+          cd /runner/work/zenod && node /opt/zenod/scripts/backlog-monitor.mjs >> /runner/work/zenod/.fanout/monitor.log 2>&1
           echo "[supervisor] monitor exited rc=$? restart in 5s $(date -u +%FT%TZ)" >> /runner/work/zenod/.fanout/monitor.log
           sleep 5
         done
