@@ -61,8 +61,10 @@ decision — who checks readiness, mints the exec ticket, and hands Epaminon a d
 
 1. **Execution-ticket class + state labels.** A `type:execution` label and the `exec:`
    state namespace (own namespace, never collides with `status:` backlog labels):
-   `exec:queued · exec:running · exec:needs-review · exec:blocked · exec:done · exec:failed`.
-   Archus sets `exec:queued` at mint.
+   `exec:queued · exec:running · exec:needs-review · exec:approved · exec:blocked · exec:done · exec:failed`.
+   **Two writers:** Archus sets `exec:queued` (at mint) and `exec:approved` (on human go —
+   see the ship seam); Epaminon *reports* `running/needs-review/blocked/done/failed` via
+   `apply_execution_event`.
 
 2. **Ticket shaping (mostly already built — keep/extend).** Work tickets are runnable
    (objective, scope, done-condition; files for code work); ask ONE clarifying question
@@ -97,11 +99,14 @@ decision — who checks readiness, mints the exec ticket, and hands Epaminon a d
 |---|---|---|---|
 | `enqueue_execution` | Archus → Epaminon | deterministic | `{ execution_id, target:"owner/repo#N", context }` |
 | `apply_execution_event` | Epaminon → Archus | deterministic | `{ execution_id, state, evidence_url?, note? }` |
+| **`approve_execution`** (NEW) | Archus → Epaminon | deterministic | `{ execution_id, final_content? }` |
 | `chat_with_archus` (unblock) | Epaminon → Archus | LLM (rare) | one blocker, full context, one ask |
 
-`state ∈ {running, needs-review, blocked, done, failed}` (Archus sets `queued` at mint).
-Legal transitions: `queued→running`, `running→needs-review`, `running→blocked`,
-`blocked→running`, `needs-review→done`, `*→failed`. Report once per edge; never stream.
+`state ∈ {running, needs-review, blocked, done, failed}` reported by Epaminon; Archus sets
+`queued` (mint) and `approved` (human go). Legal transitions: `queued→running`,
+`running→needs-review`, `needs-review→approved` (Archus, on approval), `approved→done`,
+`running→done` (internal artifact, no gate), `running→blocked`, `blocked→running`, `*→failed`.
+Report once per edge; never stream.
 
 **Epaminon-side expectations Archus relies on (the other half confirms these):**
 - `needsRepo: false`; owns no repo; pulls from the dispatched queue under a concurrency cap.
@@ -115,15 +120,41 @@ Legal transitions: `queued→running`, `running→needs-review`, `running→bloc
 
 ---
 
-## Part 4 — Green-light checklist (both sides confirm before building)
-1. ✅ One harness (Codex), generalist tools, outcomes vary — no execution "kinds."
-2. ✅ Central = `AlfaBlok/obsidian-brain`; current goals only; themes → memory notes; light
-   naming, not recursion.
-3. ✅ Human gate = outward/irreversible outcome, decided Epaminon-side; Archus applies state.
-4. ✅ Epaminon reads from Archus-dispatched execution tickets; "run X" is Archus's call.
-5. ❓ The two deterministic tools' exact names/schemas above are the contract — Epaminon
-   builder confirms `enqueue_execution` / `apply_execution_event` match verbatim.
-6. ❓ Auth: `apply_execution_event` is a trusted structured write callable by Epaminon over
-   the internal mesh — confirm it's gated to Epaminon's token (not the public gateway).
+## Part 4 — Seams resolved (2026-06-17 cross-check)
 
-When 5–6 are agreed, Archus builds Part 2 and Epaminon builds his half against Part 3.
+**1. Shipping an outward outcome (the gap).**
+- (a) Add **`exec:approved`** between `needs-review` and `done` — set by **Archus** on the
+  human's go (the only `exec` state Archus writes besides `queued`). It gives the at-a-glance
+  "approved, shipping now" vs "still awaiting."
+- (b) **Outbound performs the send** (tweet/email); the **runner merges** a PR on green. In
+  the autonomous execution path the **human-approval-through-Archus IS Outbound's
+  confirm-before-send** — Outbound ships the pre-approved content without re-asking (its
+  interactive confirm is for direct chat). Epaminon hands Outbound the approved content.
+- (c) Human approves in chat → Archus flips `needs-review → approved` **and** dispatches the
+  new **`approve_execution { execution_id, final_content? }`** to Epaminon (since Epaminon
+  doesn't scan labels, the flip alone isn't a trigger — the dispatch is). Epaminon then routes
+  to Outbound (send) or the runner (merge), and reports `apply_execution_event(done, url)`.
+  `final_content` carries the human's edit if the draft changed.
+
+**2. One ticket or two for no-code goals → TWO.** A central **work ticket** (the durable
+goal, re-runnable, the audit home) + a separate **execution ticket** referencing it. Both in
+central, but kept distinct so reflect-outcome and multi-attempt audit stay clean.
+
+**3. Unblock = advisory.** `chat_with_archus` returns guidance Epaminon feeds the **resumed
+worker** (same exec ticket → `running`). A genuine **rescope** is not advice: Archus edits the
+**work ticket** and **re-mints a fresh execution ticket** (new `enqueue_execution`); the
+blocked one goes `→ failed`.
+
+**4. Auth — confirmed, with the mechanism.** `enqueue_execution`, `apply_execution_event`, and
+`approve_execution` live ONLY on the agents' **internal `/mcp`** (dokploy-network) and are
+**never republished on the public Console gateway**. Gating is to the **counterparty's
+identity**, not just network reach or the agent's own token: the **Console cross-provisions**
+Archus↔Epaminon (each holds the other's token / a lane secret) so Archus accepts
+`apply_execution_event`/`approve_execution` traffic *only from Epaminon* — otherwise a fan-out
+Codex worker with network access and a stray token could forge `done`. → **Console-builder
+action:** add cross-provisioning of the Archus↔Epaminon lane at enable time.
+
+## Green-light
+✅ Core model (Parts 1–3) and seams 1–3 settled. Open for the Epaminon builder to confirm:
+the **`approve_execution`** addition to the handshake, and the **cross-provisioned auth** (#4).
+When both confirm, Archus builds Part 2 and Epaminon builds his half against Part 3.
