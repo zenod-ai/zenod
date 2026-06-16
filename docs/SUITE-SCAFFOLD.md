@@ -53,6 +53,38 @@ The user never sees the difference; it's one internal wire.
 
 ---
 
+## Serving topology — human entry vs MCP endpoints (every agent is also infrastructure)
+
+Two ways in, **independent of each other:**
+
+**Human entry — the Console** (one URL, the main domain): UI + chat + gateways (WhatsApp /
+Telegram / Web). For *you*.
+
+**Machine entry — each agent is its own MCP server + its own token.** For *clients* (Codex,
+Claude, Hermes, …). **This exists today** — Z0 is an MCP server you hand a token to — and the
+refactor **generalizes it to every agent; it is not lost.** Every agent stays always-on
+infrastructure: an MCP endpoint + token your other tools connect to.
+
+**"4 enabled = how many URLs?" → one MCP endpoint per agent** (a subdomain per container — the
+Dokploy-native shape):
+```
+https://zenod.zenod.dev/mcp      🔑 Z0's token
+https://archus.zenod.dev/mcp     🔑 Archus's token
+https://epaminon.zenod.dev/mcp   🔑 …
+https://outbound.zenod.dev/mcp   🔑 …
+```
+Each is **independently connectable** — a client wires only the agent(s) it needs. **Pure-MCP
+view: N enabled agents = N standalone MCP servers**, each with its own token. The Console UI is a
+*separate* URL layered on top; it does not change the per-agent MCP picture.
+
+**Optional aggregate gateway (additive, later):** the Console can *also* expose **one** MCP URL
+(e.g. `mcp.zenod.dev`) fronting all enabled agents with **namespaced tools** (`zenod.*`,
+`archus.*`) behind **one token** — for a client that wants the whole suite in one connection. The
+MCP-gateway pattern; convenience on top of per-agent endpoints, not a replacement. **Start
+per-agent** (matches today, preserves independence); add the gateway only if needed.
+
+---
+
 ## AN AGENT — uniform, headless
 
 Every agent is the **same shape**. No kinds, no exceptions.
