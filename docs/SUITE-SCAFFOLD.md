@@ -253,9 +253,14 @@ the session moves at cutover.
 
 The shape is **settled**. What remains:
 
-- **The spike (the one unproven assumption):** does today's Z0 split cleanly into Console + vault
-  capability? The engine is vault-coupled (`engine.answer()` hardwires vault + tasking + drive
-  tools inline) — this is *why the spike is first.* Everything else rests on it.
+- **The spike (#154) — PROVEN ✓ (2026-06-16).** The engine separates from the vault **cleanly**,
+  with ~15 small, localized, backward-compatible edits (not a tangle): `createEngine`'s `repo` is
+  now optional; vaultless mode gives a persona-only briefing, vault read-tools that report "no
+  vault" (so a model tool-call can't crash), no task tools, and `assertVault()`-gated vault-only
+  methods. A vaultless engine test boots + chats + gates vault ops; the full suite stays green
+  (vault agents always pass a repo → byte-identical path). The **Console** (`AGENT=console`,
+  vaultless) is **live on z2.zenod.dev** side by side with live Zenod — boots, serves the UI, and
+  needs only an admin password + LLM key (no vault). *The load-bearing assumption is now fact.*
 - **Isolation is policy, not enforced, in v1.** A shared connections center + shared volume means
   agents *can* read each other's creds. Fine for self-host (you own all the agents). Enforced
   isolation (the Console minting per-agent scoped tokens) arrives at the **hosted / multi-tenant**
