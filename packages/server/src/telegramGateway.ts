@@ -4,6 +4,7 @@ import type { BrainEngine } from "zenod";
 import type { Settings } from "./settings.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { transcribeAudio, NO_SPEECH_MESSAGE } from "./transcribe.js";
+import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 
 export type TelegramConnectionState = "disabled" | "disconnected" | "connected" | "error";
@@ -259,6 +260,9 @@ export class TelegramGateway {
     this.rememberChat(chatId);
 
     let text = (message.text ?? message.caption ?? "").trim();
+    // Audio bytes of a voice note, retained so a substantive one can be
+    // archived after the reply (the agent's keep decision drives this).
+    let voiceAudio: VoiceAudio | null = null;
 
     // Voice/audio notes mirror the WhatsApp path: transcribe through the SAME
     // global pipeline (shared whisper model + provider settings) and treat the
@@ -267,9 +271,9 @@ export class TelegramGateway {
     const voice = message.voice ?? message.audio;
     if (!text && voice?.file_id) {
       await this.sendChatAction(chatId, "typing");
-      let transcript: string;
+      let result: { transcript: string; data: Buffer; ext: string };
       try {
-        transcript = await this.transcribeVoice(voice);
+        result = await this.transcribeVoice(voice);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         console.error(`[telegram] transcription failed for chat ${chatId}: ${detail}`);
@@ -284,7 +288,12 @@ export class TelegramGateway {
       const sender = from?.username
         ? `@${from.username}`
         : from?.first_name || String(from?.id ?? "unknown");
-      text = `Telegram voice note transcript from ${sender}:\n\n${transcript}`;
+      text = `Telegram voice note transcript from ${sender}:\n\n${result.transcript}`;
+      voiceAudio = {
+        data: result.data,
+        filename: voiceArchiveFilename(sender, Date.now(), result.ext),
+        mimeType: voice.mime_type ?? "audio/ogg",
+      };
     }
 
     // Photos and image documents: describe with vision and file to vault.
@@ -339,6 +348,13 @@ export class TelegramGateway {
       if (reply.text.trim()) {
         await this.sendReply(chatId, reply.text);
         this.spawnPeerJobPoller(reply, chatId);
+        // Substantive voice note (the agent filed it) → archive its audio to
+        // Drive. Best effort, off the hot path; never breaks the reply.
+        if (voiceAudio && agentKeptNote(reply)) {
+          void archiveVoiceNote(this.options.settings, voiceAudio)
+            .then((res) => res && console.info(`[telegram] archived voice note to Drive: ${res.name}`))
+            .catch((err: unknown) => console.error("[telegram] voice archive failed:", err));
+        }
       } else {
         await this.sendReply(
           chatId,
@@ -367,7 +383,7 @@ export class TelegramGateway {
    * WhatsApp gateway uses (`this.options.settings`), so model selection is a
    * single setting for all routes. Returns the transcript text or throws.
    */
-  private async transcribeVoice(file: TelegramFile): Promise<string> {
+  private async transcribeVoice(file: TelegramFile): Promise<{ transcript: string; data: Buffer; ext: string }> {
     const { data, ext } = await this.downloadFile(file.file_id);
     const filename = `${file.file_unique_id ?? file.file_id}.${ext}`;
     const transcription = await transcribeAudio(data, filename, {
@@ -382,7 +398,7 @@ export class TelegramGateway {
     if (!transcription.success || !transcription.transcript) {
       throw new Error(transcription.error || "transcription returned no text");
     }
-    return transcription.transcript;
+    return { transcript: transcription.transcript, data, ext };
   }
 
   /**

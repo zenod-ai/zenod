@@ -15,6 +15,7 @@ import type { BrainEngine, StoreResult } from "zenod";
 import type { Settings } from "./settings.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { transcribeAudio, NO_SPEECH_MESSAGE } from "./transcribe.js";
+import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
 import {
   maskPhoneNumber,
   normalizeWhatsAppIdentifier,
@@ -778,6 +779,13 @@ export class WhatsAppGateway {
       if (reply.text.trim()) {
         await this.sendReply(event, reply.text, "sent");
         this.options.store.markMessageStatus(event.messageId, "replied");
+        // Substantive voice note (the agent filed it) → archive the audio to
+        // Drive so it can be heard back later. Best effort, off the hot path.
+        if (input.audio && agentKeptNote(reply)) {
+          void archiveVoiceNote(this.options.settings, input.audio)
+            .then((res) => res && console.info(`[whatsapp] archived voice note to Drive: ${res.name}`))
+            .catch((err: unknown) => console.error("[whatsapp] voice archive failed:", err));
+        }
       } else {
         await this.sendReply(event, "⚠️ I got your message but couldn't compose a reply — please try again.", "error").catch(() => {});
         this.options.store.markMessageStatus(event.messageId, "failed");
@@ -815,7 +823,7 @@ export class WhatsAppGateway {
   private async engineInputForEvent(
     event: WhatsAppInboundEvent,
     settings: WhatsAppSettings,
-  ): Promise<{ kind: "engine"; text: string } | { kind: "fixed-reply"; text: string }> {
+  ): Promise<{ kind: "engine"; text: string; audio?: VoiceAudio } | { kind: "fixed-reply"; text: string }> {
     if (!event.hasMedia) return { kind: "engine", text: event.body };
 
     if (event.mediaType === "audio" || event.mediaType === "ptt") {
@@ -843,9 +851,15 @@ export class WhatsAppGateway {
         };
       }
       const sender = normalizeWhatsAppIdentifier(event.senderId) || event.senderName;
+      const ext = event.mimeType?.includes("mpeg") ? "mp3" : "ogg";
       return {
         kind: "engine",
         text: `WhatsApp voice note transcript from ${sender}:\n\n${transcription.transcript}`,
+        audio: {
+          data,
+          filename: voiceArchiveFilename(sender, Date.now(), ext),
+          mimeType: event.mimeType ?? "audio/ogg",
+        },
       };
     }
 

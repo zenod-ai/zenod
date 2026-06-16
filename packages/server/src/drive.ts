@@ -190,6 +190,46 @@ export class DriveClient {
     return ((await response.json()) as { id: string }).id;
   }
 
+  /**
+   * Upload a new binary file into a folder. Uses the multipart upload endpoint
+   * (metadata + media in one request), which the JSON-only `request()` helper
+   * can't express, so it builds the multipart/related body and fetches directly.
+   */
+  async uploadFile(
+    name: string,
+    mimeType: string,
+    data: Buffer,
+    parentFolderId: string,
+  ): Promise<DriveFile> {
+    const boundary = `zenod-${base64url(name).slice(0, 16)}-boundary`;
+    const metadata = JSON.stringify({ name, mimeType, parents: [parentFolderId] });
+    const body = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n` +
+          `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`,
+      ),
+      data,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const url = new URL("https://www.googleapis.com/upload/drive/v3/files");
+    url.searchParams.set("uploadType", "multipart");
+    url.searchParams.set("supportsAllDrives", "true");
+    url.searchParams.set("fields", FILE_FIELDS);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${await this.token()}`,
+        "Content-Type": `multipart/related; boundary=${boundary}`,
+      },
+      body,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Drive upload failed (${response.status}): ${detail.slice(0, 200)}`);
+    }
+    return (await response.json()) as DriveFile;
+  }
+
   /** Move a file into a folder (e.g. inbox → Archive). The file ID — and so its webViewLink — is unchanged. */
   async moveFile(fileId: string, toFolderId: string): Promise<void> {
     const response = await this.request(`/files/${encodeURIComponent(fileId)}`, { fields: "parents" });
