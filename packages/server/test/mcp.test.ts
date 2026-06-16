@@ -171,19 +171,16 @@ describe("MCP endpoint", () => {
     const search = await client.callTool({ name: "search_memory", arguments: { query: "insurance" } });
     expect(JSON.stringify(search.structuredContent)).toContain("Areas/Insurance.md");
 
-    const store = await client.callTool({
-      name: "store_memory",
-      arguments: { content: "I renewed my insurance" },
-    });
-    const stored = store.structuredContent as { commitSha: string; question?: string };
+    const stored = (await runAsyncTool(client, "store_memory", {
+      content: "I renewed my insurance",
+    })) as { commitSha: string; question?: string };
     expect(stored.commitSha).toBe("0".repeat(40));
     expect(stored.question).toBeUndefined();
 
-    const unsure = await client.callTool({
-      name: "store_memory",
-      arguments: { content: "something cryptic" },
-    });
-    expect((unsure.structuredContent as { question?: string }).question).toBeTruthy();
+    const unsure = (await runAsyncTool(client, "store_memory", {
+      content: "something cryptic",
+    })) as { question?: string };
+    expect(unsure.question).toBeTruthy();
 
     await client.close();
   });

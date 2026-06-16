@@ -62,6 +62,14 @@ export class TaskJobQueue {
           conversationKey: job.input.conversationKey ?? "mcp",
         });
         this.store.update(job.id, { status: "done", result });
+      } else if (job.kind === "store") {
+        const result = await engine.store({
+          content: job.input.content ?? "",
+          source: "mcp",
+          ...(job.input.hints ? { hints: job.input.hints } : {}),
+          ...(job.input.verbatim !== undefined ? { verbatim: job.input.verbatim } : {}),
+        });
+        this.store.update(job.id, { status: "done", result });
       } else {
         const result = await engine.work({
           objective: job.input.objective ?? "",

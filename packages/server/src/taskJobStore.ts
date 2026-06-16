@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { TaskingReply, WorkResult } from "zenod";
+import type { StoreResult, TaskingReply, WorkResult } from "zenod";
 
 /**
  * Durable queue for long-running agentic MCP jobs (task_brain → handleTasking,
- * run_task → work) — its own SQLite file on the /data volume. The MCP tools
+ * run_task → work, store_memory → store) — its own SQLite file on the /data
+ * volume. The MCP tools
  * enqueue and return a job id at once; a background worker (taskJobQueue.ts)
  * drains it one at a time, fully decoupled from the HTTP connection; the caller
  * polls get_task_result. This is the fix for concurrent MCP calls timing out:
@@ -16,7 +17,7 @@ import type { TaskingReply, WorkResult } from "zenod";
  * marks in-flight jobs "interrupted" (not stuck "running") so they're visible.
  */
 
-export type TaskJobKind = "task" | "work";
+export type TaskJobKind = "task" | "work" | "store";
 
 export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupted";
 
@@ -32,9 +33,15 @@ export interface TaskJobInput {
   objective?: string;
   /** work: the user-approved plan (absent → propose mode). */
   plan?: string;
+  /** store: the memory content to file through the librarian pipeline. */
+  content?: string;
+  /** store: optional filing hints. */
+  hints?: string[];
+  /** store: force verbatim evidence recording. */
+  verbatim?: boolean;
 }
 
-export type TaskJobResult = TaskingReply | WorkResult;
+export type TaskJobResult = TaskingReply | WorkResult | StoreResult;
 
 export interface TaskJob {
   id: string;

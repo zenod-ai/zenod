@@ -1,14 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type TaskingReply, type WorkResult } from "zenod";
+import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
 import type { EditGithubIssueInput, EditGithubIssueResult } from "./githubApp.js";
 import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
 import type { TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
 
 /**
- * The long agentic tools (task_brain, run_task) run a multi-minute LLM loop, so
- * they enqueue a background job and return its id at once; the caller polls
- * get_task_result. This is the queue seam the MCP server talks to.
+ * The long tools (task_brain, run_task, store_memory) run a multi-minute LLM
+ * loop / git commit, so they enqueue a background job and return its id at once;
+ * the caller polls get_task_result. This is the queue seam the MCP server talks
+ * to.
  */
 export interface TaskJobs {
   enqueue(kind: TaskJobKind, input: TaskJobInput): TaskJob;
@@ -37,6 +38,17 @@ function enqueuedResponse(job: TaskJob) {
     ],
     structuredContent: { jobId: job.id, kind: job.kind, status: job.status },
   };
+}
+
+/** Human-facing text for a finished store_memory job — mirrors the old reply. */
+function formatStoreResult(result: StoreResult): string {
+  return [
+    result.question ? `QUESTION FOR THE USER: ${result.question}` : "Stored.",
+    `evidence: ${result.evidenceRef}`,
+    `pages: ${result.pagesTouched.join(", ")}`,
+    `commit: ${result.commitSha}`,
+    ...result.githubUrls,
+  ].join("\n");
 }
 
 /** Human-facing text for a finished run_task job — mirrors the old reply. */
@@ -162,7 +174,7 @@ export function buildMcpServer(
     {
       title: "Store memory",
       description:
-        "Store a memory in the user's vault through the librarian pipeline: records immutable evidence in the Log, files the meaning onto the right page(s) with citations, validates, and commits to GitHub. Returns the evidence reference, pages touched, commit SHA, and GitHub URLs. If the librarian is unsure where the memory belongs, it returns a question instead of guessing — relay that question to the user. Use for anything the user wants remembered: facts, decisions, events, preferences.",
+        "Store a memory in the user's vault through the librarian pipeline: records immutable evidence in the Log, files the meaning onto the right page(s) with citations, validates, and commits to GitHub. If the librarian is unsure where the memory belongs, it returns a question instead of guessing — relay that question to the user. Use for anything the user wants remembered: facts, decisions, events, preferences. ASYNC: the librarian pipeline runs classify + compose LLM calls and a git commit (slower for longer memories), so it returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the evidence ref, pages touched, commit SHA, and any question.",
       inputSchema: {
         content: z.string().min(1).describe("The memory to store, as the user expressed it"),
         hints: z.array(z.string()).optional().describe("Optional filing hints, e.g. 'belongs to the housing project'"),
@@ -171,6 +183,16 @@ export function buildMcpServer(
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ content, hints, verbatim }) => {
+      const input: TaskJobInput = {
+        content,
+        ...(hints ? { hints } : {}),
+        ...(verbatim !== undefined ? { verbatim } : {}),
+      };
+      if (taskJobs) {
+        const job = taskJobs.enqueue("store", input);
+        return enqueuedResponse(job);
+      }
+      // No queue wired (e.g. a minimal embedding) — run synchronously.
       const engine = await getEngine();
       const result = await engine.store({
         content,
@@ -178,14 +200,7 @@ export function buildMcpServer(
         ...(hints ? { hints } : {}),
         ...(verbatim !== undefined ? { verbatim } : {}),
       });
-      const lines = [
-        result.question ? `QUESTION FOR THE USER: ${result.question}` : "Stored.",
-        `evidence: ${result.evidenceRef}`,
-        `pages: ${result.pagesTouched.join(", ")}`,
-        `commit: ${result.commitSha}`,
-        ...result.githubUrls,
-      ];
-      return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
+      return { content: [{ type: "text", text: formatStoreResult(result) }], structuredContent: { ...result } };
     },
   );
 
@@ -269,8 +284,8 @@ export function buildMcpServer(
       {
         title: "Get task result",
         description:
-          "Poll a background job started by task_brain or run_task, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, or the plan/execution result for a run_task job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
-        inputSchema: { jobId: z.string().min(1).describe("The jobId returned by task_brain or run_task") },
+          "Poll a background job started by task_brain, run_task, or store_memory, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, the plan/execution result for a run_task job, or the evidence ref + pages + commit for a store_memory job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
+        inputSchema: { jobId: z.string().min(1).describe("The jobId returned by task_brain, run_task, or store_memory") },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
       async ({ jobId }) => {
@@ -286,7 +301,9 @@ export function buildMcpServer(
           job.status === "done" && job.result
             ? job.kind === "task"
               ? formatTaskingReply(job.result as TaskingReply)
-              : formatWorkResult(job.result as WorkResult)
+              : job.kind === "store"
+                ? formatStoreResult(job.result as StoreResult)
+                : formatWorkResult(job.result as WorkResult)
             : job.status === "error"
               ? `ERROR: ${job.error ?? "unknown error"}`
               : job.status === "interrupted"
