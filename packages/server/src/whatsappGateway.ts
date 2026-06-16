@@ -998,7 +998,7 @@ export class WhatsAppGateway {
         const reply = await engine.handleTasking({ text, surface: "whatsapp", conversationKey });
         this.options.store.markMessageStatus(event.messageId, "replied");
         await this.sendReply(event, reply.text, "sent");
-        this.spawnPeerJobPoller(reply.text, event);
+        this.spawnPeerJobPoller(reply, event);
         return;
       }
 
@@ -1020,7 +1020,7 @@ export class WhatsAppGateway {
       const reply = await engine.handleTasking({ text: input.text, surface: "whatsapp", conversationKey });
       this.options.store.markMessageStatus(event.messageId, "replied");
       await this.sendReply(event, reply.text, "sent");
-      this.spawnPeerJobPoller(reply.text, event);
+      this.spawnPeerJobPoller(reply, event);
 
       // Filing is NOT automatic (#68). The transcript of every interaction is
       // already persisted in the conversation state — we do NOT push every
@@ -1051,8 +1051,8 @@ export class WhatsAppGateway {
    * the peer that owns it and send a brief follow-up once the job finishes.
    * Runs fully in the background — never delays the primary reply.
    */
-  private spawnPeerJobPoller(replyText: string, event: WhatsAppInboundEvent): void {
-    const jobId = extractJobId(replyText);
+  private spawnPeerJobPoller(reply: { text: string; actions: Array<{ result: string }> }, event: WhatsAppInboundEvent): void {
+    const jobId = extractJobId(reply);
     if (!jobId) return;
     const peers = this.options.settings.peers();
     if (!peers.length) return;

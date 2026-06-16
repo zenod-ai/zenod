@@ -306,7 +306,7 @@ export class TelegramGateway {
         const conversationKey = normalizeTelegramId(String(chatId)) || String(chatId);
         const reply = await engine.handleTasking({ text, surface: "telegram", conversationKey });
         if (reply.text.trim()) await this.sendReply(chatId, reply.text);
-        this.spawnPeerJobPoller(reply.text, chatId);
+        this.spawnPeerJobPoller(reply, chatId);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         console.error(`[telegram] image processing failed for chat ${chatId}: ${detail}`);
@@ -337,7 +337,7 @@ export class TelegramGateway {
       });
       if (reply.text.trim()) {
         await this.sendReply(chatId, reply.text);
-        this.spawnPeerJobPoller(reply.text, chatId);
+        this.spawnPeerJobPoller(reply, chatId);
       } else {
         await this.sendReply(
           chatId,
@@ -449,8 +449,8 @@ export class TelegramGateway {
    * inline parsing and drops tables/headings). Matches Hermes'
    * `gateway/platforms/telegram.py`. See zenod-ai/zenod#121.
    */
-  private spawnPeerJobPoller(replyText: string, chatId: number): void {
-    const jobId = extractJobId(replyText);
+  private spawnPeerJobPoller(reply: { text: string; actions: Array<{ result: string }> }, chatId: number): void {
+    const jobId = extractJobId(reply);
     if (!jobId) return;
     const peers = this.options.settings.peers();
     if (!peers.length) return;

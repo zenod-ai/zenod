@@ -1,9 +1,22 @@
 import type { PeerConfig } from "./peerClient.js";
 
 /** UUID pattern — what z2 returns for queued task jobs. */
-export function extractJobId(text: string): string | null {
+function extractUuid(text: string): string | null {
   const m = text.match(/\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i);
   return m?.[1] ?? null;
+}
+
+/**
+ * Extract a task-job UUID from a handleTasking reply. Scans both the
+ * human-readable reply text AND the raw tool-call results — the LLM doesn't
+ * always echo the UUID in its reply text, but the MCP result always has it.
+ */
+export function extractJobId(reply: { text: string; actions: Array<{ result: string }> }): string | null {
+  return (
+    extractUuid(reply.text) ??
+    reply.actions.map((a) => extractUuid(a.result)).find(Boolean) ??
+    null
+  );
 }
 
 interface JobPollResult {
