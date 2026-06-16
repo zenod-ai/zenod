@@ -197,10 +197,13 @@ export function GithubConnect({
   onRepoPicked,
   onStatusChange,
   compact = false,
+  connectOnly = false,
 }: {
   onRepoPicked?: (repo: string, branch: string) => void
   onStatusChange?: (status: GithubAppStatus) => void
   compact?: boolean
+  /** Connect/disconnect only — no "Choose vault repo" picker (for the Console). */
+  connectOnly?: boolean
 }) {
   const [status, setStatus] = React.useState<GithubAppStatus | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
@@ -361,15 +364,17 @@ export function GithubConnect({
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size={compact ? "sm" : "default"}
-          onClick={() => setPickerOpen(true)}
-        >
-          <FolderGitIcon data-icon="inline-start" />
-          Choose vault repo
-        </Button>
+        {!connectOnly && (
+          <Button
+            type="button"
+            variant="outline"
+            size={compact ? "sm" : "default"}
+            onClick={() => setPickerOpen(true)}
+          >
+            <FolderGitIcon data-icon="inline-start" />
+            Choose vault repo
+          </Button>
+        )}
         {manageUrl !== null && (
           <Button asChild variant="link" size={compact ? "sm" : "default"}>
             <a href={manageUrl}>

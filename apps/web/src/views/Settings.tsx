@@ -106,7 +106,7 @@ export function Settings({
           </TabsContent>
         )}
         <TabsContent value="keys" className="mt-4">
-          <KeysTab initial={settings} onSaved={setSettings} />
+          <KeysTab initial={settings} onSaved={setSettings} vaultless={identity.vaultless} />
         </TabsContent>
         {showVault && (
           <TabsContent value="transcription" className="mt-4">

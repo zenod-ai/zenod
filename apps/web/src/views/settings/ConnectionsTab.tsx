@@ -23,6 +23,7 @@ import { GoogleDriveConnect } from "@/components/google-drive-connect"
 import { WhatsAppConnect } from "@/components/whatsapp-connect"
 import { TelegramConnect } from "@/components/telegram-connect"
 import { PeerAgents } from "@/components/peer-agents"
+import { GithubConnect } from "@/components/github-connect"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -186,6 +187,19 @@ export function ConnectionsTab() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>GitHub</CardTitle>
+          <CardDescription>
+            Connect GitHub once here. The Console uses it to provision the agents it enables
+            (so they can reach their repos) — connect-once, the shared-connection model.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GithubConnect connectOnly />
+        </CardContent>
+      </Card>
+
       <WhatsAppConnect />
       <TelegramConnect />
       <GoogleDriveConnect />

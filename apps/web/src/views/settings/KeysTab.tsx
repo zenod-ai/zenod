@@ -213,9 +213,11 @@ function TestNote({ result }: { result: TestResult }) {
 export function KeysTab({
   initial,
   onSaved,
+  vaultless = false,
 }: {
   initial: SettingsValues
   onSaved?: (settings: SettingsValues) => void
+  vaultless?: boolean
 }) {
   const [form, setForm] = React.useState<FormState>(() => toFormState(initial))
   const [saving, setSaving] = React.useState(false)
@@ -319,6 +321,10 @@ export function KeysTab({
         </CardHeader>
         <CardContent>
           <FieldGroup>
+            {/* Vault + GitHub belong to a vault agent (its Vault tab) or the
+                Console's Connections — not in Keys for a vaultless agent. */}
+            {!vaultless && (
+              <>
             <Field>
               <FieldLabel htmlFor="keys-vault-repo">
                 Vault repository
@@ -382,6 +388,8 @@ export function KeysTab({
                 </FieldDescription>
                 {githubResult !== null && <TestNote result={githubResult} />}
               </Field>
+            )}
+              </>
             )}
             <Field>
               <FieldLabel htmlFor="keys-provider">Model provider</FieldLabel>
