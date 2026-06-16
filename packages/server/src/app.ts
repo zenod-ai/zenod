@@ -276,41 +276,47 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const apiKey = settings.activeApiKey();
     if (!apiKey) return c.json({ error: "Set an LLM key on the Console first (Keys & models)." }, 400);
 
-    // The Console ORIGINATES the token — reuse the stored one across re-enables.
-    const token = settings.agentToken(sa.name) ?? randomBytes(32).toString("hex");
-    const provision: Record<string, string> = { token, provider: settings.provider(), api_key: apiKey };
-    if (settings.get("model_ask")) provision.model_ask = settings.get("model_ask")!;
-    if (settings.get("model_classify")) provision.model_classify = settings.get("model_classify")!;
+    // The Console ORIGINATES the token. If we already minted one for this agent it
+    // is already provisioned (and its /api/provision is now auth-locked) — so on
+    // re-enable we SKIP provisioning and just reconnect with the stored token.
+    const stored = settings.agentToken(sa.name);
+    const token = stored ?? randomBytes(32).toString("hex");
 
-    if (sa.needsVaultRepo) {
-      const vault = (body.vault_repo ?? "").trim();
-      if (!vault) return c.json({ error: "Vault repo required (e.g. owner/repo)." }, 400);
-      provision.vault_repo = vault;
-      provision.vault_branch = "main";
-      const ghToken = settings.get("github_token");
-      if (ghToken) provision.github_token = ghToken;
-      for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug"]) {
-        const v = settings.getRaw(k);
-        if (v) provision[k] = v;
-      }
-      if (!ghToken && !settings.hasGithubApp()) {
-        return c.json(
-          { error: "Connect GitHub on the Console first (Connections) so the agent can reach the vault." },
-          400,
-        );
-      }
-    }
+    if (!stored) {
+      const provision: Record<string, string> = { token, provider: settings.provider(), api_key: apiKey };
+      if (settings.get("model_ask")) provision.model_ask = settings.get("model_ask")!;
+      if (settings.get("model_classify")) provision.model_classify = settings.get("model_classify")!;
 
-    // Push provisioning to the headless agent over the internal network.
-    const res = await fetch(`${sa.internalBaseUrl}/api/provision`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(provision),
-    }).catch(() => null);
-    if (!res) return c.json({ error: `Could not reach ${sa.displayName} (not running?).` }, 502);
-    // 200 = just provisioned; 403 = already provisioned with this same stored token — both OK.
-    if (!res.ok && res.status !== 403) {
-      return c.json({ error: `${sa.displayName} refused provisioning (HTTP ${res.status}).` }, 502);
+      if (sa.needsVaultRepo) {
+        const vault = (body.vault_repo ?? "").trim();
+        if (!vault) return c.json({ error: "Vault repo required (e.g. owner/repo)." }, 400);
+        provision.vault_repo = vault;
+        provision.vault_branch = "main";
+        const ghToken = settings.get("github_token");
+        if (ghToken) provision.github_token = ghToken;
+        for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug"]) {
+          const v = settings.getRaw(k);
+          if (v) provision[k] = v;
+        }
+        if (!ghToken && !settings.hasGithubApp()) {
+          return c.json(
+            { error: "Connect GitHub on the Console first (Connections) so the agent can reach the vault." },
+            400,
+          );
+        }
+      }
+
+      // First enable: push provisioning to the (un-provisioned) headless agent.
+      const res = await fetch(`${sa.internalBaseUrl}/api/provision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(provision),
+      }).catch(() => null);
+      if (!res) return c.json({ error: `Could not reach ${sa.displayName} (not running?).` }, 502);
+      // 200 = just provisioned; 401/403 = already provisioned — both fine, we reconnect.
+      if (!res.ok && res.status !== 403 && res.status !== 401) {
+        return c.json({ error: `${sa.displayName} refused provisioning (HTTP ${res.status}).` }, 502);
+      }
     }
 
     settings.setAgentToken(sa.name, token);
