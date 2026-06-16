@@ -85,7 +85,7 @@ export interface AiLlmOptions {
 export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string; vision: string }> = {
   anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5", vision: "claude-sonnet-4-6" },
   openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini", vision: "gpt-4o-mini" },
-  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "openai/gpt-4o-mini" },
+  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "google/gemini-2.0-flash-lite" },
   groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant", vision: "meta-llama/llama-4-scout-17b-16e-instruct" },
 };
 
