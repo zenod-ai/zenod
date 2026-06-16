@@ -95,6 +95,32 @@ describe("reconcileTaskingReply", () => {
     expect(out).toBe(reply);
   });
 
+  it("does not flag a status summary whose numbers are all backed by query_backlog (the Telegram #86 false positive)", () => {
+    const reply =
+      "**State of execution — 2026-06-15**\n\n" +
+      "| # | Title | Status | Key Notes |\n" +
+      "|---|-------|--------|-----------|\n" +
+      "| 86 | Re-implement selector | needs-review | Just created & queued |\n" +
+      "| 76 | Fallback chain | needs-review | Blocked dependency for #86 |\n\n" +
+      "1 new issue (#86) is queued and ready for the runner.";
+    const backlog: RecordedAction = {
+      tool: "queryBacklog",
+      result:
+        "Open issues: 2\n" +
+        "#86 Re-implement selector [status:queued] — updated 2026-06-15 — https://github.com/AlfaBlok/obsidian-brain/issues/86\n" +
+        "#76 Fallback chain [status:needs-review] — updated 2026-06-15 — https://github.com/AlfaBlok/obsidian-brain/issues/76",
+    };
+    expect(reconcileTaskingReply(reply, [backlog])).toBe(reply);
+  });
+
+  it("still flags a fabricated creation when the cited number is not backed by any tool", () => {
+    const reply = "Done — just created issue #58 for you. https://github.com/AlfaBlok/obsidian-brain/issues/58";
+    const out = reconcileTaskingReply(reply, [{ tool: "queryBacklog", result: "Open issues: 1\n#42 Something else — https://github.com/AlfaBlok/obsidian-brain/issues/42" }]);
+    expect(out).toContain("no GitHub issue was created");
+    expect(out).toContain("#58");
+    expect(out).not.toContain("#42");
+  });
+
   it("does not correct a capabilities description that names verbs and example numbers", () => {
     const reply =
       "Here's what I can do with issues:\n\n" +

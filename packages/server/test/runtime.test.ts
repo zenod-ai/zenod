@@ -43,7 +43,9 @@ describe("runtime tasking tools", () => {
     const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
     const result = await tools.approveQueue({ repo: "zenod-ai/fixture", issueNumbers: [54] });
 
-    expect(result).toBe("Queued #54 — poked the runner to start now (falls back to its poll).");
+    expect(result).toBe(
+      "Queued #54 — poked the runner to start now (falls back to its poll).\n#54: https://github.com/zenod-ai/fixture/issues/54",
+    );
     expect(calls).toHaveLength(2);
     expect(calls[0]?.url).toContain("/repos/zenod-ai/fixture/issues/54/labels/status%3Aproposed");
     expect(calls[0]?.init.method).toBe("DELETE");

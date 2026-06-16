@@ -257,7 +257,8 @@ export class Runtime {
           queued.push(n);
         }
         pokeRunner(); // instant refresh instead of waiting for the monitor's ~2-min poll
-        return `Queued ${queued.map((n) => `#${n}`).join(", ")} — poked the runner to start now (falls back to its poll).`;
+        const links = queued.map((n) => `#${n}: https://github.com/${target}/issues/${n}`).join("\n");
+        return `Queued ${queued.map((n) => `#${n}`).join(", ")} — poked the runner to start now (falls back to its poll).\n${links}`;
       },
       // The only path that sets status:approved-merge — explicit human approval.
       // Removes status:needs-review (404 fine if absent) and adds approved-merge.
@@ -277,7 +278,8 @@ export class Runtime {
           });
           approved.push(n);
         }
-        return `Approved merge for ${approved.map((n) => `#${n}`).join(", ")} — the controller will merge on green CI and report back.`;
+        const links = approved.map((n) => `#${n}: https://github.com/${target}/issues/${n}`).join("\n");
+        return `Approved merge for ${approved.map((n) => `#${n}`).join(", ")} — the controller will merge on green CI and report back.\n${links}`;
       },
     };
   }

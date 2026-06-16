@@ -179,14 +179,22 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const presented = issueNumbersIn(prose);
   const receipts = createReceipts(actions);
   const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
+  const proven = provenNumbers(actions);
 
   const claimsCreation = hasActiveClaim(prose, CREATION_VERBS) && (presented.size > 0 || /\b(issue|ticket)\b/i.test(prose));
 
-  // The demonstrated bug: a creation is claimed but nothing was created.
-  if (claimsCreation && createdNums.size === 0) {
+  // The demonstrated bug: a creation is claimed but nothing was created. A status
+  // summary grounded in real tool data is NOT that — a query_backlog table whose
+  // cell reads "Just created & queued" describes an issue's history, and every
+  // number it cites is backed by the query result. Only flag a fabricated
+  // creation when a cited number is unbacked by any tool this turn, or when a
+  // creation is claimed with no number at all.
+  const unprovenPresented = [...presented].filter((n) => !proven.has(n));
+  const fabricatedCreation = presented.size === 0 || unprovenPresented.length > 0;
+  if (claimsCreation && createdNums.size === 0 && fabricatedCreation) {
     const lines = [
-      presented.size > 0
-        ? `⚠️ Correction — no GitHub issue was created. ${fmt([...presented])} ${presented.size > 1 ? "were" : "was"} not filed by this request (ignore the issue details below).`
+      unprovenPresented.length > 0
+        ? `⚠️ Correction — no GitHub issue was created. ${fmt(unprovenPresented)} ${unprovenPresented.length > 1 ? "were" : "was"} not filed by this request (ignore the issue details below).`
         : "⚠️ Correction — no GitHub issue was created by this request (ignore any claim below that one was filed).",
     ];
     const err = createError(actions);
@@ -197,7 +205,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
 
   // A creation did happen, but the reply points at a different number than the
   // one actually created (e.g. said #58, really created #61).
-  if (claimsCreation && presented.size > 0 && ![...createdNums].some((n) => presented.has(n))) {
+  if (claimsCreation && createdNums.size > 0 && presented.size > 0 && ![...createdNums].some((n) => presented.has(n))) {
     return `⚠️ Correction — the issue I actually created is below; the number cited in the text is wrong:\n${receipts.join("\n")}\n\n${text}`;
   }
 
@@ -215,7 +223,6 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // Any other mutation claim that cites an issue number no tool produced or
   // touched this turn (fabricated queue/merge/label receipts) — but only a
   // number presented right next to the verb, not one merely mentioned nearby.
-  const proven = provenNumbers(actions);
   const unproven = [...numbersClaimedAdjacent(prose, MUTATION_VERBS)].filter((n) => !proven.has(n));
   if (unproven.length > 0) {
     return `⚠️ Correction — I couldn't confirm ${fmt(unproven)} against the backlog this turn, so don't rely on ${unproven.length > 1 ? "those references" : "that reference"}.\n\n${text}`;
