@@ -31,6 +31,7 @@ import { IngestQueue } from "./ingestQueue.js";
 import { TaskJobStore } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
 import { OAuthStore } from "./oauthStore.js";
+import { callPeer } from "./peerClient.js";
 import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
@@ -153,6 +154,8 @@ export class Runtime {
     });
     // The chat/MCP Drive tools enqueue onto the background ingest queue.
     const driveTools = vaultless ? null : buildDriveTools(this.settings, this.ingestQueue);
+    // Mesh: peer-agent delegation tools, available to any agent (vault or not).
+    const peerTools = this.buildPeerTools();
     this.engine = createEngine({
       ...(repo ? { repo } : {}),
       llm,
@@ -168,9 +171,27 @@ export class Runtime {
         : {}),
       ...(driveTools ? { driveTools } : {}),
       ...(vaultless ? {} : { taskingTools: this.buildTaskingTools() }),
+      ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
     });
     return this.engine;
+  }
+
+  /**
+   * The mesh: turn each configured peer into a delegation tool the chat loop can
+   * call (`ask_<name>`), forwarding over MCP via callPeer. Available to any agent;
+   * it's how the vaultless Console answers memory questions by asking Zenod.
+   */
+  private buildPeerTools(): Record<string, { description: string; run: (input: string) => Promise<string> }> {
+    const tools: Record<string, { description: string; run: (input: string) => Promise<string> }> = {};
+    for (const peer of this.settings.peers()) {
+      const safe = peer.name.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
+      tools[`ask_${safe}`] = {
+        description: `Delegate a request to the "${peer.name}" peer agent and return its answer. Use it for that agent's domain — e.g. the user's memory/vault if it is a memory agent. Forwards your input to the peer over MCP.`,
+        run: (input: string) => callPeer(peer, input),
+      };
+    }
+    return tools;
   }
 
   private async githubToken(repo?: string): Promise<string | null> {

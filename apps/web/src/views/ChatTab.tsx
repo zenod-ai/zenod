@@ -266,7 +266,7 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`
 }
 
-export function ChatTab() {
+export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
   const [messages, setMessages] = React.useState<Message[]>([])
   const [input, setInput] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -595,7 +595,7 @@ export function ChatTab() {
             <Textarea
               ref={textareaRef}
               value={input}
-              placeholder="Ask your vault, or say 'remember this: …'"
+              placeholder={vaultless ? "Message the agent…" : "Ask your vault, or say 'remember this: …'"}
               rows={1}
               disabled={voiceTranscribing}
               className="min-h-9 resize-none rounded-xl border-transparent bg-muted/60 px-3.5 focus-visible:border-transparent focus-visible:bg-muted focus-visible:ring-0 dark:bg-input/30 dark:focus-visible:bg-input/50"

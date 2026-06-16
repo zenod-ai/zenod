@@ -22,6 +22,7 @@ export interface BrainLlm {
     tools: VaultReadTools,
     taskTools?: VaultTaskTools,
     driveTools?: DriveSourceTools,
+    peerTools?: PeerTools,
   ): Promise<AnswerResult>;
   /**
    * Librarian work loop. Without writeTools it surveys and returns a plan
@@ -106,14 +107,30 @@ export interface AnswerInput {
   onToolEvent?: (event: ChatToolEvent) => void;
 }
 
-/** Read-only tool callbacks the agent loop may invoke. */
+/**
+ * Read-only tool callbacks the agent loop may invoke. The vault tools are
+ * OPTIONAL: a vaultless agent (the Console shell) omits them so the loop never
+ * advertises a tool it can't run. searchChats is state-backed and always present.
+ */
 export interface VaultReadTools {
-  searchVault(query: string): Promise<string>;
-  readNote(path: string): Promise<string>;
-  listPages(): Promise<string>;
+  searchVault?(query: string): Promise<string>;
+  readNote?(path: string): Promise<string>;
+  listPages?(): Promise<string>;
   /** Search the user's past conversations across every channel (WhatsApp, web, …). */
   searchChats(query: string): Promise<string>;
 }
+
+/**
+ * One peer-agent delegation tool: the loop calls it with a free-form input and
+ * gets back the peer's answer. Wired by the server from configured peers (the
+ * mesh) — e.g. `ask_zenod` on the Console delegates a memory question to Zenod's
+ * MCP. To the loop it is just another tool.
+ */
+export interface PeerTool {
+  description: string;
+  run(input: string): Promise<string>;
+}
+export type PeerTools = Record<string, PeerTool>;
 
 /**
  * Mutating tool callbacks for the work loop. All operate on the local

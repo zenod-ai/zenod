@@ -12,6 +12,7 @@ import type {
   ClassifyInput,
   ComposePageInput,
   DriveSourceTools,
+  PeerTools,
   VaultReadTools,
   VaultTaskTools,
   VaultWriteTools,
@@ -439,6 +440,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     tools: VaultReadTools,
     taskTools?: VaultTaskTools,
     driveTools?: DriveSourceTools,
+    peerTools?: PeerTools,
   ): Promise<AnswerResult> {
     const readPaths = new Set<string>();
     const messages: ModelMessage[] = [
@@ -661,12 +663,32 @@ export class AiSdkBrainLlm implements BrainLlm {
         }
       : {};
 
+    // Peer-agent delegation tools (the mesh). Each configured peer becomes one
+    // tool (e.g. `ask_zenod`) that forwards a free-form request to that peer and
+    // returns its answer. The model sees them as ordinary tools.
+    const peerEntries = Object.entries(peerTools ?? {});
+    const peerToolSet = Object.fromEntries(
+      peerEntries.map(([name, peer]) => [
+        name,
+        tool({
+          description: peer.description,
+          inputSchema: z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") }),
+          execute: ({ input: peerInput }) => caught(() => peer.run(peerInput)),
+        }),
+      ]),
+    );
+
     const briefingExtras = [
       taskTools
         ? "You CAN act on explicit tasking instructions using tools: capture_note files notes, digest_backlog/run digest mines structured backlog candidates, create_issue and label_issue manage GitHub issues, edit_issue revises an existing ticket in place (body, title, labels, comment, or non-gated status) so you never close-and-recreate just to change a ticket, query_backlog reports open backlog/status, and service_backlog selects eligible work without launching a runner. propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute vault writes without explicit approval; creating a GitHub issue is allowed when the user explicitly asks to create/open/file one. Tickets you create are worked by autonomous agents, so they must be runnable: every issue needs an objective, explicit scope, and a done-condition/acceptance criteria (plus the files for code work, or the exact action + execute-vs-draft for action tasks like posting). If the user's request lacks any of that, ask ONE short clarifying question and do not file the issue until it is runnable — never create a ticket that would just bounce back as needs-clarification. Creating an issue does NOT run it: a ticket only executes once approve_queue moves it from status:proposed to status:queued. So when the user asks to create AND queue/run a ticket, create_issue then approve_queue (with the new number) in the same turn. Never tell the user something is 'queued', 'running', or that the runner was 'poked'/'woken' unless approve_queue actually succeeded for that number — poking happens only as part of a successful approve_queue (there is no separate poke tool), and the monitor also polls for queued tickets every ~2 minutes."
         : "",
       driveTools
         ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background transcription (download, configured transcription provider for audio, filing, archiving). When the user asks to transcribe their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Transcription panel, and the transcripts land in the vault when done."
+        : "",
+      peerEntries.length
+        ? `You can delegate to peer agents (the mesh): ${peerEntries
+            .map(([name]) => name)
+            .join(", ")}. Each forwards your request to that agent and returns its answer. Use a peer when the question is its domain — e.g. ask_zenod for the user's memory/vault, which you do not hold locally. Prefer delegating over saying you can't help.`
         : "",
     ].filter(Boolean);
 
@@ -697,26 +719,34 @@ export class AiSdkBrainLlm implements BrainLlm {
       tools: {
         ...taskToolSet,
         ...driveToolSet,
-        search_vault: tool({
-          description:
-            "Search the vault. Call this first for any question about the user's knowledge — returns ranked paths with snippets. Covers meaning pages, Log/ evidence files (verbatim transcripts, source links), and _attachments/ artifact filenames. If the first query misses, retry with different terms before giving up.",
-          inputSchema: z.object({ query: z.string() }),
-          execute: ({ query }) => tools.searchVault(query),
-        }),
-        read_note: tool({
-          description:
-            "Read the full content of one note by its vault-relative path. Works on meaning pages and Log/ evidence files. Always read the top search hits in full before concluding the vault lacks an answer — bodies hold details (transcripts, source links, '## Sources' sections) that summaries omit.",
-          inputSchema: z.object({ path: z.string() }),
-          execute: async ({ path }) => {
-            readPaths.add(path);
-            return tools.readNote(path);
-          },
-        }),
-        list_pages: tool({
-          description: "List all meaning pages with their titles, tags, and summaries.",
-          inputSchema: z.object({}),
-          execute: () => tools.listPages(),
-        }),
+        ...peerToolSet,
+        // Vault tools are registered only when the agent actually has a vault
+        // (they arrive as a group). A vaultless agent (the Console) omits them, so
+        // the model never advertises a tool it can't run.
+        ...(tools.searchVault
+          ? {
+              search_vault: tool({
+                description:
+                  "Search the vault. Call this first for any question about the user's knowledge — returns ranked paths with snippets. Covers meaning pages, Log/ evidence files (verbatim transcripts, source links), and _attachments/ artifact filenames. If the first query misses, retry with different terms before giving up.",
+                inputSchema: z.object({ query: z.string() }),
+                execute: ({ query }) => tools.searchVault!(query),
+              }),
+              read_note: tool({
+                description:
+                  "Read the full content of one note by its vault-relative path. Works on meaning pages and Log/ evidence files. Always read the top search hits in full before concluding the vault lacks an answer — bodies hold details (transcripts, source links, '## Sources' sections) that summaries omit.",
+                inputSchema: z.object({ path: z.string() }),
+                execute: async ({ path }) => {
+                  readPaths.add(path);
+                  return tools.readNote!(path);
+                },
+              }),
+              list_pages: tool({
+                description: "List all meaning pages with their titles, tags, and summaries.",
+                inputSchema: z.object({}),
+                execute: () => tools.listPages!(),
+              }),
+            }
+          : {}),
         search_chats: tool({
           description:
             "Search your past conversations with the user across ALL channels (WhatsApp, web, CLI, MCP) — not just the current thread. Returns matching messages grouped by conversation, with channel and timestamp. Use this when the user refers to something said earlier ('the issue we discussed', 'we were speaking about…', 'what did I say yesterday'), especially when it may have happened on a different channel. This is conversation history, distinct from search_vault (durable notes); reach for both when either could hold the answer.",
@@ -809,21 +839,23 @@ export class AiSdkBrainLlm implements BrainLlm {
           ].join("\n"),
     ].join("\n\n");
 
+    // The work loop only runs with a vault, so the (now-optional) vault read tools
+    // are always present here.
     const readToolSet = {
       search_vault: tool({
         description: "Search the vault — ranked paths with snippets.",
         inputSchema: z.object({ query: z.string() }),
-        execute: ({ query }) => caught(() => tools.searchVault(query)),
+        execute: ({ query }) => caught(() => tools.searchVault!(query)),
       }),
       read_note: tool({
         description: "Read the full content of one note by its vault-relative path.",
         inputSchema: z.object({ path: z.string() }),
-        execute: ({ path }) => caught(() => tools.readNote(path)),
+        execute: ({ path }) => caught(() => tools.readNote!(path)),
       }),
       list_pages: tool({
         description: "List all meaning pages with titles, tags, and summaries.",
         inputSchema: z.object({}),
-        execute: () => caught(() => tools.listPages()),
+        execute: () => caught(() => tools.listPages!()),
       }),
     };
 

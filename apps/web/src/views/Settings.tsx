@@ -89,7 +89,7 @@ export function Settings({
           <TabsTrigger value="test">Test</TabsTrigger>
         </TabsList>
         <TabsContent value="chat" className="mt-4">
-          <ChatTab />
+          <ChatTab vaultless={identity.vaultless} />
         </TabsContent>
         {showVault && (
           <TabsContent value="vault" className="mt-4">

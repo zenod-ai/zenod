@@ -10,6 +10,7 @@ import {
   parseStoredAllowedUsers,
   type TelegramSettings,
 } from "./telegramConfig.js";
+import type { PeerConfig } from "./peerClient.js";
 
 /** Runtime settings persisted in SQLite; env vars seed them on first boot. */
 export const SETTING_KEYS = [
@@ -116,6 +117,26 @@ export class Settings {
   setRaw(key: string, value: string): void {
     if (value === "") this.store.deleteSetting(key);
     else this.store.setSetting(key, value);
+  }
+
+  /**
+   * Peer agents this agent can delegate to (the mesh). Stored as a JSON blob under
+   * the internal `peers` key (not UI-masked settings — tokens are handled by the
+   * /api/peers endpoint, which never returns them).
+   */
+  peers(): PeerConfig[] {
+    const raw = this.getRaw("peers");
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? (arr as PeerConfig[]).filter((p) => p && p.name && p.url && p.token) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  setPeers(peers: PeerConfig[]): void {
+    this.setRaw("peers", JSON.stringify(peers));
   }
 
   /** All settings with secrets masked — safe for the UI. */

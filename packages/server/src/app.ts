@@ -165,6 +165,35 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ settings: settings.masked(), configured: settings.configured() });
   });
 
+  // --- Mesh: peer agents this agent can delegate to ---
+  // GET never returns tokens (only whether one is set). PUT replaces the whole list.
+  app.get("/api/peers", (c) =>
+    c.json({
+      peers: settings.peers().map((p) => ({ name: p.name, url: p.url, tool: p.tool ?? "ask_brain", hasToken: Boolean(p.token) })),
+    }),
+  );
+
+  app.put("/api/peers", async (c) => {
+    type PeerInput = { name?: string; url?: string; token?: string; tool?: string };
+    const body = await c.req.json<{ peers?: PeerInput[] }>().catch(() => ({ peers: [] as PeerInput[] }));
+    const existing = settings.peers();
+    const next = (body.peers ?? [])
+      .map((p) => {
+        const name = (p.name ?? "").trim();
+        const url = (p.url ?? "").trim();
+        // A masked/blank token on edit means "keep the existing one" for that peer.
+        const token =
+          p.token && !p.token.includes("••••") ? p.token : existing.find((e) => e.name === name)?.token ?? "";
+        return { name, url, token, ...(p.tool ? { tool: p.tool } : {}) };
+      })
+      .filter((p) => p.name && p.url && p.token);
+    settings.setPeers(next);
+    runtime.invalidate(); // rebuild the engine so the new peer tools take effect
+    return c.json({
+      peers: next.map((p) => ({ name: p.name, url: p.url, tool: p.tool ?? "ask_brain", hasToken: true })),
+    });
+  });
+
   app.post("/api/settings/test-github", async (c) => {
     const body = await c.req.json<{ repo?: string; token?: string }>().catch(() => ({}) as Record<string, string>);
     const repo = body.repo || settings.get("vault_repo");

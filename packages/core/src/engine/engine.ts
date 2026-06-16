@@ -34,7 +34,7 @@ import { getNote } from "../ops/get.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
-import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, VaultTaskTools } from "../llm/types.js";
+import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
 import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
@@ -104,6 +104,12 @@ export interface EngineOptions {
    * provide GitHub/backlog integrations; core supplies conservative fallbacks.
    */
   taskingTools?: ExternalTaskingTools;
+  /**
+   * Peer-agent delegation tools (the mesh). Each is exposed to the chat loop as
+   * a tool (e.g. `ask_zenod`) that forwards to a peer agent and returns its
+   * answer. Server-provided from configured peers; the engine stays peer-agnostic.
+   */
+  peerTools?: PeerTools;
   /** Override for tests. */
   now?: () => Date;
   /**
@@ -288,44 +294,43 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
-  function readTools() {
-    // Vaultless (Console shell): the three vault-backed tools are still registered
-    // by the LLM layer, so they must exist — but they report no vault rather than
-    // dereferencing an empty vaultPath. searchChats (state-backed) works normally.
-    const NO_VAULT = "No vault is configured on this agent.";
+  function readTools(): VaultReadTools {
+    // searchChats is state-backed (conversation history), not vault-backed — it
+    // works in every mode, so it is the one read tool a vaultless agent keeps.
+    const searchChats = async (query: string) => {
+      const hits = await state.searchConversations(query, { limit: 6 });
+      if (hits.length === 0) return "no results";
+      return hits
+        .map((hit) => {
+          const header = `[${channelName(hit.surface)}] ${hit.matchCount} matching message${
+            hit.matchCount === 1 ? "" : "s"
+          }, latest ${formatChatTimestamp(hit.lastAt)}`;
+          const lines = hit.messages
+            .map((m) => `  ${m.role === "user" ? "User" : "Zeno"} (${formatChatTimestamp(m.at)}): ${chatSnippet(m.text)}`)
+            .join("\n");
+          return `${header}\n${lines}`;
+        })
+        .join("\n\n");
+    };
+    // Vaultless (Console shell): omit the vault tools entirely so the loop never
+    // advertises a tool it can't run. The LLM layer registers only what's present.
+    if (!repo) return { searchChats };
     return {
       searchVault: async (query: string) => {
-        if (!repo) return NO_VAULT;
         const hits = await searchVault(vaultPath, query, location);
         if (hits.length === 0) return "no results";
         return hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n");
       },
       readNote: async (path: string) => {
-        if (!repo) return NO_VAULT;
         const note = await getNote(vaultPath, path, location);
         const body = note.body.length > 8000 ? `${note.body.slice(0, 8000)}\n[truncated]` : note.body;
         return `--- frontmatter: ${JSON.stringify(note.frontmatter)}\n${body}`;
       },
       listPages: async () => {
-        if (!repo) return NO_VAULT;
         const snapshot = await scanVault(vaultPath);
         return snapshot.pages.map((p) => `${p.path} — ${p.title}: ${p.summary}`).join("\n") || "(none)";
       },
-      searchChats: async (query: string) => {
-        const hits = await state.searchConversations(query, { limit: 6 });
-        if (hits.length === 0) return "no results";
-        return hits
-          .map((hit) => {
-            const header = `[${channelName(hit.surface)}] ${hit.matchCount} matching message${
-              hit.matchCount === 1 ? "" : "s"
-            }, latest ${formatChatTimestamp(hit.lastAt)}`;
-            const lines = hit.messages
-              .map((m) => `  ${m.role === "user" ? "User" : "Zeno"} (${formatChatTimestamp(m.at)}): ${chatSnippet(m.text)}`)
-              .join("\n");
-            return `${header}\n${lines}`;
-          })
-          .join("\n\n");
-      },
+      searchChats,
     };
   }
 
@@ -1054,6 +1059,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       readTools(),
       taskTools,
       options.driveTools,
+      options.peerTools,
     );
     // Same grounding guard as handleTasking — a fabricated "Created issue #N"
     // must not survive into the web chat either.
@@ -1085,6 +1091,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       readTools(),
       repo ? buildTaskTools(input.surface, (action) => actions.push(action)) : undefined,
       options.driveTools,
+      options.peerTools,
     );
     // Never let the reply assert a creation/mutation the tools didn't actually
     // perform — the user-facing issue number/url must come from a real result.

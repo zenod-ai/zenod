@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
-import type { AnswerInput, AnswerResult, BrainLlm, VaultReadTools, VaultTaskTools } from "../src/llm/types.js";
+import type { AnswerInput, AnswerResult, BrainLlm, PeerTools, VaultReadTools, VaultTaskTools } from "../src/llm/types.js";
 
 /**
  * The spike (#154): prove the engine boots and CHATS with NO vault — the Console
@@ -12,17 +12,29 @@ class StubLlm {
   lastInput?: AnswerInput;
   lastReadTools?: VaultReadTools;
   lastTaskTools?: VaultTaskTools;
-  async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult> {
+  lastPeerTools?: PeerTools;
+  async answer(
+    input: AnswerInput,
+    tools: VaultReadTools,
+    taskTools?: VaultTaskTools,
+    _driveTools?: unknown,
+    peerTools?: PeerTools,
+  ): Promise<AnswerResult> {
     this.lastInput = input;
     this.lastReadTools = tools;
     this.lastTaskTools = taskTools;
+    this.lastPeerTools = peerTools;
     return { text: "hello from the console", readPaths: [] };
   }
 }
 
-function vaultlessEngine() {
+function vaultlessEngine(peerTools?: PeerTools) {
   const llm = new StubLlm();
-  const engine = createEngine({ llm: llm as unknown as BrainLlm, state: new SqliteStateStore(":memory:") });
+  const engine = createEngine({
+    llm: llm as unknown as BrainLlm,
+    state: new SqliteStateStore(":memory:"),
+    ...(peerTools ? { peerTools } : {}),
+  });
   return { engine, llm };
 }
 
@@ -38,15 +50,35 @@ describe("engine — vaultless (Console shell)", () => {
     expect(llm.lastTaskTools).toBeUndefined();
   });
 
-  it("registers the vault read tools but they report no vault (so a model tool-call never crashes)", async () => {
+  it("omits the vault read tools entirely (so the loop never advertises them) but keeps searchChats", async () => {
     const { engine, llm } = vaultlessEngine();
     await engine.chat("hi", "web");
     const tools = llm.lastReadTools!;
-    expect(await tools.searchVault("anything")).toBe("No vault is configured on this agent.");
-    expect(await tools.readNote("Notes/x.md")).toBe("No vault is configured on this agent.");
-    expect(await tools.listPages()).toBe("No vault is configured on this agent.");
+    expect(tools.searchVault).toBeUndefined();
+    expect(tools.readNote).toBeUndefined();
+    expect(tools.listPages).toBeUndefined();
     // searchChats is state-backed, not vault-backed — it still works (empty here).
     expect(await tools.searchChats("anything")).toBe("no results");
+  });
+
+  it("exposes configured peer tools to the chat loop (the mesh) and they run", async () => {
+    let asked = "";
+    const { engine, llm } = vaultlessEngine({
+      ask_zenod: {
+        description: "ask the memory agent",
+        run: async (input: string) => {
+          asked = input;
+          return "Per Zenod: your Axa policy ends March 2027.";
+        },
+      },
+    });
+    await engine.chat("what does my insurance say?", "web");
+    expect(llm.lastPeerTools).toBeDefined();
+    expect(Object.keys(llm.lastPeerTools!)).toEqual(["ask_zenod"]);
+    // the peer tool actually delegates
+    const result = await llm.lastPeerTools!.ask_zenod.run("insurance renewal?");
+    expect(asked).toBe("insurance renewal?");
+    expect(result).toMatch(/Axa policy ends March 2027/);
   });
 
   it("gates the vault-only methods with a clear error", async () => {
