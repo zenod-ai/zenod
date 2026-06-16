@@ -1024,8 +1024,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
   // ignoring the user, so always produce *something*: the real tool results if
   // any ran, otherwise an honest retry notice. Reconciliation runs first so a
   // fabricated mutation is still corrected before we consider falling back.
-  function finalizeReply(rawText: string, actions: TaskingAction[]): string {
-    const text = reconcileTaskingReply(rawText, actions);
+  // `reconcile` guards against fabricated "Created issue #N" claims by checking them
+  // against OUR recorded actions. A mesh-relay agent (the Console: no own tasking
+  // tools) has no such actions — the result came from a peer (e.g. ask_archus) — so
+  // skip reconcile, else a peer's TRUE result gets a false "Correction — nothing was
+  // created" prepended. Agents that act themselves (have tasking tools) still reconcile.
+  function finalizeReply(rawText: string, actions: TaskingAction[], reconcile = true): string {
+    const text = reconcile ? reconcileTaskingReply(rawText, actions) : rawText;
     if (text.trim()) return text;
     const summary = summarizeActionsForReply(actions);
     return summary
@@ -1076,9 +1081,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
       options.driveTools,
       options.peerTools,
     );
-    // Same grounding guard as handleTasking — a fabricated "Created issue #N"
-    // must not survive into the web chat either.
-    const text = finalizeReply(result.text, actions);
+    // Same grounding guard as handleTasking — but only when WE have tasking tools.
+    // The Console relays peers' results (ask_archus) and must not "correct" them.
+    const text = finalizeReply(result.text, actions, Boolean(taskTools));
     await state.appendMessage(cid, "assistant", text, surface);
 
     return {
@@ -1109,8 +1114,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       options.peerTools,
     );
     // Never let the reply assert a creation/mutation the tools didn't actually
-    // perform — the user-facing issue number/url must come from a real result.
-    const text = finalizeReply(result.text, actions);
+    // perform — BUT only when WE have tasking tools (the Console relays peers).
+    const text = finalizeReply(result.text, actions, Boolean(repo || options.taskingTools));
     await state.appendMessage(cid, "assistant", text, input.surface);
     return { text, actions };
   }
