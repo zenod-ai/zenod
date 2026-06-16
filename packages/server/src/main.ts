@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app.js";
 import { Runtime } from "./runtime.js";
+import { ZENOD_AGENT } from "./agent.js";
 
 const port = Number(process.env.PORT ?? 8080);
 const dataDir = resolve(process.env.ZENOD_DATA_DIR ?? "./data");
@@ -18,7 +19,7 @@ try {
 }
 
 const runtime = new Runtime(dataDir);
-const app = createApp(runtime, hasWeb ? { webDist } : {});
+const app = createApp(runtime, { agent: ZENOD_AGENT, ...(hasWeb ? { webDist } : {}) });
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`zenod server listening on :${info.port} (data: ${dataDir}${hasWeb ? `, ui: ${webDist}` : ", no ui build"})`);
