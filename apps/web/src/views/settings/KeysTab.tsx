@@ -67,6 +67,7 @@ type FormState = {
   groq_api_key: string
   model_ask: string
   model_classify: string
+  model_vision: string
   model_max_steps: string
 }
 
@@ -86,6 +87,7 @@ function toFormState(settings: SettingsValues): FormState {
     groq_api_key: settings.groq_api_key ?? "",
     model_ask: settings.model_ask ?? "",
     model_classify: settings.model_classify ?? "",
+    model_vision: settings.model_vision ?? "",
     model_max_steps: settings.model_max_steps ?? "",
   }
 }
@@ -478,6 +480,22 @@ export function KeysTab({
               />
               <FieldDescription>
                 Used to classify incoming evidence.
+              </FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="keys-model-vision">
+                Vision model
+              </FieldLabel>
+              <ModelSelect
+                id="keys-model-vision"
+                provider={form.provider}
+                value={form.model_vision}
+                defaultModelId={PROVIDER_DEFAULT_MODEL[form.provider].vision}
+                onChange={(value) => update("model_vision", value)}
+              />
+              <FieldDescription>
+                Used to describe images from WhatsApp, Telegram, and the web UI.
+                Must support image content blocks.
               </FieldDescription>
             </Field>
             <Field>

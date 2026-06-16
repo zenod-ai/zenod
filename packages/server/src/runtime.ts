@@ -150,6 +150,7 @@ export class Runtime {
       apiKey: this.settings.activeApiKey()!,
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
       ...(this.settings.get("model_classify") ? { classifyModel: this.settings.get("model_classify")! } : {}),
+      ...(this.settings.get("model_vision") ? { visionModel: this.settings.get("model_vision")! } : {}),
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
       // Always persist real per-call token usage for cost analytics (GET
       // /api/usage). ZENOD_LLM_COST_LOG=1 additionally tails it to stdout.

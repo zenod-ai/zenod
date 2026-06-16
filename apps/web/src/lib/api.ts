@@ -115,6 +115,7 @@ export type SettingsValues = {
   openrouter_api_key: string | null
   model_ask: string | null
   model_classify: string | null
+  model_vision: string | null
   model_max_steps: string | null
   google_service_account_json: string | null
   google_drive_folder_id: string | null

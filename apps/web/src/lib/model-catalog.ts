@@ -83,11 +83,11 @@ export const MODEL_CATALOG: Record<Provider, ModelInfo[]> = {
  * Per-provider default models used when the stored value is empty. Mirrors
  * PROVIDER_DEFAULTS in packages/core so the UI can label the default option.
  */
-export const PROVIDER_DEFAULT_MODEL: Record<Provider, { ask: string; classify: string }> = {
-  anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5" },
-  openai: { ask: "gpt-4o", classify: "gpt-4o-mini" },
-  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat" },
-  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant" },
+export const PROVIDER_DEFAULT_MODEL: Record<Provider, { ask: string; classify: string; vision: string }> = {
+  anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5", vision: "claude-sonnet-4-6" },
+  openai: { ask: "gpt-4o", classify: "gpt-4o-mini", vision: "gpt-4o-mini" },
+  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "google/gemini-3.1-flash-lite" },
+  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant", vision: "meta-llama/llama-4-scout-17b-16e-instruct" },
 }
 
 export function findModel(provider: Provider, id: string): ModelInfo | undefined {
