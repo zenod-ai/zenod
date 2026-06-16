@@ -23,7 +23,7 @@ import { clampMaxSteps, createBrainLlm, DEFAULT_MAX_STEPS, MAX_WORK_STEPS, PROVI
 
 describe("aisdk streaming error handling", () => {
   it("uses the cheaper OpenAI model and bounded loop caps by default", () => {
-    expect(PROVIDER_DEFAULTS.openai).toEqual({ ask: "gpt-4o-mini", classify: "gpt-4o-mini" });
+    expect(PROVIDER_DEFAULTS.openai).toEqual({ ask: "gpt-4o-mini", classify: "gpt-4o-mini", vision: "gpt-4o-mini" });
     expect(DEFAULT_MAX_STEPS).toBe(8);
     expect(MAX_WORK_STEPS).toBe(12);
   });
