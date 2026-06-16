@@ -47,17 +47,30 @@ That "its own code" is the *agent's* package — there is no generic module syst
 register into. An agent is a thin app: identity + its tools + its tab(s), deployed as
 its own container.
 
-## The agents
+## The full roster
 
-| Agent | Job | Owns | Repo access | Vault? |
-|---|---|---|---|---|
-| **Zenod** | memory / librarian | vault + memory tools (search/read/list/capture, vault tasks) + **Vault, Transcription** tabs | **only** the memory/vault repo | **yes** |
-| **Archus** | backlog | backlog tools (create/edit/label issue, query/service backlog, approve_*) + **Backlog** tab | the repos it manages | **no** |
-| **Mail** | email | email tools (send/search/read) + **Inbox** tab | — | **no** |
+Three **kinds** of unit, all on the shared network, all reachable as MCP:
+- **chat-agent** = base + a capability + chat UI (you talk to it).
+- **worker** = headless, queue-driven (no chat UI; it executes).
+- **tool-island** = headless tool provider, used *by* agents (often vendored).
+- **platform** = the shared central service.
 
-- **Zenod does NOT own the backlog.** When backlog work arises it **delegates to Archus**
-  over the mesh. If you don't run Archus, Zenod simply has no backlog — and that's fine.
-- Each agent is **independent**: deletable, restartable, monitorable on its own.
+| Unit | Kind | Job | Owns | Repo access | Vault | Its own tools | Container | Subdomain | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| **Central** | platform | broker connections + identity + registry | the GitHub App, model keys, Drive creds, agent registry | (holds the App; installed per-org) | no | — (serves creds + registry, not chat tools) | `central` | internal only | **planned** |
+| **Zenod** | chat-agent | memory / librarian | the vault (git memory) | **only** the memory/vault repo (obsidian-brain) | **yes** | search_vault, read_note, list_pages, search_chats, capture_note, propose_vault_task, execute_vault_task | `zenod` | app.zenod.dev (z2 while migrating) | **LIVE** |
+| **Archus** (Nearchus) | chat-agent | backlog | the backlog (issues across repos) | the repos it manages (cross-org via the App) | no | query_backlog, service_backlog, digest_backlog, create_issue, edit_issue, label_issue, approve_queue, approve_merge | `archus` | archus.zenod.dev | **LIVE** (prototype → rebuild clean) |
+| **Epaminon** | worker | executor / runner | execution (fan-out, PRs, merges) | the code repos it works (broad, via gh) | no | drain queued tickets, fan-out Codex workers, open PR, merge-on-green | `zenod-agent-runner` | internal (status UI later) | **LIVE** |
+| **Mail** | chat-agent | email | email access | — | no | send_email, search_email, read_email | `mail` | mail.zenod.dev | **planned** |
+| **X** (Twitter) | tool-island | post/read tweets | the @ZenodAgent X creds | — | no | post_tweet, read_tweets (consumed by Epaminon/agents) | `x-mcp` (readonly + postread) | internal only | **LIVE** (vendored) |
+| **Nectary** | chat-agent | financing / incentives | the funding layer | financing repos | no | (TBD) | `nectary` | nectary.dev | **future** |
+
+How they fit together:
+- **Zenod** (memory) **delegates backlog** to **Archus** over the mesh — if you don't run Archus, Zenod simply has no backlog.
+- **Archus** curates + gates the backlog; **Epaminon** drains queued tickets and does the actual code work (Codex fan-out, PRs). Backlog *brain* (Archus) vs *muscle* (Epaminon).
+- **X** is a tool-island Epaminon/agents call to tweet; it isn't a chat-agent (vendored, headless).
+- **Central** brokers auth + the registry for everyone.
+- Each unit is **independent**: deletable, restartable, monitorable on its own.
 
 ## CENTRAL — shared platform (prerequisite, NOT yet built)
 
@@ -74,13 +87,28 @@ tools" is never ambiguous in any agent's tool list.
 
 ## Repos & containers
 
+**One monorepo:**
 ```
 packages/base-server   packages/base-ui          (the shared base)
 packages/central       (the connections/identity service)
-apps/zenod  apps/archus  apps/mail               (thin: identity + tools + tab)
+apps/zenod  apps/archus  apps/mail  apps/nectary (thin chat-agents: identity + tools + tab)
+apps/epaminon                                    (the executor/worker — headless)
+services/x-mcp                                   (vendored Twitter tool-island)
 ```
-Containers (Dokploy, side by side): `zenod`, `archus`, `mail`, `central`, + islands (`x-mcp`).
-One agent = one container.
+**Containers (Dokploy, side by side):**
+
+| Container | Unit | Status |
+|---|---|---|
+| `zenod` | Zenod | live |
+| `archus` | Archus | live (rebuild) |
+| `zenod-agent-runner` | Epaminon | live |
+| `x-mcp` (readonly + postread) | X | live |
+| `central` | Central platform | planned |
+| `mail` | Mail | planned |
+| `nectary` | Nectary | future |
+
+One unit = one container. They sit side by side as endpoints — monitorable, restartable
+independently.
 
 ## Migration — Option B (parallel → prove → cut over)
 
