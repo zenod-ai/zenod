@@ -1,64 +1,107 @@
-# Suite Scaffold — Target Structure
+# Zenod Suite — Target Architecture (base + modules)
 
-The clean end-state the scaffold refactor is moving toward. Every step must land
-*toward* this picture, tested and revertible. If a step doesn't fit this map, we
-don't take it.
+The fully-defined target. Every step lands toward this. Approach: **Option B** —
+build the clean shape in parallel (Zenod-v2), prove it, then cut over. The live
+system is never mutated destructively.
 
-## Principle
+## The one idea: a base, with modules bolted on
 
-Separate the **reusable substrate** from **per-agent specifics**. Few, well-bounded
-packages. An agent is a *thin composition* of shared packages + its own tools and
-identity — **never a fork**.
+```
+agent = THE BASE  +  one or more MODULES  +  identity/persona
+```
 
-## Packages: 3 shared + thin agent apps
+- **THE BASE** is identical in every agent.
+- A **MODULE** = tools + (optionally) a UI tab + (optionally) a store.
+- An **agent app** is a tiny file: its identity + the list of modules it uses.
+- All agents connect down to **one CENTRAL platform** and talk to each other over MCP.
 
-### Shared (the scaffold)
+## THE BASE — shared, identical in every agent
 
-**1. `zenod` (core library)** — all reusable domain logic. No HTTP, no UI. Pure
-logic, organized in clear internal modules:
-- `engine/` — the LLM agent loop, chat, tool-calling
-- `vault/` — git-backed memory
-- `llm/` — provider adapters
-- `connections/` — credentials/identity: GitHub App auth, token minting, per-repo
-  installation resolution, Drive, X. (This is where today's `githubApp.ts` belongs,
-  as a clear module — not loose at the package root.)
+Two shared packages:
 
-**2. `@zenod/server` (server shell)** — the reusable Hono app: HTTP routes, MCP
-server mounting, settings store, auth middleware, the connections REST endpoints,
-health. **Parameterized by an agent config** (identity, system prompt, tools, tab
-manifest). Zenod and Archus both instantiate the *same* shell with different config.
+- **`base-server`** — the agent loop (chat + tool-calling) + the MCP server + the
+  **connections-client** (talks to central). **No vault. No domain tools.** This is
+  the minimal "an agent that can chat, expose an MCP, and reach central."
+- **`base-ui`** — the shell: **Chat · Connections · Costs · login**. A shared React
+  kit every agent imports.
 
-**3. `@zenod/ui` (UI kit)** — the React shell: tabs (Chat, Connections/Integrations,
-Costs), shared components, login. Driven by a per-agent tab manifest.
+**UI rule (the "change once" you asked about):**
+- Change `base-ui` (the shell) → rebuild → **every agent gets it**.
+- Each **module ships its own tab** as a component → only agents with that module get it.
+- So: **shell change → everyone; module change → only its users.** Same UI everywhere,
+  edited in one place, with per-agent tabs layered on.
 
-### Per-agent (thin apps — composition + config only)
+## MODULES — the distinguishing part
 
-- `apps/zenod` — vault/memory tools + identity + tabs (Vault, Transcription) + Dockerfile + domain
-- `apps/archus` — backlog tools + identity + Backlog tab + Dockerfile + domain
-- `apps/mail` — email tools + identity + Dockerfile + domain
-- (existing, unchanged: `apps/site` marketing; `services/x-mcp` vendored island)
+A module bundles { tools, optional UI tab, optional store }:
 
-## Boundary rules (what keeps it clean)
+- **`mod-memory`** — the vault (git memory) + librarian tools (search_vault, read_note,
+  capture_note, list_pages, propose/execute_vault_task) + **Vault & Transcription** tabs. **Has a store (the vault).**
+- **`mod-backlog`** — backlog/issue tools (create/edit/label_issue, query/service_backlog,
+  approve_queue/merge) + a **Backlog** tab. **No vault.**
+- **`mod-email`** — email tools (send/search/read) + an **Inbox** tab. **No vault.**
 
-- **core** = pure logic. No `hono`, no `react`, no agent-specific names.
-- **server** = HTTP/MCP shell. No agent-specifics hardcoded; everything comes via config.
-- **ui** = presentation. No business logic.
-- **agent apps** = composition + config. No copied shell code, ever.
+## THE AGENTS — base + module(s)
 
-If you can't say which of these a file belongs to, the boundary is wrong.
+- **Zenod** = base + **`mod-memory`**. The **librarian**: owns the vault/memory.
+  **Does NOT own the backlog** — it **delegates backlog work to Archus** over the mesh.
+- **Archus** = base + **`mod-backlog`**. The backlog expert. **No vault.**
+- **Mail** = base + **`mod-email`**. **No vault.**
+- (future agents = base + their module.)
 
-## Execution order (clean slices, each tested + revertible)
+## CENTRAL — shared platform, deployed once
 
-1. ✅ Decouple connections from the concrete `Settings` (interface). *(done)*
-2. ✅ Connections into `core`. → **tidy into `core/src/connections/` module** *(next, trivial)*
-3. **Parameterize `@zenod/server` into a reusable shell** — the key step. Zenod becomes its first config. *(the meaty one)*
-4. Extract `@zenod/ui` from `apps/web`.
-5. `apps/zenod` = thin composition on the shell (proves it; Zenod still works).
-6. `apps/archus` = second composition → Archus exists, scaffold validated.
+The connections/identity service (plain HTTP, **not** MCP): one stable GitHub App,
+model/provider keys, Drive, and the **agent registry** that powers the mesh. Agents
+reach it via the base's connections-client. See [[#140]].
 
-## Why this is robust, not fragile
+## Mesh — agents talk
 
-- **Three** shared packages with single, obvious responsibilities — not a swarm of tiny ones.
-- TypeScript + the test suite gate **every** step; each slice is behavior-identical and revertible at a git checkpoint.
-- Agents are **config, not forks** — so adding Archus or Mail cannot rot the shared code.
-- Deploy stays per-agent (each app its own Dockerfile), so one agent's deploy can never break another.
+Each agent registers with central; agents call each other over MCP. **Peer tools are
+labeled external** (e.g. `zenod.search_vault` / `ask_archus`) so "my tools" and
+"peer tools" are never confused. Zenod → Archus for backlog; Archus → Zenod for memory.
+
+## Repos & containers
+
+**One monorepo:**
+```
+packages/base-server   packages/base-ui
+packages/mod-memory    packages/mod-backlog    packages/mod-email
+packages/central       (the connections/identity service)
+apps/zenod  apps/archus  apps/mail              (thin: identity + module list)
+```
+**Containers (Dokploy):** `zenod`, `archus`, `mail` (one per agent), `central`, plus
+islands (`x-mcp`). One agent = one container = base + its modules.
+
+## Migration plan — Option B (parallel, then cut over)
+
+Non-destructive: the live Zenod is untouched until a proven cutover.
+
+1. **Extract the BASE** — vault-less `base-server` loop + `base-ui` kit + the module interface.
+2. **Carve MODULES** — `mod-memory` (from today's vault engine), `mod-backlog` (from today's
+   tasking tools), `mod-email`.
+3. **Zenod-v2 = base + mod-memory** → deploy to a **temp domain** → prove parity
+   (chat, vault, WhatsApp/Telegram). Live Zenod stays as-is.
+4. **Archus = base + mod-backlog** (clean) → deploy (replaces the throwaway prototype).
+5. **Mesh** — registry + peer tools (labeled external).
+6. **Cutover** — point `app.zenod.dev` → Zenod-v2, retire the old. Reversible domain swap;
+   same vault data.
+
+## Ticket re-assessment
+
+- **#140** shared auth → CENTRAL platform (stays).
+- **#142** scaffold → re-scope to **extract the BASE + module interface** (phase 1).
+- **#143** Nearchus deploy → current Archus is a **throwaway prototype** (runs full Zenod);
+  rebuild as base + mod-backlog (phase 4).
+- **#144** backlog tooling → **`mod-backlog`** (phase 2).
+- **#145** mesh → stays (phase 5).
+- **#146** gate → stays (milestone check).
+- **#147** Mail → base + **`mod-email`**.
+- **#148** X migration → island, central-managed (stays).
+
+## Why this is clean, not fragile
+
+- The base is small and shared; modules are isolated; agents are config.
+- The target is *simple* — the only hard part is migrating off the vault-coupled engine,
+  and Option B does that in parallel so the live system is never at risk.
+- Editing the UI once updates all agents; a module change touches only its users.
