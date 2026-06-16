@@ -35,7 +35,7 @@ A GitHub issue in the central backlog (`obsidian-brain`), distinguished by a cla
 ```
 exec:queued      Archus minted it; in Epaminon's queue; waiting for a concurrency slot
 exec:running     Epaminon launched a worker; in progress
-exec:needs-review worker opened a PR; awaiting human merge approval
+exec:needs-review an outward/irreversible outcome (a PR to merge, a tweet/email to send) awaiting human content-approval
 exec:blocked     worker hit a blocker Epaminon could not auto-resolve
 exec:done        merged / completed
 exec:failed      execution failed (rolled back / abandoned)
@@ -44,6 +44,15 @@ exec:failed      execution failed (rolled back / abandoned)
 Legal transitions (Epaminon reports each one exactly once, on the edge):
 `queued→running`, `running→needs-review`, `running→blocked`, `blocked→running`,
 `needs-review→done`, `*→failed`. Archus sets `exec:queued` at creation.
+
+## One harness, generalist executor, outcome-based gate
+The executor is **one harness — Codex with the generalist suite MCP toolset** (code + X +
+memory + email via the Console gateway), not a code-only worker. There are no execution
+"kinds"; only the **outcome** varies: a PR, a tweet, a filed note. **Epaminon decides the
+gate from the outcome** — *outward/irreversible* (merge a PR, send a tweet/email) →
+`exec:needs-review` for human content-approval (preserving Outbound's confirm-before-send);
+*internal artifact* (file a note) → `exec:done` autonomously. Archus just applies the state
+Epaminon reports. See [ARCHUS-TWO-TIER-PLAN.md](./ARCHUS-TWO-TIER-PLAN.md) for the Archus half.
 
 ## The protocol — three messages, two lanes
 
