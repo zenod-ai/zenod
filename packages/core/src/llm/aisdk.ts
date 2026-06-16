@@ -183,6 +183,15 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Editing a GitHub issue";
     case "close_issue":
       return "Closing a GitHub issue";
+    // Epaminon (executor) — running queued tickets and reporting outcomes.
+    case "run_ticket":
+      return "Running a ticket";
+    case "report_outcome":
+      return "Reporting an execution outcome";
+    case "execution_status":
+      return "Checking execution status";
+    case "ask_epaminon":
+      return "Asking Epaminon about execution";
     // Outbound (comms guardian) — drafting and, after confirmation, publishing.
     case "ask_outbound":
       return "Asking Outbound";

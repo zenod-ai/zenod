@@ -1,0 +1,44 @@
+# Epaminon — the headless EXECUTOR agent. Internal MCP server the Console (c1)
+# loads over dokploy-network; reachable only as http://zenod-epaminon:8080.
+#
+# Boots UN-PROVISIONED (ZENOD_AWAIT_PROVISION=1): mints no token, idles until c1
+# MINTS its token and pushes config (GitHub creds + execution/project repo) to
+# /api/provision. AGENT=epaminon runs the engine in EXECUTOR mode — NO vault, but
+# the GitHub tasking tools, used to RUN approved tickets: queue a ticket (which
+# pokes the runner) so the fan-out runner executes it and opens a PR, then comment
+# the outcome + evidence URL back on the qualified ticket. It does NOT curate the
+# backlog (that is Archus). NOT exposed publicly. See docs/SUITE-AGENT-PATTERN.md.
+#
+# It joins dokploy-network so it can poke the agent-runner (zenod-agent-runner:8787)
+# for an instant scan when it queues a ticket — set ZENOD_RUNNER_POKE_URL. The poke
+# is best-effort; if the runner is unreachable the runner's poll still picks the
+# queued ticket up. The fan-out workers themselves authenticate against the Console
+# gateway, not Epaminon — see docs/EPAMINON-C1-MCP-WIRING.md.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-epaminon-data:
+
+services:
+  zenod-epaminon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenod-epaminon:dokploy
+    container_name: zenod-epaminon
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-epaminon-data:/data
+    environment:
+      AGENT: epaminon
+      ZENOD_AWAIT_PROVISION: "1"
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # Instant runner refresh on queue (falls back to the runner's ~2-min poll if unset/unreachable).
+      ZENOD_RUNNER_POKE_URL: http://zenod-agent-runner:8787
+    expose:
+      - "8080"

@@ -174,6 +174,48 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
+  // Epaminon's execution surface. Writes (run a ticket, record an outcome) are
+  // semantic intents routed to his guardian brain (chat_with_epaminon), which
+  // enforces his rules (only run explicitly-approved tickets, qualified ids,
+  // honest status) and acts with his GitHub tasking tools. The status read is a
+  // plain question to the same brain — no intent directive. NOTE: these are
+  // human/Console-facing execution triggers; they are NOT meant for autonomous
+  // fan-out workers (running work is an explicit approval gate — see
+  // docs/EPAMINON-C1-MCP-WIRING.md for the worker tool surface).
+  {
+    name: "run_ticket",
+    owner: "epaminon",
+    peerTool: "chat_with_epaminon",
+    intentPrefix:
+      "Run the following approved ticket now — queue it so the runner executes it; only act on a ticket explicitly approved to run, by its qualified owner/repo#N, and report back exactly what was queued: ",
+    title: "Run a backlog ticket",
+    description:
+      "Tell Epaminon to RUN an approved ticket. Name the ticket (owner/repo#N) the user has explicitly approved to execute; Epaminon queues it so the fan-out runner picks it up (opens a PR, moves it to needs-review) and confirms what was queued. He runs only what is explicitly approved — never bulk-queues a backlog.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "report_outcome",
+    owner: "epaminon",
+    peerTool: "chat_with_epaminon",
+    intentPrefix:
+      "Record this execution outcome on the ticket you ran — comment the result with its evidence URL (PR/commit) on the qualified owner/repo#N, set the review status, and report the status up so Archus can reflect it onto the central tracker: ",
+    title: "Report an execution outcome",
+    description:
+      "Hand Epaminon an execution outcome — the result and its evidence URL (PR/commit) — to record on the qualified repo ticket (owner/repo#N) he ran. He comments it, sets the review status, and reports up to Archus. He does not curate the backlog himself.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "execution_status",
+    owner: "epaminon",
+    peerTool: "chat_with_epaminon",
+    title: "Check execution status",
+    description:
+      "Ask Epaminon where execution stands — which tickets are queued/running, in review, or shipped, and any blockers. A read-only status question (does not start work). Reference tickets as owner/repo#N.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
 ];
 
 /**
