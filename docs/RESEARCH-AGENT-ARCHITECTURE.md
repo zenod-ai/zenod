@@ -79,13 +79,52 @@ crisp contract (objective, output format, boundaries) or it drifts. [anthropic-m
 - WhatsApp / web / Telegram are equal front-doors to the same agent engine. A base capability;
   any agent can expose any channel. No privileged UX.
 
+## Round 2 — the Council owns the UX; agents are headless MCP servers (DECIDED)
+
+Jordi's refinement, which collapses the biggest remaining mess (per-agent web services):
+
+- **The Council is the one conversational front-end.** WhatsApp, Telegram, and web **all bind
+  to the Council** — not to individual agents. One front door to the whole suite.
+- **The Council is always present — even with one agent.** "UniAgent" is not a special case;
+  it's **Council + 1 agent**. You talk to Z0 *through* the Council, transparently. No separate
+  "single agent chats by itself" path — uniformity preserved.
+- **Agents are headless MCP servers.** No per-agent web chat. Reached two ways: (a)
+  *conversationally* via the Council (it delegates with `ask_zenod(task)` etc.); (b)
+  *machine-to-machine* directly over authenticated MCP — a peer agent uses Z0's memory tools
+  without the Council in the loop.
+- **One human UI: the Council's.** Each agent contributes only its **config panel** (Z0 →
+  Vault; others → cred panels), mounted into the Council UI from the registry. The whole suite
+  = **one Council UI + N headless MCP servers.** This is the answer to "all these web services
+  is weird" — yes, there's just one.
+- **"Talk to one agent, focused"** survives as a **Council mode** (pin the conversation to a
+  single agent's delegation tool), not a seventh web service.
+
+Why this is *more* uniform, not less:
+- **"Change the UI → everyone"** is now trivially true — there is exactly **one** UI.
+- The **config-tab** question resolves: panels live in the one Council UI, contributed per agent.
+- Matches the field exactly: in the supervisor pattern, workers are **not** separately
+  user-facing — they're called as tools. Jordi arrived at it independently.
+
+**Honest caveats (planned, not surprises):**
+- The **Council is the single human entry point** — if it's down, no chat (agents still work
+  machine-to-machine). Acceptable; one healthy front-end beats seven.
+- **Migration:** Z0 today *is* app.zenod.dev and *holds the WhatsApp session*. In this model the
+  **Council** takes the gateways + the main domain; Z0 becomes a headless MCP server behind it.
+  The WhatsApp number moves Z0 → Council at cutover. One-time, plannable.
+
+**Updated container picture:** `council` (the UI + chat + gateways + delegation) at the main
+domain; each agent (`zenod`, `archus`, `epaminon`, `outbound`, `nectary`) a headless MCP
+server at its subdomain (MCP endpoint + health, no human chat). Central stays the shared
+volume + registry.
+
 ## Net verdict
-**The shape is right and now matches the field.** The only change research suggests is a
-*sharpening*, not a pivot: **adopt the supervisor (Council) as the orchestration pattern**
-instead of a flat peer mesh, and **realize "Central" as a convention (shared volume + Agent
-Cards) that upgrades to a token-broker service only at the hosted/multi-tenant step.**
-Everything already closed (agent shape, base-as-dependency, group-by-job, config tabs,
-gateways) stays closed.
+**The shape is right and now matches the field.** Two sharpenings, no pivot:
+1. **The Council (supervisor) is the hub *and* the only human UI** — gateways bind to it, agents
+   are headless MCP servers it delegates to (and that talk to each other directly over MCP).
+2. **Central = convention** (shared creds volume + Agent-Card registry), upgrading to a
+   token-broker service only at the hosted/multi-tenant step.
+Everything already closed (agent shape = base + tools + identity, base-as-dependency,
+group-by-job, gateways) stays closed; the config tab simply moves into the Council UI.
 
 ## Sources
 - [augment-swarm-vs-supervisor] https://www.augmentcode.com/guides/swarm-vs-supervisor
