@@ -1,5 +1,5 @@
 import * as React from "react"
-import { UsersIcon } from "lucide-react"
+import { GitBranchIcon, UsersIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -36,22 +36,26 @@ interface TeamAgent {
   needsRepo: boolean
   repoLabel: string
   enabled: boolean
+  /** The repo this agent is (or was last) pointed at, or null if never set. */
+  repo: string | null
 }
 
 /**
- * The dialog that opens when enabling an agent that needs a vault repo: it uses
- * the Console's GitHub connection to list repos and let you pick one — no typing.
+ * A repo picker over the Console's GitHub connection — no typing. Used both to
+ * pick a repo when enabling an agent and to re-point an enabled agent (Manage).
  */
-function EnableDialog({
-  agent,
+function RepoDialog({
+  title,
+  description,
   busy,
   onClose,
-  onEnable,
+  onPick,
 }: {
-  agent: TeamAgent
+  title: string
+  description: string
   busy: boolean
   onClose: () => void
-  onEnable: (vaultRepo: string, vaultBranch: string) => void
+  onPick: (repo: string, branch: string) => void
 }) {
   const [connected, setConnected] = React.useState<boolean | null>(null)
   const [repos, setRepos] = React.useState<GithubRepo[] | null>(null)
@@ -84,8 +88,8 @@ function EnableDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Enable {agent.displayName}</DialogTitle>
-          <DialogDescription>Pick the repo it should use as its {agent.repoLabel}.</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         {error !== null && <p className="text-sm text-destructive">{error}</p>}
         {connected === false && (
@@ -125,7 +129,7 @@ function EnableDialog({
                     type="button"
                     disabled={busy}
                     className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
-                    onClick={() => onEnable(r.fullName, r.defaultBranch)}
+                    onClick={() => onPick(r.fullName, r.defaultBranch)}
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="truncate font-mono text-xs">{r.fullName}</span>
@@ -150,11 +154,14 @@ function EnableDialog({
 /**
  * The Team tab — the enable surface. Enabling an agent makes the Console MINT its
  * token and provision it (token origination), then connect it so the chat gains
- * `ask_<name>`. Agents that need a vault pick their repo from the GitHub connection.
+ * `ask_<name>`. Agents that need a vault pick their repo from the GitHub
+ * connection; once enabled the repo is shown with a Manage button to re-point it
+ * in place — no disable/re-enable.
  */
 export function TeamTab() {
   const [agents, setAgents] = React.useState<TeamAgent[] | null>(null)
   const [enabling, setEnabling] = React.useState<TeamAgent | null>(null)
+  const [managing, setManaging] = React.useState<TeamAgent | null>(null)
   const [busy, setBusy] = React.useState<string | null>(null)
 
   const load = React.useCallback(() => {
@@ -179,6 +186,20 @@ export function TeamTab() {
       load()
     } catch (err) {
       toast.error(`Could not enable ${a.displayName}`, { description: errorMessage(err) })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function doManage(a: TeamAgent, repo: string, branch: string) {
+    setBusy(a.name)
+    try {
+      await api("/api/team/repo", { method: "POST", body: { name: a.name, repo, branch } })
+      toast.success(`${a.displayName} re-pointed`, { description: `Now using ${repo}.` })
+      setManaging(null)
+      load()
+    } catch (err) {
+      toast.error(`Could not change ${a.displayName}'s ${a.repoLabel}`, { description: errorMessage(err) })
     } finally {
       setBusy(null)
     }
@@ -213,7 +234,7 @@ export function TeamTab() {
         ) : (
           agents.map((a) => (
             <div key={a.name} className="flex items-center justify-between gap-3 rounded-lg border p-4">
-              <div className="flex min-w-0 flex-col">
+              <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{a.displayName}</span>
                   {a.enabled ? (
@@ -223,30 +244,65 @@ export function TeamTab() {
                   )}
                 </div>
                 <span className="text-sm text-muted-foreground">{a.role}</span>
+                {a.enabled && a.needsRepo && (
+                  <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    <GitBranchIcon className="size-3.5 shrink-0" />
+                    <span className="capitalize">{a.repoLabel}:</span>
+                    {a.repo ? (
+                      <span className="truncate font-mono text-foreground">{a.repo}</span>
+                    ) : (
+                      <span className="italic">not set</span>
+                    )}
+                  </div>
+                )}
               </div>
-              {a.enabled ? (
-                <Button variant="ghost" size="sm" disabled={busy === a.name} onClick={() => disable(a)}>
-                  {busy === a.name ? <Spinner /> : "Disable"}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  disabled={busy === a.name}
-                  onClick={() => (a.needsRepo ? setEnabling(a) : doEnable(a, "", ""))}
-                >
-                  {busy === a.name ? <Spinner /> : "Enable"}
-                </Button>
-              )}
+              <div className="flex shrink-0 items-center gap-1">
+                {a.enabled ? (
+                  <>
+                    {a.needsRepo && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy === a.name}
+                        onClick={() => setManaging(a)}
+                      >
+                        Manage
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" disabled={busy === a.name} onClick={() => disable(a)}>
+                      {busy === a.name ? <Spinner /> : "Disable"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={busy === a.name}
+                    onClick={() => (a.needsRepo && !a.repo ? setEnabling(a) : doEnable(a, a.repo ?? "", "main"))}
+                  >
+                    {busy === a.name ? <Spinner /> : "Enable"}
+                  </Button>
+                )}
+              </div>
             </div>
           ))
         )}
       </CardContent>
       {enabling && (
-        <EnableDialog
-          agent={enabling}
+        <RepoDialog
+          title={`Enable ${enabling.displayName}`}
+          description={`Pick the repo it should use as its ${enabling.repoLabel}.`}
           busy={busy === enabling.name}
           onClose={() => setEnabling(null)}
-          onEnable={(repo, branch) => doEnable(enabling, repo, branch)}
+          onPick={(repo, branch) => doEnable(enabling, repo, branch)}
+        />
+      )}
+      {managing && (
+        <RepoDialog
+          title={`Change ${managing.displayName}'s ${managing.repoLabel}`}
+          description="Pick a new repo. It applies immediately — no disable needed."
+          busy={busy === managing.name}
+          onClose={() => setManaging(null)}
+          onPick={(repo, branch) => doManage(managing, repo, branch)}
         />
       )}
     </Card>

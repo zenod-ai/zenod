@@ -23,6 +23,7 @@ export const SETTING_KEYS = [
   "openrouter_api_key",
   "model_ask",
   "model_classify",
+  "model_vision",
   "model_max_steps",
   "google_service_account_json",
   "google_drive_folder_id",
@@ -69,6 +70,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   openrouter_api_key: "OPENROUTER_API_KEY",
   model_ask: "ZENOD_MODEL_ASK",
   model_classify: "ZENOD_MODEL_CLASSIFY",
+  model_vision: "ZENOD_MODEL_VISION",
   model_max_steps: "ZENOD_MODEL_MAX_STEPS",
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
   google_drive_folder_id: "GOOGLE_DRIVE_FOLDER_ID",
@@ -208,6 +210,33 @@ export class Settings {
     const all = this.agentTokens();
     all[name] = token;
     this.setRaw("agent_tokens", JSON.stringify(all));
+  }
+
+  /**
+   * The repo each enabled agent is pointed at (vault or central backlog), kept by
+   * the Console for display + the Team-tab "Manage" affordance. Persisted
+   * separately from the peer list so it survives disable/re-enable — the agent
+   * keeps its provisioned repo while disabled, so the Console should remember it.
+   */
+  agentRepos(): Record<string, string> {
+    const raw = this.getRaw("agent_repos");
+    if (!raw) return {};
+    try {
+      const o = JSON.parse(raw);
+      return o && typeof o === "object" ? (o as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  agentRepo(name: string): string | null {
+    return this.agentRepos()[name] ?? null;
+  }
+
+  setAgentRepo(name: string, repo: string): void {
+    const all = this.agentRepos();
+    all[name] = repo;
+    this.setRaw("agent_repos", JSON.stringify(all));
   }
 
   /** All settings with secrets masked — safe for the UI. */

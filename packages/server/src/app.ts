@@ -90,6 +90,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       tagline: agent.tagline,
       // The Console shell runs without a vault; the UI can hide the Vault tab.
       vaultless: agent.vaultless ?? false,
+      // Current working repo (vault for memory agents, central backlog for backlog
+      // agents) so the Console can display it and backfill agents enabled before
+      // it tracked repos.
+      repo: agent.backlog ? settings.getRaw("backlog_repo") : settings.get("vault_repo"),
     }),
   );
 
@@ -179,6 +183,24 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // (newly) chosen transcription model to the persistent volume.
     if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
     return c.json({ settings: settings.masked(), configured: settings.configured() });
+  });
+
+  // Change THIS agent's working repo in place (authenticated with the agent's own
+  // token). The Console calls this to re-point an enabled agent without a
+  // disable/re-enable cycle. A backlog agent (Archus) points its central backlog;
+  // a vault agent re-points its vault. Unlike /api/provision this is NOT one-shot.
+  app.post("/api/agent/repo", async (c) => {
+    const body = await c.req.json<{ repo?: string; branch?: string }>().catch(() => ({}) as Record<string, string>);
+    const repo = (body.repo ?? "").trim();
+    if (!repo) return c.json({ error: "repo is required (owner/repo)" }, 400);
+    if (agent.backlog) {
+      settings.setRaw("backlog_repo", repo);
+    } else {
+      settings.set("vault_repo", repo);
+      settings.set("vault_branch", (body.branch ?? "main").trim() || "main");
+    }
+    runtime.invalidate();
+    return c.json({ ok: true, repo });
   });
 
   // --- Mesh: peer agents this agent can delegate to ---
@@ -319,6 +341,27 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     }
   }
 
+  // Backfill repo labels for agents enabled before the Console tracked them: ask
+  // each enabled-but-unlabelled peer for its current repo (over the internal
+  // network, with its token) and remember it. Best-effort, fire-and-forget — it
+  // self-heals on a later boot if an agent is briefly unreachable.
+  {
+    const tokens = settings.agentTokens();
+    const knownRepos = settings.agentRepos();
+    for (const sa of SUITE_AGENTS) {
+      if (!sa.needsRepo || knownRepos[sa.name]) continue;
+      const token = tokens[sa.name];
+      if (!token) continue; // never enabled
+      void fetch(`${sa.internalBaseUrl}/api/agent`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const repo = (j as { repo?: string } | null)?.repo;
+          if (typeof repo === "string" && repo) settings.setAgentRepo(sa.name, repo);
+        })
+        .catch(() => {});
+    }
+  }
+
   app.get("/api/team", (c) => {
     const enabled = new Set(settings.peers().map((p) => p.name));
     return c.json({
@@ -329,6 +372,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         needsRepo: a.needsRepo,
         repoLabel: a.repoLabel,
         enabled: enabled.has(a.name),
+        // The last repo this agent was pointed at — persists across disable so the
+        // UI can show it and re-enable can skip the picker.
+        repo: settings.agentRepo(a.name),
       })),
     });
   });
@@ -358,6 +404,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         const repo = (body.vault_repo ?? "").trim();
         if (!repo) return c.json({ error: `Pick a ${sa.repoLabel} (e.g. owner/repo).` }, 400);
         provision[sa.repoSetting] = repo;
+        settings.setAgentRepo(sa.name, repo);
         if (sa.repoSetting === "vault_repo") provision.vault_branch = "main";
         const ghToken = settings.get("github_token");
         if (ghToken) provision.github_token = ghToken;
@@ -387,8 +434,15 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     }
 
     settings.setAgentToken(sa.name, token);
+    const repoForPeer = settings.agentRepo(sa.name);
     const peers = settings.peers().filter((p) => p.name !== sa.name);
-    peers.push({ name: sa.name, url: `${sa.internalBaseUrl}/mcp`, token, ...(sa.peerTools ? { tools: sa.peerTools } : {}) });
+    peers.push({
+      name: sa.name,
+      url: `${sa.internalBaseUrl}/mcp`,
+      token,
+      ...(sa.peerTools ? { tools: sa.peerTools } : {}),
+      ...(repoForPeer ? { repo: repoForPeer } : {}),
+    });
     settings.setPeers(peers);
     runtime.invalidate();
     return c.json({ ok: true });
@@ -399,6 +453,34 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     settings.setPeers(settings.peers().filter((p) => p.name !== body.name));
     runtime.invalidate();
     return c.json({ ok: true });
+  });
+
+  // Re-point an already-enabled agent's repo in place — no disable/re-enable. The
+  // Console pushes the change to the agent (authenticated with the agent's token),
+  // then mirrors it locally for display.
+  app.post("/api/team/repo", async (c) => {
+    const body = await c.req
+      .json<{ name?: string; repo?: string; branch?: string }>()
+      .catch(() => ({}) as { name?: string; repo?: string; branch?: string });
+    const sa = SUITE_AGENTS.find((a) => a.name === body.name);
+    if (!sa) return c.json({ error: "unknown agent" }, 400);
+    if (!sa.needsRepo) return c.json({ error: `${sa.displayName} has no repo to manage.` }, 400);
+    const repo = (body.repo ?? "").trim();
+    if (!repo) return c.json({ error: `Pick a ${sa.repoLabel} (e.g. owner/repo).` }, 400);
+    const token = settings.agentToken(sa.name);
+    if (!token) return c.json({ error: `${sa.displayName} is not enabled.` }, 400);
+
+    const res = await fetch(`${sa.internalBaseUrl}/api/agent/repo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ repo, ...(body.branch ? { branch: body.branch } : {}) }),
+    }).catch(() => null);
+    if (!res) return c.json({ error: `Could not reach ${sa.displayName}.` }, 502);
+    if (!res.ok) return c.json({ error: `${sa.displayName} refused the repo change (HTTP ${res.status}).` }, 502);
+
+    settings.setAgentRepo(sa.name, repo);
+    settings.setPeers(settings.peers().map((p) => (p.name === sa.name ? { ...p, repo } : p)));
+    return c.json({ ok: true, repo });
   });
 
   app.post("/api/settings/test-github", async (c) => {

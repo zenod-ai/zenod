@@ -31,6 +31,12 @@ export interface PeerConfig {
   tool?: string;
   /** Curated set of the peer's tools to expose (e.g. Zenod's memory toolset). */
   tools?: PeerToolSpec[];
+  /**
+   * The repo this peer was provisioned with (vault for memory agents, central
+   * backlog for backlog agents). Kept on the Console purely for display + the
+   * "Manage" affordance in the Team tab; the agent remains the source of truth.
+   */
+  repo?: string;
 }
 
 function extractText(result: unknown): string {
