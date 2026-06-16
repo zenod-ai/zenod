@@ -153,6 +153,50 @@ headless configuration always works. The shared-volume convention makes this tri
 lives at an agreed path; write the file → the agent reads it (headless), or the Council edits
 the same file (wrapped).
 
+## Round 4 — the Console: same UI always; uni = direct bypass, multi = council (THE LANDING)
+
+The correction to Round 3: a *normal install* always has a UI. "Headless, no UI" is only the
+secondary integration mode, not what a person installs. Jordi's framing is the resolution — the
+shared service is not scary "Council baggage," it's the **Console**.
+
+**The Console = the shared UI + OAuth/auth + connections + chat front-end + gateways + registry.**
+Always present. **Always the same UI.** "Council" is just *one behavior* of it (multi-agent
+routing), not a separate deployable you're forced into. (The Console subsumes what we earlier
+called "Central": auth/connections/registry now live here, user-facing; a shared volume is just
+its storage.)
+
+**You always install the same thing: the Console + the agent(s) you enable. One URL. Full UI.**
+
+**Same UI, two chat wirings — the only thing that changes:**
+- **Uni mode (one agent, e.g. Z0):** the Console wires its chat **straight to that agent's chat
+  endpoint** — *bypass*. Direct, exactly like today's WhatsApp→Z0. The council router is
+  **dormant / transparent pass-through** — no orchestration overhead, **no baggage.**
+- **Multi mode (>1 agent):** the Console wires its chat to the **Council router**, which delegates
+  (agents-as-tools). Same UI underneath.
+- The user never sees the difference; it's one internal wire (chat → agent vs chat → council).
+
+**An agent therefore exposes two surfaces** (no UI of its own):
+1. an **MCP tool server** (for machine-to-machine + for the council to call), and
+2. a **chat endpoint** (LLM + its own tools) — the target the Console bypasses to (uni) or the
+   council delegates to (multi).
+Plus it declares a **config schema** and owns its config/data.
+
+**Two run modes from ONE artifact:**
+- **Product mode (normal):** Console + agent(s) → one URL, full UI (OAuth, vault config, chat,
+  WhatsApp). Even with a single agent. This is what a normal person installs on their VPS.
+- **Bare mode (integration):** the agent container alone as a pure MCP server, env-configured,
+  no UI — when you only want its tools plugged into something else.
+
+**What this means for the build (no abstraction left):**
+> **The Console = today's monolithic Z0 shell** (UI + chat loop + auth + OAuth + connections +
+> WhatsApp/Telegram gateways) **minus the vault/tools.**
+> **An agent = the capability** (tools + chat endpoint + config schema) — what Z0's vault logic
+> becomes.
+
+So building the suite **is** the base/vault split: pull today's Z0 monolith into **Console (shared
+shell)** + **Z0 (vault capability)**. The long-discussed "base" *is the Console*. The spike proves
+exactly this split — it is no longer an abstract unknown but a concrete refactor of the current code.
+
 ## Net verdict
 **The shape is right and now matches the field.** Two sharpenings, no pivot:
 1. **The Council (supervisor) is the hub *and* the only human UI** — gateways bind to it, agents
