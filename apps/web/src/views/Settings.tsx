@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChatTab } from "@/views/ChatTab"
+import { TeamTab } from "@/views/settings/TeamTab"
 import { ConnectionsTab } from "@/views/settings/ConnectionsTab"
 import { CostsTab } from "@/views/settings/CostsTab"
 import { TranscriptionTab } from "@/views/settings/TranscriptionTab"
@@ -43,6 +44,8 @@ export function Settings({
   // tabs (Vault, Transcription — which files Drive transcripts into the vault)
   // are hidden. This is the per-capability tab model in miniature.
   const showVault = !identity.vaultless
+  // The Console (vaultless) is the team manager — it enables the other agents.
+  const showTeam = identity.vaultless
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -81,6 +84,7 @@ export function Settings({
       <Tabs defaultValue={initialTab ?? "chat"}>
         <TabsList>
           <TabsTrigger value="chat">Chat</TabsTrigger>
+          {showTeam && <TabsTrigger value="team">Team</TabsTrigger>}
           {showVault && <TabsTrigger value="vault">Vault</TabsTrigger>}
           <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>
           {showVault && <TabsTrigger value="transcription">Transcription</TabsTrigger>}
@@ -91,6 +95,11 @@ export function Settings({
         <TabsContent value="chat" className="mt-4">
           <ChatTab vaultless={identity.vaultless} />
         </TabsContent>
+        {showTeam && (
+          <TabsContent value="team" className="mt-4">
+            <TeamTab />
+          </TabsContent>
+        )}
         {showVault && (
           <TabsContent value="vault" className="mt-4">
             <VaultTab />

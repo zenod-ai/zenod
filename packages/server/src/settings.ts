@@ -184,6 +184,31 @@ export class Settings {
     this.setRaw("peers", JSON.stringify(peers));
   }
 
+  /**
+   * Tokens this agent (as the Console) has MINTED for the agents it enables — kept
+   * so disable/re-enable reuses the same token (the agent was provisioned with it).
+   */
+  agentTokens(): Record<string, string> {
+    const raw = this.getRaw("agent_tokens");
+    if (!raw) return {};
+    try {
+      const o = JSON.parse(raw);
+      return o && typeof o === "object" ? (o as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  agentToken(name: string): string | null {
+    return this.agentTokens()[name] ?? null;
+  }
+
+  setAgentToken(name: string, token: string): void {
+    const all = this.agentTokens();
+    all[name] = token;
+    this.setRaw("agent_tokens", JSON.stringify(all));
+  }
+
   /** All settings with secrets masked — safe for the UI. */
   masked(): Record<string, string | null> {
     const out: Record<string, string | null> = {};

@@ -1,0 +1,36 @@
+# z2 — the NEW Zenod, HEADLESS (no public UI). It is an internal MCP server that the
+# Console (c1) loads over dokploy-network; reachable only as http://zenod-z2:8080.
+#
+# Boots UN-PROVISIONED (ZENOD_AWAIT_PROVISION=1): it mints no token and idles
+# (configured()=false) until c1 MINTS its token and pushes it (+ config + shared keys)
+# to /api/provision — the token-origination model. c1 then connects with the token it
+# minted. See docs/SUITE-SCAFFOLD.md.
+#
+# Vault: same repo as live Zenod (z1), cloned independently here — so z2 does NOT depend
+# on z1 the service. Provisioned by c1, not configured by hand. NOT exposed publicly.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-z2-data:
+
+services:
+  zenod-z2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenod-z2:dokploy
+    container_name: zenod-z2
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-z2-data:/data
+    environment:
+      AGENT: zenod
+      ZENOD_AWAIT_PROVISION: "1"
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+    expose:
+      - "8080"
