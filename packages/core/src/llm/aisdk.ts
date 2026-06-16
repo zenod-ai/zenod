@@ -686,9 +686,9 @@ export class AiSdkBrainLlm implements BrainLlm {
         ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background transcription (download, configured transcription provider for audio, filing, archiving). When the user asks to transcribe their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Transcription panel, and the transcripts land in the vault when done."
         : "",
       peerEntries.length
-        ? `You can delegate to peer agents (the mesh): ${peerEntries
+        ? `You have tools from connected peer agents (the mesh): ${peerEntries
             .map(([name]) => name)
-            .join(", ")}. Each forwards your request to that agent and returns its answer. Use a peer when the question is its domain — e.g. ask_zenod for the user's memory/vault, which you do not hold locally. Prefer delegating over saying you can't help.`
+            .join(", ")}. They reach capabilities you do NOT hold locally — above all the user's memory/vault (search it, read it, ask about it, add to it). Use them to answer anything about the user's notes/knowledge or to remember something for them; prefer them over saying you can't help. add_memory is async — say it's queued, not stored, unless confirmed.`
         : "",
     ].filter(Boolean);
 

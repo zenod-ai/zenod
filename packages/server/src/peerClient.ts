@@ -8,6 +8,18 @@ import { VERSION } from "zenod";
  * bearer token and call one of its tools. This is how the vaultless Console
  * delegates a memory question to Zenod (`ask_brain`) — it has no vault of its own.
  */
+/** One tool this peer exposes to our chat: a friendly name → one of the peer's MCP tools. */
+export interface PeerToolSpec {
+  /** Tool name shown to our LLM, e.g. "add_memory". */
+  as: string;
+  /** The peer's MCP tool to call, e.g. "store_memory". */
+  mcp: string;
+  /** The single argument key that MCP tool takes, e.g. "content". */
+  arg: string;
+  /** What the tool does (the model reads this). */
+  description: string;
+}
+
 export interface PeerConfig {
   /** Short id, e.g. "zenod" — surfaced to the chat as the tool `ask_<name>`. */
   name: string;
@@ -15,8 +27,10 @@ export interface PeerConfig {
   url: string;
   /** Bearer token the peer accepts (its api_token, or an OAuth token). */
   token: string;
-  /** The peer MCP tool to call. Defaults to ask_brain (free-form Q&A). */
+  /** The peer MCP tool to call (legacy single-tool peers). Defaults to ask_brain. */
   tool?: string;
+  /** Curated set of the peer's tools to expose (e.g. Zenod's memory toolset). */
+  tools?: PeerToolSpec[];
 }
 
 function extractText(result: unknown): string {
@@ -35,16 +49,14 @@ function extractText(result: unknown): string {
  * a single delegation needs. Errors are returned as a readable string so the
  * caller's model can relay a graceful failure rather than throwing mid-turn.
  */
-export async function callPeer(peer: PeerConfig, input: string): Promise<string> {
-  const toolName = peer.tool ?? "ask_brain";
-  const argKey = toolName === "ask_brain" ? "question" : "text";
+export async function callPeer(peer: PeerConfig, mcpTool: string, argKey: string, input: string): Promise<string> {
   const client = new Client({ name: "zenod-mesh-client", version: VERSION }, { capabilities: {} });
   const transport = new StreamableHTTPClientTransport(new URL(peer.url), {
     requestInit: { headers: { Authorization: `Bearer ${peer.token}` } },
   });
   try {
     await client.connect(transport);
-    const result = await client.callTool({ name: toolName, arguments: { [argKey]: input } });
+    const result = await client.callTool({ name: mcpTool, arguments: { [argKey]: input } });
     const text = extractText(result);
     return text || `(${peer.name} returned an empty answer)`;
   } catch (err) {

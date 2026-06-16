@@ -212,6 +212,36 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   // --- Team: enable/disable suite agents. The Console MINTS each agent's token and
   // PROVISIONS it over the internal network (token origination), then connects as a peer.
+  // Zenod's memory toolset — each maps to one of z2's MCP tools, exposed to the Console chat.
+  const ZENOD_MEMORY_TOOLS = [
+    {
+      as: "ask_zenod",
+      mcp: "ask_brain",
+      arg: "question",
+      description:
+        "Ask Zenod (the memory agent) a question. It researches the user's vault with its own LLM and returns a synthesized, cited answer. Use for 'what do I know about X', 'when does my policy renew', or any cross-note/fuzzy memory question.",
+    },
+    {
+      as: "search_memory",
+      mcp: "search_memory",
+      arg: "query",
+      description:
+        "Fast keyword search over the user's memory vault — returns ranked note paths with snippets. Use to locate memories quickly; then get_memory to read one in full.",
+    },
+    {
+      as: "get_memory",
+      mcp: "get_memory",
+      arg: "path",
+      description: "Read one vault note in full by its path (e.g. Areas/Insurance.md), as returned by search_memory.",
+    },
+    {
+      as: "add_memory",
+      mcp: "store_memory",
+      arg: "content",
+      description:
+        "File a new memory into the user's vault through Zenod's librarian (records evidence + files the meaning with citations). Use when the user wants something remembered. ASYNC — returns 'queued'; the filing finishes in the background. Only say it's stored once that's confirmed.",
+    },
+  ];
   const SUITE_AGENTS = [
     {
       name: "zenod",
@@ -219,6 +249,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       role: "memory / librarian",
       internalBaseUrl: "http://zenod-z2:8080",
       needsVaultRepo: true,
+      peerTools: ZENOD_MEMORY_TOOLS,
     },
   ];
 
@@ -284,7 +315,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
     settings.setAgentToken(sa.name, token);
     const peers = settings.peers().filter((p) => p.name !== sa.name);
-    peers.push({ name: sa.name, url: `${sa.internalBaseUrl}/mcp`, token });
+    peers.push({ name: sa.name, url: `${sa.internalBaseUrl}/mcp`, token, ...(sa.peerTools ? { tools: sa.peerTools } : {}) });
     settings.setPeers(peers);
     runtime.invalidate();
     return c.json({ ok: true });

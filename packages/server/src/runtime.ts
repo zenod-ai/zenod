@@ -186,10 +186,25 @@ export class Runtime {
     const tools: Record<string, { description: string; run: (input: string) => Promise<string> }> = {};
     for (const peer of this.settings.peers()) {
       const safe = peer.name.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
-      tools[`ask_${safe}`] = {
-        description: `Delegate a request to the "${peer.name}" peer agent and return its answer. Use it for that agent's domain — e.g. the user's memory/vault if it is a memory agent. Forwards your input to the peer over MCP.`,
-        run: (input: string) => callPeer(peer, input),
-      };
+      // A peer either declares a curated tool set (e.g. Zenod's memory toolset) or
+      // gets a single ask_<name> delegation to its ask_brain.
+      const specs =
+        peer.tools && peer.tools.length > 0
+          ? peer.tools
+          : [
+              {
+                as: `ask_${safe}`,
+                mcp: "ask_brain",
+                arg: "question",
+                description: `Delegate a request to the "${peer.name}" peer agent and return its answer. Use it for that agent's domain — e.g. the user's memory/vault if it is a memory agent.`,
+              },
+            ];
+      for (const spec of specs) {
+        tools[spec.as] = {
+          description: spec.description,
+          run: (input: string) => callPeer(peer, spec.mcp, spec.arg, input),
+        };
+      }
     }
     return tools;
   }
