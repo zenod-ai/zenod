@@ -44,6 +44,14 @@ const AUTO_MERGE_ENV = parseBooleanSetting(process.env.ZENOD_AUTO_MERGE);
 // flaps (CONFLICTING <-> UNKNOWN) or CI flips red/green. Alarm once, then at most
 // once per window. Tunable via env; default 12h.
 const NOTIFY_COOLDOWN_MS = Number(process.env.ZENOD_NOTIFY_COOLDOWN_MS || 12 * 60 * 60 * 1000);
+// Keep the merge-attempt audit bounded. recordMergeAttempt appends on EVERY scan
+// for every eligible PR, so a long-lived ticket (e.g. a PR stuck blocked for
+// days) grows the persisted state file without limit — one bridge was observed
+// at 807 entries / ~260KB. Keep only the most recent entries; older ones are
+// forensic noise. Trimming on each append self-heals an already-bloated file on
+// the next scan. Tunable via env.
+const MERGE_ATTEMPT_HISTORY = Number(process.env.ZENOD_MERGE_ATTEMPT_HISTORY || 200);
+const BRIDGE_MERGE_ATTEMPT_HISTORY = 30;
 
 function log(...a) {
   console.log(new Date().toISOString(), "[monitor]", ...a);
@@ -303,6 +311,12 @@ function mergeApprovalForIssue(state, issue) {
   return { eligible: false, autoMerge: false, fromStatus: issue.status };
 }
 
+// Keep only the most recent `max` entries of an audit array, in place.
+function trimTail(arr, max) {
+  if (arr.length > max) arr.splice(0, arr.length - max);
+  return arr;
+}
+
 function recordMergeAttempt(state, bridge, issue, attempt) {
   const entry = {
     at: new Date().toISOString(),
@@ -316,10 +330,12 @@ function recordMergeAttempt(state, bridge, issue, attempt) {
     detail: attempt.detail ?? "",
   };
   state.mergeAttempts.push(entry);
+  trimTail(state.mergeAttempts, MERGE_ATTEMPT_HISTORY);
   if (bridge) {
     bridge.autoMerge = attempt.autoMerge === true;
     bridge.mergeAttempts = bridge.mergeAttempts ?? [];
     bridge.mergeAttempts.push(entry);
+    trimTail(bridge.mergeAttempts, BRIDGE_MERGE_ATTEMPT_HISTORY);
   }
   return entry;
 }

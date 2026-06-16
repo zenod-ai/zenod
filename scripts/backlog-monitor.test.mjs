@@ -139,6 +139,23 @@ test("merge-note cooldown state is per dedup key and persisted on the bridge", (
   assert.equal(bridge.notifications.verify, 1500);
 });
 
+test("merge-attempt audit is bounded so a long-blocked PR can't grow state without limit", () => {
+  const state = normalizeState({ autoMerge: true });
+  const bridge = { target: "zenod-ai/zenod", exec: 112, mirrored: "needs-review" };
+  const issue = { number: 68, title: "blocked forever", target: "zenod-ai/zenod" };
+
+  for (let i = 0; i < 1000; i++) {
+    recordMergeAttempt(state, bridge, issue, { autoMerge: true, prUrl: "x", outcome: "failed", detail: String(i) });
+  }
+
+  // Both the global and per-bridge audit arrays are capped, not unbounded.
+  assert.ok(state.mergeAttempts.length <= 200, `global capped, got ${state.mergeAttempts.length}`);
+  assert.ok(bridge.mergeAttempts.length <= 30, `bridge capped, got ${bridge.mergeAttempts.length}`);
+  // The TAIL is retained — the newest entry survives, the oldest is dropped.
+  assert.equal(state.mergeAttempts[state.mergeAttempts.length - 1].detail, "999");
+  assert.equal(bridge.mergeAttempts[bridge.mergeAttempts.length - 1].detail, "999");
+});
+
 test("updateFanInBatches launches integration only after every branch reaches needs-review", () => {
   const state = normalizeState({});
   ensureFanInBatch(state, [41, 52]);
