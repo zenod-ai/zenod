@@ -1,0 +1,40 @@
+# Archus — the backlog agent — as a Dokploy Compose service, running SIDE BY SIDE
+# with Zenod. It is the SAME application image (Dockerfile in this repo), selected
+# to run as Archus via AGENT=archus. Because the UI is agent-agnostic (reads
+# /api/agent) and Archus reuses the backlog tools, no separate code/package is
+# needed — only this deploy unit + its own data volume + its own domain.
+#
+# Deploy (Dokploy):
+#   1. New Compose service from this file (autoDeploy on push to main).
+#   2. Add the domain archus.zenod.dev (port 8080) — Dokploy wires Traefik + TLS.
+#   3. Deploy. Then configure Archus in its own UI (model key, connect GitHub App).
+#
+# Note: this reuses the full app Dockerfile (incl. whisper) for now; a leaner
+# Archus image (no transcription) is a future optimization.
+
+networks:
+  # Dokploy's attachable overlay — lets Traefik reach this service by name and
+  # lets Archus reach peers (e.g. Zenod) for the MCP mesh.
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-archus-data:
+
+services:
+  zenod-archus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenod-archus:dokploy
+    container_name: zenod-archus
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-archus-data:/data
+    environment:
+      AGENT: archus
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+    expose:
+      - "8080"
