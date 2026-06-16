@@ -13,6 +13,7 @@ import {
 import { pino } from "pino";
 import type { BrainEngine, StoreResult } from "zenod";
 import type { Settings } from "./settings.js";
+import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { transcribeAudio } from "./transcribe.js";
 import {
   maskPhoneNumber,
@@ -997,6 +998,7 @@ export class WhatsAppGateway {
         const reply = await engine.handleTasking({ text, surface: "whatsapp", conversationKey });
         this.options.store.markMessageStatus(event.messageId, "replied");
         await this.sendReply(event, reply.text, "sent");
+        this.spawnPeerJobPoller(reply.text, event);
         return;
       }
 
@@ -1018,6 +1020,7 @@ export class WhatsAppGateway {
       const reply = await engine.handleTasking({ text: input.text, surface: "whatsapp", conversationKey });
       this.options.store.markMessageStatus(event.messageId, "replied");
       await this.sendReply(event, reply.text, "sent");
+      this.spawnPeerJobPoller(reply.text, event);
 
       // Filing is NOT automatic (#68). The transcript of every interaction is
       // already persisted in the conversation state — we do NOT push every
@@ -1041,6 +1044,24 @@ export class WhatsAppGateway {
     } finally {
       await this.setTyping(event, false);
     }
+  }
+
+  /**
+   * After any handleTasking reply, scan it for a task-job UUID. If found, poll
+   * the peer that owns it and send a brief follow-up once the job finishes.
+   * Runs fully in the background — never delays the primary reply.
+   */
+  private spawnPeerJobPoller(replyText: string, event: WhatsAppInboundEvent): void {
+    const jobId = extractJobId(replyText);
+    if (!jobId) return;
+    const peers = this.options.settings.peers();
+    if (!peers.length) return;
+    void pollPeerJob(peers, jobId).then((result) => {
+      if (result.status === "done")
+        return this.sendReply(event, "✓ Filed to vault.", "sent");
+      if (result.status === "error")
+        return this.sendReply(event, "⚠️ Filing failed — let me know if you'd like to retry.", "sent");
+    }).catch(() => {});
   }
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {

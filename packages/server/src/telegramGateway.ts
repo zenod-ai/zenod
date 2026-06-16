@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrainEngine } from "zenod";
 import type { Settings } from "./settings.js";
+import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { transcribeAudio } from "./transcribe.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 
@@ -305,6 +306,7 @@ export class TelegramGateway {
         const conversationKey = normalizeTelegramId(String(chatId)) || String(chatId);
         const reply = await engine.handleTasking({ text, surface: "telegram", conversationKey });
         if (reply.text.trim()) await this.sendReply(chatId, reply.text);
+        this.spawnPeerJobPoller(reply.text, chatId);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         console.error(`[telegram] image processing failed for chat ${chatId}: ${detail}`);
@@ -335,6 +337,7 @@ export class TelegramGateway {
       });
       if (reply.text.trim()) {
         await this.sendReply(chatId, reply.text);
+        this.spawnPeerJobPoller(reply.text, chatId);
       } else {
         await this.sendReply(
           chatId,
@@ -446,6 +449,19 @@ export class TelegramGateway {
    * inline parsing and drops tables/headings). Matches Hermes'
    * `gateway/platforms/telegram.py`. See zenod-ai/zenod#121.
    */
+  private spawnPeerJobPoller(replyText: string, chatId: number): void {
+    const jobId = extractJobId(replyText);
+    if (!jobId) return;
+    const peers = this.options.settings.peers();
+    if (!peers.length) return;
+    void pollPeerJob(peers, jobId).then((result) => {
+      if (result.status === "done")
+        return this.sendReply(chatId, "✓ Filed to vault.");
+      if (result.status === "error")
+        return this.sendReply(chatId, "⚠️ Filing failed — let me know if you'd like to retry.");
+    }).catch(() => {});
+  }
+
   private async sendReply(chatId: number, markdown: string): Promise<void> {
     if (!markdown) return;
     if (this.settings().rich) {
