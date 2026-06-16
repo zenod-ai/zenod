@@ -673,6 +673,25 @@ export class AiSdkBrainLlm implements BrainLlm {
                 }),
               ),
           }),
+          close_issue: tool({
+            description:
+              "CLOSE a GitHub issue — the dedicated way to close. Pass the issue number and this sets GitHub's actual issue state to closed (it does NOT just add a label or comment). Use this whenever the user asks to close/resolve/done a ticket; do not use edit_issue for closing. Optionally include a closing comment and set notPlanned for a won't-do close. Returns the closed issue URL.",
+            inputSchema: z.object({
+              repo: z.string().nullable().describe("owner/repo target; null uses the configured backlog/vault repo"),
+              issueNumber: z.number().int().positive().describe("GitHub issue number to close"),
+              comment: z.string().nullable().describe("optional closing comment to post; null for none"),
+              notPlanned: z.boolean().nullable().describe("true to close as not_planned (won't-do); null/false closes as completed"),
+            }),
+            execute: ({ repo, issueNumber, comment, notPlanned }) =>
+              caught(() =>
+                taskTools.closeIssue({
+                  ...(repo ? { repo } : {}),
+                  issueNumber,
+                  ...(comment ? { comment } : {}),
+                  ...(notPlanned ? { notPlanned: true } : {}),
+                }),
+              ),
+          }),
           approve_queue: tool({
             description:
               "Promote specific backlog issues from status:proposed to status:queued so the monitor executes them. THIS IS THE ONLY TOOL THAT CAN SET status:queued, and it is the ONLY way a ticket ever runs — until you call it the ticket sits at status:proposed and the runner ignores it. Call it when the human has EXPLICITLY approved execution: either by number (e.g. 'yes, queue #1 and #2', 'approve 51 and 53, run them'), OR when the human asked to create-and-queue a ticket this same turn — pass the number create_issue just returned. Never infer approval from a vague or general request. CRITICAL: do NOT tell the user a ticket is 'queued', 'queued for execution', 'running', or that the runner was 'poked'/'woken' unless THIS tool actually returned success for that number — poking the runner happens only as part of a successful approve_queue (there is no separate poke/wake tool), so never claim the runner was poked when you did not queue. After queuing, tell the user exactly which issues were queued.",

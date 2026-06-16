@@ -345,6 +345,16 @@ export class Runtime {
         const ops = result.operations.length ? result.operations.join(", ") : "no changes";
         return `Edited #${result.issueNumber} (${ops}): ${result.issueUrl}`;
       },
+      closeIssue: async ({ repo, issueNumber, comment, notPlanned }) => {
+        const result = await editGithubIssue(this.settings, {
+          ...(repo ? { repo } : {}),
+          issueNumber,
+          state: "closed",
+          stateReason: notPlanned ? "not_planned" : "completed",
+          ...(comment ? { comment } : {}),
+        });
+        return `Closed #${result.issueNumber}: ${result.issueUrl}`;
+      },
       queryBacklog,
       serviceBacklog: async (query?: string) =>
         ["Backlog service selection only; runner is tracked separately.", await queryBacklog(query)].join("\n"),

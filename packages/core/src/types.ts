@@ -142,6 +142,12 @@ export interface ExternalTaskingTools {
     state?: "open" | "closed";
     stateReason?: "completed" | "not_planned" | "reopened";
   }): Promise<string>;
+  /**
+   * Close a ticket by number — a dedicated, single-purpose CLOSE that always sets
+   * GitHub's issue state to closed (so the model can't accidentally downgrade a
+   * close to a comment/label). Optionally posts a closing comment.
+   */
+  closeIssue(input: { repo?: string; issueNumber: number; comment?: string; notPlanned?: boolean }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
   /**

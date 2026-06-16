@@ -201,7 +201,10 @@ export interface VaultTaskTools {
     labelsSet?: string[];
     comment?: string;
     status?: string;
+    state?: "open" | "closed";
+    stateReason?: "completed" | "not_planned" | "reopened";
   }): Promise<string>;
+  closeIssue(input: { repo?: string; issueNumber: number; comment?: string; notPlanned?: boolean }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
   approveQueue(input: { repo: string; issueNumbers: number[] }): Promise<string>;

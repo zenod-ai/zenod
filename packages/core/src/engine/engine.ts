@@ -662,8 +662,23 @@ export function createEngine(options: EngineOptions): BrainEngine {
                 ...(normalized.labelsSet ? { labelsSet: normalized.labelsSet } : {}),
                 ...(normalized.comment ? { comment: normalized.comment } : {}),
                 ...(normalized.status !== undefined ? { status: normalized.status } : {}),
+                ...(normalized.state !== undefined ? { state: normalized.state } : {}),
+                ...(normalized.stateReason !== undefined ? { stateReason: normalized.stateReason } : {}),
               })
             : Promise.resolve(noExternalTool("editIssue")),
+        );
+      },
+      closeIssue: async (input) => {
+        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        return runMutation("closeIssue", normalized, () =>
+          options.taskingTools
+            ? options.taskingTools.closeIssue({
+                issueNumber: normalized.issueNumber,
+                ...(normalized.repo ? { repo: normalized.repo } : {}),
+                ...(normalized.comment ? { comment: normalized.comment } : {}),
+                ...(normalized.notPlanned ? { notPlanned: true } : {}),
+              })
+            : Promise.resolve(noExternalTool("closeIssue")),
         );
       },
       queryBacklog: async (query?: string) => {
