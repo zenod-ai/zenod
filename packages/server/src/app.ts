@@ -24,7 +24,7 @@ import {
   exchangeManifestCode,
   installationToken,
   listInstallationRepos,
-} from "./githubApp.js";
+} from "zenod";
 import { buildMcpServer } from "./mcp.js";
 import { parseServiceAccount, testDrive } from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";

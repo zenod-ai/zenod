@@ -22,7 +22,7 @@ import {
   type LlmUsageReport,
   type TokenCostMeasurement,
 } from "zenod";
-import { installationToken, installationTokenForRepo, editGithubIssue } from "./githubApp.js";
+import { installationToken, installationTokenForRepo, editGithubIssue } from "zenod";
 import { buildDriveTools } from "./driveTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore } from "./usageStore.js";

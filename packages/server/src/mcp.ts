@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
-import type { EditGithubIssueInput, EditGithubIssueResult } from "./githubApp.js";
+import type { EditGithubIssueInput, EditGithubIssueResult } from "zenod";
 import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
 import type { TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
 

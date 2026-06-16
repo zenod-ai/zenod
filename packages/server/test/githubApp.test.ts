@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appJwt, appStatus, buildManifest, disconnectApp, editGithubIssue, installationToken } from "../src/githubApp.js";
+import { appJwt, appStatus, buildManifest, disconnectApp, editGithubIssue, installationToken } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
