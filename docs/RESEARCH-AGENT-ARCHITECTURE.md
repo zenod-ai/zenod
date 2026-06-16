@@ -117,6 +117,42 @@ domain; each agent (`zenod`, `archus`, `epaminon`, `outbound`, `nectary`) a head
 server at its subdomain (MCP endpoint + health, no human chat). Central stays the shared
 volume + registry.
 
+## Round 3 — independence & configuration (the plug-and-play question)
+
+**The stuck point:** if the UI lives in the Council, how do you configure a *standalone* agent
+(Z0 alone needs its vault set) without shipping the Council? Does "needs config" force "ship
+with the Council"?
+
+**Resolution: config is data the AGENT owns; the UI is an optional editor.** Don't conflate them.
+- Every agent owns its **config as data + a config surface** (read from env / a file in its
+  volume / a small get/set API). The vault repo is *Z0's* config, stored in *Z0's* volume.
+- **Three ways to write that config, all hitting the same surface the agent owns:**
+  1. **Env / config file** at startup (`VAULT_REPO=…`) — the pure-headless, zero-UI path.
+  2. **The agent's own config API** (get/set) — configure via CLI/API even with no UI.
+  3. **The Council UI** — a *remote editor* that calls the agent's config API. The Council does
+     not *own* the config; it's a pretty front-end over the agent's own surface.
+- So **"needs configuration" never means "needs a bundled UI."** A headless agent is fully
+  configurable by #1/#2. The Council UI (#3) is sugar.
+
+**Dependency direction is symmetric — true plug-and-play, no hard requirement either way:**
+- **Z0 alone:** ✅ pure MCP server, configured by env/file/API, no UI. Callable by anyone
+  authenticated. Depends on nothing.
+- **Council alone:** ✅ runs; just has no agents to delegate to yet.
+- **Council + Z0:** the Council *wraps* Z0 — gives it a UI (remote editor over Z0's config API),
+  orchestration, and reach to/from other agents. Remove the wrapper → Z0 still runs.
+- → You do **not** ship Z0 with the Council as a hard dependency. The Council is the **product
+  wrapper** (consolidated UI + orchestration); the agents are independently-installable
+  capabilities. *(This is the Excel-vs-Office independence Jordi has wanted from the start.)*
+
+**Where the config *form* comes from (so agents stay headless):** each agent **declares a config
+schema** in its Agent Card (e.g. `vault_repo: string`, `vault_branch: string`). The Council
+**auto-renders a form** from that schema → **zero UI code in the agent** for the common case
+(paste-these-creds). An agent that needs a richer panel (Z0's vault browser) *may* ship a panel
+the Council mounts — the exception — but the **schema + API stay the source of truth**, so
+headless configuration always works. The shared-volume convention makes this trivial: config
+lives at an agreed path; write the file → the agent reads it (headless), or the Council edits
+the same file (wrapped).
+
 ## Net verdict
 **The shape is right and now matches the field.** Two sharpenings, no pivot:
 1. **The Council (supervisor) is the hub *and* the only human UI** — gateways bind to it, agents
