@@ -269,10 +269,12 @@ export class Runtime {
       const issues = await githubJson<
         Array<{ number: number; title: string; html_url: string; labels: Array<{ name: string }>; updated_at: string }>
       >(`/repos/${encodeURIComponent(repo).replace("%2F", "/")}/issues?state=open&per_page=100&sort=updated&direction=desc`);
-      // A purely-numeric query (e.g. "95" or "#95") is an issue-number lookup, not a
-      // text search — match it against issue.number so "find #95" works.
+      // Pull an issue number from an id-style query — bare "95", "#95", or a
+      // qualified "owner/repo#95" — and match it against issue.number, so a
+      // by-number lookup works regardless of the form the caller used.
       const q = query?.trim();
-      const qNum = q && /^#?\d+$/.test(q) ? Number(q.replace(/^#/, "")) : null;
+      const idNum = q?.match(/(?:^|#)(\d+)$/)?.[1];
+      const qNum = idNum ? Number(idNum) : null;
       const filtered = q
         ? issues.filter(
             (issue) =>

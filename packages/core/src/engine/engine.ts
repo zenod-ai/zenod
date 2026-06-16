@@ -1102,6 +1102,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         question: input.text,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
+        onPeerAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
       },
       readTools(),
       repo || options.taskingTools ? buildTaskTools(input.surface, (action) => actions.push(action)) : undefined,

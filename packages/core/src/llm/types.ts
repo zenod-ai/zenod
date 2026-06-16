@@ -110,6 +110,12 @@ export interface AnswerInput {
    * basis for the "calling a tool…" indicator in the chat UI.
    */
   onToolEvent?: (event: ChatToolEvent) => void;
+  /**
+   * If set, every peer-tool invocation (and its raw result string) is delivered
+   * here. Engine uses this to capture peer tool results into the actions array
+   * so the UUID returned by z2's async tools can be extracted for job polling.
+   */
+  onPeerAction?: (tool: string, input: Record<string, unknown>, result: string) => void;
 }
 
 /**

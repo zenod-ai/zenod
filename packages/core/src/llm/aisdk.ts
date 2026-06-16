@@ -751,7 +751,11 @@ export class AiSdkBrainLlm implements BrainLlm {
         tool({
           description: peer.description,
           inputSchema: z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") }),
-          execute: ({ input: peerInput }) => caught(() => peer.run(peerInput)),
+          execute: async ({ input: peerInput }) => {
+            const result = await caught(() => peer.run(peerInput));
+            input.onPeerAction?.(name, { input: peerInput }, result);
+            return result;
+          },
         }),
       ]),
     );
