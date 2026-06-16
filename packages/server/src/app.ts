@@ -242,15 +242,39 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         "File a new memory into the user's vault through Zenod's librarian (records evidence + files the meaning with citations). Use when the user wants something remembered. ASYNC — returns 'queued'; the filing finishes in the background. Only say it's stored once that's confirmed.",
     },
   ];
-  // Archus delegates to its own chat loop (chat_with_zenod runs engine.chat
-  // synchronously and, for a backlog agent, has the GitHub issue tools).
+  // Archus's "top tools": named delegation handles that ALL route to Archus's chat
+  // (chat_with_zenod runs engine.chat synchronously and, for a backlog agent, has the
+  // GitHub issue tools). They take the same natural-language input — the distinct names
+  // exist for VISIBILITY (the activity line reads "opening an issue" / "editing an
+  // issue"); Archus's own LLM still does the real work. Pick the one that matches intent.
   const ARCHUS_BACKLOG_TOOLS = [
     {
       as: "ask_archus",
       mcp: "chat_with_zenod",
       arg: "message",
       description:
-        "Delegate to Archus, the backlog agent that owns the user's GitHub issues across all their repos — create, open, close, edit/update, label, comment, query, and triage issues (qualified IDs owner/repo#N), and get the aggregated backlog view. It acts and returns the result. Use for anything about the backlog, tickets, or GitHub issues.",
+        "Ask Archus about the backlog — list/query open issues across repos, the aggregated view, status, or triage. Use for questions and general backlog chat (not a specific create/edit/close).",
+    },
+    {
+      as: "open_issue",
+      mcp: "chat_with_zenod",
+      arg: "message",
+      description:
+        "Open/create a GitHub issue. Pass the user's request in natural language (what to file, and which repo — or leave it for the central backlog). Archus writes a runnable ticket and returns its number + URL.",
+    },
+    {
+      as: "edit_issue",
+      mcp: "chat_with_zenod",
+      arg: "message",
+      description:
+        "Edit an existing GitHub issue — update its title/body, add a comment, or change labels. Say which issue (owner/repo#N) and what to change, in natural language.",
+    },
+    {
+      as: "close_issue",
+      mcp: "chat_with_zenod",
+      arg: "message",
+      description:
+        "Close a GitHub issue. Say which one (owner/repo#N), and optionally a closing comment. Archus closes it and confirms.",
     },
   ];
   const SUITE_AGENTS = [
@@ -275,6 +299,25 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       peerTools: ARCHUS_BACKLOG_TOOLS,
     },
   ];
+
+  // Keep each enabled peer's tool set in sync with the catalog on boot, so a tool
+  // change (e.g. new flat tools) takes effect on redeploy without disable/re-enable.
+  {
+    const current = settings.peers();
+    let changed = false;
+    const synced = current.map((p) => {
+      const sa = SUITE_AGENTS.find((a) => a.name === p.name);
+      if (sa && JSON.stringify(p.tools ?? null) !== JSON.stringify(sa.peerTools)) {
+        changed = true;
+        return { ...p, tools: sa.peerTools };
+      }
+      return p;
+    });
+    if (changed) {
+      settings.setPeers(synced);
+      runtime.invalidate();
+    }
+  }
 
   app.get("/api/team", (c) => {
     const enabled = new Set(settings.peers().map((p) => p.name));
