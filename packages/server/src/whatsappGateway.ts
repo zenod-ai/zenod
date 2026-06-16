@@ -727,9 +727,15 @@ export class WhatsAppGateway {
 
     if (event.hasMedia) {
       this.options.store.markMessageStatus(event.messageId, "digest_queued");
-      await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
+      // Only send an immediate ack for audio/voice — those are slow (transcription
+      // can take 10-30s). Images go through vision which is fast enough that a
+      // single "described and filed" reply from processVoiceNote is sufficient.
+      const isAudio = event.mediaType === "audio" || event.mediaType === "ptt";
+      if (isAudio) {
+        await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
+      }
       void this.processVoiceNote(event).catch((err: unknown) => {
-        console.error("[whatsapp] voice note worker failed:", err);
+        console.error("[whatsapp] media worker failed:", err);
       });
       return;
     }

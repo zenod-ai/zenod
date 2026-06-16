@@ -286,10 +286,12 @@ export class TelegramGateway {
     }
 
     // Photos and image documents: describe with vision and file to vault.
+    // Run this BEFORE the text/caption path — a captioned image must be handled
+    // as an image (vision), not as plain caption text sent to handleTasking.
     const imageFileId =
       message.photo?.at(-1)?.file_id ??
       (message.document?.mime_type?.startsWith("image/") ? message.document.file_id : null);
-    if (!text && imageFileId) {
+    if (imageFileId) {
       await this.sendChatAction(chatId, "typing");
       try {
         const { data } = await this.downloadFile(imageFileId);
