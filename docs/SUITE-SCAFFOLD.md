@@ -26,6 +26,11 @@ it is **fewer concerns per box**.
 5. **Turn capabilities on by running their agent**; they connect via the mesh.
 6. **Opt-in beats bloat.** A dependency between agents (delegation over the mesh) is the
    accepted price of isolation — and you only pay it for capabilities you turned on.
+7. **Grouping is by JOB, not by MCP server.** An agent may compose **several MCP servers
+   internally** (a gateway that mounts upstream servers and re-exposes their tools). That is
+   private plumbing — externally it is still **one agent: one chat, one UI, one tool surface.**
+   Example: **Social** = one agent whose job is "social presence," internally composing the
+   X server + the Reddit server.
 
 ## THE BASE — shared, identical in every agent
 
@@ -68,14 +73,13 @@ special tab(s)**.
 | **Archus** | backlog | the backlog | the repos it manages (cross-org) | no | query/service/digest_backlog, create/edit/label_issue, approve_queue/merge | **Backlog** | archus.zenod.dev | `archus` | **LIVE** (rebuild) |
 | **Epaminon** | executor | execution (fan-out, PRs, merges) | the code repos it works (broad, gh) | no | drain queue, Codex fan-out, open PR, merge-on-green | **Runs** (fan-out dashboard) | epaminon.zenod.dev | `epaminon` | **LIVE** (headless today → +UI) |
 | **Mail** | email | email access | — | no | send/search/read email | **Inbox** | mail.zenod.dev | `mail` | **planned** |
-| **X** | post/read on X | the @ZenodAgent creds | — | no | post_tweet, read_tweets | **Feed · Compose** | x.zenod.dev | `x` | **LIVE** (tools vendored → +UI) |
-| **Reddit** | post/read on Reddit | the Reddit creds | — | no | submit_post, search, read_subreddit, comment | **Subreddits · Compose** | reddit.zenod.dev | `reddit` | **planned** (new) |
+| **Social** | social presence (X + Reddit + …) | the X + Reddit creds | — | no | post_tweet, read_tweets, submit_post, read_subreddit, comment, search — *composed from 2 internal MCP servers* | **Feed · Compose · Subreddits** | social.zenod.dev | `social` | **partial** (X tools vendored LIVE → +Reddit +UI) |
 | **Nectary** | financing | the funding layer | financing repos | no | (TBD) | **Ledger** | nectary.zenod.dev | `nectary` | **future** |
 
 How they relate (over the mesh):
 - **Zenod** (memory) **delegates backlog to Archus** — no Archus, no backlog. Clean.
 - **Archus** curates + gates the backlog (brain); **Epaminon** drains queued tickets and does the code work (muscle).
-- **X** and **Reddit** are agents you chat with to post/read; their tools call the platform APIs (X's tools come from the vendored xmcp, but the **agent shape is identical** to every other agent).
+- **Social** is one agent you chat with to post/read across networks; it **composes two MCP servers internally** (vendored **xmcp** + **reddit-mcp-server**) and exposes both as one tool surface — the **agent shape is identical** to every other agent. Internal composition is invisible plumbing.
 - Every agent exposes its tools over MCP; **peer tools are labeled external** in any agent's tool list.
 - Each agent is **independent**: own container, own subdomain, own UI — deletable, restartable, monitorable on its own.
 
@@ -105,9 +109,9 @@ tools" is never ambiguous in any agent's tool list.
 ```
 packages/base-server   packages/base-ui          (the shared base — every agent imports it)
 packages/central       (the connections/identity service — the one non-agent)
-apps/zenod  apps/archus  apps/epaminon  apps/mail  apps/x  apps/reddit  apps/nectary
+apps/zenod  apps/archus  apps/epaminon  apps/mail  apps/social  apps/nectary
                          (every agent: identity + its tools + its special tab(s))
-services/xmcp                                     (vendored X tools that apps/x wraps)
+services/xmcp  services/reddit-mcp                (upstream tool servers apps/social composes)
 ```
 **Containers (Dokploy, side by side):**
 
@@ -116,9 +120,8 @@ services/xmcp                                     (vendored X tools that apps/x 
 | `zenod` | Zenod | app.zenod.dev | live |
 | `archus` | Archus | archus.zenod.dev | live (rebuild) |
 | `epaminon` | Epaminon | epaminon.zenod.dev | live (headless → +UI) |
-| `x` | X | x.zenod.dev | live (vendored tools → +UI) |
 | `mail` | Mail | mail.zenod.dev | planned |
-| `reddit` | Reddit | reddit.zenod.dev | planned (new) |
+| `social` | Social (X + Reddit) | social.zenod.dev | partial (X tools live → +Reddit +UI) |
 | `nectary` | Nectary | nectary.zenod.dev | future |
 | `central` | Central (backend) | internal only | planned |
 
@@ -153,7 +156,7 @@ conflict), so v2 runs WhatsApp-disabled while proving, and we move the session a
 - **#145** mesh → stays (phase 5).
 - **#146** gate → stays (final check).
 - **#147** Mail → base + email capability.
-- **#148** X migration → island, central-managed (stays).
+- **#148** X migration → folds into the **Social** agent (X + Reddit composed internally), central-managed.
 
 ## Open risks we are tracking (not hiding)
 
