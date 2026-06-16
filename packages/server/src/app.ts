@@ -80,6 +80,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.get("/api/health", (c) => c.json({ status: "ok", name: agent.name, version: VERSION }));
 
+  // Agent identity for the UI shell (title/subtitle) so the same UI renders
+  // per-agent without a rebuild. See docs/SUITE-SCAFFOLD.md.
+  app.get("/api/agent", (c) =>
+    c.json({ name: agent.name, displayName: agent.displayName, tagline: agent.tagline }),
+  );
+
   // --- OAuth 2.1 provider (public — discovery + flow endpoints) ---
 
   // RFC 9728 protected-resource metadata (bare + path-suffixed variants clients probe)

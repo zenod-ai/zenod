@@ -27,6 +27,17 @@ export function Settings({
   // Source of truth for settings: lives here so it survives tab switches (Radix
   // unmounts inactive TabsContent). KeysTab re-seeds from this on remount.
   const [settings, setSettings] = React.useState(initialSettings)
+  // Agent identity (title/subtitle) from the backend so the same shell renders
+  // per-agent. Defaults to Zenod's values until the fetch resolves.
+  const [identity, setIdentity] = React.useState({
+    displayName: "Zenod",
+    tagline: "Self-hosted memory agent",
+  })
+  React.useEffect(() => {
+    api<{ displayName: string; tagline: string }>("/api/agent")
+      .then((r) => setIdentity({ displayName: r.displayName, tagline: r.tagline }))
+      .catch(() => {})
+  }, [])
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -47,10 +58,8 @@ export function Settings({
             <BrainIcon className="size-4.5" />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-xl font-semibold tracking-tight">Zenod</h1>
-            <p className="text-sm text-muted-foreground">
-              Self-hosted memory agent
-            </p>
+            <h1 className="text-xl font-semibold tracking-tight">{identity.displayName}</h1>
+            <p className="text-sm text-muted-foreground">{identity.tagline}</p>
           </div>
         </div>
         <Button
