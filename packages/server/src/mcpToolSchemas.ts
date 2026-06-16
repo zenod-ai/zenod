@@ -20,6 +20,16 @@ export const ASK_BRAIN_SHAPE = {
   question: z.string().min(1).describe("The question, in natural language"),
 };
 
+export const STORE_MEMORY_SHAPE = {
+  content: z.string().min(1).describe("The memory to store, as the user expressed it"),
+  hints: z.array(z.string()).optional().describe("Optional filing hints, e.g. 'belongs to the housing project'"),
+  verbatim: z.boolean().optional().describe("Force verbatim evidence recording (exact words preserved)"),
+};
+
+export const GET_TASK_RESULT_SHAPE = {
+  jobId: z.string().min(1).describe("The jobId returned by an async tool such as store_memory"),
+};
+
 export const CREATE_ISSUE_SHAPE = {
   repo: z.string().min(1).optional().describe("owner/repo. Defaults to the agent's configured backlog/vault repo."),
   title: z.string().min(1).describe("Issue title."),

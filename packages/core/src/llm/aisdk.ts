@@ -175,6 +175,10 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Reading a memory";
     case "add_memory":
       return "Saving to Zenod’s memory";
+    case "store_memory":
+      return "Filing a memory";
+    case "get_task_result":
+      return "Checking filing status";
     case "ask_archus":
       return "Asking Archus about the backlog";
     case "open_issue":

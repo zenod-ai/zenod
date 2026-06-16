@@ -3,7 +3,13 @@ import { VERSION } from "zenod";
 import { z, type ZodRawShape } from "zod";
 
 import { callPeerTool, type PeerConfig } from "./peerClient.js";
-import { ASK_BRAIN_SHAPE, GET_MEMORY_SHAPE, SEARCH_MEMORY_SHAPE } from "./mcpToolSchemas.js";
+import {
+  ASK_BRAIN_SHAPE,
+  GET_MEMORY_SHAPE,
+  GET_TASK_RESULT_SHAPE,
+  SEARCH_MEMORY_SHAPE,
+  STORE_MEMORY_SHAPE,
+} from "./mcpToolSchemas.js";
 
 /**
  * Archus's WRITE surface is semantic, not mechanical. A backlog write is a
@@ -76,6 +82,33 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     description:
       "Ask the user's memory a free-form question (via Zenod). It runs its own read-only research loop over the vault and returns a synthesized, cited answer. Use for fuzzy or cross-note questions where search_memory alone is not enough.",
     inputSchema: ASK_BRAIN_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  // Zenod's WRITE — name-preserving passthrough to its real `store_memory`. This
+  // honours invariant #5 (writes go through the agent's guardian brain) WITHOUT an
+  // intentPrefix/chat_with_zenod hop because the store_memory tool IS already the
+  // librarian brain: it runs Zenod's classify + compose to decide where the memory
+  // is filed. The mechanical CRUD stays private; this entry line just hands the raw
+  // content to that brain. ASYNC — returns a jobId; poll via get_task_result below.
+  {
+    name: "store_memory",
+    owner: "zenod",
+    title: "Store a memory",
+    description:
+      "File a memory into the user's vault through Zenod's librarian pipeline: it records immutable evidence, classifies + composes where the meaning belongs, files it onto the right page(s) with citations, validates, and commits to GitHub. If the librarian is unsure where it belongs it returns a question instead of guessing — relay that to the user. ASYNC: returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the evidence ref, pages touched, and commit SHA.",
+    inputSchema: STORE_MEMORY_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  // Poll an async job started by store_memory. get_task_result is a generic poller,
+  // but today Zenod is the only gateway owner with async jobs, so routing it to
+  // "zenod" is correct; revisit if another agent ever exposes an async tool here.
+  {
+    name: "get_task_result",
+    owner: "zenod",
+    title: "Check filing status",
+    description:
+      "Poll an async job started by store_memory, by its jobId. Returns the current status: 'queued'/'running' (poll again shortly), 'done' (with the result — evidence ref, pages touched, commit SHA, and any question for the user), 'error' (with the message), or 'interrupted' (re-issue the original store_memory call).",
+    inputSchema: GET_TASK_RESULT_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   // Archus's writes + reasoning — all routed to his guardian brain (intent in,
