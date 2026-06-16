@@ -561,6 +561,38 @@ export class AiSdkBrainLlm implements BrainLlm {
             execute: ({ repo, issueNumber, labels }) =>
               caught(() => taskTools.labelIssue({ repo: repo ?? "", issueNumber, labels })),
           }),
+          edit_issue: tool({
+            description:
+              "Edit an EXISTING GitHub issue in place when the user asks to change/update/revise/broaden a ticket — its body, title, labels, or status — or to post a comment on it. Use this instead of closing-and-recreating a ticket: pass the issue number and only the fields to change. `body` REPLACES the whole body, so include the full revised text (read the current issue first via query_backlog or the GitHub URL if you need its existing content). For status, pass a label like 'needs-update', 'blocked', or 'proposed'. IMPORTANT: this tool can NEVER set status:queued or status:approved-merge — those execution gates stay with approve_queue and approve_merge, so use those when the user approves running or merging. Returns the operations performed and the issue URL.",
+            inputSchema: z.object({
+              repo: z.string().nullable().describe("owner/repo target; null uses the configured vault/project repo"),
+              issueNumber: z.number().int().positive().describe("GitHub issue number to edit"),
+              title: z.string().nullable().describe("new title; null to leave unchanged"),
+              body: z.string().nullable().describe("new full body (replaces existing); null to leave unchanged"),
+              labelsAdd: z.array(z.string()).nullable().describe("labels to add; null for none"),
+              labelsRemove: z.array(z.string()).nullable().describe("labels to remove; null for none"),
+              labelsSet: z.array(z.string()).nullable().describe("replace ALL labels with this exact set; null to leave unchanged"),
+              comment: z.string().nullable().describe("a comment to post on the issue; null for none"),
+              status: z
+                .string()
+                .nullable()
+                .describe("non-gated status label to set, e.g. 'needs-update' or 'blocked'; null to leave unchanged. Cannot set queued/approved-merge."),
+            }),
+            execute: ({ repo, issueNumber, title, body, labelsAdd, labelsRemove, labelsSet, comment, status }) =>
+              caught(() =>
+                taskTools.editIssue({
+                  ...(repo ? { repo } : {}),
+                  issueNumber,
+                  ...(title !== null ? { title } : {}),
+                  ...(body !== null ? { body } : {}),
+                  ...(labelsAdd ? { labelsAdd } : {}),
+                  ...(labelsRemove ? { labelsRemove } : {}),
+                  ...(labelsSet ? { labelsSet } : {}),
+                  ...(comment ? { comment } : {}),
+                  ...(status !== null ? { status } : {}),
+                }),
+              ),
+          }),
           approve_queue: tool({
             description:
               "Promote specific backlog issues from status:proposed to status:queued so the monitor executes them. THIS IS THE ONLY TOOL THAT CAN SET status:queued, and it is the ONLY way a ticket ever runs — until you call it the ticket sits at status:proposed and the runner ignores it. Call it when the human has EXPLICITLY approved execution: either by number (e.g. 'yes, queue #1 and #2', 'approve 51 and 53, run them'), OR when the human asked to create-and-queue a ticket this same turn — pass the number create_issue just returned. Never infer approval from a vague or general request. CRITICAL: do NOT tell the user a ticket is 'queued', 'queued for execution', 'running', or that the runner was 'poked'/'woken' unless THIS tool actually returned success for that number — poking the runner happens only as part of a successful approve_queue (there is no separate poke/wake tool), so never claim the runner was poked when you did not queue. After queuing, tell the user exactly which issues were queued.",
@@ -631,7 +663,7 @@ export class AiSdkBrainLlm implements BrainLlm {
 
     const briefingExtras = [
       taskTools
-        ? "You CAN act on explicit tasking instructions using tools: capture_note files notes, digest_backlog/run digest mines structured backlog candidates, create_issue and label_issue manage GitHub issues, query_backlog reports open backlog/status, and service_backlog selects eligible work without launching a runner. propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute vault writes without explicit approval; creating a GitHub issue is allowed when the user explicitly asks to create/open/file one. Tickets you create are worked by autonomous agents, so they must be runnable: every issue needs an objective, explicit scope, and a done-condition/acceptance criteria (plus the files for code work, or the exact action + execute-vs-draft for action tasks like posting). If the user's request lacks any of that, ask ONE short clarifying question and do not file the issue until it is runnable — never create a ticket that would just bounce back as needs-clarification. Creating an issue does NOT run it: a ticket only executes once approve_queue moves it from status:proposed to status:queued. So when the user asks to create AND queue/run a ticket, create_issue then approve_queue (with the new number) in the same turn. Never tell the user something is 'queued', 'running', or that the runner was 'poked'/'woken' unless approve_queue actually succeeded for that number — poking happens only as part of a successful approve_queue (there is no separate poke tool), and the monitor also polls for queued tickets every ~2 minutes."
+        ? "You CAN act on explicit tasking instructions using tools: capture_note files notes, digest_backlog/run digest mines structured backlog candidates, create_issue and label_issue manage GitHub issues, edit_issue revises an existing ticket in place (body, title, labels, comment, or non-gated status) so you never close-and-recreate just to change a ticket, query_backlog reports open backlog/status, and service_backlog selects eligible work without launching a runner. propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute vault writes without explicit approval; creating a GitHub issue is allowed when the user explicitly asks to create/open/file one. Tickets you create are worked by autonomous agents, so they must be runnable: every issue needs an objective, explicit scope, and a done-condition/acceptance criteria (plus the files for code work, or the exact action + execute-vs-draft for action tasks like posting). If the user's request lacks any of that, ask ONE short clarifying question and do not file the issue until it is runnable — never create a ticket that would just bounce back as needs-clarification. Creating an issue does NOT run it: a ticket only executes once approve_queue moves it from status:proposed to status:queued. So when the user asks to create AND queue/run a ticket, create_issue then approve_queue (with the new number) in the same turn. Never tell the user something is 'queued', 'running', or that the runner was 'poked'/'woken' unless approve_queue actually succeeded for that number — poking happens only as part of a successful approve_queue (there is no separate poke tool), and the monitor also polls for queued tickets every ~2 minutes."
         : "",
       driveTools
         ? "The user's Google Drive is connected: list_drive_files shows what is waiting in the inbox; ingest_drive_file queues one file for background transcription (download, configured transcription provider for audio, filing, archiving). When the user asks to transcribe their Drive files or voice notes, list first, then call ingest_drive_file for each relevant file. It returns immediately — tell the user the files are queued and processing in the background, that live progress is in the Transcription panel, and the transcripts land in the vault when done."

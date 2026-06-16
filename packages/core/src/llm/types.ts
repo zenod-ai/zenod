@@ -163,6 +163,17 @@ export interface VaultTaskTools {
   digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult>;
   createIssue(input: { repo: string; title: string; body: string; labels?: string[] }): Promise<string>;
   labelIssue(input: { repo: string; issueNumber: number; labels: string[] }): Promise<string>;
+  editIssue(input: {
+    repo?: string;
+    issueNumber: number;
+    title?: string;
+    body?: string;
+    labelsAdd?: string[];
+    labelsRemove?: string[];
+    labelsSet?: string[];
+    comment?: string;
+    status?: string;
+  }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
   approveQueue(input: { repo: string; issueNumbers: number[] }): Promise<string>;

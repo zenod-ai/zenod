@@ -22,7 +22,7 @@ import {
   type LlmUsageReport,
   type TokenCostMeasurement,
 } from "zenod";
-import { installationToken } from "./githubApp.js";
+import { installationToken, editGithubIssue } from "./githubApp.js";
 import { buildDriveTools } from "./driveTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore } from "./usageStore.js";
@@ -234,6 +234,25 @@ export class Runtime {
           { method: "POST", body: JSON.stringify({ labels: normalizeLabelIssueLabels(labels) }) },
         );
         return `Labeled issue #${issueNumber}: ${issue.html_url}`;
+      },
+      // Revise an existing issue in place. Delegates to the shared editGithubIssue
+      // (githubApp.ts) so the chat surface gets the exact same queue/merge gating
+      // as the MCP edit_github_issue tool: status:queued and status:approved-merge
+      // can never be set here — they stay owned by approveQueue/approveMerge.
+      editIssue: async ({ repo, issueNumber, title, body, labelsAdd, labelsRemove, labelsSet, comment, status }) => {
+        const result = await editGithubIssue(this.settings, {
+          ...(repo ? { repo } : {}),
+          issueNumber,
+          ...(title !== undefined ? { title } : {}),
+          ...(body !== undefined ? { body } : {}),
+          ...(labelsAdd ? { labelsAdd } : {}),
+          ...(labelsRemove ? { labelsRemove } : {}),
+          ...(labelsSet ? { labelsSet } : {}),
+          ...(comment ? { comment } : {}),
+          ...(status !== undefined ? { status } : {}),
+        });
+        const ops = result.operations.length ? result.operations.join(", ") : "no changes";
+        return `Edited #${result.issueNumber} (${ops}): ${result.issueUrl}`;
       },
       queryBacklog,
       serviceBacklog: async (query?: string) =>

@@ -137,6 +137,15 @@ class FakeLlm implements BrainLlm {
       });
       return { text, readPaths: [] };
     }
+    if (taskTools && input.question.startsWith("EDITISSUE:")) {
+      const text = await taskTools.editIssue({
+        repo: "zenod-ai/zenod",
+        issueNumber: 90,
+        body: "## Objective\nBroadened scope: also convert the SVG to PNG before attaching.",
+        status: "needs-update",
+      });
+      return { text, readPaths: [] };
+    }
     if (taskTools && input.question.startsWith("QUERYBACKLOG")) {
       const text = await taskTools.queryBacklog("open issues");
       return { text, readPaths: [] };
@@ -709,6 +718,10 @@ describe("BrainEngine", () => {
           calls.push(`label:${input.repo}:${input.issueNumber}:${input.labels.join(",")}`);
           return "labeled";
         },
+        async editIssue(input) {
+          calls.push(`edit:${input.repo}:${input.issueNumber}:${input.status}:${(input.body ?? "").slice(0, 6)}`);
+          return `Edited #${input.issueNumber}`;
+        },
         async queryBacklog(query) {
           calls.push(`query:${query}`);
           return "Open issues: #25 tasking";
@@ -725,14 +738,17 @@ describe("BrainEngine", () => {
     });
 
     const issue = await e.handleTasking({ text: "CREATEISSUE: Task from WhatsApp", surface: "web", conversationKey: "same" });
+    const edit = await e.handleTasking({ text: "EDITISSUE: broaden #90", surface: "whatsapp", conversationKey: "same" });
     const query = await e.handleTasking({ text: "QUERYBACKLOG", surface: "whatsapp", conversationKey: "same" });
     const service = await e.handleTasking({ text: "SERVICEBACKLOG", surface: "web", conversationKey: "same" });
 
     expect(issue.actions.map((action) => action.tool)).toEqual(["createIssue"]);
+    expect(edit.actions.map((action) => action.tool)).toEqual(["editIssue"]);
     expect(query.actions.map((action) => action.tool)).toEqual(["queryBacklog"]);
     expect(service.actions.map((action) => action.tool)).toEqual(["serviceBacklog"]);
     expect(calls).toEqual([
       "create:zenod-ai/zenod:Task from WhatsApp:from-tasking,status:proposed",
+      "edit:zenod-ai/zenod:90:needs-update:## Obj",
       "query:open issues",
       "service:ready",
     ]);

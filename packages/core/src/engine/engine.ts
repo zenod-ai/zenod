@@ -588,6 +588,29 @@ export function createEngine(options: EngineOptions): BrainEngine {
             : Promise.resolve(noExternalTool("labelIssue")),
         );
       },
+      // Revise an existing ticket in place. The underlying ExternalTaskingTools
+      // (githubApp.editGithubIssue) normalizes labels and enforces the same
+      // queue/merge gates as createIssue/labelIssue: this can never set
+      // status:queued or status:approved-merge, so editing a ticket can revise
+      // scope/body/status without escalating execution.
+      editIssue: async (input) => {
+        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        return runMutation("editIssue", normalized, () =>
+          options.taskingTools
+            ? options.taskingTools.editIssue({
+                issueNumber: normalized.issueNumber,
+                ...(normalized.repo ? { repo: normalized.repo } : {}),
+                ...(normalized.title !== undefined ? { title: normalized.title } : {}),
+                ...(normalized.body !== undefined ? { body: normalized.body } : {}),
+                ...(normalized.labelsAdd ? { labelsAdd: normalized.labelsAdd } : {}),
+                ...(normalized.labelsRemove ? { labelsRemove: normalized.labelsRemove } : {}),
+                ...(normalized.labelsSet ? { labelsSet: normalized.labelsSet } : {}),
+                ...(normalized.comment ? { comment: normalized.comment } : {}),
+                ...(normalized.status !== undefined ? { status: normalized.status } : {}),
+              })
+            : Promise.resolve(noExternalTool("editIssue")),
+        );
+      },
       queryBacklog: async (query?: string) => {
         const result = options.taskingTools
           ? await options.taskingTools.queryBacklog(query)

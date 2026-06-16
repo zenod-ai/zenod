@@ -122,6 +122,24 @@ export interface TaskingReply {
 export interface ExternalTaskingTools {
   createIssue(input: { repo?: string; title: string; body: string; labels?: string[] }): Promise<string>;
   labelIssue(input: { repo?: string; issueNumber: number; labels: string[] }): Promise<string>;
+  /**
+   * Edit an existing GitHub issue in place — title, body, label add/remove/set,
+   * a comment, and non-gated status. The queue/merge gates still hold: this can
+   * never set status:queued or status:approved-merge (those go through
+   * approveQueue/approveMerge), so the agent can revise tickets without
+   * escalating execution on its own.
+   */
+  editIssue(input: {
+    repo?: string;
+    issueNumber: number;
+    title?: string;
+    body?: string;
+    labelsAdd?: string[];
+    labelsRemove?: string[];
+    labelsSet?: string[];
+    comment?: string;
+    status?: string;
+  }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
   /**
