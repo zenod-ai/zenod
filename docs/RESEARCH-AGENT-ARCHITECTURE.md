@@ -197,6 +197,31 @@ So building the suite **is** the base/vault split: pull today's Z0 monolith into
 shell)** + **Z0 (vault capability)**. The long-discussed "base" *is the Console*. The spike proves
 exactly this split — it is no longer an abstract unknown but a concrete refactor of the current code.
 
+## Round 5 — install / enable / deploy + connections (the lived experience)
+
+**Product vision:** a person has a VPS with Dokploy/Coolify and runs this **containerized personal
+agent suite** as their long-term, always-on baseline. They plug new capabilities in via MCP (the
+"bus"). The first/baseline citizen is the **memory service = Z0.**
+
+**Decisions:**
+- **One suite, one monorepo.** All agents ship together — like installing Office even if you only
+  want Word. No separate per-agent repos for now (may split later). *What the repo contains barely
+  matters; what matters is the **deployment** — which containers run.*
+- **Enable, not install.** Everything is "always there." You **enable** an agent, which means three
+  things at once: (1) its **container is deployed/running**, (2) its **tools are registered** into
+  the chat, (3) its **config panel** appears in the Console.
+- **Deployment model v1: run all, toggle on/off.** Do **not** build deploy-on-demand yet (too much
+  complexity for v1). All containers run by default; the Console toggles them on/off. A bit
+  wasteful — acceptable for now; optimize to on-demand deploy later if needed.
+- **The Console gets an on/off control surface** — a real part of the UX: which agents are enabled.
+  *This is the first thing to build + test: register agents on/off and watch tools + config panels
+  appear/disappear.*
+- **Connections are shared; config is per-agent.** The "Vault tab" is really **"connect a GitHub
+  repo."** GitHub OAuth, model keys, X creds, Drive, etc. live **once** in the Console's
+  **Connections** center (connect once). Each enabled agent then declares a thin config: *which
+  connected resource is mine* — Z0: "this repo is my vault"; Archus: "these repos are the backlog."
+  So a per-agent panel is a small selector over shared connections, **not** a bespoke auth per agent.
+
 ## Net verdict
 **The shape is right and now matches the field.** Two sharpenings, no pivot:
 1. **The Council (supervisor) is the hub *and* the only human UI** — gateways bind to it, agents
