@@ -23,6 +23,7 @@ import {
   type TokenCostMeasurement,
 } from "zenod";
 import { installationToken, installationTokenForRepo, editGithubIssue } from "zenod";
+import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { buildDriveTools } from "./driveTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore } from "./usageStore.js";
@@ -60,7 +61,7 @@ export class Runtime {
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
 
-  constructor(readonly dataDir: string) {
+  constructor(readonly dataDir: string, readonly agent: AgentDefinition = ZENOD_AGENT) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
     this.oauth = new OAuthStore(join(dataDir, "oauth.sqlite"));
     this.settings = new Settings(this.state);
@@ -146,6 +147,7 @@ export class Runtime {
       repo,
       llm,
       state: this.state,
+      persona: this.agent.persona,
       location: {
         repo: this.settings.get("vault_repo")!,
         branch: this.settings.get("vault_branch") ?? "main",

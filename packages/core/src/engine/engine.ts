@@ -84,6 +84,8 @@ export interface EngineOptions {
   llm: BrainLlm;
   state: StateStore;
   location?: VaultLocation;
+  /** System persona for the ask/chat loop. Defaults to Zenod's if omitted. */
+  persona?: string;
   /**
    * External-source tools (Google Drive) exposed to the chat loop. Provided
    * by the server when a Drive connection is configured; the engine itself
@@ -232,7 +234,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       },
     };
     const text = [
-      "You are Zeno, the user's personal memory agent. Answer questions about their knowledge vault.",
+      options.persona ?? "You are Zeno, the user's personal memory agent. Answer questions about their knowledge vault.",
       // The index below is a map, not the territory — a weaker model will happily
       // answer from it and skip the tools. Make tool use a hard, non-negotiable
       // contract so search_vault/read_note actually fire on every vault question.

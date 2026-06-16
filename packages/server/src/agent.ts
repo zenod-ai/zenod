@@ -12,6 +12,8 @@ export interface AgentDefinition {
   displayName: string;
   /** One-line subtitle shown under the title. */
   tagline: string;
+  /** System persona for the ask/chat loop, e.g. "You are Zeno…". */
+  persona: string;
 }
 
 /** The first consumer of the shell. */
@@ -19,4 +21,5 @@ export const ZENOD_AGENT: AgentDefinition = {
   name: "zenod",
   displayName: "Zenod",
   tagline: "Self-hosted memory agent",
+  persona: "You are Zeno, the user's personal memory agent. Answer questions about their knowledge vault.",
 };

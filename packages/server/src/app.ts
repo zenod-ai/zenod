@@ -33,7 +33,7 @@ import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runt
 import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
-import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
+import { type AgentDefinition } from "./agent.js";
 
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
@@ -47,7 +47,7 @@ const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
 export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
   const app = new Hono<{ Bindings: HttpBindings }>();
   const { settings } = runtime;
-  const agent = options.agent ?? ZENOD_AGENT;
+  const agent = options.agent ?? runtime.agent;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
 
   void runtime.whatsapp.startIfEnabled().catch((err: unknown) => {

@@ -18,8 +18,8 @@ try {
   hasWeb = false;
 }
 
-const runtime = new Runtime(dataDir);
-const app = createApp(runtime, { agent: ZENOD_AGENT, ...(hasWeb ? { webDist } : {}) });
+const runtime = new Runtime(dataDir, ZENOD_AGENT);
+const app = createApp(runtime, hasWeb ? { webDist } : {});
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`zenod server listening on :${info.port} (data: ${dataDir}${hasWeb ? `, ui: ${webDist}` : ", no ui build"})`);
