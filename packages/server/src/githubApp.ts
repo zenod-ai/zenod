@@ -119,6 +119,44 @@ export async function installationToken(settings: Settings): Promise<string> {
   return data.token;
 }
 
+/**
+ * Mint a token for the installation that actually owns `repo` (owner/name), so
+ * the App works across EVERY account it is installed on — not just the one
+ * stored installation. Falls back to the stored single-installation token on any
+ * failure, so behaviour is never worse than the previous single-repo path.
+ */
+export async function installationTokenForRepo(settings: Settings, repo: string): Promise<string> {
+  const appId = settings.getRaw("github_app_id");
+  const pem = settings.getRaw("github_app_private_key");
+  if (!appId || !pem || !repo.includes("/")) return installationToken(settings);
+  const cacheKey = `repo:${repo}`;
+  const cached = tokenCache.get(cacheKey);
+  if (cached && cached.expiresAt - Date.now() > 5 * 60 * 1000) return cached.token;
+  try {
+    const jwt = appJwt(appId, pem);
+    const headers = { Accept: "application/vnd.github+json", Authorization: `Bearer ${jwt}`, "User-Agent": "zenod" };
+    const found = await fetch(`https://api.github.com/repos/${repoPath(repo)}/installation`, { headers });
+    if (!found.ok) return installationToken(settings);
+    const installation = (await found.json()) as { id: number };
+    const minted = await fetch(`https://api.github.com/app/installations/${installation.id}/access_tokens`, {
+      method: "POST",
+      headers,
+    });
+    if (!minted.ok) return installationToken(settings);
+    const data = (await minted.json()) as { token: string; expires_at: string };
+    tokenCache.set(cacheKey, { token: data.token, expiresAt: Date.parse(data.expires_at) });
+    return data.token;
+  } catch {
+    return installationToken(settings);
+  }
+}
+
+/** Parse `owner/name` from a `/repos/owner/name/...` GitHub API path. */
+function repoFromPath(path: string): string | undefined {
+  const match = path.match(/^\/repos\/([^/]+)\/([^/]+)/);
+  return match ? `${match[1]}/${match[2]}` : undefined;
+}
+
 export interface InstallationRepo {
   fullName: string;
   private: boolean;
@@ -221,15 +259,17 @@ function replaceStatusLabel(labels: string[], status: string): string[] {
   return [...new Set([...withoutStatus, status])];
 }
 
-async function configuredGithubToken(settings: Settings): Promise<string> {
-  if (settings.hasGithubApp()) return installationToken(settings);
+async function configuredGithubToken(settings: Settings, repo?: string): Promise<string> {
+  if (settings.hasGithubApp()) {
+    return repo ? installationTokenForRepo(settings, repo) : installationToken(settings);
+  }
   const token = settings.get("github_token");
   if (!token) throw new Error("GitHub token or app installation is required");
   return token;
 }
 
 async function githubRequest<T>(settings: Settings, path: string, init: RequestInit = {}): Promise<T> {
-  const token = await configuredGithubToken(settings);
+  const token = await configuredGithubToken(settings, repoFromPath(path));
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {

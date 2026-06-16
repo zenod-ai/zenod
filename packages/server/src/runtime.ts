@@ -22,7 +22,7 @@ import {
   type LlmUsageReport,
   type TokenCostMeasurement,
 } from "zenod";
-import { installationToken, editGithubIssue } from "./githubApp.js";
+import { installationToken, installationTokenForRepo, editGithubIssue } from "./githubApp.js";
 import { buildDriveTools } from "./driveTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore } from "./usageStore.js";
@@ -157,15 +157,18 @@ export class Runtime {
     return this.engine;
   }
 
-  private async githubToken(): Promise<string | null> {
-    if (this.settings.hasGithubApp()) return installationToken(this.settings);
+  private async githubToken(repo?: string): Promise<string | null> {
+    if (this.settings.hasGithubApp()) {
+      return repo ? installationTokenForRepo(this.settings, repo) : installationToken(this.settings);
+    }
     return this.settings.get("github_token");
   }
 
   private buildTaskingTools(): ExternalTaskingTools {
     const defaultRepo = () => this.settings.get("vault_repo") || "";
     const githubJson = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
-      const token = await this.githubToken();
+      const repoMatch = path.match(/^\/repos\/([^/]+)\/([^/]+)/);
+      const token = await this.githubToken(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined);
       if (!token) throw new Error("GitHub token or app installation is required");
       const response = await fetch(`https://api.github.com${path}`, {
         ...init,
