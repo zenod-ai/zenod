@@ -24,6 +24,41 @@ describe("reconcileTaskingReply", () => {
     expect(out).toContain("The create step failed: GitHub returned 403: forbidden");
   });
 
+  it("corrects a fabricated multi-issue success after the create 404'd on a phantom repo (the zenod/zenod #1..#5 bug)", () => {
+    // create_issue targeted a non-existent repo (zenod/zenod). GitHub 404'd, so the
+    // tool recorded an ERROR — but the model still narrated success with invented
+    // numbers and cross-links, using a verb ("placed") the completion list omits.
+    const reply =
+      "All five tickets placed in zenod/zenod:\n" +
+      "- zenod/zenod#1 — Foo\n- zenod/zenod#2 — Bar\n- zenod/zenod#3 — Baz\n" +
+      "- zenod/zenod#4 — Qux\n- zenod/zenod#5 — Quux\nCross-links added between them.";
+    const actions: RecordedAction[] = [
+      { tool: "createIssue", result: "ERROR: GitHub returned 404: Not Found" },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("no GitHub issue was created");
+    expect(out).toContain("The create step failed: GitHub returned 404: Not Found");
+    // every invented number is named so the reader ignores them
+    for (const n of [1, 2, 3, 4, 5]) expect(out).toContain(`#${n}`);
+  });
+
+  it("corrects a 'placed' creation claim that no tool performed", () => {
+    const out = reconcileTaskingReply("Done — placed the ticket in the backlog.", []);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("no GitHub issue was created");
+  });
+
+  it("does not correct a partial result: leaves the genuinely-created issue when another create failed", () => {
+    const reply = "Created issue #25: https://github.com/zenod-ai/zenod/issues/25";
+    const actions: RecordedAction[] = [
+      created(25, "zenod-ai/zenod"),
+      { tool: "createIssue", result: "ERROR: GitHub returned 404: Not Found" },
+    ];
+    // #25 is real and backed; the failed-create guard must not fire on it.
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("leaves a genuine creation backed by a tool result untouched", () => {
     const reply = "Created issue #25: https://github.com/zenod-ai/zenod/issues/25";
     expect(reconcileTaskingReply(reply, [created(25, "zenod-ai/zenod")])).toBe(reply);

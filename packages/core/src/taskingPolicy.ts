@@ -43,8 +43,8 @@ export interface RecordedAction {
 
 // Perfective mutation verbs. Offers ("want me to create…", "I'll open…") use
 // other forms and don't trip the guard.
-const MUTATION_VERBS = "created|filed|opened|raised|logged|queued|merged|approved";
-const CREATION_VERBS = "created|filed|opened|raised|logged";
+const MUTATION_VERBS = "created|filed|opened|raised|logged|placed|queued|merged|approved";
+const CREATION_VERBS = "created|filed|opened|raised|logged|placed";
 
 // A mutation verb is only a *claim about this turn* when it's active voice. A
 // be-verb/modal/infinitive before it marks a description, not a receipt:
@@ -169,17 +169,39 @@ export function summarizeActionsForReply(actions: ReadonlyArray<RecordedAction>)
  * Pure and deterministic so it can be unit-tested against real transcripts.
  */
 export function reconcileTaskingReply(text: string, actions: ReadonlyArray<RecordedAction>): string {
+  const prose = assertedProse(text);
+  const presented = issueNumbersIn(prose);
+  const proven = provenNumbers(actions);
+  const receipts = createReceipts(actions);
+  const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
+
+  // Ground truth beats verb-matching: when a create_issue tool actually RAN and
+  // FAILED this turn, any reply that then presents issue numbers no successful
+  // tool produced is fabricating a result — however it's phrased. The completion-
+  // verb list below can't enumerate every wording ("placed in zenod/zenod", "set
+  // up", "cross-linked"), but a recorded create failure can. This catches the
+  // "All five tickets placed in zenod/zenod → #1..#5" bug, where create_issue
+  // 404'd on a non-existent repo yet the model still narrated success with
+  // invented numbers and cross-link confirmations.
+  const createFailed = createError(actions);
+  if (createFailed && createdNums.size === 0) {
+    const unbacked = [...presented].filter((n) => !proven.has(n));
+    if (unbacked.length > 0) {
+      return [
+        `⚠️ Correction — no GitHub issue was created. ${fmt(unbacked)} ${unbacked.length > 1 ? "were" : "was"} not filed by this request (ignore the issue details below).`,
+        `The create step failed: ${createFailed}`,
+        "Nothing was filed — want me to create it now?",
+        "",
+        text,
+      ].join("\n");
+    }
+  }
+
   // Only police active claims the model makes about THIS turn. Read-only
   // mentions ("what's the status of #44"), capability descriptions ("issues are
   // created with status:proposed"), and quoted history (a blockquoted past
   // receipt) are left alone — they don't assert a mutation just happened.
-  const prose = assertedProse(text);
   if (!hasActiveClaim(prose, MUTATION_VERBS)) return text;
-
-  const presented = issueNumbersIn(prose);
-  const receipts = createReceipts(actions);
-  const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
-  const proven = provenNumbers(actions);
 
   const claimsCreation = hasActiveClaim(prose, CREATION_VERBS) && (presented.size > 0 || /\b(issue|ticket)\b/i.test(prose));
 

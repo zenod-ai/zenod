@@ -37,7 +37,7 @@ import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
-import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, summarizeActionsForReply } from "../taskingPolicy.js";
+import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
 
 /**
  * The conversation key for a surface. One continuous thread per surface today;
@@ -1037,17 +1037,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
   // exhausts its step budget mid-tool-call (generateText then returns ""). An
   // empty reply is silently dropped by the WhatsApp gateway and looks like Zeno
   // ignoring the user, so always produce *something*: the real tool results if
-  // any ran, otherwise an honest retry notice. Reconciliation runs first so a
-  // fabricated mutation is still corrected before we consider falling back.
-  // The legacy "Created issue #N" reconciliation guard is removed while the backlog
-  // logic is revamped (Archus owns issues now; the Console just relays peer results,
-  // and the guard kept "correcting" true results). Keep only the empty-reply fallback.
+  // any ran, otherwise an honest retry notice.
+  //
+  // Then reconcile the drafted reply against the tools that actually ran this
+  // turn (reconcileTaskingReply is grounding-aware — it only corrects fabricated
+  // mutations, leaving genuine results and read-only summaries untouched, which
+  // is why the older blunt "Created issue #N" guard was removed). Without this
+  // the model could narrate a successful create that 404'd — e.g. "All five
+  // tickets placed in zenod/zenod #1..#5" when the repo doesn't resolve.
   function finalizeReply(rawText: string, actions: TaskingAction[]): string {
-    if (rawText.trim()) return rawText;
-    const summary = summarizeActionsForReply(actions);
-    return summary
-      ? `${summary}\n\n(That's what I did — I ran out of room to write a fuller reply.)`
-      : "I couldn't compose a reply to that one — mind rephrasing or sending it again?";
+    const drafted = rawText.trim()
+      ? rawText
+      : summarizeActionsForReply(actions)
+        ? `${summarizeActionsForReply(actions)}\n\n(That's what I did — I ran out of room to write a fuller reply.)`
+        : "I couldn't compose a reply to that one — mind rephrasing or sending it again?";
+    return reconcileTaskingReply(drafted, actions);
   }
 
   async function chat(

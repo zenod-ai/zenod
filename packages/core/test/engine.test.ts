@@ -848,6 +848,41 @@ describe("BrainEngine", () => {
     expect(reply.text).toContain("Created issue #25");
   });
 
+  it("corrects a fabricated 'Created issue #N' reply when the create actually 404'd (the phantom-repo bug)", async () => {
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        // The create hits a non-existent repo and GitHub 404s — the tool throws,
+        // exactly as runtime.createIssue does. The model still narrates success.
+        async createIssue() {
+          throw new Error("GitHub returned 404: Not Found");
+        },
+        async labelIssue() {
+          return "labeled";
+        },
+        async queryBacklog() {
+          return "";
+        },
+        async serviceBacklog() {
+          return "";
+        },
+        async approveQueue() {
+          return "queued";
+        },
+      },
+    });
+
+    const reply = await e.handleTasking({ text: "FABRICATECREATE: Phantom task", surface: "whatsapp", conversationKey: "fab" });
+
+    expect(reply.text).toMatch(/^⚠️ Correction/);
+    expect(reply.text).toContain("no GitHub issue was created");
+    expect(reply.text).toContain("The create step failed: GitHub returned 404: Not Found");
+    expect(reply.text).toContain("#58");
+  });
+
   it("forces agent-created GitHub issues to proposed instead of queued", async () => {
     const calls: string[] = [];
     const e = createEngine({
