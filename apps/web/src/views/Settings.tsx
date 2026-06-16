@@ -32,12 +32,17 @@ export function Settings({
   const [identity, setIdentity] = React.useState({
     displayName: "Zenod",
     tagline: "Self-hosted memory agent",
+    vaultless: false,
   })
   React.useEffect(() => {
-    api<{ displayName: string; tagline: string }>("/api/agent")
-      .then((r) => setIdentity({ displayName: r.displayName, tagline: r.tagline }))
+    api<{ displayName: string; tagline: string; vaultless?: boolean }>("/api/agent")
+      .then((r) => setIdentity({ displayName: r.displayName, tagline: r.tagline, vaultless: r.vaultless ?? false }))
       .catch(() => {})
   }, [])
+  // Vaultless agents (the Console shell) have no vault, so the vault-specific
+  // tabs (Vault, Transcription — which files Drive transcripts into the vault)
+  // are hidden. This is the per-capability tab model in miniature.
+  const showVault = !identity.vaultless
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -76,9 +81,9 @@ export function Settings({
       <Tabs defaultValue={initialTab ?? "chat"}>
         <TabsList>
           <TabsTrigger value="chat">Chat</TabsTrigger>
-          <TabsTrigger value="vault">Vault</TabsTrigger>
+          {showVault && <TabsTrigger value="vault">Vault</TabsTrigger>}
           <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>
-          <TabsTrigger value="transcription">Transcription</TabsTrigger>
+          {showVault && <TabsTrigger value="transcription">Transcription</TabsTrigger>}
           <TabsTrigger value="connections">Connections</TabsTrigger>
           <TabsTrigger value="costs">Costs</TabsTrigger>
           <TabsTrigger value="test">Test</TabsTrigger>
@@ -86,15 +91,19 @@ export function Settings({
         <TabsContent value="chat" className="mt-4">
           <ChatTab />
         </TabsContent>
-        <TabsContent value="vault" className="mt-4">
-          <VaultTab />
-        </TabsContent>
+        {showVault && (
+          <TabsContent value="vault" className="mt-4">
+            <VaultTab />
+          </TabsContent>
+        )}
         <TabsContent value="keys" className="mt-4">
           <KeysTab initial={settings} onSaved={setSettings} />
         </TabsContent>
-        <TabsContent value="transcription" className="mt-4">
-          <TranscriptionTab />
-        </TabsContent>
+        {showVault && (
+          <TabsContent value="transcription" className="mt-4">
+            <TranscriptionTab />
+          </TabsContent>
+        )}
         <TabsContent value="connections" className="mt-4">
           <ConnectionsTab />
         </TabsContent>
