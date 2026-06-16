@@ -14,6 +14,13 @@ export interface AgentDefinition {
   tagline: string;
   /** System persona for the ask/chat loop, e.g. "You are Zeno…". */
   persona: string;
+  /**
+   * When true, this agent runs WITHOUT a vault — the engine boots with no repo,
+   * no vault briefing, and no vault tools (just the chat loop + connections +
+   * gateways). This is the "Console shell" of the suite split: the base minus
+   * the vault capability. See docs/SUITE-SCAFFOLD.md (the spike, #154).
+   */
+  vaultless?: boolean;
 }
 
 /** The first consumer of the shell. */
@@ -33,10 +40,27 @@ export const ARCHUS_AGENT: AgentDefinition = {
     "You are Archus, the backlog agent. You read, organize, and act on the user's GitHub backlog across their repositories.",
 };
 
+/**
+ * The Console shell — the suite's shared front-end (UI + chat + connections +
+ * gateways) running WITHOUT a vault. It is the base minus the vault capability;
+ * the spike (#154) stands it up on z2 to prove the engine separates from the
+ * vault cleanly. In uni mode you chat with it directly; later it routes to
+ * enabled agents.
+ */
+export const CONSOLE_AGENT: AgentDefinition = {
+  name: "console",
+  displayName: "Console",
+  tagline: "The suite shell — chat, connections, gateways",
+  persona:
+    "You are the Zenod Console, the shared front-end of a personal agent suite. You have no vault of your own yet; you chat with the user and will route to enabled agents. Be direct and concise.",
+  vaultless: true,
+};
+
 /** Known agents, selectable at the entry point so one image can run as any of them. */
 export const AGENTS: Record<string, AgentDefinition> = {
   zenod: ZENOD_AGENT,
   archus: ARCHUS_AGENT,
+  console: CONSOLE_AGENT,
 };
 
 /** Resolve the agent for this process from an id (e.g. the AGENT env var); defaults to Zenod. */

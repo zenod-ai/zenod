@@ -80,7 +80,14 @@ function chatSnippet(text: string): string {
 }
 
 export interface EngineOptions {
-  repo: VaultRepo;
+  /**
+   * The vault repo. Optional: when omitted the engine runs "vaultless" — no
+   * sync, no vault briefing, no vault read/write tools — for the Console shell
+   * (the suite's base minus the vault capability). Vault-only methods (store,
+   * work, ask, search, get, lint, digestBacklog) throw a clear error in that
+   * mode; chat/handleTasking run with a persona-only briefing.
+   */
+  repo?: VaultRepo;
   llm: BrainLlm;
   state: StateStore;
   location?: VaultLocation;
@@ -149,7 +156,14 @@ interface Briefing {
 
 export function createEngine(options: EngineOptions): BrainEngine {
   const { repo, llm, state } = options;
-  const vaultPath = repo.path;
+  // Vaultless mode (Console shell): no repo → vaultPath is empty and every vault
+  // touchpoint below guards on `repo`. assertVault() gates the vault-only methods.
+  const vaultPath = repo ? repo.path : "";
+  // Assertion (not just a throw) so TS narrows `repo` to VaultRepo for the rest of
+  // a vault-only method after the guard, keeping `repo.pull()` etc. well-typed.
+  function assertVault(value: VaultRepo | undefined): asserts value is VaultRepo {
+    if (!value) throw new Error("This agent has no vault configured — vault operations are unavailable.");
+  }
   const location = options.location ?? {};
   const now = options.now ?? (() => new Date());
   const queue = new WriteQueue();
@@ -163,6 +177,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * reads then serve the local clone, same as store's pull fallback.
    */
   async function syncForRead(): Promise<void> {
+    if (!repo) return; // vaultless: nothing to pull
     if (now().getTime() - lastSyncMs < readSyncTtl) return;
     // Never block an interactive turn on a best-effort freshness pull. If a
     // write is in flight (especially a slow background librarian filing), serve
@@ -204,6 +219,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   async function vaultBriefing(): Promise<Briefing> {
+    if (!repo) {
+      // Vaultless (Console shell): no vault to map and no TOOL CONTRACT to enforce —
+      // just the persona. The chat loop runs as plain assistant chat.
+      const text = options.persona ?? "You are a helpful assistant. Be direct and concise.";
+      const empty = { included: 0, total: 0, omitted: 0 };
+      return {
+        text,
+        estimatedTokens: estimateTokens(text),
+        chars: text.length,
+        sections: { meaningPages: empty, evidenceLogs: empty, attachments: empty },
+      };
+    }
     const agents = await readFile(join(vaultPath, "AGENTS.md"), "utf8").catch(() => "");
     const snapshot = await scanVault(vaultPath);
     const allLogFiles = snapshot.files.filter((f) => f.startsWith("Log/"));
@@ -262,18 +289,25 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   function readTools() {
+    // Vaultless (Console shell): the three vault-backed tools are still registered
+    // by the LLM layer, so they must exist — but they report no vault rather than
+    // dereferencing an empty vaultPath. searchChats (state-backed) works normally.
+    const NO_VAULT = "No vault is configured on this agent.";
     return {
       searchVault: async (query: string) => {
+        if (!repo) return NO_VAULT;
         const hits = await searchVault(vaultPath, query, location);
         if (hits.length === 0) return "no results";
         return hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n");
       },
       readNote: async (path: string) => {
+        if (!repo) return NO_VAULT;
         const note = await getNote(vaultPath, path, location);
         const body = note.body.length > 8000 ? `${note.body.slice(0, 8000)}\n[truncated]` : note.body;
         return `--- frontmatter: ${JSON.stringify(note.frontmatter)}\n${body}`;
       },
       listPages: async () => {
+        if (!repo) return NO_VAULT;
         const snapshot = await scanVault(vaultPath);
         return snapshot.pages.map((p) => `${p.path} — ${p.title}: ${p.summary}`).join("\n") || "(none)";
       },
@@ -437,6 +471,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   async function digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult> {
+    assertVault(repo);
     if (input.write) {
       return queue.run(async () => {
         await repo.pull().catch(() => {});
@@ -669,6 +704,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * commit-and-push or full rollback. Same contract as store, wider verbs.
    */
   async function work(input: WorkInput): Promise<WorkResult> {
+    assertVault(repo);
     if (!input.plan) {
       await syncForRead();
       const briefing = await vaultBriefing();
@@ -769,6 +805,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * "background" so it can never starve an interactive turn (#96).
    */
   async function store(input: StoreInput, priority: QueuePriority = "interactive"): Promise<StoreResult> {
+    assertVault(repo);
     return queue.run(async () => {
       await repo.pull().catch(() => {
         // offline or empty remote — proceed against the local clone
@@ -949,6 +986,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   async function ask(question: string): Promise<Answer> {
+    assertVault(repo);
     await syncForRead();
     const briefing = await vaultBriefing();
     reportTokenCost("ask", [briefing.text, question], briefing);
@@ -995,12 +1033,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
     const wantsStore = /\b(remember|store|save|capture|log) (this|that|it)\b/i.test(message);
     let stored: StoreResult | undefined;
-    if (wantsStore) {
+    if (wantsStore && repo) {
       stored = await store({ content: message, source: surface });
     }
 
     const actions: TaskingAction[] = [];
-    const taskTools = buildTaskTools(surface, (action) => actions.push(action));
+    // Vaultless: no task tools (capture/propose write to the vault). Plain chat.
+    const taskTools = repo ? buildTaskTools(surface, (action) => actions.push(action)) : undefined;
     const briefing = await vaultBriefing();
     reportTokenCost("chat", [briefing.text, ...window.map((m) => m.text), message], briefing);
 
@@ -1044,7 +1083,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
       },
       readTools(),
-      buildTaskTools(input.surface, (action) => actions.push(action)),
+      repo ? buildTaskTools(input.surface, (action) => actions.push(action)) : undefined,
       options.driveTools,
     );
     // Never let the reply assert a creation/mutation the tools didn't actually
@@ -1062,14 +1101,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
     work,
     digestBacklog,
     search: async (query: string): Promise<Hit[]> => {
+      assertVault(repo);
       await syncForRead();
       return searchVault(vaultPath, query, location);
     },
     get: async (path: string): Promise<Note> => {
+      assertVault(repo);
       await syncForRead();
       return getNote(vaultPath, path, location);
     },
     lint: async (): Promise<LintReport> => {
+      assertVault(repo);
       await syncForRead();
       return lintVault(vaultPath);
     },

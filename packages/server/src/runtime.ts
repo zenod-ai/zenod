@@ -128,9 +128,16 @@ export class Runtime {
 
   async getEngine(): Promise<BrainEngine> {
     if (this.engine) return this.engine;
-    if (!this.settings.configured()) throw new NotConfiguredError();
+    // Vaultless agents (the Console shell) boot the engine with no vault: only an
+    // LLM key is required, no vault/tasking/drive tools. Vault agents are unchanged.
+    const vaultless = this.agent.vaultless === true;
+    if (vaultless) {
+      if (!this.settings.activeApiKey()) throw new NotConfiguredError();
+    } else if (!this.settings.configured()) {
+      throw new NotConfiguredError();
+    }
 
-    const repo = await this.getRepo();
+    const repo = vaultless ? null : await this.getRepo();
     const llm = createBrainLlm({
       provider: this.settings.provider(),
       apiKey: this.settings.activeApiKey()!,
@@ -145,18 +152,22 @@ export class Runtime {
       },
     });
     // The chat/MCP Drive tools enqueue onto the background ingest queue.
-    const driveTools = buildDriveTools(this.settings, this.ingestQueue);
+    const driveTools = vaultless ? null : buildDriveTools(this.settings, this.ingestQueue);
     this.engine = createEngine({
-      repo,
+      ...(repo ? { repo } : {}),
       llm,
       state: this.state,
       persona: this.agent.persona,
-      location: {
-        repo: this.settings.get("vault_repo")!,
-        branch: this.settings.get("vault_branch") ?? "main",
-      },
+      ...(repo
+        ? {
+            location: {
+              repo: this.settings.get("vault_repo")!,
+              branch: this.settings.get("vault_branch") ?? "main",
+            },
+          }
+        : {}),
       ...(driveTools ? { driveTools } : {}),
-      taskingTools: this.buildTaskingTools(),
+      ...(vaultless ? {} : { taskingTools: this.buildTaskingTools() }),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
     });
     return this.engine;

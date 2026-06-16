@@ -83,7 +83,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // Agent identity for the UI shell (title/subtitle) so the same UI renders
   // per-agent without a rebuild. See docs/SUITE-SCAFFOLD.md.
   app.get("/api/agent", (c) =>
-    c.json({ name: agent.name, displayName: agent.displayName, tagline: agent.tagline }),
+    c.json({
+      name: agent.name,
+      displayName: agent.displayName,
+      tagline: agent.tagline,
+      // The Console shell runs without a vault; the UI can hide the Vault tab.
+      vaultless: agent.vaultless ?? false,
+    }),
   );
 
   // --- OAuth 2.1 provider (public — discovery + flow endpoints) ---

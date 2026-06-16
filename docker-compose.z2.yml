@@ -1,0 +1,38 @@
+# z2 — the Console shell (the suite's base MINUS the vault), as a Dokploy Compose
+# service running SIDE BY SIDE with live Zenod. Same application image (the repo
+# Dockerfile), selected to run as the Console via AGENT=console. The Console boots
+# the engine with NO vault — chat + connections + gateways + UI only — to prove the
+# base separates from the vault capability (the spike, #154). Live Zenod is untouched.
+#
+# Deploy (Dokploy):
+#   1. New Compose service from this file.
+#   2. Add the domain z2.zenod.dev (port 8080) — Dokploy wires Traefik + TLS.
+#   3. Deploy. Then in the Console UI: set an admin password + an LLM key (no vault).
+#
+# Reuses the full app Dockerfile (incl. whisper) for now; a leaner Console image is
+# a future optimization.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-console-data:
+
+services:
+  zenod-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenod-console:dokploy
+    container_name: zenod-console
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-console-data:/data
+    environment:
+      AGENT: console
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+    expose:
+      - "8080"
