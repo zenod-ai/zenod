@@ -110,8 +110,11 @@ export class Runtime {
     const repo = await VaultRepo.open({
       workdir: this.workdir,
       repo: repoName,
-      // GitHub App installation tokens (short-lived, repo-scoped) win over a PAT
-      ...(hasApp ? { tokenProvider: () => installationToken(this.settings) } : { token: token! }),
+      // GitHub App installation tokens (short-lived, repo-scoped) win over a PAT.
+      // Resolve the installation that owns the vault repo (per-repo), so an agent
+      // whose vault lives in a different org than the stored installation still
+      // clones/pushes correctly — same resolution the issue tools use.
+      ...(hasApp ? { tokenProvider: () => installationTokenForRepo(this.settings, repoName) } : { token: token! }),
     });
     if (ensureSchema) {
       const created = await ensureSchemaV1(repo.path);
