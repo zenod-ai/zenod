@@ -93,6 +93,8 @@ export type {
   ChatToolEvent,
   ComposePageInput,
   DriveSourceTools,
+  PeerTool,
+  PeerTools,
   VaultReadTools,
 } from "./llm/types.js";
 export * from "./connections/github.js";

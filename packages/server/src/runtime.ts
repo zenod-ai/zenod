@@ -25,6 +25,7 @@ import {
 import { installationToken, installationTokenForRepo, editGithubIssue } from "zenod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { buildDriveTools } from "./driveTools.js";
+import { buildOutboundTools } from "./outboundTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore } from "./usageStore.js";
 import { IngestQueue } from "./ingestQueue.js";
@@ -133,6 +134,9 @@ export class Runtime {
     // LLM key is required, no vault/tasking/drive tools. Vault agents are unchanged.
     const vaultless = this.agent.vaultless === true;
     const backlog = this.agent.backlog === true;
+    // The Outbound agent is vaultless and owns no repo; it just needs an LLM key.
+    // Its send tools are wired below into the same generic tool slot the mesh uses.
+    const outbound = this.agent.outbound === true;
     if (backlog) {
       // Backlog agent (Archus): needs an LLM key + GitHub access, but NO vault.
       if (!this.settings.activeApiKey() || !(this.settings.get("github_token") || this.settings.hasGithubApp())) {
@@ -163,6 +167,9 @@ export class Runtime {
     const driveTools = vaultless ? null : buildDriveTools(this.settings, this.ingestQueue);
     // Mesh: peer-agent delegation tools, available to any agent (vault or not).
     const peerTools = this.buildPeerTools();
+    // Outbound's private send tools (post_tweet/post_reddit/send_email) ride the
+    // same generic tool slot — its guardian brain wields them and confirms first.
+    if (outbound) Object.assign(peerTools, buildOutboundTools());
     this.engine = createEngine({
       ...(repo ? { repo } : {}),
       llm,
