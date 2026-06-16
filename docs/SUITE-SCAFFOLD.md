@@ -296,10 +296,22 @@ The shape is **settled**. What remains:
   vault → the Console relayed the answer. *Cross-agent auth (the flagged unknown) is resolved
   for self-host: a per-agent bearer token pasted via the connections center — connect-once, the
   Central model. Enforced isolation / a token-broker remains for the hosted step.*
-- **Isolation is policy, not enforced, in v1.** A shared connections center + shared volume means
-  agents *can* read each other's creds. Fine for self-host (you own all the agents). Enforced
-  isolation (the Console minting per-agent scoped tokens) arrives at the **hosted / multi-tenant**
-  step — see HOSTED-PLAN — not before.
+- **Token origination — DECIDED (2026-06-16).** The **enabler mints the token.** When the Console
+  (c1) enables an agent, c1 **generates** that agent's token and **provisions** the agent with it
+  (+ config: vault repo, the shared LLM key c1 holds) over the internal `dokploy-network`; the agent
+  **instantiates itself** with the given token and goes live. c1 never *retrieves* a token — it
+  *originates* it, so a **headless agent (no UI) needs no token-retrieval path.** This makes **c1
+  the token authority — the real Central / token-broker** — resolving cross-agent auth *and* the
+  enforced-isolation question in one move: every agent's credential comes *from* c1. Agents boot
+  "un-provisioned" and idle until c1 provisions them (fits run-all-toggle: the container runs;
+  enabling provisions + connects). *Supersedes "isolation is only policy" below for the self-host
+  case — c1 now controls every agent's credential.*
+
+  **New-stack topology (c1 / z1 / z2):** **z1** = live Zenod (`app.zenod.dev`) — production, never
+  touched. **c1** = the Console (the UI), at `c1.zenod.dev`; it is what was temporarily at
+  `z2.zenod.dev`. **z2** = the NEW Zenod — **headless** (no public UI), an internal MCP server that
+  c1 loads over `dokploy-network`. **c1 → z2 only; never c1 → z1.** Keeps the new stack isolated
+  from production.
 - **Base-change propagation** is manual per-container until a rebuild-and-redeploy-all step exists
   (else: version skew).
 
