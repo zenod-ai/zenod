@@ -1,207 +1,241 @@
 # Zenod Suite — Target Architecture (THE CONTRACT)
 
-This is the single source of truth. We build **to** it. Decisions here are settled —
-changing one is a deliberate edit to this file, never silent drift. Migration is
-**Option B** (build in parallel, prove, cut over); the live system is never mutated
-destructively.
+This is the single source of truth. We build **to** it. A decision here changes only by a
+deliberate edit to this file — never silent drift. Migration is **Option B** (build in
+parallel, prove, cut over); the live system is never mutated destructively.
 
-## The vision (settled)
+The full reasoning behind every decision (with external research + the round-by-round
+discussion) lives in [RESEARCH-AGENT-ARCHITECTURE.md](./RESEARCH-AGENT-ARCHITECTURE.md).
 
-**Each capability is its own independent agent.** You install the ones you want —
-like installing Excel, or Excel + PowerPoint, or all of Office. Agents are clean,
-isolated endpoints (own container, own UI, own MCP); the **mesh** connects whatever
-you've turned on.
+---
 
-Why this shape: a precise **control surface** per agent, real **isolation**, the
-ability to **train each agent properly** for its one job, and **flexibility** (point
-an agent at whatever repos it needs — no more, no less). It is not "more complex" —
-it is **fewer concerns per box**.
+## The product (the vision)
 
-## Non-negotiable principles
+A person has a VPS with **Dokploy / Coolify** and runs this **containerized personal agent
+suite** as their long-term, always-on baseline. **One URL** gives them the whole thing. They
+plug new capabilities in over **MCP** (the bus). The first/baseline citizen is the **memory
+service — Zenod (Z0)**.
 
-1. **One agent, one job.** No agent is a do-everything.
-2. **Capability = a separate agent**, NOT an in-process plugin/module registry.
-3. **The base is shared code** (so agents are not forks) — nothing more.
-4. **An agent only gets access to the repos its job needs.**
-5. **Turn capabilities on by running their agent**; they connect via the mesh.
-6. **Opt-in beats bloat.** A dependency between agents (delegation over the mesh) is the
-   accepted price of isolation — and you only pay it for capabilities you turned on.
-7. **Grouping is by JOB, not by MCP server.** An agent may compose **several MCP servers
-   internally** (a gateway that mounts upstream servers and re-exposes their tools). That is
-   private plumbing — externally it is still **one agent: one chat, one UI, one tool surface.**
-   Example: **Outbound** = one agent whose job is outbound comms, internally composing the
-   X + Reddit + email servers.
+It is **one suite, one monorepo** — all agents ship together, like installing Office even if
+you only want Word. You don't *install* an agent; you **enable** it.
+
+## The shape in one line
+
+> **One Console (the UI + chat + auth/connections + gateways, always present) that delegates to
+> N headless agents (each = base + tools + a chat endpoint + a config schema + one settings tab).
+> The base is shared, so changing it changes everyone. Enable agents on/off; the chat is the UX.**
+
+---
+
+## THE CONSOLE — the one shared service (the product front-end)
+
+The Console is **the whole UI and the shared backend in one** — one URL, always the same UI.
+It owns:
+- **the chat front-end** (the UX) and the **chat router**,
+- **OAuth + connections** (the auth center you already built) and the **registry**,
+- the **gateways** — **WhatsApp · Telegram · Web** all bind here (equal front-doors; no
+  privileged channel),
+- **Costs · login** and the **on/off control surface** (which agents are enabled).
+
+It **subsumes what we earlier called "Central."** "Council" is **not a separate thing** — it's
+just the Console's **multi-agent routing mode.**
+
+**Same UI, two chat wirings** (the only thing that changes):
+- **Uni mode (one agent enabled):** the chat is wired **straight to that agent's chat endpoint
+  — bypass.** Direct, exactly like today's WhatsApp→Z0. The router is a transparent
+  pass-through — **no orchestration baggage.**
+- **Multi mode (more enabled):** the chat is wired to the **Council router**, which **delegates**
+  to the enabled agents (**agents-as-tools**: one delegation tool per agent — `ask_zenod(task)`,
+  `archus(task)`, … — not 40 flat leaf tools). "Talk to just one agent" survives as a Council
+  **focus mode**, not a separate UI.
+
+The user never sees the difference; it's one internal wire.
+
+---
+
+## AN AGENT — uniform, headless
+
+Every agent is the **same shape**. No kinds, no exceptions.
+
+```
+agent = base + {its tools, optional internal MCP servers} + a chat endpoint + a config schema + one settings tab + identity/persona
+```
+
+- It exposes **two surfaces**: an **MCP tool server** (for the Console/Council to call, and for
+  peer agents to call directly, authenticated) and a **chat endpoint** (an LLM + its own tools —
+  the target the Console bypasses to in uni mode / the Council delegates to in multi mode).
+- It has **no UI of its own** — the Console is the UI. It only **contributes one settings tab**
+  (see below) via its config schema.
+- **Group by JOB, not by MCP server.** An agent may compose **several MCP servers internally**
+  (e.g. **Outbound** = X + Reddit + email) — invisible plumbing; externally one agent, one chat,
+  one tool surface.
+- **Two run modes from one artifact:** **product mode** (Console + agent → one URL, full UI) is
+  the normal install; **bare mode** (the agent container alone as a headless MCP server,
+  env-configured, no UI) is the integration path.
+
+---
+
+## The UI & tabs (resolved)
+
+**It is literally the same web UI we already have.** Permanent areas: **the chat** (the UX) +
+shared setup (**Connections · Costs · login**) + the **on/off** surface. On top of that:
+
+- **Each ENABLED agent contributes exactly one *settings tab*** — where you manage *that
+  agent's* settings. **Z0's tab is "Vault"** (Zenod's settings — the vault repo, transcription).
+  Enable **Archus** → a **"Backlog"** tab (its GitHub repo selections). Enable **Epaminon** → an
+  **"Executor"** tab. Etc.
+- **Tabs are shown/hidden by what's enabled.** Not a different UI — the *same* UI, where an
+  agent's tab appears only when it's on, and hides when off.
+- These are **settings/config tabs, NOT content surfaces.** No inbox, no feed, no dashboard. You
+  still *use* every agent through the **chat**; a tab is only for setup.
+- A tab's contents = the agent's declared **config schema** (the Console auto-renders the form)
+  + the shared **Connections**. Rich panels (e.g. a vault browser) are the exception; the
+  schema/API stays the source of truth so **headless config always works**.
+
+---
+
+## Connections (shared) vs config (per-agent)
+
+- **Connections are shared — connect ONCE.** GitHub OAuth, model/provider keys, Google Drive, X
+  / Reddit creds live once in the Console's **Connections** center.
+- **Config is per-agent — a thin selector.** Each agent declares *which connected resource is
+  mine*: Z0 → "this repo is my vault"; Archus → "these repos are the backlog"; Outbound → "this
+  X / Reddit / email account." So a per-agent tab is a small selector over shared connections —
+  **not a bespoke auth per agent.** (Z0's "Vault tab" is really "connect a GitHub repo.")
+- **Config is agent-owned DATA** (env / file in its volume / a get-set API). The Console UI is
+  just an editor over it. Three write paths, same surface: env/file (headless), the agent's API,
+  or the Console UI.
+
+---
+
+## Enable / on-off / deploy
+
+- **Enable, not install.** Everything ships together; you **enable** an agent, which flips three
+  things at once: (1) its **container runs**, (2) its **tools register** into the chat, (3) its
+  **settings tab appears** in the Console.
+- **Deployment v1: run all, toggle on/off.** Do **not** build deploy-on-demand yet (too much
+  complexity for v1). All containers run by default; the Console toggles them on/off. A bit
+  wasteful — acceptable now; optimize to on-demand later if needed.
+- **First thing to build + test:** the on/off **registration loop** — enable an agent → its
+  tools + settings tab appear; disable → they vanish.
+
+---
 
 ## THE BASE — shared, identical in every agent
 
-Just two shared packages (code reuse, not a runtime):
-- **`base-server`** — the agent loop (chat + tool-calling) + MCP server + the
-  **connections-client** (talks to central). **No vault. No domain tools.**
-- **`base-ui`** — the shared UI shell: **the chat** (the UX) + **Connections · Costs · login**
-  (setup). **Extensible on a tab basis:** an agent can fold in its own **config tab(s)** for
-  setup its job needs — Zenod's **Vault** tab, or another agent's API-credential panel. The
-  base ships the shell; the agent adds its config tab(s).
+Code reuse, not a runtime. The base **is the Console shell** plus the agent loop:
+- **`base-server`** — the agent loop (chat + tool-calling) + MCP server + connections-client.
+  **No vault, no domain tools.**
+- **`base-ui`** — the Console UI shell: chat + Connections · Costs · login + the dynamic
+  settings-tab host + the on/off surface.
 
-**The chat is the UX — config tabs are the one allowed extension.** You *use* every agent
-through its chat. The only extra tabs permitted are **config/setup tabs** (like Vault) —
-**never content surfaces** (no inbox, no feed, no ledger, no dashboard). The test: a tab may
-**configure** an agent; a tab must **never become how you use it**.
+**The base is a shared dependency you import — not copied files.** One copy in the monorepo;
+every agent imports it. **Change it once → rebuild → all agents get it.** A new agent =
+scaffold a thin app (identity + tools + config schema). *Duplicate-and-extend to create;
+shared-import so a base change propagates to all.*
 
-**UI rule (this gives you exactly what you asked for):** change the shared shell in `base-ui`
-→ **every agent gets it**. An agent's own config tab ships with that agent → **only it has
-it**. *Shell change → all; an agent's config tab → only that agent.*
+---
 
-## AN AGENT = base + its own tools (+ optional config tab)
+## Mesh — agents-as-tools via the Console hub (not a swarm)
 
-```
-agent = base-server + base-ui  +  {its tools, optional config tab(s), optional store}  +  identity/persona
-```
-No content tabs, no module registry. An agent is a thin app: identity + its tools + (where its
-setup needs it) a config tab. The shared shell (chat + setup) is the base, unchanged.
+The mesh is just **agents using each other's tools.** The **Console/Council is the hub**; agents
+are spokes that expose tools. **Do not wire every agent to every other** (the swarm the field
+warns against: N² edges, tool bloat, undebuggable). Add a **direct** peer edge only where
+concretely, frequently needed (e.g. Zenod filing into Archus). Peer tools are labeled by origin
+(`archus.create_issue`). This is the field-standard **supervisor** pattern.
 
-## The agents — all the SAME shape (uniform, no exceptions)
+---
 
-**Every agent is the same kind of thing.** Same base: server + MCP + connections-client +
-**the same chat shell**. The differences between any two agents are just **(1) the tools
-wired into the chat** and **(2) any config tab its setup needs** (e.g. Zenod's Vault). You
-talk to *all* of them the same way — through the chat. There are **no "workers," no
-"tool-islands," and no content tabs.** Whether an agent's tools are deterministic (post a
-tweet) or reasoning is irrelevant — the LLM lives in the chat, the tools are just tools.
+## The roster (all agents uniform)
 
-The **only** thing that is not an agent is **Central** — the shared backend they all
-connect to (see below).
+| Agent | Job | Its tools (wired into its chat) | Settings tab | MCP endpoint | Status |
+|---|---|---|---|---|---|
+| **Zenod** | memory / librarian | search_vault, read_note, list_pages, search_chats, capture_note, propose/execute_vault_task | **Vault** | `zenod` | **LIVE** |
+| **Archus** | backlog | query/service/digest_backlog, create/edit/label_issue, approve_queue/merge | **Backlog** | `archus` | **LIVE** (rebuild) |
+| **Epaminon** | executor | drain queue, Codex fan-out, open PR, merge-on-green | **Executor** | `epaminon` | **LIVE** (headless) |
+| **Outbound** | outbound comms: post + email | post_tweet, read_tweets, submit_post, read_subreddit, comment, send_email, search_email — *composed from 3 internal MCP servers (xmcp + reddit-mcp + email)* | **Accounts** | `outbound` | **partial** (X tools live → +Reddit +Mail) |
+| **Nectary** | financing | (TBD) | **Financing** | `nectary` | **future** |
 
-Same chat shell everywhere. The two things that vary are **its tools** and **any config tab
-its setup needs** (setup only — never a content surface; the UX is always the chat).
-
-| Agent | Job | Owns | Repos it can touch | Vault | Its tools (wired into its chat) | Config tab (setup) | Subdomain | Container | Status |
-|---|---|---|---|---|---|---|---|---|---|
-| **Zenod** | memory / librarian | the vault | **only** the vault repo (obsidian-brain) | **yes** | search_vault, read_note, list_pages, search_chats, capture_note, propose/execute_vault_task | **Vault** | app.zenod.dev | `zenod` | **LIVE** |
-| **Archus** | backlog | the backlog | the repos it manages (cross-org) | no | query/service/digest_backlog, create/edit/label_issue, approve_queue/merge | — | archus.zenod.dev | `archus` | **LIVE** (rebuild) |
-| **Epaminon** | executor | execution (fan-out, PRs, merges) | the code repos it works (broad, gh) | no | drain queue, Codex fan-out, open PR, merge-on-green | — | epaminon.zenod.dev | `epaminon` | **LIVE** (headless today → +chat UI) |
-| **Outbound** | outbound comms: post + email | the X + Reddit + email creds | — | no | post_tweet, read_tweets, submit_post, read_subreddit, comment, send_email, search_email — *composed from 3 internal MCP servers* | — *(creds via Connections; add one if needed)* | outbound.zenod.dev | `outbound` | **partial** (X tools vendored LIVE → +Reddit +Mail) |
-| **Nectary** | financing | the funding layer | financing repos | no | (TBD) | — | nectary.zenod.dev | `nectary` | **future** |
-
-How they relate (over the mesh):
-- **Zenod** (memory) **delegates backlog to Archus** — no Archus, no backlog. Clean.
-- **Archus** curates + gates the backlog (brain); **Epaminon** drains queued tickets and does the code work (muscle).
-- **Outbound** is one agent you chat with to post to social + send email; it **composes three MCP servers internally** (vendored **xmcp** + **reddit-mcp-server** + an email server) and exposes them as one tool surface — the **agent shape is identical** to every other agent. Internal composition is invisible plumbing. You use it through the chat ("post this to X and Reddit and email it to Jordi"), not through any inbox/feed UI — there isn't one.
-- Every agent exposes its tools over MCP; **peer tools are labeled external** in any agent's tool list.
-- Each agent is **independent**: own container, own subdomain, same (identical) chat UI — deletable, restartable, monitorable on its own.
-
-## CENTRAL — form is an OPEN decision (resolve via the research recommendation)
-
-Central is whatever holds **shared creds** + **the agent registry**. Its *form* is not yet
-decided — two live hypotheses:
-
-- **Convention, not a service (Jordi's lean):** a **shared mounted volume** every container
-  reads. Creds live at an agreed path — set once, every agent finds them. Agents **register
-  themselves** at an agreed path on startup ("I'm active; here are my MCP URL + tools + token").
-  Discovery is automatic because the location is a convention. No running service, no
-  functionality — just *where things live*.
-- **A small service:** an HTTP backend that brokers scoped tokens / proxies model calls / owns
-  the registry. More moving parts, but enables *enforced* isolation + central metering.
-
-*The research recommendation (see RESEARCH-AGENT-ARCHITECTURE.md) picks one.*
-
-## Mesh = just tools (Jordi's framing)
-
-The "mesh" is nothing fancier than **agents using each other's tools**. Every agent's MCP
-tools are, to a peer, *just more tools*. When you talk to Zenod (an LLM), he has **his own
-tools + his co-agents' tools** (pulled from the registry), so he can act beyond his own
-surface — augmented by the others. Peer tools are labeled by origin (`archus.create_issue`).
-
-**Open alternative — the Council.** Instead of (or alongside) talking to each agent, talk to
-a **Council**: one LLM wired to **every** agent's tools. From the Council you do everything
-(memory + issues + email + runs). Two access modes: **per-agent** (focused, its own tools) or
-**Council** (one chat, all tools). *To resolve: is the Council a real "new guy," and how does
-it relate to per-agent chats? — answered in the research recommendation.*
+The **Console** is the product at the main domain (today: `app.zenod.dev`). Each agent's MCP
+server is reachable internally (and optionally at its subdomain for external MCP use).
 
 ## Repos & containers
 
 **One monorepo:**
 ```
-packages/base-server   packages/base-ui          (the shared base — every agent imports it)
-packages/central       (the connections/identity service — the one non-agent)
+packages/base-server   packages/base-ui          (the shared base / Console shell — every agent imports it)
+apps/console                                      (the Console: UI + chat + auth/connections + gateways + router + on/off)
 apps/zenod  apps/archus  apps/epaminon  apps/outbound  apps/nectary
-                         (every agent: identity + its tools + optional config tab; shell is base-ui)
+                         (every agent: identity + its tools + its config schema; headless, no UI)
 services/xmcp  services/reddit-mcp  services/mail-mcp   (upstream tool servers apps/outbound composes)
 ```
-**Containers (Dokploy, side by side):**
 
-| Container | Agent | Subdomain | Status |
+| Container | Role | URL | Status |
 |---|---|---|---|
-| `zenod` | Zenod | app.zenod.dev | live |
-| `archus` | Archus | archus.zenod.dev | live (rebuild) |
-| `epaminon` | Epaminon | epaminon.zenod.dev | live (headless → +chat UI) |
-| `outbound` | Outbound (X + Reddit + email) | outbound.zenod.dev | partial (X tools live → +Reddit +Mail) |
-| `nectary` | Nectary | nectary.zenod.dev | future |
-| `central` | Central (backend) | internal only | planned |
+| `console` | the Console (UI + chat + auth + gateways + router) | main domain | planned (= today's Z0 shell minus vault) |
+| `zenod` | memory agent (MCP + chat endpoint) | `zenod` (mcp) | live (to split) |
+| `archus` | backlog agent | `archus` (mcp) | live (rebuild) |
+| `epaminon` | executor agent | `epaminon` (mcp) | live (headless) |
+| `outbound` | outbound agent (X + Reddit + email) | `outbound` (mcp) | partial |
+| `nectary` | financing agent | `nectary` (mcp) | future |
 
-One agent = one container = one subdomain. Side by side as endpoints — monitorable,
-restartable independently.
+v1: all containers run; the Console toggles them on/off.
+
+---
 
 ## Migration — Option B (parallel → prove → cut over)
 
-1. **Spike (FIRST):** prove the base separates from the vault — stand up the bare base
-   (loop + MCP + UI + connections, **no vault, no tools**) as a running agent on `z2`.
-   If clean → proceed. If it fights → rethink before building. *Converts the one real
-   unknown to fact.*
-2. **Extract the base** (`base-server` vault-less loop + `base-ui`).
-3. **Build Zenod-v2 = base + memory capability** → deploy to **z2.zenod.dev**, same vault
-   data → **prove parity** (chat, vault, gateways). Live Zenod untouched.
+1. **Spike (FIRST):** split today's monolithic Z0 into **Console (shell — chat + MCP +
+   connections + UI + gateways, NO vault, NO tools)** + **Zenod (the vault capability)**, running
+   on `z2`. If it separates clean → proceed. If it fights → rethink before building. *Converts
+   the one real unknown to fact.* **The "base" IS the Console — this is a concrete refactor of
+   current code, not an abstraction.**
+2. **Extract the base** (`base-server` vault-less loop + `base-ui` Console shell).
+3. **Build Zenod-v2 = base + memory capability** → deploy to **z2.zenod.dev**, same vault data →
+   **prove parity** (chat, vault, gateways, on/off registration). Live Zenod untouched.
 4. **Rebuild Archus = base + backlog capability** (replaces today's throwaway prototype).
-5. **Mesh** + **central** (extract connections into the shared platform).
-6. **Cutover** — point `app.zenod.dev` → Zenod-v2, retire old.
+5. **Mesh + Council routing** (multi-agent mode in the Console).
+6. **Cutover** — point the main domain → the Console-v2 stack, retire old.
 
-**Honest cutover caveats (planned, not surprises):** Zenod has state beyond the vault —
-the **WhatsApp session**, conversation history, usage, oauth — in v1's SQLite volume; it
-must be migrated to v2's, and **two Zenods cannot share one WhatsApp number** (428
-conflict), so v2 runs WhatsApp-disabled while proving, and we move the session at cutover.
+**Honest cutover caveats (planned, not surprises):** Z0 holds state beyond the vault — the
+**WhatsApp session**, conversation history, usage, oauth — in v1's SQLite volume. At cutover the
+**Console** takes over the gateways + main domain; **the WhatsApp number moves Z0 → Console.**
+Two Z0s cannot share one WhatsApp number (428), so v2 runs WhatsApp-disabled while proving, and
+the session moves at cutover.
 
 ## Ticket re-assessment
 
-- **#140** shared auth → **CENTRAL** (stays; phase 5).
-- **#142** scaffold → **extract the base + spike** (phases 1–2).
+- **#140** shared auth → folds into the **Console** (auth/connections center).
+- **#142** scaffold → **the spike + extract the base/Console** (phases 1–2).
 - **#143** Nearchus deploy → today's Archus is a **throwaway prototype** (runs full Zenod);
   rebuild as base + backlog (phase 4).
 - **#144** backlog tooling → the **backlog capability** in `apps/archus` (phase 4).
-- **#145** mesh → stays (phase 5).
+- **#145** mesh → the **Council routing** in the Console (phase 5).
 - **#146** gate → stays (final check).
 - **#147** Mail → folds into the **Outbound** agent (email is one of its tools).
-- **#148** X migration → folds into the **Outbound** agent (X + Reddit + email composed internally), central-managed.
+- **#148** X migration → folds into the **Outbound** agent (X + Reddit + email composed internally).
 
-## Open questions — NOT yet specified (must close before/while building)
+---
 
-The agent **shape** is settled. These layers underneath are still single phrases above that
-hide real decisions. We do not pretend they're answered.
+## Open questions — what's NOT yet specified
 
-**Unproven assumptions (need an experiment):**
-- **Base/vault separation** — the engine is vault-coupled (`engine.answer()` hardwires vault
-  + tasking + drive tools inline). Unproven until the **spike** (phase 1). *This is why it's first.*
-- **Tools-as-injectable** — "agent = base + a tool list" is a goal, not yet true; same knot as
-  the spike. Making tools a clean list the base loop discovers is the actual refactor.
+The shape is **settled**. What remains:
 
-**Underspecified design (need a one-page contract before relying on it):**
-- **Central's contract** — token **broker** (mints per-repo scoped tokens on request) vs.
-  **key distributor** (hands agents the private key)? LLM **proxy** (central metering + key
-  rotation) vs. **key distribution**? This one fork decides whether isolation + metering are
-  *real* or *aspirational*. Pick explicitly.
-- **Mesh contract** — discovery (how an agent learns a peer's URL + tools), auth (today a
-  shared `api_token` hack — needs real per-agent auth), scoping (does every agent see every
-  peer's tools, or a curated subset?), recursion depth. Decide before wiring #145.
-- **Isolation: enforced or policy?** "An agent only touches the repos its job needs" is today
-  a *policy* (one GitHub App installed broadly; Archus got Zenod's creds copied), not an
-  *enforced boundary*. Enforcing it requires Central to gate token issuance per-agent → ties
-  to Central's contract above.
+- **The spike (the one unproven assumption):** does today's Z0 split cleanly into Console + vault
+  capability? The engine is vault-coupled (`engine.answer()` hardwires vault + tasking + drive
+  tools inline) — this is *why the spike is first.* Everything else rests on it.
+- **Isolation is policy, not enforced, in v1.** A shared connections center + shared volume means
+  agents *can* read each other's creds. Fine for self-host (you own all the agents). Enforced
+  isolation (the Console minting per-agent scoped tokens) arrives at the **hosted / multi-tenant**
+  step — see HOSTED-PLAN — not before.
+- **Base-change propagation** is manual per-container until a rebuild-and-redeploy-all step exists
+  (else: version skew).
 
-**Blindspots not yet placed in the architecture:**
-- **Gateways = interchangeable front-doors (DECIDED).** WhatsApp, web chat, Telegram are
-  **equal channels into the same engine** — none is "the real UX." A gateway is a base
-  capability: any agent can expose any channel; they all reach the same chat + tools.
-  *(Corrects an earlier wrong claim that WhatsApp was Zenod's privileged UX.)*
-- **New-agent creation flow** — "duplicate and extend" is still a manual ritual (hand-run
-  Dokploy API + container-to-container secret copy, as Archus was). Needs a scaffold.
-- **Base-change propagation** — shared package, but each agent is a separate deploy. "Change
-  base → all change" needs a rebuild-and-redeploy-all step that doesn't exist yet (else: skew).
-- **Cutover** needs WhatsApp/SQLite state migration (see caveats above).
+## Decision log
+
+Decisions were reached across Rounds 1–5 (recorded in
+[RESEARCH-AGENT-ARCHITECTURE.md](./RESEARCH-AGENT-ARCHITECTURE.md)): agent shape · base as
+shared dependency · group-by-job + internal MCP composition · the Council/supervisor pattern ·
+Central-as-convention → service at hosted · the Console owns the UX · config is agent-owned data
+/ UI is the editor · the Console (same UI always; uni=bypass, multi=council) · enable-not-install
+/ run-all-toggle / shared connections / per-agent settings tabs.
