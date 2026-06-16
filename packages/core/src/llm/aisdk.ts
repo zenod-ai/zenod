@@ -165,6 +165,24 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Checking backlog status";
     case "service_backlog":
       return "Selecting backlog work";
+    // Mesh / peer-agent tools (routed to another agent over MCP). These give the
+    // chat activity line a readable trail of what a delegated agent is doing.
+    case "ask_zenod":
+      return "Asking Zenod";
+    case "search_memory":
+      return "Searching Zenod’s memory";
+    case "get_memory":
+      return "Reading a memory";
+    case "add_memory":
+      return "Saving to Zenod’s memory";
+    case "ask_archus":
+      return "Asking Archus about the backlog";
+    case "open_issue":
+      return "Opening a GitHub issue";
+    case "edit_issue":
+      return "Editing a GitHub issue";
+    case "close_issue":
+      return "Closing a GitHub issue";
     default:
       return `Running ${toolName}`;
   }
