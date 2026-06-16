@@ -38,6 +38,12 @@ const CONCURRENCY = Number(process.env.ZENOD_CONCURRENCY || 3);
 const STATE_PATH = process.env.ZENOD_STATE || `${WORKDIR}/.fanout/monitor-state.json`;
 const BASE_BRANCH = process.env.ZENOD_BASE || "main";
 const AUTO_MERGE_ENV = parseBooleanSetting(process.env.ZENOD_AUTO_MERGE);
+// How long a merge-gate alarm stays quiet before it may remind again. A blocked
+// PR is re-discovered on EVERY scan for as long as it stays blocked; without a
+// cooldown it would re-ping each time GitHub's lazily-computed `mergeable` field
+// flaps (CONFLICTING <-> UNKNOWN) or CI flips red/green. Alarm once, then at most
+// once per window. Tunable via env; default 12h.
+const NOTIFY_COOLDOWN_MS = Number(process.env.ZENOD_NOTIFY_COOLDOWN_MS || 12 * 60 * 60 * 1000);
 
 function log(...a) {
   console.log(new Date().toISOString(), "[monitor]", ...a);
@@ -316,6 +322,32 @@ function recordMergeAttempt(state, bridge, issue, attempt) {
     bridge.mergeAttempts.push(entry);
   }
   return entry;
+}
+
+// Merge-gate notification dedup. The old guard keyed dedup on the exact blocker
+// REASON, so a PR flapping between "conflicting" and "CI failing" (or bouncing
+// through a transient "verify" while GitHub recomputes mergeability) read as a
+// brand-new event each scan and re-pinged the owner. To a human these are the
+// same condition: "this PR can't merge and needs you." Collapse the
+// interchangeable hard-blocker reasons to ONE dedup identity so the alarm is a
+// single ongoing event; distinct events (verify progress, closed, merge error)
+// keep their own identity but are still rate-limited by the cooldown below.
+function mergeNoteDedupKey(key) {
+  return key === "conflict" || key === "failed" ? "blocked" : key;
+}
+
+// Decide whether a merge-gate note should actually ping this scan. Pure and
+// deterministic — the caller passes `now` so tests can drive the clock. Stamps
+// the send time per dedup identity on the bridge when a ping is warranted; the
+// bridge is persisted in monitor state (on a named volume), so the cooldown
+// survives runner restarts and redeploys.
+function shouldSendMergeNote(bridge, key, now, cooldownMs = NOTIFY_COOLDOWN_MS) {
+  const dedupKey = mergeNoteDedupKey(key);
+  const sent = bridge.notifications || (bridge.notifications = {});
+  const last = sent[dedupKey];
+  if (last != null && now - last < cooldownMs) return false;
+  sent[dedupKey] = now;
+  return true;
 }
 
 // ---- fan-in (#41), preserved for re-integration in the central model ----
@@ -633,7 +665,11 @@ async function scan(reason) {
         recordMergeAttempt(state, bridge, c, { autoMerge: approval.autoMerge, outcome: "no-open-pr", prUrl });
         continue;
       }
-      // Notify only on state TRANSITIONS, so a multi-scan wait doesn't spam.
+      // Record EVERY gate evaluation (full audit), but only ACT — flip the
+      // central status, comment, ping the owner — when the dedup+cooldown gate
+      // says this is a fresh alarm. A blocked PR thus alarms once and then stays
+      // quiet, instead of re-pinging on every scan as GitHub's mergeable field
+      // flaps between conflicting / unknown / CI-failed (see shouldSendMergeNote).
       const note = async (key, text, options = {}) => {
         recordMergeAttempt(state, bridge, c, {
           autoMerge: approval.autoMerge,
@@ -641,20 +677,19 @@ async function scan(reason) {
           outcome: options.outcome ?? key,
           detail: options.detail ?? "",
         });
-        if (bridge.mergeNote !== key) {
-          bridge.mergeNote = key;
-          if (options.blockAutoMerge && approval.autoMerge && c.status === "status:needs-review") {
-            setCentralStatus(c.number, "status:needs-review", "status:blocked");
-          }
-          if (options.comment && approval.autoMerge) {
-            try {
-              gh(["issue", "comment", String(c.number), "--repo", BACKLOG, "--body", text]);
-            } catch {
-              // best-effort
-            }
-          }
-          await notify(text, c.origin);
+        if (!shouldSendMergeNote(bridge, key, Date.now())) return;
+        bridge.mergeNote = mergeNoteDedupKey(key);
+        if (options.blockAutoMerge && approval.autoMerge && c.status === "status:needs-review") {
+          setCentralStatus(c.number, "status:needs-review", "status:blocked");
         }
+        if (options.comment && approval.autoMerge) {
+          try {
+            gh(["issue", "comment", String(c.number), "--repo", BACKLOG, "--body", text]);
+          } catch {
+            // best-effort
+          }
+        }
+        await notify(text, c.origin);
       };
       const finalizeMerged = async () => {
         recordMergeAttempt(state, bridge, c, { autoMerge: approval.autoMerge, prUrl, outcome: "merged" });
@@ -805,8 +840,10 @@ export {
   ensureFanInBatch,
   integrationPrompt,
   mergeApprovalForIssue,
+  mergeNoteDedupKey,
   normalizeState,
   recordMergeAttempt,
+  shouldSendMergeNote,
   detectIntegrationStatus,
   reviewHeldByFanInBatch,
   updateFanInBatches,

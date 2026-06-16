@@ -10,10 +10,12 @@ import {
   ensureFanInBatch,
   integrationPrompt,
   mergeApprovalForIssue,
+  mergeNoteDedupKey,
   normalizeState,
   pickupNotification,
   recordMergeAttempt,
   reviewHeldByFanInBatch,
+  shouldSendMergeNote,
   updateFanInBatches,
 } from "./backlog-monitor.mjs";
 
@@ -90,6 +92,51 @@ test("merge attempts are recorded in monitor state and bridge audit", () => {
   assert.deepEqual(bridge.mergeAttempts, [entry]);
   assert.equal(entry.outcome, "update-branch");
   assert.equal(entry.detail, "refreshing against main");
+});
+
+test("conflict and CI-failure collapse to one alarm identity; distinct events keep theirs", () => {
+  // "conflicting" and "CI failing" are the same actionable condition to the
+  // owner — the PR can't merge and needs a human — so they share a dedup key.
+  assert.equal(mergeNoteDedupKey("conflict"), "blocked");
+  assert.equal(mergeNoteDedupKey("failed"), "blocked");
+  // Genuinely distinct events keep their own identity.
+  assert.equal(mergeNoteDedupKey("verify"), "verify");
+  assert.equal(mergeNoteDedupKey("closed"), "closed");
+  assert.equal(mergeNoteDedupKey("mergeerr"), "mergeerr");
+});
+
+test("a flapping blocked PR alarms once per cooldown, not on every reason change", () => {
+  // Reproduces the real WhatsApp-spam: PR #112 re-pinged at 05:33 (conflict),
+  // 12:59 (CI failing), 13:01 (conflict again) because GitHub's mergeable field
+  // flapped. With the cooldown gate it must alarm exactly once.
+  const bridge = { target: "zenod-ai/zenod", exec: 112, mirrored: "needs-review" };
+  const HOUR = 60 * 60 * 1000;
+  const cooldown = 12 * HOUR;
+  const at = (h) => h * HOUR;
+
+  // 05:33 — first discovery: CONFLICTING -> alarm fires.
+  assert.equal(shouldSendMergeNote(bridge, "conflict", at(5.5), cooldown), true);
+  // A transient UNKNOWN-mergeability "verify" tick is a distinct identity: it
+  // pings once on its own, then goes quiet — and crucially it does NOT reset the
+  // blocked alarm.
+  assert.equal(shouldSendMergeNote(bridge, "verify", at(8), cooldown), true);
+  assert.equal(shouldSendMergeNote(bridge, "verify", at(9), cooldown), false);
+  // 12:59 — GitHub now reports CI failed (same "blocked" identity) -> suppressed.
+  assert.equal(shouldSendMergeNote(bridge, "failed", at(13), cooldown), false);
+  // 13:01 — flaps back to CONFLICTING -> still suppressed.
+  assert.equal(shouldSendMergeNote(bridge, "conflict", at(13.03), cooldown), false);
+  // Next day, still blocked -> one gentle reminder once the cooldown elapses
+  // (measured from the last actual send at 05:33, not the suppressed flaps).
+  assert.equal(shouldSendMergeNote(bridge, "conflict", at(18), cooldown), true);
+});
+
+test("merge-note cooldown state is per dedup key and persisted on the bridge", () => {
+  const bridge = {};
+  assert.equal(shouldSendMergeNote(bridge, "conflict", 1000, 10000), true);
+  assert.equal(bridge.notifications.blocked, 1000);
+  // A genuinely distinct event still pings even within another key's window.
+  assert.equal(shouldSendMergeNote(bridge, "verify", 1500, 10000), true);
+  assert.equal(bridge.notifications.verify, 1500);
 });
 
 test("updateFanInBatches launches integration only after every branch reaches needs-review", () => {
