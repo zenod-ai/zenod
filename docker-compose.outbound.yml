@@ -30,12 +30,10 @@
 networks:
   dokploy-network:
     external: true
-  # Uncomment once x-mcp is deployed (it owns/creates this network) so Outbound can
-  # reach x-mcp-postread by name — then add it to the service `networks` list below
-  # and set OUTBOUND_X_MCP_URL. Keeping it out by default means this container boots
-  # even when x-mcp is not up (no "external network not found" failure).
-  # zenod-x-net:
-  #   external: true
+  # The x-mcp compose (services/x-mcp) owns/creates this network; x-mcp is deployed,
+  # so Outbound joins it (external) to reach x-mcp-postread by name for posting.
+  zenod-x-net:
+    external: true
 
 volumes:
   zenod-outbound-data:
@@ -48,9 +46,9 @@ services:
     image: zenod-outbound:dokploy
     container_name: zenod-outbound
     restart: unless-stopped
-    # dokploy-network only by default. Add `zenod-x-net` here (and uncomment it
-    # above + set OUTBOUND_X_MCP_URL) to connect the X connector — see issue #180.
-    networks: [dokploy-network]
+    # dokploy-network (so the Console reaches it) + zenod-x-net (so it reaches the
+    # x-mcp POST connector for tweeting).
+    networks: [dokploy-network, zenod-x-net]
     volumes:
       - zenod-outbound-data:/data
     environment:
@@ -58,10 +56,9 @@ services:
       ZENOD_AWAIT_PROVISION: "1"
       ZENOD_DATA_DIR: /data
       PORT: "8080"
-      # X connector (the vendored x-mcp POST instance). Wire this together with the
-      # `zenod-x-net` network above once x-mcp is deployed (issue #180). Until set,
-      # post_tweet reports "X is not connected yet" instead of posting.
-      # OUTBOUND_X_MCP_URL: http://x-mcp-postread:8000/mcp
+      # X connector — the vendored x-mcp POST instance (FastMCP Streamable HTTP at
+      # /mcp, posting via createPosts). Reached over zenod-x-net by container name.
+      OUTBOUND_X_MCP_URL: http://x-mcp-postread:8000/mcp
       # Reddit + email connectors — FOLLOW-UP (issue #185). Leave unset so the tools
       # report "not connected" rather than faking a send; set them once deployed.
       # OUTBOUND_REDDIT_MCP_URL: http://reddit-mcp:8000/mcp
