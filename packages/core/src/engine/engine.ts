@@ -111,7 +111,12 @@ export interface EngineOptions {
   onTokenCost?: (measurement: TokenCostMeasurement) => void;
 }
 
-const COMPOSE_RETRIES = 2;
+// One retry, not two: attempt 0 composes, attempt 1 re-composes with the lint
+// errors fed back (the high-value correction). A third attempt rarely recovers
+// what the second didn't and just adds a full compose round-trip per page to the
+// worst case — costly on long, multi-page stores. On exhaustion we fall back to
+// an Inbox stub, so a hard case is parked for the user, never half-applied.
+const COMPOSE_RETRIES = 1;
 const WORK_RETRIES = 2;
 const DEFAULT_READ_SYNC_TTL_MS = 60_000;
 const MAX_BRIEFING_MEANING_PAGES = 80;
