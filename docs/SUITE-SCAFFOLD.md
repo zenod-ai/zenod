@@ -89,25 +89,33 @@ How they relate (over the mesh):
 - Every agent exposes its tools over MCP; **peer tools are labeled external** in any agent's tool list.
 - Each agent is **independent**: own container, own subdomain, same (identical) chat UI — deletable, restartable, monitorable on its own.
 
-## CENTRAL — the shared backend (the ONE non-agent)
+## CENTRAL — form is an OPEN decision (resolve via the research recommendation)
 
-Plain HTTP service (no chat, no public UI): one stable **GitHub App**, model/provider keys,
-Drive, and the **agent registry** (powers the mesh). Every agent connects to it via the
-base's connections-client. Container `central`, **internal only**. *Not built yet — building
-it is a phase.*
+Central is whatever holds **shared creds** + **the agent registry**. Its *form* is not yet
+decided — two live hypotheses:
 
-## CENTRAL — shared platform (prerequisite, NOT yet built)
+- **Convention, not a service (Jordi's lean):** a **shared mounted volume** every container
+  reads. Creds live at an agreed path — set once, every agent finds them. Agents **register
+  themselves** at an agreed path on startup ("I'm active; here are my MCP URL + tools + token").
+  Discovery is automatic because the location is a convention. No running service, no
+  functionality — just *where things live*.
+- **A small service:** an HTTP backend that brokers scoped tokens / proxies model calls / owns
+  the registry. More moving parts, but enables *enforced* isolation + central metering.
 
-Plain HTTP service (not MCP) holding: **one stable GitHub App**, model/provider keys,
-Drive, and the **agent registry** (powers the mesh). Agents reach it via the base's
-connections-client. *Status: not built — today creds are copied by hand. Building it is
-a phase, not an assumption.*
+*The research recommendation (see RESEARCH-AGENT-ARCHITECTURE.md) picks one.*
 
-## Mesh — agents talk
+## Mesh = just tools (Jordi's framing)
 
-Each agent registers with central; agents call each other over MCP. **Peer tools are
-labeled external** (e.g. `archus.create_issue`, `ask_zenod`) so "my tools" vs "a peer's
-tools" is never ambiguous in any agent's tool list.
+The "mesh" is nothing fancier than **agents using each other's tools**. Every agent's MCP
+tools are, to a peer, *just more tools*. When you talk to Zenod (an LLM), he has **his own
+tools + his co-agents' tools** (pulled from the registry), so he can act beyond his own
+surface — augmented by the others. Peer tools are labeled by origin (`archus.create_issue`).
+
+**Open alternative — the Council.** Instead of (or alongside) talking to each agent, talk to
+a **Council**: one LLM wired to **every** agent's tools. From the Council you do everything
+(memory + issues + email + runs). Two access modes: **per-agent** (focused, its own tools) or
+**Council** (one chat, all tools). *To resolve: is the Council a real "new guy," and how does
+it relate to per-agent chats? — answered in the research recommendation.*
 
 ## Repos & containers
 
@@ -188,9 +196,10 @@ hide real decisions. We do not pretend they're answered.
   to Central's contract above.
 
 **Blindspots not yet placed in the architecture:**
-- **Gateways** — Zenod's real UX is **WhatsApp**, not the web chat. Is a WhatsApp/Telegram
-  number a **base capability** (any agent can have one) or Zenod-only? "The UI is the chat"
-  silently ignores the channel that actually drives Zenod. Decide where gateways live.
+- **Gateways = interchangeable front-doors (DECIDED).** WhatsApp, web chat, Telegram are
+  **equal channels into the same engine** — none is "the real UX." A gateway is a base
+  capability: any agent can expose any channel; they all reach the same chat + tools.
+  *(Corrects an earlier wrong claim that WhatsApp was Zenod's privileged UX.)*
 - **New-agent creation flow** — "duplicate and extend" is still a manual ritual (hand-run
   Dokploy API + container-to-container secret copy, as Archus was). Needs a scaffold.
 - **Base-change propagation** — shared package, but each agent is a separate deploy. "Change
