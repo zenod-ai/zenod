@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { BrainEngine } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
+import { type AgentDefinition } from "../src/agent.js";
 
 describe("server API", () => {
   let dir: string;
@@ -299,5 +300,31 @@ describe("server API", () => {
     expect(fresh).not.toBe(old);
     expect((await app.request("/api/settings", { headers: { Authorization: `Bearer ${old}` } })).status).toBe(401);
     expect((await app.request("/api/settings", { headers: { Authorization: `Bearer ${fresh}` } })).status).toBe(200);
+  });
+
+  it("the shell is agent-agnostic: a supplied AgentDefinition drives identity", async () => {
+    const otherDir = await mkdtemp(join(tmpdir(), "zenod-archus-"));
+    const archus: AgentDefinition = {
+      name: "archus",
+      displayName: "Archus",
+      tagline: "Backlog agent",
+      persona: "You are Archus, the backlog agent.",
+    };
+    const otherRuntime = new Runtime(otherDir, archus);
+    const otherApp = createApp(otherRuntime);
+    try {
+      const health = await (await otherApp.request("/api/health")).json();
+      expect(health.name).toBe("archus");
+
+      const agent = await (
+        await otherApp.request("/api/agent", {
+          headers: { Authorization: `Bearer ${otherRuntime.settings.apiToken()}` },
+        })
+      ).json();
+      expect(agent).toMatchObject({ name: "archus", displayName: "Archus", tagline: "Backlog agent" });
+    } finally {
+      otherRuntime.close();
+      await rm(otherDir, { recursive: true, force: true });
+    }
   });
 });
