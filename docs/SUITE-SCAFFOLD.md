@@ -235,6 +235,32 @@ v1: all containers run; the Console toggles them on/off.
 Two Z0s cannot share one WhatsApp number (428), so v2 runs WhatsApp-disabled while proving, and
 the session moves at cutover.
 
+## Build sequence — capabilities come to life ONE AT A TIME (UI-first)
+
+The proven core (vaultless Console + mesh) means we now grow the suite **inside the Console UI,
+one capability at a time**. The driver is a **Team tab**; each agent enabled there brings its own
+settings tab to life. **We bake Zenod in FULLY before moving to Archus** — no jumping ahead.
+
+1. **The Team tab (the enable surface).** A new tab in the Console listing the suite's agents
+   (Zenod, Archus, …) with an on/off toggle each. Enabling an agent does three things at once
+   (the on/off contract): connects it (registry/mesh) → registers its delegation tool
+   (`ask_<name>`) → **surfaces its settings tab** in the Console. Disabling reverses all three.
+   This is the on/off control surface made visible, and the home where capabilities "come to life
+   one by one." (Backs onto the registry — enabling should eventually be one-click, no token paste.)
+2. **Zenod — fully baked (step 1).** Enable Zenod from the Team tab → the Console delegates to it
+   (mesh ✓ done) **and its "Vault" settings tab appears in the Console** (a remote editor over
+   Zenod's own config — it owns the data; the Console renders the tab from Zenod's config schema).
+   *Done = toggling Zenod on/off adds/removes both `ask_zenod` and the Vault tab, and you can set
+   Zenod's vault from that tab.* Zenod is the first capability that fully lives in the Console UI.
+3. **Archus — next (only after Zenod is fully baked).** Enable Archus → `ask_archus` + its
+   **"Backlog" settings tab** appear. Same pattern, second capability.
+4. **Then the rest, one by one** (Nectary, …). Base extraction + cutover slot in around this; the
+   UI-first capability ladder is the spine.
+
+How this maps to the backlog: the Team tab + on/off is **#161** (made visible); rendering an
+enabled agent's settings tab from its schema is **#160**; Zenod-as-capability is **#158**; Archus
+is **#162** — re-sequenced so each capability is *fully* alive in the UI before the next starts.
+
 ## Ticket re-assessment
 
 - **#140** shared auth → folds into the **Console** (auth/connections center).
