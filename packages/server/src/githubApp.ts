@@ -1,5 +1,15 @@
 import { createSign, randomBytes } from "node:crypto";
-import type { Settings } from "./settings.js";
+/**
+ * The minimal settings surface the connections layer needs — decoupled from the
+ * concrete server Settings class so this logic can move to a shared package and
+ * be reused by other agents. The server's Settings class satisfies it
+ * structurally, so existing callers pass their Settings unchanged.
+ */
+export interface ConnectionSettings {
+  getRaw(key: string): string | null;
+  setRaw(key: string, value: string): void;
+  hasGithubApp(): boolean;
+}
 
 /**
  * GitHub App manifest flow — the "Connect GitHub" button. The instance walks
@@ -16,7 +26,7 @@ export interface GithubAppStatus {
   installationId: string | null;
 }
 
-export function appStatus(settings: Settings): GithubAppStatus {
+export function appStatus(settings: ConnectionSettings): GithubAppStatus {
   const slug = settings.getRaw("github_app_slug");
   const installationId = settings.getRaw("github_app_installation_id");
   return {
@@ -57,7 +67,7 @@ interface ManifestConversion {
 }
 
 /** Exchange the one-time manifest code for the new app's credentials. */
-export async function exchangeManifestCode(code: string, settings: Settings): Promise<ManifestConversion> {
+export async function exchangeManifestCode(code: string, settings: ConnectionSettings): Promise<ManifestConversion> {
   const response = await fetch(`https://api.github.com/app-manifests/${encodeURIComponent(code)}/conversions`, {
     method: "POST",
     headers: { Accept: "application/vnd.github+json", "User-Agent": "zenod" },
@@ -93,7 +103,7 @@ interface InstallationToken {
 const tokenCache = new Map<string, InstallationToken>();
 
 /** Mint (and cache) a short-lived installation token. */
-export async function installationToken(settings: Settings): Promise<string> {
+export async function installationToken(settings: ConnectionSettings): Promise<string> {
   const appId = settings.getRaw("github_app_id");
   const pem = settings.getRaw("github_app_private_key");
   const installationId = settings.getRaw("github_app_installation_id");
@@ -125,7 +135,7 @@ export async function installationToken(settings: Settings): Promise<string> {
  * stored installation. Falls back to the stored single-installation token on any
  * failure, so behaviour is never worse than the previous single-repo path.
  */
-export async function installationTokenForRepo(settings: Settings, repo: string): Promise<string> {
+export async function installationTokenForRepo(settings: ConnectionSettings, repo: string): Promise<string> {
   const appId = settings.getRaw("github_app_id");
   const pem = settings.getRaw("github_app_private_key");
   if (!appId || !pem || !repo.includes("/")) return installationToken(settings);
@@ -164,7 +174,7 @@ export interface InstallationRepo {
 }
 
 /** Repos the user granted to the installation — feeds the UI repo picker. */
-export async function listInstallationRepos(settings: Settings): Promise<InstallationRepo[]> {
+export async function listInstallationRepos(settings: ConnectionSettings): Promise<InstallationRepo[]> {
   const token = await installationToken(settings);
   const repos: InstallationRepo[] = [];
   let page = 1;
@@ -186,7 +196,7 @@ export async function listInstallationRepos(settings: Settings): Promise<Install
   return repos;
 }
 
-export function disconnectApp(settings: Settings): void {
+export function disconnectApp(settings: ConnectionSettings): void {
   for (const key of [
     "github_app_id",
     "github_app_slug",
@@ -259,16 +269,16 @@ function replaceStatusLabel(labels: string[], status: string): string[] {
   return [...new Set([...withoutStatus, status])];
 }
 
-async function configuredGithubToken(settings: Settings, repo?: string): Promise<string> {
+async function configuredGithubToken(settings: ConnectionSettings, repo?: string): Promise<string> {
   if (settings.hasGithubApp()) {
     return repo ? installationTokenForRepo(settings, repo) : installationToken(settings);
   }
-  const token = settings.get("github_token");
+  const token = settings.getRaw("github_token");
   if (!token) throw new Error("GitHub token or app installation is required");
   return token;
 }
 
-async function githubRequest<T>(settings: Settings, path: string, init: RequestInit = {}): Promise<T> {
+async function githubRequest<T>(settings: ConnectionSettings, path: string, init: RequestInit = {}): Promise<T> {
   const token = await configuredGithubToken(settings, repoFromPath(path));
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,
@@ -294,8 +304,8 @@ async function githubRequest<T>(settings: Settings, path: string, init: RequestI
  * The only exception here is status:queued with queueApproval=true for this
  * exact issue number, matching the explicit human queue gate.
  */
-export async function editGithubIssue(settings: Settings, input: EditGithubIssueInput): Promise<EditGithubIssueResult> {
-  const repo = input.repo || settings.get("vault_repo");
+export async function editGithubIssue(settings: ConnectionSettings, input: EditGithubIssueInput): Promise<EditGithubIssueResult> {
+  const repo = input.repo || settings.getRaw("vault_repo");
   if (!repo) throw new Error("No GitHub repository is configured.");
   const issuePath = `/repos/${repoPath(repo)}/issues/${input.issueNumber}`;
   const operations: string[] = [];
