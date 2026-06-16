@@ -62,6 +62,12 @@ export interface AiLlmOptions {
   /** Classification pass model. */
   classifyModel?: string;
   /**
+   * Vision model for image description. Must support image content blocks.
+   * Defaults to a provider-specific model known to support vision — separate
+   * from askModel because users often configure a text-only ask model.
+   */
+  visionModel?: string;
+  /**
    * Tool-step budget for an answer turn. The model is told this limit and the
    * final step forces a text answer. Clamped to [MIN_MAX_STEPS, MAX_MAX_STEPS];
    * undefined uses DEFAULT_MAX_STEPS.
@@ -75,12 +81,12 @@ export interface AiLlmOptions {
   onUsage?: (report: LlmUsageReport) => void;
 }
 
-/** Per-provider default models. Both are user-overridable in settings. */
-export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string }> = {
-  anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5" },
-  openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini" },
-  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat" },
-  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant" },
+/** Per-provider default models. All are user-overridable in settings. */
+export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string; vision: string }> = {
+  anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5", vision: "claude-sonnet-4-6" },
+  openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini", vision: "gpt-4o-mini" },
+  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "openai/gpt-4o-mini" },
+  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant", vision: "meta-llama/llama-4-scout-17b-16e-instruct" },
 };
 
 /**
@@ -228,8 +234,9 @@ export { backlogCandidateSchema, backlogExtractSchema };
  */
 export class AiSdkBrainLlm implements BrainLlm {
   private readonly askModelId: string;
-  private readonly maxSteps: number;
   private readonly classifyModelId: string;
+  private readonly visionModelId: string;
+  private readonly maxSteps: number;
   private readonly provider: Provider;
   private readonly onUsage: ((report: LlmUsageReport) => void) | undefined;
   private readonly model: (id: string) => Parameters<typeof generateText>[0]["model"];
@@ -246,6 +253,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     const defaults = PROVIDER_DEFAULTS[options.provider];
     this.askModelId = options.askModel || defaults.ask;
     this.classifyModelId = options.classifyModel || defaults.classify;
+    this.visionModelId = options.visionModel || defaults.vision;
     this.maxSteps = clampMaxSteps(options.maxSteps);
     this.provider = options.provider;
     this.onUsage = options.onUsage;
@@ -339,7 +347,7 @@ export class AiSdkBrainLlm implements BrainLlm {
       prompt ??
       "Describe this image in detail. Extract any visible text, context, diagrams, notes, or action items. Be thorough — this description will be stored as a memory.";
     const { text, usage, providerMetadata } = await generateText({
-      model: this.model(this.askModelId),
+      model: this.model(this.visionModelId),
       messages: [
         {
           role: "user",
@@ -350,7 +358,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         },
       ] as ModelMessage[],
     });
-    this.reportUsage("describeImage", this.askModelId, usage, providerMetadata);
+    this.reportUsage("describeImage", this.visionModelId, usage, providerMetadata);
     return text;
   }
 
