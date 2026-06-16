@@ -269,8 +269,16 @@ export class Runtime {
       const issues = await githubJson<
         Array<{ number: number; title: string; html_url: string; labels: Array<{ name: string }>; updated_at: string }>
       >(`/repos/${encodeURIComponent(repo).replace("%2F", "/")}/issues?state=open&per_page=30&sort=updated&direction=desc`);
-      const filtered = query
-        ? issues.filter((issue) => `${issue.title} ${issue.labels.map((label) => label.name).join(" ")}`.toLowerCase().includes(query.toLowerCase()))
+      // A purely-numeric query (e.g. "95" or "#95") is an issue-number lookup, not a
+      // text search — match it against issue.number so "find #95" works.
+      const q = query?.trim();
+      const qNum = q && /^#?\d+$/.test(q) ? Number(q.replace(/^#/, "")) : null;
+      const filtered = q
+        ? issues.filter(
+            (issue) =>
+              (qNum !== null && issue.number === qNum) ||
+              `${issue.title} ${issue.labels.map((label) => label.name).join(" ")}`.toLowerCase().includes(q.toLowerCase()),
+          )
         : issues;
       if (filtered.length === 0) return query ? `No open issues matched "${query}".` : "No open issues found.";
       return [
