@@ -264,6 +264,8 @@ export interface BacklogDigestResult {
 export interface BrainEngine {
   /** The librarian pipeline — the only write path. */
   store(input: StoreInput): Promise<StoreResult>;
+  /** Describe an image via the vision model and return a plain-text description. */
+  describeImage(imageData: Uint8Array, mimeType: string, prompt?: string): Promise<string>;
   /** Read-only agent loop: synthesized answer with citations. */
   ask(question: string): Promise<Answer>;
   /**

@@ -981,6 +981,22 @@ export class WhatsAppGateway {
     await this.setTyping(event, true);
     this.options.store.markMessageStatus(event.messageId, "processing");
     try {
+      // Images: download, describe with vision, file to vault — no chat loop needed.
+      if (event.mediaType === "image" && event.mediaRaw) {
+        const stream = await downloadContentFromMessage(event.mediaRaw as never, "image");
+        const data = await streamToBuffer(stream);
+        const mimeType = event.mimeType?.startsWith("image/") ? event.mimeType : "image/jpeg";
+        const engine = await this.options.getEngine();
+        const sender = normalizeWhatsAppIdentifier(event.senderId) || event.senderName;
+        const description = await engine.describeImage(data, mimeType);
+        const captionLine = event.body.trim() ? `\nCaption: ${event.body.trim()}\n\n` : "\n\n";
+        const content = `WhatsApp image from ${sender}:${captionLine}${description}`;
+        await engine.store({ content, source: "whatsapp", hints: ["image", "screenshot"] });
+        this.options.store.markMessageStatus(event.messageId, "replied");
+        await this.sendReply(event, "Got it — I described and filed this image in your vault.", "sent");
+        return;
+      }
+
       const input = await this.engineInputForEvent(event, this.options.settings.whatsappSettings());
       if (input.kind === "fixed-reply") {
         this.options.store.markMessageStatus(event.messageId, "failed");
@@ -1013,11 +1029,12 @@ export class WhatsAppGateway {
         /quota|billing|rate.?limit|insufficient|api key|unauthor|401|429|overloaded|model provider|not configured/i.test(
           message,
         );
+      const mediaKind = event.mediaType === "image" ? "image" : "voice note";
       const notice = providerIssue
-        ? "⚠️ I got your voice note, but the AI model is unavailable right now (out of quota, rate-limited, or misconfigured). Nothing was lost — please try again once that's sorted."
-        : "⚠️ I got your voice note, but hit an error while processing it. It's been logged — please try again in a moment.";
+        ? `⚠️ I got your ${mediaKind}, but the AI model is unavailable right now (out of quota, rate-limited, or misconfigured). Nothing was lost — please try again once that's sorted.`
+        : `⚠️ I got your ${mediaKind}, but hit an error while processing it. It's been logged — please try again in a moment.`;
       await this.sendReply(event, notice, "error").catch(() => {});
-      console.error(`[whatsapp] voice note processing failed for ${event.messageId}: ${message}`);
+      console.error(`[whatsapp] media processing failed for ${event.messageId}: ${message}`);
     } finally {
       await this.setTyping(event, false);
     }

@@ -33,8 +33,8 @@ const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<Provider, string>> = {
   groq: "https://api.groq.com/openai/v1",
 };
 
-/** The five LLM operations, tagged on every usage report for cost analytics. */
-export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog";
+/** The six LLM operations, tagged on every usage report for cost analytics. */
+export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog" | "describeImage";
 
 /**
  * Real, provider-billed token usage for one LLM call — read from the AI SDK
@@ -332,6 +332,26 @@ export class AiSdkBrainLlm implements BrainLlm {
       console.warn(`[answer] forced closing step failed: ${(err as Error).message}`);
     }
     return "";
+  }
+
+  async describeImage(imageData: Uint8Array, mimeType: string, prompt?: string): Promise<string> {
+    const description =
+      prompt ??
+      "Describe this image in detail. Extract any visible text, context, diagrams, notes, or action items. Be thorough — this description will be stored as a memory.";
+    const { text, usage, providerMetadata } = await generateText({
+      model: this.model(this.askModelId),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image" as const, image: imageData, mediaType: mimeType },
+            { type: "text" as const, text: description },
+          ],
+        },
+      ] as ModelMessage[],
+    });
+    this.reportUsage("describeImage", this.askModelId, usage, providerMetadata);
+    return text;
   }
 
   async classify(input: ClassifyInput): Promise<Classification> {

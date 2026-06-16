@@ -554,6 +554,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
     return {
       captureNote: async (content: string, hints?: string[]) => {
+        if (!repo) {
+          return { evidenceRef: "(no vault)", pagesTouched: [], commitSha: "(no vault)", githubUrls: [], queued: false };
+        }
         // The librarian pipeline (classify → compose → digest → commit) must
         // never sit on the hot reply line: on a slow model it adds minutes
         // (a real WhatsApp turn took ~4 min, ~2:20 of it filing — see
@@ -578,11 +581,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return { evidenceRef: "(queued)", pagesTouched: [], commitSha: "(queued)", githubUrls: [], queued: true };
       },
       proposeTask: async (objective: string) => {
+        if (!repo) return "Vault tasks are unavailable on this agent (it has no vault).";
         const proposal = await work({ objective });
         recordAction("proposeVaultTask", { objective }, proposal.text);
         return proposal.text;
       },
       executeTask: async (objective: string, plan: string) => {
+        if (!repo) return "Vault tasks are unavailable on this agent (it has no vault).";
         const executed = await work({ objective, plan });
         const text = [
           executed.mode === "failed" ? "FAILED (rolled back, nothing committed)" : "DONE",
@@ -594,6 +599,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return text;
       },
       digestBacklog: async (input: BacklogDigestInput) => {
+        if (!repo) {
+          return {
+            candidates: [],
+            written: [],
+            skipped: [{ reason: "Vault-backed digest is unavailable on this agent (it has no vault)." }],
+            source_refs: [],
+          } satisfies BacklogDigestResult;
+        }
         const result = await digestBacklog(input);
         recordAction("runDigest", { ...input }, formatDigestResult(result));
         return result;
@@ -1043,8 +1056,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
 
     const actions: TaskingAction[] = [];
-    // Vaultless: no task tools (capture/propose write to the vault). Plain chat.
-    const taskTools = repo ? buildTaskTools(surface, (action) => actions.push(action)) : undefined;
+    // Task tools when there's a vault (capture/propose) OR external tasking tools
+    // (a backlog agent: GitHub issues without a vault). Plain chat otherwise.
+    const taskTools =
+      repo || options.taskingTools ? buildTaskTools(surface, (action) => actions.push(action)) : undefined;
     const briefing = await vaultBriefing();
     reportTokenCost("chat", [briefing.text, ...window.map((m) => m.text), message], briefing);
 
@@ -1089,7 +1104,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
       },
       readTools(),
-      repo ? buildTaskTools(input.surface, (action) => actions.push(action)) : undefined,
+      repo || options.taskingTools ? buildTaskTools(input.surface, (action) => actions.push(action)) : undefined,
       options.driveTools,
       options.peerTools,
     );
@@ -1107,6 +1122,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
     handleTasking,
     work,
     digestBacklog,
+    describeImage: (imageData: Uint8Array, mimeType: string, prompt?: string) =>
+      llm.describeImage(imageData, mimeType, prompt),
     search: async (query: string): Promise<Hit[]> => {
       assertVault(repo);
       await syncForRead();

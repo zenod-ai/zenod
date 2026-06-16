@@ -47,8 +47,8 @@ interface TelegramMessage {
   caption?: string;
   voice?: TelegramFile;
   audio?: TelegramFile;
-  photo?: unknown;
-  document?: unknown;
+  photo?: Array<{ file_id: string; width: number; height: number }>;
+  document?: { file_id: string; mime_type?: string; file_name?: string };
 }
 interface TelegramUpdate {
   update_id: number;
@@ -285,11 +285,37 @@ export class TelegramGateway {
       text = `Telegram voice note transcript from ${sender}:\n\n${transcript}`;
     }
 
+    // Photos and image documents: describe with vision and file to vault.
+    const imageFileId =
+      message.photo?.at(-1)?.file_id ??
+      (message.document?.mime_type?.startsWith("image/") ? message.document.file_id : null);
+    if (!text && imageFileId) {
+      await this.sendChatAction(chatId, "typing");
+      try {
+        const { data } = await this.downloadFile(imageFileId);
+        const mimeType = message.document?.mime_type ?? "image/jpeg";
+        const engine = await this.options.getEngine();
+        const sender = from?.username ? `@${from.username}` : from?.first_name || String(from?.id ?? "unknown");
+        const caption = message.caption?.trim() ?? "";
+        const description = await engine.describeImage(new Uint8Array(data), mimeType);
+        const captionLine = caption ? `\nCaption: ${caption}\n\n` : "\n\n";
+        const content = `Telegram image from ${sender}:${captionLine}${description}`;
+        await engine.store({ content, source: "telegram", hints: ["image", "screenshot"] });
+        await this.sendReply(chatId, "Got it — I described and filed this image in your vault.");
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.error(`[telegram] image processing failed for chat ${chatId}: ${detail}`);
+        await this.sendReply(chatId, "⚠️ I got your image but hit an error processing it — please try again.").catch(
+          () => {},
+        );
+      }
+      return;
+    }
+
     if (!text) {
-      // Non-audio media (photo/document) isn't ingested yet — a tracked follow-up.
       await this.sendReply(
         chatId,
-        "I can only handle text and voice messages for now — photo and document ingestion is coming soon.",
+        "I can only handle text, voice messages, and images for now.",
       ).catch(() => {});
       return;
     }

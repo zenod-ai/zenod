@@ -11,6 +11,11 @@ export interface BrainLlm {
   /** Compose the full new content of one meaning page, integrating the evidence. */
   composePage(input: ComposePageInput): Promise<string>;
   /**
+   * Describe an image using the vision model. Returns a plain-text description
+   * that can be stored as a memory or used as engine input.
+   */
+  describeImage(imageData: Uint8Array, mimeType: string, prompt?: string): Promise<string>;
+  /**
    * Agent loop over the vault; returns the synthesized answer. Read-only,
    * unless taskTools is given (chat surface) — then the loop may also
    * propose and, after explicit user approval, execute vault work. With
