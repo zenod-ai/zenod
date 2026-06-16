@@ -3,13 +3,19 @@ import { VERSION } from "zenod";
 import { z, type ZodRawShape } from "zod";
 
 import { callPeerTool, type PeerConfig } from "./peerClient.js";
-import {
-  ASK_BRAIN_SHAPE,
-  CREATE_ISSUE_SHAPE,
-  EDIT_GITHUB_ISSUE_SHAPE,
-  GET_MEMORY_SHAPE,
-  SEARCH_MEMORY_SHAPE,
-} from "./mcpToolSchemas.js";
+import { ASK_BRAIN_SHAPE, GET_MEMORY_SHAPE, SEARCH_MEMORY_SHAPE } from "./mcpToolSchemas.js";
+
+/**
+ * Archus's WRITE surface is semantic, not mechanical. A backlog write is a
+ * judgment call — where does it belong (which repo vs the central backlog), is it
+ * a duplicate, what labels/structure, is it runnable — so every public write is an
+ * INTENT routed to Archus's guardian brain (chat_with_archus), which interprets it
+ * and acts with its own private GitHub tools. The distinct names are intent
+ * signals (and drive the activity line); the shared `message` carries the request.
+ */
+const INTENT_SHAPE = {
+  message: z.string().min(1).describe("What you want, in natural language — Archus decides how to honour it per his guidelines."),
+};
 
 /**
  * The Console's PUBLIC MCP front door is a straight-through gateway, not a chat.
@@ -32,6 +38,12 @@ interface GatewayTool {
   owner: string;
   /** The owner's real MCP tool to call. Defaults to `name` (name-preserving proxy). */
   peerTool?: string;
+  /**
+   * For brain-routed tools: a directive prepended to `message` so the intent the
+   * tool name carries actually reaches the agent's brain (the brain only sees the
+   * forwarded message, not which tool was called).
+   */
+  intentPrefix?: string;
   title: string;
   description: string;
   inputSchema: ZodRawShape;
@@ -66,37 +78,49 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: ASK_BRAIN_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
+  // Archus's writes + reasoning — all routed to his guardian brain (intent in,
+  // Archus decides placement/structure/labels and acts). Named for intent signal.
   {
     name: "create_issue",
     owner: "archus",
-    title: "Open a GitHub issue",
+    peerTool: "chat_with_archus",
+    intentPrefix: "Open backlog issue(s) for the following — decide placement and structure per your rules: ",
+    title: "Open backlog issue(s)",
     description:
-      "Open a new GitHub issue (via Archus) in the central backlog repo (or pass repo to target another). Write a runnable body — objective, scope, done-condition. Created at status:proposed; it does not run until explicitly queued. Returns the new number + URL.",
-    inputSchema: CREATE_ISSUE_SHAPE,
+      "Tell Archus to open issue(s). Describe what you want filed in natural language; Archus decides where it belongs (which repo vs the central backlog), checks for duplicates, applies labels/structure per his guidelines, writes runnable tickets, and returns the qualified IDs (owner/repo#N).",
+    inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   {
-    name: "edit_github_issue",
+    name: "edit_issue",
     owner: "archus",
-    title: "Edit a GitHub issue",
+    peerTool: "chat_with_archus",
+    intentPrefix: "Edit a backlog issue as follows: ",
+    title: "Edit a backlog issue",
     description:
-      "Edit one GitHub issue (via Archus): update title/body, add/remove/set labels, post a comment, replace assignees, or change the lifecycle status label. status:queued requires explicit user approval (queueApproval=true); status:approved-merge is not settable here.",
-    inputSchema: EDIT_GITHUB_ISSUE_SHAPE,
+      "Tell Archus to edit an issue — retitle, revise the body, relabel, comment, or change status. Name the issue (owner/repo#N) and what you want changed; Archus applies it within his governance rules (e.g. queue/merge gates) and confirms.",
+    inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   {
-    // Archus's BRAIN (its LLM), for non-trivial backlog work the caller hasn't
-    // already reduced to a precise create/edit. Routes to Archus's chat loop,
-    // which reasons over the backlog (query) and can act (create/edit). One LLM —
-    // Archus's — and no council LLM. Use create_issue/edit_github_issue instead
-    // when you already know the exact action.
+    name: "close_issue",
+    owner: "archus",
+    peerTool: "chat_with_archus",
+    intentPrefix: "Close a backlog issue as follows: ",
+    title: "Close a backlog issue",
+    description:
+      "Tell Archus to close an issue (owner/repo#N), optionally with a closing comment/reason. Archus closes it, updates any parent/tracking ticket, and confirms.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
     name: "ask_archus",
     owner: "archus",
     peerTool: "chat_with_archus",
     title: "Ask Archus (backlog brain)",
     description:
-      "Delegate a NON-TRIVIAL backlog request to Archus's reasoning: triage, prioritize, summarize what's open, or turn a messy idea into runnable tickets. Archus reads the backlog with its own LLM and may create/edit issues, returning a synthesized reply. For a precise action you've already decided, call create_issue or edit_github_issue instead (no LLM).",
-    inputSchema: { message: z.string().min(1).describe("What to ask or instruct Archus, in natural language") },
+      "Ask Archus a non-trivial backlog question or hand him judgment: triage, prioritize, summarize what's open across repos, or turn a messy idea into runnable tickets. He reasons over the backlog with his own LLM and may act, returning a synthesized reply.",
+    inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
 ];
@@ -115,7 +139,14 @@ export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig
     server.registerTool(
       t.name,
       { title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations },
-      async (args) => callPeerTool(peer, t.peerTool ?? t.name, (args ?? {}) as Record<string, unknown>),
+      async (args) => {
+        let payload = (args ?? {}) as Record<string, unknown>;
+        // Prepend the intent directive so the tool-name signal reaches the brain.
+        if (t.intentPrefix && typeof payload.message === "string") {
+          payload = { ...payload, message: `${t.intentPrefix}${payload.message}` };
+        }
+        return callPeerTool(peer, t.peerTool ?? t.name, payload);
+      },
     );
   }
   return server;
