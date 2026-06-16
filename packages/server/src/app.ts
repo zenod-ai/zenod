@@ -143,7 +143,22 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.use("/api/*", async (c, next) => {
     const path = c.req.path;
     if (path === "/api/health" || path.startsWith("/api/auth/")) return next();
+    // /api/provision is open ONLY while the agent is un-provisioned (it has no
+    // token yet, so the Console can't authenticate to it). The handler enforces
+    // the awaiting-provision guard; once provisioned it 403s and falls under auth.
+    if (path === "/api/provision" && settings.awaitingProvision()) return next();
     return auth(c, next);
+  });
+
+  // Headless provisioning: the Console mints this agent's token and pushes it (plus
+  // config + shared keys) here; the agent instantiates itself and goes live. One-shot.
+  app.post("/api/provision", async (c) => {
+    if (!settings.awaitingProvision()) return c.json({ error: "already provisioned" }, 403);
+    const body = await c.req.json<{ token?: string } & Record<string, string>>().catch(() => ({}) as Record<string, string>);
+    if (!body.token) return c.json({ error: "token required" }, 400);
+    settings.applyProvision(body as Parameters<typeof settings.applyProvision>[0]);
+    runtime.invalidate();
+    return c.json({ ok: true, name: agent.name, configured: settings.configured() });
   });
 
   app.get("/api/settings", (c) =>

@@ -94,10 +94,55 @@ export class Settings {
       if (envValue && this.get(key) === null) this.store.setSetting(key, envValue);
     }
     if (this.get("provider") === null) this.store.setSetting("provider", "anthropic");
-    if (this.store.getSetting("api_token") === null) this.regenerateApiToken();
+    // Un-provisioned agents (ZENOD_AWAIT_PROVISION=1, not yet provisioned) do NOT
+    // mint their own api_token — the enabler (the Console) originates it and pushes
+    // it in via /api/provision. Until then the agent idles, configured()=false.
+    if (!this.awaitingProvision(env) && this.store.getSetting("api_token") === null) {
+      this.regenerateApiToken();
+    }
     if (this.store.getSetting("session_secret") === null) {
       this.store.setSetting("session_secret", randomBytes(32).toString("hex"));
     }
+  }
+
+  /** This agent waits for the Console to mint+push its token (headless provisioning). */
+  awaitingProvision(env: NodeJS.ProcessEnv = process.env): boolean {
+    return env.ZENOD_AWAIT_PROVISION === "1" && this.getRaw("provisioned") !== "1";
+  }
+
+  /**
+   * Apply a Console-originated provisioning: adopt the given token + config and go
+   * live. One-shot — once provisioned, awaitingProvision() is false and the
+   * /api/provision endpoint refuses further calls.
+   */
+  applyProvision(input: {
+    token: string
+    admin_password_hash?: string
+    session_secret?: string
+    provider?: string
+    api_key?: string
+    model_ask?: string
+    model_classify?: string
+    vault_repo?: string
+    vault_branch?: string
+    github_app_id?: string
+    github_app_private_key?: string
+    github_app_installation_id?: string
+    github_app_slug?: string
+    github_token?: string
+  }): void {
+    this.store.setSetting("api_token", input.token);
+    if (input.admin_password_hash) this.store.setSetting("admin_password_hash", input.admin_password_hash);
+    if (input.session_secret) this.store.setSetting("session_secret", input.session_secret);
+    if (input.provider) this.store.setSetting("provider", input.provider);
+    if (input.provider && input.api_key) this.store.setSetting(PROVIDER_KEY[input.provider as Provider], input.api_key);
+    for (const k of ["model_ask", "model_classify", "vault_repo", "vault_branch"] as const) {
+      if (input[k]) this.store.setSetting(k, input[k]!);
+    }
+    for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug", "github_token"] as const) {
+      if (input[k]) this.store.setSetting(k, input[k]!);
+    }
+    this.setRaw("provisioned", "1");
   }
 
   get(key: SettingKey): string | null {
