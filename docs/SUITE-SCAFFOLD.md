@@ -261,6 +261,15 @@ The shape is **settled**. What remains:
   (vault agents always pass a repo → byte-identical path). The **Console** (`AGENT=console`,
   vaultless) is **live on z2.zenod.dev** side by side with live Zenod — boots, serves the UI, and
   needs only an admin password + LLM key (no vault). *The load-bearing assumption is now fact.*
+- **The mesh (#145) — PROVEN ✓ (2026-06-16).** Agents delegate over MCP. Vault read-tools are
+  now capability-gated (a vaultless agent omits them); a generic `PeerTools` slot flows through
+  the engine → aisdk, registering each configured peer as an `ask_<name>` tool. `callPeer`
+  connects to a peer's MCP endpoint with a bearer token and calls `ask_brain`. Peers are
+  configured in the **Connections** UI (name + MCP URL + write-only token). **Live on z2:** the
+  vaultless Console answered a memory question by calling `ask_zenod` → Zenod researched its
+  vault → the Console relayed the answer. *Cross-agent auth (the flagged unknown) is resolved
+  for self-host: a per-agent bearer token pasted via the connections center — connect-once, the
+  Central model. Enforced isolation / a token-broker remains for the hosted step.*
 - **Isolation is policy, not enforced, in v1.** A shared connections center + shared volume means
   agents *can* read each other's creds. Fine for self-host (you own all the agents). Enforced
   isolation (the Console minting per-agent scoped tokens) arrives at the **hosted / multi-tenant**
