@@ -71,3 +71,53 @@ export async function callPeer(peer: PeerConfig, mcpTool: string, argKey: string
     await client.close().catch(() => {});
   }
 }
+
+/**
+ * Raw passthrough result of a peer tool call — shaped like an MCP tool response
+ * (CallToolResult), so a gateway execute can return it directly. The index
+ * signature mirrors the SDK's result type (it carries optional _meta etc.).
+ */
+export interface PeerToolResult {
+  content: Array<{ type: "text"; text: string }>;
+  structuredContent?: { [key: string]: unknown };
+  isError?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Call a peer's MCP tool with a FULL argument object and relay its result
+ * unchanged. This is the mesh GATEWAY primitive: the Console re-publishes a
+ * peer's real tool and forwards the external caller's arguments straight through,
+ * returning the peer's response verbatim — no LLM in the path. A connection
+ * failure comes back as an isError result so the caller sees a graceful error.
+ */
+export async function callPeerTool(
+  peer: PeerConfig,
+  mcpTool: string,
+  args: Record<string, unknown>,
+): Promise<PeerToolResult> {
+  const client = new Client({ name: "zenod-mesh-client", version: VERSION }, { capabilities: {} });
+  const transport = new StreamableHTTPClientTransport(new URL(peer.url), {
+    requestInit: { headers: { Authorization: `Bearer ${peer.token}` } },
+  });
+  try {
+    await client.connect(transport);
+    const result = await client.callTool({ name: mcpTool, arguments: args });
+    const rawContent = Array.isArray(result.content) ? result.content : [];
+    const content = rawContent
+      .filter((c): c is { type: "text"; text: string } => (c as { type?: string })?.type === "text" && typeof (c as { text?: unknown }).text === "string")
+      .map((c) => ({ type: "text" as const, text: c.text }));
+    return {
+      content: content.length ? content : [{ type: "text", text: `(${peer.name} returned no text)` }],
+      ...(result.structuredContent ? { structuredContent: result.structuredContent as { [key: string]: unknown } } : {}),
+      ...(result.isError ? { isError: true } : {}),
+    };
+  } catch (err) {
+    return {
+      content: [{ type: "text", text: `Could not reach peer agent "${peer.name}": ${(err as Error).message}` }],
+      isError: true,
+    };
+  } finally {
+    await client.close().catch(() => {});
+  }
+}

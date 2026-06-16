@@ -1,9 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
-import type { EditGithubIssueInput, EditGithubIssueResult } from "zenod";
+import type { CreateGithubIssueInput, CreateGithubIssueResult, EditGithubIssueInput, EditGithubIssueResult } from "zenod";
 import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
 import type { TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
+import {
+  ASK_BRAIN_SHAPE,
+  CREATE_ISSUE_SHAPE,
+  EDIT_GITHUB_ISSUE_SHAPE,
+  GET_MEMORY_SHAPE,
+  SEARCH_MEMORY_SHAPE,
+} from "./mcpToolSchemas.js";
 
 /**
  * The long tools (task_brain, run_task, store_memory) run a multi-minute LLM
@@ -17,6 +24,7 @@ export interface TaskJobs {
 }
 
 export type GithubIssueEditor = (input: EditGithubIssueInput) => Promise<EditGithubIssueResult>;
+export type GithubIssueCreator = (input: CreateGithubIssueInput) => Promise<CreateGithubIssueResult>;
 
 /** Human-facing text for a finished task_brain job — mirrors the old reply. */
 function formatTaskingReply(result: TaskingReply): string {
@@ -77,6 +85,7 @@ export function buildMcpServer(
   recordChatTestRun?: (input: ChatTestAuditInput) => ChatTestAuditRecord,
   taskJobs?: TaskJobs,
   editGithubIssue?: GithubIssueEditor,
+  createGithubIssue?: GithubIssueCreator,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -123,7 +132,7 @@ export function buildMcpServer(
       title: "Search memory",
       description:
         "Deterministic search over the user's memory vault. Returns ranked note paths with snippets, scores, and GitHub source URLs. Fast (no LLM) — call this first to locate memories; then use get_memory to read one. For fuzzy or synthesis questions, prefer ask_brain.",
-      inputSchema: { query: z.string().min(1).describe("Search terms, e.g. 'travel insurance'") },
+      inputSchema: SEARCH_MEMORY_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ query }) => {
@@ -151,7 +160,7 @@ export function buildMcpServer(
       title: "Get memory",
       description:
         "Read one note from the memory vault by its vault-relative path (e.g. 'Areas/Insurance.md'). Returns frontmatter, full content, and the GitHub source URL. Paths come from search_memory results.",
-      inputSchema: { path: z.string().min(1).describe("Vault-relative path, e.g. Areas/Insurance.md") },
+      inputSchema: GET_MEMORY_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ path }) => {
@@ -210,7 +219,7 @@ export function buildMcpServer(
       title: "Ask the brain",
       description:
         "Ask the user's memory agent a free-form question. It runs its own read-only research loop over the vault and returns a synthesized answer with cited sources (vault paths + GitHub URLs). Use for fuzzy or cross-note questions ('what do I know about X?', 'when does my policy renew?') where search_memory alone is not enough. Slower than search_memory (runs an LLM loop).",
-      inputSchema: { question: z.string().min(1).describe("The question, in natural language") },
+      inputSchema: ASK_BRAIN_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ question }) => {
@@ -414,26 +423,7 @@ export function buildMcpServer(
         title: "Edit a GitHub issue",
         description:
           "Edit one issue in the configured GitHub repository: update title/body, add/remove/set labels, post a comment, replace assignees, or update the lifecycle status label. Examples: {issueNumber: 52, title: 'Clarify launch scope'} edits the title; {issueNumber: 52, labelsAdd: ['owner:agent'], status: 'proposed'} assigns agent ownership while keeping the ticket proposed; {issueNumber: 52, comment: 'Blocked on API decision.'} posts a comment. Governance: generic label edits normalize status:queued and status:approved-merge to status:proposed. Setting status:queued requires direct user approval for this exact numbered issue and queueApproval=true. status:approved-merge is not available here; use the merge approval gate.",
-        inputSchema: {
-          repo: z.string().min(1).optional().describe("owner/repo. Defaults to the configured vault repo."),
-          issueNumber: z.number().int().positive().describe("GitHub issue number to edit."),
-          title: z.string().min(1).optional().describe("New issue title."),
-          body: z.string().optional().describe("New issue body."),
-          labelsAdd: z.array(z.string().min(1)).optional().describe("Labels to add. Gated status labels are normalized to status:proposed."),
-          labelsRemove: z.array(z.string().min(1)).optional().describe("Labels to remove if present."),
-          labelsSet: z.array(z.string().min(1)).optional().describe("Replace all issue labels with this set. Gated status labels are normalized to status:proposed."),
-          comment: z.string().min(1).optional().describe("Comment body to post on the issue."),
-          assignees: z.array(z.string().min(1)).optional().describe("Replace assignees with these GitHub logins. Empty array clears assignees."),
-          status: z
-            .string()
-            .min(1)
-            .optional()
-            .describe("Lifecycle status label, with or without 'status:' prefix, e.g. proposed, blocked, needs-review, queued."),
-          queueApproval: z
-            .boolean()
-            .optional()
-            .describe("Set true only after the user explicitly approved queueing this exact numbered issue."),
-        },
+        inputSchema: EDIT_GITHUB_ISSUE_SHAPE,
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       },
       async (input) => {
@@ -444,6 +434,26 @@ export function buildMcpServer(
           ...(result.labels ? [`labels: ${result.labels.join(", ")}`] : []),
         ];
         return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };
+      },
+    );
+  }
+
+  if (createGithubIssue) {
+    server.registerTool(
+      "create_issue",
+      {
+        title: "Open a GitHub issue",
+        description:
+          "Open a new issue in the agent's GitHub repository (defaults to its configured backlog/vault repo; pass repo to target another). Direct structured creation — no LLM. Tickets are worked by autonomous agents, so write a runnable body: objective, explicit scope, and a done-condition/acceptance criteria (plus the files for code work). The ticket is created at status:proposed and does NOT run until it is explicitly queued. Returns the new number + URL.",
+        inputSchema: CREATE_ISSUE_SHAPE,
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      },
+      async (input) => {
+        const result = await createGithubIssue(input);
+        return {
+          content: [{ type: "text", text: `Created ${result.repo}#${result.issueNumber}: ${result.issueUrl}` }],
+          structuredContent: { ...result },
+        };
       },
     );
   }

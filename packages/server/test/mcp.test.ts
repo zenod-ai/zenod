@@ -146,6 +146,7 @@ describe("MCP endpoint", () => {
       "ask_brain",
       "chat_with_zenod",
       "clean_slate_vault",
+      "create_issue",
       "digest_backlog",
       "edit_github_issue",
       "get_memory",

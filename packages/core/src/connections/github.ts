@@ -269,6 +269,15 @@ function replaceStatusLabel(labels: string[], status: string): string[] {
   return [...new Set([...withoutStatus, status])];
 }
 
+/**
+ * The repo issue tools act on when the caller doesn't name one: a vault agent's
+ * vault repo, or (for a vaultless backlog agent like Archus) its central backlog
+ * repo. Mirrors the tasking-tools default so MCP and chat agree.
+ */
+function defaultIssueRepo(settings: ConnectionSettings): string | null {
+  return settings.getRaw("vault_repo") || settings.getRaw("backlog_repo") || null;
+}
+
 async function configuredGithubToken(settings: ConnectionSettings, repo?: string): Promise<string> {
   if (settings.hasGithubApp()) {
     return repo ? installationTokenForRepo(settings, repo) : installationToken(settings);
@@ -305,7 +314,7 @@ async function githubRequest<T>(settings: ConnectionSettings, path: string, init
  * exact issue number, matching the explicit human queue gate.
  */
 export async function editGithubIssue(settings: ConnectionSettings, input: EditGithubIssueInput): Promise<EditGithubIssueResult> {
-  const repo = input.repo || settings.getRaw("vault_repo");
+  const repo = input.repo || defaultIssueRepo(settings);
   if (!repo) throw new Error("No GitHub repository is configured.");
   const issuePath = `/repos/${repoPath(repo)}/issues/${input.issueNumber}`;
   const operations: string[] = [];
@@ -391,4 +400,39 @@ export async function editGithubIssue(settings: ConnectionSettings, input: EditG
     operations,
     labels,
   };
+}
+
+export interface CreateGithubIssueInput {
+  repo?: string;
+  title: string;
+  body?: string;
+  labels?: string[];
+}
+
+export interface CreateGithubIssueResult {
+  repo: string;
+  issueNumber: number;
+  issueUrl: string;
+  labels: string[];
+}
+
+/**
+ * Open a new GitHub issue in the configured repository — a direct, LLM-free
+ * structured creation (the caller supplies title/body/labels). Created tickets
+ * start at status:proposed, matching the agent-tasking create policy, so a
+ * brand-new ticket never auto-runs. Defaults to the agent's issue repo.
+ */
+export async function createGithubIssue(settings: ConnectionSettings, input: CreateGithubIssueInput): Promise<CreateGithubIssueResult> {
+  const repo = input.repo || defaultIssueRepo(settings);
+  if (!repo) throw new Error("No GitHub repository is configured.");
+  const labels = [...new Set([...normalizeLabelIssueLabels(input.labels ?? []), STATUS_PROPOSED])];
+  const issue = await githubRequest<{ number: number; html_url: string }>(settings, `/repos/${repoPath(repo)}/issues`, {
+    method: "POST",
+    body: JSON.stringify({
+      title: input.title,
+      ...(input.body !== undefined ? { body: input.body } : {}),
+      labels,
+    }),
+  });
+  return { repo, issueNumber: issue.number, issueUrl: issue.html_url, labels };
 }

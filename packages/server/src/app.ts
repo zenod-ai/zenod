@@ -20,6 +20,7 @@ import {
 import {
   appStatus,
   buildManifest,
+  createGithubIssue,
   disconnectApp,
   editGithubIssue,
   exchangeManifestCode,
@@ -27,6 +28,7 @@ import {
   listInstallationRepos,
 } from "zenod";
 import { buildMcpServer } from "./mcp.js";
+import { buildMeshGatewayServer } from "./meshGateway.js";
 import { parseServiceAccount, testDrive } from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";
 import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
@@ -993,17 +995,24 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.all("/mcp", requireMcpAuth(settings, runtime.oauth), async (c) => {
     const { incoming, outgoing } = c.env;
-    const server = buildMcpServer(
-      () => runtime.getEngine(),
-      () => buildDriveTools(settings, runtime.ingestQueue),
-      () => runtime.cleanSlate(),
-      (input) => chatTestAudit.recordChatTestRun(input),
-      {
-        enqueue: (kind, input) => runtime.taskJobQueue.enqueue(kind, input),
-        get: (id) => runtime.taskJobQueue.get(id),
-      },
-      (input) => editGithubIssue(settings, input),
-    );
+    // The Console's public front door is a straight-through gateway over the mesh:
+    // it re-publishes the enabled agents' own tools and forwards calls directly to
+    // each owner (no council LLM). Every other agent exposes its own tool surface.
+    const isConsole = (agent.vaultless ?? false) && !agent.backlog;
+    const server = isConsole
+      ? buildMeshGatewayServer((name) => settings.peers().find((p) => p.name === name) ?? null)
+      : buildMcpServer(
+          () => runtime.getEngine(),
+          () => buildDriveTools(settings, runtime.ingestQueue),
+          () => runtime.cleanSlate(),
+          (input) => chatTestAudit.recordChatTestRun(input),
+          {
+            enqueue: (kind, input) => runtime.taskJobQueue.enqueue(kind, input),
+            get: (id) => runtime.taskJobQueue.get(id),
+          },
+          (input) => editGithubIssue(settings, input),
+          (input) => createGithubIssue(settings, input),
+        );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
