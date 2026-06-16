@@ -183,6 +183,15 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Editing a GitHub issue";
     case "close_issue":
       return "Closing a GitHub issue";
+    // Outbound (comms guardian) — drafting and, after confirmation, publishing.
+    case "ask_outbound":
+      return "Asking Outbound";
+    case "post_tweet":
+      return "Posting to X";
+    case "post_reddit":
+      return "Posting to Reddit";
+    case "send_email":
+      return "Sending an email";
     default:
       return `Running ${toolName}`;
   }

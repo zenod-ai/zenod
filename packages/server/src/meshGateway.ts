@@ -123,6 +123,57 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
+  // Outbound's send surface. Every public tool is a WRITE that publishes/sends —
+  // outward-facing and irreversible — so each is a semantic intent routed to his
+  // guardian brain (chat_with_outbound), which drafts in the user's voice and MUST
+  // confirm the exact content/target before it ever calls a connector. The brain,
+  // not the gateway, decides to send; these names just carry the channel intent.
+  {
+    name: "post_tweet",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "The user wants to post the following to X (Twitter). Draft it in their voice and, unless they have already confirmed this exact text in the conversation, show the final post and ASK them to confirm before sending — do not post unconfirmed: ",
+    title: "Post to X (Twitter)",
+    description:
+      "Tell Outbound to post to X. Describe (or give) what to post in natural language; Outbound drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. Refuses spam/mass sends.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "post_reddit",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "The user wants to submit the following to Reddit. Confirm the target subreddit, title, and body, drafted in their voice, and — unless they have already confirmed this exact content — ASK them to confirm before submitting; do not post unconfirmed: ",
+    title: "Post to Reddit",
+    description:
+      "Tell Outbound to submit a Reddit post. Say what to post and to which subreddit; Outbound drafts it, confirms the exact content and target first (it is public and irreversible), then submits and returns the URL. Refuses spam/cross-post floods.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "send_email",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "The user wants to send the following email. Confirm the recipient, subject, and body, drafted in their voice, and — unless they have already confirmed this exact message and recipient — ASK them to confirm before sending; a sent email cannot be recalled: ",
+    title: "Send an email",
+    description:
+      "Tell Outbound to send an email. Give the recipient and what to say; Outbound drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms. Refuses spam/mass mailing.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "ask_outbound",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    title: "Ask Outbound (comms brain)",
+    description:
+      "Ask Outbound to help with outbound communications — draft a tweet/post/email, adapt tone for a channel, or plan a send. He reasons in the user's voice and may draft, but never publishes/sends without explicit confirmation. For composing and advice, not a committed send.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
 ];
 
 /**

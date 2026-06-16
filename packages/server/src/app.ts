@@ -301,7 +301,56 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         "Close a GitHub issue. Say which one (owner/repo#N), and optionally a closing comment. Archus closes it and confirms.",
     },
   ];
-  const SUITE_AGENTS = [
+  // Outbound's "top tools": named delegation handles that ALL route to his chat
+  // brain (chat_with_outbound runs engine.chat synchronously and, as the outbound
+  // agent, has the private send connectors — X/Reddit/email). The distinct names
+  // are for VISIBILITY (the activity line reads "posting to X" / "sending an
+  // email"); Outbound's own LLM does the real work and enforces his guardrails
+  // (draft in the user's voice, refuse spam, and CONFIRM before anything is sent).
+  const OUTBOUND_COMMS_TOOLS = [
+    {
+      as: "ask_outbound",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Ask Outbound to help with outbound comms — draft a tweet/Reddit post/email, adapt tone for a channel, or plan a send. He drafts in the user's voice but never publishes/sends without explicit confirmation. Use for composing and advice (not a committed send).",
+    },
+    {
+      as: "post_tweet",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Post to X (Twitter). Pass what to post in natural language; Outbound drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. He refuses spam/mass sends.",
+    },
+    {
+      as: "post_reddit",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Submit a Reddit post. Say what to post and to which subreddit; Outbound drafts it, confirms the exact content and target subreddit first (it is public and irreversible), then submits and returns the URL.",
+    },
+    {
+      as: "send_email",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Send an email. Give the recipient and what to say; Outbound drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms.",
+    },
+  ];
+  // The Console's catalog of suite agents. repoSetting/repoLabel are optional: an
+  // agent that owns no repo (Outbound) omits them and is enabled with just an LLM
+  // key. peerTools is the curated tool set the Console exposes for that agent.
+  interface SuiteAgentSpec {
+    name: string;
+    displayName: string;
+    role: string;
+    internalBaseUrl: string;
+    needsRepo: boolean;
+    repoSetting?: "vault_repo" | "backlog_repo";
+    repoLabel?: string;
+    peerTools: { as: string; mcp: string; arg: string; description: string }[];
+  }
+  const SUITE_AGENTS: SuiteAgentSpec[] = [
     {
       name: "zenod",
       displayName: "Zenod",
@@ -321,6 +370,16 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       repoSetting: "backlog_repo" as const,
       repoLabel: "central backlog repo",
       peerTools: ARCHUS_BACKLOG_TOOLS,
+    },
+    {
+      name: "outbound",
+      displayName: "Outbound",
+      role: "outbound comms / X · Reddit · email",
+      internalBaseUrl: "http://zenod-outbound:8080",
+      // Outbound owns no repo — its accounts/connectors are env-configured on its
+      // container. Enabling it needs only the shared LLM key.
+      needsRepo: false,
+      peerTools: OUTBOUND_COMMS_TOOLS,
     },
   ];
 
@@ -399,7 +458,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       if (settings.get("model_ask")) provision.model_ask = settings.get("model_ask")!;
       if (settings.get("model_classify")) provision.model_classify = settings.get("model_classify")!;
 
-      if (sa.needsRepo) {
+      if (sa.needsRepo && sa.repoSetting) {
         const repo = (body.vault_repo ?? "").trim();
         if (!repo) return c.json({ error: `Pick a ${sa.repoLabel} (e.g. owner/repo).` }, 400);
         provision[sa.repoSetting] = repo;

@@ -1,0 +1,62 @@
+# Outbound — the headless OUTBOUND-COMMS agent. Internal MCP server the Console
+# (c1) loads over dokploy-network; reachable only as http://zenod-outbound:8080.
+#
+# Boots UN-PROVISIONED (ZENOD_AWAIT_PROVISION=1): mints no token, idles until c1
+# MINTS its token and pushes config (the shared LLM key) to /api/provision. Owns NO
+# repo and needs no vault — AGENT=outbound runs the engine with the outbound SEND
+# tools wired into its chat brain: post to X, post to Reddit, send email. Its domain
+# is SENDING — there is no inbox; the UX is the chat. It is the guardian of outbound
+# comms and ALWAYS confirms before anything is published/sent. NOT exposed publicly.
+# See docs/SUITE-AGENT-PATTERN.md.
+#
+# The send capabilities live in their OWN deployed MCP connectors that Outbound
+# reaches over dokploy-network (group-by-job: one agent composed from several
+# internal MCP servers). Point each at its connector with the OUTBOUND_*_MCP_URL
+# env. A connector whose URL is unset is simply "not connected yet" — the tool
+# reports it and never fakes a send, so Reddit/email can land as a follow-up once
+# their containers are deployed.
+#
+#   X (Twitter)  -> the vendored x-mcp (services/x-mcp), POST instance. Reuse the
+#                   write-capable endpoint (createPosts), e.g. http://x-mcp-postread:8000/mcp.
+#                   Join the x-mcp's network (zenod-x-net) below to reach it.
+#   Reddit       -> a reddit-mcp (vendor like x-mcp; FOLLOW-UP, not yet deployed).
+#   Email        -> a mail-mcp (clone the x-mcp shape; FOLLOW-UP, not yet deployed).
+
+networks:
+  dokploy-network:
+    external: true
+  # The x-mcp compose creates this network (services/x-mcp). Join it so Outbound
+  # can reach x-mcp-postread by name. Comment out (and the OUTBOUND_X_MCP_URL env)
+  # until x-mcp is deployed.
+  zenod-x-net:
+    external: true
+
+volumes:
+  zenod-outbound-data:
+
+services:
+  zenod-outbound:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenod-outbound:dokploy
+    container_name: zenod-outbound
+    restart: unless-stopped
+    networks: [dokploy-network, zenod-x-net]
+    volumes:
+      - zenod-outbound-data:/data
+    environment:
+      AGENT: outbound
+      ZENOD_AWAIT_PROVISION: "1"
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # X connector (the vendored x-mcp POST instance). Unset → post_tweet reports
+      # "X is not connected yet" instead of posting.
+      OUTBOUND_X_MCP_URL: http://x-mcp-postread:8000/mcp
+      # Reddit + email connectors — FOLLOW-UP (their containers are not deployed
+      # yet). Leave unset so the tools report "not connected" rather than faking a
+      # send; set them once the connectors exist.
+      # OUTBOUND_REDDIT_MCP_URL: http://reddit-mcp:8000/mcp
+      # OUTBOUND_MAIL_MCP_URL: http://mail-mcp:8000/mcp
+    expose:
+      - "8080"
