@@ -95,7 +95,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       // Current working repo (vault for memory agents, central backlog for backlog
       // agents) so the Console can display it and backfill agents enabled before
       // it tracked repos.
-      repo: agent.backlog ? settings.getRaw("backlog_repo") : settings.get("vault_repo"),
+      repo: agent.backlog || agent.executor ? settings.getRaw("backlog_repo") : settings.get("vault_repo"),
     }),
   );
 
@@ -195,7 +195,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const body = await c.req.json<{ repo?: string; branch?: string }>().catch(() => ({}) as Record<string, string>);
     const repo = (body.repo ?? "").trim();
     if (!repo) return c.json({ error: "repo is required (owner/repo)" }, 400);
-    if (agent.backlog) {
+    if (agent.backlog || agent.executor) {
       settings.setRaw("backlog_repo", repo);
     } else {
       settings.set("vault_repo", repo);
@@ -301,6 +301,37 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         "Close a GitHub issue. Say which one (owner/repo#N), and optionally a closing comment. Archus closes it and confirms.",
     },
   ];
+  // Epaminon's "top tools": named delegation handles that ALL route to his chat
+  // brain (chat_with_epaminon runs engine.chat synchronously and, as an executor,
+  // has the GitHub tasking tools — queue/comment/status). The distinct names are
+  // for VISIBILITY (the activity line reads "running a ticket" / "reporting an
+  // outcome"); Epaminon's own LLM does the real work and enforces his guardrails
+  // (only run explicitly-approved tickets, qualified ids, honest status). He
+  // executes the qualified REPO ticket and reports status up — he never curates
+  // the backlog (that is Archus).
+  const EPAMINON_EXECUTION_TOOLS = [
+    {
+      as: "execution_status",
+      mcp: "chat_with_epaminon",
+      arg: "message",
+      description:
+        "Ask Epaminon where execution stands — which tickets are queued/running, in review, or shipped, and any blockers. Use for execution status questions (not to start work). Reference tickets as owner/repo#N.",
+    },
+    {
+      as: "run_ticket",
+      mcp: "chat_with_epaminon",
+      arg: "message",
+      description:
+        "Tell Epaminon to RUN an approved ticket now. Name the ticket (owner/repo#N) that the user has explicitly approved to execute; Epaminon queues it so the fan-out runner picks it up (opens a PR, moves it to needs-review) and confirms exactly what was queued. He only runs tickets explicitly approved to run — never bulk-queues.",
+    },
+    {
+      as: "report_outcome",
+      mcp: "chat_with_epaminon",
+      arg: "message",
+      description:
+        "Hand Epaminon an execution outcome to record on the ticket he ran — the result and its evidence URL (PR/commit). He posts it as a comment on the qualified repo ticket (owner/repo#N) and sets the review status, then reports the status up so Archus can reflect it onto the central tracker. He does not curate the backlog himself.",
+    },
+  ];
   // Outbound's "top tools": named delegation handles that ALL route to his chat
   // brain (chat_with_outbound runs engine.chat synchronously and, as the outbound
   // agent, has the private send connectors — X/Reddit/email). The distinct names
@@ -370,6 +401,20 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       repoSetting: "backlog_repo" as const,
       repoLabel: "central backlog repo",
       peerTools: ARCHUS_BACKLOG_TOOLS,
+    },
+    {
+      name: "epaminon",
+      displayName: "Epaminon",
+      role: "executor / runs queued tickets",
+      internalBaseUrl: "http://zenod-epaminon:8080",
+      needsRepo: true,
+      // Epaminon resolves bare ticket references and his default execution target
+      // from the same `backlog_repo` setting a backlog agent uses (his own
+      // container, his own settings store). He still executes each ticket in its
+      // own qualified owner/repo.
+      repoSetting: "backlog_repo" as const,
+      repoLabel: "execution/project repo",
+      peerTools: EPAMINON_EXECUTION_TOOLS,
     },
     {
       name: "outbound",
@@ -1057,7 +1102,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // The Console's public front door is a straight-through gateway over the mesh:
     // it re-publishes the enabled agents' own tools and forwards calls directly to
     // each owner (no council LLM). Every other agent exposes its own tool surface.
-    const isConsole = (agent.vaultless ?? false) && !agent.backlog;
+    // Only the BARE Console (vaultless with no domain capability) is the mesh
+    // gateway. Backlog (Archus), executor (Epaminon), and outbound agents are
+    // vaultless too, but each must expose its OWN MCP tool surface
+    // (chat_with_<name> + its domain tools) — not the gateway.
+    const isConsole = (agent.vaultless ?? false) && !agent.backlog && !agent.executor && !agent.outbound;
     const server = isConsole
       ? buildMeshGatewayServer((name) => settings.peers().find((p) => p.name === name) ?? null)
       : buildMcpServer(

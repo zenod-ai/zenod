@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAgent, ZENOD_AGENT, ARCHUS_AGENT, OUTBOUND_AGENT } from "../src/agent.js";
+import { resolveAgent, ZENOD_AGENT, ARCHUS_AGENT, EPAMINON_AGENT, OUTBOUND_AGENT } from "../src/agent.js";
 
 describe("resolveAgent", () => {
   it("defaults to Zenod when unset or unknown", () => {
@@ -12,8 +12,30 @@ describe("resolveAgent", () => {
     expect(resolveAgent("archus")).toBe(ARCHUS_AGENT);
     expect(resolveAgent("  ARCHUS  ")).toBe(ARCHUS_AGENT);
     expect(resolveAgent("zenod")).toBe(ZENOD_AGENT);
+    expect(resolveAgent("epaminon")).toBe(EPAMINON_AGENT);
+    expect(resolveAgent("  EPAMINON  ")).toBe(EPAMINON_AGENT);
     expect(resolveAgent("outbound")).toBe(OUTBOUND_AGENT);
     expect(resolveAgent("  OUTBOUND  ")).toBe(OUTBOUND_AGENT);
+  });
+});
+
+describe("EPAMINON_AGENT (executor)", () => {
+  it("is the vaultless, GitHub-backed executor — not a backlog curator", () => {
+    expect(EPAMINON_AGENT.name).toBe("epaminon");
+    expect(EPAMINON_AGENT.vaultless).toBe(true);
+    expect(EPAMINON_AGENT.executor).toBe(true);
+    // It must NOT be a backlog agent — it executes tickets, Archus curates them.
+    expect(EPAMINON_AGENT.backlog).toBeUndefined();
+  });
+
+  it("its persona encodes the execution guardrails (honest state, qualified ids, run-only-approved)", () => {
+    const persona = EPAMINON_AGENT.persona.toLowerCase();
+    expect(persona).toContain("owner/repo#n");
+    expect(persona).toContain("queue");
+    // Honesty rule: never claim queued/running unless confirmed.
+    expect(persona).toContain("never say a ticket is queued");
+    // Stays out of Archus's lane.
+    expect(persona).toContain("archus");
   });
 });
 
