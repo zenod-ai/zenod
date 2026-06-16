@@ -554,7 +554,7 @@ describe("WhatsAppGateway", () => {
     }
   });
 
-  it("acks a voice note immediately, then acts on the transcript via the tasking loop (voice ≡ text)", async () => {
+  it("treats a voice note as text — transcribes and replies inline, no ingest ack (voice ≡ text)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-voice-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
@@ -587,12 +587,12 @@ describe("WhatsAppGateway", () => {
 
       await gateway.handleEvent(audioEvent() as never);
 
-      // Immediate ack.
-      expect(socket.sent[0]!.text).toContain("Got this voice note");
-      // Then it ACTS on the transcript through the same tasking loop as text.
-      await waitFor(() => socket.sent.length, (count) => count === 2);
+      // No "queued for filing/digestion" ack — a voice note is acted on through
+      // the same tasking loop as text and answered with a single reply.
+      await waitFor(() => socket.sent.length, (count) => count === 1);
+      expect(socket.sent.some((m) => m.text.includes("Got this voice note"))).toBe(false);
       expect(calls.some((c) => c.includes("queue 51 and 53"))).toBe(true);
-      expect(socket.sent[1]!.text).toContain("queue 51 and 53");
+      expect(socket.sent[0]!.text).toContain("queue 51 and 53");
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(1);
       // Filing is NOT automatic (#68) — a voice note is acted on, not pushed
       // into the vault. The transcript lives in conversation state; explicit
@@ -623,17 +623,17 @@ describe("WhatsAppGateway", () => {
 
       await gateway.handleEvent(audioEvent({ mediaRaw: null }) as never);
 
-      expect(socket.sent[0]!.text).toContain("Got this voice note");
-      await waitFor(() => socket.sent.length, (count) => count === 2);
-      expect(socket.sent[1]!.text).toContain("could not download");
-      expect(runtime.whatsappStore.diagnostics().processingCounts.failed).toBe(1);
+      // No ack first — a single, clear reply (never silent), no "queued" framing.
+      await waitFor(() => socket.sent.length, (count) => count === 1);
+      expect(socket.sent.some((m) => m.text.includes("Got this voice note"))).toBe(false);
+      expect(socket.sent[0]!.text).toContain("could not download");
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("answers voice-note status questions from durable digest state", async () => {
+  it("voice notes are answered inline — a follow-up question routes through chat, not a digest-status shortcut", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-digest-status-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
@@ -663,7 +663,8 @@ describe("WhatsAppGateway", () => {
       await gateway.pair();
 
       await gateway.handleEvent(audioEvent() as never);
-      await waitFor(() => socket.sent.length, (count) => count === 2);
+      // One inline reply, no ack.
+      await waitFor(() => socket.sent.length, (count) => count === 1);
 
       await gateway.handleEvent({
         ...(eventFromBaileysMessage(
@@ -674,9 +675,12 @@ describe("WhatsAppGateway", () => {
         ) as NonNullable<ReturnType<typeof eventFromBaileysMessage>>),
       } as never);
 
-      expect(socket.sent).toHaveLength(3);
-      expect(socket.sent[2]!.text).toContain("Latest voice-note digest status:");
-      expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBe(1);
+      // Voice notes no longer create a "digest job", so the question is answered
+      // as a normal chat turn — NOT intercepted by the (image-only) shortcut.
+      expect(socket.sent).toHaveLength(2);
+      expect(socket.sent[1]!.text).not.toContain("Latest voice-note digest status");
+      expect(socket.sent[1]!.text).toBe("Re: what happened to my voice note?");
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBeUndefined();
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
       runtime.close();
@@ -714,7 +718,7 @@ describe("WhatsAppGateway", () => {
       await gateway.pair();
 
       await gateway.handleEvent(audioEvent() as never);
-      await waitFor(() => socket.sent.length, (count) => count === 2);
+      await waitFor(() => socket.sent.length, (count) => count === 1);
 
       const taskingText =
         "So I think I want to fast track one job which is doing log analysis of the last transcripts because I sent three voice notes but only got two digestions. Can you immediately create this one issue and launch a Codex agent against that issue?";
@@ -727,13 +731,14 @@ describe("WhatsAppGateway", () => {
         ) as NonNullable<ReturnType<typeof eventFromBaileysMessage>>),
       } as never);
 
-      // The voice note now ALSO acts via the tasking loop, so there are two
-      // handleTasking calls: the voice transcript, then the text instruction.
+      // The voice note acts via the tasking loop too, so there are two
+      // handleTasking calls: the voice transcript, then the text instruction —
+      // and one reply each (no ack), so two sends total.
       expect(calls).toHaveLength(2);
       expect(calls).toContain(`34611111111:${taskingText}`);
-      expect(socket.sent).toHaveLength(3);
-      expect(socket.sent[2]!.text).toBe(`Re: ${taskingText}`);
-      expect(socket.sent[2]!.text).not.toContain("Latest voice-note digest status");
+      expect(socket.sent).toHaveLength(2);
+      expect(socket.sent[1]!.text).toBe(`Re: ${taskingText}`);
+      expect(socket.sent[1]!.text).not.toContain("Latest voice-note digest status");
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(2);
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBeUndefined();
     } finally {

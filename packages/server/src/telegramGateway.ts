@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { BrainEngine } from "zenod";
 import type { Settings } from "./settings.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
-import { transcribeAudio } from "./transcribe.js";
+import { transcribeAudio, NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 
 export type TelegramConnectionState = "disabled" | "disconnected" | "connected" | "error";
@@ -267,16 +267,17 @@ export class TelegramGateway {
     const voice = message.voice ?? message.audio;
     if (!text && voice?.file_id) {
       await this.sendChatAction(chatId, "typing");
-      const transcript = await this.transcribeVoice(voice).catch((err: unknown) => {
-        console.error(
-          `[telegram] transcription failed for chat ${chatId}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        return null;
-      });
-      if (!transcript) {
+      let transcript: string;
+      try {
+        transcript = await this.transcribeVoice(voice);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.error(`[telegram] transcription failed for chat ${chatId}: ${detail}`);
         await this.sendReply(
           chatId,
-          "⚠️ I got your voice note, but couldn't transcribe it — please try again.",
+          detail === NO_SPEECH_MESSAGE
+            ? `⚠️ ${detail}`
+            : "⚠️ I got your voice note, but couldn't transcribe it — please try again.",
         ).catch(() => {});
         return;
       }

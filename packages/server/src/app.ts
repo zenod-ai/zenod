@@ -691,7 +691,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       longTranscriptionProvider: settings.longTranscriptionProvider(),
       useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
     });
-    if (!result.success) return c.json({ error: `could not transcribe voice note: ${result.error}` }, 422);
+    if (!result.success)
+      return c.json(
+        {
+          error: result.noSpeech ? result.error : `could not transcribe voice note: ${result.error}`,
+          noSpeech: result.noSpeech === true,
+        },
+        422,
+      );
     return c.json({ transcript: result.transcript, provider: result.provider });
   });
 

@@ -14,7 +14,7 @@ import { pino } from "pino";
 import type { BrainEngine, StoreResult } from "zenod";
 import type { Settings } from "./settings.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
-import { transcribeAudio } from "./transcribe.js";
+import { transcribeAudio, NO_SPEECH_MESSAGE } from "./transcribe.js";
 import {
   maskPhoneNumber,
   normalizeWhatsAppIdentifier,
@@ -727,12 +727,20 @@ export class WhatsAppGateway {
     await this.markRead(event);
 
     if (event.hasMedia) {
-      this.options.store.markMessageStatus(event.messageId, "digest_queued");
-      await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
-      void this.processVoiceNote(event).catch((err: unknown) => {
-        console.error("[whatsapp] media worker failed:", err);
-      });
-      return;
+      const isVoice = event.mediaType === "audio" || event.mediaType === "ptt";
+      if (!isVoice) {
+        // Images and other media keep the ingest-ack + background worker.
+        this.options.store.markMessageStatus(event.messageId, "digest_queued");
+        await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
+        void this.processVoiceNote(event).catch((err: unknown) => {
+          console.error("[whatsapp] media worker failed:", err);
+        });
+        return;
+      }
+      // A voice note IS a typed message. Do NOT ack it or "queue it for filing"
+      // — fall through to the normal tasking path below: typing indicator →
+      // transcribe (engineInputForEvent) → handleTasking → one reply, exactly
+      // like text. Keeping/filing a substantive note happens after the reply.
     }
 
     const localStatus = this.localDigestStatusReply(event);
@@ -827,7 +835,12 @@ export class WhatsAppGateway {
         useOpenAiForLongAudio: this.options.settings.useOpenAiForLongTranscription(),
       });
       if (!transcription.success) {
-        return { kind: "fixed-reply", text: `I could not transcribe that voice note: ${transcription.error}` };
+        return {
+          kind: "fixed-reply",
+          text: transcription.noSpeech
+            ? transcription.error ?? NO_SPEECH_MESSAGE
+            : `I could not transcribe that voice note: ${transcription.error}`,
+        };
       }
       const sender = normalizeWhatsAppIdentifier(event.senderId) || event.senderName;
       return {

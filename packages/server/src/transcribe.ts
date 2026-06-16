@@ -39,6 +39,60 @@ export interface TranscriptionEnvelope {
   transcript?: string;
   provider?: string;
   error?: string;
+  /** True when the audio contained no intelligible speech (silence/hallucination). */
+  noSpeech?: boolean;
+}
+
+// Whisper-family models hallucinate filler on silent or sub-second audio —
+// "you", "Thank you", "Thanks for watching" are artifacts of their
+// caption-heavy training data, not real transcriptions. A transcript made up
+// solely of such filler is treated as no-speech across ALL providers (Groq,
+// OpenAI, OpenRouter, whisper.cpp), because the guard runs at the single
+// transcribeAudio choke point rather than per provider.
+export const NO_SPEECH_MESSAGE =
+  "I couldn't make out any speech in that voice note — mind trying again, a little closer to the mic?";
+
+const HALLUCINATION_PHRASES = new Set([
+  "you",
+  "thank you",
+  "thanks for watching",
+  "thank you for watching",
+  "please subscribe",
+  "bye",
+  "okay",
+  "ok",
+  "so",
+  "uh",
+  "um",
+  "yeah",
+]);
+
+const FILLER_WORDS = new Set([
+  "you",
+  "thank",
+  "thanks",
+  "for",
+  "watching",
+  "bye",
+  "so",
+  "uh",
+  "um",
+  "yeah",
+  "okay",
+  "ok",
+]);
+
+/** A transcript that is only silence-hallucination filler — not real speech. */
+function isDegenerateTranscript(transcript: string): boolean {
+  const normalized = transcript.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return true;
+  const stripped = normalized.replace(/^[\s.,!?¡¿"'’\-…]+|[\s.,!?¡¿"'’\-…]+$/g, "").trim();
+  if (!stripped) return true;
+  if (HALLUCINATION_PHRASES.has(stripped)) return true;
+  // Nothing but repeated filler ("you you you", "thank you thank you").
+  const words = stripped.split(" ");
+  if (words.length <= 5 && words.every((w) => FILLER_WORDS.has(w))) return true;
+  return false;
 }
 
 /** Selectable transcription quality — speed vs accuracy, with download size. */
@@ -540,23 +594,44 @@ async function transcribeWithGroq(
  * WAV whisper.cpp expects (any size — it's local, no upload cap), then
  * whisper-cli writes a .txt we read back.
  */
+type TranscribeOptions =
+  | {
+      model?: string;
+      groqApiKey?: string | null;
+      openaiApiKey?: string | null;
+      openrouterApiKey?: string | null;
+      openrouterModel?: string | null;
+      longTranscriptionProvider?: "openrouter" | "openai" | "local";
+      useOpenAiForLongAudio?: boolean;
+      durationSeconds?: number;
+      onProgress?: (percent: number) => void;
+      signal?: AbortSignal;
+    }
+  | ((percent: number) => void);
+
+/**
+ * Public entry point. Runs the provider cascade, then guards against Whisper's
+ * silent-audio hallucinations: a transcript that is only filler ("you",
+ * "Thank you", "Thanks for watching") is not speech, so it is surfaced as a
+ * no-speech failure — callers ask the user to retry instead of posting filler
+ * text to chat as if it were a typed message.
+ */
 export async function transcribeAudio(
   data: Buffer,
   filename: string,
-  options:
-    | {
-        model?: string;
-        groqApiKey?: string | null;
-        openaiApiKey?: string | null;
-        openrouterApiKey?: string | null;
-        openrouterModel?: string | null;
-        longTranscriptionProvider?: "openrouter" | "openai" | "local";
-        useOpenAiForLongAudio?: boolean;
-        durationSeconds?: number;
-        onProgress?: (percent: number) => void;
-        signal?: AbortSignal;
-      }
-    | ((percent: number) => void) = {},
+  options: TranscribeOptions = {},
+): Promise<TranscriptionEnvelope> {
+  const result = await runTranscription(data, filename, options);
+  if (result.success && isDegenerateTranscript(result.transcript ?? "")) {
+    return { success: false, provider: result.provider, error: NO_SPEECH_MESSAGE, noSpeech: true };
+  }
+  return result;
+}
+
+async function runTranscription(
+  data: Buffer,
+  filename: string,
+  options: TranscribeOptions = {},
 ): Promise<TranscriptionEnvelope> {
   const modelName = resolveWhisperModel(typeof options === "function" ? DEFAULT_WHISPER_MODEL : options.model);
   const onProgress = typeof options === "function" ? options : options.onProgress;
