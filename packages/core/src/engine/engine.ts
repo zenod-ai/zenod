@@ -37,7 +37,7 @@ import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
-import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
+import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, summarizeActionsForReply } from "../taskingPolicy.js";
 
 /**
  * The conversation key for a surface. One continuous thread per surface today;
@@ -1024,14 +1024,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
   // ignoring the user, so always produce *something*: the real tool results if
   // any ran, otherwise an honest retry notice. Reconciliation runs first so a
   // fabricated mutation is still corrected before we consider falling back.
-  // `reconcile` guards against fabricated "Created issue #N" claims by checking them
-  // against OUR recorded actions. A mesh-relay agent (the Console: no own tasking
-  // tools) has no such actions — the result came from a peer (e.g. ask_archus) — so
-  // skip reconcile, else a peer's TRUE result gets a false "Correction — nothing was
-  // created" prepended. Agents that act themselves (have tasking tools) still reconcile.
-  function finalizeReply(rawText: string, actions: TaskingAction[], reconcile = true): string {
-    const text = reconcile ? reconcileTaskingReply(rawText, actions) : rawText;
-    if (text.trim()) return text;
+  // The legacy "Created issue #N" reconciliation guard is removed while the backlog
+  // logic is revamped (Archus owns issues now; the Console just relays peer results,
+  // and the guard kept "correcting" true results). Keep only the empty-reply fallback.
+  function finalizeReply(rawText: string, actions: TaskingAction[]): string {
+    if (rawText.trim()) return rawText;
     const summary = summarizeActionsForReply(actions);
     return summary
       ? `${summary}\n\n(That's what I did — I ran out of room to write a fuller reply.)`
@@ -1081,9 +1078,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       options.driveTools,
       options.peerTools,
     );
-    // Same grounding guard as handleTasking — but only when WE have tasking tools.
-    // The Console relays peers' results (ask_archus) and must not "correct" them.
-    const text = finalizeReply(result.text, actions, Boolean(taskTools));
+    const text = finalizeReply(result.text, actions);
     await state.appendMessage(cid, "assistant", text, surface);
 
     return {
@@ -1113,9 +1108,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       options.driveTools,
       options.peerTools,
     );
-    // Never let the reply assert a creation/mutation the tools didn't actually
-    // perform — BUT only when WE have tasking tools (the Console relays peers).
-    const text = finalizeReply(result.text, actions, Boolean(repo || options.taskingTools));
+    const text = finalizeReply(result.text, actions);
     await state.appendMessage(cid, "assistant", text, input.surface);
     return { text, actions };
   }

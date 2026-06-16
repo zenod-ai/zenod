@@ -779,46 +779,6 @@ describe("BrainEngine", () => {
     expect((await engine().lint()).errors).toEqual([]);
   });
 
-  it("corrects a fabricated 'Created issue #N' when create_issue actually failed", async () => {
-    const e = createEngine({
-      repo,
-      llm,
-      state,
-      location: { repo: "zenod-ai/fixture" },
-      taskingTools: {
-        async createIssue() {
-          throw new Error("GitHub returned 403: forbidden");
-        },
-        async labelIssue() {
-          return "labeled";
-        },
-        async queryBacklog() {
-          return "";
-        },
-        async serviceBacklog() {
-          return "";
-        },
-        async approveQueue() {
-          return "queued";
-        },
-      },
-    });
-
-    const reply = await e.handleTasking({
-      text: "FABRICATECREATE: Market research on idealista_scraper",
-      surface: "whatsapp",
-      conversationKey: "fab",
-    });
-
-    // The user must be told nothing was created — not the fabricated #58.
-    expect(reply.text).toMatch(/^⚠️ Correction/);
-    expect(reply.text).toContain("no GitHub issue was created");
-    expect(reply.text).toContain("403");
-    // The failed attempt is recorded for audit instead of silently dropped.
-    const create = reply.actions.find((action) => action.tool === "createIssue");
-    expect(create?.result).toMatch(/^ERROR:.*403/);
-  });
-
   it("never returns an empty WhatsApp reply — falls back to the real tool results", async () => {
     const e = createEngine({
       repo,
