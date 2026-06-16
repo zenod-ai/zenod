@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VERSION } from "zenod";
-import type { ZodRawShape } from "zod";
+import { z, type ZodRawShape } from "zod";
 
 import { callPeerTool, type PeerConfig } from "./peerClient.js";
 import {
@@ -26,10 +26,12 @@ import {
  * are addressed by peer name; a tool is published only when its owner is enabled.
  */
 interface GatewayTool {
-  /** Tool name — must equal the owner peer's real MCP tool name. */
+  /** Tool name as published at the front door. */
   name: string;
   /** Peer that owns/executes the tool. */
   owner: string;
+  /** The owner's real MCP tool to call. Defaults to `name` (name-preserving proxy). */
+  peerTool?: string;
   title: string;
   description: string;
   inputSchema: ZodRawShape;
@@ -82,6 +84,21 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: EDIT_GITHUB_ISSUE_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
+  {
+    // Archus's BRAIN (its LLM), for non-trivial backlog work the caller hasn't
+    // already reduced to a precise create/edit. Routes to Archus's chat loop,
+    // which reasons over the backlog (query) and can act (create/edit). One LLM —
+    // Archus's — and no council LLM. Use create_issue/edit_github_issue instead
+    // when you already know the exact action.
+    name: "ask_archus",
+    owner: "archus",
+    peerTool: "chat_with_archus",
+    title: "Ask Archus (backlog brain)",
+    description:
+      "Delegate a NON-TRIVIAL backlog request to Archus's reasoning: triage, prioritize, summarize what's open, or turn a messy idea into runnable tickets. Archus reads the backlog with its own LLM and may create/edit issues, returning a synthesized reply. For a precise action you've already decided, call create_issue or edit_github_issue instead (no LLM).",
+    inputSchema: { message: z.string().min(1).describe("What to ask or instruct Archus, in natural language") },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
 ];
 
 /**
@@ -98,7 +115,7 @@ export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig
     server.registerTool(
       t.name,
       { title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations },
-      async (args) => callPeerTool(peer, t.name, (args ?? {}) as Record<string, unknown>),
+      async (args) => callPeerTool(peer, t.peerTool ?? t.name, (args ?? {}) as Record<string, unknown>),
     );
   }
   return server;

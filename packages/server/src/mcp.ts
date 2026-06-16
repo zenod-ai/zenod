@@ -86,17 +86,21 @@ export function buildMcpServer(
   taskJobs?: TaskJobs,
   editGithubIssue?: GithubIssueEditor,
   createGithubIssue?: GithubIssueCreator,
+  agentName: string = "zenod",
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
+  // This agent's chat-brain tool: a full engine.chat turn (the agent reasons with
+  // its own tools and replies). Named per-agent — chat_with_zenod, chat_with_archus
+  // — so it reads sensibly on every agent and routes unambiguously over the mesh.
   server.registerTool(
-    "chat_with_zenod",
+    `chat_with_${agentName}`,
     {
-      title: "Chat with Zenod",
+      title: `Chat with ${agentName}`,
       description:
-        "Synthetic chat/test harness for Codex and other agents. Sends a natural-language prompt through the same engine.chat loop used by web and WhatsApp, with an explicit conversationKey/testRunId for isolated multi-turn tests. Returns reply text, sources, tool events, and a correlation id that is also written to the test chat audit log.",
+        "Send a natural-language prompt through this agent's engine.chat loop (the same loop used by web and WhatsApp) — the agent reasons with its own tools and returns a reply. For a backlog agent this engages its backlog brain (query/triage/create/edit issues); for a memory agent, the vault. Supports an explicit conversationKey/testRunId for isolated multi-turn sessions and self-tests. Returns reply text, sources, tool events, and a correlation id written to the chat audit log.",
       inputSchema: {
-        message: z.string().min(1).describe("Natural-language prompt to send to Zenod"),
+        message: z.string().min(1).describe("Natural-language prompt to send to the agent"),
         surface: z.enum(["cli", "mcp", "whatsapp", "web", "drive"]).optional().describe("Surface label to run as. Defaults to mcp."),
         conversationKey: z.string().min(1).optional().describe("Stable key for multi-turn test context"),
         testRunId: z.string().min(1).optional().describe("Optional caller-supplied test run grouping id"),
