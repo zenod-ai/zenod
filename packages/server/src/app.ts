@@ -341,29 +341,26 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     }
   }
 
-  // Backfill repo labels for agents enabled before the Console tracked them: ask
-  // each enabled-but-unlabelled peer for its current repo (over the internal
-  // network, with its token) and remember it. Best-effort, fire-and-forget — it
-  // self-heals on a later boot if an agent is briefly unreachable.
-  {
-    const tokens = settings.agentTokens();
-    const knownRepos = settings.agentRepos();
-    for (const sa of SUITE_AGENTS) {
-      if (!sa.needsRepo || knownRepos[sa.name]) continue;
-      const token = tokens[sa.name];
-      if (!token) continue; // never enabled
-      void fetch(`${sa.internalBaseUrl}/api/agent`, { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j) => {
-          const repo = (j as { repo?: string } | null)?.repo;
-          if (typeof repo === "string" && repo) settings.setAgentRepo(sa.name, repo);
-        })
-        .catch(() => {});
-    }
-  }
-
-  app.get("/api/team", (c) => {
+  app.get("/api/team", async (c) => {
     const enabled = new Set(settings.peers().map((p) => p.name));
+    const tokens = settings.agentTokens();
+    // Backfill any missing repo label by asking the agent itself (over the internal
+    // network, with its token). Covers agents enabled before the Console tracked
+    // repos, and is robust to boot ordering — it runs the first time the tab loads
+    // and then caches, so the display is correct without a restart.
+    await Promise.all(
+      SUITE_AGENTS.filter(
+        (a) => a.needsRepo && enabled.has(a.name) && !settings.agentRepo(a.name) && tokens[a.name],
+      ).map(async (a) => {
+        const repo = await fetch(`${a.internalBaseUrl}/api/agent`, {
+          headers: { Authorization: `Bearer ${tokens[a.name]}` },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => (j as { repo?: string } | null)?.repo)
+          .catch(() => null);
+        if (typeof repo === "string" && repo) settings.setAgentRepo(a.name, repo);
+      }),
+    );
     return c.json({
       agents: SUITE_AGENTS.map((a) => ({
         name: a.name,
