@@ -450,3 +450,89 @@ export async function createGithubIssue(settings: ConnectionSettings, input: Cre
   });
   return { repo, issueNumber: issue.number, issueUrl: issue.html_url, labels };
 }
+
+// --- Execution tickets (Archus ↔ Epaminon protocol) ------------------------
+// An execution ticket is a central-backlog issue, class `type:execution`, whose
+// run-state lives in its own `exec:` label namespace (never collides with the
+// backlog `status:` labels). See docs/ARCHUS-TWO-TIER-PLAN.md.
+
+export const EXECUTION_CLASS_LABEL = "type:execution";
+const EXEC_LABEL_PREFIX = "exec:";
+/** Run-state values. Archus writes queued+approved; Epaminon reports the rest. */
+export const EXECUTION_STATES = ["queued", "running", "needs-review", "approved", "blocked", "done", "failed"] as const;
+export type ExecutionState = (typeof EXECUTION_STATES)[number];
+
+export interface MintExecutionInput {
+  repo?: string;
+  title: string;
+  /** Run context: objective, scope, done-condition + the goal. */
+  context: string;
+  /** The work ticket this run is for, e.g. owner/repo#N. */
+  target: string;
+}
+export interface ExecutionIssueResult {
+  repo: string;
+  executionId: number;
+  issueUrl: string;
+}
+
+/**
+ * Mint an execution ticket (Archus, at queue time): a central issue labelled
+ * `type:execution` + `exec:queued`, linking its target work ticket and carrying
+ * the run context. Unlike createGithubIssue it does NOT add status:proposed —
+ * an execution ticket lives in the `exec:` lifecycle, not the backlog one.
+ */
+export async function mintExecutionIssue(settings: ConnectionSettings, input: MintExecutionInput): Promise<ExecutionIssueResult> {
+  const repo = input.repo || defaultIssueRepo(settings);
+  if (!repo) throw new Error("No GitHub repository is configured.");
+  const body = `**Target:** ${input.target}\n\n${input.context}`;
+  const issue = await githubRequest<{ number: number; html_url: string }>(settings, `/repos/${repoPath(repo)}/issues`, {
+    method: "POST",
+    body: JSON.stringify({ title: input.title, body, labels: [EXECUTION_CLASS_LABEL, `${EXEC_LABEL_PREFIX}queued`] }),
+  });
+  return { repo, executionId: issue.number, issueUrl: issue.html_url };
+}
+
+export interface SetExecutionStateInput {
+  repo?: string;
+  executionId: number;
+  state: ExecutionState;
+  evidenceUrl?: string;
+  note?: string;
+}
+export interface SetExecutionStateResult {
+  repo: string;
+  executionId: number;
+  issueUrl: string;
+  state: ExecutionState;
+  /** false when the ticket was already in this state (idempotent no-op). */
+  changed: boolean;
+}
+
+/**
+ * Deterministically move an execution ticket's `exec:` state — the no-LLM write
+ * behind `apply_execution_event`. Swaps the single `exec:*` label and (on a real
+ * transition) appends the evidence/note as a comment. Idempotent: re-applying the
+ * current state is a no-op (no relabel, no duplicate comment).
+ */
+export async function setExecutionState(settings: ConnectionSettings, input: SetExecutionStateInput): Promise<SetExecutionStateResult> {
+  const repo = input.repo || defaultIssueRepo(settings);
+  if (!repo) throw new Error("No GitHub repository is configured.");
+  const target = `${EXEC_LABEL_PREFIX}${input.state}`;
+  const issuePath = `/repos/${repoPath(repo)}/issues/${input.executionId}`;
+  const issue = await githubRequest<GithubIssueResponse>(settings, issuePath);
+  const labels = issueLabels(issue);
+  if (labels.includes(target)) {
+    return { repo, executionId: input.executionId, issueUrl: issue.html_url, state: input.state, changed: false };
+  }
+  const nextLabels = [...labels.filter((l) => !l.startsWith(EXEC_LABEL_PREFIX)), target];
+  await githubRequest<GithubLabelsResponse>(settings, `${issuePath}/labels`, {
+    method: "PUT",
+    body: JSON.stringify({ labels: nextLabels }),
+  });
+  if (input.evidenceUrl || input.note) {
+    const comment = [`**${target}**`, input.evidenceUrl, input.note].filter(Boolean).join(" — ");
+    await githubRequest(settings, `${issuePath}/comments`, { method: "POST", body: JSON.stringify({ body: comment }) });
+  }
+  return { repo, executionId: input.executionId, issueUrl: issue.html_url, state: input.state, changed: true };
+}

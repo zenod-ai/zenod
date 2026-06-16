@@ -26,6 +26,9 @@ import {
   exchangeManifestCode,
   installationToken,
   listInstallationRepos,
+  setExecutionState,
+  EXECUTION_STATES,
+  type ExecutionState,
 } from "zenod";
 import { buildMcpServer } from "./mcp.js";
 import { buildMeshGatewayServer } from "./meshGateway.js";
@@ -154,6 +157,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // token yet, so the Console can't authenticate to it). The handler enforces
     // the awaiting-provision guard; once provisioned it 403s and falls under auth.
     if (path === "/api/provision" && settings.awaitingProvision()) return next();
+    // The execution lane (Archus ↔ Epaminon) is NOT gated by the agent token — it
+    // does its own cross-provisioned lane-secret check, so a fan-out worker holding
+    // the agent token can't forge execution state. It is internal-only and is never
+    // republished on the public Console gateway.
+    if (path.startsWith("/api/exec/")) return next();
     return auth(c, next);
   });
 
@@ -166,6 +174,31 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     settings.applyProvision(body as Parameters<typeof settings.applyProvision>[0]);
     runtime.invalidate();
     return c.json({ ok: true, name: agent.name, configured: settings.configured() });
+  });
+
+  // Execution lane — `apply_execution_event` (Epaminon → Archus). Deterministic,
+  // no-LLM: moves an execution ticket's exec: state + appends evidence. Gated by
+  // the cross-provisioned `exec_lane_secret` (NOT the agent token); inert until the
+  // Console provisions the lane. Internal-mesh only; never on the public gateway.
+  app.post("/api/exec/event", async (c) => {
+    const secret = settings.getRaw("exec_lane_secret");
+    if (!secret) return c.json({ error: "execution lane not provisioned" }, 503);
+    if ((c.req.header("X-Lane-Secret") ?? "") !== secret) return c.json({ error: "unauthorized" }, 401);
+    const body = await c.req
+      .json<{ execution_id?: number; state?: string; evidence_url?: string; note?: string }>()
+      .catch(() => ({}) as Record<string, unknown>);
+    const executionId = Number(body.execution_id);
+    const state = body.state as ExecutionState;
+    if (!executionId || !EXECUTION_STATES.includes(state)) {
+      return c.json({ error: "execution_id (number) and a valid state are required" }, 400);
+    }
+    const result = await setExecutionState(settings, {
+      executionId,
+      state,
+      ...(body.evidence_url ? { evidenceUrl: String(body.evidence_url) } : {}),
+      ...(body.note ? { note: String(body.note) } : {}),
+    });
+    return c.json({ ok: true, ...result });
   });
 
   app.get("/api/settings", (c) =>
