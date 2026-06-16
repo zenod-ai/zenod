@@ -727,13 +727,7 @@ export class WhatsAppGateway {
 
     if (event.hasMedia) {
       this.options.store.markMessageStatus(event.messageId, "digest_queued");
-      // Only send an immediate ack for audio/voice — those are slow (transcription
-      // can take 10-30s). Images go through vision which is fast enough that a
-      // single "described and filed" reply from processVoiceNote is sufficient.
-      const isAudio = event.mediaType === "audio" || event.mediaType === "ptt";
-      if (isAudio) {
-        await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
-      }
+      await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
       void this.processVoiceNote(event).catch((err: unknown) => {
         console.error("[whatsapp] media worker failed:", err);
       });
@@ -987,7 +981,9 @@ export class WhatsAppGateway {
     await this.setTyping(event, true);
     this.options.store.markMessageStatus(event.messageId, "processing");
     try {
-      // Images: download, describe with vision, file to vault — no chat loop needed.
+      // Images: describe with vision, then route through handleTasking (same as
+      // voice notes) so storage goes via the peer tool — direct store() is
+      // unavailable when the engine runs vaultless (Console mode).
       if (event.mediaType === "image" && event.mediaRaw) {
         const stream = await downloadContentFromMessage(event.mediaRaw as never, "image");
         const data = await streamToBuffer(stream);
@@ -996,10 +992,11 @@ export class WhatsAppGateway {
         const sender = normalizeWhatsAppIdentifier(event.senderId) || event.senderName;
         const description = await engine.describeImage(data, mimeType);
         const captionLine = event.body.trim() ? `\nCaption: ${event.body.trim()}\n\n` : "\n\n";
-        const content = `WhatsApp image from ${sender}:${captionLine}${description}`;
-        await engine.store({ content, source: "whatsapp", hints: ["image", "screenshot"] });
+        const text = `WhatsApp image from ${sender}:${captionLine}${description}`;
+        const conversationKey = normalizeWhatsAppIdentifier(event.senderId) || event.senderId;
+        const reply = await engine.handleTasking({ text, surface: "whatsapp", conversationKey });
         this.options.store.markMessageStatus(event.messageId, "replied");
-        await this.sendReply(event, "Got it — I described and filed this image in your vault.", "sent");
+        await this.sendReply(event, reply.text, "sent");
         return;
       }
 

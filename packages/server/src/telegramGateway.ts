@@ -301,9 +301,10 @@ export class TelegramGateway {
         const caption = message.caption?.trim() ?? "";
         const description = await engine.describeImage(new Uint8Array(data), mimeType);
         const captionLine = caption ? `\nCaption: ${caption}\n\n` : "\n\n";
-        const content = `Telegram image from ${sender}:${captionLine}${description}`;
-        await engine.store({ content, source: "telegram", hints: ["image", "screenshot"] });
-        await this.sendReply(chatId, "Got it — I described and filed this image in your vault.");
+        const text = `Telegram image from ${sender}:${captionLine}${description}`;
+        const conversationKey = normalizeTelegramId(String(chatId)) || String(chatId);
+        const reply = await engine.handleTasking({ text, surface: "telegram", conversationKey });
+        if (reply.text.trim()) await this.sendReply(chatId, reply.text);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         console.error(`[telegram] image processing failed for chat ${chatId}: ${detail}`);
