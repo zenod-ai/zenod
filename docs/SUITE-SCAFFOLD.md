@@ -47,30 +47,44 @@ That "its own code" is the *agent's* package — there is no generic module syst
 register into. An agent is a thin app: identity + its tools + its tab(s), deployed as
 its own container.
 
-## The full roster
+## The agents — all the SAME shape (uniform, no exceptions)
 
-Three **kinds** of unit, all on the shared network, all reachable as MCP:
-- **chat-agent** = base + a capability + chat UI (you talk to it).
-- **worker** = headless, queue-driven (no chat UI; it executes).
-- **tool-island** = headless tool provider, used *by* agents (often vendored).
-- **platform** = the shared central service.
+**Every agent is the same kind of thing.** Same base: server + MCP + connections-client +
+a **web UI with a chat** (an LLM in the UI). Each adds its **own tools** and its **own
+special UI tab(s)**. You can chat with *any* of them. There are **no "workers," no
+"tool-islands."** X is an agent. Epaminon is an agent. Whether an agent's tools are
+deterministic (post a tweet) or reasoning is irrelevant — the LLM lives in the UI, the
+tools are just tools.
 
-| Unit | Kind | Job | Owns | Repo access | Vault | Its own tools | Container | Subdomain | Status |
+The **only** thing that is not an agent is **Central** — the shared backend they all
+connect to (see below).
+
+Every agent's UI = the **base tabs** (**Chat · Connections · Costs · login**) **+ its own
+special tab(s)**.
+
+| Agent | Job | Owns | Repos it can touch | Vault | Its tools | Special UI tab(s) | Subdomain | Container | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| **Central** | platform | broker connections + identity + registry | the GitHub App, model keys, Drive creds, agent registry | (holds the App; installed per-org) | no | — (serves creds + registry, not chat tools) | `central` | internal only | **planned** |
-| **Zenod** | chat-agent | memory / librarian | the vault (git memory) | **only** the memory/vault repo (obsidian-brain) | **yes** | search_vault, read_note, list_pages, search_chats, capture_note, propose_vault_task, execute_vault_task | `zenod` | app.zenod.dev (z2 while migrating) | **LIVE** |
-| **Archus** (Nearchus) | chat-agent | backlog | the backlog (issues across repos) | the repos it manages (cross-org via the App) | no | query_backlog, service_backlog, digest_backlog, create_issue, edit_issue, label_issue, approve_queue, approve_merge | `archus` | archus.zenod.dev | **LIVE** (prototype → rebuild clean) |
-| **Epaminon** | worker | executor / runner | execution (fan-out, PRs, merges) | the code repos it works (broad, via gh) | no | drain queued tickets, fan-out Codex workers, open PR, merge-on-green | `zenod-agent-runner` | internal (status UI later) | **LIVE** |
-| **Mail** | chat-agent | email | email access | — | no | send_email, search_email, read_email | `mail` | mail.zenod.dev | **planned** |
-| **X** (Twitter) | tool-island | post/read tweets | the @ZenodAgent X creds | — | no | post_tweet, read_tweets (consumed by Epaminon/agents) | `x-mcp` (readonly + postread) | internal only | **LIVE** (vendored) |
-| **Nectary** | chat-agent | financing / incentives | the funding layer | financing repos | no | (TBD) | `nectary` | nectary.dev | **future** |
+| **Zenod** | memory / librarian | the vault | **only** the vault repo (obsidian-brain) | **yes** | search_vault, read_note, list_pages, search_chats, capture_note, propose/execute_vault_task | **Vault · Transcription** | app.zenod.dev | `zenod` | **LIVE** |
+| **Archus** | backlog | the backlog | the repos it manages (cross-org) | no | query/service/digest_backlog, create/edit/label_issue, approve_queue/merge | **Backlog** | archus.zenod.dev | `archus` | **LIVE** (rebuild) |
+| **Epaminon** | executor | execution (fan-out, PRs, merges) | the code repos it works (broad, gh) | no | drain queue, Codex fan-out, open PR, merge-on-green | **Runs** (fan-out dashboard) | epaminon.zenod.dev | `epaminon` | **LIVE** (headless today → +UI) |
+| **Mail** | email | email access | — | no | send/search/read email | **Inbox** | mail.zenod.dev | `mail` | **planned** |
+| **X** | post/read on X | the @ZenodAgent creds | — | no | post_tweet, read_tweets | **Feed · Compose** | x.zenod.dev | `x` | **LIVE** (tools vendored → +UI) |
+| **Reddit** | post/read on Reddit | the Reddit creds | — | no | submit_post, search, read_subreddit, comment | **Subreddits · Compose** | reddit.zenod.dev | `reddit` | **planned** (new) |
+| **Nectary** | financing | the funding layer | financing repos | no | (TBD) | **Ledger** | nectary.zenod.dev | `nectary` | **future** |
 
-How they fit together:
-- **Zenod** (memory) **delegates backlog** to **Archus** over the mesh — if you don't run Archus, Zenod simply has no backlog.
-- **Archus** curates + gates the backlog; **Epaminon** drains queued tickets and does the actual code work (Codex fan-out, PRs). Backlog *brain* (Archus) vs *muscle* (Epaminon).
-- **X** is a tool-island Epaminon/agents call to tweet; it isn't a chat-agent (vendored, headless).
-- **Central** brokers auth + the registry for everyone.
-- Each unit is **independent**: deletable, restartable, monitorable on its own.
+How they relate (over the mesh):
+- **Zenod** (memory) **delegates backlog to Archus** — no Archus, no backlog. Clean.
+- **Archus** curates + gates the backlog (brain); **Epaminon** drains queued tickets and does the code work (muscle).
+- **X** and **Reddit** are agents you chat with to post/read; their tools call the platform APIs (X's tools come from the vendored xmcp, but the **agent shape is identical** to every other agent).
+- Every agent exposes its tools over MCP; **peer tools are labeled external** in any agent's tool list.
+- Each agent is **independent**: own container, own subdomain, own UI — deletable, restartable, monitorable on its own.
+
+## CENTRAL — the shared backend (the ONE non-agent)
+
+Plain HTTP service (no chat, no public UI): one stable **GitHub App**, model/provider keys,
+Drive, and the **agent registry** (powers the mesh). Every agent connects to it via the
+base's connections-client. Container `central`, **internal only**. *Not built yet — building
+it is a phase.*
 
 ## CENTRAL — shared platform (prerequisite, NOT yet built)
 
@@ -89,26 +103,27 @@ tools" is never ambiguous in any agent's tool list.
 
 **One monorepo:**
 ```
-packages/base-server   packages/base-ui          (the shared base)
-packages/central       (the connections/identity service)
-apps/zenod  apps/archus  apps/mail  apps/nectary (thin chat-agents: identity + tools + tab)
-apps/epaminon                                    (the executor/worker — headless)
-services/x-mcp                                   (vendored Twitter tool-island)
+packages/base-server   packages/base-ui          (the shared base — every agent imports it)
+packages/central       (the connections/identity service — the one non-agent)
+apps/zenod  apps/archus  apps/epaminon  apps/mail  apps/x  apps/reddit  apps/nectary
+                         (every agent: identity + its tools + its special tab(s))
+services/xmcp                                     (vendored X tools that apps/x wraps)
 ```
 **Containers (Dokploy, side by side):**
 
-| Container | Unit | Status |
-|---|---|---|
-| `zenod` | Zenod | live |
-| `archus` | Archus | live (rebuild) |
-| `zenod-agent-runner` | Epaminon | live |
-| `x-mcp` (readonly + postread) | X | live |
-| `central` | Central platform | planned |
-| `mail` | Mail | planned |
-| `nectary` | Nectary | future |
+| Container | Agent | Subdomain | Status |
+|---|---|---|---|
+| `zenod` | Zenod | app.zenod.dev | live |
+| `archus` | Archus | archus.zenod.dev | live (rebuild) |
+| `epaminon` | Epaminon | epaminon.zenod.dev | live (headless → +UI) |
+| `x` | X | x.zenod.dev | live (vendored tools → +UI) |
+| `mail` | Mail | mail.zenod.dev | planned |
+| `reddit` | Reddit | reddit.zenod.dev | planned (new) |
+| `nectary` | Nectary | nectary.zenod.dev | future |
+| `central` | Central (backend) | internal only | planned |
 
-One unit = one container. They sit side by side as endpoints — monitorable, restartable
-independently.
+One agent = one container = one subdomain. Side by side as endpoints — monitorable,
+restartable independently.
 
 ## Migration — Option B (parallel → prove → cut over)
 
