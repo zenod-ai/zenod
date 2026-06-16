@@ -37,46 +37,50 @@ it is **fewer concerns per box**.
 Just two shared packages (code reuse, not a runtime):
 - **`base-server`** — the agent loop (chat + tool-calling) + MCP server + the
   **connections-client** (talks to central). **No vault. No domain tools.**
-- **`base-ui`** — the **entire UI**: **the chat** (the only UX) + **Connections · Costs ·
-  login** (setup/access). A React app every agent imports as-is.
+- **`base-ui`** — the shared UI shell: **the chat** (the UX) + **Connections · Costs · login**
+  (setup). **Extensible on a tab basis:** an agent can fold in its own **config tab(s)** for
+  setup its job needs — Zenod's **Vault** tab, or another agent's API-credential panel. The
+  base ships the shell; the agent adds its config tab(s).
 
-**The UI is the chat.** There are **no content tabs** — no inbox, no feed, no ledger, no
-dashboard. You talk to the agent; its tools are wired into the chat; the rest of the UI is
-just there to configure connections and get into the chat. **Every agent's UI is identical.**
+**The chat is the UX — config tabs are the one allowed extension.** You *use* every agent
+through its chat. The only extra tabs permitted are **config/setup tabs** (like Vault) —
+**never content surfaces** (no inbox, no feed, no ledger, no dashboard). The test: a tab may
+**configure** an agent; a tab must **never become how you use it**.
 
-**UI rule:** the UI lives entirely in `base-ui`. Change it → **every agent gets it**. *The
-only thing that differs per agent is the tools wired into its chat.*
+**UI rule (this gives you exactly what you asked for):** change the shared shell in `base-ui`
+→ **every agent gets it**. An agent's own config tab ships with that agent → **only it has
+it**. *Shell change → all; an agent's config tab → only that agent.*
 
-## AN AGENT = base + its own tools
+## AN AGENT = base + its own tools (+ optional config tab)
 
 ```
-agent = base-server + base-ui  +  {its tools, optional store}  +  identity/persona
+agent = base-server + base-ui  +  {its tools, optional config tab(s), optional store}  +  identity/persona
 ```
-No content tabs, no per-agent UI code, no module registry. An agent is a thin app: identity
-+ its tools, deployed as its own container. **The UI is the base, unchanged.**
+No content tabs, no module registry. An agent is a thin app: identity + its tools + (where its
+setup needs it) a config tab. The shared shell (chat + setup) is the base, unchanged.
 
 ## The agents — all the SAME shape (uniform, no exceptions)
 
 **Every agent is the same kind of thing.** Same base: server + MCP + connections-client +
-**the same chat UI**. The **only** difference between any two agents is **the tools wired
-into the chat**. You talk to *all* of them the same way — through the chat. There are **no
-"workers," no "tool-islands," and no special UI tabs.** Whether an agent's tools are
-deterministic (post a tweet) or reasoning is irrelevant — the LLM lives in the chat, the
-tools are just tools.
+**the same chat shell**. The differences between any two agents are just **(1) the tools
+wired into the chat** and **(2) any config tab its setup needs** (e.g. Zenod's Vault). You
+talk to *all* of them the same way — through the chat. There are **no "workers," no
+"tool-islands," and no content tabs.** Whether an agent's tools are deterministic (post a
+tweet) or reasoning is irrelevant — the LLM lives in the chat, the tools are just tools.
 
 The **only** thing that is not an agent is **Central** — the shared backend they all
 connect to (see below).
 
-Same UI everywhere (the chat + setup). The columns that actually vary are **its tools** and
-the creds/repos those tools reach.
+Same chat shell everywhere. The two things that vary are **its tools** and **any config tab
+its setup needs** (setup only — never a content surface; the UX is always the chat).
 
-| Agent | Job | Owns | Repos it can touch | Vault | Its tools (wired into its chat) | Subdomain | Container | Status |
-|---|---|---|---|---|---|---|---|---|
-| **Zenod** | memory / librarian | the vault | **only** the vault repo (obsidian-brain) | **yes** | search_vault, read_note, list_pages, search_chats, capture_note, propose/execute_vault_task | app.zenod.dev | `zenod` | **LIVE** |
-| **Archus** | backlog | the backlog | the repos it manages (cross-org) | no | query/service/digest_backlog, create/edit/label_issue, approve_queue/merge | archus.zenod.dev | `archus` | **LIVE** (rebuild) |
-| **Epaminon** | executor | execution (fan-out, PRs, merges) | the code repos it works (broad, gh) | no | drain queue, Codex fan-out, open PR, merge-on-green | epaminon.zenod.dev | `epaminon` | **LIVE** (headless today → +chat UI) |
-| **Outbound** | outbound comms: post + email | the X + Reddit + email creds | — | no | post_tweet, read_tweets, submit_post, read_subreddit, comment, send_email, search_email — *composed from 3 internal MCP servers* | outbound.zenod.dev | `outbound` | **partial** (X tools vendored LIVE → +Reddit +Mail) |
-| **Nectary** | financing | the funding layer | financing repos | no | (TBD) | nectary.zenod.dev | `nectary` | **future** |
+| Agent | Job | Owns | Repos it can touch | Vault | Its tools (wired into its chat) | Config tab (setup) | Subdomain | Container | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| **Zenod** | memory / librarian | the vault | **only** the vault repo (obsidian-brain) | **yes** | search_vault, read_note, list_pages, search_chats, capture_note, propose/execute_vault_task | **Vault** | app.zenod.dev | `zenod` | **LIVE** |
+| **Archus** | backlog | the backlog | the repos it manages (cross-org) | no | query/service/digest_backlog, create/edit/label_issue, approve_queue/merge | — | archus.zenod.dev | `archus` | **LIVE** (rebuild) |
+| **Epaminon** | executor | execution (fan-out, PRs, merges) | the code repos it works (broad, gh) | no | drain queue, Codex fan-out, open PR, merge-on-green | — | epaminon.zenod.dev | `epaminon` | **LIVE** (headless today → +chat UI) |
+| **Outbound** | outbound comms: post + email | the X + Reddit + email creds | — | no | post_tweet, read_tweets, submit_post, read_subreddit, comment, send_email, search_email — *composed from 3 internal MCP servers* | — *(creds via Connections; add one if needed)* | outbound.zenod.dev | `outbound` | **partial** (X tools vendored LIVE → +Reddit +Mail) |
+| **Nectary** | financing | the funding layer | financing repos | no | (TBD) | — | nectary.zenod.dev | `nectary` | **future** |
 
 How they relate (over the mesh):
 - **Zenod** (memory) **delegates backlog to Archus** — no Archus, no backlog. Clean.
@@ -112,7 +116,7 @@ tools" is never ambiguous in any agent's tool list.
 packages/base-server   packages/base-ui          (the shared base — every agent imports it)
 packages/central       (the connections/identity service — the one non-agent)
 apps/zenod  apps/archus  apps/epaminon  apps/outbound  apps/nectary
-                         (every agent: identity + its tools — NO UI code; the UI is base-ui)
+                         (every agent: identity + its tools + optional config tab; shell is base-ui)
 services/xmcp  services/reddit-mcp  services/mail-mcp   (upstream tool servers apps/outbound composes)
 ```
 **Containers (Dokploy, side by side):**
