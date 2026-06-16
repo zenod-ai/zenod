@@ -33,7 +33,8 @@ interface TeamAgent {
   name: string
   displayName: string
   role: string
-  needsVaultRepo: boolean
+  needsRepo: boolean
+  repoLabel: string
   enabled: boolean
 }
 
@@ -84,7 +85,7 @@ function EnableDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Enable {agent.displayName}</DialogTitle>
-          <DialogDescription>Pick the repo it should use as its vault.</DialogDescription>
+          <DialogDescription>Pick the repo it should use as its {agent.repoLabel}.</DialogDescription>
         </DialogHeader>
         {error !== null && <p className="text-sm text-destructive">{error}</p>}
         {connected === false && (
@@ -231,7 +232,7 @@ export function TeamTab() {
                 <Button
                   size="sm"
                   disabled={busy === a.name}
-                  onClick={() => (a.needsVaultRepo ? setEnabling(a) : doEnable(a, "", ""))}
+                  onClick={() => (a.needsRepo ? setEnabling(a) : doEnable(a, "", ""))}
                 >
                   {busy === a.name ? <Spinner /> : "Enable"}
                 </Button>

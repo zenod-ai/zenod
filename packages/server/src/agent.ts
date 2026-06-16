@@ -21,6 +21,12 @@ export interface AgentDefinition {
    * the vault capability. See docs/SUITE-SCAFFOLD.md (the spike, #154).
    */
   vaultless?: boolean;
+  /**
+   * When true, this agent is a BACKLOG agent (Archus): vaultless, but it DOES get
+   * the GitHub tasking tools (create/edit/label/query issues, etc.) pointed at a
+   * central backlog repo. No markdown vault — its home is a GitHub repo.
+   */
+  backlog?: boolean;
 }
 
 /** The first consumer of the shell. */
@@ -31,13 +37,15 @@ export const ZENOD_AGENT: AgentDefinition = {
   persona: "You are Zeno, the user's personal memory agent. Answer questions about their knowledge vault.",
 };
 
-/** Backlog agent — same shell + tools, different identity/persona. */
+/** Backlog agent — vaultless, owns the GitHub issue backlog across the user's repos. */
 export const ARCHUS_AGENT: AgentDefinition = {
   name: "archus",
   displayName: "Archus",
   tagline: "Backlog agent",
   persona:
-    "You are Archus, the backlog agent. You read, organize, and act on the user's GitHub backlog across their repositories.",
+    "You are Archus, the backlog agent. You own the user's GitHub issue backlog across their repositories — you create, edit, label, comment on, close, query, and triage issues, with qualified IDs (owner/repo#N). Issues live in their home repo (one-ticket-per-home, no central duplicate); when a ticket has no specific code repo, file it in the central backlog repo. You present a single aggregated view across repos. Be direct and concise.",
+  vaultless: true,
+  backlog: true,
 };
 
 /**

@@ -125,6 +125,7 @@ export class Settings {
     model_classify?: string
     vault_repo?: string
     vault_branch?: string
+    backlog_repo?: string
     github_app_id?: string
     github_app_private_key?: string
     github_app_installation_id?: string
@@ -136,7 +137,7 @@ export class Settings {
     if (input.session_secret) this.store.setSetting("session_secret", input.session_secret);
     if (input.provider) this.store.setSetting("provider", input.provider);
     if (input.provider && input.api_key) this.store.setSetting(PROVIDER_KEY[input.provider as Provider], input.api_key);
-    for (const k of ["model_ask", "model_classify", "vault_repo", "vault_branch"] as const) {
+    for (const k of ["model_ask", "model_classify", "vault_repo", "vault_branch", "backlog_repo"] as const) {
       if (input[k]) this.store.setSetting(k, input[k]!);
     }
     for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug", "github_token"] as const) {

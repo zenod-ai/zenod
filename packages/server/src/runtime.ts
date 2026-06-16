@@ -132,7 +132,13 @@ export class Runtime {
     // Vaultless agents (the Console shell) boot the engine with no vault: only an
     // LLM key is required, no vault/tasking/drive tools. Vault agents are unchanged.
     const vaultless = this.agent.vaultless === true;
-    if (vaultless) {
+    const backlog = this.agent.backlog === true;
+    if (backlog) {
+      // Backlog agent (Archus): needs an LLM key + GitHub access, but NO vault.
+      if (!this.settings.activeApiKey() || !(this.settings.get("github_token") || this.settings.hasGithubApp())) {
+        throw new NotConfiguredError();
+      }
+    } else if (vaultless) {
       if (!this.settings.activeApiKey()) throw new NotConfiguredError();
     } else if (!this.settings.configured()) {
       throw new NotConfiguredError();
@@ -170,7 +176,8 @@ export class Runtime {
           }
         : {}),
       ...(driveTools ? { driveTools } : {}),
-      ...(vaultless ? {} : { taskingTools: this.buildTaskingTools() }),
+      // GitHub tasking tools for vault agents AND backlog agents (Archus) — not the Console.
+      ...(vaultless && !backlog ? {} : { taskingTools: this.buildTaskingTools() }),
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
     });
@@ -217,7 +224,9 @@ export class Runtime {
   }
 
   private buildTaskingTools(): ExternalTaskingTools {
-    const defaultRepo = () => this.settings.get("vault_repo") || "";
+    // Vault agents default to the vault repo; a backlog agent (Archus, no vault)
+    // defaults to its central backlog repo.
+    const defaultRepo = () => this.settings.get("vault_repo") || this.settings.getRaw("backlog_repo") || "";
     const githubJson = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
       const repoMatch = path.match(/^\/repos\/([^/]+)\/([^/]+)/);
       const token = await this.githubToken(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined);

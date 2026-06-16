@@ -1,0 +1,34 @@
+# Archus — the NEW headless backlog agent. Internal MCP server the Console (c1)
+# loads over dokploy-network; reachable only as http://zenod-archus2:8080.
+#
+# Boots UN-PROVISIONED (ZENOD_AWAIT_PROVISION=1): mints no token, idles until c1
+# MINTS its token and pushes config (GitHub creds + central backlog repo) to
+# /api/provision. AGENT=archus runs the engine in BACKLOG mode — NO vault, but the
+# GitHub issue tasking tools (create/edit/label/close/comment/query). NOT exposed
+# publicly. Replaces the old throwaway `zenod-archus` compose. See docs/SUITE-SCAFFOLD.md.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-archus2-data:
+
+services:
+  zenod-archus2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenod-archus2:dokploy
+    container_name: zenod-archus2
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-archus2-data:/data
+    environment:
+      AGENT: archus
+      ZENOD_AWAIT_PROVISION: "1"
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+    expose:
+      - "8080"

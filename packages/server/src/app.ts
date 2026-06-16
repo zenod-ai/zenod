@@ -242,14 +242,37 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         "File a new memory into the user's vault through Zenod's librarian (records evidence + files the meaning with citations). Use when the user wants something remembered. ASYNC — returns 'queued'; the filing finishes in the background. Only say it's stored once that's confirmed.",
     },
   ];
+  // Archus delegates to its own chat loop (chat_with_zenod runs engine.chat
+  // synchronously and, for a backlog agent, has the GitHub issue tools).
+  const ARCHUS_BACKLOG_TOOLS = [
+    {
+      as: "ask_archus",
+      mcp: "chat_with_zenod",
+      arg: "message",
+      description:
+        "Delegate to Archus, the backlog agent that owns the user's GitHub issues across all their repos — create, open, close, edit/update, label, comment, query, and triage issues (qualified IDs owner/repo#N), and get the aggregated backlog view. It acts and returns the result. Use for anything about the backlog, tickets, or GitHub issues.",
+    },
+  ];
   const SUITE_AGENTS = [
     {
       name: "zenod",
       displayName: "Zenod",
       role: "memory / librarian",
       internalBaseUrl: "http://zenod-z2:8080",
-      needsVaultRepo: true,
+      needsRepo: true,
+      repoSetting: "vault_repo" as const,
+      repoLabel: "vault",
       peerTools: ZENOD_MEMORY_TOOLS,
+    },
+    {
+      name: "archus",
+      displayName: "Archus",
+      role: "backlog / GitHub issues",
+      internalBaseUrl: "http://zenod-archus2:8080",
+      needsRepo: true,
+      repoSetting: "backlog_repo" as const,
+      repoLabel: "central backlog repo",
+      peerTools: ARCHUS_BACKLOG_TOOLS,
     },
   ];
 
@@ -260,7 +283,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         name: a.name,
         displayName: a.displayName,
         role: a.role,
-        needsVaultRepo: a.needsVaultRepo,
+        needsRepo: a.needsRepo,
+        repoLabel: a.repoLabel,
         enabled: enabled.has(a.name),
       })),
     });
@@ -287,11 +311,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       if (settings.get("model_ask")) provision.model_ask = settings.get("model_ask")!;
       if (settings.get("model_classify")) provision.model_classify = settings.get("model_classify")!;
 
-      if (sa.needsVaultRepo) {
-        const vault = (body.vault_repo ?? "").trim();
-        if (!vault) return c.json({ error: "Vault repo required (e.g. owner/repo)." }, 400);
-        provision.vault_repo = vault;
-        provision.vault_branch = "main";
+      if (sa.needsRepo) {
+        const repo = (body.vault_repo ?? "").trim();
+        if (!repo) return c.json({ error: `Pick a ${sa.repoLabel} (e.g. owner/repo).` }, 400);
+        provision[sa.repoSetting] = repo;
+        if (sa.repoSetting === "vault_repo") provision.vault_branch = "main";
         const ghToken = settings.get("github_token");
         if (ghToken) provision.github_token = ghToken;
         for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug"]) {
@@ -300,7 +324,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         }
         if (!ghToken && !settings.hasGithubApp()) {
           return c.json(
-            { error: "Connect GitHub on the Console first (Connections) so the agent can reach the vault." },
+            { error: "Connect GitHub on the Console first (Connections) so the agent can reach GitHub." },
             400,
           );
         }
