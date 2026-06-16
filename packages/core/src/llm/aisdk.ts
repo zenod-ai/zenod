@@ -611,7 +611,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           }),
           edit_issue: tool({
             description:
-              "Edit an EXISTING GitHub issue in place when the user asks to change/update/revise/broaden a ticket — its body, title, labels, or status — or to post a comment on it. Use this instead of closing-and-recreating a ticket: pass the issue number and only the fields to change. `body` REPLACES the whole body, so include the full revised text (read the current issue first via query_backlog or the GitHub URL if you need its existing content). For status, pass a label like 'needs-update', 'blocked', or 'proposed'. IMPORTANT: this tool can NEVER set status:queued or status:approved-merge — those execution gates stay with approve_queue and approve_merge, so use those when the user approves running or merging. Returns the operations performed and the issue URL.",
+              "Edit an EXISTING GitHub issue in place when the user asks to change/update/revise/broaden a ticket — its body, title, labels, or status — or to post a comment on it. Use this instead of closing-and-recreating a ticket: pass the issue number and only the fields to change. `body` REPLACES the whole body, so include the full revised text (read the current issue first via query_backlog or the GitHub URL if you need its existing content). For status, pass a label like 'needs-update', 'blocked', or 'proposed'. To CLOSE an issue set state='closed' (optionally stateReason 'completed' or 'not_planned'); set state='open' to reopen — this changes GitHub's actual issue state, not a label. IMPORTANT: this tool can NEVER set status:queued or status:approved-merge — those execution gates stay with approve_queue and approve_merge, so use those when the user approves running or merging. Returns the operations performed and the issue URL.",
             inputSchema: z.object({
               repo: z.string().nullable().describe("owner/repo target; null uses the configured vault/project repo"),
               issueNumber: z.number().int().positive().describe("GitHub issue number to edit"),
@@ -625,8 +625,16 @@ export class AiSdkBrainLlm implements BrainLlm {
                 .string()
                 .nullable()
                 .describe("non-gated status label to set, e.g. 'needs-update' or 'blocked'; null to leave unchanged. Cannot set queued/approved-merge."),
+              state: z
+                .enum(["open", "closed"])
+                .nullable()
+                .describe("set 'closed' to close the issue or 'open' to reopen it (GitHub state, not a label); null to leave unchanged"),
+              stateReason: z
+                .enum(["completed", "not_planned", "reopened"])
+                .nullable()
+                .describe("why it closed; null defaults to 'completed' when closing"),
             }),
-            execute: ({ repo, issueNumber, title, body, labelsAdd, labelsRemove, labelsSet, comment, status }) =>
+            execute: ({ repo, issueNumber, title, body, labelsAdd, labelsRemove, labelsSet, comment, status, state, stateReason }) =>
               caught(() =>
                 taskTools.editIssue({
                   ...(repo ? { repo } : {}),
@@ -638,6 +646,8 @@ export class AiSdkBrainLlm implements BrainLlm {
                   ...(labelsSet ? { labelsSet } : {}),
                   ...(comment ? { comment } : {}),
                   ...(status !== null ? { status } : {}),
+                  ...(state !== null ? { state } : {}),
+                  ...(stateReason !== null ? { stateReason } : {}),
                 }),
               ),
           }),

@@ -304,7 +304,7 @@ export class Runtime {
       // (githubApp.ts) so the chat surface gets the exact same queue/merge gating
       // as the MCP edit_github_issue tool: status:queued and status:approved-merge
       // can never be set here — they stay owned by approveQueue/approveMerge.
-      editIssue: async ({ repo, issueNumber, title, body, labelsAdd, labelsRemove, labelsSet, comment, status }) => {
+      editIssue: async ({ repo, issueNumber, title, body, labelsAdd, labelsRemove, labelsSet, comment, status, state, stateReason }) => {
         const result = await editGithubIssue(this.settings, {
           ...(repo ? { repo } : {}),
           issueNumber,
@@ -315,6 +315,8 @@ export class Runtime {
           ...(labelsSet ? { labelsSet } : {}),
           ...(comment ? { comment } : {}),
           ...(status !== undefined ? { status } : {}),
+          ...(state !== undefined ? { state } : {}),
+          ...(stateReason !== undefined ? { stateReason } : {}),
         });
         const ops = result.operations.length ? result.operations.join(", ") : "no changes";
         return `Edited #${result.issueNumber} (${ops}): ${result.issueUrl}`;

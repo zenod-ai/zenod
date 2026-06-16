@@ -220,6 +220,10 @@ export interface EditGithubIssueInput {
   assignees?: string[];
   status?: string;
   queueApproval?: boolean;
+  /** Open/close the issue (GitHub state, not a label). */
+  state?: "open" | "closed";
+  /** Why it closed — GitHub's state_reason. Defaults to "completed" when closing. */
+  stateReason?: "completed" | "not_planned" | "reopened";
 }
 
 export interface EditGithubIssueResult {
@@ -322,19 +326,29 @@ export async function editGithubIssue(settings: ConnectionSettings, input: EditG
   const issueUrl = issue.html_url;
   let labels = issueLabels(issue);
 
-  if (input.title !== undefined || input.body !== undefined || input.assignees !== undefined) {
+  if (
+    input.title !== undefined ||
+    input.body !== undefined ||
+    input.assignees !== undefined ||
+    input.state !== undefined
+  ) {
+    const closing = input.state === "closed";
     issue = await githubRequest<GithubIssueResponse>(settings, issuePath, {
       method: "PATCH",
       body: JSON.stringify({
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.body !== undefined ? { body: input.body } : {}),
         ...(input.assignees !== undefined ? { assignees: input.assignees } : {}),
+        ...(input.state !== undefined
+          ? { state: input.state, state_reason: input.stateReason ?? (closing ? "completed" : "reopened") }
+          : {}),
       }),
     });
     labels = issueLabels(issue);
     if (input.title !== undefined) operations.push("updated title");
     if (input.body !== undefined) operations.push("updated body");
     if (input.assignees !== undefined) operations.push("replaced assignees");
+    if (input.state !== undefined) operations.push(closing ? "closed" : "reopened");
   }
 
   if (input.labelsSet) {

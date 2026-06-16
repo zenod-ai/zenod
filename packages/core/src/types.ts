@@ -139,6 +139,8 @@ export interface ExternalTaskingTools {
     labelsSet?: string[];
     comment?: string;
     status?: string;
+    state?: "open" | "closed";
+    stateReason?: "completed" | "not_planned" | "reopened";
   }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
