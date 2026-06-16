@@ -163,8 +163,36 @@ conflict), so v2 runs WhatsApp-disabled while proving, and we move the session a
 - **#147** Mail → folds into the **Outbound** agent (email is one of its tools).
 - **#148** X migration → folds into the **Outbound** agent (X + Reddit + email composed internally), central-managed.
 
-## Open risks we are tracking (not hiding)
+## Open questions — NOT yet specified (must close before/while building)
 
-- The base/vault separation is unproven until the **spike** (phase 1) — that's why it's first.
-- **Central** does not exist yet — it is a built phase, not a given.
+The agent **shape** is settled. These layers underneath are still single phrases above that
+hide real decisions. We do not pretend they're answered.
+
+**Unproven assumptions (need an experiment):**
+- **Base/vault separation** — the engine is vault-coupled (`engine.answer()` hardwires vault
+  + tasking + drive tools inline). Unproven until the **spike** (phase 1). *This is why it's first.*
+- **Tools-as-injectable** — "agent = base + a tool list" is a goal, not yet true; same knot as
+  the spike. Making tools a clean list the base loop discovers is the actual refactor.
+
+**Underspecified design (need a one-page contract before relying on it):**
+- **Central's contract** — token **broker** (mints per-repo scoped tokens on request) vs.
+  **key distributor** (hands agents the private key)? LLM **proxy** (central metering + key
+  rotation) vs. **key distribution**? This one fork decides whether isolation + metering are
+  *real* or *aspirational*. Pick explicitly.
+- **Mesh contract** — discovery (how an agent learns a peer's URL + tools), auth (today a
+  shared `api_token` hack — needs real per-agent auth), scoping (does every agent see every
+  peer's tools, or a curated subset?), recursion depth. Decide before wiring #145.
+- **Isolation: enforced or policy?** "An agent only touches the repos its job needs" is today
+  a *policy* (one GitHub App installed broadly; Archus got Zenod's creds copied), not an
+  *enforced boundary*. Enforcing it requires Central to gate token issuance per-agent → ties
+  to Central's contract above.
+
+**Blindspots not yet placed in the architecture:**
+- **Gateways** — Zenod's real UX is **WhatsApp**, not the web chat. Is a WhatsApp/Telegram
+  number a **base capability** (any agent can have one) or Zenod-only? "The UI is the chat"
+  silently ignores the channel that actually drives Zenod. Decide where gateways live.
+- **New-agent creation flow** — "duplicate and extend" is still a manual ritual (hand-run
+  Dokploy API + container-to-container secret copy, as Archus was). Needs a scaffold.
+- **Base-change propagation** — shared package, but each agent is a separate deploy. "Change
+  base → all change" needs a rebuild-and-redeploy-all step that doesn't exist yet (else: skew).
 - **Cutover** needs WhatsApp/SQLite state migration (see caveats above).
