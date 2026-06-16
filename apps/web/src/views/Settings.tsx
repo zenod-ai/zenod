@@ -87,7 +87,7 @@ export function Settings({
           {showTeam && <TabsTrigger value="team">Team</TabsTrigger>}
           {showVault && <TabsTrigger value="vault">Vault</TabsTrigger>}
           <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>
-          {showVault && <TabsTrigger value="transcription">Transcription</TabsTrigger>}
+          <TabsTrigger value="transcription">Transcription</TabsTrigger>
           <TabsTrigger value="connections">Connections</TabsTrigger>
           <TabsTrigger value="costs">Costs</TabsTrigger>
           <TabsTrigger value="test">Test</TabsTrigger>
@@ -108,11 +108,9 @@ export function Settings({
         <TabsContent value="keys" className="mt-4">
           <KeysTab initial={settings} onSaved={setSettings} vaultless={identity.vaultless} />
         </TabsContent>
-        {showVault && (
-          <TabsContent value="transcription" className="mt-4">
-            <TranscriptionTab />
-          </TabsContent>
-        )}
+        <TabsContent value="transcription" className="mt-4">
+          <TranscriptionTab />
+        </TabsContent>
         <TabsContent value="connections" className="mt-4">
           <ConnectionsTab />
         </TabsContent>
