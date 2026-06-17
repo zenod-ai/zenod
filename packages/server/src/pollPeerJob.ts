@@ -22,10 +22,12 @@ export function extractJobId(reply: { text: string; actions: Array<{ result: str
 interface JobPollResult {
   status: "done" | "error" | "timeout";
   error?: string;
+  kind?: string;
+  result?: unknown;
 }
 
 interface TaskJobResponse {
-  job: { status: string; error?: string };
+  job: { status: string; error?: string; kind?: string; result?: unknown };
 }
 
 /**
@@ -52,7 +54,7 @@ export async function pollPeerJob(
         });
         if (!res.ok) continue;
         const { job } = (await res.json()) as TaskJobResponse;
-        if (job.status === "done") return { status: "done" };
+        if (job.status === "done") return { status: "done", kind: job.kind, result: job.result };
         if (job.status === "error" || job.status === "interrupted")
           return { status: "error", error: job.error };
         // "queued" or "running" — keep waiting

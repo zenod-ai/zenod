@@ -5,6 +5,7 @@ import type { Settings } from "./settings.js";
 import { transcribeChannelAudio } from "./channelAudio.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { NO_SPEECH_MESSAGE } from "./transcribe.js";
+import { formatStorageReceipt } from "./storageReceipt.js";
 import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 
@@ -348,14 +349,7 @@ export class TelegramGateway {
       });
       if (reply.text.trim()) {
         await this.sendReply(chatId, reply.text);
-        this.spawnPeerJobPoller(reply, chatId);
-        // Substantive voice note (the agent filed it) → archive its audio to
-        // Drive. Best effort, off the hot path; never breaks the reply.
-        if (voiceAudio && agentKeptNote(reply)) {
-          void archiveVoiceNote(this.options.settings, voiceAudio)
-            .then((res) => res && console.info(`[telegram] archived voice note to Drive: ${res.name}`))
-            .catch((err: unknown) => console.error("[telegram] voice archive failed:", err));
-        }
+        this.spawnPeerJobPoller(reply, chatId, voiceAudio ?? undefined);
       } else {
         await this.sendReply(
           chatId,
@@ -459,17 +453,40 @@ export class TelegramGateway {
    * inline parsing and drops tables/headings). Matches Hermes'
    * `gateway/platforms/telegram.py`. See zenod-ai/zenod#121.
    */
-  private spawnPeerJobPoller(reply: { text: string; actions: Array<{ result: string }> }, chatId: number): void {
+  private spawnPeerJobPoller(
+    reply: { text: string; actions: Array<{ tool: string; result: string }> },
+    chatId: number,
+    voiceAudio?: VoiceAudio,
+  ): void {
     const jobId = extractJobId(reply);
-    if (!jobId) return;
+    const shouldArchiveVoice = voiceAudio && agentKeptNote(reply);
+    if (!jobId && !shouldArchiveVoice) return;
     const peers = this.options.settings.peers();
-    if (!peers.length) return;
-    void pollPeerJob(peers, jobId).then((result) => {
-      if (result.status === "done")
-        return this.sendReply(chatId, "✓ Filed to vault.");
-      if (result.status === "error")
-        return this.sendReply(chatId, "⚠️ Filing failed — let me know if you'd like to retry.");
-    }).catch(() => {});
+    const poll = jobId && peers.length ? pollPeerJob(peers, jobId) : Promise.resolve(null);
+    const archive = shouldArchiveVoice
+      ? archiveVoiceNote(this.options.settings, voiceAudio)
+          .then((res) => ({ result: res }))
+          .catch((err: unknown) => ({ error: err }))
+      : Promise.resolve(null);
+    void Promise.all([poll, archive])
+      .then(([job, archived]) => {
+        const archivedResult = archived && "result" in archived ? archived.result : undefined;
+        const archivedError = archived && "error" in archived ? archived.error : undefined;
+        if (job?.status === "error" && !archivedResult && !archivedError) {
+          return this.sendReply(chatId, "⚠️ Filing failed — let me know if you'd like to retry.");
+        }
+        const receipt = formatStorageReceipt({
+          storeResult: job?.status === "done" ? job.result : undefined,
+          filingStatus: job?.status ?? null,
+          filingError: job?.error,
+          archive: archivedResult,
+          archiveError: archivedError,
+        });
+        if (receipt) return this.sendReply(chatId, receipt);
+      })
+      .catch((err: unknown) => {
+        console.error("[telegram] storage receipt failed:", err);
+      });
   }
 
   private async sendReply(chatId: number, markdown: string): Promise<void> {

@@ -16,6 +16,7 @@ import type { Settings } from "./settings.js";
 import { transcribeChannelAudio } from "./channelAudio.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { NO_SPEECH_MESSAGE } from "./transcribe.js";
+import { formatStorageReceipt } from "./storageReceipt.js";
 import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
 import {
   maskPhoneNumber,
@@ -780,13 +781,7 @@ export class WhatsAppGateway {
       if (reply.text.trim()) {
         await this.sendReply(event, reply.text, "sent");
         this.options.store.markMessageStatus(event.messageId, "replied");
-        // Substantive voice note (the agent filed it) → archive the audio to
-        // Drive so it can be heard back later. Best effort, off the hot path.
-        if (input.audio && agentKeptNote(reply)) {
-          void archiveVoiceNote(this.options.settings, input.audio)
-            .then((res) => res && console.info(`[whatsapp] archived voice note to Drive: ${res.name}`))
-            .catch((err: unknown) => console.error("[whatsapp] voice archive failed:", err));
-        }
+        this.spawnPeerJobPoller(reply, event, input.audio);
       } else {
         await this.sendReply(event, "⚠️ I got your message but couldn't compose a reply — please try again.", "error").catch(() => {});
         this.options.store.markMessageStatus(event.messageId, "failed");
@@ -1032,7 +1027,7 @@ export class WhatsAppGateway {
       const reply = await engine.handleTasking({ text: input.text, surface: "whatsapp", conversationKey });
       this.options.store.markMessageStatus(event.messageId, "replied");
       await this.sendReply(event, reply.text, "sent");
-      this.spawnPeerJobPoller(reply, event);
+      this.spawnPeerJobPoller(reply, event, input.audio);
 
       // Filing is NOT automatic (#68). The transcript of every interaction is
       // already persisted in the conversation state — we do NOT push every
@@ -1063,17 +1058,40 @@ export class WhatsAppGateway {
    * the peer that owns it and send a brief follow-up once the job finishes.
    * Runs fully in the background — never delays the primary reply.
    */
-  private spawnPeerJobPoller(reply: { text: string; actions: Array<{ result: string }> }, event: WhatsAppInboundEvent): void {
+  private spawnPeerJobPoller(
+    reply: { text: string; actions: Array<{ tool: string; result: string }> },
+    event: WhatsAppInboundEvent,
+    voiceAudio?: VoiceAudio,
+  ): void {
     const jobId = extractJobId(reply);
-    if (!jobId) return;
+    const shouldArchiveVoice = voiceAudio && agentKeptNote(reply);
+    if (!jobId && !shouldArchiveVoice) return;
     const peers = this.options.settings.peers();
-    if (!peers.length) return;
-    void pollPeerJob(peers, jobId).then((result) => {
-      if (result.status === "done")
-        return this.sendReply(event, "✓ Filed to vault.", "sent");
-      if (result.status === "error")
-        return this.sendReply(event, "⚠️ Filing failed — let me know if you'd like to retry.", "sent");
-    }).catch(() => {});
+    const poll = jobId && peers.length ? pollPeerJob(peers, jobId) : Promise.resolve(null);
+    const archive = shouldArchiveVoice
+      ? archiveVoiceNote(this.options.settings, voiceAudio)
+          .then((res) => ({ result: res }))
+          .catch((err: unknown) => ({ error: err }))
+      : Promise.resolve(null);
+    void Promise.all([poll, archive])
+      .then(([job, archived]) => {
+        const archivedResult = archived && "result" in archived ? archived.result : undefined;
+        const archivedError = archived && "error" in archived ? archived.error : undefined;
+        if (job?.status === "error" && !archivedResult && !archivedError) {
+          return this.sendReply(event, "⚠️ Filing failed — let me know if you'd like to retry.", "sent");
+        }
+        const receipt = formatStorageReceipt({
+          storeResult: job?.status === "done" ? job.result : undefined,
+          filingStatus: job?.status ?? null,
+          filingError: job?.error,
+          archive: archivedResult,
+          archiveError: archivedError,
+        });
+        if (receipt) return this.sendReply(event, receipt, "sent");
+      })
+      .catch((err: unknown) => {
+        console.error("[whatsapp] storage receipt failed:", err);
+      });
   }
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
