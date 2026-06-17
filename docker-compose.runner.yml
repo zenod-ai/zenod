@@ -49,6 +49,11 @@ services:
       # api_token, not ZENOD_API_TOKEN.
       ZENOD_CONSOLE_URL: ${ZENOD_CONSOLE_URL:-http://zenod-console:8080}
       ZENOD_CONSOLE_TOKEN: ${ZENOD_CONSOLE_TOKEN}
+      # Execution lane (#194): Epaminon dispatches tickets to POST /run; the runner
+      # reports results back to Epaminon, gated by the lane secret it fetches from the
+      # Console (GET /api/lane-secret with ZENOD_CONSOLE_TOKEN). ZENOD_EXEC_LANE_SECRET
+      # may override the fetch in dev.
+      ZENOD_EPAMINON_URL: ${ZENOD_EPAMINON_URL:-http://zenod-epaminon:8080}
       # Point Codex at the post+read X endpoint so agents can actually tweet
       # (not just read). The entrypoint var is named *_READONLY_URL but it's
       # simply "the endpoint Codex registers" — set here to the posting instance.
