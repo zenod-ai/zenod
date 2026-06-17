@@ -346,6 +346,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ ok: true });
   });
 
+  // The runner fetches the cross-provisioned lane secret from the Console with its
+  // agent (Console) token, so a static env never drifts from the Console-minted value.
+  // Normal agent-token auth (NOT under /api/exec/, so not bypassed). Null until enabled.
+  app.get("/api/lane-secret", (c) => c.json({ secret: settings.getRaw("exec_lane_secret") }));
+
   // --- Mesh: peer agents this agent can delegate to ---
   // GET never returns tokens (only whether one is set). PUT replaces the whole list.
   app.get("/api/peers", (c) =>

@@ -37,6 +37,14 @@ const POKE_PORT = Number(process.env.ZENOD_POKE_PORT || 8787);
 const CONCURRENCY = Number(process.env.ZENOD_CONCURRENCY || 3);
 const STATE_PATH = process.env.ZENOD_STATE || `${WORKDIR}/.fanout/monitor-state.json`;
 const BASE_BRANCH = process.env.ZENOD_BASE || "main";
+// Execution lane (#194): Epaminon dispatches a ticket to POST /run; the runner works
+// it and reports the result back to Epaminon's /api/exec/outcome|blocked, gated by the
+// cross-provisioned lane secret. The secret is fetched from the Console with the
+// runner's Console token (so a static env never drifts), with an env override.
+const EPAMINON_URL = (process.env.ZENOD_EPAMINON_URL || "http://zenod-epaminon:8080").replace(/\/$/, "");
+const CONSOLE_URL = (process.env.ZENOD_CONSOLE_URL || "").replace(/\/$/, "");
+const CONSOLE_TOKEN = process.env.ZENOD_CONSOLE_TOKEN || "";
+let LANE_SECRET = process.env.ZENOD_EXEC_LANE_SECRET || "";
 const AUTO_MERGE_ENV = parseBooleanSetting(process.env.ZENOD_AUTO_MERGE);
 // How long a merge-gate alarm stays quiet before it may remind again. A blocked
 // PR is re-discovered on EVERY scan for as long as it stays blocked; without a
@@ -78,6 +86,7 @@ function normalizeState(state) {
     fanInBatches: state?.fanInBatches ?? {},
     bridges: state?.bridges ?? {}, // central # -> { target, exec, mirrored }
     mergeAttempts: Array.isArray(state?.mergeAttempts) ? state.mergeAttempts : [],
+    dispatched: state?.dispatched ?? {}, // execution_id -> { repo, issueN, target, reportedStatus }
   };
 }
 function parseBooleanSetting(value) {
@@ -295,6 +304,105 @@ function prGate(target, prNumber) {
 function prNumberFromUrl(url) {
   const m = (url || "").match(/\/pull\/(\d+)/);
   return m ? Number(m[1]) : null;
+}
+
+// --- Execution lane (#194): run Epaminon-dispatched tickets + report back ---
+
+// Parse a fully-qualified work ticket "owner/repo#N" into { repo, number }.
+function parseTarget(target) {
+  const m = String(target || "").match(/^([^#\s]+\/[^#\s]+)#(\d+)$/);
+  return m ? { repo: m[1], number: Number(m[2]) } : null;
+}
+
+// PURE: map a dispatched run's target-issue status (+ whether a PR exists) to the
+// exec-lane outcome Epaminon expects. `none` = not terminal yet (keep watching).
+// Outward (a PR to merge) parks at needs-review; an internal completion with no PR
+// is done. Blocked surfaces the blocker. Mirrors the gate decision Epaminon owns.
+function dispatchedOutcome(status, prUrl) {
+  if (status === "status:blocked") return { kind: "blocked" };
+  if (status === "status:needs-review") return { kind: "outcome", outward: true, evidenceUrl: prUrl || "" };
+  if (status === "status:complete") {
+    return prUrl ? { kind: "outcome", outward: true, evidenceUrl: prUrl } : { kind: "outcome", outward: false, evidenceUrl: "" };
+  }
+  return { kind: "none" }; // queued / running / unknown — not terminal
+}
+
+// Fetch the cross-provisioned lane secret from the Console (with the runner's Console
+// token) so it always matches the Console-minted value. Cached; env override wins.
+async function ensureLaneSecret() {
+  if (LANE_SECRET) return LANE_SECRET;
+  if (!CONSOLE_URL || !CONSOLE_TOKEN) return "";
+  try {
+    const res = await fetch(`${CONSOLE_URL}/api/lane-secret`, { headers: { Authorization: `Bearer ${CONSOLE_TOKEN}` } });
+    if (res.ok) {
+      const j = await res.json();
+      if (j && j.secret) LANE_SECRET = String(j.secret);
+    }
+  } catch (e) {
+    log("lane-secret fetch failed:", e.message);
+  }
+  return LANE_SECRET;
+}
+
+// Report an Epaminon-owned execution edge back to its receivers, lane-secret gated.
+async function reportToEpaminon(path, body) {
+  const secret = await ensureLaneSecret();
+  if (!secret) {
+    log(`exec-lane not provisioned — cannot report ${path} ${body.execution_id}`);
+    return false;
+  }
+  try {
+    const res = await fetch(`${EPAMINON_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) log(`Epaminon rejected ${path} ${body.execution_id} (HTTP ${res.status})`);
+    return res.ok;
+  } catch (e) {
+    log(`report ${path} ${body.execution_id} failed:`, e.message);
+    return false;
+  }
+}
+
+// Launch an Epaminon-dispatched ticket: work its target work-ticket directly (no
+// central materialize — the dispatched target IS the issue).
+function launchDispatched(executionId, target, state) {
+  const t = parseTarget(target);
+  if (!t) {
+    log(`/run: bad target "${target}" for ${executionId}`);
+    return false;
+  }
+  if (!launcherHealthy()) {
+    log(`/run: launcher not healthy — ${executionId} not started`);
+    return false;
+  }
+  launchFanout(t.repo, t.number);
+  state.dispatched[executionId] = { repo: t.repo, issueN: t.number, target, reportedStatus: null };
+  return true;
+}
+
+// Each scan: for dispatched runs, read the target issue state and report new
+// terminal-ish transitions (needs-review / complete / blocked) back to Epaminon once.
+async function reportDispatched(state) {
+  for (const [executionId, d] of Object.entries(state.dispatched || {})) {
+    const { status, lastComment } = execStatusAndComment(d.repo, d.issueN);
+    const prUrl = prUrlForExec(d.repo, d.issueN);
+    const o = dispatchedOutcome(status, prUrl);
+    if (o.kind === "none") continue;
+    if (d.reportedStatus === status) continue; // already reported this state
+    let ok = false;
+    if (o.kind === "blocked") {
+      ok = await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: (lastComment || "").slice(0, 280) });
+    } else {
+      ok = await reportToEpaminon("/api/exec/outcome", {
+        execution_id: executionId,
+        outward: o.outward,
+        ...(o.evidenceUrl ? { evidence_url: o.evidenceUrl } : {}),
+      });
+    }
+    if (ok) d.reportedStatus = status;
+  }
 }
 
 function autoMergeForIssue(state, issue) {
@@ -823,6 +931,10 @@ async function scan(reason) {
       }
     }
 
+    // Execution lane (#194): report Epaminon-dispatched runs' results back to
+    // Epaminon. Additive — independent of the central-scan motions above.
+    await reportDispatched(state);
+
     saveState(state);
     log(`scan (${reason}): ${issues.length} central issues, launched ${launched}`);
   } catch (e) {
@@ -832,12 +944,37 @@ async function scan(reason) {
   }
 }
 
+// POST /run — Epaminon dispatches an execution ticket to be worked now (#194).
+// Lane-secret gated (so only Epaminon can trigger a Codex run). Body:
+// { execution_id, target: "owner/repo#N", context }.
+async function handleRun(req, res) {
+  try {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+    const secret = await ensureLaneSecret();
+    if (!secret) return void res.writeHead(503).end("lane not provisioned\n");
+    if ((req.headers["x-lane-secret"] || "") !== secret) return void res.writeHead(401).end("unauthorized\n");
+    const executionId = body.execution_id != null ? String(body.execution_id) : "";
+    if (!executionId || !body.target) return void res.writeHead(400).end("execution_id and target required\n");
+    const state = loadState();
+    const ok = launchDispatched(executionId, String(body.target), state);
+    saveState(state);
+    res.writeHead(ok ? 202 : 422).end(ok ? "launched\n" : "could not launch\n");
+  } catch (e) {
+    log("/run error:", e.message);
+    res.writeHead(500).end("error\n");
+  }
+}
+
 function main() {
   // Poke endpoint — workers (and Zenod) hit POST /poke for an instant refresh.
   createServer((req, res) => {
     if (req.method === "POST" && req.url === "/poke") {
       res.writeHead(202).end("scanning\n");
       void scan("poke");
+    } else if (req.method === "POST" && req.url === "/run") {
+      void handleRun(req, res); // Epaminon dispatches an execution ticket (#194)
     } else if (req.url === "/health") {
       res.writeHead(200).end("ok\n");
     } else {
@@ -865,6 +1002,8 @@ export {
   updateFanInBatches,
   latestComment,
   pickupNotification,
+  parseTarget,
+  dispatchedOutcome,
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

@@ -17,6 +17,8 @@ import {
   reviewHeldByFanInBatch,
   shouldSendMergeNote,
   updateFanInBatches,
+  parseTarget,
+  dispatchedOutcome,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
@@ -268,4 +270,43 @@ test("integration prompt distinguishes textual and semantic conflicts and lists 
   assert.match(prompt, /semantic conflicts/i);
   assert.match(prompt, /codex\/issue-41-fan-in/);
   assert.match(prompt, /codex\/issue-52-approval/);
+});
+
+// --- Execution lane (#194) ---
+
+test("parseTarget splits owner/repo#N; rejects malformed", () => {
+  assert.deepEqual(parseTarget("zenod-ai/zenod#42"), { repo: "zenod-ai/zenod", number: 42 });
+  assert.deepEqual(parseTarget("AlfaBlok/obsidian-brain#7"), { repo: "AlfaBlok/obsidian-brain", number: 7 });
+  assert.equal(parseTarget("zenod-ai/zenod"), null); // no #N
+  assert.equal(parseTarget("#42"), null); // no repo
+  assert.equal(parseTarget(""), null);
+  assert.equal(parseTarget(null), null);
+});
+
+test("dispatchedOutcome maps target status to the exec-lane outcome (Epaminon's gate)", () => {
+  // outward: a PR to merge parks at needs-review
+  assert.deepEqual(dispatchedOutcome("status:needs-review", "https://pr/9"), {
+    kind: "outcome",
+    outward: true,
+    evidenceUrl: "https://pr/9",
+  });
+  // complete WITH a PR is outward (reviewable); complete WITHOUT a PR is internal/done
+  assert.deepEqual(dispatchedOutcome("status:complete", "https://pr/9"), {
+    kind: "outcome",
+    outward: true,
+    evidenceUrl: "https://pr/9",
+  });
+  assert.deepEqual(dispatchedOutcome("status:complete", ""), { kind: "outcome", outward: false, evidenceUrl: "" });
+  // blocked surfaces the blocker
+  assert.deepEqual(dispatchedOutcome("status:blocked", ""), { kind: "blocked" });
+  // not-terminal states keep watching
+  assert.deepEqual(dispatchedOutcome("status:queued", ""), { kind: "none" });
+  assert.deepEqual(dispatchedOutcome("status:running", ""), { kind: "none" });
+  assert.deepEqual(dispatchedOutcome(null, ""), { kind: "none" });
+});
+
+test("normalizeState preserves the dispatched map (survives restart)", () => {
+  const s = normalizeState({ dispatched: { "42": { repo: "o/r", issueN: 42, reportedStatus: null } } });
+  assert.deepEqual(s.dispatched, { "42": { repo: "o/r", issueN: 42, reportedStatus: null } });
+  assert.deepEqual(normalizeState({}).dispatched, {});
 });
