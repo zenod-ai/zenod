@@ -180,7 +180,7 @@ describe("TelegramGateway", () => {
       await waitFor(() => seen.length > 0);
       expect(calls.some((c) => c.method === "getFile")).toBe(true);
       expect(calls.some((c) => c.method === "download")).toBe(true);
-      expect(seen).toEqual(["telegram:555:Telegram voice note transcript from @tester:\n\nfile the launch notes"]);
+      expect(seen).toEqual(["telegram:555:file the launch notes"]);
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
       await gateway.close();

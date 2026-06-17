@@ -340,7 +340,7 @@ export class WhatsAppStore {
       .prepare(
         // Voice notes are no longer a digest/ingest artifact — they're treated
         // as text and answered inline — so they must NOT surface as a
-        // "voice-note digest status". The shortcut now only reflects ingest
+        // digest status. The shortcut now only reflects ingest
         // media (e.g. images), which still flow through the digest path.
         `SELECT message_id, chat_id, contact_id, received_at, message_timestamp, media_type, processing_status
          FROM whatsapp_messages

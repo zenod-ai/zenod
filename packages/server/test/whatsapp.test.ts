@@ -591,7 +591,7 @@ describe("WhatsAppGateway", () => {
       // the same tasking loop as text and answered with a single reply.
       await waitFor(() => socket.sent.length, (count) => count === 1);
       expect(socket.sent.some((m) => m.text.includes("Got this voice note"))).toBe(false);
-      expect(calls.some((c) => c.includes("queue 51 and 53"))).toBe(true);
+      expect(calls).toContain("34611111111:queue 51 and 53");
       expect(socket.sent[0]!.text).toContain("queue 51 and 53");
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(1);
       // Filing is NOT automatic (#68) — a voice note is acted on, not pushed
@@ -735,6 +735,7 @@ describe("WhatsAppGateway", () => {
       // handleTasking calls: the voice transcript, then the text instruction —
       // and one reply each (no ack), so two sends total.
       expect(calls).toHaveLength(2);
+      expect(calls).toContain("34611111111:test fan out from this voice note");
       expect(calls).toContain(`34611111111:${taskingText}`);
       expect(socket.sent).toHaveLength(2);
       expect(socket.sent[1]!.text).toBe(`Re: ${taskingText}`);
