@@ -104,7 +104,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       // Current working repo (vault for memory agents, central backlog for backlog
       // agents) so the Console can display it and backfill agents enabled before
       // it tracked repos.
-      repo: agent.backlog || agent.executor ? settings.getRaw("backlog_repo") : settings.get("vault_repo"),
+      repo: agent.backlog ? settings.getRaw("backlog_repo") : settings.get("vault_repo"),
     }),
   );
 
@@ -320,7 +320,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const body = await c.req.json<{ repo?: string; branch?: string }>().catch(() => ({}) as Record<string, string>);
     const repo = (body.repo ?? "").trim();
     if (!repo) return c.json({ error: "repo is required (owner/repo)" }, 400);
-    if (agent.backlog || agent.executor) {
+    if (agent.backlog) {
       settings.setRaw("backlog_repo", repo);
     } else {
       settings.set("vault_repo", repo);
@@ -447,34 +447,16 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         "Close a GitHub issue. Say which one (owner/repo#N), and optionally a closing comment. Archus closes it and confirms.",
     },
   ];
-  // Epaminon's "top tools": named delegation handles that ALL route to his chat
-  // brain (chat_with_epaminon runs engine.chat synchronously). The distinct names
-  // are for VISIBILITY (the activity line reads "running a ticket" / "reporting
-  // an outcome"); Epaminon's own LLM enforces his guardrails (only run explicitly
-  // dispatched execution tickets, qualified ids, honest status). He executes the
-  // Archus-minted execution ticket and reports facts up — he never curates the
-  // backlog (that is Archus).
+  // Epaminon's "top tool": a single READ handle. "Run X" is Archus's call (he mints
+  // + dispatches the execution ticket); Epaminon writes no backlog and exposes no
+  // write-intents — the run is driven by the deterministic /api/exec lane, not chat.
   const EPAMINON_EXECUTION_TOOLS = [
     {
       as: "execution_status",
       mcp: "chat_with_epaminon",
       arg: "message",
       description:
-        "Ask Epaminon where execution stands — which tickets are queued/running, in review, or shipped, and any blockers. Use for execution status questions (not to start work). Reference tickets as owner/repo#N.",
-    },
-    {
-      as: "run_ticket",
-      mcp: "chat_with_epaminon",
-      arg: "message",
-      description:
-        "Tell Epaminon to run explicitly approved work. Name the target work ticket (owner/repo#N) or execution ticket; Epaminon operates through the Archus-minted execution-ticket protocol, launches the runner, and reports confirmed state/evidence. He never bulk-runs.",
-    },
-    {
-      as: "report_outcome",
-      mcp: "chat_with_epaminon",
-      arg: "message",
-      description:
-        "Hand Epaminon an execution outcome with the target owner/repo#N, state, and evidence URL. He records execution state, routes review/approval as needed, and reports up so Archus can reflect it onto the central tracker. He does not curate the backlog himself.",
+        "Ask Epaminon where execution stands — which tickets are queued/running, in review, or shipped, and any blockers. A read-only status question (it does not start work — queuing is Archus's call). Reference tickets as owner/repo#N.",
     },
   ];
   // Outbound's "top tools": named delegation handles that ALL route to his chat
@@ -568,13 +550,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       displayName: "Epaminon",
       role: "executor / runs queued tickets",
       internalBaseUrl: "http://zenod-epaminon:8080",
-      needsRepo: true,
-      // Epaminon resolves bare ticket references and his default execution target
-      // from the same `backlog_repo` setting a backlog agent uses (his own
-      // container, his own settings store). He still executes each ticket in its
-      // own qualified owner/repo.
-      repoSetting: "backlog_repo" as const,
-      repoLabel: "execution/project repo",
+      // Owns NO repo — he guards the activity of executing (like Outbound guards
+      // sending). The execution queue lives in Archus's central backlog as a ticket
+      // class; Epaminon reads it and commands the runner. Enabling needs only the LLM
+      // key; the lane is cross-provisioned at enable.
+      needsRepo: false,
       peerTools: EPAMINON_EXECUTION_TOOLS,
     },
     {

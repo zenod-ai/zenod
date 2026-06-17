@@ -232,37 +232,10 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
-  // Epaminon's execution surface. Writes (run a ticket, record an outcome) are
-  // semantic intents routed to his guardian brain (chat_with_epaminon), which
-  // enforces his rules (only run explicitly-dispatched execution tickets,
-  // qualified target ids, honest status). The status read is a plain question to
-  // the same brain — no intent directive. NOTE: these are human/Console-facing
-  // execution intents; the deterministic Archus↔Epaminon lane is internal-only
-  // and must never be republished on this public gateway.
-  {
-    name: "run_ticket",
-    owner: "epaminon",
-    peerTool: "chat_with_epaminon",
-    intentPrefix:
-      "Run the following approved work through the execution-ticket protocol. If this is not already an Archus-dispatched execution ticket, ask Archus to mint/dispatch one; only act on explicitly approved qualified owner/repo#N work and report the confirmed execution state: ",
-    title: "Run a backlog ticket",
-    description:
-      "Tell Epaminon to run explicitly approved work. Name the target work ticket (owner/repo#N) or execution ticket; Epaminon operates through the Archus-minted execution-ticket protocol, launches the runner, and reports confirmed state/evidence. He never bulk-runs a backlog.",
-    inputSchema: INTENT_SHAPE,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  },
-  {
-    name: "report_outcome",
-    owner: "epaminon",
-    peerTool: "chat_with_epaminon",
-    intentPrefix:
-      "Record this execution outcome for the execution ticket you ran — include the target owner/repo#N, state, and evidence URL; report facts up so Archus can reflect them onto the central tracker: ",
-    title: "Report an execution outcome",
-    description:
-      "Hand Epaminon an execution outcome with evidence. He records execution state, routes review/approval as needed, and reports up to Archus. He does not curate or directly own backlog work tickets.",
-    inputSchema: INTENT_SHAPE,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  },
+  // Epaminon's execution surface is READ-ONLY here. "Run X" is Archus's call (he
+  // mints + dispatches the execution ticket); Epaminon exposes no write-intents —
+  // the run is driven by the deterministic Archus↔Epaminon lane, which is
+  // internal-only and must never be republished on this public gateway.
   {
     name: "execution_status",
     owner: "epaminon",
