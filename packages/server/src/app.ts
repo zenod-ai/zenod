@@ -297,6 +297,22 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ ok: true, repo });
   });
 
+  // Execution-lane config push (#196). The Console cross-provisions the
+  // Archus↔Epaminon lane in place (the pair is provisioned one-shot, so this is the
+  // path for an already-enabled agent — same shape as /api/agent/repo). Authenticated
+  // with the AGENT token (NOT the lane secret): only the Console, which holds the
+  // token, can set the lane. The peer URL is stored under each side's own convention
+  // (Epaminon → exec_archus_url; Archus → epaminon_base_url) so both report endpoints
+  // resolve. Only the lane participants accept it.
+  app.post("/api/agent/lane", async (c) => {
+    if (!agent.executor && !agent.backlog) return c.json({ error: `${agent.displayName} is not a lane participant.` }, 400);
+    const body = await c.req.json<{ exec_lane_secret?: string; peer_url?: string }>().catch(() => ({}) as Record<string, string>);
+    if (body.exec_lane_secret) settings.setRaw("exec_lane_secret", body.exec_lane_secret);
+    if (body.peer_url) settings.setRaw(agent.executor ? "exec_archus_url" : "epaminon_base_url", body.peer_url.trim());
+    runtime.invalidate();
+    return c.json({ ok: true });
+  });
+
   // --- Mesh: peer agents this agent can delegate to ---
   // GET never returns tokens (only whether one is set). PUT replaces the whole list.
   app.get("/api/peers", (c) =>
@@ -597,6 +613,36 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     });
   });
 
+  // Execution lane (#196). The deterministic Archus↔Epaminon lane is INERT until the
+  // Console cross-provisions it. Once BOTH are enabled, mint ONE shared secret (stored
+  // on the Console + reused, so re-enable is stable) and push it — plus each other's
+  // internal URL — to both, authenticated with each agent's own token. Identity-gated,
+  // internal-only; never on the public gateway. Best-effort: a push failure doesn't
+  // fail the enable (the next enable/re-enable retries).
+  const provisionExecLaneIfReady = async (): Promise<void> => {
+    const archusSa = SUITE_AGENTS.find((a) => a.name === "archus");
+    const epaminonSa = SUITE_AGENTS.find((a) => a.name === "epaminon");
+    if (!archusSa || !epaminonSa) return;
+    const archusToken = settings.agentToken("archus");
+    const epaminonToken = settings.agentToken("epaminon");
+    if (!archusToken || !epaminonToken) return; // need both enabled
+    let secret = settings.getRaw("exec_lane_secret");
+    if (!secret) {
+      secret = randomBytes(32).toString("hex");
+      settings.setRaw("exec_lane_secret", secret);
+    }
+    const push = (sa: (typeof SUITE_AGENTS)[number], token: string, peerUrl: string) =>
+      fetch(`${sa.internalBaseUrl}/api/agent/lane`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ exec_lane_secret: secret, peer_url: peerUrl }),
+      }).catch(() => null);
+    await Promise.all([
+      push(epaminonSa, epaminonToken, archusSa.internalBaseUrl), // Epaminon learns Archus's URL
+      push(archusSa, archusToken, epaminonSa.internalBaseUrl), // Archus learns Epaminon's URL
+    ]);
+  };
+
   app.post("/api/team/enable", async (c) => {
     const body = await c.req
       .json<{ name?: string; vault_repo?: string }>()
@@ -663,6 +709,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     });
     settings.setPeers(peers);
     runtime.invalidate();
+    // If this enable completed the Archus+Epaminon pair, light up the execution lane.
+    await provisionExecLaneIfReady();
     return c.json({ ok: true });
   });
 
