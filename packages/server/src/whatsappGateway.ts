@@ -17,7 +17,14 @@ import { transcribeChannelAudio } from "./channelAudio.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { formatStorageReceipt } from "./storageReceipt.js";
-import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
+import {
+  agentKeptNote,
+  archiveImage,
+  archiveVoiceNote,
+  imageArchiveFilename,
+  voiceArchiveFilename,
+  type VoiceAudio,
+} from "./voiceArchive.js";
 import {
   maskPhoneNumber,
   normalizeWhatsAppIdentifier,
@@ -781,7 +788,7 @@ export class WhatsAppGateway {
       if (reply.text.trim()) {
         await this.sendReply(event, reply.text, "sent");
         this.options.store.markMessageStatus(event.messageId, "replied");
-        this.spawnPeerJobPoller(reply, event, input.audio);
+        this.spawnPeerJobPoller(reply, event, input.audio ? { input: input.audio, kind: "voice" } : undefined);
       } else {
         await this.sendReply(event, "⚠️ I got your message but couldn't compose a reply — please try again.", "error").catch(() => {});
         this.options.store.markMessageStatus(event.messageId, "failed");
@@ -1005,7 +1012,15 @@ export class WhatsAppGateway {
         const reply = await engine.handleTasking({ text, surface: "whatsapp", conversationKey });
         this.options.store.markMessageStatus(event.messageId, "replied");
         await this.sendReply(event, reply.text, "sent");
-        this.spawnPeerJobPoller(reply, event);
+        // Archive the original image to Drive (mirrors voice notes) when the
+        // agent keeps it — so the binary lands alongside the vault note.
+        const ext = (mimeType.split("/")[1] || "jpg").replace("jpeg", "jpg");
+        const imageMedia: VoiceAudio = {
+          data,
+          filename: imageArchiveFilename(sender, Date.now(), ext),
+          mimeType,
+        };
+        this.spawnPeerJobPoller(reply, event, { input: imageMedia, kind: "image" });
         return;
       }
 
@@ -1027,7 +1042,7 @@ export class WhatsAppGateway {
       const reply = await engine.handleTasking({ text: input.text, surface: "whatsapp", conversationKey });
       this.options.store.markMessageStatus(event.messageId, "replied");
       await this.sendReply(event, reply.text, "sent");
-      this.spawnPeerJobPoller(reply, event, input.audio);
+      this.spawnPeerJobPoller(reply, event, input.audio ? { input: input.audio, kind: "voice" } : undefined);
 
       // Filing is NOT automatic (#68). The transcript of every interaction is
       // already persisted in the conversation state — we do NOT push every
@@ -1061,15 +1076,21 @@ export class WhatsAppGateway {
   private spawnPeerJobPoller(
     reply: { text: string; actions: Array<{ tool: string; result: string }> },
     event: WhatsAppInboundEvent,
-    voiceAudio?: VoiceAudio,
+    media?: { input: VoiceAudio; kind: "voice" | "image" },
   ): void {
     const jobId = extractJobId(reply);
-    const shouldArchiveVoice = voiceAudio && agentKeptNote(reply);
-    if (!jobId && !shouldArchiveVoice) return;
+    // Archive the original media to Drive only when the agent kept the note —
+    // same gate for voice and images, so the binary lands in Drive alongside
+    // the vault note describing it.
+    const shouldArchive = media && agentKeptNote(reply);
+    if (!jobId && !shouldArchive) return;
+    const archiveLabel = media?.kind === "image" ? "image" : "audio";
     const peers = this.options.settings.peers();
     const poll = jobId && peers.length ? pollPeerJob(peers, jobId) : Promise.resolve(null);
-    const archive = shouldArchiveVoice
-      ? archiveVoiceNote(this.options.settings, voiceAudio)
+    const archive = shouldArchive
+      ? (media.kind === "image"
+          ? archiveImage(this.options.settings, media.input)
+          : archiveVoiceNote(this.options.settings, media.input))
           .then((res) => ({ result: res }))
           .catch((err: unknown) => ({ error: err }))
       : Promise.resolve(null);
@@ -1086,6 +1107,7 @@ export class WhatsAppGateway {
           filingError: job?.error,
           archive: archivedResult,
           archiveError: archivedError,
+          archiveLabel,
         });
         if (receipt) return this.sendReply(event, receipt, "sent");
       })

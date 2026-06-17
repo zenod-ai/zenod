@@ -12,6 +12,8 @@ export interface StorageReceiptInput {
   storeResult?: unknown;
   archive?: VoiceArchiveResult | null;
   archiveError?: unknown;
+  /** What kind of media was archived to Drive — labels the receipt line. */
+  archiveLabel?: string;
   filingStatus?: "done" | "error" | "timeout" | null;
   filingError?: string;
 }
@@ -55,13 +57,14 @@ export function formatStorageReceipt(input: StorageReceiptInput): string | null 
     lines.push("Vault filing: still processing; no final vault receipt yet.");
   }
 
+  const archiveLabel = input.archiveLabel ?? "audio";
   if (archive) {
-    lines.push(`Drive audio: ${archive.name}`);
+    lines.push(`Drive ${archiveLabel}: ${archive.name}`);
     lines.push(`Drive link: ${driveLink(archive)}`);
   } else if (archiveError) {
-    lines.push(`Drive audio: archive failed — ${archiveError}`);
+    lines.push(`Drive ${archiveLabel}: archive failed — ${archiveError}`);
   } else if (input.archive === null) {
-    lines.push("Drive audio: not archived; Google Drive archive is not configured.");
+    lines.push(`Drive ${archiveLabel}: not archived; Google Drive archive is not configured.`);
   }
 
   return lines.join("\n");

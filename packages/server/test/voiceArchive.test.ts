@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename } from "../src/voiceArchive.js";
+import { agentKeptNote, archiveImage, archiveVoiceNote, imageArchiveFilename, voiceArchiveFilename } from "../src/voiceArchive.js";
 import type { Settings } from "../src/settings.js";
 
 describe("voice archive keep-detection", () => {
@@ -32,6 +32,17 @@ describe("voiceArchiveFilename", () => {
   });
 });
 
+describe("imageArchiveFilename", () => {
+  it("builds a safe, descriptive filename", () => {
+    const name = imageArchiveFilename("@jordi", Date.UTC(2026, 5, 17, 9, 30, 0), "jpg");
+    expect(name).toBe("image-2026-06-17T09-30-00-000Z-@jordi.jpg");
+  });
+
+  it("falls back to jpg when no extension is given", () => {
+    expect(imageArchiveFilename("Bob / Smith!", 0, "")).toBe("image-1970-01-01T00-00-00-000Z-Bob_Smith_.jpg");
+  });
+});
+
 describe("archiveVoiceNote", () => {
   it("no-ops (returns null) when Drive is not configured", async () => {
     const settings = { get: () => null } as unknown as Settings;
@@ -39,6 +50,18 @@ describe("archiveVoiceNote", () => {
       data: Buffer.from("audio"),
       filename: "voice.ogg",
       mimeType: "audio/ogg",
+    });
+    expect(result).toBeNull();
+  });
+});
+
+describe("archiveImage", () => {
+  it("no-ops (returns null) when Drive is not configured", async () => {
+    const settings = { get: () => null } as unknown as Settings;
+    const result = await archiveImage(settings, {
+      data: Buffer.from("image"),
+      filename: "image.jpg",
+      mimeType: "image/jpeg",
     });
     expect(result).toBeNull();
   });
