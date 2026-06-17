@@ -24,7 +24,7 @@ describe("pollPeerJob", () => {
     );
 
     const result = await pollPeerJob(
-      [{ name: "zenod", url: "https://z2.zenod.dev", token: "token" }],
+      [{ name: "zenod", url: "https://z2.zenod.dev/mcp", token: "token" }],
       "14ff5e91-c12b-4e1f-8c30-ecdc8dc2d3d3",
       0,
       100,
@@ -40,5 +40,9 @@ describe("pollPeerJob", () => {
         githubUrls: ["https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-06-17.md"],
       },
     });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://z2.zenod.dev/api/tasks/jobs/14ff5e91-c12b-4e1f-8c30-ecdc8dc2d3d3",
+      { headers: { Authorization: "Bearer token" } },
+    );
   });
 });
