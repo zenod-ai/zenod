@@ -253,6 +253,39 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ ok: true });
   });
 
+  // Worker → Epaminon (#194): the runner reports a DISPATCHED run's result back so the
+  // queue advances. Same cross-provisioned lane-secret gate; executor-only; internal.
+  // `outward` decides the gate Epaminon-side (PR/tweet/email → needs-review; filed
+  // artifact → done). The runner must hold the lane secret to call these.
+  app.post("/api/exec/outcome", async (c) => {
+    const bad = execLaneGate(c.req.header("X-Lane-Secret"));
+    if (bad) return c.json({ error: bad.error }, bad.status);
+    const body = await c.req
+      .json<{ execution_id?: number | string; outward?: boolean; evidence_url?: string; note?: string }>()
+      .catch(() => ({}) as Record<string, unknown>);
+    const executionId = body.execution_id != null ? String(body.execution_id) : "";
+    if (!executionId) return c.json({ error: "execution_id is required" }, 400);
+    await runtime.executionQueue!.reportOutcome({
+      executionId,
+      outward: Boolean(body.outward),
+      ...(body.evidence_url ? { evidenceUrl: String(body.evidence_url) } : {}),
+      ...(body.note ? { note: String(body.note) } : {}),
+    });
+    return c.json({ ok: true });
+  });
+
+  app.post("/api/exec/blocked", async (c) => {
+    const bad = execLaneGate(c.req.header("X-Lane-Secret"));
+    if (bad) return c.json({ error: bad.error }, bad.status);
+    const body = await c.req
+      .json<{ execution_id?: number | string; note?: string }>()
+      .catch(() => ({}) as Record<string, unknown>);
+    const executionId = body.execution_id != null ? String(body.execution_id) : "";
+    if (!executionId) return c.json({ error: "execution_id is required" }, 400);
+    await runtime.executionQueue!.reportBlocked({ executionId, note: String(body.note ?? "") });
+    return c.json({ ok: true });
+  });
+
   // `execution_status` — the human read (Console/chat). Normal agent-token auth (this
   // path is NOT under /api/exec/, so it does not bypass auth). Returns the live queue.
   app.get("/api/executions", (c) => {

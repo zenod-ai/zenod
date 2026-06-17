@@ -66,7 +66,22 @@ async function reportToArchus(settings: Settings, e: ExecutionEvent): Promise<vo
 
 /** STUB (#194): re-point the runner to run this ticket on command, reporting back. */
 async function launchExecution(t: ExecutionTicket): Promise<void> {
-  console.info(`[exec-lane] launch ${t.executionId} → ${t.target} — runner re-point pending (#194)`);
+  const base = process.env.ZENOD_RUNNER_POKE_URL?.trim();
+  if (!base) {
+    console.warn(`[exec-lane] no runner (ZENOD_RUNNER_POKE_URL unset) — ${t.executionId} stays running, not launched (#194)`);
+    return;
+  }
+  try {
+    const res = await fetch(`${base.replace(/\/$/, "")}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ execution_id: t.executionId, target: t.target, context: t.context }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) console.warn(`[exec-lane] runner refused /run for ${t.executionId} (HTTP ${res.status}) — awaiting runner #194`);
+  } catch (err) {
+    console.warn(`[exec-lane] runner /run unreachable for ${t.executionId}: ${(err as Error).message} — awaiting runner #194`);
+  }
 }
 
 /** STUB (#197): route an approved outward outcome to Outbound (send) / runner (merge). */

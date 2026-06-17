@@ -115,4 +115,60 @@ describe("execution lane — Epaminon receivers", () => {
     });
     expect(res.status).toBe(500);
   });
+
+  // The runner reports a dispatched run's result back (#194) — the queue advances.
+  const dispatch = async (id: number) => {
+    runtime.settings.setRaw("exec_lane_secret", SECRET);
+    await app.request("/api/exec/enqueue", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: id, target: `o/r#${id}`, context: "c" }),
+    });
+  };
+
+  it("outcome(outward) → the ticket parks at needs-review with its evidence", async () => {
+    await dispatch(11);
+    const res = await app.request("/api/exec/outcome", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: 11, outward: true, evidence_url: "https://pr/11" }),
+    });
+    expect(res.status).toBe(200);
+    const t = runtime.executionQueue!.get("11");
+    expect(t?.state).toBe("needs-review");
+    expect(t?.evidenceUrl).toBe("https://pr/11");
+  });
+
+  it("outcome(internal) → the ticket completes at done", async () => {
+    await dispatch(12);
+    await app.request("/api/exec/outcome", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: 12, outward: false, evidence_url: "vault://note" }),
+    });
+    expect(runtime.executionQueue!.get("12")?.state).toBe("done");
+  });
+
+  it("blocked → the ticket parks at blocked with the note", async () => {
+    await dispatch(13);
+    await app.request("/api/exec/blocked", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: 13, note: "needs an API key" }),
+    });
+    const t = runtime.executionQueue!.get("13");
+    expect(t?.state).toBe("blocked");
+    expect(t?.note).toBe("needs an API key");
+  });
+
+  it("outcome/blocked require the lane secret (401)", async () => {
+    await dispatch(14);
+    const res = await app.request("/api/exec/outcome", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Lane-Secret": "wrong" },
+      body: JSON.stringify({ execution_id: 14, outward: false }),
+    });
+    expect(res.status).toBe(401);
+    expect(runtime.executionQueue!.get("14")?.state).toBe("running"); // untouched
+  });
 });
