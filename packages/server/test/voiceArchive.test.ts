@@ -8,6 +8,12 @@ describe("voice archive keep-detection", () => {
     expect(agentKeptNote({ actions: [{ tool: "search_vault" }, { tool: "capture_note" }] })).toBe(true);
   });
 
+  it("treats C1 peer memory actions as a keep", () => {
+    expect(agentKeptNote({ actions: [{ tool: "add_memory" }] })).toBe(true);
+    expect(agentKeptNote({ actions: [{ tool: "store_memory" }] })).toBe(true);
+    expect(agentKeptNote({ actions: [{ tool: "capture" }] })).toBe(true);
+  });
+
   it("does not keep when the agent filed nothing", () => {
     expect(agentKeptNote({ actions: [{ tool: "search_vault" }] })).toBe(false);
     expect(agentKeptNote({ actions: [] })).toBe(false);

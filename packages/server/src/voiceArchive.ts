@@ -17,7 +17,11 @@ export interface VoiceArchiveResult {
 
 /** Did the agent judge this note worth keeping? It signals that by filing it. */
 export function agentKeptNote(reply: { actions?: Array<{ tool: string }> }): boolean {
-  return reply.actions?.some((a) => a.tool === "capture_note") === true;
+  return (
+    reply.actions?.some((a) =>
+      ["capture", "capture_note", "add_memory", "store_memory"].includes(a.tool),
+    ) === true
+  );
 }
 
 /** A safe, descriptive Drive filename: voice-<iso>-<who>.<ext>. */
