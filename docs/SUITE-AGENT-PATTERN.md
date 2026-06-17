@@ -77,8 +77,15 @@ build to this; if you must deviate, say so explicitly.
 - **Archus** — backlog guardian (vaultless + `backlog`). Public writes (`create_issue`,
   `edit_issue`, `close_issue`) + `ask_archus` route to `chat_with_archus`; private CRUD =
   `createGithubIssue`/`editGithubIssue` (`connections/github.ts`); guidelines in
-  `ARCHUS_AGENT.persona`. Two-tier backlog design + qualified IDs: see
-  [SUITE-SCAFFOLD.md](./SUITE-SCAFFOLD.md) and the two-tier protocol (#82).
+  `ARCHUS_AGENT.persona`. In the execution-ticket protocol, Archus is also the sole owner
+  of central `type:execution` tickets: it mints `exec:queued`, writes `exec:approved`, and
+  reflects Epaminon's reported outcomes onto the work ticket.
+- **Epaminon** — execution guardian (vaultless + `executor`). Human-facing requests route to
+  `chat_with_epaminon`, but the durable queue is the Archus-minted execution ticket, not a
+  direct backlog label. Epaminon receives dispatched execution tickets, launches the runner,
+  reports transition facts back to Archus, and handles approval/ship/blocker flow. Legacy
+  `status:queued` work-issue labels may still exist while the runner is being repointed, but
+  they are compatibility mechanics, not the target ownership model.
 
 ## Anti-patterns (don't)
 
@@ -86,5 +93,8 @@ build to this; if you must deviate, say so explicitly.
 - ❌ Expose a deterministic *write* publicly on a guardian agent — route writes through its
   brain + guidelines; keep mechanical CRUD private.
 - ❌ Run the Console's LLM on a gateway tool call (that's the double-LLM we removed).
+- ❌ Publish internal Archus↔Epaminon lane tools (`enqueue_execution`, `approve_execution`,
+  `apply_execution_event`) on the public Console gateway. Those are identity-gated
+  internal protocol calls.
 - ❌ Bare `#N` references. Always `owner/repo#N`.
 - ❌ Hand-run / `docker exec` services on the VPS. Dokploy push-deploy only.

@@ -388,13 +388,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     },
   ];
   // Epaminon's "top tools": named delegation handles that ALL route to his chat
-  // brain (chat_with_epaminon runs engine.chat synchronously and, as an executor,
-  // has the GitHub tasking tools — queue/comment/status). The distinct names are
-  // for VISIBILITY (the activity line reads "running a ticket" / "reporting an
-  // outcome"); Epaminon's own LLM does the real work and enforces his guardrails
-  // (only run explicitly-approved tickets, qualified ids, honest status). He
-  // executes the qualified REPO ticket and reports status up — he never curates
-  // the backlog (that is Archus).
+  // brain (chat_with_epaminon runs engine.chat synchronously). The distinct names
+  // are for VISIBILITY (the activity line reads "running a ticket" / "reporting
+  // an outcome"); Epaminon's own LLM enforces his guardrails (only run explicitly
+  // dispatched execution tickets, qualified ids, honest status). He executes the
+  // Archus-minted execution ticket and reports facts up — he never curates the
+  // backlog (that is Archus).
   const EPAMINON_EXECUTION_TOOLS = [
     {
       as: "execution_status",
@@ -408,14 +407,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "chat_with_epaminon",
       arg: "message",
       description:
-        "Tell Epaminon to RUN an approved ticket now. Name the ticket (owner/repo#N) that the user has explicitly approved to execute; Epaminon queues it so the fan-out runner picks it up (opens a PR, moves it to needs-review) and confirms exactly what was queued. He only runs tickets explicitly approved to run — never bulk-queues.",
+        "Tell Epaminon to run explicitly approved work. Name the target work ticket (owner/repo#N) or execution ticket; Epaminon operates through the Archus-minted execution-ticket protocol, launches the runner, and reports confirmed state/evidence. He never bulk-runs.",
     },
     {
       as: "report_outcome",
       mcp: "chat_with_epaminon",
       arg: "message",
       description:
-        "Hand Epaminon an execution outcome to record on the ticket he ran — the result and its evidence URL (PR/commit). He posts it as a comment on the qualified repo ticket (owner/repo#N) and sets the review status, then reports the status up so Archus can reflect it onto the central tracker. He does not curate the backlog himself.",
+        "Hand Epaminon an execution outcome with the target owner/repo#N, state, and evidence URL. He records execution state, routes review/approval as needed, and reports up so Archus can reflect it onto the central tracker. He does not curate the backlog himself.",
     },
   ];
   // Outbound's "top tools": named delegation handles that ALL route to his chat
@@ -452,6 +451,22 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       arg: "message",
       description:
         "Send an email. Give the recipient and what to say; Outbound drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms.",
+    },
+  ];
+  const PHYLAX_NOTIFICATION_TOOLS = [
+    {
+      as: "ask_phylax",
+      mcp: "chat_with_phylax",
+      arg: "message",
+      description:
+        "Ask Phylax about notification handling, quiet hours, batching, or whether/how an event should reach Jordi. He is the inward-facing attention gatekeeper.",
+    },
+    {
+      as: "raise_event",
+      mcp: "chat_with_phylax",
+      arg: "message",
+      description:
+        "Report an event/fact to Phylax. Include source, event, urgency, and reference if known; Phylax decides whether to suppress, batch, hold, enrich, or notify Jordi through the Console transport.",
     },
   ];
   // The Console's catalog of suite agents. repoSetting/repoLabel are optional: an
@@ -511,6 +526,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       // container. Enabling it needs only the shared LLM key.
       needsRepo: false,
       peerTools: OUTBOUND_COMMS_TOOLS,
+    },
+    {
+      name: "phylax",
+      displayName: "Phylax",
+      role: "attention gatekeeper / notifications",
+      internalBaseUrl: "http://zenod-phylax:8080",
+      needsRepo: false,
+      peerTools: PHYLAX_NOTIFICATION_TOOLS,
     },
   ];
 
@@ -1197,9 +1220,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // each owner (no council LLM). Every other agent exposes its own tool surface.
     // Only the BARE Console (vaultless with no domain capability) is the mesh
     // gateway. Backlog (Archus), executor (Epaminon), and outbound agents are
-    // vaultless too, but each must expose its OWN MCP tool surface
+    // vaultless too, and Phylax is a notifier, but each must expose its OWN MCP tool surface
     // (chat_with_<name> + its domain tools) — not the gateway.
-    const isConsole = (agent.vaultless ?? false) && !agent.backlog && !agent.executor && !agent.outbound;
+    const isConsole = (agent.vaultless ?? false) && !agent.backlog && !agent.executor && !agent.outbound && !agent.notifier;
     const server = isConsole
       ? buildMeshGatewayServer((name) => settings.peers().find((p) => p.name === name) ?? null)
       : buildMcpServer(

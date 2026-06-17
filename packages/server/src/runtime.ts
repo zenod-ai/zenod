@@ -101,7 +101,7 @@ export class Runtime {
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
     // The executor (Epaminon) owns an execution queue; no other agent does.
-    this.executionQueue = agent.executor === true ? buildExecutionQueue(this.settings) : null;
+    this.executionQueue = agent.executor === true ? buildExecutionQueue(this.settings, this.executionStore) : null;
   }
 
   get workdir(): string {

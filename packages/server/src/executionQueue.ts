@@ -50,6 +50,8 @@ export interface ExecutionEvent {
 export interface ExecutionQueueOptions {
   /** Max tickets actively executing (state === "running") at once. */
   concurrency: number;
+  /** Tickets recovered from durable state on boot. */
+  initialTickets?: ExecutionTicket[];
   /** Start the runner/worker for a ticket. Epaminon-internal; the worker later calls
    *  back via reportOutcome/reportBlocked. Errors here fail the ticket. */
   launch: (ticket: ExecutionTicket) => void | Promise<void>;
@@ -59,6 +61,8 @@ export interface ExecutionQueueOptions {
   /** Report an Epaminon-owned state edge up to Archus (apply_execution_event). Must be
    *  idempotent on Archus's side; this module also never reports the same edge twice. */
   report: (event: ExecutionEvent) => void | Promise<void>;
+  /** Persist a ticket after every state/context/evidence change. */
+  onChange?: (ticket: ExecutionTicket) => void | Promise<void>;
   /** Injected clock (tests + resume-determinism — never call Date.now directly). */
   now?: () => number;
 }
@@ -84,6 +88,7 @@ export class ExecutionQueue {
   private readonly tickets = new Map<string, ExecutionTicket>();
   private readonly opts: Required<Pick<ExecutionQueueOptions, "concurrency" | "launch" | "ship" | "report">> & {
     now: () => number;
+    onChange?: (ticket: ExecutionTicket) => void | Promise<void>;
   };
 
   constructor(options: ExecutionQueueOptions) {
@@ -95,8 +100,12 @@ export class ExecutionQueue {
       launch: options.launch,
       ship: options.ship,
       report: options.report,
+      onChange: options.onChange,
       now: options.now ?? (() => 0),
     };
+    for (const ticket of options.initialTickets ?? []) {
+      this.tickets.set(ticket.executionId, { ...ticket });
+    }
   }
 
   /** Tickets actively occupying a slot. needs-review/approved are PARKED (no worker). */
@@ -112,6 +121,11 @@ export class ExecutionQueue {
     }
     ticket.state = to;
     ticket.updatedAt = this.opts.now();
+    await this.persist(ticket);
+  }
+
+  private async persist(ticket: ExecutionTicket): Promise<void> {
+    await this.opts.onChange?.({ ...ticket });
   }
 
   /** Start as many queued tickets as the concurrency cap allows (oldest first). */
@@ -138,13 +152,15 @@ export class ExecutionQueue {
    */
   async enqueue(input: { executionId: string; target: string; context: string }): Promise<void> {
     if (this.tickets.has(input.executionId)) return;
-    this.tickets.set(input.executionId, {
+    const ticket: ExecutionTicket = {
       executionId: input.executionId,
       target: input.target,
       context: input.context,
       state: "queued",
       updatedAt: this.opts.now(),
-    });
+    };
+    this.tickets.set(input.executionId, ticket);
+    await this.persist(ticket);
     await this.pump();
   }
 
@@ -208,6 +224,11 @@ export class ExecutionQueue {
     if (t.state !== "blocked") return;
     if (input.guidance) t.context = `${t.context}\n\n[unblock guidance] ${input.guidance}`;
     await this.transition(t, "queued");
+    await this.pump();
+  }
+
+  /** Resume queued work recovered on boot under the same concurrency rules. */
+  async resume(): Promise<void> {
     await this.pump();
   }
 
