@@ -1,21 +1,21 @@
 import { createSign } from "node:crypto";
+import type { Settings } from "./settings.js";
 
 /**
- * Google Drive client over a service account — the M1.5 design
- * (docs/ROADMAP.md), chosen because it is the cheapest durable path for a
- * self-hosted instance: the user creates a service account, shares a Drive
- * folder with its email, and pastes the JSON key in the Connections tab. No
- * OAuth consent screen, no app-verification dance, no 7-day token expiry —
- * and no googleapis dependency: a hand-rolled RS256 JWT and the Drive v3
- * REST API are all that read-only access needs.
+ * Small Google Drive REST client. It supports the original service-account
+ * path and a user OAuth path; the Drive API calls stay identical once we have
+ * a bearer token.
  */
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
+const USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
+const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 // Full (not readonly) scope: ingestion archives consumed files into an
 // Archive/ subfolder. The service account still only ever sees what the
 // user explicitly shared with it.
 const SCOPE = "https://www.googleapis.com/auth/drive";
+const OAUTH_SCOPE = `${SCOPE} https://www.googleapis.com/auth/userinfo.email`;
 const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,webViewLink,parents";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
@@ -23,6 +23,10 @@ export interface ServiceAccount {
   client_email: string;
   private_key: string;
 }
+
+export type DriveAuth =
+  | { kind: "service_account"; serviceAccountJson: string }
+  | { kind: "oauth"; clientId: string; clientSecret: string; refreshToken: string; email?: string | null };
 
 export interface DriveFile {
   id: string;
@@ -55,22 +59,34 @@ function base64url(input: Buffer | string): string {
 }
 
 export class DriveClient {
-  private readonly account: ServiceAccount;
+  private readonly auth: DriveAuth;
+  private readonly account: ServiceAccount | null;
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
 
-  constructor(serviceAccountJson: string) {
-    this.account = parseServiceAccount(serviceAccountJson);
+  constructor(auth: string | DriveAuth) {
+    this.auth = typeof auth === "string" ? { kind: "service_account", serviceAccountJson: auth } : auth;
+    this.account = this.auth.kind === "service_account" ? parseServiceAccount(this.auth.serviceAccountJson) : null;
   }
 
-  get clientEmail(): string {
-    return this.account.client_email;
+  get accountLabel(): string {
+    if (this.account) return this.account.client_email;
+    return this.auth.kind === "oauth" && this.auth.email ? this.auth.email : "Google OAuth user";
+  }
+
+  get clientEmail(): string | null {
+    return this.account?.client_email ?? null;
+  }
+
+  /** Mint/refresh (and cache) an access token. */
+  private async token(): Promise<string> {
+    if (this.accessToken && Date.now() < this.tokenExpiresAt - 60_000) return this.accessToken;
+    return this.auth.kind === "oauth" ? this.oauthToken() : this.serviceAccountToken();
   }
 
   /** Mint (and cache) an access token via the signed-JWT grant. */
-  private async token(): Promise<string> {
-    if (this.accessToken && Date.now() < this.tokenExpiresAt - 60_000) return this.accessToken;
-
+  private async serviceAccountToken(): Promise<string> {
+    if (!this.account) throw new Error("service account is not configured");
     const now = Math.floor(Date.now() / 1000);
     const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
     const claims = base64url(
@@ -102,6 +118,29 @@ export class DriveClient {
     const data = (await response.json()) as { access_token: string; expires_in: number };
     this.accessToken = data.access_token;
     this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
+    return this.accessToken;
+  }
+
+  /** Refresh a Google user OAuth token. Uploads then use the user's quota. */
+  private async oauthToken(): Promise<string> {
+    if (this.auth.kind !== "oauth") throw new Error("Google OAuth is not configured");
+    const response = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: this.auth.clientId,
+        client_secret: this.auth.clientSecret,
+        refresh_token: this.auth.refreshToken,
+      }),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Google OAuth refresh failed (${response.status}): ${detail.slice(0, 200)}`);
+    }
+    const data = (await response.json()) as { access_token: string; expires_in?: number };
+    this.accessToken = data.access_token;
+    this.tokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000;
     return this.accessToken;
   }
 
@@ -246,13 +285,77 @@ export class DriveClient {
   }
 }
 
-/** Verify the service account works and can see files (the Test button). */
-export async function testDrive(
-  serviceAccountJson: string,
-  folderId?: string,
-): Promise<{ ok: boolean; message: string }> {
+export function driveAuthFromSettings(settings: Settings): DriveAuth | null {
+  const clientId = settings.get("google_oauth_client_id");
+  const clientSecret = settings.get("google_oauth_client_secret");
+  const rawSettings = settings as Settings & { getRaw?: (key: string) => string | null };
+  const refreshToken = rawSettings.getRaw?.("google_oauth_refresh_token") ?? null;
+  if (clientId && clientSecret && refreshToken) {
+    return { kind: "oauth", clientId, clientSecret, refreshToken, email: rawSettings.getRaw?.("google_oauth_email") ?? null };
+  }
+  const serviceAccountJson = settings.get("google_service_account_json");
+  return serviceAccountJson ? { kind: "service_account", serviceAccountJson } : null;
+}
+
+export function driveClientFromSettings(settings: Settings): DriveClient | null {
+  const auth = driveAuthFromSettings(settings);
+  return auth ? new DriveClient(auth) : null;
+}
+
+/** Build the Google consent-screen URL for the Connect button. */
+export function googleDriveOAuthUrl(input: { clientId: string; redirectUri: string; state: string }): string {
+  const url = new URL(GOOGLE_AUTH_URL);
+  url.searchParams.set("client_id", input.clientId);
+  url.searchParams.set("redirect_uri", input.redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", OAUTH_SCOPE);
+  url.searchParams.set("access_type", "offline");
+  url.searchParams.set("prompt", "consent");
+  url.searchParams.set("state", input.state);
+  return url.toString();
+}
+
+export async function exchangeGoogleDriveOAuthCode(input: {
+  clientId: string;
+  clientSecret: string;
+  code: string;
+  redirectUri: string;
+}): Promise<{ refreshToken: string; email: string | null }> {
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: input.clientId,
+      client_secret: input.clientSecret,
+      code: input.code,
+      redirect_uri: input.redirectUri,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Google OAuth code exchange failed (${response.status}): ${detail.slice(0, 200)}`);
+  }
+  const data = (await response.json()) as { access_token?: string; refresh_token?: string };
+  if (!data.refresh_token) {
+    throw new Error("Google did not return a refresh token; reconnect and approve offline Drive access");
+  }
+  let email: string | null = null;
+  if (data.access_token) email = await fetchGoogleUserEmail(data.access_token).catch(() => null);
+  return { refreshToken: data.refresh_token, email };
+}
+
+async function fetchGoogleUserEmail(accessToken: string): Promise<string | null> {
+  const response = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) return null;
+  const data = (await response.json()) as { email?: unknown };
+  return typeof data.email === "string" ? data.email : null;
+}
+
+/** Verify the configured Drive auth works and can see files (the Test button). */
+export async function testDrive(auth: string | DriveAuth, folderId?: string): Promise<{ ok: boolean; message: string }> {
   try {
-    const client = new DriveClient(serviceAccountJson);
+    const client = new DriveClient(auth);
     const files = await client.listFiles({ ...(folderId ? { folderId } : {}), pageSize: 5 });
 
     // Archiving needs write access on the folder; warn early when it's view-only.
@@ -265,12 +368,12 @@ export async function testDrive(
     if (files.length === 0) {
       return {
         ok: true,
-        message: `connected as ${client.clientEmail}, but no files are visible yet — share your Drive folder with that email (Editor, so ingested files can be archived)`,
+        message: `connected as ${client.accountLabel}, but no files are visible yet — pick a folder with Drive files or drop one in the inbox`,
       };
     }
     return {
       ok: true,
-      message: `connected as ${client.clientEmail} — ${files.length === 5 ? "5+" : files.length} file(s) in the inbox, newest: ${files[0]!.name}${writeNote}`,
+      message: `connected as ${client.accountLabel} — ${files.length === 5 ? "5+" : files.length} file(s) in the inbox, newest: ${files[0]!.name}${writeNote}`,
     };
   } catch (err) {
     return { ok: false, message: (err as Error).message };

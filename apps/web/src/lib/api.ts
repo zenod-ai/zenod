@@ -118,6 +118,8 @@ export type SettingsValues = {
   model_vision: string | null
   model_max_steps: string | null
   google_service_account_json: string | null
+  google_oauth_client_id: string | null
+  google_oauth_client_secret: string | null
   google_drive_folder_id: string | null
   groq_api_key: string | null
   openai_long_transcription: string | null
@@ -127,7 +129,11 @@ export type SettingsValues = {
 
 export type DriveStatus = {
   configured: boolean
+  authMode: "oauth" | "service_account" | null
   clientEmail: string | null
+  oauthEmail: string | null
+  oauthClientConfigured: boolean
+  oauthClientId: string | null
   folderId: string | null
   transcriptionProvider: string | null
 }

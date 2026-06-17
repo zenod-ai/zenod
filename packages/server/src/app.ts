@@ -32,7 +32,13 @@ import {
 } from "zenod";
 import { buildMcpServer } from "./mcp.js";
 import { buildMeshGatewayServer } from "./meshGateway.js";
-import { parseServiceAccount, testDrive } from "./drive.js";
+import {
+  driveAuthFromSettings,
+  exchangeGoogleDriveOAuthCode,
+  googleDriveOAuthUrl,
+  parseServiceAccount,
+  testDrive,
+} from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";
 import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
@@ -725,12 +731,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const body = await c.req
       .json<{ service_account_json?: string; folder_id?: string }>()
       .catch(() => ({}) as Record<string, string>);
-    const json =
-      (body.service_account_json && !body.service_account_json.includes("••••") ? body.service_account_json : null) ||
-      settings.get("google_service_account_json");
+    const json = body.service_account_json && !body.service_account_json.includes("••••") ? body.service_account_json : null;
+    const auth = json ? { kind: "service_account" as const, serviceAccountJson: json } : driveAuthFromSettings(settings);
     const folderId = body.folder_id ?? settings.get("google_drive_folder_id") ?? undefined;
-    if (!json) return c.json({ ok: false, message: "paste the service account JSON key first" });
-    return c.json(await testDrive(json, folderId || undefined));
+    if (!auth) return c.json({ ok: false, message: "connect Google Drive first" });
+    return c.json(await testDrive(auth, folderId || undefined));
   });
 
   // Drive connection status for the UI: which service account, and whether
@@ -745,9 +750,18 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         clientEmail = null;
       }
     }
+    const oauthConfigured = Boolean(
+      settings.get("google_oauth_client_id") &&
+        settings.get("google_oauth_client_secret") &&
+        settings.getRaw("google_oauth_refresh_token"),
+    );
     return c.json({
       configured: settings.driveConfigured(),
+      authMode: oauthConfigured ? "oauth" : clientEmail ? "service_account" : null,
       clientEmail,
+      oauthEmail: settings.getRaw("google_oauth_email"),
+      oauthClientConfigured: Boolean(settings.get("google_oauth_client_id") && settings.get("google_oauth_client_secret")),
+      oauthClientId: settings.get("google_oauth_client_id"),
       folderId: settings.get("google_drive_folder_id"),
       transcriptionProvider: [
         settings.get("groq_api_key") ? "groq for notes up to 5 min" : null,
@@ -760,6 +774,49 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         .filter(Boolean)
         .join("; "),
     });
+  });
+
+  app.get("/api/drive/oauth/start", (c) => {
+    const clientId = settings.get("google_oauth_client_id");
+    const clientSecret = settings.get("google_oauth_client_secret");
+    if (!clientId || !clientSecret) return c.json({ error: "save the Google OAuth client ID and secret first" }, 400);
+    const state = randomBytes(24).toString("base64url");
+    settings.setRaw("google_oauth_state", state);
+    const redirectUri = new URL("/api/drive/oauth/callback", publicBaseUrl(c)).toString();
+    return c.redirect(googleDriveOAuthUrl({ clientId, redirectUri, state }));
+  });
+
+  app.get("/api/drive/oauth/callback", async (c) => {
+    const url = new URL(c.req.url);
+    const error = url.searchParams.get("error");
+    if (error) return c.text(`Google Drive connection failed: ${error}`, 400);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    if (!code || !state || state !== settings.getRaw("google_oauth_state")) {
+      return c.text("Google Drive connection failed: invalid OAuth state", 400);
+    }
+    settings.setRaw("google_oauth_state", "");
+    const clientId = settings.get("google_oauth_client_id");
+    const clientSecret = settings.get("google_oauth_client_secret");
+    if (!clientId || !clientSecret) return c.text("Google Drive connection failed: OAuth client is not configured", 400);
+    const redirectUri = new URL("/api/drive/oauth/callback", publicBaseUrl(c)).toString();
+    const result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });
+    settings.setRaw("google_oauth_refresh_token", result.refreshToken);
+    settings.setRaw("google_oauth_email", result.email ?? "");
+    runtime.invalidate();
+    if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
+    return c.redirect("/");
+  });
+
+  app.post("/api/drive/disconnect", (c) => {
+    settings.set("google_service_account_json", "");
+    settings.set("google_oauth_client_id", "");
+    settings.set("google_oauth_client_secret", "");
+    settings.setRaw("google_oauth_refresh_token", "");
+    settings.setRaw("google_oauth_email", "");
+    settings.setRaw("google_oauth_state", "");
+    runtime.invalidate();
+    return c.json({ ok: true });
   });
 
   // Whisper model readiness — the setup UI polls this so the one-time model

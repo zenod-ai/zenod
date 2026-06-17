@@ -47,9 +47,21 @@ function stubFetch(moves: string[] = []): typeof fetch {
     const url = String(input);
     const method = init?.method ?? "GET";
     if (url.startsWith("https://oauth2.googleapis.com/token")) {
-      const assertion = new URLSearchParams(String(init?.body)).get("assertion")!;
+      const params = new URLSearchParams(String(init?.body));
+      if (params.get("grant_type") === "refresh_token") {
+        expect(params.get("refresh_token")).toBe("refresh-123");
+        return Response.json({ access_token: "tok-123", expires_in: 3600 });
+      }
+      if (params.get("grant_type") === "authorization_code") {
+        expect(params.get("code")).toBe("code-123");
+        return Response.json({ access_token: "tok-abc", refresh_token: "refresh-123" });
+      }
+      const assertion = params.get("assertion")!;
       expect(assertion.split(".")).toHaveLength(3); // a signed JWT
       return Response.json({ access_token: "tok-123", expires_in: 3600 });
+    }
+    if (url.startsWith("https://www.googleapis.com/oauth2/v2/userinfo")) {
+      return Response.json({ email: "jordi@example.com" });
     }
     expect((init?.headers as Record<string, string> | undefined)?.Authorization ?? "Bearer tok-123").toContain(
       "Bearer",
@@ -101,6 +113,23 @@ describe("drive client", () => {
     const result = await testDrive(SA_JSON);
     expect(result.ok).toBe(true);
     expect(result.message).toContain("zenod@test-project.iam.gserviceaccount.com");
+    vi.unstubAllGlobals();
+  });
+
+  it("refreshes a user OAuth token and lists files using the Google account", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    const result = await testDrive(
+      {
+        kind: "oauth",
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        refreshToken: "refresh-123",
+        email: "jordi@example.com",
+      },
+      "folder-9",
+    );
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("connected as jordi@example.com");
     vi.unstubAllGlobals();
   });
 });
@@ -375,9 +404,11 @@ describe("drive tools + API", () => {
 
   it("masks the new secrets and exposes drive status", async () => {
     runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_oauth_client_secret", "oauth-secret");
     const masked = runtime.settings.masked();
     expect(masked.google_service_account_json).toMatch(/^••••/);
     expect(masked.google_service_account_json).not.toContain("PRIVATE KEY");
+    expect(masked.google_oauth_client_secret).toMatch(/^••••/);
 
     const app = createApp(runtime);
     runtime.settings.setAdminPassword("hunter2hunter2");
@@ -392,6 +423,41 @@ describe("drive tools + API", () => {
     expect(body.configured).toBe(true);
     expect(body.clientEmail).toBe("zenod@test-project.iam.gserviceaccount.com");
     expect(body.transcriptionProvider).toBe("local whisper.cpp for long notes");
+  });
+
+  it("connects Google Drive OAuth through start/callback and prefers OAuth for Drive", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_oauth_client_id", "client-id");
+    runtime.settings.set("google_oauth_client_secret", "client-secret");
+    runtime.settings.setAdminPassword("hunter2hunter2");
+    const app = createApp(runtime);
+    const login = await app.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password: "hunter2hunter2" }),
+    });
+    const cookie = login.headers.get("set-cookie")!;
+
+    const start = await app.request("https://c1.zenod.dev/api/drive/oauth/start", { headers: { cookie } });
+    expect(start.status).toBe(302);
+    const location = start.headers.get("location")!;
+    expect(location).toContain("accounts.google.com");
+    const state = runtime.settings.getRaw("google_oauth_state")!;
+    expect(location).toContain(encodeURIComponent(state));
+
+    const callback = await app.request(
+      `https://c1.zenod.dev/api/drive/oauth/callback?code=code-123&state=${encodeURIComponent(state)}`,
+      { headers: { cookie } },
+    );
+    expect(callback.status).toBe(302);
+    expect(runtime.settings.getRaw("google_oauth_refresh_token")).toBe("refresh-123");
+    expect(runtime.settings.getRaw("google_oauth_email")).toBe("jordi@example.com");
+
+    const status = await app.request("/api/drive/status", { headers: { cookie } });
+    const body = await status.json();
+    expect(body.configured).toBe(true);
+    expect(body.authMode).toBe("oauth");
+    expect(body.oauthEmail).toBe("jordi@example.com");
   });
 
   it("exposes OpenRouter as the long-note and Groq fallback provider", async () => {
