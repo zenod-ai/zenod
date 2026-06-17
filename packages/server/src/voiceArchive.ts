@@ -1,4 +1,4 @@
-import { DriveClient } from "./drive.js";
+import { driveClientFromSettings } from "./drive.js";
 import type { Settings } from "./settings.js";
 
 const VOICE_ARCHIVE_FOLDER = "Voice Notes";
@@ -39,10 +39,9 @@ export function voiceArchiveFilename(who: string, timestampMs: number, ext: stri
  * non-fatal: archiving must never block or break the reply.
  */
 export async function archiveVoiceNote(settings: Settings, audio: VoiceAudio): Promise<VoiceArchiveResult | null> {
-  const serviceAccountJson = settings.get("google_service_account_json");
   const folderId = settings.get("google_drive_folder_id");
-  if (!serviceAccountJson || !folderId) return null;
-  const client = new DriveClient(serviceAccountJson);
+  const client = driveClientFromSettings(settings);
+  if (!client || !folderId) return null;
   const archiveId = await client.ensureFolder(VOICE_ARCHIVE_FOLDER, folderId);
   const file = await client.uploadFile(audio.filename, audio.mimeType, audio.data, archiveId);
   return { fileId: file.id, name: file.name, webViewLink: file.webViewLink };

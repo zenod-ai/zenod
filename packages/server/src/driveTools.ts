@@ -1,5 +1,5 @@
 import type { DriveSourceTools } from "zenod";
-import { DriveClient, type DriveFile } from "./drive.js";
+import { driveClientFromSettings, type DriveFile } from "./drive.js";
 import type { IngestQueue } from "./ingestQueue.js";
 import type { Settings } from "./settings.js";
 
@@ -23,10 +23,9 @@ function describe(file: DriveFile): string {
 }
 
 export function buildDriveTools(settings: Settings, queue: IngestQueue): DriveSourceTools | undefined {
-  const serviceAccountJson = settings.get("google_service_account_json");
-  if (!serviceAccountJson) return undefined;
+  const client = driveClientFromSettings(settings);
+  if (!client) return undefined;
 
-  const client = new DriveClient(serviceAccountJson);
   const folderId = settings.get("google_drive_folder_id");
 
   return {

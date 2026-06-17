@@ -26,6 +26,8 @@ export const SETTING_KEYS = [
   "model_vision",
   "model_max_steps",
   "google_service_account_json",
+  "google_oauth_client_id",
+  "google_oauth_client_secret",
   "google_drive_folder_id",
   "groq_api_key",
   "openai_long_transcription",
@@ -56,6 +58,7 @@ const SECRET_KEYS: ReadonlySet<string> = new Set([
   "openai_api_key",
   "openrouter_api_key",
   "google_service_account_json",
+  "google_oauth_client_secret",
   "groq_api_key",
   "telegram_bot_token",
 ]);
@@ -73,6 +76,8 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   model_vision: "ZENOD_MODEL_VISION",
   model_max_steps: "ZENOD_MODEL_MAX_STEPS",
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
+  google_oauth_client_id: "GOOGLE_OAUTH_CLIENT_ID",
+  google_oauth_client_secret: "GOOGLE_OAUTH_CLIENT_SECRET",
   google_drive_folder_id: "GOOGLE_DRIVE_FOLDER_ID",
   groq_api_key: "GROQ_API_KEY",
   openai_long_transcription: "ZENOD_OPENAI_LONG_TRANSCRIPTION",
@@ -279,9 +284,14 @@ export class Settings {
     return this.get(PROVIDER_KEY[this.provider()]);
   }
 
-  /** Google Drive is connected: a service account to read with. */
+  /** Google Drive is connected: service account, or Google user OAuth. */
   driveConfigured(): boolean {
-    return Boolean(this.get("google_service_account_json"));
+    return Boolean(
+      this.get("google_service_account_json") ||
+        (this.get("google_oauth_client_id") &&
+          this.get("google_oauth_client_secret") &&
+          this.getRaw("google_oauth_refresh_token")),
+    );
   }
 
   /** Configured whisper transcription quality; defaults to large-v3-turbo. */

@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   CheckIcon,
   ExternalLinkIcon,
+  LogInIcon,
   PlugZapIcon,
   SaveIcon,
 } from "lucide-react"
@@ -43,10 +44,10 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 
-const CONSOLE_SA_URL =
-  "https://console.cloud.google.com/iam-admin/serviceaccounts"
 const CONSOLE_DRIVE_API_URL =
   "https://console.cloud.google.com/apis/library/drive.googleapis.com"
+const CONSOLE_OAUTH_URL =
+  "https://console.cloud.google.com/apis/credentials"
 
 /** Google Drive triangle, lucide-style props (lucide ships no brand icons). */
 function DriveIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -93,19 +94,20 @@ function Step({
 }
 
 /**
- * Connect Google Drive for a self-hosted instance. Google offers no
- * GitHub-manifest-style flow that could create credentials for us, and a
- * shared vendor OAuth client would put someone's personal Google project
- * behind every install — so the connection is a service account you create
- * once, following the numbered steps right here in the card.
+ * Connect Google Drive for a self-hosted instance. The primary path is user
+ * OAuth, so uploads use the user's Drive quota. Service accounts remain as an
+ * advanced fallback for Shared Drive setups.
  */
 export function GoogleDriveConnect() {
   const [status, setStatus] = React.useState<DriveStatus | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [setupOpen, setSetupOpen] = React.useState(false)
+  const [oauthClientId, setOauthClientId] = React.useState("")
+  const [oauthClientSecret, setOauthClientSecret] = React.useState("")
   const [json, setJson] = React.useState("")
   const [folderId, setFolderId] = React.useState("")
   const [saving, setSaving] = React.useState(false)
+  const [connecting, setConnecting] = React.useState(false)
   const [testing, setTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<TestResult | null>(null)
   const [disconnecting, setDisconnecting] = React.useState(false)
@@ -140,6 +142,7 @@ export function GoogleDriveConnect() {
         setStatus(result)
         setLoadError(null)
         setFolderId((previous) => previous || (result.folderId ?? ""))
+        setOauthClientId((previous) => previous || (result.oauthClientId ?? ""))
       })
       .catch((err: unknown) => {
         setLoadError(errorMessage(err))
@@ -194,13 +197,35 @@ export function GoogleDriveConnect() {
     }
   }
 
+  async function handleOAuthConnect() {
+    setConnecting(true)
+    try {
+      const body: Record<string, string> = {
+        google_drive_folder_id: folderId,
+      }
+      if (oauthClientId.trim() !== "") {
+        body.google_oauth_client_id = oauthClientId.trim()
+      }
+      if (oauthClientSecret.trim() !== "") {
+        body.google_oauth_client_secret = oauthClientSecret
+      }
+      await api<SettingsResponse>("/api/settings", {
+        method: "PUT",
+        body,
+      })
+      window.location.assign("/api/drive/oauth/start")
+    } catch (err) {
+      toast.error("Could not start Google OAuth", {
+        description: errorMessage(err),
+      })
+      setConnecting(false)
+    }
+  }
+
   async function handleDisconnect() {
     setDisconnecting(true)
     try {
-      await api("/api/settings", {
-        method: "PUT",
-        body: { google_service_account_json: "" },
-      })
+      await api("/api/drive/disconnect", { method: "POST" })
       await loadStatus()
       toast.success("Google Drive disconnected")
     } catch (err) {
@@ -212,6 +237,10 @@ export function GoogleDriveConnect() {
 
   const connected = Boolean(status?.configured)
   const showSetup = !connected || setupOpen
+  const connectedLabel =
+    status?.authMode === "oauth"
+      ? status.oauthEmail || "Google OAuth user"
+      : status?.clientEmail
 
   return (
     <Card>
@@ -234,18 +263,24 @@ export function GoogleDriveConnect() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        {connected && status?.clientEmail !== null && (
+        {connected && connectedLabel && (
           <Field>
-            <FieldLabel>Connected service account</FieldLabel>
+            <FieldLabel>
+              {status?.authMode === "oauth"
+                ? "Connected Google account"
+                : "Connected service account"}
+            </FieldLabel>
             <div className="flex items-center gap-2">
               <code className="min-w-0 flex-1 truncate rounded-md bg-muted px-2 py-1.5 text-xs">
-                {status?.clientEmail}
+                {connectedLabel}
               </code>
-              {status?.clientEmail && <CopyButton value={status.clientEmail} />}
+              <CopyButton value={connectedLabel} />
             </div>
             <FieldDescription>
-              Any folder shared with this email is visible to Zeno. Voice
-              notes are transcribed on this server with{" "}
+              {status?.authMode === "oauth"
+                ? "Uploads use this Google account's Drive quota."
+                : "Any folder shared with this email is visible to Zeno."}{" "}
+              Voice notes are transcribed on this server with{" "}
               {status?.transcriptionProvider ?? "local whisper.cpp"} — no API
               key, no per-minute cost.
             </FieldDescription>
@@ -280,18 +315,21 @@ export function GoogleDriveConnect() {
           <>
             <div className="flex flex-col gap-3">
               <Step n={1}>
-                In Google Cloud, create a service account (any project, no
-                roles needed) and download a <strong>JSON key</strong> for it
-                — then make sure the <strong>Google Drive API</strong> is
-                enabled in that project.
+                In Google Cloud, create an <strong>OAuth client</strong> for a
+                web application, add{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  {window.location.origin}/api/drive/oauth/callback
+                </code>{" "}
+                as an authorized redirect URI, and make sure the{" "}
+                <strong>Google Drive API</strong> is enabled.
                 <span className="mt-1 flex flex-wrap gap-3">
                   <a
                     className="inline-flex items-center gap-1 text-foreground underline underline-offset-4"
-                    href={CONSOLE_SA_URL}
+                    href={CONSOLE_OAUTH_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Service accounts <ExternalLinkIcon className="size-3" />
+                    OAuth clients <ExternalLinkIcon className="size-3" />
                   </a>
                   <a
                     className="inline-flex items-center gap-1 text-foreground underline underline-offset-4"
@@ -304,14 +342,77 @@ export function GoogleDriveConnect() {
                 </span>
               </Step>
               <Step n={2}>
-                Paste the key file below — its email appears; share your Drive
-                folder with that email as <strong>Editor</strong> (lets Zeno
-                archive transcribed files; Viewer works but skips archiving).
+                Paste the client ID and client secret, choose the Drive folder
+                that acts as the inbox, then connect with Google. Uploads and
+                archived voice notes will be owned by that Google account.
               </Step>
               <Step n={3}>
-                Test, save, and you&apos;re connected — from then on Zeno can
-                list and transcribe that folder whenever you ask in chat.
+                From then on Zeno can list and transcribe that folder whenever
+                you ask in chat; receipts include the final Drive link.
               </Step>
+            </div>
+
+            <Field>
+              <FieldLabel htmlFor="drive-oauth-client-id">
+                OAuth client ID
+              </FieldLabel>
+              <Input
+                id="drive-oauth-client-id"
+                autoComplete="off"
+                placeholder="1234567890-abc.apps.googleusercontent.com"
+                value={oauthClientId}
+                onChange={(event) => setOauthClientId(event.target.value)}
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="drive-oauth-client-secret">
+                OAuth client secret
+              </FieldLabel>
+              <Input
+                id="drive-oauth-client-secret"
+                type="password"
+                autoComplete="off"
+                placeholder={
+                  status?.oauthClientConfigured
+                    ? "saved; leave blank to keep it"
+                    : "GOCSPX-..."
+                }
+                value={oauthClientSecret}
+                onChange={(event) =>
+                  setOauthClientSecret(event.target.value)
+                }
+              />
+              <FieldDescription>
+                Stored only on this server. Leave blank when reconnecting with
+                an already saved secret.
+              </FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="drive-folder-id">
+                Folder ID
+              </FieldLabel>
+              <Input
+                id="drive-folder-id"
+                autoComplete="off"
+                placeholder="the part after /folders/ in the folder URL"
+                value={folderId}
+                onChange={(event) => setFolderId(event.target.value)}
+              />
+              <FieldDescription>
+                The folder that acts as the inbox and contains the Voice Notes
+                archive folder.
+              </FieldDescription>
+            </Field>
+
+            <div className="border-t pt-4">
+              <p className="text-sm font-medium">Service account fallback</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Use this only for Shared Drive setups. My Drive uploads from a
+                service account can fail because service accounts have no Drive
+                storage quota.
+              </p>
             </div>
 
             <Field>
@@ -348,11 +449,11 @@ export function GoogleDriveConnect() {
             )}
 
             <Field>
-              <FieldLabel htmlFor="drive-folder-id">
-                Folder ID (optional)
+              <FieldLabel htmlFor="drive-sa-folder-id">
+                Service-account folder ID
               </FieldLabel>
               <Input
-                id="drive-folder-id"
+                id="drive-sa-folder-id"
                 autoComplete="off"
                 placeholder="the part after /folders/ in the folder URL"
                 value={folderId}
@@ -391,6 +492,14 @@ export function GoogleDriveConnect() {
       <CardFooter className="flex flex-wrap items-center gap-2">
         {showSetup ? (
           <>
+            <Button
+              type="button"
+              disabled={connecting}
+              onClick={handleOAuthConnect}
+            >
+              {connecting ? <Spinner /> : <LogInIcon data-icon="inline-start" />}
+              Connect with Google
+            </Button>
             <Button
               type="button"
               variant="outline"

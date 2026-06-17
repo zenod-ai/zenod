@@ -1,5 +1,5 @@
 import type { BrainEngine } from "zenod";
-import { DriveClient } from "./drive.js";
+import { driveClientFromSettings } from "./drive.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 import type { IngestJob, IngestStore } from "./ingestStore.js";
 import type { Settings } from "./settings.js";
@@ -78,12 +78,11 @@ export class IngestQueue {
   }
 
   private async process(job: IngestJob): Promise<void> {
-    const serviceAccountJson = this.settings.get("google_service_account_json");
-    if (!serviceAccountJson) {
+    const client = driveClientFromSettings(this.settings);
+    if (!client) {
       this.store.update(job.id, { status: "error", error: "Google Drive is not connected" });
       return;
     }
-    const client = new DriveClient(serviceAccountJson);
     const folderId = this.settings.get("google_drive_folder_id");
     const controller = new AbortController();
     this.running.set(job.id, controller);
