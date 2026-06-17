@@ -145,11 +145,12 @@ export class Runtime {
     // LLM key is required, no vault/tasking/drive tools. Vault agents are unchanged.
     const vaultless = this.agent.vaultless === true;
     const backlog = this.agent.backlog === true;
-    // The executor (Epaminon) wires its engine exactly like a backlog agent —
-    // vaultless + the GitHub tasking tools — but runs queued tickets rather than
-    // curating the backlog. Treat both the same for engine config/tooling.
-    const executor = this.agent.executor === true;
-    const githubBacked = backlog || executor;
+    // The executor (Epaminon) is vaultless and owns NO repo: it never writes GitHub
+    // (the runner does the code work; Archus owns the backlog). Its engine is a plain
+    // chat brain — no vault, no backlog tasking tools — and it just needs an LLM key.
+    // Its execution work flows through the ExecutionQueue + the /api/exec lane, not the
+    // engine. So it is NOT githubBacked.
+    const githubBacked = backlog;
     // The Outbound agent is vaultless and owns no repo; it just needs an LLM key.
     // Its send tools are wired below into the same generic tool slot the mesh uses.
     const outbound = this.agent.outbound === true;
@@ -202,8 +203,8 @@ export class Runtime {
           }
         : {}),
       ...(driveTools ? { driveTools } : {}),
-      // GitHub tasking tools for vault agents, backlog agents (Archus), and the
-      // executor (Epaminon) — not the bare Console.
+      // GitHub tasking tools for vault agents and backlog agents (Archus) — NOT the
+      // bare Console, NOT the executor (Epaminon writes no backlog), NOT Outbound.
       ...(vaultless && !githubBacked ? {} : { taskingTools: this.buildTaskingTools() }),
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),

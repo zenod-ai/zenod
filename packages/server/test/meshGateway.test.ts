@@ -69,8 +69,6 @@ describe("Console mesh gateway contract", () => {
       "post_reddit",
       "post_tweet",
       "raise_event",
-      "report_outcome",
-      "run_ticket",
       "search_memory",
       "send_email",
       "store_memory",
