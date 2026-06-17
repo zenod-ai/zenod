@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Idempotently provision X MCP client config on agent-runner startup, then hand
-# off to the original CMD.
+# Idempotently provision MCP client config on agent-runner startup, then hand off
+# to the original CMD.
 #
-#   Codex  -> $CODEX_HOME/config.toml  ->  read-only X endpoint (autonomous workers)
+#   Codex  -> $CODEX_HOME/config.toml  ->  Console gateway + X endpoint
 #   Claude -> $HOME/.claude.json       ->  post+read X endpoint (attended use)
 #
 # Why an entrypoint and not files baked into the image: CODEX_HOME and HOME live on
@@ -18,10 +18,10 @@ CODEX_HOME="${CODEX_HOME:-/runner/codex-home}"
 CLAUDE_CONFIG="${HOME:-/runner}/.claude.json"
 X_MCP_READONLY_URL="${X_MCP_READONLY_URL:-http://x-mcp-readonly:8000/mcp}"
 X_MCP_POSTREAD_URL="${X_MCP_POSTREAD_URL:-http://x-mcp-postread:8000/mcp}"
-# Zenod's own MCP endpoint, so the agent can read the vault/brain (ask_brain,
-# search_memory, get_memory, ...). Bearer = ZENOD_API_TOKEN (already in the
-# runner env, same token the monitor uses). Derived from ZENOD_APP_URL.
-ZENOD_MCP_URL="${ZENOD_MCP_URL:-${ZENOD_APP_URL:-https://app.zenod.dev}/mcp}"
+# Console MCP gateway: one endpoint that republishes enabled suite agents'
+# curated semantic tools. Bearer = the Console instance's own api_token, carried
+# in ZENOD_CONSOLE_TOKEN. Do not use ZENOD_API_TOKEN here; that belongs to Zenod.
+ZENOD_CONSOLE_MCP_URL="${ZENOD_CONSOLE_MCP_URL:-${ZENOD_CONSOLE_URL:-http://zenod-console:8080}/mcp}"
 
 BEGIN_MARK="# >>> zenod x-mcp (managed) >>>"
 END_MARK="# <<< zenod x-mcp (managed) <<<"
@@ -39,9 +39,9 @@ url = "${X_MCP_READONLY_URL}"
 startup_timeout_sec = 30
 tool_timeout_sec = 120
 
-[mcp_servers.zenod]
-url = "${ZENOD_MCP_URL}"
-bearer_token_env_var = "ZENOD_API_TOKEN"
+[mcp_servers.console]
+url = "${ZENOD_CONSOLE_MCP_URL}"
+bearer_token_env_var = "ZENOD_CONSOLE_TOKEN"
 startup_timeout_sec = 30
 tool_timeout_sec = 120
 ${END_MARK}
@@ -59,7 +59,7 @@ EOF
   printf '\n%s\n' "${block}" >> "${tmp}"
   mv "${tmp}" "${config}"
   log "codex: wrote [mcp_servers.x] -> ${X_MCP_READONLY_URL}"
-  log "codex: wrote [mcp_servers.zenod] -> ${ZENOD_MCP_URL}"
+  log "codex: wrote [mcp_servers.console] -> ${ZENOD_CONSOLE_MCP_URL}"
 }
 
 provision_claude() {

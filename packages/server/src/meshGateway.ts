@@ -207,23 +207,47 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
+  // Phylax's inward notification surface. Callers report events/facts; Phylax
+  // decides whether/how to reach the principal and uses his private
+  // deliver_to_principal tool only after composing the final message.
+  {
+    name: "raise_event",
+    owner: "phylax",
+    peerTool: "chat_with_phylax",
+    intentPrefix:
+      "An agent or system is raising this event for possible notification. Treat it as a fact, not a final message; decide whether to suppress, batch, hold, enrich, or notify Jordi: ",
+    title: "Raise event to Phylax",
+    description:
+      "Report an event/fact to Phylax, the inward-facing attention gatekeeper. Include source, event, urgency, and reference if known; Phylax decides whether/when/how it reaches Jordi.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "ask_phylax",
+    owner: "phylax",
+    peerTool: "chat_with_phylax",
+    title: "Ask Phylax (notification gatekeeper)",
+    description:
+      "Ask Phylax about notification handling, quiet hours, batching, urgency, or whether an event should interrupt Jordi. For advice/control, not direct delivery.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
   // Epaminon's execution surface. Writes (run a ticket, record an outcome) are
   // semantic intents routed to his guardian brain (chat_with_epaminon), which
-  // enforces his rules (only run explicitly-approved tickets, qualified ids,
-  // honest status) and acts with his GitHub tasking tools. The status read is a
-  // plain question to the same brain — no intent directive. NOTE: these are
-  // human/Console-facing execution triggers; they are NOT meant for autonomous
-  // fan-out workers (running work is an explicit approval gate — see
-  // docs/EPAMINON-C1-MCP-WIRING.md for the worker tool surface).
+  // enforces his rules (only run explicitly-dispatched execution tickets,
+  // qualified target ids, honest status). The status read is a plain question to
+  // the same brain — no intent directive. NOTE: these are human/Console-facing
+  // execution intents; the deterministic Archus↔Epaminon lane is internal-only
+  // and must never be republished on this public gateway.
   {
     name: "run_ticket",
     owner: "epaminon",
     peerTool: "chat_with_epaminon",
     intentPrefix:
-      "Run the following approved ticket now — queue it so the runner executes it; only act on a ticket explicitly approved to run, by its qualified owner/repo#N, and report back exactly what was queued: ",
+      "Run the following approved work through the execution-ticket protocol. If this is not already an Archus-dispatched execution ticket, ask Archus to mint/dispatch one; only act on explicitly approved qualified owner/repo#N work and report the confirmed execution state: ",
     title: "Run a backlog ticket",
     description:
-      "Tell Epaminon to RUN an approved ticket. Name the ticket (owner/repo#N) the user has explicitly approved to execute; Epaminon queues it so the fan-out runner picks it up (opens a PR, moves it to needs-review) and confirms what was queued. He runs only what is explicitly approved — never bulk-queues a backlog.",
+      "Tell Epaminon to run explicitly approved work. Name the target work ticket (owner/repo#N) or execution ticket; Epaminon operates through the Archus-minted execution-ticket protocol, launches the runner, and reports confirmed state/evidence. He never bulk-runs a backlog.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
@@ -232,10 +256,10 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "epaminon",
     peerTool: "chat_with_epaminon",
     intentPrefix:
-      "Record this execution outcome on the ticket you ran — comment the result with its evidence URL (PR/commit) on the qualified owner/repo#N, set the review status, and report the status up so Archus can reflect it onto the central tracker: ",
+      "Record this execution outcome for the execution ticket you ran — include the target owner/repo#N, state, and evidence URL; report facts up so Archus can reflect them onto the central tracker: ",
     title: "Report an execution outcome",
     description:
-      "Hand Epaminon an execution outcome — the result and its evidence URL (PR/commit) — to record on the qualified repo ticket (owner/repo#N) he ran. He comments it, sets the review status, and reports up to Archus. He does not curate the backlog himself.",
+      "Hand Epaminon an execution outcome with evidence. He records execution state, routes review/approval as needed, and reports up to Archus. He does not curate or directly own backlog work tickets.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
@@ -245,7 +269,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     peerTool: "chat_with_epaminon",
     title: "Check execution status",
     description:
-      "Ask Epaminon where execution stands — which tickets are queued/running, in review, or shipped, and any blockers. A read-only status question (does not start work). Reference tickets as owner/repo#N.",
+      "Ask Epaminon where execution stands — execution tickets queued/running/blocked/awaiting review/done, and any blockers. A read-only status question (does not start work). Reference work tickets as owner/repo#N.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ExecutionQueue, IllegalTransitionError, type ExecutionEvent, type ExecutionTicket } from "../src/executionQueue.js";
+import { ExecutionStore } from "../src/executionStore.js";
 
 /** A test harness: a monotonic clock + captured seam calls. */
 function harness(opts?: { concurrency?: number; ship?: (t: ExecutionTicket) => Promise<string> }) {
@@ -188,5 +192,77 @@ describe("ExecutionQueue — protocol invariants", () => {
     const snap = h.q.snapshot();
     expect(snap[0].executionId).toBe("a"); // most recently updated
     expect(snap.map((t) => t.executionId).sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("ExecutionQueue — durable state seam", () => {
+  it("persists state changes through the injected onChange hook", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-exec-store-"));
+    const store = new ExecutionStore(join(dir, "execution.sqlite"));
+    try {
+      const q = new ExecutionQueue({
+        concurrency: 1,
+        now: () => 1,
+        launch: () => {},
+        ship: async () => "ship://a",
+        report: () => {},
+        onChange: (ticket) => store.upsert(ticket),
+      });
+      await q.enqueue(tk("a"));
+      expect(store.get("a")?.state).toBe("running");
+      await q.reportOutcome({ executionId: "a", outward: true, evidenceUrl: "draft://a" });
+      expect(store.get("a")).toMatchObject({ state: "needs-review", evidenceUrl: "draft://a", outward: true });
+      await q.approve({ executionId: "a" });
+      expect(store.get("a")).toMatchObject({ state: "done", evidenceUrl: "ship://a" });
+    } finally {
+      store.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("marks running tickets blocked on restart instead of losing them", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-exec-store-"));
+    const path = join(dir, "execution.sqlite");
+    const first = new ExecutionStore(path, () => 10);
+    first.upsert({ executionId: "a", target: "o/r#a", context: "do a", state: "running", updatedAt: 1 });
+    first.close();
+
+    const second = new ExecutionStore(path, () => 20);
+    try {
+      expect(second.get("a")).toMatchObject({
+        state: "blocked",
+        note: "interrupted by a server restart",
+        updatedAt: 20,
+      });
+    } finally {
+      second.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("hydrates active tickets into a fresh queue and resumes queued work", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-exec-store-"));
+    const store = new ExecutionStore(join(dir, "execution.sqlite"));
+    try {
+      store.upsert({ executionId: "a", target: "o/r#a", context: "do a", state: "queued", updatedAt: 1 });
+      store.upsert({ executionId: "b", target: "o/r#b", context: "do b", state: "needs-review", evidenceUrl: "pr://b", updatedAt: 2 });
+      const launched: string[] = [];
+      const q = new ExecutionQueue({
+        concurrency: 1,
+        initialTickets: store.active(),
+        now: () => 3,
+        launch: (ticket) => launched.push(ticket.executionId),
+        ship: async () => "ship://",
+        report: () => {},
+        onChange: (ticket) => store.upsert(ticket),
+      });
+      await q.resume();
+      expect(launched).toEqual(["a"]);
+      expect(store.get("a")?.state).toBe("running");
+      expect(q.get("b")?.state).toBe("needs-review");
+    } finally {
+      store.close();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

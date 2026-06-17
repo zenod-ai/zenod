@@ -1,4 +1,5 @@
 import { ExecutionQueue, type ExecutionEvent, type ExecutionTicket } from "./executionQueue.js";
+import type { ExecutionStore } from "./executionStore.js";
 import type { Settings } from "./settings.js";
 
 /**
@@ -18,14 +19,16 @@ import type { Settings } from "./settings.js";
 
 const DEFAULT_CONCURRENCY = 3;
 
-export function buildExecutionQueue(settings: Settings): ExecutionQueue {
+export function buildExecutionQueue(settings: Settings, store: ExecutionStore): ExecutionQueue {
   const configured = Number(settings.getRaw("exec_concurrency"));
   const concurrency = Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_CONCURRENCY;
   return new ExecutionQueue({
     concurrency,
+    initialTickets: store.active(),
     launch: (t) => launchExecution(t),
     ship: (t) => shipExecution(t),
     report: (e) => reportToArchus(settings, e),
+    onChange: (t) => store.upsert(t),
     now: () => Date.now(),
   });
 }

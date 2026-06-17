@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAgent, ZENOD_AGENT, ARCHUS_AGENT, EPAMINON_AGENT, OUTBOUND_AGENT } from "../src/agent.js";
+import { resolveAgent, ZENOD_AGENT, ARCHUS_AGENT, EPAMINON_AGENT, OUTBOUND_AGENT, PHYLAX_AGENT } from "../src/agent.js";
 
 describe("resolveAgent", () => {
   it("defaults to Zenod when unset or unknown", () => {
@@ -16,6 +16,8 @@ describe("resolveAgent", () => {
     expect(resolveAgent("  EPAMINON  ")).toBe(EPAMINON_AGENT);
     expect(resolveAgent("outbound")).toBe(OUTBOUND_AGENT);
     expect(resolveAgent("  OUTBOUND  ")).toBe(OUTBOUND_AGENT);
+    expect(resolveAgent("phylax")).toBe(PHYLAX_AGENT);
+    expect(resolveAgent("  PHYLAX  ")).toBe(PHYLAX_AGENT);
   });
 });
 
@@ -36,6 +38,23 @@ describe("EPAMINON_AGENT (executor)", () => {
     expect(persona).toContain("never say a ticket is queued");
     // Stays out of Archus's lane.
     expect(persona).toContain("archus");
+  });
+});
+
+describe("PHYLAX_AGENT (notification gatekeeper)", () => {
+  it("is the vaultless, repo-less guardian of inbound attention", () => {
+    expect(PHYLAX_AGENT.name).toBe("phylax");
+    expect(PHYLAX_AGENT.vaultless).toBe(true);
+    expect(PHYLAX_AGENT.notifier).toBe(true);
+    expect(PHYLAX_AGENT.backlog).toBeUndefined();
+  });
+
+  it("its persona treats inbound requests as events, not final messages", () => {
+    const persona = PHYLAX_AGENT.persona.toLowerCase();
+    expect(persona).toContain("attention");
+    expect(persona).toContain("event/fact");
+    expect(persona).toContain("quiet hours");
+    expect(persona).toContain("deliver_to_principal");
   });
 });
 

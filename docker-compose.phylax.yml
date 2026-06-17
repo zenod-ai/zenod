@@ -1,0 +1,40 @@
+# Phylax — the headless INBOUND-NOTIFICATION gatekeeper. Internal MCP server the
+# Console (c1) loads over dokploy-network; reachable only as
+# http://zenod-phylax:8080.
+#
+# Boots UN-PROVISIONED (ZENOD_AWAIT_PROVISION=1): mints no token, idles until c1
+# MINTS its token and pushes config (the shared LLM key) to /api/provision. Owns
+# NO repo and needs no vault — AGENT=phylax runs the engine with the private
+# deliver_to_principal tool wired into its chat brain. Phylax decides whether,
+# when, and how an event reaches Jordi; the Console only delivers through
+# WhatsApp/Telegram. NOT exposed publicly. See docs/PHYLAX-GATEKEEPER.md.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-phylax-data:
+
+services:
+  zenod-phylax:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenod-phylax:dokploy
+    container_name: zenod-phylax
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-phylax-data:/data
+    environment:
+      AGENT: phylax
+      ZENOD_AWAIT_PROVISION: "1"
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # Console delivery bridge. PHYLAX_CONSOLE_TOKEN is the Console instance's
+      # own api_token, not Phylax's token.
+      PHYLAX_CONSOLE_URL: ${PHYLAX_CONSOLE_URL:-http://zenod-console:8080}
+      PHYLAX_CONSOLE_TOKEN: ${PHYLAX_CONSOLE_TOKEN}
+    expose:
+      - "8080"

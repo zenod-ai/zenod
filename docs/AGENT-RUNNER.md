@@ -2,6 +2,10 @@
 
 The agent runner is a separate container for Codex fan-out work. Keep it separate from the Zenod app container: Zenod owns memory, MCP, chat, ingestion, and vault writes; the runner owns GitHub issue execution, worktrees, Codex subprocesses, draft PRs, and `.fanout` status.
 
+Autonomous workers do not connect directly to each suite agent. The runner writes one Codex MCP server named `console`, pointing at the Console `/mcp` gateway. The Console republishes the enabled agents' curated semantic tools and forwards each call to the owning agent with that agent's stored token.
+
+Execution ownership is moving to the Archus/Epaminon execution-ticket protocol: Archus mints central `type:execution` tickets and Epaminon dispatches concrete work to the runner. Any remaining `status:queued` scanning in the runner is a migration path until the runner is fully run-on-command.
+
 ## Build
 
 ```sh
@@ -35,7 +39,7 @@ docker run -d --name zenod-agent-runner \
   zenod-agent-runner
 ```
 
-The image's entrypoint (`scripts/agent-runner-entrypoint.sh`) idempotently writes the X MCP client config into the `codex-home`/`HOME` volumes on every start, then runs the CMD.
+The image's entrypoint (`scripts/agent-runner-entrypoint.sh`) idempotently writes the Console and X MCP client config into the `codex-home`/`HOME` volumes on every start, then runs the CMD.
 
 ## Auth
 
@@ -115,11 +119,28 @@ docker exec zenod-agent-runner zenod-fanout-codex start \
 
 No command in this flow merges to `main`.
 
+## Console MCP wiring
+
+Codex workers receive one suite backend:
+
+- **`console`** — wired into Codex (`$CODEX_HOME/config.toml`, `[mcp_servers.console]`). This is the Console `/mcp` gateway, authenticated with `ZENOD_CONSOLE_TOKEN`, the Console instance's own API token.
+
+Do not reuse `ZENOD_API_TOKEN` for this. That token belongs to the Zenod memory agent/app endpoint. The runner must receive the Console token through Dokploy as `ZENOD_CONSOLE_TOKEN`, with `ZENOD_CONSOLE_URL` defaulting to `http://zenod-console:8080` on `dokploy-network`.
+
+The worker-visible tool set is dynamic: enabling or disabling agents in the Console Team tab changes what the gateway advertises on the next MCP call. Typical enabled tools include `ask_zenod`, `search_memory`, `get_memory`, `ask_archus`, `open_issue`, `edit_issue`, and `close_issue`, depending on which peers are enabled. Raw internal lane tools such as `enqueue_execution`, `approve_execution`, and `apply_execution_event` must not be exposed here.
+
+Verify after start:
+
+```sh
+docker exec zenod-agent-runner cat /runner/codex-home/config.toml   # [mcp_servers.console] -> Console gateway
+docker exec zenod-agent-runner codex mcp list                       # console: enabled suite-agent tools
+```
+
 ## X MCP wiring
 
 The runner consumes the vendored X (Twitter) MCP server (`services/x-mcp/`) as an MCP **client**. Two instances run on the shared `zenod-x-net` network, differing only by tool allowlist:
 
-- **`x-mcp-readonly`** — wired into Codex (`$CODEX_HOME/config.toml`, `[mcp_servers.x]`). Autonomous fan-out workers run with approvals bypassed, so they get **read tools only** — they can research X but cannot post.
+- **`x-mcp-readonly`** — wired into Codex (`$CODEX_HOME/config.toml`, `[mcp_servers.x]`). Autonomous fan-out workers run with approvals bypassed, so this endpoint should normally expose **read tools only** — they can research X but cannot post. Some deployments temporarily point this at the post+read instance while testing; keep the worker prompt's human-authorization gate in place either way.
 - **`x-mcp-postread`** — wired into Claude CLI (`$HOME/.claude.json`, `mcpServers.x`). Posting (`createTweet`) lives here, for **attended** use only (Claude CLI is interactive / has its own approval prompts).
 
 The gate is topology, not prompt instructions: posting is simply absent from the endpoint the autonomous worker reaches. Bring the instances up from `services/x-mcp/` (`docker compose -f docker-compose.x-mcp.yml up -d`, or two Dokploy apps on `zenod-x-net`) before relying on X tools. Override the default endpoints with `X_MCP_READONLY_URL` / `X_MCP_POSTREAD_URL` env vars on the runner if needed.
@@ -147,4 +168,4 @@ docker run -d --name zenod-agent-runner \
   zenod-agent-runner
 ```
 
-The entrypoint re-applies the X MCP config to the existing `codex-home` volume on start (it strips and rewrites only its own sentinel-marked block, leaving the rest of `config.toml` intact).
+The entrypoint re-applies the Console and X MCP config to the existing `codex-home` volume on start (it strips and rewrites only its own sentinel-marked block, leaving the rest of `config.toml` intact).
