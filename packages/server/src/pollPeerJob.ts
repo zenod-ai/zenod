@@ -19,6 +19,15 @@ export function extractJobId(reply: { text: string; actions: Array<{ result: str
   );
 }
 
+function peerApiUrl(peerUrl: string, jobId: string): string {
+  const url = new URL(peerUrl);
+  url.pathname = url.pathname.replace(/\/mcp\/?$/, "");
+  url.pathname = `${url.pathname.replace(/\/$/, "")}/api/tasks/jobs/${jobId}`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
 interface JobPollResult {
   status: "done" | "error" | "timeout";
   error?: string;
@@ -49,7 +58,7 @@ export async function pollPeerJob(
 
     for (const peer of peers) {
       try {
-        const res = await fetch(`${peer.url}/api/tasks/jobs/${jobId}`, {
+        const res = await fetch(peerApiUrl(peer.url, jobId), {
           headers: { Authorization: `Bearer ${peer.token}` },
         });
         if (!res.ok) continue;
