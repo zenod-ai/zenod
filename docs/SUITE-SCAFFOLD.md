@@ -188,7 +188,7 @@ concretely, frequently needed (e.g. Zenod filing into Archus). Peer tools are la
 | **Outbound** | outbound comms: post + email | post_tweet, read_tweets, submit_post, read_subreddit, comment, send_email, search_email — *composed from 3 internal MCP servers (xmcp + reddit-mcp + email)* | **Accounts** | `outbound` | **partial** (X tools live → +Reddit +Mail) |
 | **Nectary** | financing | (TBD) | **Financing** | `nectary` | **future** |
 
-The **Console** is the product at the main domain (today: `app.zenod.dev`). Each agent's MCP
+The **Console** is the product at the main domain (`c1.zenod.dev` for the current C1 stack). Each agent's MCP
 server is reachable internally (and optionally at its subdomain for external MCP use).
 
 ## Repos & containers
@@ -307,11 +307,10 @@ The shape is **settled**. What remains:
   enabling provisions + connects). *Supersedes "isolation is only policy" below for the self-host
   case — c1 now controls every agent's credential.*
 
-  **New-stack topology (c1 / z1 / z2):** **z1** = live Zenod (`app.zenod.dev`) — production, never
-  touched. **c1** = the Console (the UI), at `c1.zenod.dev`; it is what was temporarily at
+  **New-stack topology (c1 / z2):** **c1** = the Console (the UI and channels), at `c1.zenod.dev`; it is what was temporarily at
   `z2.zenod.dev`. **z2** = the NEW Zenod — **headless** (no public UI), an internal MCP server that
-  c1 loads over `dokploy-network`. **c1 → z2 only; never c1 → z1.** Keeps the new stack isolated
-  from production.
+  c1 loads over `dokploy-network`. `app.zenod.dev` is retired for this stack and must not be used
+  for C1 health checks or channel verification.
 - **Base-change propagation** is manual per-container until a rebuild-and-redeploy-all step exists
   (else: version skew).
 
