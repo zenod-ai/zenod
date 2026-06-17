@@ -24,6 +24,8 @@ import {
 } from "zenod";
 import { installationToken, installationTokenForRepo, editGithubIssue } from "zenod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
+import { ExecutionQueue } from "./executionQueue.js";
+import { buildExecutionQueue } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
 import { buildOutboundTools } from "./outboundTools.js";
 import { IngestStore } from "./ingestStore.js";
@@ -60,6 +62,9 @@ export class Runtime {
   readonly taskJobStore: TaskJobStore;
   readonly taskJobQueue: TaskJobQueue;
   readonly usageStore: UsageStore;
+  /** The executor's queue (Epaminon only) — the state authority for the execution
+   *  lane. Null on every other agent. Wired to the protocol seams in executionLane. */
+  readonly executionQueue: ExecutionQueue | null;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
 
@@ -91,6 +96,8 @@ export class Runtime {
     this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"));
     this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine());
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
+    // The executor (Epaminon) owns an execution queue; no other agent does.
+    this.executionQueue = agent.executor === true ? buildExecutionQueue(this.settings) : null;
   }
 
   get workdir(): string {

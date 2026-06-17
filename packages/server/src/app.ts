@@ -201,6 +201,59 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ ok: true, ...result });
   });
 
+  // Execution lane — Epaminon's receivers (Archus → Epaminon). Same cross-provisioned
+  // `exec_lane_secret` gate as /api/exec/event (NOT the agent token); inert until the
+  // Console provisions the lane; executor agents only; internal-mesh, never on the
+  // public gateway. They drive the ExecutionQueue (the executor's state authority).
+  const execLaneGate = (laneHeader: string | undefined): { error: string; status: 404 | 503 | 401 } | null => {
+    if (!runtime.executionQueue) return { error: "not an executor agent", status: 404 };
+    const secret = settings.getRaw("exec_lane_secret");
+    if (!secret) return { error: "execution lane not provisioned", status: 503 };
+    if ((laneHeader ?? "") !== secret) return { error: "unauthorized", status: 401 };
+    return null;
+  };
+
+  // `enqueue_execution` — Archus dispatches a freshly-minted execution ticket.
+  app.post("/api/exec/enqueue", async (c) => {
+    const bad = execLaneGate(c.req.header("X-Lane-Secret"));
+    if (bad) return c.json({ error: bad.error }, bad.status);
+    const body = await c.req
+      .json<{ execution_id?: number | string; target?: string; context?: string }>()
+      .catch(() => ({}) as Record<string, unknown>);
+    const executionId = body.execution_id != null ? String(body.execution_id) : "";
+    if (!executionId || !body.target) return c.json({ error: "execution_id and target are required" }, 400);
+    await runtime.executionQueue!.enqueue({
+      executionId,
+      target: String(body.target),
+      context: String(body.context ?? ""),
+    });
+    return c.json({ ok: true });
+  });
+
+  // `approve_execution` — Archus dispatches the human's content-approval (with the
+  // edited final_content, if any); Epaminon routes it to Outbound (send) / runner (merge).
+  app.post("/api/exec/approve", async (c) => {
+    const bad = execLaneGate(c.req.header("X-Lane-Secret"));
+    if (bad) return c.json({ error: bad.error }, bad.status);
+    const body = await c.req
+      .json<{ execution_id?: number | string; final_content?: string }>()
+      .catch(() => ({}) as Record<string, unknown>);
+    const executionId = body.execution_id != null ? String(body.execution_id) : "";
+    if (!executionId) return c.json({ error: "execution_id is required" }, 400);
+    await runtime.executionQueue!.approve({
+      executionId,
+      ...(body.final_content ? { finalContent: String(body.final_content) } : {}),
+    });
+    return c.json({ ok: true });
+  });
+
+  // `execution_status` — the human read (Console/chat). Normal agent-token auth (this
+  // path is NOT under /api/exec/, so it does not bypass auth). Returns the live queue.
+  app.get("/api/executions", (c) => {
+    if (!runtime.executionQueue) return c.json({ error: "not an executor agent" }, 404);
+    return c.json({ tickets: runtime.executionQueue.snapshot() });
+  });
+
   app.get("/api/settings", (c) =>
     c.json({ settings: settings.masked(), configured: settings.configured() }),
   );
