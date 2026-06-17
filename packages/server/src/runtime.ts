@@ -22,7 +22,7 @@ import {
   type LlmUsageReport,
   type TokenCostMeasurement,
 } from "zenod";
-import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue } from "zenod";
+import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue, setExecutionState } from "zenod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { ExecutionQueue } from "./executionQueue.js";
 import { buildExecutionQueue } from "./executionLane.js";
@@ -394,6 +394,27 @@ export class Runtime {
         return `Minted execution ticket ${minted.repo}#${minted.executionId} (exec:queued) for ${target}${
           dispatched ? " and dispatched to Epaminon" : " — awaiting Epaminon dispatch (execution lane not yet provisioned)"
         }: ${minted.issueUrl}`;
+      },
+      approveExecution: async ({ executionId, finalContent, repo }) => {
+        // Flip the exec ticket to exec:approved (the human's go), then dispatch to
+        // Epaminon to ship the outward outcome (merge/send).
+        const res = await setExecutionState(this.settings, { ...(repo ? { repo } : {}), executionId, state: "approved" });
+        const secret = this.settings.getRaw("exec_lane_secret");
+        const base = (this.settings.getRaw("epaminon_base_url") || "http://zenod-epaminon:8080").replace(/\/$/, "");
+        let dispatched = false;
+        if (secret) {
+          dispatched = await fetch(`${base}/api/exec/approve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
+            body: JSON.stringify({ execution_id: executionId, ...(finalContent ? { final_content: finalContent } : {}) }),
+            signal: AbortSignal.timeout(4000),
+          })
+            .then((r) => r.ok)
+            .catch(() => false);
+        }
+        return `Approved execution ${res.repo}#${executionId} (exec:approved)${
+          dispatched ? " — dispatched to Epaminon to ship" : " — awaiting Epaminon (execution lane not yet provisioned)"
+        }: ${res.issueUrl}`;
       },
       queryBacklog,
       serviceBacklog: async (query?: string) =>

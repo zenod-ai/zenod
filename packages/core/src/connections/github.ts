@@ -237,6 +237,7 @@ export interface EditGithubIssueResult {
 interface GithubIssueResponse {
   html_url: string;
   labels: Array<{ name: string } | string>;
+  body?: string | null;
 }
 
 type GithubLabelsResponse = Array<{ name: string } | string>;
@@ -533,6 +534,20 @@ export async function setExecutionState(settings: ConnectionSettings, input: Set
   if (input.evidenceUrl || input.note) {
     const comment = [`**${target}**`, input.evidenceUrl, input.note].filter(Boolean).join(" — ");
     await githubRequest(settings, `${issuePath}/comments`, { method: "POST", body: JSON.stringify({ body: comment }) });
+  }
+  // Reflect a terminal outcome onto the work ticket the execution was for — the
+  // central exec ticket holds the run, but the work ticket is its home, so a
+  // done/failed outcome (with evidence) is mirrored there. Best-effort: a missing
+  // target or a comment failure never fails the state write.
+  if (input.state === "done" || input.state === "failed") {
+    const m = (issue.body ?? "").match(/Target:\*{0,2}\s*([\w.-]+\/[\w.-]+)#(\d+)/i);
+    if (m && m[1] && m[2]) {
+      const outcome = `Execution ${input.state} (${repo}#${input.executionId})${input.evidenceUrl ? ` — ${input.evidenceUrl}` : ""}${input.note ? ` — ${input.note}` : ""}`;
+      await githubRequest(settings, `/repos/${repoPath(m[1])}/issues/${m[2]}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: outcome }),
+      }).catch(() => {});
+    }
   }
   return { repo, executionId: input.executionId, issueUrl: issue.html_url, state: input.state, changed: true };
 }

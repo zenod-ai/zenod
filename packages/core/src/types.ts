@@ -155,6 +155,12 @@ export interface ExternalTaskingTools {
    * act of queuing. Returns the new execution ticket id + URL.
    */
   queueExecution(input: { target: string; title: string; context: string; repo?: string }): Promise<string>;
+  /**
+   * Approve a needs-review execution (Archus, on the human's go): flip the exec
+   * ticket to `exec:approved` and dispatch `approve_execution` to Epaminon to ship
+   * the outward outcome (merge/send). finalContent carries the human's edit, if any.
+   */
+  approveExecution(input: { executionId: number; finalContent?: string; repo?: string }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
   /**

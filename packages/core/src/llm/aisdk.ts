@@ -189,6 +189,8 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Closing a GitHub issue";
     case "queue_execution":
       return "Queuing for execution";
+    case "approve_execution":
+      return "Approving execution to ship";
     // Epaminon (executor) — running queued tickets and reporting outcomes.
     case "run_ticket":
       return "Running a ticket";
@@ -714,6 +716,19 @@ export class AiSdkBrainLlm implements BrainLlm {
             }),
             execute: ({ target, title, context, repo }) =>
               caught(() => taskTools.queueExecution({ target, title, context, ...(repo ? { repo } : {}) })),
+          }),
+          approve_execution: tool({
+            description:
+              "APPROVE a needs-review execution ticket to ship — call ONLY when the human has explicitly approved the actual content/outcome of an execution at exec:needs-review (e.g. they OK'd a drafted tweet, or approved merging a PR). It flips the execution ticket to exec:approved and tells Epaminon to ship (send/merge). Pass the execution ticket number. If the human edited the content, pass it as finalContent. Do NOT approve from a vague request.",
+            inputSchema: z.object({
+              executionId: z.number().int().positive().describe("The execution ticket number (central backlog) to approve"),
+              finalContent: z.string().nullable().describe("The human's final/edited content to ship, if it changed; null to ship as-is"),
+              repo: z.string().nullable().describe("Central backlog repo of the execution ticket; null uses the configured backlog repo"),
+            }),
+            execute: ({ executionId, finalContent, repo }) =>
+              caught(() =>
+                taskTools.approveExecution({ executionId, ...(finalContent ? { finalContent } : {}), ...(repo ? { repo } : {}) }),
+              ),
           }),
           approve_queue: tool({
             description:

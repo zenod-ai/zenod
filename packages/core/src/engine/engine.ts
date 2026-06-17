@@ -694,6 +694,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
             : Promise.resolve(noExternalTool("queueExecution")),
         );
       },
+      approveExecution: async (input) => {
+        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        return runMutation("approveExecution", normalized, () =>
+          options.taskingTools
+            ? options.taskingTools.approveExecution({
+                executionId: normalized.executionId,
+                ...(normalized.finalContent ? { finalContent: normalized.finalContent } : {}),
+                ...(normalized.repo ? { repo: normalized.repo } : {}),
+              })
+            : Promise.resolve(noExternalTool("approveExecution")),
+        );
+      },
       queryBacklog: async (query?: string) => {
         const result = options.taskingTools
           ? await options.taskingTools.queryBacklog(query)
