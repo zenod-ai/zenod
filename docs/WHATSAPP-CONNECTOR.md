@@ -51,11 +51,13 @@ settings, the server SQLite data directory, and `BrainEngine`.
 - Group chats are off unless explicitly enabled.
 - `Accept every sender` bypasses the allowlist but should be treated as an
   admin-only/self-hosted convenience.
-- Voice notes download through Baileys, transcribe through the shared transcription path
-  (`whisper.cpp` locally by default, with Groq/OpenAI when configured), then enter
-  the same tasking/chat loop as typed text.
-- Filing/digestion for voice notes is designed as a background/provenance path;
-  the immediate interaction should not wait on a slow vault write.
+- Voice notes download through Baileys, transcribe through the shared channel
+  audio path (`whisper.cpp` locally by default, with Groq/OpenAI when
+  configured), then enter the same tasking/chat loop as typed text. The engine
+  receives the transcript text itself, not a `WhatsApp voice note transcript...`
+  wrapper.
+- Voice notes do not use the media ingest/digest path. They must not send a
+  `Digest job`, `Got this voice note`, or queue-only reply.
 - Images/documents are metadata/caption-first for now; full attachment filing is
   still follow-up work.
 - The status card now shows safe diagnostics: last Baileys upsert, last ignored
@@ -101,6 +103,7 @@ Covered in `packages/server/test/whatsapp.test.ts`:
 Current verification commands:
 
 ```sh
+npm run test -w @zenod/server -- channelAudio.test.ts transcribe.test.ts whatsapp.test.ts telegram.test.ts
 npm run test -w @zenod/server -- whatsapp.test.ts
 npm run test -w @zenod/server
 npm run build
