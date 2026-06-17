@@ -187,6 +187,8 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Editing a GitHub issue";
     case "close_issue":
       return "Closing a GitHub issue";
+    case "queue_execution":
+      return "Queuing for execution";
     // Epaminon (executor) — running queued tickets and reporting outcomes.
     case "run_ticket":
       return "Running a ticket";
@@ -205,6 +207,13 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Posting to Reddit";
     case "send_email":
       return "Sending an email";
+    // Phylax (attention gatekeeper) — inbound events and principal notifications.
+    case "raise_event":
+      return "Raising an event to Phylax";
+    case "ask_phylax":
+      return "Asking Phylax";
+    case "deliver_to_principal":
+      return "Notifying Jordi";
     default:
       return `Running ${toolName}`;
   }
@@ -693,6 +702,18 @@ export class AiSdkBrainLlm implements BrainLlm {
                   ...(notPlanned ? { notPlanned: true } : {}),
                 }),
               ),
+          }),
+          queue_execution: tool({
+            description:
+              "QUEUE a work ticket for execution — call ONLY when the human has EXPLICITLY approved running a specific ticket (e.g. 'run owner/repo#5', 'queue #12 for execution'). It mints a central type:execution ticket (exec:queued) that links the target work ticket and carries the run context, then dispatches it to Epaminon (the executor). Minting IS queuing — do not also set status:queued. Never queue from a vague request, never bulk-queue. Returns the new execution ticket id + URL.",
+            inputSchema: z.object({
+              target: z.string().min(1).describe("The work ticket to run, qualified owner/repo#N (the real home of the work)"),
+              title: z.string().min(1).describe("Short title for the execution ticket, e.g. 'Run obsidian-brain#5'"),
+              context: z.string().min(1).describe("The run context: objective, scope, done-condition + the goal — what the executor needs to do the work"),
+              repo: z.string().nullable().describe("Central backlog repo for the execution ticket; null uses the configured backlog repo"),
+            }),
+            execute: ({ target, title, context, repo }) =>
+              caught(() => taskTools.queueExecution({ target, title, context, ...(repo ? { repo } : {}) })),
           }),
           approve_queue: tool({
             description:

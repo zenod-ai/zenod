@@ -22,17 +22,19 @@ import {
   type LlmUsageReport,
   type TokenCostMeasurement,
 } from "zenod";
-import { installationToken, installationTokenForRepo, editGithubIssue } from "zenod";
+import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue } from "zenod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { ExecutionQueue } from "./executionQueue.js";
 import { buildExecutionQueue } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
 import { buildOutboundTools } from "./outboundTools.js";
+import { buildNotifierTools } from "./notifierTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore } from "./usageStore.js";
 import { IngestQueue } from "./ingestQueue.js";
 import { TaskJobStore } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
+import { ExecutionStore } from "./executionStore.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer } from "./peerClient.js";
 import { Settings, type Provider } from "./settings.js";
@@ -61,6 +63,7 @@ export class Runtime {
   readonly ingestQueue: IngestQueue;
   readonly taskJobStore: TaskJobStore;
   readonly taskJobQueue: TaskJobQueue;
+  readonly executionStore: ExecutionStore;
   readonly usageStore: UsageStore;
   /** The executor's queue (Epaminon only) — the state authority for the execution
    *  lane. Null on every other agent. Wired to the protocol seams in executionLane. */
@@ -95,6 +98,7 @@ export class Runtime {
     // resume() then drains anything still queued.
     this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"));
     this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine());
+    this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
     // The executor (Epaminon) owns an execution queue; no other agent does.
     this.executionQueue = agent.executor === true ? buildExecutionQueue(this.settings) : null;
@@ -183,6 +187,7 @@ export class Runtime {
     // Outbound's private send tools (post_tweet/post_reddit/send_email) ride the
     // same generic tool slot — its guardian brain wields them and confirms first.
     if (outbound) Object.assign(peerTools, buildOutboundTools());
+    if (this.agent.notifier === true) Object.assign(peerTools, buildNotifierTools());
     this.engine = createEngine({
       ...(repo ? { repo } : {}),
       llm,
@@ -362,6 +367,34 @@ export class Runtime {
         });
         return `Closed #${result.issueNumber}: ${result.issueUrl}`;
       },
+      queueExecution: async ({ target, title, context, repo }) => {
+        // Mint the execution ticket (exec:queued) — minting IS queuing.
+        const minted = await mintExecutionIssue(this.settings, {
+          ...(repo ? { repo } : {}),
+          title,
+          context,
+          target,
+        });
+        // Best-effort dispatch to Epaminon over the internal lane. Until the Console
+        // cross-provisions exec_lane_secret (and Epaminon's enqueue receiver is up),
+        // the ticket is still minted and visible — we just report it as awaiting.
+        const secret = this.settings.getRaw("exec_lane_secret");
+        const base = (this.settings.getRaw("epaminon_base_url") || "http://zenod-epaminon:8080").replace(/\/$/, "");
+        let dispatched = false;
+        if (secret) {
+          dispatched = await fetch(`${base}/api/exec/enqueue`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
+            body: JSON.stringify({ execution_id: minted.executionId, target, context }),
+            signal: AbortSignal.timeout(4000),
+          })
+            .then((r) => r.ok)
+            .catch(() => false);
+        }
+        return `Minted execution ticket ${minted.repo}#${minted.executionId} (exec:queued) for ${target}${
+          dispatched ? " and dispatched to Epaminon" : " — awaiting Epaminon dispatch (execution lane not yet provisioned)"
+        }: ${minted.issueUrl}`;
+      },
       queryBacklog,
       serviceBacklog: async (query?: string) =>
         ["Backlog service selection only; runner is tracked separately.", await queryBacklog(query)].join("\n"),
@@ -446,6 +479,7 @@ export class Runtime {
     this.whatsappStore.close();
     this.ingestStore.close();
     this.taskJobStore.close();
+    this.executionStore.close();
     this.usageStore.close();
   }
 }

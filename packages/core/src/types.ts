@@ -148,6 +148,13 @@ export interface ExternalTaskingTools {
    * close to a comment/label). Optionally posts a closing comment.
    */
   closeIssue(input: { repo?: string; issueNumber: number; comment?: string; notPlanned?: boolean }): Promise<string>;
+  /**
+   * Queue a work ticket for execution (Archus, on explicit human approval to run):
+   * mint a central `type:execution` ticket (`exec:queued`) linking the target work
+   * ticket + carrying the run context, then dispatch it to Epaminon. Minting IS the
+   * act of queuing. Returns the new execution ticket id + URL.
+   */
+  queueExecution(input: { target: string; title: string; context: string; repo?: string }): Promise<string>;
   queryBacklog(query?: string): Promise<string>;
   serviceBacklog(query?: string): Promise<string>;
   /**
