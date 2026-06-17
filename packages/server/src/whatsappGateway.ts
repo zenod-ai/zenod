@@ -13,8 +13,9 @@ import {
 import { pino } from "pino";
 import type { BrainEngine, StoreResult } from "zenod";
 import type { Settings } from "./settings.js";
+import { transcribeChannelAudio } from "./channelAudio.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
-import { transcribeAudio, NO_SPEECH_MESSAGE } from "./transcribe.js";
+import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
 import {
   maskPhoneNumber,
@@ -733,7 +734,7 @@ export class WhatsAppGateway {
         // Images and other media keep the ingest-ack + background worker.
         this.options.store.markMessageStatus(event.messageId, "digest_queued");
         await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
-        void this.processVoiceNote(event).catch((err: unknown) => {
+        void this.processMediaIngest(event).catch((err: unknown) => {
           console.error("[whatsapp] media worker failed:", err);
         });
         return;
@@ -833,15 +834,7 @@ export class WhatsAppGateway {
       const stream = await downloadContentFromMessage(event.mediaRaw as never, "audio");
       const data = await streamToBuffer(stream);
       const filename = `${event.messageId}.${event.mimeType?.includes("mpeg") ? "mp3" : "ogg"}`;
-      const transcription = await transcribeAudio(data, filename, {
-        model: this.options.settings.whisperModel(),
-        groqApiKey: this.options.settings.get("groq_api_key"),
-        openaiApiKey: this.options.settings.get("openai_api_key"),
-        openrouterApiKey: this.options.settings.get("openrouter_api_key"),
-        openrouterModel: this.options.settings.openrouterTranscriptionModel(),
-        longTranscriptionProvider: this.options.settings.longTranscriptionProvider(),
-        useOpenAiForLongAudio: this.options.settings.useOpenAiForLongTranscription(),
-      });
+      const transcription = await transcribeChannelAudio(this.options.settings, data, filename);
       if (!transcription.success) {
         return {
           kind: "fixed-reply",
@@ -854,7 +847,7 @@ export class WhatsAppGateway {
       const ext = event.mimeType?.includes("mpeg") ? "mp3" : "ogg";
       return {
         kind: "engine",
-        text: `WhatsApp voice note transcript from ${sender}:\n\n${transcription.transcript}`,
+        text: transcription.transcript ?? "",
         audio: {
           data,
           filename: voiceArchiveFilename(sender, Date.now(), ext),
@@ -885,11 +878,9 @@ export class WhatsAppGateway {
         ? String((event.timestamp as { low: unknown }).low)
         : String(event.timestamp ?? "unknown");
     const channel = event.isGroup ? "WhatsApp group" : "WhatsApp";
-    const isVoice = event.mediaType === "ptt" || event.mediaType === "audio";
-    const kind = isVoice ? "voice note" : event.mediaType ?? "media";
-    const work = isVoice ? "transcription, filing, and digestion" : "filing and digestion";
+    const kind = event.mediaType ?? "media";
     return [
-      `Got this ${kind}. I queued it for ${work}.`,
+      `Got this ${kind}. I queued it for filing and digestion.`,
       `Source: ${channel} message ${event.messageId} at ${timestamp}.`,
       `Digest job: wa-${event.messageId}.`,
     ].join("\n");
@@ -910,7 +901,7 @@ export class WhatsAppGateway {
 
     if (status.lastReport?.status === "digest_report_sent" || status.lastReport?.status === "digest_failed") {
       return [
-        `Latest voice-note digest status: ${status.status}.`,
+        `Latest media ingest status: ${status.status}.`,
         `Source: ${source}, received ${received}.`,
         "",
         status.lastReport.bodyText,
@@ -918,7 +909,7 @@ export class WhatsAppGateway {
     }
 
     return [
-      `Latest voice-note digest status: ${status.status}.`,
+      `Latest media ingest status: ${status.status}.`,
       `Source: ${source}, received ${received}.`,
       `Digest job: wa-${status.messageId}.`,
       "No final digest report has been recorded yet.",
@@ -929,11 +920,11 @@ export class WhatsAppGateway {
     const asksForStatus = /\b(status|progress|done|finished|complete|completed|happen(?:ed)?|where|filed|transcrib(?:e|ed|ing)|digest(?:ed|ion)?)\b/i.test(
       text,
     );
-    const asksAboutIngest = /\b(voice\s*note|audio|recording|note|transcript|digest|ingest|file)\b/i.test(text);
+    const asksAboutIngest = /\b(image|photo|media|attachment|note|transcript|digest|ingest|file)\b/i.test(text);
     if (!asksForStatus || !asksAboutIngest) return false;
 
     // This shortcut is only for quick local status checks. Longer tasking
-    // instructions often mention "voice note" or "digest" as context, but still
+    // instructions often mention "digest" as context, but still
     // need the full chat/tool route so the agent can follow the user's request.
     if (text.length > 180) return false;
 
@@ -999,18 +990,12 @@ export class WhatsAppGateway {
       .slice(0, 6);
   }
 
-  // A transcribed voice note IS a prompt — there is no behavioral difference
-  // from typing (#51). So after transcription we run it through the SAME tasking
-  // loop as text (handleTasking), so it can ACT (approve_queue, create issues,
-  // answer…). Evidence capture still happens, but as a non-blocking background
-  // side-effect for provenance — it never gates or slows the action/reply.
-  // Artifact-ness is a property of content, not of input type.
-  private async processVoiceNote(event: WhatsAppInboundEvent): Promise<void> {
+  private async processMediaIngest(event: WhatsAppInboundEvent): Promise<void> {
     await this.setTyping(event, true);
     this.options.store.markMessageStatus(event.messageId, "processing");
     try {
-      // Images: describe with vision, then route through handleTasking (same as
-      // voice notes) so storage goes via the peer tool — direct store() is
+      // Images: describe with vision, then route through handleTasking so
+      // storage goes via the peer tool — direct store() is
       // unavailable when the engine runs vaultless (Console mode).
       if (event.mediaType === "image" && event.mediaRaw) {
         const stream = await downloadContentFromMessage(event.mediaRaw as never, "image");
@@ -1062,7 +1047,7 @@ export class WhatsAppGateway {
         /quota|billing|rate.?limit|insufficient|api key|unauthor|401|429|overloaded|model provider|not configured/i.test(
           message,
         );
-      const mediaKind = event.mediaType === "image" ? "image" : "voice note";
+      const mediaKind = event.mediaType === "image" ? "image" : "media";
       const notice = providerIssue
         ? `⚠️ I got your ${mediaKind}, but the AI model is unavailable right now (out of quota, rate-limited, or misconfigured). Nothing was lost — please try again once that's sorted.`
         : `⚠️ I got your ${mediaKind}, but hit an error while processing it. It's been logged — please try again in a moment.`;

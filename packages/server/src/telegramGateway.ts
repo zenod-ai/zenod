@@ -2,8 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrainEngine } from "zenod";
 import type { Settings } from "./settings.js";
+import { transcribeChannelAudio } from "./channelAudio.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
-import { transcribeAudio, NO_SPEECH_MESSAGE } from "./transcribe.js";
+import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 
@@ -288,7 +289,7 @@ export class TelegramGateway {
       const sender = from?.username
         ? `@${from.username}`
         : from?.first_name || String(from?.id ?? "unknown");
-      text = `Telegram voice note transcript from ${sender}:\n\n${result.transcript}`;
+      text = result.transcript;
       voiceAudio = {
         data: result.data,
         filename: voiceArchiveFilename(sender, Date.now(), result.ext),
@@ -386,15 +387,7 @@ export class TelegramGateway {
   private async transcribeVoice(file: TelegramFile): Promise<{ transcript: string; data: Buffer; ext: string }> {
     const { data, ext } = await this.downloadFile(file.file_id);
     const filename = `${file.file_unique_id ?? file.file_id}.${ext}`;
-    const transcription = await transcribeAudio(data, filename, {
-      model: this.options.settings.whisperModel(),
-      groqApiKey: this.options.settings.get("groq_api_key"),
-      openaiApiKey: this.options.settings.get("openai_api_key"),
-      openrouterApiKey: this.options.settings.get("openrouter_api_key"),
-      openrouterModel: this.options.settings.openrouterTranscriptionModel(),
-      longTranscriptionProvider: this.options.settings.longTranscriptionProvider(),
-      useOpenAiForLongAudio: this.options.settings.useOpenAiForLongTranscription(),
-    });
+    const transcription = await transcribeChannelAudio(this.options.settings, data, filename);
     if (!transcription.success || !transcription.transcript) {
       throw new Error(transcription.error || "transcription returned no text");
     }
