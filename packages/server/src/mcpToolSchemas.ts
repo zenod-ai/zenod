@@ -30,6 +30,10 @@ export const GET_TASK_RESULT_SHAPE = {
   jobId: z.string().min(1).describe("The jobId returned by an async tool such as store_memory"),
 };
 
+export const EXECUTION_STATUS_SHAPE = {
+  message: z.string().optional().describe("Optional natural-language filter, e.g. an execution id or owner/repo#N target."),
+};
+
 export const CREATE_ISSUE_SHAPE = {
   repo: z.string().min(1).optional().describe("owner/repo. Defaults to the agent's configured backlog/vault repo."),
   title: z.string().min(1).describe("Issue title."),

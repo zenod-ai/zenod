@@ -7,6 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { BrainEngine } from "zenod";
+import { EPAMINON_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -276,6 +277,66 @@ describe("MCP endpoint", () => {
     expect(digest.candidates[0]?.title).toBe("Write launch backlog");
     expect(digest.candidates[0]?.source_refs[0]?.path).toBe("Log/2026-06-13.md#^e-test");
     expect(digest.written).toEqual([]);
+    await client.close();
+  });
+});
+
+describe("Epaminon MCP execution status", () => {
+  let dir: string;
+  let runtime: Runtime;
+  let server: ServerType;
+  let url: URL;
+  let token: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), "zenod-epaminon-mcp-"));
+    runtime = new Runtime(dir, EPAMINON_AGENT);
+    token = runtime.settings.apiToken();
+    await runtime.executionQueue!.enqueue({
+      executionId: "104",
+      target: "AlfaBlok/obsidian-brain#103",
+      context: "Fusion spike execution context",
+    });
+    const app = createApp(runtime);
+    server = serve({ fetch: app.fetch, port: 0 });
+    const { port } = server.address() as AddressInfo;
+    url = new URL(`http://127.0.0.1:${port}/mcp`);
+  });
+
+  afterAll(async () => {
+    server.close();
+    runtime.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  async function connect() {
+    const transport = new StreamableHTTPClientTransport(url, {
+      requestInit: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const client = new Client({ name: "epaminon-test-client", version: "0.0.0" });
+    await client.connect(transport);
+    return client;
+  }
+
+  it("exposes execution_status as a deterministic queue read", async () => {
+    const client = await connect();
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name)).toContain("execution_status");
+
+    const result = await client.callTool({ name: "execution_status", arguments: { message: "AlfaBlok/obsidian-brain#103" } });
+    const status = result.structuredContent as {
+      tickets: Array<{ executionId: string; target: string; state: string }>;
+      executor: boolean;
+    };
+    expect(status.executor).toBe(true);
+    expect(status.tickets).toEqual([
+      expect.objectContaining({
+        executionId: "104",
+        target: "AlfaBlok/obsidian-brain#103",
+        state: "running",
+      }),
+    ]);
+    expect(JSON.stringify(result.content)).toContain("AlfaBlok/obsidian-brain#103");
     await client.close();
   });
 });

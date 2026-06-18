@@ -213,13 +213,13 @@ function launcherHealthy() {
   return true;
 }
 
-function launchFanout(target, execNumber) {
+function launchFanout(target, execNumber, extraEnv = {}) {
   const args = [
     "start", "--repo", target, "--issues", String(execNumber),
     "--workdir", WORKDIR, "--draft-pr", "--github-status",
     "--concurrency", String(CONCURRENCY),
   ];
-  const child = spawn("zenod-fanout-codex", args, { stdio: "ignore", detached: true });
+  const child = spawn("zenod-fanout-codex", args, { stdio: "ignore", detached: true, env: { ...process.env, ...extraEnv } });
   // Belt-and-suspenders: catch any late async spawn error so it can never become an
   // unhandled 'error' event that crashes the whole monitor.
   child.on("error", (err) => log(`fanout spawn error (post-probe) for ${target}#${execNumber}: ${err.code || err.message}`));
@@ -367,19 +367,24 @@ async function reportToEpaminon(path, body) {
 
 // Launch an Epaminon-dispatched ticket: work its target work-ticket directly (no
 // central materialize — the dispatched target IS the issue).
-function launchDispatched(executionId, target, state) {
+function launchDispatched(executionId, target, context, state) {
   const t = parseTarget(target);
   if (!t) {
     log(`/run: bad target "${target}" for ${executionId}`);
-    return false;
+    return { ok: false, note: `bad execution target "${target}"; expected owner/repo#N` };
   }
   if (!launcherHealthy()) {
     log(`/run: launcher not healthy — ${executionId} not started`);
-    return false;
+    return { ok: false, note: "runner launcher is not healthy; fanout could not start" };
   }
-  launchFanout(t.repo, t.number);
+  launchFanout(t.repo, t.number, {
+    ZENOD_EXECUTION_ID: String(executionId),
+    ZENOD_EXECUTION_CONTEXT: String(context || ""),
+    ...(LANE_SECRET ? { ZENOD_EXEC_LANE_SECRET: LANE_SECRET } : {}),
+    ZENOD_EPAMINON_URL: EPAMINON_URL,
+  });
   state.dispatched[executionId] = { repo: t.repo, issueN: t.number, target, reportedStatus: null };
-  return true;
+  return { ok: true };
 }
 
 // Each scan: for dispatched runs, read the target issue state and report new
@@ -958,9 +963,12 @@ async function handleRun(req, res) {
     const executionId = body.execution_id != null ? String(body.execution_id) : "";
     if (!executionId || !body.target) return void res.writeHead(400).end("execution_id and target required\n");
     const state = loadState();
-    const ok = launchDispatched(executionId, String(body.target), state);
+    const result = launchDispatched(executionId, String(body.target), String(body.context || ""), state);
+    if (!result.ok) {
+      await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: result.note });
+    }
     saveState(state);
-    res.writeHead(ok ? 202 : 422).end(ok ? "launched\n" : "could not launch\n");
+    res.writeHead(result.ok ? 202 : 422).end(result.ok ? "launched\n" : "could not launch\n");
   } catch (e) {
     log("/run error:", e.message);
     res.writeHead(500).end("error\n");

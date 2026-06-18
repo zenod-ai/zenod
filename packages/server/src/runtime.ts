@@ -15,7 +15,9 @@ import {
   STATUS_APPROVED_MERGE,
   SqliteStateStore,
   VaultRepo,
+  conversationId,
   type BrainEngine,
+  type ConversationMessage,
   type CleanSlateResult,
   type ExternalTaskingTools,
   type LintReport,
@@ -46,6 +48,33 @@ export class NotConfiguredError extends Error {
   constructor() {
     super("Zenod is not configured yet — set vault repo, GitHub token, and Anthropic key in settings");
   }
+}
+
+const CONSOLE_PARENT_CONVERSATION_KEY = "default";
+const MAX_PEER_CONTEXT_MESSAGES = 8;
+const MAX_PEER_CONTEXT_CHARS = 400;
+
+export function consolePeerConversationKey(parentConversationId: string, peerName: string): string {
+  return `${parentConversationId.replace(/[^a-z0-9_-]+/gi, "-")}-${peerName.replace(/[^a-z0-9_-]+/gi, "-")}`;
+}
+
+export function formatConsolePeerDelegation(input: string, options: { parentConversationId: string; peerName: string; messages: ConversationMessage[] }): string {
+  const recent = options.messages.slice(-MAX_PEER_CONTEXT_MESSAGES);
+  const excerpt = recent
+    .map((message) => {
+      const speaker = message.role === "user" ? "user" : "Console";
+      const text = message.text.replace(/\s+/g, " ").trim().slice(0, MAX_PEER_CONTEXT_CHARS);
+      return `${speaker}: ${text}`;
+    })
+    .join("\n");
+  return [
+    `Parent Console conversation: ${options.parentConversationId}`,
+    `You are ${options.peerName}. The bounded excerpt below is recent Console thread context, not durable memory.`,
+    excerpt ? `Recent Console thread:\n${excerpt}` : "Recent Console thread: (empty)",
+    "",
+    `Current request to ${options.peerName}:`,
+    input,
+  ].join("\n");
 }
 
 /**
@@ -219,6 +248,8 @@ export class Runtime {
    */
   private buildPeerTools(): Record<string, { description: string; run: (input: string) => Promise<string> }> {
     const tools: Record<string, { description: string; run: (input: string) => Promise<string> }> = {};
+    const parentConversationId = conversationId("web", CONSOLE_PARENT_CONVERSATION_KEY);
+    const shouldForwardConsoleContext = this.agent.name === "console";
     for (const peer of this.settings.peers()) {
       const safe = peer.name.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
       // A peer either declares a curated tool set (e.g. Zenod's memory toolset) or
@@ -237,7 +268,21 @@ export class Runtime {
       for (const spec of specs) {
         tools[spec.as] = {
           description: spec.description,
-          run: (input: string) => callPeer(peer, spec.mcp, spec.arg, input),
+          run: async (input: string) => {
+            if (!shouldForwardConsoleContext || !spec.mcp.startsWith("chat_with_")) {
+              return callPeer(peer, spec.mcp, spec.arg, input);
+            }
+            const window = await this.state.recentWindow(parentConversationId);
+            const message = formatConsolePeerDelegation(input, {
+              parentConversationId,
+              peerName: peer.name,
+              messages: window,
+            });
+            return callPeer(peer, spec.mcp, spec.arg, message, {
+              surface: "web",
+              conversationKey: consolePeerConversationKey(parentConversationId, peer.name),
+            });
+          },
         };
       }
     }
@@ -305,6 +350,53 @@ export class Runtime {
       ].join("\n");
     };
 
+    const parseQualifiedIssue = (target: string): { repo: string; number: number } => {
+      const match = target.trim().match(/^([^#\s]+\/[^#\s]+)#(\d+)$/);
+      if (!match) throw new Error("queue_execution target must be a qualified issue id like owner/repo#123");
+      return { repo: match[1]!, number: Number(match[2]) };
+    };
+    const issueLabelNames = (issue: { labels?: Array<{ name: string }> }): string[] => (issue.labels ?? []).map((label) => label.name);
+    const validateRunnableIssue = (issue: { number: number; title?: string; body?: string; labels?: Array<{ name: string }> }): string[] => {
+      const body = issue.body ?? "";
+      const names = issueLabelNames(issue);
+      const failures: string[] = [];
+      if (!issue.title?.trim()) failures.push("missing title");
+      if (!body.trim()) failures.push("missing body");
+      if (!names.includes(OWNER_AGENT)) failures.push(`missing ${OWNER_AGENT} label`);
+      const actionLabels = new Set(["twitter", "x", "social", "post", "action", "announcement"]);
+      const isActionTicket = names.some((name) => actionLabels.has(name.toLowerCase()));
+      if (!isActionTicket) {
+        const hasPathRefs = /(\b(?:packages|apps|src|scripts|lib|test|tests)\/[\w./-]+|\w+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|md))/i.test(body);
+        if (!/(acceptance criteria|done when|requirements?|test[s]? \/ verification|verification|deliverables?|outcomes?|definition of done)/i.test(body)) {
+          failures.push("missing acceptance criteria or clear done condition");
+        }
+        if (!/(scope|out of scope|requirements?|deliverables?)/i.test(body) && !hasPathRefs) {
+          failures.push("missing scope boundaries");
+        }
+        if (!/(source basis|source refs?|source context|log\/|projects\/|notes\/|github)/i.test(body) && !hasPathRefs) {
+          failures.push("missing source context references");
+        }
+      }
+      return failures;
+    };
+    const hydratedExecutionContext = (
+      target: string,
+      issue: { title: string; body?: string; html_url: string; labels?: Array<{ name: string }> },
+      requestedContext: string,
+    ): string =>
+      [
+        `Target: ${target}`,
+        `Target URL: ${issue.html_url}`,
+        `Target title: ${issue.title}`,
+        `Target labels: ${issueLabelNames(issue).join(", ") || "(none)"}`,
+        "",
+        "Archus run note:",
+        requestedContext,
+        "",
+        "Target issue body:",
+        issue.body?.trim() || "(empty)",
+      ].join("\n");
+
     // Best-effort instant refresh: the agent-runner's monitor exposes POST /poke
     // for an immediate scan instead of waiting up to one poll interval (~2 min).
     // Fire-and-forget; if the runner is unreachable or unset, the poll still
@@ -369,11 +461,24 @@ export class Runtime {
         return `Closed #${result.issueNumber}: ${result.issueUrl}`;
       },
       queueExecution: async ({ target, title, context, repo }) => {
+        const parsedTarget = parseQualifiedIssue(target);
+        const targetIssue = await githubJson<{
+          number: number;
+          title: string;
+          body: string;
+          html_url: string;
+          labels: Array<{ name: string }>;
+        }>(`/repos/${encodeURIComponent(parsedTarget.repo).replace("%2F", "/")}/issues/${parsedTarget.number}`);
+        const failures = validateRunnableIssue(targetIssue);
+        if (failures.length > 0) {
+          throw new Error(`target ${target} is not runnable: ${failures.join("; ")}`);
+        }
+        const hydratedContext = hydratedExecutionContext(target, targetIssue, context);
         // Mint the execution ticket (exec:queued) — minting IS queuing.
         const minted = await mintExecutionIssue(this.settings, {
           ...(repo ? { repo } : {}),
           title,
-          context,
+          context: hydratedContext,
           target,
         });
         // Best-effort dispatch to Epaminon over the internal lane. Until the Console
@@ -386,7 +491,7 @@ export class Runtime {
           dispatched = await fetch(`${base}/api/exec/enqueue`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
-            body: JSON.stringify({ execution_id: minted.executionId, target, context }),
+            body: JSON.stringify({ execution_id: minted.executionId, target, context: hydratedContext }),
             signal: AbortSignal.timeout(4000),
           })
             .then((r) => r.ok)

@@ -55,14 +55,20 @@ function extractText(result: unknown): string {
  * a single delegation needs. Errors are returned as a readable string so the
  * caller's model can relay a graceful failure rather than throwing mid-turn.
  */
-export async function callPeer(peer: PeerConfig, mcpTool: string, argKey: string, input: string): Promise<string> {
+export async function callPeer(
+  peer: PeerConfig,
+  mcpTool: string,
+  argKey: string,
+  input: string,
+  extraArgs: Record<string, unknown> = {},
+): Promise<string> {
   const client = new Client({ name: "zenod-mesh-client", version: VERSION }, { capabilities: {} });
   const transport = new StreamableHTTPClientTransport(new URL(peer.url), {
     requestInit: { headers: { Authorization: `Bearer ${peer.token}` } },
   });
   try {
     await client.connect(transport);
-    const result = await client.callTool({ name: mcpTool, arguments: { [argKey]: input } });
+    const result = await client.callTool({ name: mcpTool, arguments: { ...extraArgs, [argKey]: input } });
     const text = extractText(result);
     return text || `(${peer.name} returned an empty answer)`;
   } catch (err) {

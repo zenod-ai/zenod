@@ -4,10 +4,12 @@ import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools
 import type { CreateGithubIssueInput, CreateGithubIssueResult, EditGithubIssueInput, EditGithubIssueResult } from "zenod";
 import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
 import type { TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
+import type { ExecutionTicket } from "./executionQueue.js";
 import {
   ASK_BRAIN_SHAPE,
   CREATE_ISSUE_SHAPE,
   EDIT_GITHUB_ISSUE_SHAPE,
+  EXECUTION_STATUS_SHAPE,
   GET_MEMORY_SHAPE,
   SEARCH_MEMORY_SHAPE,
 } from "./mcpToolSchemas.js";
@@ -25,6 +27,7 @@ export interface TaskJobs {
 
 export type GithubIssueEditor = (input: EditGithubIssueInput) => Promise<EditGithubIssueResult>;
 export type GithubIssueCreator = (input: CreateGithubIssueInput) => Promise<CreateGithubIssueResult>;
+export type ExecutionStatusReader = () => ExecutionTicket[] | null;
 
 /** Human-facing text for a finished task_brain job — mirrors the old reply. */
 function formatTaskingReply(result: TaskingReply): string {
@@ -46,6 +49,34 @@ function enqueuedResponse(job: TaskJob) {
     ],
     structuredContent: { jobId: job.id, kind: job.kind, status: job.status },
   };
+}
+
+function formatExecutionStatus(tickets: ExecutionTicket[]): string {
+  if (tickets.length === 0) {
+    return "No execution tickets currently queued, running, blocked, awaiting review, approved, done, or failed.";
+  }
+  return tickets
+    .map((ticket) => {
+      const parts = [
+        `#${ticket.executionId}`,
+        ticket.target,
+        ticket.state,
+        `updated ${new Date(ticket.updatedAt).toISOString()}`,
+      ];
+      if (ticket.note) parts.push(`note: ${ticket.note}`);
+      if (ticket.evidenceUrl) parts.push(`evidence: ${ticket.evidenceUrl}`);
+      return parts.join(" — ");
+    })
+    .join("\n");
+}
+
+function filterExecutionTickets(tickets: ExecutionTicket[], message?: string): ExecutionTicket[] {
+  const query = message?.trim().toLowerCase();
+  if (!query) return tickets;
+  return tickets.filter((ticket) => {
+    const searchable = [ticket.executionId, ticket.target, ticket.state, ticket.note ?? "", ticket.evidenceUrl ?? ""].join(" ").toLowerCase();
+    return searchable.includes(query) || query.includes(ticket.executionId.toLowerCase()) || query.includes(ticket.target.toLowerCase());
+  });
 }
 
 /** Human-facing text for a finished store_memory job — mirrors the old reply. */
@@ -87,6 +118,7 @@ export function buildMcpServer(
   editGithubIssue?: GithubIssueEditor,
   createGithubIssue?: GithubIssueCreator,
   agentName: string = "zenod",
+  readExecutionStatus?: ExecutionStatusReader,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -129,6 +161,34 @@ export function buildMcpServer(
       };
     },
   );
+
+  if (readExecutionStatus) {
+    server.registerTool(
+      "execution_status",
+      {
+        title: "Execution status",
+        description:
+          "Read this executor agent's live execution queue deterministically. Returns queued/running/blocked/needs-review/approved/done/failed tickets, notes, and evidence URLs. Does not use chat and does not start work.",
+        inputSchema: EXECUTION_STATUS_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ message }) => {
+        const tickets = readExecutionStatus();
+        if (!tickets) {
+          return {
+            content: [{ type: "text", text: "This agent is not configured as an executor; no execution queue is available." }],
+            structuredContent: { tickets: [], executor: false },
+            isError: true,
+          };
+        }
+        const filteredTickets = filterExecutionTickets(tickets, message);
+        return {
+          content: [{ type: "text", text: formatExecutionStatus(filteredTickets) }],
+          structuredContent: { tickets: filteredTickets, total: tickets.length, filtered: filteredTickets.length, executor: true },
+        };
+      },
+    );
+  }
 
   server.registerTool(
     "search_memory",

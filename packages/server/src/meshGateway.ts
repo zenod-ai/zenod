@@ -5,6 +5,7 @@ import { z, type ZodRawShape } from "zod";
 import { callPeerTool, type PeerConfig } from "./peerClient.js";
 import {
   ASK_BRAIN_SHAPE,
+  EXECUTION_STATUS_SHAPE,
   GET_MEMORY_SHAPE,
   GET_TASK_RESULT_SHAPE,
   SEARCH_MEMORY_SHAPE,
@@ -239,11 +240,10 @@ const GATEWAY_TOOLS: GatewayTool[] = [
   {
     name: "execution_status",
     owner: "epaminon",
-    peerTool: "chat_with_epaminon",
     title: "Check execution status",
     description:
-      "Ask Epaminon where execution stands — execution tickets queued/running/blocked/awaiting review/done, and any blockers. A read-only status question (does not start work). Reference work tickets as owner/repo#N.",
-    inputSchema: INTENT_SHAPE,
+      "Read Epaminon's live execution queue — execution tickets queued/running/blocked/awaiting review/done, and any blockers. Deterministic, no chat/LLM. Optionally reference work tickets as owner/repo#N.",
+    inputSchema: EXECUTION_STATUS_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
 ];

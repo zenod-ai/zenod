@@ -453,10 +453,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   const EPAMINON_EXECUTION_TOOLS = [
     {
       as: "execution_status",
-      mcp: "chat_with_epaminon",
+      mcp: "execution_status",
       arg: "message",
       description:
-        "Ask Epaminon where execution stands — which tickets are queued/running, in review, or shipped, and any blockers. A read-only status question (it does not start work — queuing is Archus's call). Reference tickets as owner/repo#N.",
+        "Read Epaminon's live execution queue — which tickets are queued/running, in review, shipped, failed, or blocked, and any blocker notes. Deterministic, read-only, and does not start work. Reference tickets as owner/repo#N.",
     },
   ];
   // Outbound's "top tools": named delegation handles that ALL route to his chat
@@ -1360,6 +1360,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           (input) => editGithubIssue(settings, input),
           (input) => createGithubIssue(settings, input),
           agent.name,
+          runtime.executionQueue ? () => runtime.executionQueue!.snapshot() : undefined,
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

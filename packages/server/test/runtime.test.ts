@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExternalTaskingTools } from "zenod";
-import { Runtime } from "../src/runtime.js";
+import { consolePeerConversationKey, formatConsolePeerDelegation, Runtime } from "../src/runtime.js";
 
 describe("runtime tasking tools", () => {
   let dir: string;
@@ -76,5 +76,135 @@ describe("runtime tasking tools", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toContain("/repos/zenod-ai/fixture/issues");
     expect(calls[0]?.init.method).toBe("POST");
+  });
+
+  it("queueExecution hydrates the target issue before minting and dispatching", async () => {
+    runtime.settings.setRaw("backlog_repo", "owner/central");
+    runtime.settings.setRaw("exec_lane_secret", "lane-secret");
+    runtime.settings.setRaw("epaminon_base_url", "http://epaminon.test");
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init: RequestInit = {}) => {
+        calls.push({ url: String(url), init });
+        const path = String(url).replace("https://api.github.com", "");
+        if (path === "/repos/zenod-ai/fixture/issues/103" && !init.method) {
+          return new Response(
+            JSON.stringify({
+              number: 103,
+              title: "Fusion spike",
+              body: [
+                "## Objective",
+                "Investigate the fusion path in packages/server/src/runtime.ts.",
+                "## Scope",
+                "Only inspect execution plumbing.",
+                "## Acceptance criteria",
+                "- Document the result.",
+                "## Source context",
+                "- https://github.com/zenod-ai/zenod/issues/103",
+              ].join("\n"),
+              html_url: "https://github.com/zenod-ai/fixture/issues/103",
+              labels: [{ name: "owner:agent" }, { name: "status:proposed" }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (path === "/repos/owner/central/issues" && init.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          expect(body.body).toContain("Target URL: https://github.com/zenod-ai/fixture/issues/103");
+          expect(body.body).toContain("Archus run note:");
+          expect(body.body).toContain("Target issue body:");
+          return new Response(JSON.stringify({ number: 104, html_url: "https://github.com/owner/central/issues/104" }), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (String(url) === "http://epaminon.test/api/exec/enqueue" && init.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          expect(body).toMatchObject({
+            execution_id: 104,
+            target: "zenod-ai/fixture#103",
+          });
+          expect(body.context).toContain("Target issue body:");
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(`unexpected ${init.method ?? "GET"} ${url}`, { status: 500 });
+      }),
+    );
+
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+    const result = await tools.queueExecution({
+      target: "zenod-ai/fixture#103",
+      title: "Run fixture#103",
+      context: "Start this now.",
+      repo: "owner/central",
+    });
+
+    expect(result).toContain("Minted execution ticket owner/central#104");
+    expect(result).toContain("and dispatched to Epaminon");
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://api.github.com/repos/zenod-ai/fixture/issues/103",
+      "https://api.github.com/repos/owner/central/issues",
+      "http://epaminon.test/api/exec/enqueue",
+    ]);
+  });
+
+  it("queueExecution refuses to mint when the target issue is not runnable", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init: RequestInit = {}) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            number: 103,
+            title: "Fusion spike",
+            body: "Vague spike with no runnable details.",
+            html_url: "https://github.com/zenod-ai/fixture/issues/103",
+            labels: [{ name: "status:proposed" }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+    await expect(
+      tools.queueExecution({
+        target: "zenod-ai/fixture#103",
+        title: "Run fixture#103",
+        context: "Start this now.",
+      }),
+    ).rejects.toThrow(/missing owner:agent label.*missing acceptance criteria.*missing scope.*missing source context/);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("https://api.github.com/repos/zenod-ai/fixture/issues/103");
+  });
+});
+
+describe("Console peer delegation context", () => {
+  it("derives a stable peer conversation key from the parent Console thread", () => {
+    expect(consolePeerConversationKey("web:default", "archus")).toBe("web-default-archus");
+  });
+
+  it("formats a bounded recent-thread excerpt with speaker labels", () => {
+    const text = formatConsolePeerDelegation("what is blocked?", {
+      parentConversationId: "web:default",
+      peerName: "archus",
+      messages: [
+        { role: "user", surface: "web", text: "epaminon what's your status?", at: new Date("2026-06-17T18:00:00Z") },
+        {
+          role: "assistant",
+          surface: "web",
+          text: "Epaminon: No Fusion tickets currently dispatched on my side.",
+          at: new Date("2026-06-17T18:00:01Z"),
+        },
+      ],
+    });
+
+    expect(text).toContain("Parent Console conversation: web:default");
+    expect(text).toContain("user: epaminon what's your status?");
+    expect(text).toContain("Console: Epaminon: No Fusion tickets currently dispatched on my side.");
+    expect(text).toContain("Current request to archus:\nwhat is blocked?");
+    expect(text).toContain("not durable memory");
   });
 });

@@ -92,6 +92,10 @@ Start options:
   --thinking <effort>       Optional Codex reasoning effort if supported by installed CLI.
   --draft-pr                Push branches and open draft PRs.
   --github-status           Comment start/final/blocker status on GitHub issues.
+  --execution-id <id>       Optional Epaminon execution id to report worker blockers against.
+  --execution-context <txt> Optional hydrated execution context from Archus/Epaminon.
+  --epaminon-url <url>      Epaminon base URL for execution blocker reports. Defaults to ZENOD_EPAMINON_URL.
+  --exec-lane-secret <s>    Lane secret for execution blocker reports. Defaults to ZENOD_EXEC_LANE_SECRET.
   --dry-run                 Build prompts/manifests only; do not launch Codex.
   --no-push                 Never push or open PRs.
 `.trim();
@@ -257,14 +261,15 @@ function labels(issue) {
   return (issue.labels ?? []).map((label) => label.name);
 }
 
-function clarityCheck(issue) {
-  const body = issue.body ?? "";
+function clarityCheck(issue, options = {}) {
+  const executionContext = String(options.executionContext ?? "");
+  const body = [issue.body ?? "", executionContext].filter(Boolean).join("\n\n");
   const names = labels(issue);
   const failures = [];
   const warnings = [];
   if (!issue.title?.trim()) failures.push("missing title");
   if (!body.trim()) failures.push("missing body");
-  if (!names.includes("owner:agent")) failures.push("missing owner:agent label");
+  if (!options.execLane && !names.includes("owner:agent")) failures.push("missing owner:agent label");
   // Action tickets (post a tweet, send a message, etc.) are self-describing and
   // don't carry code-ticket structure (file paths, acceptance criteria, scope
   // boundaries). Recognize them by an action label and require only a clear
@@ -687,6 +692,7 @@ async function runWorker({ opts, manifest, issueNumber }) {
       await commentIssue(manifest.repo, issueNumber, blockerComment(manifest.runId, worker.branch, blocker), true);
       addLabels(manifest.repo, issueNumber, ["question", "help wanted"]);
     }
+    await reportExecutionBlocked(opts, blocker.question ?? blocker.reason ?? "Worker reported blocked.");
     return;
   }
   if (exitCode !== 0) {
@@ -742,6 +748,37 @@ function detectBlocker(text) {
     }
   }
   return null;
+}
+
+function executionBlockedRequest(opts, note) {
+  const executionId = String(opts.executionId ?? process.env.ZENOD_EXECUTION_ID ?? "").trim();
+  if (!executionId) return null;
+  const secret = String(opts.execLaneSecret ?? process.env.ZENOD_EXEC_LANE_SECRET ?? "").trim();
+  if (!secret) return null;
+  const base = String(opts.epaminonUrl ?? process.env.ZENOD_EPAMINON_URL ?? "http://zenod-epaminon:8080").replace(/\/$/, "");
+  return {
+    url: `${base}/api/exec/blocked`,
+    headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
+    body: { execution_id: executionId, note: String(note || "Runner blocked without a detailed note.").slice(0, 1000) },
+  };
+}
+
+async function reportExecutionBlocked(opts, note) {
+  const request = executionBlockedRequest(opts, note);
+  if (!request) return false;
+  try {
+    const res = await fetch(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: JSON.stringify(request.body),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) console.error(`[exec-lane] Epaminon rejected blocked report for ${request.body.execution_id} (HTTP ${res.status})`);
+    return res.ok;
+  } catch (err) {
+    console.error(`[exec-lane] blocked report failed for ${request.body.execution_id}: ${err.message}`);
+    return false;
+  }
 }
 
 async function commitPushPr({ opts, manifest, issueNumber, finalText }) {
@@ -846,6 +883,10 @@ async function start(opts) {
   const thisRunDir = join(runDirRoot, id);
   const concurrency = Number(opts.concurrency ?? issues.length);
   if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error("--concurrency must be a positive integer");
+  const executionId = String(opts.executionId ?? process.env.ZENOD_EXECUTION_ID ?? "").trim();
+  const executionContext = String(opts.executionContext ?? process.env.ZENOD_EXECUTION_CONTEXT ?? "").trim();
+  const execLane = Boolean(executionId);
+  const goal = executionContext && !opts.goal && !opts.goalFile ? `GOAL: Execute Epaminon-dispatched work.\n\n${executionContext}` : resolveGoal(opts, issues);
 
   verifyPrereqs({ allowNode18: opts.dryRun });
   if (opts.githubStatus) ensureIssueStatusLabels(opts.repo);
@@ -858,7 +899,7 @@ async function start(opts) {
     base,
     workdir,
     runDir: thisRunDir,
-    goal: resolveGoal(opts, issues),
+    goal,
     startedAt: nowIso(),
     updatedAt: nowIso(),
     options: {
@@ -868,6 +909,8 @@ async function start(opts) {
       noPush: Boolean(opts.noPush),
       concurrency,
       goalSupplied: Boolean(opts.goal || opts.goalFile),
+      execLane,
+      executionId: executionId || null,
       model: opts.model ?? null,
       thinking: opts.thinking ?? null,
     },
@@ -877,7 +920,7 @@ async function start(opts) {
 
   for (const number of issues) {
     const issue = fetchIssue(opts.repo, number);
-    const clarity = clarityCheck(issue);
+    const clarity = clarityCheck(issue, { execLane, executionContext });
     const branch = branchName(issue);
     const worktree = join(workdir, ".fanout", "worktrees", `${id}-issue-${number}`);
     const promptPath = join(thisRunDir, `issue-${number}.prompt.md`);
@@ -913,6 +956,7 @@ async function start(opts) {
         await commentIssue(opts.repo, number, blockerComment(id, status.branch, status.blocker), true);
         addLabels(opts.repo, number, ["question", "help wanted"]);
       }
+      await reportExecutionBlocked(opts, status.blocker.question);
       continue;
     }
     if (!opts.dryRun) {
@@ -1157,6 +1201,8 @@ async function main() {
 export {
   issueStatusLabelFor,
   detectBlocker,
+  clarityCheck,
+  executionBlockedRequest,
 };
 
 // Run main() only when invoked as the entry script — but resolve symlinks first.
