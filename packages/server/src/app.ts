@@ -31,7 +31,7 @@ import {
   type ExecutionState,
 } from "zenod";
 import { buildMcpServer } from "./mcp.js";
-import { buildMeshGatewayServer } from "./meshGateway.js";
+import { buildMeshGatewayServer, type ConsoleChatRequest } from "./meshGateway.js";
 import {
   driveAuthFromSettings,
   exchangeGoogleDriveOAuthCode,
@@ -1347,7 +1347,64 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // (chat_with_<name> + its domain tools) — not the gateway.
     const isConsole = (agent.vaultless ?? false) && !agent.backlog && !agent.executor && !agent.outbound && !agent.notifier;
     const server = isConsole
-      ? buildMeshGatewayServer((name) => settings.peers().find((p) => p.name === name) ?? null)
+      ? buildMeshGatewayServer(
+          (name) => settings.peers().find((p) => p.name === name) ?? null,
+          async (input: ConsoleChatRequest) => {
+            const message = input.message?.trim();
+            if (!message) {
+              return {
+                content: [{ type: "text", text: "ERROR: message is required" }],
+                structuredContent: { status: "error", error: "message is required" },
+                isError: true,
+              };
+            }
+            const surface = input.surface ?? "whatsapp";
+            const conversationKey = input.conversationKey?.trim() || `mcp-console-${randomBytes(8).toString("hex")}`;
+            const cid = conversationId(surface, conversationKey);
+            try {
+              const cleanSlate = await handleCleanSlateChat(message, runtime);
+              if (cleanSlate) {
+                return {
+                  content: [{ type: "text", text: cleanSlate.text }],
+                  structuredContent: {
+                    status: "ok",
+                    surface,
+                    conversationKey,
+                    conversationId: cid,
+                    text: cleanSlate.text,
+                    actions: [],
+                    ...(cleanSlate.cleanSlate ? { cleanSlate: cleanSlate.cleanSlate } : {}),
+                  },
+                };
+              }
+              const engine = await runtime.getEngine();
+              const reply = await engine.handleTasking({ text: message, surface, conversationKey });
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: [reply.text, "", `conversationId: ${cid}`, `actions: ${reply.actions.length}`].join("\n"),
+                  },
+                ],
+                structuredContent: {
+                  status: "ok",
+                  surface,
+                  conversationKey,
+                  conversationId: cid,
+                  text: reply.text,
+                  actions: reply.actions,
+                },
+              };
+            } catch (err) {
+              const error = err instanceof Error ? err.message : "console chat failed";
+              return {
+                content: [{ type: "text", text: `ERROR: ${error}` }],
+                structuredContent: { status: "error", surface, conversationKey, conversationId: cid, error },
+                isError: true,
+              };
+            }
+          },
+        )
       : buildMcpServer(
           () => runtime.getEngine(),
           () => buildDriveTools(settings, runtime.ingestQueue),

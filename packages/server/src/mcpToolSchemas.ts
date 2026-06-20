@@ -30,6 +30,15 @@ export const GET_TASK_RESULT_SHAPE = {
   jobId: z.string().min(1).describe("The jobId returned by an async tool such as store_memory"),
 };
 
+export const CHAT_WITH_CONSOLE_SHAPE = {
+  message: z.string().min(1).describe("Natural-language prompt to send through the Console chat/tasking path."),
+  surface: z
+    .enum(["whatsapp", "telegram", "web", "mcp", "selftest"])
+    .optional()
+    .describe("Surface to run as. Defaults to whatsapp so callers can reproduce the phone-native path."),
+  conversationKey: z.string().min(1).optional().describe("Stable conversation key for multi-turn chat sessions. Defaults to a generated correlation id."),
+};
+
 export const EXECUTION_STATUS_SHAPE = {
   message: z.string().optional().describe("Optional natural-language filter, e.g. an execution id or owner/repo#N target."),
 };
