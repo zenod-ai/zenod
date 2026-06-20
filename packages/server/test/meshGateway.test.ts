@@ -83,6 +83,7 @@ describe("Console mesh gateway contract", () => {
       "ask_brain",
       "ask_outbound",
       "ask_phylax",
+      "chat_with_console",
       "close_issue",
       "create_issue",
       "edit_issue",
@@ -123,6 +124,27 @@ describe("Console mesh gateway contract", () => {
         }),
       ]);
       expect(JSON.stringify(result.content)).toContain("AlfaBlok/obsidian-brain#103");
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("exposes chat_with_console through the Console chat path", async () => {
+    const client = await connectGateway();
+    try {
+      const result = await client.callTool({
+        name: "chat_with_console",
+        arguments: { message: "/clean-slate", surface: "web", conversationKey: "mesh-gateway-chat-smoke" },
+      });
+      expect(JSON.stringify(result.content)).toContain("clean-slate");
+      expect(result.structuredContent).toEqual(
+        expect.objectContaining({
+          status: "ok",
+          surface: "web",
+          conversationKey: "mesh-gateway-chat-smoke",
+          actions: [],
+        }),
+      );
     } finally {
       await client.close();
     }

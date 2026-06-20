@@ -5,6 +5,7 @@ import { z, type ZodRawShape } from "zod";
 import { callPeerTool, type PeerConfig } from "./peerClient.js";
 import {
   ASK_BRAIN_SHAPE,
+  CHAT_WITH_CONSOLE_SHAPE,
   EXECUTION_STATUS_SHAPE,
   GET_MEMORY_SHAPE,
   GET_TASK_RESULT_SHAPE,
@@ -56,6 +57,18 @@ interface GatewayTool {
   inputSchema: ZodRawShape;
   annotations: { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean; openWorldHint: boolean };
 }
+
+export interface ConsoleChatRequest {
+  message: string;
+  surface?: "whatsapp" | "telegram" | "web" | "mcp" | "selftest";
+  conversationKey?: string;
+}
+
+export type ConsoleChatRunner = (request: ConsoleChatRequest) => Promise<{
+  content: Array<{ type: "text"; text: string }>;
+  structuredContent?: { [key: string]: unknown };
+  isError?: boolean;
+}>;
 
 const GATEWAY_TOOLS: GatewayTool[] = [
   {
@@ -254,8 +267,21 @@ const GATEWAY_TOOLS: GatewayTool[] = [
  * tool forwards its full argument object straight to the owner via callPeerTool
  * and relays the response verbatim.
  */
-export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig | null): McpServer {
+export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig | null, chatWithConsole?: ConsoleChatRunner): McpServer {
   const server = new McpServer({ name: "zenod-console-gateway", version: VERSION });
+  if (chatWithConsole) {
+    server.registerTool(
+      "chat_with_console",
+      {
+        title: "Chat with Console",
+        description:
+          "Send a natural-language prompt through the Console's own chat/tasking path, the same internal entry path used by /api/chat and the phone adapters after transcription. The Console decides which enabled peer agents/tools to call, and the response includes the reply plus recorded actions. Defaults to surface=whatsapp.",
+        inputSchema: CHAT_WITH_CONSOLE_SHAPE,
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      },
+      async (args) => chatWithConsole(args as ConsoleChatRequest),
+    );
+  }
   for (const t of GATEWAY_TOOLS) {
     const peer = resolvePeer(t.owner);
     if (!peer) continue; // owner agent not enabled → don't advertise its tools
