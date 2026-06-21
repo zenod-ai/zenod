@@ -17,6 +17,7 @@ import type {
   Classification,
   ClassifyInput,
   ComposePageInput,
+  PeerTools,
   VaultReadTools,
   VaultTaskTools,
   VaultWriteTools,
@@ -70,7 +71,7 @@ class FakeLlm implements BrainLlm {
     ].join("\n");
   }
 
-  async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools): Promise<AnswerResult> {
+  async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools, _driveTools?: unknown, peerTools?: PeerTools): Promise<AnswerResult> {
     this.answerInputs.push(input);
     if (taskTools && input.question.startsWith("BACKLOG:")) {
       const result = await taskTools.digestBacklog({
@@ -211,6 +212,16 @@ class FakeLlm implements BrainLlm {
       // A real model would see the queued tool result and acknowledge without
       // claiming a commit; mirror that here.
       return { text: result.queued ? "Got it — capturing that in the background." : `Filed: ${result.evidenceRef}`, readPaths: [] };
+    }
+    if (peerTools && input.question.startsWith("PEEREXECSTATUS:")) {
+      const tool = peerTools.epaminon_read_issue_execution_status;
+      if (!tool) {
+        throw new Error("missing execution status peer tool");
+      }
+      const toolInput = { target: input.question.slice("PEEREXECSTATUS:".length).trim() };
+      const result = await tool.run(toolInput);
+      input.onPeerAction?.("epaminon_read_issue_execution_status", toolInput, result);
+      return { text: result, readPaths: [] };
     }
     await tools.searchVault(input.question);
     const note = await tools.readNote("Areas/Insurance.md");
@@ -706,6 +717,30 @@ describe("BrainEngine", () => {
 
     expect(reply.text).toContain("Backlog candidates:");
     expect(reply.text).toContain("Answer launch orchestration question");
+  });
+
+  it("chat grounds peer-tool execution status replies before reconciliation", async () => {
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      peerTools: {
+        epaminon_read_issue_execution_status: {
+          description: "Read execution status for an issue.",
+          async run(input) {
+            expect(input).toEqual({ target: "AlfaBlok/obsidian-brain#122" });
+            return "No execution tickets found for AlfaBlok/obsidian-brain#122 (nothing queued/running/done/failed).";
+          },
+        },
+      },
+    });
+
+    const reply = await e.chat("PEEREXECSTATUS: AlfaBlok/obsidian-brain#122", "web");
+
+    expect(reply.text).toContain("No execution tickets found");
+    expect(reply.text).not.toContain("Correction");
+    expect(reply.text).not.toContain("couldn't confirm execution state");
   });
 
   it("handleTasking records digest actions with the selftest surface conversation key", async () => {
