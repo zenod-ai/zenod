@@ -222,6 +222,14 @@ function claimsPositiveExecutionForNoExecutionTarget(prose: string, noExecNums: 
   return [...contradicted];
 }
 
+function isSameTurnCreateWithoutExecutionReceipt(prose: string, presented: ReadonlySet<number>, createdNums: ReadonlySet<number>): boolean {
+  if (createdNums.size === 0) return false;
+  if (!hasActiveClaim(prose, CREATION_VERBS)) return false;
+  if (!NEGATIVE_QUEUE_RE.test(prose) && !NEGATIVE_CREATED_QUEUED_RE.test(prose)) return false;
+  if (presented.size === 0) return true;
+  return [...createdNums].some((n) => presented.has(n));
+}
+
 /**
  * Build a user-facing reply from the tool results when the model produced no
  * final text (e.g. it exhausted its step budget mid-tool-call, leaving
@@ -286,7 +294,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // Execution state is not ordinary backlog state. A reply like "No, #108/#109
   // were not created or queued" must be grounded in Epaminon's live execution
   // read, not stale chat memory or an Archus paraphrase.
-  if (claimsExecutionState(prose) && !executionGrounded) {
+  if (claimsExecutionState(prose) && !executionGrounded && !isSameTurnCreateWithoutExecutionReceipt(prose, presented, createdNums)) {
     const nums = [...presented];
     return [
       `⚠️ Correction — I couldn't confirm execution state${nums.length ? ` for ${fmt(nums)}` : ""} this turn, so don't rely on the run/pickup claim below.`,

@@ -573,8 +573,14 @@ export class Runtime {
           });
         }
         if (candidates.length > 1) {
+          const candidateLines = candidates.map((candidate) =>
+            `${candidate.target} - ${candidate.title} - ${candidate.url}`,
+          );
           return toolResponse({
-            text: `Found ${candidates.length} candidate issues for ${reference}; choose one before mutating anything.`,
+            text: [
+              `Found ${candidates.length} candidate issues for ${reference}; choose one before mutating anything.`,
+              ...candidateLines,
+            ].join("\n"),
             candidates,
           });
         }
