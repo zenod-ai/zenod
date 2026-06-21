@@ -368,12 +368,12 @@ export async function testDrive(auth: string | DriveAuth, folderId?: string): Pr
     if (files.length === 0) {
       return {
         ok: true,
-        message: `connected as ${client.accountLabel}, but no files are visible yet — pick a folder with Drive files or drop one in the inbox`,
+        message: `connected as ${client.accountLabel}, but no files are visible yet — pick a Zenod Drive folder or drop a file in the root/Inbox`,
       };
     }
     return {
       ok: true,
-      message: `connected as ${client.accountLabel} — ${files.length === 5 ? "5+" : files.length} file(s) in the inbox, newest: ${files[0]!.name}${writeNote}`,
+      message: `connected as ${client.accountLabel} — ${files.length === 5 ? "5+" : files.length} file(s) in the Zenod Drive folder, newest: ${files[0]!.name}${writeNote}`,
     };
   } catch (err) {
     return { ok: false, message: (err as Error).message };

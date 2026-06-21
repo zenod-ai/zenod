@@ -21,6 +21,7 @@ import {
   agentKeptNote,
   archiveImage,
   archiveVoiceNote,
+  driveArchiveUnavailableReason,
   imageArchiveFilename,
   voiceArchiveFilename,
   type VoiceAudio,
@@ -1085,6 +1086,7 @@ export class WhatsAppGateway {
     const shouldArchive = media && agentKeptNote(reply);
     if (!jobId && !shouldArchive) return;
     const archiveLabel = media?.kind === "image" ? "image" : "audio";
+    const archiveUnavailableReason = shouldArchive ? driveArchiveUnavailableReason(this.options.settings) : null;
     const peers = this.options.settings.peers();
     const poll = jobId && peers.length ? pollPeerJob(peers, jobId) : Promise.resolve(null);
     const archive = shouldArchive
@@ -1107,6 +1109,7 @@ export class WhatsAppGateway {
           filingError: job?.error,
           archive: archivedResult,
           archiveError: archivedError,
+          archiveUnavailableReason,
           archiveLabel,
         });
         if (receipt) return this.sendReply(event, receipt, "sent");

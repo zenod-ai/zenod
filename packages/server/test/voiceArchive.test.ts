@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { agentKeptNote, archiveImage, archiveVoiceNote, imageArchiveFilename, voiceArchiveFilename } from "../src/voiceArchive.js";
+import {
+  agentKeptNote,
+  archiveImage,
+  archiveVoiceNote,
+  driveArchiveUnavailableReason,
+  imageArchiveFilename,
+  voiceArchiveFilename,
+} from "../src/voiceArchive.js";
 import type { Settings } from "../src/settings.js";
 
 describe("voice archive keep-detection", () => {
@@ -52,6 +59,20 @@ describe("archiveVoiceNote", () => {
       mimeType: "audio/ogg",
     });
     expect(result).toBeNull();
+  });
+
+  it("reports the missing folder ID separately from auth", () => {
+    const values: Record<string, string> = {
+      google_oauth_client_id: "client-id",
+      google_oauth_client_secret: "client-secret",
+      google_oauth_refresh_token: "refresh-token",
+    };
+    const settings = {
+      get: (key: string) => values[key] ?? null,
+      getRaw: (key: string) => values[key] ?? null,
+    } as unknown as Settings;
+
+    expect(driveArchiveUnavailableReason(settings)).toBe("missing Zenod Drive folder ID.");
   });
 });
 

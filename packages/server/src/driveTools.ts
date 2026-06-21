@@ -1,5 +1,6 @@
 import type { DriveSourceTools } from "zenod";
 import { driveClientFromSettings, type DriveFile } from "./drive.js";
+import { ensureDriveInboxFolder, uniqueDriveFiles } from "./driveFolders.js";
 import type { IngestQueue } from "./ingestQueue.js";
 import type { Settings } from "./settings.js";
 
@@ -11,10 +12,9 @@ import type { Settings } from "./settings.js";
  * refreshing, even a redeploy. The tool returns immediately with the job id;
  * progress is watched in the Transcription panel (GET /api/ingest/jobs).
  *
- * The shared folder is the INBOX and Drive is the binary store (the vault
- * holds markdown + pointers, never the binaries). After a successful ingest
- * the file moves to an auto-created Archive/ subfolder so the inbox listing
- * only ever shows what hasn't been consumed yet.
+ * The configured folder is the Zenod Drive root. Files dropped directly in the
+ * root or in its auto-created Inbox/ subfolder can be queued. After a successful
+ * ingest the file moves to Archive/Drive Ingest/ under that same root.
  */
 
 function describe(file: DriveFile): string {
@@ -30,14 +30,18 @@ export function buildDriveTools(settings: Settings, queue: IngestQueue): DriveSo
 
   return {
     async listDriveFiles(query?: string): Promise<string> {
-      const files = await client.listFiles({
-        ...(folderId ? { folderId } : {}),
-        ...(query ? { nameContains: query } : {}),
-      });
+      const files = folderId
+        ? uniqueDriveFiles([
+            ...(await client.listFiles({ folderId, ...(query ? { nameContains: query } : {}) })),
+            ...(await ensureDriveInboxFolder(client, folderId)
+              .then((inboxId) => client.listFiles({ folderId: inboxId, ...(query ? { nameContains: query } : {}) }))
+              .catch(() => [])),
+          ])
+        : await client.listFiles({ ...(query ? { nameContains: query } : {}) });
       if (files.length === 0) {
         return query
           ? `no Drive files match '${query}'`
-          : "the Drive inbox is empty — everything has been ingested and archived (or nothing is shared with the service account yet)";
+          : "the Zenod Drive folder is empty — everything has been ingested and archived, or nothing has been dropped in the root/Inbox yet";
       }
       return files.map(describe).join("\n");
     },

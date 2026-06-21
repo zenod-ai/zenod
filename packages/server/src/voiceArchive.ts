@@ -1,8 +1,6 @@
 import { driveClientFromSettings } from "./drive.js";
+import { imageArchiveFolder, voiceArchiveFolder } from "./driveFolders.js";
 import type { Settings } from "./settings.js";
-
-const VOICE_ARCHIVE_FOLDER = "Voice Notes";
-const IMAGE_ARCHIVE_FOLDER = "Images";
 
 export interface VoiceAudio {
   data: Buffer;
@@ -47,13 +45,20 @@ export function imageArchiveFilename(who: string, timestampMs: number, ext: stri
  * null) when Drive isn't configured, and the caller must treat any throw as
  * non-fatal: archiving must never block or break the reply.
  */
-async function archiveToFolder(settings: Settings, media: VoiceAudio, folder: string): Promise<VoiceArchiveResult | null> {
+async function archiveToFolder(settings: Settings, media: VoiceAudio, kind: "voice" | "image"): Promise<VoiceArchiveResult | null> {
   const folderId = settings.get("google_drive_folder_id");
   const client = driveClientFromSettings(settings);
   if (!client || !folderId) return null;
-  const archiveId = await client.ensureFolder(folder, folderId);
+  const archiveId = kind === "image" ? await imageArchiveFolder(client, folderId) : await voiceArchiveFolder(client, folderId);
   const file = await client.uploadFile(media.filename, media.mimeType, media.data, archiveId);
   return { fileId: file.id, name: file.name, webViewLink: file.webViewLink };
+}
+
+/** Why media archive uploads are currently unavailable, or null when ready. */
+export function driveArchiveUnavailableReason(settings: Settings): string | null {
+  if (!driveClientFromSettings(settings)) return "Google Drive is not connected.";
+  if (!settings.get("google_drive_folder_id")) return "missing Zenod Drive folder ID.";
+  return null;
 }
 
 /**
@@ -62,7 +67,7 @@ async function archiveToFolder(settings: Settings, media: VoiceAudio, folder: st
  * keep something the user may want to hear back later.
  */
 export function archiveVoiceNote(settings: Settings, audio: VoiceAudio): Promise<VoiceArchiveResult | null> {
-  return archiveToFolder(settings, audio, VOICE_ARCHIVE_FOLDER);
+  return archiveToFolder(settings, audio, "voice");
 }
 
 /**
@@ -71,5 +76,5 @@ export function archiveVoiceNote(settings: Settings, audio: VoiceAudio): Promise
  * alongside the vault note describing it.
  */
 export function archiveImage(settings: Settings, image: VoiceAudio): Promise<VoiceArchiveResult | null> {
-  return archiveToFolder(settings, image, IMAGE_ARCHIVE_FOLDER);
+  return archiveToFolder(settings, image, "image");
 }

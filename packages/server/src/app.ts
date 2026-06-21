@@ -46,6 +46,7 @@ import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./se
 import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
 import { type AgentDefinition } from "./agent.js";
+import { driveArchiveUnavailableReason } from "./voiceArchive.js";
 
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
@@ -845,8 +846,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         settings.get("google_oauth_client_secret") &&
         settings.getRaw("google_oauth_refresh_token"),
     );
+    const archiveReason = driveArchiveUnavailableReason(settings);
     return c.json({
       configured: settings.driveConfigured(),
+      archiveConfigured: archiveReason === null,
+      archiveReason,
       authMode: oauthConfigured ? "oauth" : clientEmail ? "service_account" : null,
       clientEmail,
       oauthEmail: settings.getRaw("google_oauth_email"),
