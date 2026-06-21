@@ -44,19 +44,18 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=8080 \
     ZENOD_DATA_DIR=/data \
-    ZENOD_WEB_DIST=/app/web
+    ZENOD_WEB_DIST=/app/apps/web/dist
 
 COPY --from=build /app/node_modules ./node_modules
-# replace the workspace symlinks with the real built package
-RUN rm -rf ./node_modules/zenod ./node_modules/@zenod
-COPY --from=build /app/packages/core/package.json ./node_modules/zenod/package.json
-COPY --from=build /app/packages/core/dist ./node_modules/zenod/dist
-COPY --from=build /app/packages/server/dist ./server
-COPY --from=build /app/packages/server/node_modules ./server/node_modules
-COPY --from=build /app/apps/web/dist ./web
+COPY --from=build /app/packages/core/package.json ./packages/core/package.json
+COPY --from=build /app/packages/core/dist ./packages/core/dist
+COPY --from=build /app/packages/server/package.json ./packages/server/package.json
+COPY --from=build /app/packages/server/dist ./packages/server/dist
+COPY --from=build /app/packages/server/node_modules ./packages/server/node_modules
+COPY --from=build /app/apps/web/dist ./apps/web/dist
 
 VOLUME /data
 EXPOSE 8080
 
 # The vault clone and SQLite state live on /data — one volume, whole state.
-CMD ["node", "server/main.js"]
+CMD ["node", "packages/server/dist/main.js"]
