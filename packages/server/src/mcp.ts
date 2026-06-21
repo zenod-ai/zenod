@@ -90,9 +90,26 @@ function formatExecutionStatus(tickets: ExecutionTicket[]): string {
 function filterExecutionTickets(tickets: ExecutionTicket[], message?: string): ExecutionTicket[] {
   const query = message?.trim().toLowerCase();
   if (!query) return tickets;
+
+  const qualifiedRefs = Array.from(query.matchAll(/\b[a-z0-9_.-]+\/[a-z0-9_.-]+#\d+\b/g)).map((match) => match[0]);
+  if (qualifiedRefs.length > 0) {
+    const refs = new Set(qualifiedRefs);
+    return tickets.filter((ticket) => refs.has(ticket.target.toLowerCase()));
+  }
+
+  const unqualifiedRefs = Array.from(query.matchAll(/(?:#|issue\s+|ticket\s+|execution\s+)(\d+)\b/g)).map((match) => match[1]);
+  if (unqualifiedRefs.length > 0) {
+    const refs = new Set(unqualifiedRefs);
+    return tickets.filter((ticket) => refs.has(ticket.executionId.toLowerCase()) || unqualifiedRefs.some((ref) => ticket.target.endsWith(`#${ref}`)));
+  }
+
+  if (/\b(list|show|current|recent|all|backlog|queue|status|executions?)\b/.test(query)) {
+    return tickets;
+  }
+
   return tickets.filter((ticket) => {
     const searchable = [ticket.executionId, ticket.target, ticket.state, ticket.note ?? "", ticket.evidenceUrl ?? ""].join(" ").toLowerCase();
-    return searchable.includes(query) || query.includes(ticket.executionId.toLowerCase()) || query.includes(ticket.target.toLowerCase());
+    return searchable.includes(query);
   });
 }
 

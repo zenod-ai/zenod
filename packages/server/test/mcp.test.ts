@@ -460,6 +460,16 @@ describe("Epaminon MCP execution status", () => {
       target: "AlfaBlok/obsidian-brain#103",
       context: "Fusion spike execution context",
     });
+    await runtime.executionQueue!.enqueue({
+      executionId: "109",
+      target: "AlfaBlok/obsidian-brain#108",
+      context: "Backlog system plan execution context",
+    });
+    await runtime.executionQueue!.enqueue({
+      executionId: "100",
+      target: "AlfaBlok/obsidian-brain#1",
+      context: "Older execution context",
+    });
     const app = createApp(runtime);
     server = serve({ fetch: app.fetch, port: 0 });
     const { port } = server.address() as AddressInfo;
@@ -501,6 +511,26 @@ describe("Epaminon MCP execution status", () => {
     ]);
     expect(JSON.stringify(result.content)).toContain("AlfaBlok/obsidian-brain#103");
     await client.close();
+  });
+
+  it("normalizes human execution_status filters without substring false positives", async () => {
+    const client = await connect();
+    try {
+      const exact = await client.callTool({ name: "execution_status", arguments: { message: "AlfaBlok/obsidian-brain#108" } });
+      expect((exact.structuredContent as { tickets: Array<{ target: string }> }).tickets.map((ticket) => ticket.target)).toEqual([
+        "AlfaBlok/obsidian-brain#108",
+      ]);
+
+      const unqualified = await client.callTool({ name: "execution_status", arguments: { message: "Did issue 108 run?" } });
+      expect((unqualified.structuredContent as { tickets: Array<{ target: string }> }).tickets.map((ticket) => ticket.target)).toEqual([
+        "AlfaBlok/obsidian-brain#108",
+      ]);
+
+      const broad = await client.callTool({ name: "execution_status", arguments: { message: "Show the current recent execution backlog." } });
+      expect((broad.structuredContent as { tickets: Array<unknown>; filtered: number }).filtered).toBe(3);
+    } finally {
+      await client.close();
+    }
   });
 
   it("exposes epaminon.execution_status as the typed v4 status read", async () => {
