@@ -164,6 +164,31 @@ describe("MCP endpoint", () => {
   it("get_recent_conversation_transcript returns audited WhatsApp voice transcripts and replies", async () => {
     const client = await connect();
     const nowSeconds = Math.floor(Date.now() / 1000);
+    const oldSeconds = nowSeconds - 3 * 60 * 60;
+    runtime.whatsappStore.recordInbound({
+      messageId: "voice_mcp_old",
+      chatId: "34622222222@s.whatsapp.net",
+      senderId: "34622222222@s.whatsapp.net",
+      senderName: "Tester",
+      chatName: "Tester",
+      isGroup: false,
+      timestamp: oldSeconds,
+      body: "old exact transcript",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: {},
+      raw: {},
+    });
+    runtime.whatsappStore.recordOutboundAudit({
+      messageId: "voice_mcp_old",
+      chatId: "34622222222@s.whatsapp.net",
+      contactId: "34622222222@s.whatsapp.net",
+      bodyText: "old exact receipt",
+      status: "sent",
+      sentMessageId: "sent_voice_mcp_old",
+    });
     runtime.whatsappStore.recordInbound({
       messageId: "voice_mcp_1",
       chatId: "34611111111@s.whatsapp.net",
@@ -215,6 +240,18 @@ describe("MCP endpoint", () => {
     expect(exactText).toContain("raw voice transcript from WhatsApp");
     expect(exactText).toContain("reply to the voice note");
     expect((exact.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
+
+    const oldExact = await client.callTool({
+      name: "get_recent_conversation_transcript",
+      arguments: { messageId: "voice_mcp_old" },
+    });
+    const oldExactText = oldExact.content
+      .filter((item): item is { type: "text"; text: string } => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+    expect(oldExactText).toContain("old exact transcript");
+    expect(oldExactText).toContain("old exact receipt");
+    expect((oldExact.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
     await client.close();
   });
 
