@@ -43,6 +43,7 @@ import { TaskJobQueue } from "./taskJobQueue.js";
 import { ExecutionStore } from "./executionStore.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer, callPeerWithArgs } from "./peerClient.js";
+import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
 import { GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE, V4_FIND_ISSUE_SHAPE, V4_GET_ISSUE_SHAPE, V4_LIST_ISSUES_SHAPE } from "./mcpToolSchemas.js";
 import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
@@ -327,6 +328,9 @@ export class Runtime {
           run: async (input: string | Record<string, unknown>) => {
             if (inputSchema) {
               const args = typeof input === "object" && input !== null ? input : { [spec.arg]: String(input ?? "") };
+              if (this.agent.name === "console" && spec.mcp === "get_recent_conversation_transcript") {
+                return formatConversationTranscript(this.whatsappStore.recentTranscript(transcriptQueryFromToolArgs(args)));
+              }
               const rawEvidence = this.taskingContext.getStore()?.rawEvidence;
               if (rawEvidence && spec.mcp === "store_memory") {
                 const hints = [

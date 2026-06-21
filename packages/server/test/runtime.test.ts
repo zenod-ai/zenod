@@ -526,4 +526,52 @@ describe("Console peer delegation context", () => {
       await rm(consoleDir, { recursive: true, force: true });
     }
   });
+
+  it("serves Console transcript peer tools from the local WhatsApp audit store", async () => {
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-runtime-peer-transcript-console-"));
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    try {
+      consoleRuntime.settings.setPeers([
+        {
+          name: "zenod",
+          url: "http://zenod.test/mcp",
+          token: "zenod-token",
+          tools: [
+            {
+              as: "get_recent_conversation_transcript",
+              mcp: "get_recent_conversation_transcript",
+              arg: "contactId",
+              inputSchema: "zenod.get_recent_conversation_transcript",
+              description: "Read recent phone transcript.",
+            },
+          ],
+        },
+      ]);
+      consoleRuntime.whatsappStore.recordInbound({
+        messageId: "runtime-local-transcript",
+        chatId: "110771719696610@lid",
+        senderId: "34618217703@s.whatsapp.net",
+        senderName: "Jordi",
+        chatName: "Jordi",
+        isGroup: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        body: "runtime local transcript text",
+        hasMedia: true,
+        mediaType: "ptt",
+        mimeType: "audio/ogg",
+        fileName: null,
+        mediaRaw: {},
+        raw: {},
+      });
+
+      const tools = (consoleRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+      const result = await tools.get_recent_conversation_transcript.run({ windowMinutes: 10, contactId: "34618217703", limit: 5 });
+
+      expect(result).toContain("runtime local transcript text");
+      expect(result).toContain("runtime-local-transcript");
+    } finally {
+      consoleRuntime.close();
+      await rm(consoleDir, { recursive: true, force: true });
+    }
+  });
 });

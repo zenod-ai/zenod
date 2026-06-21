@@ -7,6 +7,11 @@ import { z, type ZodRawShape } from "zod";
 
 import { callPeerTool, type PeerConfig } from "./peerClient.js";
 import {
+  formatConversationTranscript,
+  transcriptQueryFromToolArgs,
+  type ConversationTranscriptReader,
+} from "./conversationTranscript.js";
+import {
   ASK_BRAIN_SHAPE,
   CHAT_WITH_CONSOLE_SHAPE,
   EXECUTION_STATUS_SHAPE,
@@ -138,15 +143,6 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     description:
       "Poll an async job started by store_memory, by its jobId. Returns the current status: 'queued'/'running' (poll again shortly), 'done' (with the result — evidence ref, pages touched, commit SHA, and any question for the user), 'error' (with the message), or 'interrupted' (re-issue the original store_memory call).",
     inputSchema: GET_TASK_RESULT_SHAPE,
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  },
-  {
-    name: "get_recent_conversation_transcript",
-    owner: "zenod",
-    title: "Get recent conversation transcript",
-    description:
-      "Deterministically read recent WhatsApp/phone conversation transcript from Zenod's channel audit store. Includes inbound/outbound lines, timestamps, message ids, status, media type, and transcribed voice-note text when available. Use for recent phone transcript reviews; empty transcript bodies are explicit gaps.",
-    inputSchema: GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   // Archus's writes + reasoning — all routed to his guardian brain (intent in,
@@ -431,7 +427,11 @@ function installStrictOutputSchemaListOverride(server: McpServer, outputSchemaNa
  * tool forwards its full argument object straight to the owner via callPeerTool
  * and relays the response verbatim.
  */
-export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig | null, chatWithConsole?: ConsoleChatRunner): McpServer {
+export function buildMeshGatewayServer(
+  resolvePeer: (name: string) => PeerConfig | null,
+  chatWithConsole?: ConsoleChatRunner,
+  readConversationTranscript?: ConversationTranscriptReader,
+): McpServer {
   const server = new McpServer({ name: "zenod-console-gateway", version: VERSION });
   const outputSchemaNames = new Map<string, string>();
   if (chatWithConsole) {
@@ -446,6 +446,26 @@ export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       },
       async (args) => chatWithConsole(args as ConsoleChatRequest),
+    );
+  }
+  if (readConversationTranscript) {
+    server.registerTool(
+      "get_recent_conversation_transcript",
+      {
+        title: "Get recent conversation transcript",
+        description:
+          "Owner: Console. Deterministically read recent WhatsApp/phone conversation transcript from the Console channel audit store. Includes inbound/outbound lines, timestamps, message ids, status, media type, and transcribed voice-note text when available. Use for recent phone transcript reviews; empty transcript bodies are explicit gaps.",
+        inputSchema: GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async (args) => {
+        const query = transcriptQueryFromToolArgs((args ?? {}) as Record<string, unknown>);
+        const entries = readConversationTranscript(query);
+        return {
+          content: [{ type: "text", text: formatConversationTranscript(entries) }],
+          structuredContent: { entries, count: entries.length, sinceMs: query.sinceMs, windowMinutes: query.windowMinutes },
+        };
+      },
     );
   }
   for (const t of GATEWAY_TOOLS) {
