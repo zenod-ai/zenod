@@ -94,7 +94,8 @@ function filterExecutionTickets(tickets: ExecutionTicket[], message?: string): E
   const qualifiedRefs = Array.from(query.matchAll(/\b[a-z0-9_.-]+\/[a-z0-9_.-]+#\d+\b/g)).map((match) => match[0]);
   if (qualifiedRefs.length > 0) {
     const refs = new Set(qualifiedRefs);
-    return tickets.filter((ticket) => refs.has(ticket.target.toLowerCase()));
+    const numbers = new Set(qualifiedRefs.map((ref) => ref.match(/#(\d+)$/)?.[1]).filter((n): n is string => Boolean(n)));
+    return tickets.filter((ticket) => refs.has(ticket.target.toLowerCase()) || numbers.has(ticket.executionId.toLowerCase()));
   }
 
   const unqualifiedRefs = Array.from(query.matchAll(/(?:#|issue\s+|ticket\s+|execution\s+)(\d+)\b/g)).map((match) => match[1]);
@@ -132,11 +133,12 @@ function filterExecutionTicketsV4(
   },
 ): ExecutionTicket[] {
   const sinceMs = filters.since ? Date.parse(filters.since) : NaN;
+  const executionIssueId = filters.executionIssue?.match(/#(\d+)$/)?.[1] ?? filters.executionIssue;
   return tickets
     .filter((ticket) => {
       if (filters.executionId && ticket.executionId !== filters.executionId) return false;
       if (filters.workIssue && ticket.target !== filters.workIssue) return false;
-      if (filters.executionIssue && ticket.executionId !== filters.executionIssue && ticket.target !== filters.executionIssue) return false;
+      if (filters.executionIssue && ticket.executionId !== executionIssueId && ticket.target !== filters.executionIssue) return false;
       if (filters.state && canonicalExecutionState(ticket.state) !== filters.state) return false;
       if (Number.isFinite(sinceMs) && ticket.updatedAt < sinceMs) return false;
       return true;
