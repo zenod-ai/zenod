@@ -456,7 +456,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "execution_status",
       arg: "message",
       description:
-        "Read Epaminon's live execution queue — which tickets are queued/running, in review, shipped, failed, or blocked, and any blocker notes. Deterministic, read-only, and does not start work. Reference tickets as owner/repo#N.",
+        "Read Epaminon's live execution queue — which tickets are queued/running, in review, shipped, failed, or blocked, and any blocker notes. Deterministic, read-only, and does not start work. For 'did it run?', 'was it picked up?', 'issue 108', or owner/repo#N status questions, call this tool with the user's exact reference; do not claim you searched execution state unless this tool returned a result.",
     },
   ];
   // Callistheness's "top tools": named delegation handles that ALL route to his chat
