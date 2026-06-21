@@ -203,6 +203,18 @@ describe("MCP endpoint", () => {
     expect(text).toContain("raw voice transcript from WhatsApp");
     expect(text).toContain("reply to the voice note");
     expect((result.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
+
+    const exact = await client.callTool({
+      name: "get_recent_conversation_transcript",
+      arguments: { messageId: "voice_mcp_1" },
+    });
+    const exactText = exact.content
+      .filter((item): item is { type: "text"; text: string } => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+    expect(exactText).toContain("raw voice transcript from WhatsApp");
+    expect(exactText).toContain("reply to the voice note");
+    expect((exact.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
     await client.close();
   });
 

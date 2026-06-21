@@ -14,6 +14,7 @@ export type ConversationTranscriptReader = (input: {
   sinceMs?: number;
   contactId?: string;
   chatId?: string;
+  messageId?: string;
   limit?: number;
 }) => ConversationTranscriptEntry[];
 
@@ -21,6 +22,7 @@ export interface ConversationTranscriptToolArgs {
   windowMinutes?: unknown;
   contactId?: unknown;
   chatId?: unknown;
+  messageId?: unknown;
   limit?: unknown;
 }
 
@@ -29,6 +31,7 @@ export function transcriptQueryFromToolArgs(args: ConversationTranscriptToolArgs
   windowMinutes: number;
   contactId?: string;
   chatId?: string;
+  messageId?: string;
   limit?: number;
 } {
   const parsedWindow = typeof args.windowMinutes === "number" && Number.isFinite(args.windowMinutes) ? args.windowMinutes : 120;
@@ -38,6 +41,7 @@ export function transcriptQueryFromToolArgs(args: ConversationTranscriptToolArgs
     windowMinutes: parsedWindow,
     ...(typeof args.contactId === "string" && args.contactId ? { contactId: args.contactId } : {}),
     ...(typeof args.chatId === "string" && args.chatId ? { chatId: args.chatId } : {}),
+    ...(typeof args.messageId === "string" && args.messageId ? { messageId: args.messageId } : {}),
     ...(parsedLimit ? { limit: parsedLimit } : {}),
   };
 }

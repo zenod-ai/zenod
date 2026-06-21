@@ -563,12 +563,21 @@ describe("Console peer delegation context", () => {
         mediaRaw: {},
         raw: {},
       });
+      consoleRuntime.whatsappStore.recordOutboundAudit({
+        messageId: "runtime-local-transcript",
+        chatId: "110771719696610@lid",
+        contactId: "34618217703@s.whatsapp.net",
+        bodyText: "runtime storage receipt",
+        status: "sent",
+        sentMessageId: "sent-runtime-local-transcript",
+      });
 
       const tools = (consoleRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
-      const result = await tools.get_recent_conversation_transcript.run({ windowMinutes: 10, contactId: "34618217703", limit: 5 });
+      const result = await tools.get_recent_conversation_transcript.run({ messageId: "runtime-local-transcript" });
 
       expect(result).toContain("runtime local transcript text");
       expect(result).toContain("runtime-local-transcript");
+      expect(result).toContain("runtime storage receipt");
     } finally {
       consoleRuntime.close();
       await rm(consoleDir, { recursive: true, force: true });
