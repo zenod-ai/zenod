@@ -30,4 +30,20 @@ describe("formatStorageReceipt", () => {
     expect(receipt).toContain("Drive audio: voice-2026-06-17T01-19-03-000Z-34618217703.ogg");
     expect(receipt).toContain("Drive link: https://drive.google.com/file/d/drive-file-1/view");
   });
+
+  it("explains why Drive archive was skipped", () => {
+    const receipt = formatStorageReceipt({
+      storeResult: {
+        evidenceRef: "Log/2026-06-21.md#^e-350e36",
+        pagesTouched: ["Notes/Drive Setup.md"],
+        commitSha: "a02977ca3b9198928ff6f91fbe2c0a72b628557e",
+        githubUrls: [],
+      },
+      archive: null,
+      archiveUnavailableReason: "missing Zenod Drive folder ID.",
+      archiveLabel: "image",
+    });
+
+    expect(receipt).toContain("Drive image: not archived; missing Zenod Drive folder ID.");
+  });
 });

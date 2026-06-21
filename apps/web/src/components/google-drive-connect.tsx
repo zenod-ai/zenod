@@ -254,12 +254,14 @@ export function GoogleDriveConnect() {
               Connected
             </Badge>
           )}
+          {connected && status?.archiveConfigured === false && (
+            <Badge variant="destructive">Archive folder missing</Badge>
+          )}
         </CardTitle>
         <CardDescription>
-          Your shared Drive folder becomes Zeno&apos;s inbox: drop voice notes
-          or documents there and ask Zeno to transcribe them — audio is
-          transcribed, filed into the vault as evidence, and the original is
-          moved to an Archive/ subfolder in Drive (the vault keeps the link).
+          Pick one Zenod Drive folder. Drop voice notes or documents there, or
+          in its Inbox/ subfolder, and ask Zeno to transcribe them — Zeno
+          creates archive subfolders inside that same folder.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -284,6 +286,12 @@ export function GoogleDriveConnect() {
               {status?.transcriptionProvider ?? "local whisper.cpp"} — no API
               key, no per-minute cost.
             </FieldDescription>
+            {status?.archiveConfigured === false && (
+              <FieldDescription className="text-destructive">
+                WhatsApp media receipts will not include Drive links until this
+                connection has a Zenod Drive folder ID: {status.archiveReason}
+              </FieldDescription>
+            )}
             {model && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {model.error ? (
@@ -342,13 +350,13 @@ export function GoogleDriveConnect() {
                 </span>
               </Step>
               <Step n={2}>
-                Paste the client ID and client secret, choose the Drive folder
-                that acts as the inbox, then connect with Google. Uploads and
-                archived voice notes will be owned by that Google account.
+                Paste the client ID and client secret, choose one Zenod Drive
+                folder, then connect with Google. Uploads and archived media
+                will be owned by that Google account.
               </Step>
               <Step n={3}>
-                From then on Zeno can list and transcribe that folder whenever
-                you ask in chat; receipts include the final Drive link.
+                From then on Zeno can list and transcribe files in that folder
+                or its Inbox/ subfolder; receipts include the final Drive link.
               </Step>
             </div>
 
@@ -391,7 +399,7 @@ export function GoogleDriveConnect() {
 
             <Field>
               <FieldLabel htmlFor="drive-folder-id">
-                Folder ID
+                Zenod Drive folder ID
               </FieldLabel>
               <Input
                 id="drive-folder-id"
@@ -401,8 +409,8 @@ export function GoogleDriveConnect() {
                 onChange={(event) => setFolderId(event.target.value)}
               />
               <FieldDescription>
-                The folder that acts as the inbox and contains the Voice Notes
-                archive folder.
+                Use one folder. Zeno creates Inbox/ and Archive/ subfolders
+                inside it as needed.
               </FieldDescription>
             </Field>
 
@@ -447,24 +455,6 @@ export function GoogleDriveConnect() {
                 </div>
               </Field>
             )}
-
-            <Field>
-              <FieldLabel htmlFor="drive-sa-folder-id">
-                Service-account folder ID
-              </FieldLabel>
-              <Input
-                id="drive-sa-folder-id"
-                autoComplete="off"
-                placeholder="the part after /folders/ in the folder URL"
-                value={folderId}
-                onChange={(event) => setFolderId(event.target.value)}
-              />
-              <FieldDescription>
-                The folder that acts as the inbox — needed for archiving.
-                Leave empty to see everything shared with the service account
-                (no archiving).
-              </FieldDescription>
-            </Field>
 
             <FieldDescription>
               Voice notes are transcribed locally with whisper.cpp

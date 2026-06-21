@@ -6,7 +6,7 @@ import { transcribeChannelAudio } from "./channelAudio.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { formatStorageReceipt } from "./storageReceipt.js";
-import { agentKeptNote, archiveVoiceNote, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
+import { agentKeptNote, archiveVoiceNote, driveArchiveUnavailableReason, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 
 export type TelegramConnectionState = "disabled" | "disconnected" | "connected" | "error";
@@ -461,6 +461,7 @@ export class TelegramGateway {
     const jobId = extractJobId(reply);
     const shouldArchiveVoice = voiceAudio && agentKeptNote(reply);
     if (!jobId && !shouldArchiveVoice) return;
+    const archiveUnavailableReason = shouldArchiveVoice ? driveArchiveUnavailableReason(this.options.settings) : null;
     const peers = this.options.settings.peers();
     const poll = jobId && peers.length ? pollPeerJob(peers, jobId) : Promise.resolve(null);
     const archive = shouldArchiveVoice
@@ -481,6 +482,7 @@ export class TelegramGateway {
           filingError: job?.error,
           archive: archivedResult,
           archiveError: archivedError,
+          archiveUnavailableReason,
         });
         if (receipt) return this.sendReply(chatId, receipt);
       })

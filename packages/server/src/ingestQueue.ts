@@ -1,5 +1,6 @@
 import type { BrainEngine } from "zenod";
 import { driveClientFromSettings } from "./drive.js";
+import { driveIngestArchiveFolder } from "./driveFolders.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 import type { IngestJob, IngestStore } from "./ingestStore.js";
 import type { Settings } from "./settings.js";
@@ -12,7 +13,6 @@ import type { Settings } from "./settings.js";
  * in-flight jobs interrupted (see IngestStore) and the user can retry.
  */
 
-const ARCHIVE_FOLDER = "Archive";
 const TEXT_MIME_PREFIXES = ["text/"];
 const TEXT_MIME_EXACT = new Set(["application/json", "application/xml", "application/x-yaml"]);
 const GOOGLE_DOC_MIMES = new Set([
@@ -156,10 +156,10 @@ export class IngestQueue {
 
       // Archive the original (file ID — and its link — survive the move).
       let archived = false;
-      const archiveParentId = folderId ?? file.parents?.[0];
-      if (archiveParentId) {
+      const archiveRootId = folderId ?? file.parents?.[0];
+      if (archiveRootId) {
         try {
-          const archiveId = await client.ensureFolder(ARCHIVE_FOLDER, archiveParentId);
+          const archiveId = await driveIngestArchiveFolder(client, archiveRootId);
           await client.moveFile(file.id, archiveId);
           archived = true;
         } catch (err) {

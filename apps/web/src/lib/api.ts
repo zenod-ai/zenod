@@ -129,6 +129,8 @@ export type SettingsValues = {
 
 export type DriveStatus = {
   configured: boolean
+  archiveConfigured: boolean
+  archiveReason: string | null
   authMode: "oauth" | "service_account" | null
   clientEmail: string | null
   oauthEmail: string | null

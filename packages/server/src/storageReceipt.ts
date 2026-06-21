@@ -12,6 +12,7 @@ export interface StorageReceiptInput {
   storeResult?: unknown;
   archive?: VoiceArchiveResult | null;
   archiveError?: unknown;
+  archiveUnavailableReason?: string | null;
   /** What kind of media was archived to Drive — labels the receipt line. */
   archiveLabel?: string;
   filingStatus?: "done" | "error" | "timeout" | null;
@@ -64,7 +65,7 @@ export function formatStorageReceipt(input: StorageReceiptInput): string | null 
   } else if (archiveError) {
     lines.push(`Drive ${archiveLabel}: archive failed — ${archiveError}`);
   } else if (input.archive === null) {
-    lines.push(`Drive ${archiveLabel}: not archived; Google Drive archive is not configured.`);
+    lines.push(`Drive ${archiveLabel}: not archived; ${input.archiveUnavailableReason ?? "Google Drive archive is not configured."}`);
   }
 
   return lines.join("\n");
