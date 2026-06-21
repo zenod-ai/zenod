@@ -139,7 +139,8 @@ export interface VaultReadTools {
  */
 export interface PeerTool {
   description: string;
-  run(input: string): Promise<string>;
+  inputSchema?: unknown;
+  run(input: string | Record<string, unknown>): Promise<string>;
 }
 export type PeerTools = Record<string, PeerTool>;
 

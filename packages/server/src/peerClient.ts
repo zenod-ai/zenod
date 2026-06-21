@@ -16,6 +16,8 @@ export interface PeerToolSpec {
   mcp: string;
   /** The single argument key that MCP tool takes, e.g. "content". */
   arg: string;
+  /** Optional schema key for typed peer tools whose arguments should pass through unchanged. */
+  inputSchema?: string;
   /** What the tool does (the model reads this). */
   description: string;
 }
@@ -126,4 +128,13 @@ export async function callPeerTool(
   } finally {
     await client.close().catch(() => {});
   }
+}
+
+/** Call a peer tool with full structured arguments, returning readable text for the chat loop. */
+export async function callPeerWithArgs(peer: PeerConfig, mcpTool: string, args: Record<string, unknown>): Promise<string> {
+  const result = await callPeerTool(peer, mcpTool, args);
+  const text = extractText(result);
+  if (text) return text;
+  if (result.structuredContent) return JSON.stringify(result.structuredContent);
+  return `(${peer.name} returned no text)`;
 }

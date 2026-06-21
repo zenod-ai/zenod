@@ -807,10 +807,11 @@ export class AiSdkBrainLlm implements BrainLlm {
         name,
         tool({
           description: peer.description,
-          inputSchema: z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") }),
-          execute: async ({ input: peerInput }) => {
-            const result = await caught(() => peer.run(peerInput));
-            input.onPeerAction?.(name, { input: peerInput }, result);
+          inputSchema: (peer.inputSchema ?? z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") })) as never,
+          execute: async (peerInput) => {
+            const args = (peerInput ?? {}) as Record<string, unknown>;
+            const result = await caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? ""))));
+            input.onPeerAction?.(name, args, result);
             return result;
           },
         }),
