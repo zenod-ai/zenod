@@ -151,12 +151,58 @@ describe("MCP endpoint", () => {
       "digest_backlog",
       "edit_github_issue",
       "get_memory",
+      "get_recent_conversation_transcript",
       "get_task_result",
       "run_task",
       "search_memory",
       "store_memory",
       "task_brain",
     ]);
+    await client.close();
+  });
+
+  it("get_recent_conversation_transcript returns audited WhatsApp voice transcripts and replies", async () => {
+    const client = await connect();
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    runtime.whatsappStore.recordInbound({
+      messageId: "voice_mcp_1",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Tester",
+      chatName: "Tester",
+      isGroup: false,
+      timestamp: nowSeconds,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: {},
+      raw: {},
+    });
+    runtime.whatsappStore.recordInboundTranscript("voice_mcp_1", "raw voice transcript from WhatsApp");
+    runtime.whatsappStore.recordOutboundAudit({
+      messageId: "voice_mcp_1",
+      chatId: "34611111111@s.whatsapp.net",
+      contactId: "34611111111@s.whatsapp.net",
+      bodyText: "reply to the voice note",
+      status: "sent",
+      sentMessageId: "sent_voice_mcp_1",
+    });
+
+    const result = await client.callTool({
+      name: "get_recent_conversation_transcript",
+      arguments: { windowMinutes: 60, contactId: "34611111111", limit: 10 },
+    });
+    const text = result.content
+      .filter((item): item is { type: "text"; text: string } => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+    expect(text).toContain("voice_mcp_1");
+    expect(text).toContain("media=ptt");
+    expect(text).toContain("raw voice transcript from WhatsApp");
+    expect(text).toContain("reply to the voice note");
+    expect((result.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
     await client.close();
   });
 

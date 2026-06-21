@@ -30,6 +30,13 @@ export const GET_TASK_RESULT_SHAPE = {
   jobId: z.string().min(1).describe("The jobId returned by an async tool such as store_memory"),
 };
 
+export const GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE = {
+  windowMinutes: z.number().int().min(1).max(24 * 60).optional().describe("Lookback window in minutes. Defaults to 120."),
+  contactId: z.string().optional().describe("Optional WhatsApp sender/contact id or phone number to filter."),
+  chatId: z.string().optional().describe("Optional exact WhatsApp chat id to filter."),
+  limit: z.number().int().min(1).max(500).optional().describe("Maximum transcript lines to return. Defaults to 100."),
+};
+
 export const CHAT_WITH_CONSOLE_SHAPE = {
   message: z.string().min(1).describe("Natural-language prompt to send through the Console chat/tasking path."),
   surface: z

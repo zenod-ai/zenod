@@ -9,6 +9,17 @@ import { ARCHUS_AGENT, CONSOLE_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { consolePeerConversationKey, formatConsolePeerDelegation, Runtime } from "../src/runtime.js";
 
+async function waitFor<T>(read: () => T, done: (value: T) => boolean): Promise<T> {
+  const started = Date.now();
+  let value = read();
+  while (!done(value)) {
+    if (Date.now() - started > 2_000) throw new Error("timed out waiting for async work");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    value = read();
+  }
+  return value;
+}
+
 describe("runtime tasking tools", () => {
   let dir: string;
   let runtime: Runtime;
@@ -443,6 +454,75 @@ describe("Console peer delegation context", () => {
       archusRuntime.close();
       consoleRuntime.close();
       await rm(archusDir, { recursive: true, force: true });
+      await rm(consoleDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses raw turn evidence for peer store_memory calls from voice-note tasking", async () => {
+    const zenodDir = await mkdtemp(join(tmpdir(), "zenod-runtime-peer-store-zenod-"));
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-runtime-peer-store-console-"));
+    let zenodServer: ServerType | undefined;
+    const zenodRuntime = new Runtime(zenodDir);
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    const stored: Array<Parameters<BrainEngine["store"]>[0]> = [];
+    try {
+      zenodRuntime.getEngine = async () =>
+        ({
+          async store(input: Parameters<BrainEngine["store"]>[0]) {
+            stored.push(input);
+            return {
+              evidenceRef: "Log/2026-06-21.md#^e-voice",
+              pagesTouched: ["Projects/Voice.md"],
+              commitSha: "a".repeat(40),
+              githubUrls: ["https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-06-21.md"],
+            };
+          },
+        }) as BrainEngine;
+      const zenodApp = createApp(zenodRuntime);
+      zenodServer = serve({ fetch: zenodApp.fetch, port: 0 });
+      const zenodPort = (zenodServer.address() as AddressInfo).port;
+      consoleRuntime.settings.setPeers([
+        {
+          name: "zenod",
+          url: `http://127.0.0.1:${zenodPort}/mcp`,
+          token: zenodRuntime.settings.apiToken(),
+          tools: [{ as: "add_memory", mcp: "store_memory", arg: "content", description: "Store memory." }],
+        },
+      ]);
+
+      const tools = (consoleRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+      const taskingContext = (
+        consoleRuntime as unknown as {
+          taskingContext: {
+            run<T>(
+              store: { parentConversationId: string; rawEvidence?: { content: string; hints?: string[] } },
+              callback: () => Promise<T>,
+            ): Promise<T>;
+          };
+        }
+      ).taskingContext;
+      const rawEvidence = {
+        content: "WhatsApp voice-note raw transcript.\n\nTranscript:\nexact words from the audio",
+        hints: ["WhatsApp voice note", "raw transcript"],
+      };
+      const result = await taskingContext.run({ parentConversationId: "whatsapp:34611111111", rawEvidence }, () =>
+        tools.add_memory.run("model summary instead of the raw transcript"),
+      );
+
+      expect(result).toContain("Queued job");
+      await waitFor(() => stored, (items) => items.length === 1);
+      expect(stored[0]).toMatchObject({
+        content: rawEvidence.content,
+        source: "mcp",
+        verbatim: true,
+        hints: rawEvidence.hints,
+      });
+      expect(stored[0]?.content).not.toContain("model summary");
+    } finally {
+      zenodServer?.close();
+      zenodRuntime.close();
+      consoleRuntime.close();
+      await rm(zenodDir, { recursive: true, force: true });
       await rm(consoleDir, { recursive: true, force: true });
     }
   });

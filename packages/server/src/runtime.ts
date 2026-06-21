@@ -24,6 +24,7 @@ import {
   type LintReport,
   type LlmUsageReport,
   type PeerTools,
+  type TaskingInput,
   type TokenCostMeasurement,
 } from "zenod";
 import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue, setExecutionState } from "zenod";
@@ -42,7 +43,7 @@ import { TaskJobQueue } from "./taskJobQueue.js";
 import { ExecutionStore } from "./executionStore.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer, callPeerWithArgs } from "./peerClient.js";
-import { V4_FIND_ISSUE_SHAPE, V4_GET_ISSUE_SHAPE, V4_LIST_ISSUES_SHAPE } from "./mcpToolSchemas.js";
+import { GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE, V4_FIND_ISSUE_SHAPE, V4_GET_ISSUE_SHAPE, V4_LIST_ISSUES_SHAPE } from "./mcpToolSchemas.js";
 import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
@@ -67,6 +68,8 @@ function peerToolInputSchema(schemaKey?: string): ZodTypeAny | undefined {
       return z.object(V4_FIND_ISSUE_SHAPE);
     case "archus.list_issues":
       return z.object(V4_LIST_ISSUES_SHAPE);
+    case "zenod.get_recent_conversation_transcript":
+      return z.object(GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE);
     default:
       return undefined;
   }
@@ -131,7 +134,7 @@ export class Runtime {
   readonly executionQueue: ExecutionQueue | null;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
-  private readonly taskingContext = new AsyncLocalStorage<{ parentConversationId: string }>();
+  private readonly taskingContext = new AsyncLocalStorage<{ parentConversationId: string; rawEvidence?: TaskingInput["rawEvidence"] }>();
 
   constructor(readonly dataDir: string, readonly agent: AgentDefinition = ZENOD_AGENT) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
@@ -274,8 +277,12 @@ export class Runtime {
     this.engine = {
       ...engine,
       handleTasking: (input) =>
-        this.taskingContext.run({ parentConversationId: conversationId(input.surface, input.conversationKey) }, () =>
-          engine.handleTasking(input),
+        this.taskingContext.run(
+          {
+            parentConversationId: conversationId(input.surface, input.conversationKey),
+            ...(input.rawEvidence ? { rawEvidence: input.rawEvidence } : {}),
+          },
+          () => engine.handleTasking(input),
         ),
     };
     return this.engine;
@@ -312,9 +319,31 @@ export class Runtime {
           run: async (input: string | Record<string, unknown>) => {
             if (inputSchema) {
               const args = typeof input === "object" && input !== null ? input : { [spec.arg]: String(input ?? "") };
+              const rawEvidence = this.taskingContext.getStore()?.rawEvidence;
+              if (rawEvidence && spec.mcp === "store_memory") {
+                const hints = [
+                  ...(Array.isArray(args.hints) ? args.hints.filter((hint): hint is string => typeof hint === "string") : []),
+                  ...(rawEvidence.hints ?? []),
+                ];
+                return callPeerWithArgs(peer, spec.mcp, {
+                  ...args,
+                  content: rawEvidence.content,
+                  verbatim: true,
+                  ...(hints.length ? { hints } : {}),
+                });
+              }
               return callPeerWithArgs(peer, spec.mcp, args);
             }
             const textInput = typeof input === "string" ? input : String(input.input ?? "");
+            const rawEvidence = this.taskingContext.getStore()?.rawEvidence;
+            if (rawEvidence && spec.mcp === "store_memory") {
+              const hints = rawEvidence.hints ?? [];
+              return callPeerWithArgs(peer, spec.mcp, {
+                content: rawEvidence.content,
+                verbatim: true,
+                ...(hints.length ? { hints } : {}),
+              });
+            }
             if (!shouldForwardConsoleContext || !spec.mcp.startsWith("chat_with_")) {
               return callPeer(peer, spec.mcp, spec.arg, textInput);
             }

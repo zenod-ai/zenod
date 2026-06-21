@@ -560,8 +560,14 @@ describe("WhatsAppGateway", () => {
     const socket = new FakeSocket();
     const stored: StoreInput[] = [];
     const calls: string[] = [];
+    const taskingInputs: Parameters<BrainEngine["handleTasking"]>[0][] = [];
     const fakeVoiceEngine = {
       ...fakeEngine(calls),
+      async handleTasking(input: Parameters<BrainEngine["handleTasking"]>[0]) {
+        taskingInputs.push(input);
+        calls.push(`${input.conversationKey}:${input.text}`);
+        return { text: `Re: ${input.text}`, actions: [] };
+      },
       async store(input: StoreInput) {
         stored.push(input);
         return {
@@ -593,10 +599,15 @@ describe("WhatsAppGateway", () => {
       expect(socket.sent.some((m) => m.text.includes("Got this voice note"))).toBe(false);
       expect(calls).toContain("34611111111:queue 51 and 53");
       expect(socket.sent[0]!.text).toContain("queue 51 and 53");
+      expect(taskingInputs[0]?.rawEvidence?.content).toContain("WhatsApp voice-note raw transcript.");
+      expect(taskingInputs[0]?.rawEvidence?.content).toContain("Message id: voice_1");
+      expect(taskingInputs[0]?.rawEvidence?.content).toContain("Transcript:\nqueue 51 and 53");
+      expect(taskingInputs[0]?.rawEvidence?.hints).toContain("raw transcript");
+      expect(runtime.whatsappStore.recentTranscript({ limit: 5 }).some((entry) => entry.messageId === "voice_1" && entry.bodyText === "queue 51 and 53")).toBe(true);
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(1);
       // Filing is NOT automatic (#68) — a voice note is acted on, not pushed
-      // into the vault. The transcript lives in conversation state; explicit
-      // "file this" requests do the filing, on demand.
+      // into the vault. The transcript lives in the WhatsApp audit; explicit
+      // "file this" requests do the vault filing, using that transcript as raw evidence.
       expect(stored).toHaveLength(0);
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;

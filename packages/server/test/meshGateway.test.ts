@@ -139,6 +139,7 @@ describe("Console mesh gateway contract", () => {
       "edit_issue",
       "execution_status",
       "get_memory",
+      "get_recent_conversation_transcript",
       "get_task_result",
       "post_reddit",
       "post_tweet",

@@ -11,6 +11,7 @@ import {
   CHAT_WITH_CONSOLE_SHAPE,
   EXECUTION_STATUS_SHAPE,
   GET_MEMORY_SHAPE,
+  GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
   GET_TASK_RESULT_SHAPE,
   REQUEST_BACKLOG_ACTION_SHAPE,
   RUN_ISSUE_SHAPE,
@@ -137,6 +138,15 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     description:
       "Poll an async job started by store_memory, by its jobId. Returns the current status: 'queued'/'running' (poll again shortly), 'done' (with the result — evidence ref, pages touched, commit SHA, and any question for the user), 'error' (with the message), or 'interrupted' (re-issue the original store_memory call).",
     inputSchema: GET_TASK_RESULT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: "get_recent_conversation_transcript",
+    owner: "zenod",
+    title: "Get recent conversation transcript",
+    description:
+      "Deterministically read recent WhatsApp/phone conversation transcript from Zenod's channel audit store. Includes inbound/outbound lines, timestamps, message ids, status, media type, and transcribed voice-note text when available. Use for recent phone transcript reviews; empty transcript bodies are explicit gaps.",
+    inputSchema: GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   // Archus's writes + reasoning — all routed to his guardian brain (intent in,

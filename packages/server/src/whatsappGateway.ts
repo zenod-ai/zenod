@@ -781,6 +781,7 @@ export class WhatsAppGateway {
         text: input.text,
         surface: "whatsapp",
         conversationKey: normalizeWhatsAppIdentifier(event.senderId) || event.senderId,
+        ...(input.rawEvidence ? { rawEvidence: input.rawEvidence } : {}),
       });
       // The engine now guarantees a non-empty reply, but never record a false
       // "replied": if the text is blank, sendReply's empty-text guard would
@@ -827,7 +828,10 @@ export class WhatsAppGateway {
   private async engineInputForEvent(
     event: WhatsAppInboundEvent,
     settings: WhatsAppSettings,
-  ): Promise<{ kind: "engine"; text: string; audio?: VoiceAudio } | { kind: "fixed-reply"; text: string }> {
+  ): Promise<
+    | { kind: "engine"; text: string; audio?: VoiceAudio; rawEvidence?: { content: string; hints?: string[] } }
+    | { kind: "fixed-reply"; text: string }
+  > {
     if (!event.hasMedia) return { kind: "engine", text: event.body };
 
     if (event.mediaType === "audio" || event.mediaType === "ptt") {
@@ -846,11 +850,17 @@ export class WhatsAppGateway {
             : `I could not transcribe that voice note: ${transcription.error}`,
         };
       }
+      const transcript = transcription.transcript ?? "";
+      this.options.store.recordInboundTranscript(event.messageId, transcript);
       const sender = normalizeWhatsAppIdentifier(event.senderId) || event.senderName;
       const ext = event.mimeType?.includes("mpeg") ? "mp3" : "ogg";
       return {
         kind: "engine",
-        text: transcription.transcript ?? "",
+        text: transcript,
+        rawEvidence: {
+          content: this.formatVoiceTranscriptEvidence(event, transcript, transcription.provider),
+          hints: ["WhatsApp voice note", "raw transcript", `WhatsApp message ${event.messageId}`],
+        },
         audio: {
           data,
           filename: voiceArchiveFilename(sender, Date.now(), ext),
@@ -873,6 +883,27 @@ export class WhatsAppGateway {
           ? "I received media, but this Zenod WhatsApp connector can only process text, captions, and voice notes in v1."
           : "",
     };
+  }
+
+  private formatVoiceTranscriptEvidence(event: WhatsAppInboundEvent, transcript: string, provider?: string): string {
+    const timestamp =
+      typeof event.timestamp === "object" && event.timestamp !== null && "low" in event.timestamp
+        ? new Date(Number((event.timestamp as { low: unknown }).low) * 1000).toISOString()
+        : Number.isFinite(Number(event.timestamp))
+          ? new Date(Number(event.timestamp) * 1000).toISOString()
+          : new Date().toISOString();
+    const sender = normalizeWhatsAppIdentifier(event.senderId) || event.senderName || event.senderId;
+    return [
+      "WhatsApp voice-note raw transcript.",
+      `Message id: ${event.messageId}`,
+      `Sender: ${sender}`,
+      `Chat: ${event.chatId}`,
+      `Timestamp: ${timestamp}`,
+      ...(provider ? [`Transcribed by: ${provider}`] : []),
+      "",
+      "Transcript:",
+      transcript,
+    ].join("\n");
   }
 
   private formatIngestAck(event: WhatsAppInboundEvent): string {
@@ -1040,17 +1071,22 @@ export class WhatsAppGateway {
       // classify/compose/commit pipeline, and handleTasking's read path waits on
       // that same queue — so filing-before-reply serialized them and put minutes
       // of filing on the hot path. Answer first; file after, in the background.
-      const reply = await engine.handleTasking({ text: input.text, surface: "whatsapp", conversationKey });
+      const reply = await engine.handleTasking({
+        text: input.text,
+        surface: "whatsapp",
+        conversationKey,
+        ...(input.rawEvidence ? { rawEvidence: input.rawEvidence } : {}),
+      });
       this.options.store.markMessageStatus(event.messageId, "replied");
       await this.sendReply(event, reply.text, "sent");
       this.spawnPeerJobPoller(reply, event, input.audio ? { input: input.audio, kind: "voice" } : undefined);
 
-      // Filing is NOT automatic (#68). The transcript of every interaction is
-      // already persisted in the conversation state — we do NOT push every
-      // prompt into the memory vault (that flooded the vault and ran a ~2-min
-      // librarian pipeline per message). Filing happens only when the user
-      // explicitly asks ("file the last few messages"), via a capture tool, in
-      // the background — keeping responses snappy and the vault curated.
+      // Filing is NOT automatic (#68). Voice transcripts are persisted in the
+      // WhatsApp audit, but we do NOT push every prompt into the memory vault
+      // (that flooded the vault and ran a ~2-min librarian pipeline per
+      // message). Filing happens only when the user explicitly asks, via a
+      // capture/store tool, and that tool receives rawEvidence so the vault
+      // evidence is the transcript rather than a model-written digest.
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.options.store.markMessageStatus(event.messageId, "failed");
