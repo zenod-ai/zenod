@@ -44,7 +44,7 @@ export interface RecordedAction {
 
 // Perfective mutation verbs. Offers ("want me to create…", "I'll open…") use
 // other forms and don't trip the guard.
-const MUTATION_VERBS = "created|filed|opened|raised|logged|placed|queued|merged|approved";
+const MUTATION_VERBS = "created|filed|opened|raised|logged|placed|queued|merged|approved|closed|edited|updated|commented|labeled|labelled";
 const CREATION_VERBS = "created|filed|opened|raised|logged|placed";
 
 // A mutation verb is only a *claim about this turn* when it's active voice. A
@@ -152,6 +152,56 @@ function createReceipts(actions: ReadonlyArray<RecordedAction>): string[] {
   return actions.map(normalizedCreateReceipt).filter((receipt): receipt is string => Boolean(receipt));
 }
 
+interface IssueWriteReceipt {
+  verb: "created" | "edited" | "closed" | "labeled";
+  issueNumber: number;
+  url: string;
+}
+
+interface ExecutionWriteReceipt {
+  verb: "queued" | "approved";
+  target: string;
+  issueNumber: number;
+  url: string;
+}
+
+function issueWriteReceipt(action: RecordedAction): IssueWriteReceipt | null {
+  if (/^ERROR:/.test(action.result)) return null;
+  const created = normalizedCreateReceipt(action);
+  if (created) {
+    const match = /^Created issue #(\d+):\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/.exec(created);
+    return match ? { verb: "created", issueNumber: Number(match[1]), url: match[2]! } : null;
+  }
+  const edited = /^Edited #(\d+)(?:\s+\([^)]+\))?:\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/.exec(action.result);
+  if (edited) return { verb: "edited", issueNumber: Number(edited[1]), url: edited[2]! };
+  const closed = /^Closed #(\d+):\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/.exec(action.result);
+  if (closed) return { verb: "closed", issueNumber: Number(closed[1]), url: closed[2]! };
+  const labeled = /^Labeled issue #(\d+):\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/.exec(action.result);
+  if (labeled) return { verb: "labeled", issueNumber: Number(labeled[1]), url: labeled[2]! };
+  return null;
+}
+
+function issueWriteReceipts(actions: ReadonlyArray<RecordedAction>): IssueWriteReceipt[] {
+  return actions.map(issueWriteReceipt).filter((receipt): receipt is IssueWriteReceipt => Boolean(receipt));
+}
+
+function executionWriteReceipt(action: RecordedAction): ExecutionWriteReceipt | null {
+  if (/^ERROR:/.test(action.result)) return null;
+  const queued = /^Minted execution ticket\s+([^#\s]+\/[^#\s]+)#(\d+)\b[\s\S]*?:\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/.exec(
+    action.result,
+  );
+  if (queued) return { verb: "queued", target: `${queued[1]}#${queued[2]}`, issueNumber: Number(queued[2]), url: queued[3]! };
+  const approved = /^Approved execution\s+([^#\s]+\/[^#\s]+)#(\d+)\b[\s\S]*?:\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/.exec(
+    action.result,
+  );
+  if (approved) return { verb: "approved", target: `${approved[1]}#${approved[2]}`, issueNumber: Number(approved[2]), url: approved[3]! };
+  return null;
+}
+
+function executionWriteReceipts(actions: ReadonlyArray<RecordedAction>): ExecutionWriteReceipt[] {
+  return actions.map(executionWriteReceipt).filter((receipt): receipt is ExecutionWriteReceipt => Boolean(receipt));
+}
+
 function hasIssueUrl(text: string, issueNumber: number): boolean {
   return new RegExp(`https://github\\.com/[^\\s)]+/[^\\s)]+/issues/${issueNumber}\\b`).test(text);
 }
@@ -162,8 +212,30 @@ function markdownIssueReceipt(receipt: string): string {
   return `Created issue [#${match[1]}](${match[2]})`;
 }
 
+function markdownWriteReceipt(receipt: IssueWriteReceipt): string {
+  const label = {
+    created: "Created issue",
+    edited: "Edited issue",
+    closed: "Closed issue",
+    labeled: "Labeled issue",
+  }[receipt.verb];
+  return `${label} [#${receipt.issueNumber}](${receipt.url})`;
+}
+
+function markdownExecutionReceipt(receipt: ExecutionWriteReceipt): string {
+  const label = receipt.verb === "queued" ? "Queued execution" : "Approved execution";
+  return `${label} [${receipt.target}](${receipt.url})`;
+}
+
 function createError(actions: ReadonlyArray<RecordedAction>): string | undefined {
-  const failed = [...actions].reverse().find((action) => action.tool === "createIssue" && /^ERROR:/.test(action.result));
+  const failed = [...actions].reverse().find((action) => isCreateReceiptTool(action.tool) && /^ERROR:/.test(action.result));
+  return failed?.result.replace(/^ERROR:\s*/, "");
+}
+
+function queueExecutionError(actions: ReadonlyArray<RecordedAction>): string | undefined {
+  const failed = [...actions]
+    .reverse()
+    .find((action) => action.tool.toLowerCase().replace(/[^a-z0-9]/g, "") === "queueexecution" && /^ERROR:/.test(action.result));
   return failed?.result.replace(/^ERROR:\s*/, "");
 }
 
@@ -269,6 +341,8 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const presented = issueNumbersIn(prose);
   const proven = provenNumbers(actions);
   const receipts = createReceipts(actions);
+  const writeReceipts = issueWriteReceipts(actions);
+  const executionReceipts = executionWriteReceipts(actions);
   const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
   const executionGrounded = hasExecutionGrounding(actions);
   const noExecNums = noExecutionNumbers(actions);
@@ -310,12 +384,18 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // read, not stale chat memory or an Archus paraphrase.
   if (claimsExecutionState(prose) && !executionGrounded && !isSameTurnCreateWithoutExecutionReceipt(prose, presented, createdNums)) {
     const nums = [...presented];
-    return [
+    const lines = [
       `⚠️ Correction — I couldn't confirm execution state${nums.length ? ` for ${fmt(nums)}` : ""} this turn, so don't rely on the run/pickup claim below.`,
       "Execution status answers need a same-turn queue_execution receipt or live execution_status result.",
-      "",
-      text,
-    ].join("\n");
+    ];
+    const queueErr = queueExecutionError(actions);
+    if (queueErr) lines.push(`The queue step failed: ${queueErr}`);
+    return [...lines, "", text].join("\n");
+  }
+
+  if (claimsExecutionState(prose) && executionReceipts.length > 0) {
+    const missingExecutionReceipts = executionReceipts.filter((receipt) => !hasIssueUrl(prose, receipt.issueNumber));
+    if (missingExecutionReceipts.length > 0) return `${missingExecutionReceipts.map(markdownExecutionReceipt).join("\n")}\n\n${text}`;
   }
 
   // Only police active claims the model makes about THIS turn. Read-only
@@ -365,6 +445,9 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     });
     if (missingReceipts.length > 0) return `${missingReceipts.map(markdownIssueReceipt).join("\n")}\n\n${text}`;
   }
+
+  const missingWriteReceipts = writeReceipts.filter((receipt) => !hasIssueUrl(prose, receipt.issueNumber));
+  if (missingWriteReceipts.length > 0) return `${missingWriteReceipts.map(markdownWriteReceipt).join("\n")}\n\n${text}`;
 
   // Any other mutation claim that cites an issue number no tool produced or
   // touched this turn (fabricated queue/merge/label receipts) — but only a

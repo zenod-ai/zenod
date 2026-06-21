@@ -24,6 +24,14 @@ describe("reconcileTaskingReply", () => {
     expect(out).toContain("The create step failed: GitHub returned 403: forbidden");
   });
 
+  it("surfaces the real error when peer open_issue failed", () => {
+    const actions: RecordedAction[] = [{ tool: "open_issue", result: "ERROR: GitHub returned 403: forbidden" }];
+    const out = reconcileTaskingReply("Created issue #58: https://github.com/AlfaBlok/obsidian-brain/issues/58", actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("no GitHub issue was created");
+    expect(out).toContain("The create step failed: GitHub returned 403: forbidden");
+  });
+
   it("corrects a fabricated multi-issue success after the create 404'd on a phantom repo (the zenod/zenod #1..#5 bug)", () => {
     // create_issue targeted a non-existent repo (zenod/zenod). GitHub 404'd, so the
     // tool recorded an ERROR — but the model still narrated success with invented
@@ -87,6 +95,30 @@ describe("reconcileTaskingReply", () => {
     ];
     const out = reconcileTaskingReply(reply, actions);
     expect(out).toBe(`Created issue [#120](https://github.com/AlfaBlok/obsidian-brain/issues/120)\n\n${reply}`);
+  });
+
+  it("adds the direct issue URL from a close_issue receipt when Console prose omits it", () => {
+    const reply = "Closed #121 as completed.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "close_issue",
+        result: "Closed #121: https://github.com/AlfaBlok/obsidian-brain/issues/121",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toBe(`Closed issue [#121](https://github.com/AlfaBlok/obsidian-brain/issues/121)\n\n${reply}`);
+  });
+
+  it("adds the direct issue URL from an edit_issue receipt when Console prose omits it", () => {
+    const reply = "Updated #121 with the smoke-test comment.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "edit_issue",
+        result: "Edited #121 (comment): https://github.com/AlfaBlok/obsidian-brain/issues/121",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toBe(`Edited issue [#121](https://github.com/AlfaBlok/obsidian-brain/issues/121)\n\n${reply}`);
   });
 
   it("corrects a creation that cites the wrong number", () => {
@@ -236,6 +268,33 @@ describe("reconcileTaskingReply", () => {
       },
     ];
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("adds the execution ticket URL when a queue_execution receipt is present but Console prose omits it", () => {
+    const reply = "Queued execution ticket #104 for zenod-ai/fixture#103.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "queueExecution",
+        result:
+          "Minted execution ticket owner/central#104 (exec:queued) for zenod-ai/fixture#103 and dispatched to Epaminon: https://github.com/owner/central/issues/104",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toBe(`Queued execution [owner/central#104](https://github.com/owner/central/issues/104)\n\n${reply}`);
+  });
+
+  it("surfaces the queue_execution error when the model claims the run was queued", () => {
+    const reply = "Queued execution ticket #104 for zenod-ai/fixture#103.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "queueExecution",
+        result: "ERROR: target zenod-ai/fixture#103 is not runnable: missing acceptance criteria",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("couldn't confirm execution state for #104, #103");
+    expect(out).toContain("The queue step failed: target zenod-ai/fixture#103 is not runnable");
   });
 
   it("does not correct coordinated participles joined by 'and' under a be-verb", () => {
