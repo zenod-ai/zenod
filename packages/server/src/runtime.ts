@@ -364,6 +364,12 @@ export class Runtime {
     };
     const issueTarget = (repo: string, issue: { number: number }): string => `${repo}#${issue.number}`;
     const labelsOf = (issue: { labels?: Array<{ name: string }> }): string[] => (issue.labels ?? []).map((label) => label.name);
+    const formatIssueLine = (repo: string, issue: GitHubIssueRead): string => {
+      const labels = labelsOf(issue);
+      const labelText = labels.length ? `; labels: ${labels.join(", ")}` : "";
+      const updated = issue.updated_at ? `; updated: ${issue.updated_at}` : "";
+      return `${issueTarget(repo, issue)} - ${issue.title} - state: ${issue.state}${labelText}${updated} - ${issue.html_url}`;
+    };
     const issueEvidence = (repo: string, issue: GitHubIssueRead, comments: GitHubCommentRead[] = []) =>
       evidence("issue", {
         target: issueTarget(repo, issue),
@@ -415,6 +421,13 @@ export class Runtime {
       matchReason,
       confidence,
     });
+    const issueNumberReference = (reference: string): number | null => {
+      const trimmed = reference.trim();
+      const exactNumber = trimmed.match(/^#?(\d+)$/)?.[1];
+      if (exactNumber) return Number(exactNumber);
+      const phrasedNumber = trimmed.match(/\b(?:issue|ticket|github issue|backlog issue|number|no\.?)\s*#?(\d+)\b/i)?.[1];
+      return phrasedNumber ? Number(phrasedNumber) : null;
+    };
 
     return {
       getIssue: async ({ target }: { target: string }): Promise<ToolResponse> => {
@@ -429,12 +442,12 @@ export class Runtime {
           const issue = await readIssue(parsed.repo, parsed.number);
           const comments = await readComments(parsed.repo, parsed.number);
           return toolResponse({
-            text: `${issueTarget(parsed.repo, issue)} ${issue.title}: ${issue.html_url}`,
+            text: formatIssueLine(parsed.repo, issue),
             evidence: [issueEvidence(parsed.repo, issue, comments)],
           });
         } catch (error) {
           return toolResponse({
-            text: `${target} was not found.`,
+            text: `${target} was not found in GitHub.`,
             errors: [{ code: "issue_not_found", message: error instanceof Error ? error.message : String(error) }],
           });
         }
@@ -467,8 +480,12 @@ export class Runtime {
           .filter((issue) => matchesSince(issue.updated_at, updatedSince))
           .slice(0, limit);
         const filters = { repo: targetRepo, state, labels: labels ?? [], createdSince: createdSince ?? "", updatedSince: updatedSince ?? "", limit };
+        const issueLines = issues.map((issue) => formatIssueLine(targetRepo, issue));
         return toolResponse({
-          text: `Found ${issues.length} issue${issues.length === 1 ? "" : "s"} in ${targetRepo}.`,
+          text: [
+            `Found ${issues.length} issue${issues.length === 1 ? "" : "s"} in ${targetRepo}.`,
+            ...issueLines,
+          ].join("\n"),
           evidence: [
             evidence("issue_list", {
               filters,
@@ -499,9 +516,8 @@ export class Runtime {
         }
 
         const explicit = parseTarget(reference);
-        const bareNumber = reference.trim().match(/^#?(\d+)$/)?.[1];
         const exactCandidates = [];
-        const numberToRead = explicit?.number ?? (bareNumber ? Number(bareNumber) : null);
+        const numberToRead = explicit?.number ?? issueNumberReference(reference);
         const exactRepos = explicit ? [explicit.repo] : searchedRepos;
         if (numberToRead) {
           for (const repo of exactRepos) {

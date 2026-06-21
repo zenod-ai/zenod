@@ -206,7 +206,9 @@ describe("runtime tasking tools", () => {
       expect(tools.archus_get_issue.inputSchema).toBeDefined();
       const result = await tools.archus_get_issue.run({ target: "AlfaBlok/obsidian-brain#108" });
 
-      expect(result).toContain("AlfaBlok/obsidian-brain#108 Produce Backlog System Plan");
+      expect(result).toContain("AlfaBlok/obsidian-brain#108");
+      expect(result).toContain("Produce Backlog System Plan");
+      expect(result).toContain("state: open");
       expect(result).toContain("https://github.com/AlfaBlok/obsidian-brain/issues/108");
       expect(calls).toContain("https://api.github.com/repos/AlfaBlok/obsidian-brain/issues/108");
     } finally {
