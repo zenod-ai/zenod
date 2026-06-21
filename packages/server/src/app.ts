@@ -291,7 +291,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // path is NOT under /api/exec/, so it does not bypass auth). Returns the live queue.
   app.get("/api/executions", (c) => {
     if (!runtime.executionQueue) return c.json({ error: "not an executor agent" }, 404);
-    return c.json({ tickets: runtime.executionQueue.snapshot() });
+    return c.json({ tickets: runtime.executionStore.recent() });
   });
 
   app.get("/api/settings", (c) =>
@@ -1459,7 +1459,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           (input) => editGithubIssue(settings, input),
           (input) => createGithubIssue(settings, input),
           agent.name,
-          runtime.executionQueue ? () => runtime.executionQueue!.snapshot() : undefined,
+          runtime.executionQueue ? () => runtime.executionStore.recent() : undefined,
           agent.backlog ? runtime.buildBacklogIssueReader() : undefined,
         );
     const transport = new StreamableHTTPServerTransport({
