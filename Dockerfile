@@ -52,6 +52,7 @@ RUN rm -rf ./node_modules/zenod ./node_modules/@zenod
 COPY --from=build /app/packages/core/package.json ./node_modules/zenod/package.json
 COPY --from=build /app/packages/core/dist ./node_modules/zenod/dist
 COPY --from=build /app/packages/server/dist ./server
+COPY --from=build /app/packages/server/node_modules ./server/node_modules
 COPY --from=build /app/apps/web/dist ./web
 
 VOLUME /data
