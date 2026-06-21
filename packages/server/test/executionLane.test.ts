@@ -100,6 +100,40 @@ describe("execution lane — Epaminon receivers", () => {
     expect(body.tickets.map((t) => t.executionId)).toContain("9");
   });
 
+  it("execution_status still returns terminal executions after a restart", async () => {
+    runtime.settings.setRaw("exec_lane_secret", SECRET);
+    await app.request("/api/exec/enqueue", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: 10, target: "o/r#10", context: "c" }),
+    });
+    await runtime.executionQueue!.reportOutcome({
+      executionId: "10",
+      outward: false,
+      evidenceUrl: "https://example.test/evidence",
+      note: "finished smoke",
+    });
+    runtime.close();
+
+    runtime = new Runtime(dir, EPAMINON_AGENT);
+    app = createApp(runtime);
+    const token = runtime.settings.apiToken();
+    const res = await app.request("/api/executions", { headers: { Authorization: `Bearer ${token}` } });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { tickets: Array<{ executionId: string; state: string; evidenceUrl?: string; note?: string }> };
+    expect(body.tickets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          executionId: "10",
+          state: "done",
+          evidenceUrl: "https://example.test/evidence",
+          note: "finished smoke",
+        }),
+      ]),
+    );
+  });
+
   it("approve on a ticket not awaiting review surfaces the illegal transition", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
     await app.request("/api/exec/enqueue", {
