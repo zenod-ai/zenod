@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   createBrainLlm,
   createEngine,
@@ -130,6 +131,7 @@ export class Runtime {
   readonly executionQueue: ExecutionQueue | null;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
+  private readonly taskingContext = new AsyncLocalStorage<{ parentConversationId: string }>();
 
   constructor(readonly dataDir: string, readonly agent: AgentDefinition = ZENOD_AGENT) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
@@ -249,7 +251,7 @@ export class Runtime {
     // same generic tool slot — its guardian brain wields them and confirms first.
     if (outbound) Object.assign(peerTools, buildOutboundTools());
     if (this.agent.notifier === true) Object.assign(peerTools, buildNotifierTools());
-    this.engine = createEngine({
+    const engine = createEngine({
       ...(repo ? { repo } : {}),
       llm,
       state: this.state,
@@ -269,6 +271,13 @@ export class Runtime {
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
     });
+    this.engine = {
+      ...engine,
+      handleTasking: (input) =>
+        this.taskingContext.run({ parentConversationId: conversationId(input.surface, input.conversationKey) }, () =>
+          engine.handleTasking(input),
+        ),
+    };
     return this.engine;
   }
 
@@ -279,7 +288,6 @@ export class Runtime {
    */
   private buildPeerTools(): PeerTools {
     const tools: PeerTools = {};
-    const parentConversationId = conversationId("web", CONSOLE_PARENT_CONVERSATION_KEY);
     const shouldForwardConsoleContext = this.agent.name === "console";
     for (const peer of this.settings.peers()) {
       const safe = peer.name.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
@@ -310,6 +318,7 @@ export class Runtime {
             if (!shouldForwardConsoleContext || !spec.mcp.startsWith("chat_with_")) {
               return callPeer(peer, spec.mcp, spec.arg, textInput);
             }
+            const parentConversationId = this.taskingContext.getStore()?.parentConversationId ?? conversationId("web", CONSOLE_PARENT_CONVERSATION_KEY);
             const window = await this.state.recentWindow(parentConversationId);
             const message = formatConsolePeerDelegation(textInput, {
               parentConversationId,
