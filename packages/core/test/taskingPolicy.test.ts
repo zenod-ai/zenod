@@ -207,6 +207,19 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("does not treat proposed workflow text about an execution ticket as an execution claim", () => {
+    const reply = [
+      "Got it.",
+      "",
+      "- Your entire voice note has been queued for storage + ingestion (raw audio + transcript → project memory).",
+      "- Research-style questions → single lightweight execution ticket (no extra epic) → Codex works → answer lands in memory/ticket → you get a short receipt.",
+      "- Follow-ups reopen the same ticket to keep context.",
+      "",
+      "Do you want me to open one clean investigation ticket now?",
+    ].join("\n");
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
   it("corrects a positive execution narrative when Epaminon found no execution for that issue", () => {
     const reply =
       "AlfaBlok/obsidian-brain#107 ran via child #108, completed successfully, opened PR #110, and changed docs/BACKLOG-SYSTEM-PLAN.md.";

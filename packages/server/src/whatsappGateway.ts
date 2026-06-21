@@ -287,6 +287,7 @@ export class WhatsAppGateway {
       settings: Settings;
       store: WhatsAppStore;
       getEngine: () => Promise<BrainEngine>;
+      recordAssistantMessage?: (event: WhatsAppInboundEvent, text: string) => Promise<void> | void;
       socketFactory?: SocketFactory;
     },
   ) {}
@@ -1137,7 +1138,7 @@ export class WhatsAppGateway {
         const archivedResult = archived && "result" in archived ? archived.result : undefined;
         const archivedError = archived && "error" in archived ? archived.error : undefined;
         if (job?.status === "error" && !archivedResult && !archivedError) {
-          return this.sendReply(event, "⚠️ Filing failed — let me know if you'd like to retry.", "sent");
+          return this.sendBackgroundReply(event, "⚠️ Filing failed — let me know if you'd like to retry.", "sent");
         }
         const receipt = formatStorageReceipt({
           storeResult: job?.status === "done" ? job.result : undefined,
@@ -1148,11 +1149,16 @@ export class WhatsAppGateway {
           archiveUnavailableReason,
           archiveLabel,
         });
-        if (receipt) return this.sendReply(event, receipt, "sent");
+        if (receipt) return this.sendBackgroundReply(event, receipt, "sent");
       })
       .catch((err: unknown) => {
         console.error("[whatsapp] storage receipt failed:", err);
       });
+  }
+
+  private async sendBackgroundReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
+    await this.sendReply(event, text, status);
+    await this.options.recordAssistantMessage?.(event, text);
   }
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {

@@ -1,9 +1,11 @@
 import { EventEmitter } from "node:events";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { BrainEngine, StoreInput, StoreResult } from "zenod";
+import { conversationId, type BrainEngine, type StoreInput, type StoreResult } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 import {
@@ -108,11 +110,11 @@ function fakeEngine(calls: string[]): BrainEngine {
   };
 }
 
-async function waitFor<T>(read: () => T, done: (value: T) => boolean): Promise<T> {
+async function waitFor<T>(read: () => T, done: (value: T) => boolean, timeoutMs = 2_000): Promise<T> {
   const started = Date.now();
   let value = read();
   while (!done(value)) {
-    if (Date.now() - started > 2_000) throw new Error("timed out waiting for async work");
+    if (Date.now() - started > timeoutMs) throw new Error("timed out waiting for async work");
     await new Promise((resolve) => setTimeout(resolve, 10));
     value = read();
   }
@@ -615,6 +617,74 @@ describe("WhatsAppGateway", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("records delayed storage receipts into the WhatsApp conversation history", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-receipt-history-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    let peerServer: Server | undefined;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+      recordAssistantMessage: (event, text) =>
+        runtime.state.appendMessage(
+          conversationId("whatsapp", normalizeWhatsAppIdentifier(event.senderId) || event.senderId),
+          "assistant",
+          text,
+          "whatsapp",
+        ),
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      peerServer = createServer((_req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            job: {
+              status: "done",
+              result: {
+                evidenceRef: "Log/2026-06-21.md#^e-voice",
+                pagesTouched: ["Projects/Voice Notes.md"],
+                commitSha: "a".repeat(40),
+                githubUrls: ["https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-06-21.md"],
+              },
+            },
+          }),
+        );
+      });
+      await new Promise<void>((resolve) => peerServer!.listen(0, "127.0.0.1", resolve));
+      const port = (peerServer.address() as AddressInfo).port;
+      runtime.settings.setPeers([{ name: "zenod", url: `http://127.0.0.1:${port}/mcp`, token: "token" }]);
+      await gateway.pair();
+
+      const jobId = "11111111-1111-4111-8111-111111111111";
+      const poller = gateway as unknown as {
+        spawnPeerJobPoller(
+          reply: { text: string; actions: Array<{ tool: string; input: Record<string, unknown>; result: string }> },
+          event: ReturnType<typeof audioEvent>,
+        ): void;
+      };
+      poller.spawnPeerJobPoller(
+        { text: `Queued job ${jobId}.`, actions: [{ tool: "add_memory", input: { content: "store this" }, result: `Queued job ${jobId}.` }] },
+        audioEvent(),
+      );
+
+      await waitFor(() => socket.sent.length, (count) => count === 1, 7_000);
+      expect(socket.sent[0]!.text).toContain("Storage receipt");
+      expect(socket.sent[0]!.text).toContain("Vault evidence: Log/2026-06-21.md#^e-voice");
+
+      const window = await runtime.state.recentWindow(conversationId("whatsapp", "34611111111"));
+      expect(window.some((message) => message.role === "assistant" && message.text === socket.sent[0]!.text)).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => peerServer?.close(() => resolve()) ?? resolve());
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 10_000);
 
   it("replies clearly when a voice note can't be transcribed (never silent)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-voice-failure-"));
