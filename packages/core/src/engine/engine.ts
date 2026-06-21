@@ -79,6 +79,17 @@ function chatSnippet(text: string): string {
   return flat.length > 240 ? `${flat.slice(0, 240)}…` : flat;
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export interface EngineOptions {
   /**
    * The vault repo. Optional: when omitted the engine runs "vaultless" — no
@@ -535,6 +546,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   function buildTaskTools(surface: Surface, record?: (action: TaskingAction) => void): VaultTaskTools {
+    const sameTurnMutations = new Map<string, Promise<string>>();
     const recordAction = (tool: string, input: Record<string, unknown>, result: string) => {
       record?.({ tool, input, result });
     };
@@ -543,14 +555,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // create must never be narratable as success. The error is still re-thrown
     // so the LLM tool layer surfaces it to the model as before.
     const runMutation = async (tool: string, input: Record<string, unknown>, run: () => Promise<string>): Promise<string> => {
-      try {
-        const result = await run();
-        recordAction(tool, input, result);
-        return result;
-      } catch (err) {
-        recordAction(tool, input, `ERROR: ${(err as Error).message}`);
-        throw err;
-      }
+      const key = `${tool}:${stableJson(input)}`;
+      const existing = sameTurnMutations.get(key);
+      if (existing) return existing;
+      const pending = (async () => {
+        try {
+          const result = await run();
+          recordAction(tool, input, result);
+          return result;
+        } catch (err) {
+          sameTurnMutations.delete(key);
+          recordAction(tool, input, `ERROR: ${(err as Error).message}`);
+          throw err;
+        }
+      })();
+      sameTurnMutations.set(key, pending);
+      return pending;
     };
     return {
       captureNote: async (content: string, hints?: string[]) => {
