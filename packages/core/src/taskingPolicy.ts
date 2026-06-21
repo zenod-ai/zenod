@@ -131,11 +131,25 @@ function provenNumbers(actions: ReadonlyArray<RecordedAction>): Set<number> {
   return nums;
 }
 
-/** Full success receipts from create_issue calls (carry the real number + url). */
+function isCreateReceiptTool(tool: string): boolean {
+  const normalized = tool.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return normalized === "createissue" || normalized === "openissue";
+}
+
+function normalizedCreateReceipt(action: RecordedAction): string | null {
+  if (!isCreateReceiptTool(action.tool)) return null;
+  if (/^ERROR:/.test(action.result)) return null;
+  const legacy = /^Created issue #(\d+):\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/.exec(action.result);
+  if (legacy) return action.result;
+  if (!/^\s*(?:Created|Issue created)\b/i.test(action.result)) return null;
+  const urlMatch = /https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/(\d+)\b/.exec(action.result);
+  if (!urlMatch) return null;
+  return `Created issue #${urlMatch[1]}: ${urlMatch[0]}`;
+}
+
+/** Full success receipts from issue-create calls (carry the real number + url). */
 function createReceipts(actions: ReadonlyArray<RecordedAction>): string[] {
-  return actions
-    .filter((action) => action.tool === "createIssue" && /^Created issue #\d+:/.test(action.result))
-    .map((action) => action.result);
+  return actions.map(normalizedCreateReceipt).filter((receipt): receipt is string => Boolean(receipt));
 }
 
 function hasIssueUrl(text: string, issueNumber: number): boolean {

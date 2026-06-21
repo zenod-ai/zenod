@@ -76,6 +76,19 @@ describe("reconcileTaskingReply", () => {
     expect(out).toBe(`Created issue [#25](https://github.com/zenod-ai/zenod/issues/25)\n\n${reply}`);
   });
 
+  it("adds the direct issue URL from a peer open_issue receipt when Console prose omits it", () => {
+    const reply = "Issue created: AlfaBlok/obsidian-brain#120 (status:proposed, type:bug). Not queued/executed.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "open_issue",
+        result:
+          "Created [#120](https://github.com/AlfaBlok/obsidian-brain/issues/120) (labels: status:proposed, type:bug). Not queued/executed.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toBe(`Created issue [#120](https://github.com/AlfaBlok/obsidian-brain/issues/120)\n\n${reply}`);
+  });
+
   it("corrects a creation that cites the wrong number", () => {
     const reply = "Done — created issue #58 for you.";
     const out = reconcileTaskingReply(reply, [created(61)]);
