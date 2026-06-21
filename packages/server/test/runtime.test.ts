@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { serve, type ServerType } from "@hono/node-server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ExternalTaskingTools, PeerTools } from "zenod";
+import type { BrainEngine, ExternalTaskingTools, PeerTools } from "zenod";
 import { ARCHUS_AGENT, CONSOLE_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { consolePeerConversationKey, formatConsolePeerDelegation, Runtime } from "../src/runtime.js";
@@ -348,5 +348,54 @@ describe("Console peer delegation context", () => {
     expect(text).toContain("Console: Epaminon: No Fusion tickets currently dispatched on my side.");
     expect(text).toContain("Current request to archus:\nwhat is blocked?");
     expect(text).toContain("not durable memory");
+  });
+
+  it("keys peer chat delegation by the active Console conversation, not a shared default thread", async () => {
+    const archusDir = await mkdtemp(join(tmpdir(), "zenod-runtime-peer-archus-"));
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-runtime-peer-console-"));
+    let archusServer: ServerType | undefined;
+    const archusRuntime = new Runtime(archusDir, ARCHUS_AGENT);
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    try {
+      archusRuntime.getEngine = async () =>
+        ({
+          async chat(message: string, _surface: string, options?: { conversationKey?: string }) {
+            return { text: `peerKey=${options?.conversationKey ?? ""}\n${message}`, sources: [] };
+          },
+        }) as BrainEngine;
+      const archusApp = createApp(archusRuntime);
+      archusServer = serve({ fetch: archusApp.fetch, port: 0 });
+      const archusPort = (archusServer.address() as AddressInfo).port;
+      consoleRuntime.settings.setPeers([
+        {
+          name: "archus",
+          url: `http://127.0.0.1:${archusPort}/mcp`,
+          token: archusRuntime.settings.apiToken(),
+          tools: [{ as: "ask_archus", mcp: "chat_with_archus", arg: "message", description: "Ask Archus." }],
+        },
+      ]);
+
+      const tools = (consoleRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+      const taskingContext = (
+        consoleRuntime as unknown as {
+          taskingContext: { run<T>(store: { parentConversationId: string }, callback: () => Promise<T>): Promise<T> };
+        }
+      ).taskingContext;
+      const first = await taskingContext.run({ parentConversationId: "web:thread-a" }, () => tools.ask_archus.run("first request"));
+      const second = await taskingContext.run({ parentConversationId: "web:thread-b" }, () => tools.ask_archus.run("second request"));
+
+      expect(first).toContain("peerKey=web-thread-a-archus");
+      expect(first).toContain("Parent Console conversation: web:thread-a");
+      expect(second).toContain("peerKey=web-thread-b-archus");
+      expect(second).toContain("Parent Console conversation: web:thread-b");
+      expect(first).not.toContain("peerKey=web-default-archus");
+      expect(second).not.toContain("peerKey=web-default-archus");
+    } finally {
+      archusServer?.close();
+      archusRuntime.close();
+      consoleRuntime.close();
+      await rm(archusDir, { recursive: true, force: true });
+      await rm(consoleDir, { recursive: true, force: true });
+    }
   });
 });
