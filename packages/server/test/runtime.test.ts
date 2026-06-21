@@ -192,19 +192,19 @@ describe("runtime tasking tools", () => {
           token: archusRuntime.settings.apiToken(),
           tools: [
             {
-              as: "archus_get_issue",
+              as: "archus_read_exact_github_issue",
               mcp: "archus.get_issue",
               arg: "target",
               inputSchema: "archus.get_issue",
-              description: "Owner: Archus. Deterministically read one exact GitHub issue.",
+              description: "Owner: Archus. Read ONE exact GitHub issue.",
             },
           ],
         },
       ]);
 
       const tools = (consoleRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
-      expect(tools.archus_get_issue.inputSchema).toBeDefined();
-      const result = await tools.archus_get_issue.run({ target: "AlfaBlok/obsidian-brain#108" });
+      expect(tools.archus_read_exact_github_issue.inputSchema).toBeDefined();
+      const result = await tools.archus_read_exact_github_issue.run({ target: "AlfaBlok/obsidian-brain#108" });
 
       expect(result).toContain("AlfaBlok/obsidian-brain#108");
       expect(result).toContain("Produce Backlog System Plan");
