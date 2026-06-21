@@ -75,6 +75,7 @@ export interface WhatsAppTranscriptQuery {
   sinceMs?: number;
   contactId?: string;
   chatId?: string;
+  messageId?: string;
   limit?: number;
 }
 
@@ -431,6 +432,7 @@ export class WhatsAppStore {
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
     const contact = input.contactId ? normalizeWhatsAppIdentifier(input.contactId) : "";
     const chat = input.chatId ?? "";
+    const message = input.messageId?.trim() ?? "";
     const rows = this.db
       .prepare(
         `SELECT * FROM (
@@ -462,10 +464,11 @@ export class WhatsAppStore {
          )
          WHERE (? = '' OR REPLACE(REPLACE(REPLACE(COALESCE(contactId, ''), '@s.whatsapp.net', ''), '@lid', ''), '+', '') LIKE '%' || ? || '%')
            AND (? = '' OR chatId = ?)
+           AND (? = '' OR messageId = ? OR sentMessageId = ?)
          ORDER BY at DESC
          LIMIT ?`,
       )
-      .all(sinceMs, sinceMs, contact, contact, chat, chat, limit) as unknown as Array<{
+      .all(sinceMs, sinceMs, contact, contact, chat, chat, message, message, message, limit) as unknown as Array<{
       direction: "inbound" | "outbound";
       at: number;
       messageId: string | null;

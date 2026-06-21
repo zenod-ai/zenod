@@ -183,7 +183,6 @@ describe("Console mesh gateway contract", () => {
       mediaRaw: {},
       raw: {},
     });
-
     const client = await connectGateway();
     try {
       const result = await client.callTool({
@@ -204,6 +203,21 @@ describe("Console mesh gateway contract", () => {
           ]),
         }),
       );
+      runtime.whatsappStore.recordOutboundAudit({
+        messageId: "voice-local-transcript",
+        chatId: "110771719696610@lid",
+        contactId: "34618217703@s.whatsapp.net",
+        bodyText: "Storage receipt\nVault evidence: Log/2026-06-21.md#^e-test",
+        status: "sent",
+        sentMessageId: "sent-local-transcript-receipt",
+      });
+      const exact = await client.callTool({
+        name: "get_recent_conversation_transcript",
+        arguments: { messageId: "voice-local-transcript" },
+      });
+      expect(JSON.stringify(exact.content)).toContain("local console transcript text");
+      expect(JSON.stringify(exact.content)).toContain("Vault evidence: Log/2026-06-21.md#^e-test");
+      expect((exact.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
     } finally {
       await client.close();
     }

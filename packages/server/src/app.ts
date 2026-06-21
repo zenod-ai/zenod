@@ -418,7 +418,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       arg: "contactId",
       inputSchema: "zenod.get_recent_conversation_transcript",
       description:
-        "Owner: Zenod. Deterministically read recent WhatsApp/phone conversation transcript from the channel audit store. Use for 'last two hours phone transcript' or recent voice-note review; returns timestamps, inbound/outbound text, message ids, status, and voice-note transcript text when available.",
+        "Owner: Zenod. Deterministically read recent WhatsApp/phone conversation transcript from the channel audit store. Use messageId when the user names a specific WhatsApp message or voice note; that returns the matching row and linked replies/receipts. Use broader window/contact filters for 'last two hours phone transcript' or recent voice-note review; returns timestamps, inbound/outbound text, message ids, status, and voice-note transcript text when available.",
     },
   ];
   // Archus's "top tools": named delegation handles that ALL route to Archus's chat

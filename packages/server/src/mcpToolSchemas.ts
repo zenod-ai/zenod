@@ -34,6 +34,10 @@ export const GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE = {
   windowMinutes: z.number().int().min(1).max(24 * 60).optional().describe("Lookback window in minutes. Defaults to 120."),
   contactId: z.string().optional().describe("Optional WhatsApp sender/contact id or phone number to filter."),
   chatId: z.string().optional().describe("Optional exact WhatsApp chat id to filter."),
+  messageId: z
+    .string()
+    .optional()
+    .describe("Optional exact WhatsApp message id. Use this when the user names a specific message or voice note; returns the matching row and linked replies/receipts."),
   limit: z.number().int().min(1).max(500).optional().describe("Maximum transcript lines to return. Defaults to 100."),
 };
 
