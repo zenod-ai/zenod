@@ -249,7 +249,8 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const receipts = createReceipts(actions);
   const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
   const executionGrounded = hasExecutionGrounding(actions);
-  const contradictedNoExecution = claimsPositiveExecutionForNoExecutionTarget(prose, noExecutionNumbers(actions));
+  const noExecNums = noExecutionNumbers(actions);
+  const contradictedNoExecution = claimsPositiveExecutionForNoExecutionTarget(prose, noExecNums);
 
   if (contradictedNoExecution.length > 0) {
     return [
@@ -346,7 +347,9 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // Any other mutation claim that cites an issue number no tool produced or
   // touched this turn (fabricated queue/merge/label receipts) — but only a
   // number presented right next to the verb, not one merely mentioned nearby.
-  const unproven = [...numbersClaimedAdjacent(prose, MUTATION_VERBS)].filter((n) => !proven.has(n));
+  const unproven = [...numbersClaimedAdjacent(prose, MUTATION_VERBS)].filter(
+    (n) => !proven.has(n) && !(executionGrounded && noExecNums.has(n) && NEGATIVE_QUEUE_RE.test(prose)),
+  );
   if (unproven.length > 0) {
     return `⚠️ Correction — I couldn't confirm ${fmt(unproven)} against the backlog this turn, so don't rely on ${unproven.length > 1 ? "those references" : "that reference"}.\n\n${text}`;
   }

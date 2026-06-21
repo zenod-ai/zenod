@@ -180,6 +180,18 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("does not treat a backed negative execution answer as an unconfirmed queue claim", () => {
+    const reply = "No execution ticket exists for AlfaBlok/obsidian-brain#107 (none queued/running/etc.).";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_read_issue_execution_status",
+        input: { input: "AlfaBlok/obsidian-brain#107" },
+        result: "No execution tickets currently queued, running, blocked, awaiting review, approved, done, or failed.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("does not correct a queue receipt backed by queue_execution", () => {
     const reply = "Execution ticket opened and queued: [#108](https://github.com/AlfaBlok/obsidian-brain/issues/108), live execution #109.";
     const actions: RecordedAction[] = [
