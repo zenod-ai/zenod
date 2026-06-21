@@ -169,7 +169,12 @@ function hasExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean 
   return actions.some((action) => {
     if (/^ERROR:/.test(action.result)) return false;
     const tool = action.tool.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (tool === "queueexecution" || tool === "executionstatus" || tool === "approveexecution") return true;
+    if (
+      tool === "queueexecution" ||
+      tool === "executionstatus" ||
+      tool === "epaminonreadissueexecutionstatus" ||
+      tool === "approveexecution"
+    ) return true;
     return /\b(exec:(?:queued|running|needs-review|approved|blocked|done)|Minted execution ticket|Execution \d+|Epaminon)\b/i.test(
       action.result,
     );

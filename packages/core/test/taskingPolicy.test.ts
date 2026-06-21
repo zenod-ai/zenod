@@ -130,6 +130,17 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("does not correct an execution status answer backed by the Console-facing Epaminon status tool", () => {
+    const reply = "#109 is needs-review for AlfaBlok/obsidian-brain#108.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_read_issue_execution_status",
+        result: "#109 — AlfaBlok/obsidian-brain#108 — needs-review — evidence: https://github.com/AlfaBlok/obsidian-brain/pull/110",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("does not correct a queue receipt backed by queue_execution", () => {
     const reply = "Execution ticket opened and queued: [#108](https://github.com/AlfaBlok/obsidian-brain/issues/108), live execution #109.";
     const actions: RecordedAction[] = [
