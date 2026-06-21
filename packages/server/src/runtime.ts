@@ -379,6 +379,16 @@ export class Runtime {
       const updated = issue.updated_at ? `; updated: ${issue.updated_at}` : "";
       return `${issueTarget(repo, issue)} - ${issue.title} - state: ${issue.state}${labelText}${updated} - ${issue.html_url}`;
     };
+    const formatIssueReadText = (repo: string, issue: GitHubIssueRead, comments: GitHubCommentRead[]): string => {
+      const body = issue.body?.replace(/\s+/g, " ").trim();
+      const bodyLine = body ? `Body: ${body.slice(0, 1000)}${body.length > 1000 ? "..." : ""}` : "Body: (empty)";
+      const commentLines = comments
+        .slice(-3)
+        .map((comment) => comment.body?.replace(/\s+/g, " ").trim())
+        .filter((body): body is string => Boolean(body))
+        .map((body, index) => `Recent comment ${index + 1}: ${body.slice(0, 500)}${body.length > 500 ? "..." : ""}`);
+      return [formatIssueLine(repo, issue), bodyLine, ...commentLines].join("\n");
+    };
     const issueEvidence = (repo: string, issue: GitHubIssueRead, comments: GitHubCommentRead[] = []) =>
       evidence("issue", {
         target: issueTarget(repo, issue),
@@ -451,7 +461,7 @@ export class Runtime {
           const issue = await readIssue(parsed.repo, parsed.number);
           const comments = await readComments(parsed.repo, parsed.number);
           return toolResponse({
-            text: formatIssueLine(parsed.repo, issue),
+            text: formatIssueReadText(parsed.repo, issue, comments),
             evidence: [issueEvidence(parsed.repo, issue, comments)],
           });
         } catch (error) {
