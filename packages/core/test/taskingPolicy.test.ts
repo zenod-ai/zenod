@@ -192,6 +192,12 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("does not warn when a same-turn create receipt says it was not queued or run by this request", () => {
+    const reply =
+      "Created: [AlfaBlok/obsidian-brain#119](https://github.com/AlfaBlok/obsidian-brain/issues/119) (labels applied; not queued or run).";
+    expect(reconcileTaskingReply(reply, [created(119)])).toBe(reply);
+  });
+
   it("does not correct a queue receipt backed by queue_execution", () => {
     const reply = "Execution ticket opened and queued: [#108](https://github.com/AlfaBlok/obsidian-brain/issues/108), live execution #109.";
     const actions: RecordedAction[] = [

@@ -143,6 +143,54 @@ describe("runtime tasking tools", () => {
     ].sort());
   });
 
+  it("findIssue includes candidate targets and links when a fuzzy reference is ambiguous", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const path = String(url).replace("https://api.github.com", "");
+        if (path === "/repos/zenod-ai/fixture/issues?state=all&per_page=100&sort=updated&direction=desc") {
+          return new Response(
+            JSON.stringify([
+              {
+                number: 107,
+                title: "How the Backlog System Works",
+                body: "Parent planning ticket for the backlog system plan.",
+                state: "open",
+                html_url: "https://github.com/zenod-ai/fixture/issues/107",
+                created_at: "2026-06-19T11:00:00Z",
+                updated_at: "2026-06-20T14:35:16Z",
+                labels: [{ name: "status:needs-review" }],
+              },
+              {
+                number: 108,
+                title: "Produce Backlog System Plan",
+                body: "Child execution ticket for the backlog system plan.",
+                state: "open",
+                html_url: "https://github.com/zenod-ai/fixture/issues/108",
+                created_at: "2026-06-19T11:10:00Z",
+                updated_at: "2026-06-20T14:35:17Z",
+                labels: [{ name: "owner:agent" }],
+              },
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(`unexpected ${url}`, { status: 500 });
+      }),
+    );
+
+    const reader = (runtime as unknown as {
+      buildBacklogIssueReader(): {
+        findIssue(input: { reference: string; limit?: number }): Promise<{ text?: string }>;
+      };
+    }).buildBacklogIssueReader();
+    const result = await reader.findIssue({ reference: "backlog system plan", limit: 5 });
+
+    expect(result.text).toContain("Found 2 candidate issues for backlog system plan");
+    expect(result.text).toContain("zenod-ai/fixture#107 - How the Backlog System Works - https://github.com/zenod-ai/fixture/issues/107");
+    expect(result.text).toContain("zenod-ai/fixture#108 - Produce Backlog System Plan - https://github.com/zenod-ai/fixture/issues/108");
+  });
+
   it("exposes typed Archus issue reads to Console peer tools", async () => {
     const calls: string[] = [];
     const originalFetch = globalThis.fetch;
