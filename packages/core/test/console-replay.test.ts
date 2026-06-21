@@ -233,6 +233,23 @@ describe("Console behavior replay harness", () => {
       modelText: "Created issue #58: https://github.com/AlfaBlok/obsidian-brain/issues/58",
     },
     {
+      prompt: "create a bug issue through canonical Archus backlog action",
+      actions: [
+        {
+          tool: "archus_request_backlog_action",
+          input: { message: "create a bug issue" },
+          result:
+            "Created [#120](https://github.com/AlfaBlok/obsidian-brain/issues/120) (labels: status:proposed, type:bug). Not queued/executed.",
+        },
+      ],
+      modelText: "Issue created: AlfaBlok/obsidian-brain#120 (status:proposed, type:bug). Not queued/executed.",
+    },
+    {
+      prompt: "canonical Archus backlog action fails",
+      actions: [{ tool: "archus_request_backlog_action", input: {}, result: "ERROR: GitHub returned 403: forbidden" }],
+      modelText: "Created issue #58: https://github.com/AlfaBlok/obsidian-brain/issues/58",
+    },
+    {
       prompt: "close issue #121 after smoke",
       actions: [
         {

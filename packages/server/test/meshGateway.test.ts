@@ -6,7 +6,8 @@ import { serve, type ServerType } from "@hono/node-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CONSOLE_AGENT, EPAMINON_AGENT } from "../src/agent.js";
+import type { BrainEngine } from "zenod";
+import { ARCHUS_AGENT, CONSOLE_AGENT, EPAMINON_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -16,12 +17,29 @@ describe("Console mesh gateway contract", () => {
   let server: ServerType;
   let url: URL;
   let token: string;
+  let archusDir: string;
+  let archusRuntime: Runtime;
+  let archusServer: ServerType;
+  let archusUrl: string;
   let epaminonDir: string;
   let epaminonRuntime: Runtime;
   let epaminonServer: ServerType;
   let epaminonUrl: string;
 
   beforeAll(async () => {
+    archusDir = await mkdtemp(join(tmpdir(), "zenod-mesh-archus-"));
+    archusRuntime = new Runtime(archusDir, ARCHUS_AGENT);
+    archusRuntime.getEngine = async () =>
+      ({
+        async chat(message: string) {
+          return { text: `ARCHUS_CHAT:\n${message}`, sources: [] };
+        },
+      }) as BrainEngine;
+    const archusApp = createApp(archusRuntime);
+    archusServer = serve({ fetch: archusApp.fetch, port: 0 });
+    const archusPort = (archusServer.address() as AddressInfo).port;
+    archusUrl = `http://127.0.0.1:${archusPort}/mcp`;
+
     epaminonDir = await mkdtemp(join(tmpdir(), "zenod-mesh-epaminon-"));
     epaminonRuntime = new Runtime(epaminonDir, EPAMINON_AGENT);
     await epaminonRuntime.executionQueue!.enqueue({
@@ -39,7 +57,7 @@ describe("Console mesh gateway contract", () => {
     token = runtime.settings.apiToken();
     runtime.settings.setPeers([
       { name: "zenod", url: "http://zenod.test/mcp", token: "zenod-token" },
-      { name: "archus", url: "http://archus.test/mcp", token: "archus-token" },
+      { name: "archus", url: archusUrl, token: archusRuntime.settings.apiToken() },
       { name: "epaminon", url: epaminonUrl, token: epaminonRuntime.settings.apiToken() },
       { name: "outbound", url: "http://outbound.test/mcp", token: "outbound-token" },
       { name: "phylax", url: "http://phylax.test/mcp", token: "phylax-token" },
@@ -53,9 +71,12 @@ describe("Console mesh gateway contract", () => {
   afterAll(async () => {
     server.close();
     runtime.close();
+    archusServer.close();
+    archusRuntime.close();
     epaminonServer.close();
     epaminonRuntime.close();
     await rm(dir, { recursive: true, force: true });
+    await rm(archusDir, { recursive: true, force: true });
     await rm(epaminonDir, { recursive: true, force: true });
   });
 
@@ -106,6 +127,8 @@ describe("Console mesh gateway contract", () => {
 
   it("publishes only the curated semantic suite surface", async () => {
     await expect(listGatewayToolNames()).resolves.toEqual([
+      "archus.request_backlog_action",
+      "archus.run_issue",
       "ask_archus",
       "ask_brain",
       "ask_outbound",
@@ -315,6 +338,41 @@ describe("Console mesh gateway contract", () => {
         }),
       ]);
       expect(JSON.stringify(result.content)).toContain("AlfaBlok/obsidian-brain#103");
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("routes archus.request_backlog_action to Archus chat with the backlog-action directive", async () => {
+    const client = await connectGateway();
+    try {
+      const result = await client.callTool({
+        name: "archus.request_backlog_action",
+        arguments: { message: "Create a bug for the Console issue lookup confusion." },
+      });
+      const text = JSON.stringify(result.content);
+      expect(text).toContain("ARCHUS_CHAT");
+      expect(text).toContain("Backlog action request");
+      expect(text).toContain("Create a bug for the Console issue lookup confusion");
+      expect(text).toContain("Do not run/queue execution");
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("routes archus.run_issue to Archus chat with an exact run directive", async () => {
+    const client = await connectGateway();
+    try {
+      const result = await client.callTool({
+        name: "archus.run_issue",
+        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch.", repo: "zenod-ai/zenod" },
+      });
+      const text = JSON.stringify(result.content);
+      expect(text).toContain("ARCHUS_CHAT");
+      expect(text).toContain("Run this exact work issue");
+      expect(text).toContain("zenod-ai/zenod#270");
+      expect(text).toContain("Use the current branch");
+      expect(text).toContain("Execution backlog repo: zenod-ai/zenod");
     } finally {
       await client.close();
     }

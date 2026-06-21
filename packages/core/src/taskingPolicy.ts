@@ -133,7 +133,7 @@ function provenNumbers(actions: ReadonlyArray<RecordedAction>): Set<number> {
 
 function isCreateReceiptTool(tool: string): boolean {
   const normalized = tool.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return normalized === "createissue" || normalized === "openissue";
+  return normalized === "createissue" || normalized === "openissue" || normalized === "archusrequestbacklogaction";
 }
 
 function normalizedCreateReceipt(action: RecordedAction): string | null {
@@ -235,7 +235,10 @@ function createError(actions: ReadonlyArray<RecordedAction>): string | undefined
 function queueExecutionError(actions: ReadonlyArray<RecordedAction>): string | undefined {
   const failed = [...actions]
     .reverse()
-    .find((action) => action.tool.toLowerCase().replace(/[^a-z0-9]/g, "") === "queueexecution" && /^ERROR:/.test(action.result));
+    .find((action) => {
+      const normalized = action.tool.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return (normalized === "queueexecution" || normalized === "archusrunissue") && /^ERROR:/.test(action.result);
+    });
   return failed?.result.replace(/^ERROR:\s*/, "");
 }
 

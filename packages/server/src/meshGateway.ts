@@ -12,6 +12,8 @@ import {
   EXECUTION_STATUS_SHAPE,
   GET_MEMORY_SHAPE,
   GET_TASK_RESULT_SHAPE,
+  REQUEST_BACKLOG_ACTION_SHAPE,
+  RUN_ISSUE_SHAPE,
   SEARCH_MEMORY_SHAPE,
   STORE_MEMORY_SHAPE,
   V4_EXECUTION_STATUS_SHAPE,
@@ -60,6 +62,8 @@ interface GatewayTool {
    * forwarded message, not which tool was called).
    */
   intentPrefix?: string;
+  /** Optional argument adapter for public semantic aliases that call a chat tool. */
+  mapArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
   title: string;
   description: string;
   inputSchema: ZodRawShape;
@@ -169,6 +173,34 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     v4OutputSchemaName: "archus.list_issues",
     requiresV4ToolNames: true,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: "archus.request_backlog_action",
+    owner: "archus",
+    peerTool: "chat_with_archus",
+    intentPrefix:
+      "Backlog action request. Interpret the user's intent, choose create/update/comment/close, choose the correct repo, avoid duplicates, and return verified issue URLs. Do not run/queue execution from this tool: ",
+    title: "Archus backlog action",
+    description:
+      "Owner: Archus. Semantic GitHub backlog write gateway for create/update/comment/close issue requests. Use this when the user wants the backlog changed but is not asking to run work. Archus decides the repo, structure, labels, and exact private GitHub operation, then returns issue numbers and URLs.",
+    inputSchema: REQUEST_BACKLOG_ACTION_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "archus.run_issue",
+    owner: "archus",
+    peerTool: "chat_with_archus",
+    mapArgs: (args) => {
+      const target = typeof args.target === "string" ? args.target : "";
+      const instructions = typeof args.instructions === "string" && args.instructions.trim() ? `\nUser instructions: ${args.instructions.trim()}` : "";
+      const repo = typeof args.repo === "string" && args.repo.trim() ? `\nExecution backlog repo: ${args.repo.trim()}` : "";
+      return { message: `Run this exact work issue by validating it and calling your private queue_execution tool: ${target}${instructions}${repo}` };
+    },
+    title: "Archus run issue",
+    description:
+      "Owner: Archus. Start execution for one exact work issue. Input must be a qualified target owner/repo#N. Archus validates the issue is runnable, mints the execution ticket, and dispatches Epaminon through the private lane. Do not use this to ask whether something ran; use epaminon.execution_status/execution_status for status reads.",
+    inputSchema: RUN_ISSUE_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },
   {
     name: "create_issue",
@@ -415,7 +447,7 @@ export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig
       t.name,
       { title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations },
       async (args) => {
-        let payload = (args ?? {}) as Record<string, unknown>;
+        let payload = t.mapArgs ? t.mapArgs((args ?? {}) as Record<string, unknown>) : ((args ?? {}) as Record<string, unknown>);
         // Prepend the intent directive so the tool-name signal reaches the brain.
         if (t.intentPrefix && typeof payload.message === "string") {
           payload = { ...payload, message: `${t.intentPrefix}${payload.message}` };

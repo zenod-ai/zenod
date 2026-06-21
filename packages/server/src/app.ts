@@ -451,6 +451,20 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         "Ask Archus a general backlog/GitHub-issue question that is not covered by the exact read/search/list tools. Archus owns GitHub issues and backlog triage. Do NOT use for execution runner status such as ran, picked up, queued by runner, blocked while running, or completed; use Epaminon for execution.",
     },
     {
+      as: "archus_request_backlog_action",
+      mcp: "chat_with_archus",
+      arg: "message",
+      description:
+        "Owner: Archus. Change the GitHub backlog: create an issue, update/comment/label an issue, or close an issue. Pass the user's request in natural language. Archus decides repo placement, labels, structure, duplicate handling, and returns issue numbers + URLs. Do NOT use for running/executing a ticket.",
+    },
+    {
+      as: "archus_run_issue",
+      mcp: "chat_with_archus",
+      arg: "message",
+      description:
+        "Owner: Archus. Start execution for an exact work issue after the user asks to run/start/execute it. The input must include a qualified issue target like owner/repo#123. Archus validates the ticket and calls its private queueExecution tool, minting an execution ticket for Epaminon. Do NOT use for status questions like did it run, was it picked up, queued, blocked, or completed; use Epaminon for those reads.",
+    },
+    {
       as: "open_issue",
       mcp: "chat_with_archus",
       arg: "message",

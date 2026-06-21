@@ -345,6 +345,8 @@ describe("server API", () => {
           "archus_read_exact_github_issue",
           "archus_search_github_issues",
           "archus_list_github_issues",
+          "archus_request_backlog_action",
+          "archus_run_issue",
         ]),
       );
       expect(archus?.tools?.map((tool) => tool.as)).not.toEqual(
@@ -352,6 +354,8 @@ describe("server API", () => {
       );
       expect(epaminon?.tools?.map((tool) => tool.as)).toEqual(["epaminon_read_issue_execution_status"]);
       expect(epaminon?.tools?.[0]?.description).toContain("did it run");
+      expect(archus?.tools?.find((tool) => tool.as === "archus_run_issue")?.description).toContain("calls its private queueExecution tool");
+      expect(archus?.tools?.find((tool) => tool.as === "archus_request_backlog_action")?.description).toContain("Do NOT use for running");
     } finally {
       consoleRuntime.close();
       await rm(consoleDir, { recursive: true, force: true });
