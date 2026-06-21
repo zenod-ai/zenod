@@ -1145,6 +1145,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
         ...(chatOptions.onToolEvent ? { onToolEvent: chatOptions.onToolEvent } : {}),
+        onPeerAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
       },
       readTools(),
       taskTools,
