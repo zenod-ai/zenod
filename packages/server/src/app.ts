@@ -419,35 +419,35 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // issue"); Archus's own LLM still does the real work. Pick the one that matches intent.
   const ARCHUS_BACKLOG_TOOLS = [
     {
-      as: "archus_get_issue",
+      as: "archus_read_exact_github_issue",
       mcp: "archus.get_issue",
       arg: "target",
       inputSchema: "archus.get_issue",
       description:
-        "Owner: Archus. Deterministically read one exact GitHub issue by target owner/repo#N. Use this first for 'does this issue exist?', 'what does issue X say?', or any exact issue URL/number with repo. This is the authority for GitHub issue existence/details.",
+        "Owner: Archus. Read ONE exact GitHub issue when the input is an exact target like owner/repo#123. Use for: does this GitHub issue exist, what is its title/body/state/labels/URL, or read this issue. Do NOT use for whether work ran, was picked up, queued, blocked, or completed; those are Epaminon execution questions.",
     },
     {
-      as: "archus_find_issue",
+      as: "archus_search_github_issues",
       mcp: "archus.find_issue",
       arg: "reference",
       inputSchema: "archus.find_issue",
       description:
-        "Owner: Archus. Resolve a fuzzy issue reference such as '#108', 'issue 108', 'that ticket', or title text. Returns a unique issue, candidates, or not-found evidence with searched scope. Use before claiming an unqualified issue does or does not exist.",
+        "Owner: Archus. Search/resolve GitHub issue references when the user gives a fuzzy reference like #108, issue 108, that ticket, title text, or an ambiguous issue number. Returns one resolved issue, candidates, or not-found with searched scope. Do NOT use for execution/running/pickup/completion status.",
     },
     {
-      as: "archus_list_issues",
+      as: "archus_list_github_issues",
       mcp: "archus.list_issues",
       arg: "repo",
       inputSchema: "archus.list_issues",
       description:
-        "Owner: Archus. List GitHub issues using explicit filters such as repo, state, labels, and date windows. Use for backlog inventory questions, not execution runner status.",
+        "Owner: Archus. List GitHub issues/backlog tickets with filters: repo, state, labels, createdSince, updatedSince, limit. Use for backlog inventory such as open issues, recent issues, bugs, queued labels. Do NOT use for whether an issue ran or what the executor did.",
     },
     {
       as: "ask_archus",
       mcp: "chat_with_archus",
       arg: "message",
       description:
-        "Ask Archus about the backlog — list/query open issues across repos, the aggregated view, status, or triage. Use for questions and general backlog chat (not a specific create/edit/close).",
+        "Ask Archus a general backlog/GitHub-issue question that is not covered by the exact read/search/list tools. Archus owns GitHub issues and backlog triage. Do NOT use for execution runner status such as ran, picked up, queued by runner, blocked while running, or completed; use Epaminon for execution.",
     },
     {
       as: "open_issue",
@@ -476,11 +476,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // write-intents — the run is driven by the deterministic /api/exec lane, not chat.
   const EPAMINON_EXECUTION_TOOLS = [
     {
-      as: "execution_status",
+      as: "epaminon_read_issue_execution_status",
       mcp: "execution_status",
       arg: "message",
       description:
-        "Read Epaminon's live execution queue — which tickets are queued/running, in review, shipped, failed, or blocked, and any blocker notes. Deterministic, read-only, and does not start work. For 'did it run?', 'was it picked up?', 'issue 108', or owner/repo#N status questions, call this tool with the user's exact reference; do not claim you searched execution state unless this tool returned a result.",
+        "Owner: Epaminon. Read execution status for a GitHub issue/work ticket: did it run, was it picked up, queued, running, blocked, awaiting review, done, failed, or what did the runner do. Input is the user's exact issue reference/question. Read-only; does NOT start work. Do NOT use for GitHub issue title/body/labels/existence; those are Archus GitHub issue questions.",
     },
   ];
   // Callistheness's "top tools": named delegation handles that ALL route to his chat

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { BrainEngine } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
-import { type AgentDefinition } from "../src/agent.js";
+import { CONSOLE_AGENT, type AgentDefinition } from "../src/agent.js";
 
 describe("server API", () => {
   let dir: string;
@@ -325,6 +325,36 @@ describe("server API", () => {
     } finally {
       otherRuntime.close();
       await rm(otherDir, { recursive: true, force: true });
+    }
+  });
+
+  it("Console boot sync exposes unambiguous Archus and Epaminon tool names", async () => {
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-console-tools-"));
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    try {
+      consoleRuntime.settings.setPeers([
+        { name: "archus", url: "http://archus.test/mcp", token: "archus-token" },
+        { name: "epaminon", url: "http://epaminon.test/mcp", token: "epaminon-token" },
+      ]);
+      createApp(consoleRuntime);
+
+      const archus = consoleRuntime.settings.peers().find((peer) => peer.name === "archus");
+      const epaminon = consoleRuntime.settings.peers().find((peer) => peer.name === "epaminon");
+      expect(archus?.tools?.map((tool) => tool.as)).toEqual(
+        expect.arrayContaining([
+          "archus_read_exact_github_issue",
+          "archus_search_github_issues",
+          "archus_list_github_issues",
+        ]),
+      );
+      expect(archus?.tools?.map((tool) => tool.as)).not.toEqual(
+        expect.arrayContaining(["archus_get_issue", "archus_find_issue", "archus_list_issues"]),
+      );
+      expect(epaminon?.tools?.map((tool) => tool.as)).toEqual(["epaminon_read_issue_execution_status"]);
+      expect(epaminon?.tools?.[0]?.description).toContain("did it run");
+    } finally {
+      consoleRuntime.close();
+      await rm(consoleDir, { recursive: true, force: true });
     }
   });
 });
