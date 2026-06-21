@@ -237,7 +237,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   // `approve_execution` — Archus dispatches the human's content-approval (with the
-  // edited final_content, if any); Epaminon routes it to Outbound (send) / runner (merge).
+  // edited final_content, if any); Epaminon routes it to Callistheness (send) / runner (merge).
   app.post("/api/exec/approve", async (c) => {
     const bad = execLaneGate(c.req.header("X-Lane-Secret"));
     if (bad) return c.json({ error: bad.error }, bad.status);
@@ -459,11 +459,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         "Read Epaminon's live execution queue — which tickets are queued/running, in review, shipped, failed, or blocked, and any blocker notes. Deterministic, read-only, and does not start work. Reference tickets as owner/repo#N.",
     },
   ];
-  // Outbound's "top tools": named delegation handles that ALL route to his chat
+  // Callistheness's "top tools": named delegation handles that ALL route to his chat
   // brain (chat_with_outbound runs engine.chat synchronously and, as the outbound
   // agent, has the private send connectors — X/Reddit/email). The distinct names
   // are for VISIBILITY (the activity line reads "posting to X" / "sending an
-  // email"); Outbound's own LLM does the real work and enforces his guardrails
+  // email"); Callistheness's own LLM does the real work and enforces his guardrails
   // (draft in the user's voice, refuse spam, and CONFIRM before anything is sent).
   const OUTBOUND_COMMS_TOOLS = [
     {
@@ -471,28 +471,28 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "chat_with_outbound",
       arg: "message",
       description:
-        "Ask Outbound to help with outbound comms — draft a tweet/Reddit post/email, adapt tone for a channel, or plan a send. He drafts in the user's voice but never publishes/sends without explicit confirmation. Use for composing and advice (not a committed send).",
+        "Ask Callistheness to help with marketing/outbound comms — draft a tweet/Reddit post/email, adapt tone for a channel, or plan a send. He drafts in the user's voice but never publishes/sends without explicit confirmation. Use for composing and advice (not a committed send).",
     },
     {
       as: "post_tweet",
       mcp: "chat_with_outbound",
       arg: "message",
       description:
-        "Post to X (Twitter). Pass what to post in natural language; Outbound drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. He refuses spam/mass sends.",
+        "Post to X (Twitter). Pass what to post in natural language; Callistheness drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. He refuses spam/mass sends.",
     },
     {
       as: "post_reddit",
       mcp: "chat_with_outbound",
       arg: "message",
       description:
-        "Submit a Reddit post. Say what to post and to which subreddit; Outbound drafts it, confirms the exact content and target subreddit first (it is public and irreversible), then submits and returns the URL.",
+        "Submit a Reddit post. Say what to post and to which subreddit; Callistheness drafts it, confirms the exact content and target subreddit first (it is public and irreversible), then submits and returns the URL.",
     },
     {
       as: "send_email",
       mcp: "chat_with_outbound",
       arg: "message",
       description:
-        "Send an email. Give the recipient and what to say; Outbound drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms.",
+        "Send an email. Give the recipient and what to say; Callistheness drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms.",
     },
   ];
   const PHYLAX_NOTIFICATION_TOOLS = [
@@ -512,7 +512,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     },
   ];
   // The Console's catalog of suite agents. repoSetting/repoLabel are optional: an
-  // agent that owns no repo (Outbound) omits them and is enabled with just an LLM
+  // agent that owns no repo (Callistheness) omits them and is enabled with just an LLM
   // key. peerTools is the curated tool set the Console exposes for that agent.
   interface SuiteAgentSpec {
     name: string;
@@ -550,7 +550,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       displayName: "Epaminon",
       role: "executor / runs queued tickets",
       internalBaseUrl: "http://zenod-epaminon:8080",
-      // Owns NO repo — he guards the activity of executing (like Outbound guards
+      // Owns NO repo — he guards the activity of executing (like Callistheness guards
       // sending). The execution queue lives in Archus's central backlog as a ticket
       // class; Epaminon reads it and commands the runner. Enabling needs only the LLM
       // key; the lane is cross-provisioned at enable.
@@ -559,10 +559,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     },
     {
       name: "outbound",
-      displayName: "Outbound",
-      role: "outbound comms / X · Reddit · email",
+      displayName: "Callistheness",
+      role: "marketing / X · Reddit · email",
       internalBaseUrl: "http://zenod-outbound:8080",
-      // Outbound owns no repo — its accounts/connectors are env-configured on its
+      // Callistheness owns no repo — its accounts/connectors are env-configured on its
       // container. Enabling it needs only the shared LLM key.
       needsRepo: false,
       peerTools: OUTBOUND_COMMS_TOOLS,
@@ -1418,6 +1418,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           (input) => createGithubIssue(settings, input),
           agent.name,
           runtime.executionQueue ? () => runtime.executionQueue!.snapshot() : undefined,
+          agent.backlog ? runtime.buildBacklogIssueReader() : undefined,
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

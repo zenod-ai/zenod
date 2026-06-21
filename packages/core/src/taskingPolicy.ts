@@ -141,12 +141,40 @@ function hasIssueUrl(text: string, issueNumber: number): boolean {
   return new RegExp(`https://github\\.com/[^\\s)]+/[^\\s)]+/issues/${issueNumber}\\b`).test(text);
 }
 
+function markdownIssueReceipt(receipt: string): string {
+  const match = /^Created issue #(\d+):\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/.exec(receipt);
+  if (!match) return receipt;
+  return `Created issue [#${match[1]}](${match[2]})`;
+}
+
 function createError(actions: ReadonlyArray<RecordedAction>): string | undefined {
   const failed = [...actions].reverse().find((action) => action.tool === "createIssue" && /^ERROR:/.test(action.result));
   return failed?.result.replace(/^ERROR:\s*/, "");
 }
 
 const fmt = (nums: number[]): string => nums.map((n) => `#${n}`).join(", ");
+
+const EXECUTION_STATE_RE =
+  /\b(exec:(?:queued|running|needs-review|approved|blocked|done)|execution ticket|queued for execution|runner\s+(?:picked up|started|launched|reported|blocked)|running|picked up|dispatched|launched|started|ran|did(?: not|n't) run)\b/i;
+const NEGATIVE_QUEUE_RE =
+  /\b(?:no|not|never|did(?: not|n't))\b[\s\S]{0,80}\b(?:run|ran|running|picked up|dispatched|launched|started)\b/i;
+const NEGATIVE_CREATED_QUEUED_RE = /\b(?:no|not|never)\b[\s\S]{0,80}\bcreated\b[\s\S]{0,80}\bqueued\b/i;
+
+function claimsExecutionState(prose: string): boolean {
+  if (!EXECUTION_STATE_RE.test(prose) && !NEGATIVE_QUEUE_RE.test(prose) && !NEGATIVE_CREATED_QUEUED_RE.test(prose)) return false;
+  return issueNumbersIn(prose).size > 0 || /\b(issue|ticket|execution|epaminon|runner)\b/i.test(prose);
+}
+
+function hasExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean {
+  return actions.some((action) => {
+    if (/^ERROR:/.test(action.result)) return false;
+    const tool = action.tool.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (tool === "queueexecution" || tool === "executionstatus" || tool === "approveexecution") return true;
+    return /\b(exec:(?:queued|running|needs-review|approved|blocked|done)|Minted execution ticket|Execution \d+|Epaminon)\b/i.test(
+      action.result,
+    );
+  });
+}
 
 /**
  * Build a user-facing reply from the tool results when the model produced no
@@ -174,6 +202,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const proven = provenNumbers(actions);
   const receipts = createReceipts(actions);
   const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
+  const executionGrounded = hasExecutionGrounding(actions);
 
   // Ground truth beats verb-matching: when a create_issue tool actually RAN and
   // FAILED this turn, any reply that then presents issue numbers no successful
@@ -197,13 +226,29 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     }
   }
 
+  // Execution state is not ordinary backlog state. A reply like "No, #108/#109
+  // were not created or queued" must be grounded in Epaminon's live execution
+  // read, not stale chat memory or an Archus paraphrase.
+  if (claimsExecutionState(prose) && !executionGrounded) {
+    const nums = [...presented];
+    return [
+      `⚠️ Correction — I couldn't confirm execution state${nums.length ? ` for ${fmt(nums)}` : ""} this turn, so don't rely on the run/pickup claim below.`,
+      "Execution status answers need a same-turn queue_execution receipt or live execution_status result.",
+      "",
+      text,
+    ].join("\n");
+  }
+
   // Only police active claims the model makes about THIS turn. Read-only
   // mentions ("what's the status of #44"), capability descriptions ("issues are
   // created with status:proposed"), and quoted history (a blockquoted past
   // receipt) are left alone — they don't assert a mutation just happened.
   if (!hasActiveClaim(prose, MUTATION_VERBS)) return text;
 
-  const claimsCreation = hasActiveClaim(prose, CREATION_VERBS) && (presented.size > 0 || /\b(issue|ticket)\b/i.test(prose));
+  const claimsCreation =
+    hasActiveClaim(prose, CREATION_VERBS) &&
+    (presented.size > 0 || /\b(issue|ticket)\b/i.test(prose)) &&
+    !(executionGrounded && /\bexecution ticket\b/i.test(prose));
 
   // The demonstrated bug: a creation is claimed but nothing was created. A status
   // summary grounded in real tool data is NOT that — a query_backlog table whose
@@ -228,7 +273,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // A creation did happen, but the reply points at a different number than the
   // one actually created (e.g. said #58, really created #61).
   if (claimsCreation && createdNums.size > 0 && presented.size > 0 && ![...createdNums].some((n) => presented.has(n))) {
-    return `⚠️ Correction — the issue I actually created is below; the number cited in the text is wrong:\n${receipts.join("\n")}\n\n${text}`;
+    return `⚠️ Correction — the issue I actually created is below; the number cited in the text is wrong:\n${receipts.map(markdownIssueReceipt).join("\n")}\n\n${text}`;
   }
 
   // A creation did happen and the number is right (or omitted), but the model's
@@ -239,7 +284,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
       const issueNumber = Number(/^Created issue #(\d+):/.exec(receipt)![1]);
       return !hasIssueUrl(prose, issueNumber);
     });
-    if (missingReceipts.length > 0) return `${missingReceipts.join("\n")}\n\n${text}`;
+    if (missingReceipts.length > 0) return `${missingReceipts.map(markdownIssueReceipt).join("\n")}\n\n${text}`;
   }
 
   // Any other mutation claim that cites an issue number no tool produced or

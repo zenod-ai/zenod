@@ -67,13 +67,13 @@ describe("reconcileTaskingReply", () => {
   it("adds the direct issue URL when a genuine creation reply only cites the number", () => {
     const reply = "Done — created issue #25 for you.";
     const out = reconcileTaskingReply(reply, [created(25, "zenod-ai/zenod")]);
-    expect(out).toBe(`Created issue #25: https://github.com/zenod-ai/zenod/issues/25\n\n${reply}`);
+    expect(out).toBe(`Created issue [#25](https://github.com/zenod-ai/zenod/issues/25)\n\n${reply}`);
   });
 
   it("adds the direct issue URL when a genuine creation reply omits the number", () => {
     const reply = "Done — created the ticket.";
     const out = reconcileTaskingReply(reply, [created(25, "zenod-ai/zenod")]);
-    expect(out).toBe(`Created issue #25: https://github.com/zenod-ai/zenod/issues/25\n\n${reply}`);
+    expect(out).toBe(`Created issue [#25](https://github.com/zenod-ai/zenod/issues/25)\n\n${reply}`);
   });
 
   it("corrects a creation that cites the wrong number", () => {
@@ -109,6 +109,37 @@ describe("reconcileTaskingReply", () => {
       "#76 is indeed approved/queued.\n\n" +
       "#80 is explicitly a research spike / plan ticket, not a code-merge ticket. There is no PR planned for #80.";
     expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
+  it("corrects an ungrounded execution status denial (the #108/#109 pickup bug)", () => {
+    const reply = "No. #108 / #109 were not created or queued. The plan-generation execution ticket did not run.";
+    const out = reconcileTaskingReply(reply, []);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("couldn't confirm execution state for #108, #109");
+    expect(out).toContain("live execution_status");
+  });
+
+  it("does not correct an execution status answer backed by execution_status", () => {
+    const reply = "#109 is running for AlfaBlok/obsidian-brain#108.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "execution_status",
+        result: "Execution 109: exec:running target AlfaBlok/obsidian-brain#108 started 2026-06-19T14:25:28Z",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("does not correct a queue receipt backed by queue_execution", () => {
+    const reply = "Execution ticket opened and queued: [#108](https://github.com/AlfaBlok/obsidian-brain/issues/108), live execution #109.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "queueExecution",
+        result:
+          "Minted execution ticket AlfaBlok/obsidian-brain#108 (exec:queued) for AlfaBlok/obsidian-brain#107; Epaminon execution 109 dispatched.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
   it("does not correct coordinated participles joined by 'and' under a be-verb", () => {

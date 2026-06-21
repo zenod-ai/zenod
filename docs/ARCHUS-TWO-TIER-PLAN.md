@@ -43,7 +43,7 @@ digging through every repo.
 - **Outward / irreversible** (merge a PR, **send a tweet**, send an email): the worker
   produces the artifact/draft → `exec:needs-review` → **the human approves the actual
   content** → it ships. (You approved the *goal* at queue time; you approve the *content*
-  before it goes out — same as approving a PR's diff, and it preserves Outbound's
+  before it goes out — same as approving a PR's diff, and it preserves Callistheness's
   confirm-before-send.)
 - **Internal artifact** (file a note, a research doc): completes autonomously → `exec:done`.
 
@@ -126,14 +126,14 @@ Report once per edge; never stream.
 - (a) Add **`exec:approved`** between `needs-review` and `done` — set by **Archus** on the
   human's go (the only `exec` state Archus writes besides `queued`). It gives the at-a-glance
   "approved, shipping now" vs "still awaiting."
-- (b) **Outbound performs the send** (tweet/email); the **runner merges** a PR on green. In
-  the autonomous execution path the **human-approval-through-Archus IS Outbound's
-  confirm-before-send** — Outbound ships the pre-approved content without re-asking (its
-  interactive confirm is for direct chat). Epaminon hands Outbound the approved content.
+- (b) **Callistheness performs the send** (tweet/email); the **runner merges** a PR on green. In
+  the autonomous execution path the **human-approval-through-Archus IS Callistheness's
+  confirm-before-send** — Callistheness ships the pre-approved content without re-asking (its
+  interactive confirm is for direct chat). Epaminon hands Callistheness the approved content.
 - (c) Human approves in chat → Archus flips `needs-review → approved` **and** dispatches the
   new **`approve_execution { execution_id, final_content? }`** to Epaminon (since Epaminon
   doesn't scan labels, the flip alone isn't a trigger — the dispatch is). Epaminon then routes
-  to Outbound (send) or the runner (merge), and reports `apply_execution_event(done, url)`.
+  to Callistheness (send) or the runner (merge), and reports `apply_execution_event(done, url)`.
   `final_content` carries the human's edit if the draft changed.
 
 **2. One ticket or two for no-code goals → TWO.** A central **work ticket** (the durable

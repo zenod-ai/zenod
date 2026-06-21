@@ -127,7 +127,7 @@ Codex workers receive one suite backend:
 
 Do not reuse `ZENOD_API_TOKEN` for this. That token belongs to the Zenod memory agent/app endpoint. The runner must receive the Console token through Dokploy as `ZENOD_CONSOLE_TOKEN`, with `ZENOD_CONSOLE_URL` defaulting to `http://zenod-console:8080` on `dokploy-network`.
 
-The worker-visible tool set is dynamic: enabling or disabling agents in the Console Team tab changes what the gateway advertises on the next MCP call. Typical enabled tools include `ask_zenod`, `search_memory`, `get_memory`, `ask_archus`, `open_issue`, `edit_issue`, and `close_issue`, depending on which peers are enabled. Raw internal lane tools such as `enqueue_execution`, `approve_execution`, and `apply_execution_event` must not be exposed here.
+The worker-visible tool set is dynamic: enabling or disabling agents in the Console Team tab changes what the gateway advertises on the next MCP call. Typical enabled tools follow the v4 public contract, including `zenod.ask_brain`, `zenod.search_memory`, `zenod.get_memory`, `archus.ask_archus`, `archus.find_issue`, `archus.request_backlog_action`, and `archus.run_issue`, depending on which peers are enabled. Raw internal lane tools such as `enqueue_execution`, `approve_execution`, and `apply_execution_event` must not be exposed here.
 
 Verify after start:
 

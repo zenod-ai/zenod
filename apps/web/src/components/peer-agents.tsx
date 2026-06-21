@@ -145,7 +145,7 @@ export function PeerAgents() {
             <FieldLabel htmlFor="peer-url">MCP URL</FieldLabel>
             <Input
               id="peer-url"
-              placeholder="https://app.zenod.dev/mcp"
+              placeholder="https://c1.zenod.dev/mcp"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               className="font-mono text-xs"

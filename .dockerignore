@@ -4,6 +4,9 @@ node_modules
 .git
 .github
 docs
+!docs
+docs/*
+!docs/tool-output-schemas.v4.json
 *.md
 .env*
 .zenod-data

@@ -1,4 +1,4 @@
-# Outbound — the headless OUTBOUND-COMMS agent. Internal MCP server the Console
+# Callistheness — the headless OUTBOUND-COMMS agent. Internal MCP server the Console
 # (c1) loads over dokploy-network; reachable only as http://zenod-outbound:8080.
 #
 # Boots UN-PROVISIONED (ZENOD_AWAIT_PROVISION=1): mints no token, idles until c1
@@ -9,7 +9,7 @@
 # comms and ALWAYS confirms before anything is published/sent. NOT exposed publicly.
 # See docs/SUITE-AGENT-PATTERN.md.
 #
-# The send capabilities live in their OWN deployed MCP connectors that Outbound
+# The send capabilities live in their OWN deployed MCP connectors that Callistheness
 # reaches over the docker network. Point each at its connector with the
 # OUTBOUND_*_MCP_URL env. A connector whose URL is unset is simply "not connected
 # yet" — the tool reports it and never fakes a send, so the X/Reddit/email channels
@@ -31,7 +31,7 @@ networks:
   dokploy-network:
     external: true
   # The x-mcp compose (services/x-mcp) owns/creates this network; x-mcp is deployed,
-  # so Outbound joins it (external) to reach x-mcp-postread by name for posting.
+  # so Callistheness joins it (external) to reach x-mcp-postread by name for posting.
   zenod-x-net:
     external: true
 

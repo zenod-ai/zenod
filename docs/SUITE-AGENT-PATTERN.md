@@ -1,6 +1,6 @@
 # Suite Agent Pattern — the as-built handoff
 
-How to bring a new suite agent online (Epaminon, the Outbound agent, …). This is the
+How to bring a new suite agent online (Epaminon, the Callistheness agent, …). This is the
 **proven** pattern, showcased by **Zenod** (memory) and **Archus** (backlog). It is the
 *as-built* companion to the full target contract in [SUITE-SCAFFOLD.md](./SUITE-SCAFFOLD.md) —
 build to this; if you must deviate, say so explicitly.
@@ -74,8 +74,8 @@ build to this; if you must deviate, say so explicitly.
 - **Zenod** — memory librarian. Public reads: `search_memory`, `get_memory`; brain:
   `ask_brain` / `store_memory`. Files: `ZENOD_AGENT` (agent.ts), vault engine path
   (engine.ts), `buildMcpServer` (mcp.ts).
-- **Archus** — backlog guardian (vaultless + `backlog`). Public writes (`create_issue`,
-  `edit_issue`, `close_issue`) + `ask_archus` route to `chat_with_archus`; private CRUD =
+- **Archus** — backlog guardian (vaultless + `backlog`). Public v4 tools include
+  `request_backlog_action`, `run_issue`, typed reads/resolvers, and `ask_archus`; private CRUD =
   `createGithubIssue`/`editGithubIssue` (`connections/github.ts`); guidelines in
   `ARCHUS_AGENT.persona`. In the execution-ticket protocol, Archus is also the sole owner
   of central `type:execution` tickets: it mints `exec:queued`, writes `exec:approved`, and

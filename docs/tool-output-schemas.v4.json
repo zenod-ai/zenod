@@ -1,0 +1,669 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zenod.dev/schemas/tool-output/v4.json",
+  "title": "Zenod agent tool output contract (v4)",
+  "description": "Registry of MCP outputSchema definitions for the public tool surface described in behavioral-intent-patterns-and-chat-test-strategy-v4.md. Entries under `tools` reference shared definitions under the document-root `$defs`, so they are NOT inline-self-contained: do not copy a single entry into MCP as-is. Run `scripts/build-tool-output-schemas.mjs` to emit one fully bundled, self-contained schema per tool under `dist/tool-output-schemas/`, for use directly as each tool's MCP `outputSchema`. Schema validation proves SHAPE (well-formed, allowed EvidenceKinds, required fields) only; it does NOT prove the evidence is TRUE — truth is established by readback and end-state tests in the replay harness.",
+  "$defs": {
+    "Operation": {
+      "type": "object",
+      "required": ["operationId", "status"],
+      "properties": {
+        "operationId": { "type": "string" },
+        "interpretedAs": { "type": "string" },
+        "status": { "enum": ["completed", "blocked", "needs_input"] }
+      },
+      "additionalProperties": false
+    },
+    "Question": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "operationId": { "type": "string" },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Candidate": {
+      "type": "object",
+      "required": ["target"],
+      "properties": {
+        "operationId": { "type": "string" },
+        "target": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "matchReason": { "type": "string" },
+        "confidence": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "ToolError": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "operationId": { "type": "string" },
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "currentState": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceKind": {
+      "enum": [
+        "issue", "issue_list", "issue_resolved", "issue_not_found",
+        "issue_created", "issue_updated", "issue_closed", "issues_linked",
+        "execution_status", "execution_none",
+        "execution_queued", "execution_running", "execution_needs_review",
+        "execution_blocked", "execution_done", "execution_failed",
+        "notification_record", "notification_list",
+        "notification_sent", "notification_decision", "notification_none",
+        "memory_hits", "memory_note", "memory_job", "memory_stored", "action_audit",
+        "outbound_draft",
+        "outbound_tweet_sent", "outbound_reddit_sent", "outbound_email_sent"
+      ]
+    },
+
+    "Ev_issue": {
+      "type": "object",
+      "required": ["kind", "target", "title", "state", "url"],
+      "properties": {
+        "kind": { "const": "issue" },
+        "operationId": { "type": "string" },
+        "target": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "state": { "type": "string" },
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "url": { "type": "string" },
+        "comments": { "type": "array" },
+        "linkedRefs": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_issue_list": {
+      "type": "object",
+      "required": ["kind", "issues"],
+      "properties": {
+        "kind": { "const": "issue_list" },
+        "operationId": { "type": "string" },
+        "filters": { "type": "object" },
+        "issues": { "type": "array", "items": { "type": "object" } }
+      },
+      "additionalProperties": false
+    },
+    "Ev_issue_resolved": {
+      "type": "object",
+      "required": ["kind", "target", "url", "confidence"],
+      "properties": {
+        "kind": { "const": "issue_resolved" },
+        "operationId": { "type": "string" },
+        "target": { "type": "string" },
+        "url": { "type": "string" },
+        "confidence": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_issue_not_found": {
+      "type": "object",
+      "required": ["kind", "searchedRepos", "searchedWindow", "candidates"],
+      "properties": {
+        "kind": { "const": "issue_not_found" },
+        "operationId": { "type": "string" },
+        "searchedRepos": { "type": "array", "items": { "type": "string" } },
+        "searchedWindow": { "type": "string" },
+        "candidates": { "type": "array", "items": { "$ref": "#/$defs/Candidate" } }
+      },
+      "additionalProperties": false
+    },
+    "Ev_issue_created": {
+      "type": "object",
+      "required": ["kind", "target", "url", "verified"],
+      "properties": {
+        "kind": { "const": "issue_created" },
+        "operationId": { "type": "string" },
+        "target": { "type": "string" },
+        "url": { "type": "string" },
+        "title": { "type": "string" },
+        "state": { "type": "string" },
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "verified": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "Ev_issue_updated": {
+      "type": "object",
+      "required": ["kind", "target", "url", "changedFields", "verified"],
+      "properties": {
+        "kind": { "const": "issue_updated" },
+        "operationId": { "type": "string" },
+        "target": { "type": "string" },
+        "url": { "type": "string" },
+        "changedFields": { "type": "array", "items": { "type": "string" } },
+        "verified": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "Ev_issue_closed": {
+      "type": "object",
+      "required": ["kind", "target", "url", "state", "verified"],
+      "properties": {
+        "kind": { "const": "issue_closed" },
+        "operationId": { "type": "string" },
+        "target": { "type": "string" },
+        "url": { "type": "string" },
+        "state": { "const": "closed" },
+        "verified": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "Ev_issues_linked": {
+      "type": "object",
+      "required": ["kind", "source", "targets", "relationship", "verifiedLinks"],
+      "properties": {
+        "kind": { "const": "issues_linked" },
+        "operationId": { "type": "string" },
+        "source": { "type": "string" },
+        "targets": { "type": "array", "items": { "type": "string" } },
+        "relationship": {
+          "enum": ["parent", "child", "blocks", "blocked_by", "relates", "execution_for"]
+        },
+        "verifiedLinks": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_execution_status": {
+      "type": "object",
+      "required": ["kind", "state"],
+      "properties": {
+        "kind": { "const": "execution_status" },
+        "operationId": { "type": "string" },
+        "executionId": { "type": "string" },
+        "executionIssue": { "type": "string" },
+        "workIssue": { "type": "string" },
+        "state": { "enum": ["queued", "running", "needs_review", "blocked", "done", "failed"] },
+        "runnerStatus": { "type": "string" },
+        "blockers": { "type": "array" },
+        "resultRefs": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_execution_none": {
+      "type": "object",
+      "required": ["kind", "searchScope", "executions"],
+      "properties": {
+        "kind": { "const": "execution_none" },
+        "operationId": { "type": "string" },
+        "searchScope": { "type": "object" },
+        "executions": { "type": "array", "maxItems": 0 }
+      },
+      "additionalProperties": false
+    },
+    "Ev_execution_queued": {
+      "type": "object",
+      "required": ["kind", "executionIssue", "executionId", "state"],
+      "properties": {
+        "kind": { "const": "execution_queued" },
+        "operationId": { "type": "string" },
+        "workIssue": { "type": "object" },
+        "executionIssue": { "type": "string" },
+        "executionId": { "type": "string" },
+        "state": { "const": "queued" },
+        "dispatchStatus": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_execution_running": {
+      "type": "object",
+      "required": ["kind", "executionId", "state", "runnerStatus"],
+      "properties": {
+        "kind": { "const": "execution_running" },
+        "operationId": { "type": "string" },
+        "executionId": { "type": "string" },
+        "state": { "const": "running" },
+        "runnerStatus": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_execution_needs_review": {
+      "type": "object",
+      "required": ["kind", "executionId", "state", "resultRefs"],
+      "properties": {
+        "kind": { "const": "execution_needs_review" },
+        "operationId": { "type": "string" },
+        "executionId": { "type": "string" },
+        "state": { "const": "needs_review" },
+        "resultRefs": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_execution_blocked": {
+      "type": "object",
+      "required": ["kind", "executionId", "state", "blockers"],
+      "properties": {
+        "kind": { "const": "execution_blocked" },
+        "operationId": { "type": "string" },
+        "executionId": { "type": "string" },
+        "state": { "const": "blocked" },
+        "blockers": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_execution_done": {
+      "type": "object",
+      "required": ["kind", "executionId", "state", "resultRefs"],
+      "properties": {
+        "kind": { "const": "execution_done" },
+        "operationId": { "type": "string" },
+        "executionId": { "type": "string" },
+        "state": { "const": "done" },
+        "resultRefs": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_execution_failed": {
+      "type": "object",
+      "required": ["kind", "executionId", "state", "reason"],
+      "properties": {
+        "kind": { "const": "execution_failed" },
+        "operationId": { "type": "string" },
+        "executionId": { "type": "string" },
+        "state": { "const": "failed" },
+        "reason": { "type": "string" },
+        "resultRefs": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_notification_record": {
+      "type": "object",
+      "required": ["kind", "notificationId", "decision", "reference"],
+      "properties": {
+        "kind": { "const": "notification_record" },
+        "operationId": { "type": "string" },
+        "notificationId": { "type": "string" },
+        "decision": { "type": "string" },
+        "channel": { "type": "string" },
+        "reason": { "type": "string" },
+        "deliveredAt": { "type": "string" },
+        "reference": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_notification_list": {
+      "type": "object",
+      "required": ["kind", "records"],
+      "properties": {
+        "kind": { "const": "notification_list" },
+        "operationId": { "type": "string" },
+        "filters": { "type": "object" },
+        "records": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_notification_sent": {
+      "type": "object",
+      "required": ["kind", "channel", "recipient", "status"],
+      "properties": {
+        "kind": { "const": "notification_sent" },
+        "operationId": { "type": "string" },
+        "channel": { "type": "string" },
+        "recipient": { "type": "string" },
+        "status": { "type": "string" },
+        "providerMessageId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_notification_decision": {
+      "type": "object",
+      "required": ["kind", "decision", "reason"],
+      "properties": {
+        "kind": { "const": "notification_decision" },
+        "operationId": { "type": "string" },
+        "decision": { "enum": ["queued", "suppressed", "batched"] },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_notification_none": {
+      "type": "object",
+      "required": ["kind", "reference", "searchedScope", "records"],
+      "properties": {
+        "kind": { "const": "notification_none" },
+        "operationId": { "type": "string" },
+        "reference": { "type": "string" },
+        "searchedScope": { "type": "object" },
+        "records": { "type": "array", "maxItems": 0 }
+      },
+      "additionalProperties": false
+    },
+    "Ev_memory_hits": {
+      "type": "object",
+      "required": ["kind", "hits", "query"],
+      "properties": {
+        "kind": { "const": "memory_hits" },
+        "operationId": { "type": "string" },
+        "hits": { "type": "array" },
+        "query": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_memory_note": {
+      "type": "object",
+      "required": ["kind", "path", "content"],
+      "properties": {
+        "kind": { "const": "memory_note" },
+        "operationId": { "type": "string" },
+        "path": { "type": "string" },
+        "frontmatter": { "type": "object" },
+        "content": { "type": "string" },
+        "githubUrl": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_memory_job": {
+      "type": "object",
+      "required": ["kind", "jobId", "status"],
+      "properties": {
+        "kind": { "const": "memory_job" },
+        "operationId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "status": { "enum": ["queued", "running", "done", "error", "interrupted"] },
+        "result": { "type": "object" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_memory_stored": {
+      "type": "object",
+      "required": ["kind", "jobId", "status", "commitSha", "pagesTouched"],
+      "properties": {
+        "kind": { "const": "memory_stored" },
+        "operationId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "status": { "const": "done" },
+        "commitSha": { "type": "string" },
+        "pagesTouched": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_action_audit": {
+      "type": "object",
+      "required": ["kind", "rows", "coverage"],
+      "properties": {
+        "kind": { "const": "action_audit" },
+        "operationId": { "type": "string" },
+        "rows": { "type": "array" },
+        "coverage": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_outbound_draft": {
+      "type": "object",
+      "required": ["kind", "text"],
+      "properties": {
+        "kind": { "const": "outbound_draft" },
+        "operationId": { "type": "string" },
+        "text": { "type": "string" },
+        "drafts": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_outbound_tweet_sent": {
+      "type": "object",
+      "required": ["kind", "url"],
+      "properties": {
+        "kind": { "const": "outbound_tweet_sent" },
+        "operationId": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_outbound_reddit_sent": {
+      "type": "object",
+      "required": ["kind", "url"],
+      "properties": {
+        "kind": { "const": "outbound_reddit_sent" },
+        "operationId": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Ev_outbound_email_sent": {
+      "type": "object",
+      "required": ["kind", "receipt"],
+      "properties": {
+        "kind": { "const": "outbound_email_sent" },
+        "operationId": { "type": "string" },
+        "receipt": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "EvidenceObject": {
+      "oneOf": [
+        { "$ref": "#/$defs/Ev_issue" },
+        { "$ref": "#/$defs/Ev_issue_list" },
+        { "$ref": "#/$defs/Ev_issue_resolved" },
+        { "$ref": "#/$defs/Ev_issue_not_found" },
+        { "$ref": "#/$defs/Ev_issue_created" },
+        { "$ref": "#/$defs/Ev_issue_updated" },
+        { "$ref": "#/$defs/Ev_issue_closed" },
+        { "$ref": "#/$defs/Ev_issues_linked" },
+        { "$ref": "#/$defs/Ev_execution_status" },
+        { "$ref": "#/$defs/Ev_execution_none" },
+        { "$ref": "#/$defs/Ev_execution_queued" },
+        { "$ref": "#/$defs/Ev_execution_running" },
+        { "$ref": "#/$defs/Ev_execution_needs_review" },
+        { "$ref": "#/$defs/Ev_execution_blocked" },
+        { "$ref": "#/$defs/Ev_execution_done" },
+        { "$ref": "#/$defs/Ev_execution_failed" },
+        { "$ref": "#/$defs/Ev_notification_record" },
+        { "$ref": "#/$defs/Ev_notification_list" },
+        { "$ref": "#/$defs/Ev_notification_sent" },
+        { "$ref": "#/$defs/Ev_notification_decision" },
+        { "$ref": "#/$defs/Ev_notification_none" },
+        { "$ref": "#/$defs/Ev_memory_hits" },
+        { "$ref": "#/$defs/Ev_memory_note" },
+        { "$ref": "#/$defs/Ev_memory_job" },
+        { "$ref": "#/$defs/Ev_memory_stored" },
+        { "$ref": "#/$defs/Ev_action_audit" },
+        { "$ref": "#/$defs/Ev_outbound_draft" },
+        { "$ref": "#/$defs/Ev_outbound_tweet_sent" },
+        { "$ref": "#/$defs/Ev_outbound_reddit_sent" },
+        { "$ref": "#/$defs/Ev_outbound_email_sent" }
+      ]
+    },
+
+    "Envelope": {
+      "type": "object",
+      "required": ["evidence"],
+      "properties": {
+        "text": { "type": "string" },
+        "operations": { "type": "array", "items": { "$ref": "#/$defs/Operation" } },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/EvidenceObject" } },
+        "questions": { "type": "array", "items": { "$ref": "#/$defs/Question" } },
+        "candidates": { "type": "array", "items": { "$ref": "#/$defs/Candidate" } },
+        "errors": { "type": "array", "items": { "$ref": "#/$defs/ToolError" } },
+        "meta": {
+          "type": "object",
+          "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "tools": {
+    "console.chat_with_console": {
+      "$comment": "Test harness passthrough: may surface any evidence kind emitted by owner tools.",
+      "$ref": "#/$defs/Envelope"
+    },
+
+    "zenod.search_memory": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_memory_hits" } } } }
+      ]
+    },
+    "zenod.get_memory": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_memory_note" } } } }
+      ]
+    },
+    "zenod.ask_brain": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_memory_note" } } } }
+      ]
+    },
+    "zenod.store_memory": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_memory_job" },
+          { "$ref": "#/$defs/Ev_memory_stored" }
+        ] } } } }
+      ]
+    },
+    "zenod.get_task_result": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_memory_job" } } } }
+      ]
+    },
+    "zenod.extract_action_requests": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_action_audit" } } } }
+      ]
+    },
+
+    "archus.get_issue": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_issue" } } } }
+      ]
+    },
+    "archus.find_issue": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_issue_resolved" },
+          { "$ref": "#/$defs/Ev_issue_not_found" }
+        ] } } } }
+      ]
+    },
+    "archus.list_issues": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_issue_list" } } } }
+      ]
+    },
+    "archus.request_backlog_action": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_issue_created" },
+          { "$ref": "#/$defs/Ev_issue_updated" },
+          { "$ref": "#/$defs/Ev_issue_closed" },
+          { "$ref": "#/$defs/Ev_issues_linked" }
+        ] } } } }
+      ]
+    },
+    "archus.run_issue": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_execution_queued" },
+          { "$ref": "#/$defs/Ev_execution_blocked" }
+        ] } } } }
+      ]
+    },
+    "archus.ask_archus": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_issue" },
+          { "$ref": "#/$defs/Ev_issue_list" },
+          { "$ref": "#/$defs/Ev_issue_resolved" },
+          { "$ref": "#/$defs/Ev_issue_not_found" }
+        ] } } } }
+      ]
+    },
+
+    "epaminon.execution_status": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_execution_status" },
+          { "$ref": "#/$defs/Ev_execution_none" }
+        ] } } } }
+      ]
+    },
+
+    "phylax.raise_notification_event": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_notification_sent" },
+          { "$ref": "#/$defs/Ev_notification_decision" }
+        ] } } } }
+      ]
+    },
+    "phylax.get_notification_status": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_notification_record" },
+          { "$ref": "#/$defs/Ev_notification_none" }
+        ] } } } }
+      ]
+    },
+    "phylax.list_notifications": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_notification_list" } } } }
+      ]
+    },
+    "phylax.ask_phylax": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "maxItems": 0 } } }
+      ]
+    },
+
+    "outbound.ask_outbound": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_outbound_draft" } } } }
+      ]
+    },
+    "outbound.post_tweet": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_outbound_draft" },
+          { "$ref": "#/$defs/Ev_outbound_tweet_sent" }
+        ] } } } }
+      ]
+    },
+    "outbound.post_reddit": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_outbound_draft" },
+          { "$ref": "#/$defs/Ev_outbound_reddit_sent" }
+        ] } } } }
+      ]
+    },
+    "outbound.send_email": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_outbound_draft" },
+          { "$ref": "#/$defs/Ev_outbound_email_sent" }
+        ] } } } }
+      ]
+    }
+  }
+}

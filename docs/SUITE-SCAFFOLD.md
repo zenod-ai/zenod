@@ -1,5 +1,9 @@
 # Zenod Suite — Target Architecture (THE CONTRACT)
 
+Tool naming note: this architecture doc predates the v4 public contract. Use
+[behavioral-intent-patterns-and-chat-test-strategy-v4.md](./behavioral-intent-patterns-and-chat-test-strategy-v4.md)
+as canonical for public tool names and output schemas.
+
 This is the single source of truth. We build **to** it. A decision here changes only by a
 deliberate edit to this file — never silent drift. Migration is **Option B** (build in
 parallel, prove, cut over); the live system is never mutated destructively.
@@ -45,7 +49,7 @@ just the Console's **multi-agent routing mode.**
   — bypass.** Direct, exactly like today's WhatsApp→Z0. The router is a transparent
   pass-through — **no orchestration baggage.**
 - **Multi mode (more enabled):** the chat is wired to the **Council router**, which **delegates**
-  to the enabled agents (**agents-as-tools**: one delegation tool per agent — `ask_zenod(task)`,
+  to the enabled agents (**agents-as-tools**: one delegation tool per agent — `ask_brain(task)`,
   `archus(task)`, … — not 40 flat leaf tools). "Talk to just one agent" survives as a Council
   **focus mode**, not a separate UI.
 
@@ -99,7 +103,7 @@ agent = base + {its tools, optional internal MCP servers} + a chat endpoint + a 
 - It has **no UI of its own** — the Console is the UI. It only **contributes one settings tab**
   (see below) via its config schema.
 - **Group by JOB, not by MCP server.** An agent may compose **several MCP servers internally**
-  (e.g. **Outbound** = X + Reddit + email) — invisible plumbing; externally one agent, one chat,
+  (e.g. **Callistheness** = X + Reddit + email) — invisible plumbing; externally one agent, one chat,
   one tool surface.
 - **Two run modes from one artifact:** **product mode** (Console + agent → one URL, full UI) is
   the normal install; **bare mode** (the agent container alone as a headless MCP server,
@@ -131,7 +135,7 @@ shared setup (**Connections · Costs · login**) + the **on/off** surface. On to
 - **Connections are shared — connect ONCE.** GitHub OAuth, model/provider keys, Google Drive, X
   / Reddit creds live once in the Console's **Connections** center.
 - **Config is per-agent — a thin selector.** Each agent declares *which connected resource is
-  mine*: Z0 → "this repo is my vault"; Archus → "these repos are the backlog"; Outbound → "this
+  mine*: Z0 → "this repo is my vault"; Archus → "these repos are the backlog"; Callistheness → "this
   X / Reddit / email account." So a per-agent tab is a small selector over shared connections —
   **not a bespoke auth per agent.** (Z0's "Vault tab" is really "connect a GitHub repo.")
 - **Config is agent-owned DATA** (env / file in its volume / a get-set API). The Console UI is
@@ -185,7 +189,7 @@ concretely, frequently needed (e.g. Zenod filing into Archus). Peer tools are la
 | **Zenod** | memory / librarian | search_vault, read_note, list_pages, search_chats, capture_note, propose/execute_vault_task | **Vault** | `zenod` | **LIVE** |
 | **Archus** | backlog | query/service/digest_backlog, create/edit/label_issue, approve_queue/merge | **Backlog** | `archus` | **LIVE** (rebuild) |
 | **Epaminon** | executor | drain queue, Codex fan-out, open PR, merge-on-green | **Executor** | `epaminon` | **LIVE** (headless) |
-| **Outbound** | outbound comms: post + email | post_tweet, read_tweets, submit_post, read_subreddit, comment, send_email, search_email — *composed from 3 internal MCP servers (xmcp + reddit-mcp + email)* | **Accounts** | `outbound` | **partial** (X tools live → +Reddit +Mail) |
+| **Callistheness** | marketing/outbound comms: post + email | post_tweet, read_tweets, submit_post, read_subreddit, comment, send_email, search_email — *composed from 3 internal MCP servers (xmcp + reddit-mcp + email)* | **Accounts** | `outbound` | **partial** (X tools live → +Reddit +Mail) |
 | **Nectary** | financing | (TBD) | **Financing** | `nectary` | **future** |
 
 The **Console** is the product at the main domain (`c1.zenod.dev` for the current C1 stack). Each agent's MCP
@@ -208,7 +212,7 @@ services/xmcp  services/reddit-mcp  services/mail-mcp   (upstream tool servers a
 | `zenod` | memory agent (MCP + chat endpoint) | `zenod` (mcp) | live (to split) |
 | `archus` | backlog agent | `archus` (mcp) | live (rebuild) |
 | `epaminon` | executor agent | `epaminon` (mcp) | live (headless) |
-| `outbound` | outbound agent (X + Reddit + email) | `outbound` (mcp) | partial |
+| `outbound` | marketing agent (X + Reddit + email) | `outbound` (mcp) | partial |
 | `nectary` | financing agent | `nectary` (mcp) | future |
 
 v1: all containers run; the Console toggles them on/off.
@@ -250,7 +254,7 @@ settings tab to life. **We bake Zenod in FULLY before moving to Archus** — no 
 2. **Zenod — fully baked (step 1).** Enable Zenod from the Team tab → the Console delegates to it
    (mesh ✓ done) **and its "Vault" settings tab appears in the Console** (a remote editor over
    Zenod's own config — it owns the data; the Console renders the tab from Zenod's config schema).
-   *Done = toggling Zenod on/off adds/removes both `ask_zenod` and the Vault tab, and you can set
+   *Done = toggling Zenod on/off adds/removes both `ask_brain` and the Vault tab, and you can set
    Zenod's vault from that tab.* Zenod is the first capability that fully lives in the Console UI.
 3. **Archus — next (only after Zenod is fully baked).** Enable Archus → `ask_archus` + its
    **"Backlog" settings tab** appear. Same pattern, second capability.
@@ -270,8 +274,8 @@ is **#162** — re-sequenced so each capability is *fully* alive in the UI befor
 - **#144** backlog tooling → the **backlog capability** in `apps/archus` (phase 4).
 - **#145** mesh → the **Council routing** in the Console (phase 5).
 - **#146** gate → stays (final check).
-- **#147** Mail → folds into the **Outbound** agent (email is one of its tools).
-- **#148** X migration → folds into the **Outbound** agent (X + Reddit + email composed internally).
+- **#147** Mail → folds into the **Callistheness** agent (email is one of its tools).
+- **#148** X migration → folds into the **Callistheness** agent (X + Reddit + email composed internally).
 
 ---
 
@@ -292,7 +296,7 @@ The shape is **settled**. What remains:
   the engine → aisdk, registering each configured peer as an `ask_<name>` tool. `callPeer`
   connects to a peer's MCP endpoint with a bearer token and calls `ask_brain`. Peers are
   configured in the **Connections** UI (name + MCP URL + write-only token). **Live on z2:** the
-  vaultless Console answered a memory question by calling `ask_zenod` → Zenod researched its
+  vaultless Console answered a memory question by calling `ask_brain` → Zenod researched its
   vault → the Console relayed the answer. *Cross-agent auth (the flagged unknown) is resolved
   for self-host: a per-agent bearer token pasted via the connections center — connect-once, the
   Central model. Enforced isolation / a token-broker remains for the hosted step.*
@@ -309,7 +313,7 @@ The shape is **settled**. What remains:
 
   **New-stack topology (c1 / z2):** **c1** = the Console (the UI and channels), at `c1.zenod.dev`; it is what was temporarily at
   `z2.zenod.dev`. **z2** = the NEW Zenod — **headless** (no public UI), an internal MCP server that
-  c1 loads over `dokploy-network`. `app.zenod.dev` is retired for this stack and must not be used
+  c1 loads over `dokploy-network`. The old app host is retired for this stack and must not be used
   for C1 health checks or channel verification.
 - **Base-change propagation** is manual per-container until a rebuild-and-redeploy-all step exists
   (else: version skew).

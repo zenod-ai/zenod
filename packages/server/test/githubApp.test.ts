@@ -23,11 +23,11 @@ describe("GitHub App flow", () => {
   });
 
   it("builds a manifest with the instance callbacks", () => {
-    const { action, manifest } = buildManifest("https://app.zenod.dev");
+    const { action, manifest } = buildManifest("https://c1.zenod.dev");
     expect(action).toBe("https://github.com/settings/apps/new");
-    expect(manifest.redirect_url).toBe("https://app.zenod.dev/api/github/app/callback");
-    expect(manifest.setup_url).toBe("https://app.zenod.dev/api/github/app/setup");
-    expect(manifest.default_permissions).toEqual({ contents: "write", issues: "write", metadata: "read" });
+    expect(manifest.redirect_url).toBe("https://c1.zenod.dev/api/github/app/callback");
+    expect(manifest.setup_url).toBe("https://c1.zenod.dev/api/github/app/setup");
+    expect(manifest.default_permissions).toEqual({ contents: "write", issues: "write", pull_requests: "read", metadata: "read" });
     expect(String(manifest.name)).toMatch(/^zenod-[0-9a-f]{4}$/);
   });
 
@@ -146,11 +146,11 @@ describe("GitHub App flow", () => {
       headers: {
         Authorization: `Bearer ${runtime.settings.apiToken()}`,
         "x-forwarded-proto": "https",
-        "x-forwarded-host": "app.zenod.dev",
+        "x-forwarded-host": "c1.zenod.dev",
       },
     });
     const body = await res.json();
-    expect(body.manifest.redirect_url).toBe("https://app.zenod.dev/api/github/app/callback");
+    expect(body.manifest.redirect_url).toBe("https://c1.zenod.dev/api/github/app/callback");
   });
 
   it("edits issue fields, labels, status, assignees, and comments through GitHub", async () => {

@@ -15,7 +15,7 @@ chatty and never free-form.
 - **Archus** is the SOLE writer of the central backlog (`AlfaBlok/obsidian-brain`),
   **including a new ticket class: the execution ticket.** Minting one = the act of
   queuing. Maintaining its run-state = also Archus (on Epaminon's structured reports).
-- **Epaminon** owns **no repo** (he guards the *activity* of executing, like Outbound
+- **Epaminon** owns **no repo** (he guards the *activity* of executing, like Callistheness
   guards sending — `needsRepo: false`). His "queue" is just the set of open execution
   tickets. He runs them, fans them in, and **reports facts up to Archus**; he never
   writes GitHub himself.
@@ -49,7 +49,7 @@ exec:failed      execution failed (rolled back / abandoned)
 Legal transitions:
 `queued→running` (Ep), `running→needs-review` (Ep, outward outcome) **or** `running→done`
 (Ep, internal artifact), `needs-review→approved` (**Archus**, on human approval),
-`approved→done` (Ep, after Outbound sends / runner merges), `running→blocked` (Ep),
+`approved→done` (Ep, after Callistheness sends / runner merges), `running→blocked` (Ep),
 `blocked→running` (Ep, after advisory unblock), `*→failed` (Ep; a blocked ticket that gets
 rescoped goes `→failed` and Archus re-mints a fresh exec). Epaminon reports its edges once.
 
@@ -58,7 +58,7 @@ The executor is **one harness — Codex with the generalist suite MCP toolset** 
 memory + email via the Console gateway), not a code-only worker. There are no execution
 "kinds"; only the **outcome** varies: a PR, a tweet, a filed note. **Epaminon decides the
 gate from the outcome** — *outward/irreversible* (merge a PR, send a tweet/email) →
-`exec:needs-review` for human content-approval (preserving Outbound's confirm-before-send);
+`exec:needs-review` for human content-approval (preserving Callistheness's confirm-before-send);
 *internal artifact* (file a note) → `exec:done` autonomously. Archus just applies the state
 Epaminon reports. See [ARCHUS-TWO-TIER-PLAN.md](./ARCHUS-TWO-TIER-PLAN.md) for the Archus half.
 
@@ -77,7 +77,7 @@ this (the flip alone is not a trigger — Epaminon never scans labels).
 ```
 { execution_id: string, final_content?: string }   // final_content = the human's edited text, if changed
 ```
-Epaminon routes it: a tweet/email → **Outbound** (send the pre-approved content), a PR →
+Epaminon routes it: a tweet/email → **Callistheness** (send the pre-approved content), a PR →
 the **runner** (merge on green). Then Epaminon reports `apply_execution_event(done, evidence_url)`.
 No LLM.
 
@@ -135,7 +135,7 @@ replies with guidance or a rescope. Epaminon then resumes (→ `running`) or mar
   **`approve_execution`** (receive Archus dispatches) and `execution_status` (human read).
 - Loop: pull from queue under a concurrency limit → launch the runner/Codex → on each edge
   call `apply_execution_event` → outward outcome → `needs-review`; on `approve_execution`,
-  route to **Outbound** (send) or the **runner** (merge) then report `done` → fan-in/integrate
+  route to **Callistheness** (send) or the **runner** (merge) then report `done` → fan-in/integrate
   in order → on a blocker, try context first, then one `chat_with_archus` unblock call.
 - The runner stops scanning/owning the queue; it just runs the ticket Epaminon hands it and
   reports back to Epaminon.
@@ -152,8 +152,8 @@ owned explicitly.
 
 ## Downstream owners this creates
 - **Console builder:** cross-provision the Archus↔Epaminon lane secret at enable time (auth above).
-- **Outbound builder:** accept a **pre-approved send** — in the autonomous path the human's
-  approval came through Archus (`approve_execution`), so Outbound ships the approved content
+- **Callistheness builder:** accept a **pre-approved send** — in the autonomous path the human's
+  approval came through Archus (`approve_execution`), so Callistheness ships the approved content
   **without re-asking**; its interactive confirm-before-send stays for *direct chat* only.
 
 ## Sequence (happy path)
@@ -168,7 +168,7 @@ Epaminon → Archus:     apply_execution_event(E, needs-review, pr_url)    [dete
 Human → Archus:        approves the content
 Archus:                flip exec:approved
 Archus → Epaminon:     approve_execution(E, final_content?)              [deterministic]
-Epaminon:              route → runner merges PR on green (a tweet would go → Outbound)
+Epaminon:              route → runner merges PR on green (a tweet would go → Callistheness)
 Epaminon → Archus:     apply_execution_event(E, done, evidence_url)      [deterministic]
 Archus:                reflects outcome onto work ticket #5
 ```

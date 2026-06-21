@@ -5,6 +5,7 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app.js";
 import { Runtime } from "./runtime.js";
 import { resolveAgent } from "./agent.js";
+import { compileAllToolOutputSchemas } from "./toolOutput.js";
 
 const port = Number(process.env.PORT ?? 8080);
 const dataDir = resolve(process.env.ZENOD_DATA_DIR ?? "./data");
@@ -20,6 +21,7 @@ try {
 
 // One image can run as any agent — pick it from the AGENT env var (default zenod).
 const agent = resolveAgent(process.env.AGENT);
+compileAllToolOutputSchemas();
 const runtime = new Runtime(dataDir, agent);
 const app = createApp(runtime, hasWeb ? { webDist } : {});
 

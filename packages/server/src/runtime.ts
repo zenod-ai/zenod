@@ -43,6 +43,7 @@ import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
 import { TelegramGateway } from "./telegramGateway.js";
+import { evidence, type ToolResponse, toolResponse } from "./toolOutput.js";
 
 export class NotConfiguredError extends Error {
   constructor() {
@@ -53,6 +54,20 @@ export class NotConfiguredError extends Error {
 const CONSOLE_PARENT_CONVERSATION_KEY = "default";
 const MAX_PEER_CONTEXT_MESSAGES = 8;
 const MAX_PEER_CONTEXT_CHARS = 400;
+
+type GitHubIssueRead = {
+  number: number;
+  title: string;
+  html_url: string;
+  labels: Array<{ name: string }>;
+  created_at: string;
+  updated_at: string;
+  state: string;
+  body?: string | null;
+  pull_request?: unknown;
+};
+
+type GitHubCommentRead = { body?: string | null; html_url?: string; created_at?: string };
 
 export function consolePeerConversationKey(parentConversationId: string, peerName: string): string {
   return `${parentConversationId.replace(/[^a-z0-9_-]+/gi, "-")}-${peerName.replace(/[^a-z0-9_-]+/gi, "-")}`;
@@ -180,7 +195,7 @@ export class Runtime {
     // Its execution work flows through the ExecutionQueue + the /api/exec lane, not the
     // engine. So it is NOT githubBacked.
     const githubBacked = backlog;
-    // The Outbound agent is vaultless and owns no repo; it just needs an LLM key.
+    // The Callistheness agent is vaultless and owns no repo; it just needs an LLM key.
     // Its send tools are wired below into the same generic tool slot the mesh uses.
     const outbound = this.agent.outbound === true;
     if (githubBacked) {
@@ -214,7 +229,7 @@ export class Runtime {
     const driveTools = vaultless ? null : buildDriveTools(this.settings, this.ingestQueue);
     // Mesh: peer-agent delegation tools, available to any agent (vault or not).
     const peerTools = this.buildPeerTools();
-    // Outbound's private send tools (post_tweet/post_reddit/send_email) ride the
+    // Callistheness's private send tools (post_tweet/post_reddit/send_email) ride the
     // same generic tool slot — its guardian brain wields them and confirms first.
     if (outbound) Object.assign(peerTools, buildOutboundTools());
     if (this.agent.notifier === true) Object.assign(peerTools, buildNotifierTools());
@@ -233,7 +248,7 @@ export class Runtime {
         : {}),
       ...(driveTools ? { driveTools } : {}),
       // GitHub tasking tools for vault agents and backlog agents (Archus) — NOT the
-      // bare Console, NOT the executor (Epaminon writes no backlog), NOT Outbound.
+      // bare Console, NOT the executor (Epaminon writes no backlog), NOT Callistheness.
       ...(vaultless && !githubBacked ? {} : { taskingTools: this.buildTaskingTools() }),
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
@@ -296,6 +311,223 @@ export class Runtime {
     return this.settings.get("github_token");
   }
 
+  private async githubJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const repoMatch = path.match(/^\/repos\/([^/]+)\/([^/]+)/);
+    const token = await this.githubToken(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined);
+    if (!token) throw new Error("GitHub token or app installation is required");
+    const response = await fetch(`https://api.github.com${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "zenod",
+        Accept: "application/vnd.github+json",
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.headers ?? {}),
+      },
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`GitHub returned ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
+    }
+    return (await response.json()) as T;
+  }
+
+  buildBacklogIssueReader() {
+    const defaultRepo = () => this.settings.get("vault_repo") || this.settings.getRaw("backlog_repo") || "";
+    const repoPath = (repo: string) => encodeURIComponent(repo).replace("%2F", "/");
+    const parseTarget = (target: string): { repo: string; number: number } | null => {
+      const match = target.trim().match(/^([^#\s]+\/[^#\s]+)#(\d+)$/);
+      return match ? { repo: match[1]!, number: Number(match[2]) } : null;
+    };
+    const issueTarget = (repo: string, issue: { number: number }): string => `${repo}#${issue.number}`;
+    const labelsOf = (issue: { labels?: Array<{ name: string }> }): string[] => (issue.labels ?? []).map((label) => label.name);
+    const issueEvidence = (repo: string, issue: GitHubIssueRead, comments: GitHubCommentRead[] = []) =>
+      evidence("issue", {
+        target: issueTarget(repo, issue),
+        title: issue.title,
+        body: issue.body ?? "",
+        state: issue.state,
+        labels: labelsOf(issue),
+        url: issue.html_url,
+        comments: comments
+          .slice(-5)
+          .map((comment) => ({
+            body: comment.body ?? "",
+            url: comment.html_url ?? "",
+            createdAt: comment.created_at ?? "",
+          }))
+          .filter((comment) => comment.body || comment.url || comment.createdAt),
+      });
+    const issueSummary = (repo: string, issue: GitHubIssueRead) => ({
+      target: issueTarget(repo, issue),
+      title: issue.title,
+      state: issue.state,
+      labels: labelsOf(issue),
+      url: issue.html_url,
+      createdAt: issue.created_at,
+      updatedAt: issue.updated_at,
+    });
+    const readIssue = async (repo: string, number: number): Promise<GitHubIssueRead> =>
+      this.githubJson<GitHubIssueRead>(`/repos/${repoPath(repo)}/issues/${number}`);
+    const readComments = async (repo: string, number: number): Promise<GitHubCommentRead[]> =>
+      this.githubJson<GitHubCommentRead[]>(`/repos/${repoPath(repo)}/issues/${number}/comments?per_page=20`).catch(() => []);
+    const listRepoIssues = async (repo: string, state = "open", limit = 20): Promise<GitHubIssueRead[]> =>
+      this.githubJson<GitHubIssueRead[]>(
+        `/repos/${repoPath(repo)}/issues?state=${encodeURIComponent(state)}&per_page=${Math.min(Math.max(limit, 1), 100)}&sort=updated&direction=desc`,
+      );
+    const matchesLabels = (issue: GitHubIssueRead, labels: string[] | undefined): boolean => {
+      if (!labels?.length) return true;
+      const names = new Set(labelsOf(issue));
+      return labels.every((label) => names.has(label));
+    };
+    const matchesSince = (value: string, since?: string): boolean => {
+      if (!since) return true;
+      const parsed = Date.parse(since);
+      return !Number.isFinite(parsed) || Date.parse(value) >= parsed;
+    };
+    const candidateFromIssue = (repo: string, issue: GitHubIssueRead, matchReason: string, confidence: number) => ({
+      target: issueTarget(repo, issue),
+      title: issue.title,
+      url: issue.html_url,
+      matchReason,
+      confidence,
+    });
+
+    return {
+      getIssue: async ({ target }: { target: string }): Promise<ToolResponse> => {
+        const parsed = parseTarget(target);
+        if (!parsed) {
+          return toolResponse({
+            text: `Invalid issue target: ${target}`,
+            errors: [{ code: "invalid_target", message: "target must be an exact owner/repo#123 issue reference" }],
+          });
+        }
+        try {
+          const issue = await readIssue(parsed.repo, parsed.number);
+          const comments = await readComments(parsed.repo, parsed.number);
+          return toolResponse({
+            text: `${issueTarget(parsed.repo, issue)} ${issue.title}: ${issue.html_url}`,
+            evidence: [issueEvidence(parsed.repo, issue, comments)],
+          });
+        } catch (error) {
+          return toolResponse({
+            text: `${target} was not found.`,
+            errors: [{ code: "issue_not_found", message: error instanceof Error ? error.message : String(error) }],
+          });
+        }
+      },
+      listIssues: async ({
+        repo,
+        state = "open",
+        labels,
+        createdSince,
+        updatedSince,
+        limit = 20,
+      }: {
+        repo?: string;
+        state?: "open" | "closed" | "all";
+        labels?: string[];
+        createdSince?: string;
+        updatedSince?: string;
+        limit?: number;
+      }): Promise<ToolResponse> => {
+        const targetRepo = repo || defaultRepo();
+        if (!targetRepo) {
+          return toolResponse({
+            text: "No GitHub repository is configured.",
+            errors: [{ code: "repo_not_configured", message: "No backlog or vault repo is configured." }],
+          });
+        }
+        const issues = (await listRepoIssues(targetRepo, state, limit))
+          .filter((issue) => matchesLabels(issue, labels))
+          .filter((issue) => matchesSince(issue.created_at, createdSince))
+          .filter((issue) => matchesSince(issue.updated_at, updatedSince))
+          .slice(0, limit);
+        const filters = { repo: targetRepo, state, labels: labels ?? [], createdSince: createdSince ?? "", updatedSince: updatedSince ?? "", limit };
+        return toolResponse({
+          text: `Found ${issues.length} issue${issues.length === 1 ? "" : "s"} in ${targetRepo}.`,
+          evidence: [
+            evidence("issue_list", {
+              filters,
+              issues: issues.map((issue) => issueSummary(targetRepo, issue)),
+            }),
+          ],
+        });
+      },
+      findIssue: async ({
+        reference,
+        repos,
+        recentWindow = "all",
+        labels,
+        limit = 10,
+      }: {
+        reference: string;
+        repos?: string[];
+        recentWindow?: string;
+        labels?: string[];
+        limit?: number;
+      }): Promise<ToolResponse> => {
+        const searchedRepos = repos?.length ? repos : [defaultRepo()].filter(Boolean);
+        if (searchedRepos.length === 0) {
+          return toolResponse({
+            text: "No GitHub repository is configured.",
+            evidence: [evidence("issue_not_found", { searchedRepos: [], searchedWindow: recentWindow, candidates: [] })],
+          });
+        }
+
+        const explicit = parseTarget(reference);
+        const bareNumber = reference.trim().match(/^#?(\d+)$/)?.[1];
+        const exactCandidates = [];
+        const numberToRead = explicit?.number ?? (bareNumber ? Number(bareNumber) : null);
+        const exactRepos = explicit ? [explicit.repo] : searchedRepos;
+        if (numberToRead) {
+          for (const repo of exactRepos) {
+            try {
+              const issue = await readIssue(repo, numberToRead);
+              if (matchesLabels(issue, labels)) exactCandidates.push(candidateFromIssue(repo, issue, "number match", explicit ? 1 : 0.9));
+            } catch {
+              // Keep searching every requested repo before returning not-found evidence.
+            }
+          }
+        }
+
+        const normalized = reference.trim().toLowerCase();
+        const fuzzyCandidates = [];
+        if (exactCandidates.length === 0 && normalized) {
+          for (const repo of searchedRepos) {
+            const issues = await listRepoIssues(repo, "all", 100).catch(() => []);
+            for (const issue of issues) {
+              if (!matchesLabels(issue, labels)) continue;
+              const haystack = [issue.title, issue.body ?? "", labelsOf(issue).join(" "), issue.html_url].join(" ").toLowerCase();
+              if (!haystack.includes(normalized)) continue;
+              fuzzyCandidates.push(candidateFromIssue(repo, issue, "title/body/label match", 0.65));
+              if (fuzzyCandidates.length >= limit) break;
+            }
+          }
+        }
+
+        const candidates = [...exactCandidates, ...fuzzyCandidates].slice(0, limit);
+        if (candidates.length === 1) {
+          const only = candidates[0]!;
+          return toolResponse({
+            text: `Resolved ${reference} to ${only.target}: ${only.url}`,
+            evidence: [evidence("issue_resolved", { target: only.target, url: only.url, confidence: only.confidence ?? 0.8 })],
+          });
+        }
+        if (candidates.length > 1) {
+          return toolResponse({
+            text: `Found ${candidates.length} candidate issues for ${reference}; choose one before mutating anything.`,
+            candidates,
+          });
+        }
+        return toolResponse({
+          text: `No issue matched ${reference}.`,
+          evidence: [evidence("issue_not_found", { searchedRepos, searchedWindow: recentWindow, candidates: [] })],
+        });
+      },
+    };
+  }
+
   private buildTaskingTools(): ExternalTaskingTools {
     // Vault agents default to the vault repo; a backlog agent (Archus, no vault)
     // defaults to its central backlog repo.
@@ -321,32 +553,100 @@ export class Runtime {
       return (await response.json()) as T;
     };
 
+    type GitHubIssue = {
+      number: number;
+      title: string;
+      html_url: string;
+      labels: Array<{ name: string }>;
+      updated_at: string;
+      state?: string;
+      body?: string | null;
+      pull_request?: unknown;
+    };
+    type GitHubComment = { body?: string | null; html_url?: string; created_at?: string };
+    const issueLookupRefs = (queryText: string | undefined, fallbackRepo: string): Array<{ repo: string; number: number; kind: "issue" | "pr" }> => {
+      if (!queryText?.trim()) return [];
+      const refs: Array<{ repo: string; number: number; kind: "issue" | "pr" }> = [];
+      const repoContext = queryText.match(/\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\b/)?.[1] ?? fallbackRepo;
+      for (const match of queryText.matchAll(/\b(?:pr|pull request)\s*#(\d+)\b/gi)) {
+        refs.push({ repo: repoContext, number: Number(match[1]), kind: "pr" });
+      }
+      for (const match of queryText.matchAll(/\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#(\d+)\b/g)) {
+        refs.push({ repo: match[1]!, number: Number(match[2]), kind: "issue" });
+      }
+      for (const match of queryText.matchAll(/#(\d+)\b/g)) {
+        const number = Number(match[1]);
+        if (!refs.some((ref) => ref.number === number)) refs.push({ repo: repoContext, number, kind: "issue" });
+      }
+      const bare = queryText.match(/^\s*(\d+)\s*$/)?.[1];
+      if (bare && !refs.some((ref) => ref.number === Number(bare))) refs.push({ repo: fallbackRepo, number: Number(bare), kind: "issue" });
+      return refs.filter(
+        (ref, index, all) =>
+          ref.repo && all.findIndex((other) => other.repo === ref.repo && other.number === ref.number && other.kind === ref.kind) === index,
+      );
+    };
+    const formatIssue = (issue: GitHubIssue, comments: GitHubComment[] = []): string => {
+      const labels = issue.labels.map((label) => label.name).join(", ");
+      const kind = issue.pull_request ? "Pull request" : "Issue";
+      const state = issue.state ? issue.state.toUpperCase() : "UNKNOWN";
+      const commentLines = comments
+        .slice(-3)
+        .map((comment) => comment.body?.replace(/\s+/g, " ").trim())
+        .filter((body): body is string => Boolean(body))
+        .map((body) => `  comment: ${body.slice(0, 300)}${body.length > 300 ? "…" : ""}`);
+      return [
+        `#${issue.number} ${kind}: ${issue.title} [${state}${labels ? `; ${labels}` : ""}] — updated ${issue.updated_at} — ${issue.html_url}`,
+        ...commentLines,
+      ].join("\n");
+    };
     const queryBacklog = async (query?: string): Promise<string> => {
       const repo = defaultRepo();
       if (!repo) return "No GitHub repository is configured.";
-      const issues = await githubJson<
-        Array<{ number: number; title: string; html_url: string; labels: Array<{ name: string }>; updated_at: string }>
-      >(`/repos/${encodeURIComponent(repo).replace("%2F", "/")}/issues?state=open&per_page=100&sort=updated&direction=desc`);
-      // Pull an issue number from an id-style query — bare "95", "#95", or a
-      // qualified "owner/repo#95" — and match it against issue.number, so a
-      // by-number lookup works regardless of the form the caller used.
       const q = query?.trim();
-      const idNum = q?.match(/(?:^|#)(\d+)$/)?.[1];
-      const qNum = idNum ? Number(idNum) : null;
+      const explicitRefs = issueLookupRefs(q, repo);
+      if (explicitRefs.length > 0) {
+        const lines = await Promise.all(
+          explicitRefs.map(async (ref) => {
+            try {
+              if (ref.kind === "pr") {
+                const pullUrl = `https://github.com/${ref.repo}/pull/${ref.number}`;
+                try {
+                  const pull = await githubJson<{ number: number; title: string; html_url: string; state: string; updated_at: string }>(
+                    `/repos/${encodeURIComponent(ref.repo).replace("%2F", "/")}/pulls/${ref.number}`,
+                  );
+                  return `${ref.repo}#${pull.number} Pull request: ${pull.title} [${pull.state.toUpperCase()}] — updated ${pull.updated_at} — ${pull.html_url}`;
+                } catch (error) {
+                  return `${ref.repo}#${ref.number} Pull request: ${pullUrl} (PR metadata unavailable to the current GitHub token: ${
+                    error instanceof Error ? error.message : String(error)
+                  })`;
+                }
+              }
+              const issue = await githubJson<GitHubIssue>(
+                `/repos/${encodeURIComponent(ref.repo).replace("%2F", "/")}/issues/${ref.number}`,
+              );
+              const comments = await githubJson<GitHubComment[]>(
+                `/repos/${encodeURIComponent(ref.repo).replace("%2F", "/")}/issues/${ref.number}/comments?per_page=20`,
+              ).catch(() => []);
+              return `${ref.repo}${formatIssue(issue, comments).replace(/^#/, "#")}`;
+            } catch (error) {
+              return `${ref.repo}#${ref.number}: not found (${error instanceof Error ? error.message : String(error)})`;
+            }
+          }),
+        );
+        return [`Issue lookup${q ? ` matching "${q}"` : ""}: ${lines.length}`, ...lines].join("\n");
+      }
+      const issues = await githubJson<
+        GitHubIssue[]
+      >(`/repos/${encodeURIComponent(repo).replace("%2F", "/")}/issues?state=open&per_page=100&sort=updated&direction=desc`);
       const filtered = q
         ? issues.filter(
-            (issue) =>
-              (qNum !== null && issue.number === qNum) ||
-              `${issue.title} ${issue.labels.map((label) => label.name).join(" ")}`.toLowerCase().includes(q.toLowerCase()),
+            (issue) => `${issue.title} ${issue.labels.map((label) => label.name).join(" ")}`.toLowerCase().includes(q.toLowerCase()),
           )
         : issues;
       if (filtered.length === 0) return query ? `No open issues matched "${query}".` : "No open issues found.";
       return [
         `Open issues${query ? ` matching "${query}"` : ""}: ${filtered.length}`,
-        ...filtered.slice(0, 10).map((issue) => {
-          const labels = issue.labels.map((label) => label.name).join(", ");
-          return `#${issue.number} ${issue.title}${labels ? ` [${labels}]` : ""} — updated ${issue.updated_at} — ${issue.html_url}`;
-        }),
+        ...filtered.slice(0, 10).map((issue) => formatIssue(issue)),
       ].join("\n");
     };
 

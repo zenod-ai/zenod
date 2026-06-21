@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo } from "./fanout-codex.mjs";
 
 test("detectBlocker does NOT block a completed handoff that merely describes status labels", () => {
   // Real regression: a worker whose change SETS status:blocked described it in prose.
@@ -110,4 +110,11 @@ test("executionBlockedRequest builds the Epaminon blocked event payload", () => 
 test("executionBlockedRequest is inert without an execution id or lane secret", () => {
   assert.equal(executionBlockedRequest({ execLaneSecret: "lane-secret" }, "blocked"), null);
   assert.equal(executionBlockedRequest({ executionId: "104" }, "blocked"), null);
+});
+
+test("remoteMatchesRepo accepts common GitHub remote forms and rejects wrong checkouts", () => {
+  assert.equal(remoteMatchesRepo("https://github.com/AlfaBlok/obsidian-brain.git", "AlfaBlok/obsidian-brain"), true);
+  assert.equal(remoteMatchesRepo("git@github.com:AlfaBlok/obsidian-brain.git", "AlfaBlok/obsidian-brain"), true);
+  assert.equal(remoteMatchesRepo("https://github.com/zenod-ai/zenod.git", "AlfaBlok/obsidian-brain"), false);
+  assert.equal(remoteMatchesRepo("", "AlfaBlok/obsidian-brain"), false);
 });

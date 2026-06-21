@@ -2,6 +2,9 @@
 
 Status: target contract for suite-v2 connector access from fan-out workers.
 
+Public suite-agent tool names follow the v4 contract in
+[behavioral-intent-patterns-and-chat-test-strategy-v4.md](./behavioral-intent-patterns-and-chat-test-strategy-v4.md).
+
 ## Problem
 
 The Console already centralizes user authentication and republishes enabled suite-agent tools
@@ -48,7 +51,7 @@ Examples:
 
 - File connector content into memory -> Zenod.
 - Create or modify backlog work -> Archus.
-- Send email/post/publish -> Outbound.
+- Send email/post/publish -> Callistheness.
 - Notify Jordi -> Phylax.
 
 Rules:
@@ -79,11 +82,11 @@ Rules:
 
 When the Console has matching connections and agents enabled, a worker may see:
 
-- Memory: `ask_zenod`, `search_memory`, `get_memory`, `store_memory`
-- Backlog: `ask_archus`, `create_issue`, `edit_issue`, `close_issue`
-- Execution: `execution_status`, `run_ticket`, `report_outcome`
-- Outbound: `ask_outbound`, `post_tweet`, `post_reddit`, `send_email`
-- Notifications: `ask_phylax`, `raise_event`
+- Memory: `zenod.ask_brain`, `zenod.search_memory`, `zenod.get_memory`, `zenod.store_memory`
+- Backlog: `archus.ask_archus`, `archus.get_issue`, `archus.find_issue`, `archus.list_issues`, `archus.request_backlog_action`, `archus.run_issue`
+- Execution: `epaminon.execution_status`
+- Callistheness: `outbound.ask_outbound`, `outbound.post_tweet`, `outbound.post_reddit`, `outbound.send_email`
+- Notifications: `phylax.ask_phylax`, `phylax.raise_notification_event`, `phylax.get_notification_status`, `phylax.list_notifications`
 
 Connector-native read tools should be added only after they are explicitly classified as
 deterministic reads and added to the gateway contract tests.

@@ -78,6 +78,67 @@ describe("runtime tasking tools", () => {
     expect(calls[0]?.init.method).toBe("POST");
   });
 
+  it("queryBacklog resolves explicit mixed issue and PR ids instead of fuzzy-searching only open issues", async () => {
+    runtime.settings.setRaw("backlog_repo", "AlfaBlok/obsidian-brain");
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init: RequestInit = {}) => {
+        calls.push({ url: String(url), init });
+        const path = String(url).replace("https://api.github.com", "");
+        if (path === "/repos/AlfaBlok/obsidian-brain/issues/108") {
+          return new Response(
+            JSON.stringify({
+              number: 108,
+              title: "Produce Backlog System Plan",
+              body: "## Objective\nProduce the plan.",
+              state: "open",
+              html_url: "https://github.com/AlfaBlok/obsidian-brain/issues/108",
+              updated_at: "2026-06-20T14:29:00Z",
+              labels: [{ name: "owner:agent" }, { name: "status:needs-review" }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (path === "/repos/AlfaBlok/obsidian-brain/issues/108/comments?per_page=20") {
+          return new Response(
+            JSON.stringify([{ body: "Recovered draft PR: https://github.com/AlfaBlok/obsidian-brain/pull/110" }]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (path === "/repos/AlfaBlok/obsidian-brain/pulls/110") {
+          return new Response(
+            JSON.stringify({
+              number: 110,
+              title: "Fix #108: Produce Backlog System Plan",
+              state: "open",
+              html_url: "https://github.com/AlfaBlok/obsidian-brain/pull/110",
+              updated_at: "2026-06-20T14:30:00Z",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(`unexpected ${init.method ?? "GET"} ${url}`, { status: 500 });
+      }),
+    );
+
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+    const result = await tools.queryBacklog(
+      "Re-check status of tickets #108 and PR #110 in AlfaBlok/obsidian-brain; provide output links.",
+    );
+
+    expect(result).toContain("Issue lookup matching");
+    expect(result).toContain("AlfaBlok/obsidian-brain#108 Issue: Produce Backlog System Plan");
+    expect(result).toContain("status:needs-review");
+    expect(result).toContain("Recovered draft PR: https://github.com/AlfaBlok/obsidian-brain/pull/110");
+    expect(result).toContain("AlfaBlok/obsidian-brain#110 Pull request: Fix #108: Produce Backlog System Plan");
+    expect(calls.map((call) => call.url).sort()).toEqual([
+      "https://api.github.com/repos/AlfaBlok/obsidian-brain/issues/108",
+      "https://api.github.com/repos/AlfaBlok/obsidian-brain/issues/108/comments?per_page=20",
+      "https://api.github.com/repos/AlfaBlok/obsidian-brain/pulls/110",
+    ].sort());
+  });
+
   it("queueExecution hydrates the target issue before minting and dispatching", async () => {
     runtime.settings.setRaw("backlog_repo", "owner/central");
     runtime.settings.setRaw("exec_lane_secret", "lane-secret");

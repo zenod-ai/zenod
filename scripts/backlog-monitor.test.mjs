@@ -12,12 +12,14 @@ import {
   mergeApprovalForIssue,
   mergeNoteDedupKey,
   normalizeState,
+  notifyConfig,
   pickupNotification,
   recordMergeAttempt,
   reviewHeldByFanInBatch,
   shouldSendMergeNote,
   updateFanInBatches,
   parseTarget,
+  workdirForRepo,
   dispatchedOutcome,
 } from "./backlog-monitor.mjs";
 
@@ -309,4 +311,21 @@ test("normalizeState preserves the dispatched map (survives restart)", () => {
   const s = normalizeState({ dispatched: { "42": { repo: "o/r", issueN: 42, reportedStatus: null } } });
   assert.deepEqual(s.dispatched, { "42": { repo: "o/r", issueN: 42, reportedStatus: null } });
   assert.deepEqual(normalizeState({}).dispatched, {});
+});
+
+test("workdirForRepo keeps default repo stable and isolates cross-repo dispatches", () => {
+  assert.equal(workdirForRepo("zenod-ai/zenod"), "/runner/work/zenod");
+  assert.equal(workdirForRepo("AlfaBlok/obsidian-brain"), "/runner/work/AlfaBlok__obsidian-brain");
+});
+
+test("notifyConfig prefers Console notify route over legacy app URL", () => {
+  assert.deepEqual(
+    notifyConfig({
+      ZENOD_APP_URL: "https://c1.zenod.dev/",
+      ZENOD_API_TOKEN: "legacy",
+      ZENOD_CONSOLE_URL: "http://zenod-console:8080",
+      ZENOD_CONSOLE_TOKEN: "console",
+    }),
+    { url: "http://zenod-console:8080", token: "console" },
+  );
 });

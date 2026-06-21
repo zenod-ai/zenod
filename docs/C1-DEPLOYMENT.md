@@ -7,18 +7,13 @@ checks, channel debugging, and live smoke tests:
 curl -fsS https://c1.zenod.dev/api/health
 ```
 
-`app.zenod.dev` is retired for this stack and must not be used as proof that C1
-or the channels are healthy. A healthy C1 rollout should leave:
+The retired legacy app host must not be used as proof that C1 or the channels
+are healthy. A healthy C1 rollout should leave non-Console responses on any old
+routes.
 
-```sh
-curl -sS -o /dev/null -w "%{http_code}\n" https://app.zenod.dev/api/health
-```
-
-returning a non-Console response such as `404`.
-
-The Dokploy C1 compose domain list must not include `app.zenod.dev`. If it is
-present there, a future deploy can regenerate the old route even when the live
-Traefik labels currently return 404.
+The Dokploy C1 compose domain list must not include the retired legacy app host.
+If it is present there, a future deploy can regenerate the old route even when
+the live Traefik labels currently return 404.
 
 ## Deploy Rule
 
