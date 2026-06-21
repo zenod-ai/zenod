@@ -321,8 +321,14 @@ describe("Archus MCP v4 issue reads", () => {
           headers: { "Content-Type": "application/json" },
         });
       }
+      if (url.includes("/repos/AlfaBlok/obsidian-brain/issues/108/comments")) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.includes("/repos/AlfaBlok/obsidian-brain/issues/103")) {
         return new Response(JSON.stringify(issue103), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/repos/AlfaBlok/obsidian-brain/issues/108")) {
+        return new Response(JSON.stringify(issue108), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (url.includes("/repos/AlfaBlok/obsidian-brain/issues/999")) {
         return new Response(JSON.stringify({ message: "Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
@@ -368,6 +374,8 @@ describe("Archus MCP v4 issue reads", () => {
     );
 
     const got = await client.callTool({ name: "archus.get_issue", arguments: { target: "AlfaBlok/obsidian-brain#103" } });
+    expect(JSON.stringify(got.content)).toContain("state: open");
+    expect(JSON.stringify(got.content)).toContain(issue103.html_url);
     expect(got.structuredContent).toEqual(
       expect.objectContaining({
         evidence: [
@@ -382,6 +390,9 @@ describe("Archus MCP v4 issue reads", () => {
     );
 
     const listed = await client.callTool({ name: "archus.list_issues", arguments: { state: "open", labels: ["bug"] } });
+    expect(JSON.stringify(listed.content)).toContain("AlfaBlok/obsidian-brain#108");
+    expect(JSON.stringify(listed.content)).toContain("Runner notification bug");
+    expect(JSON.stringify(listed.content)).toContain(issue108.html_url);
     expect(listed.structuredContent).toEqual(
       expect.objectContaining({
         evidence: [
@@ -401,6 +412,19 @@ describe("Archus MCP v4 issue reads", () => {
             kind: "issue_resolved",
             target: "AlfaBlok/obsidian-brain#103",
             url: issue103.html_url,
+          }),
+        ],
+      }),
+    );
+
+    const phrasedNumber = await client.callTool({ name: "archus.find_issue", arguments: { reference: "issue 108" } });
+    expect(phrasedNumber.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [
+          expect.objectContaining({
+            kind: "issue_resolved",
+            target: "AlfaBlok/obsidian-brain#108",
+            url: issue108.html_url,
           }),
         ],
       }),
