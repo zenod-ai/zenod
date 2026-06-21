@@ -76,6 +76,22 @@ export const V4_LIST_ISSUES_SHAPE = {
   limit: z.number().int().positive().max(100).optional().describe("Maximum issues to return. Defaults to 20."),
 };
 
+export const REQUEST_BACKLOG_ACTION_SHAPE = {
+  message: z
+    .string()
+    .min(1)
+    .describe("Natural-language backlog action request. Archus decides create/update/comment/close, repo placement, labels, and structure."),
+};
+
+export const RUN_ISSUE_SHAPE = {
+  target: z
+    .string()
+    .regex(/^[^#\s]+\/[^#\s]+#\d+$/)
+    .describe("Exact work issue to run, as owner/repo#123. Do not pass a fuzzy reference."),
+  instructions: z.string().min(1).optional().describe("Optional user instructions to include in Archus's execution request."),
+  repo: z.string().min(1).optional().describe("Optional central backlog repo where Archus should mint the execution ticket, as owner/repo."),
+};
+
 export const CREATE_ISSUE_SHAPE = {
   repo: z.string().min(1).optional().describe("owner/repo. Defaults to the agent's configured backlog/vault repo."),
   title: z.string().min(1).describe("Issue title."),

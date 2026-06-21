@@ -32,6 +32,14 @@ describe("reconcileTaskingReply", () => {
     expect(out).toContain("The create step failed: GitHub returned 403: forbidden");
   });
 
+  it("surfaces the real error when canonical Archus backlog action failed", () => {
+    const actions: RecordedAction[] = [{ tool: "archus_request_backlog_action", result: "ERROR: GitHub returned 403: forbidden" }];
+    const out = reconcileTaskingReply("Created issue #58: https://github.com/AlfaBlok/obsidian-brain/issues/58", actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("no GitHub issue was created");
+    expect(out).toContain("The create step failed: GitHub returned 403: forbidden");
+  });
+
   it("corrects a fabricated multi-issue success after the create 404'd on a phantom repo (the zenod/zenod #1..#5 bug)", () => {
     // create_issue targeted a non-existent repo (zenod/zenod). GitHub 404'd, so the
     // tool recorded an ERROR — but the model still narrated success with invented
@@ -89,6 +97,19 @@ describe("reconcileTaskingReply", () => {
     const actions: RecordedAction[] = [
       {
         tool: "open_issue",
+        result:
+          "Created [#120](https://github.com/AlfaBlok/obsidian-brain/issues/120) (labels: status:proposed, type:bug). Not queued/executed.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toBe(`Created issue [#120](https://github.com/AlfaBlok/obsidian-brain/issues/120)\n\n${reply}`);
+  });
+
+  it("adds the direct issue URL from a canonical Archus backlog-action receipt when Console prose omits it", () => {
+    const reply = "Issue created: AlfaBlok/obsidian-brain#120 (status:proposed, type:bug). Not queued/executed.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "archus_request_backlog_action",
         result:
           "Created [#120](https://github.com/AlfaBlok/obsidian-brain/issues/120) (labels: status:proposed, type:bug). Not queued/executed.",
       },
