@@ -10,6 +10,7 @@ import {
   CREATE_ISSUE_SHAPE,
   EDIT_GITHUB_ISSUE_SHAPE,
   EXECUTION_STATUS_SHAPE,
+  GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
   GET_MEMORY_SHAPE,
   SEARCH_MEMORY_SHAPE,
   V4_FIND_ISSUE_SHAPE,
@@ -45,6 +46,23 @@ export interface BacklogIssueReader {
     limit?: number;
   }): Promise<ToolResponse>;
 }
+export interface ConversationTranscriptEntry {
+  direction: "inbound" | "outbound";
+  at: number;
+  messageId: string | null;
+  chatId: string;
+  contactId: string | null;
+  bodyText: string;
+  status: string;
+  mediaType: string | null;
+  sentMessageId?: string | null;
+}
+export type ConversationTranscriptReader = (input: {
+  sinceMs?: number;
+  contactId?: string;
+  chatId?: string;
+  limit?: number;
+}) => ConversationTranscriptEntry[];
 
 /** Human-facing text for a finished task_brain job — mirrors the old reply. */
 function formatTaskingReply(result: TaskingReply): string {
@@ -85,6 +103,23 @@ function formatExecutionStatus(tickets: ExecutionTicket[]): string {
       return parts.join(" — ");
     })
     .join("\n");
+}
+
+function formatConversationTranscript(entries: ConversationTranscriptEntry[]): string {
+  if (entries.length === 0) {
+    return "No WhatsApp transcript entries matched the requested window/scope.";
+  }
+  return entries
+    .map((entry) => {
+      const at = new Date(entry.at).toISOString();
+      const who = entry.direction === "inbound" ? entry.contactId ?? "inbound" : "Zenod";
+      const media = entry.mediaType ? `; media=${entry.mediaType}` : "";
+      const status = entry.status ? `; status=${entry.status}` : "";
+      const id = entry.messageId ? `; message=${entry.messageId}` : "";
+      const body = entry.bodyText.trim() || "(empty body/transcript not available)";
+      return `[${at}] ${entry.direction} ${who}${id}${media}${status}\n${body}`;
+    })
+    .join("\n\n");
 }
 
 function filterExecutionTickets(tickets: ExecutionTicket[], message?: string): ExecutionTicket[] {
@@ -230,6 +265,7 @@ export function buildMcpServer(
   agentName: string = "zenod",
   readExecutionStatus?: ExecutionStatusReader,
   readBacklogIssues?: BacklogIssueReader,
+  readConversationTranscript?: ConversationTranscriptReader,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -272,6 +308,27 @@ export function buildMcpServer(
       };
     },
   );
+
+  if (readConversationTranscript) {
+    server.registerTool(
+      "get_recent_conversation_transcript",
+      {
+        title: "Get recent conversation transcript",
+        description:
+          "Deterministically read recent WhatsApp/phone conversation transcript from Zenod's channel audit store. Includes inbound/outbound lines, timestamps, message ids, status, media type, and transcribed voice-note text when available. Use for requests like 'last two hours phone transcript' or 'what did I send by WhatsApp recently'. Empty transcript bodies are explicit gaps.",
+        inputSchema: GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ windowMinutes, contactId, chatId, limit }) => {
+        const sinceMs = Date.now() - (windowMinutes ?? 120) * 60 * 1000;
+        const entries = readConversationTranscript({ sinceMs, contactId, chatId, limit });
+        return {
+          content: [{ type: "text", text: formatConversationTranscript(entries) }],
+          structuredContent: { entries, count: entries.length, sinceMs, windowMinutes: windowMinutes ?? 120 },
+        };
+      },
+    );
+  }
 
   if (readExecutionStatus) {
     server.registerTool(

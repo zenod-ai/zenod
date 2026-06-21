@@ -18,8 +18,8 @@ import type {
   StoreResult,
   Surface,
   TaskingAction,
+  TaskingInput,
   TaskingReply,
-  TaskingSurface,
   TokenCostMeasurement,
   TokenCostOperation,
   WorkInput,
@@ -545,7 +545,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return `${name} is not configured for this engine instance.`;
   }
 
-  function buildTaskTools(surface: Surface, record?: (action: TaskingAction) => void): VaultTaskTools {
+  function buildTaskTools(surface: Surface, record?: (action: TaskingAction) => void, rawEvidence?: TaskingInput["rawEvidence"]): VaultTaskTools {
     const sameTurnMutations = new Map<string, Promise<string>>();
     const recordAction = (tool: string, input: Record<string, unknown>, result: string) => {
       record?.({ tool, input, result });
@@ -577,6 +577,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (!repo) {
           return { evidenceRef: "(no vault)", pagesTouched: [], commitSha: "(no vault)", githubUrls: [], queued: false };
         }
+        const storeContent = rawEvidence?.content ?? content;
+        const storeHints = [...(hints ?? []), ...(rawEvidence?.hints ?? [])];
+        const storeVerbatim = rawEvidence ? true : undefined;
         // The librarian pipeline (classify → compose → digest → commit) must
         // never sit on the hot reply line: on a slow model it adds minutes
         // (a real WhatsApp turn took ~4 min, ~2:20 of it filing — see
@@ -584,7 +587,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
         // the same write queue (so writes still serialize) and return at once;
         // the reply confirms the note is *queued*, not committed. The filing
         // self-reports to the logs when it lands.
-        void store({ content, source: surface, ...(hints?.length ? { hints } : {}) }, "background")
+        void store(
+          {
+            content: storeContent,
+            source: surface,
+            ...(storeHints.length ? { hints: storeHints } : {}),
+            ...(storeVerbatim !== undefined ? { verbatim: storeVerbatim } : {}),
+          },
+          "background",
+        )
           .then((result) =>
             console.info(
               `[librarian] background filing complete: ${result.evidenceRef}` +
@@ -595,7 +606,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
           .catch((err) => console.error(`[librarian] background filing failed: ${(err as Error).message}`));
         recordAction(
           "capture",
-          { content, ...(hints?.length ? { hints } : {}) },
+          {
+            content: storeContent,
+            ...(storeHints.length ? { hints: storeHints } : {}),
+            ...(storeVerbatim !== undefined ? { verbatim: storeVerbatim } : {}),
+          },
           "Queued: filing this note to the vault in the background (not yet committed).",
         );
         return { evidenceRef: "(queued)", pagesTouched: [], commitSha: "(queued)", githubUrls: [], queued: true };
@@ -1162,7 +1177,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
-  async function handleTasking(input: { text: string; surface: TaskingSurface; conversationKey: string }): Promise<TaskingReply> {
+  async function handleTasking(input: TaskingInput): Promise<TaskingReply> {
     await syncForRead();
     const cid = conversationId(input.surface, input.conversationKey);
     const window = await state.recentWindow(cid);
@@ -1179,7 +1194,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         onPeerAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
       },
       readTools(),
-      repo || options.taskingTools ? buildTaskTools(input.surface, (action) => actions.push(action)) : undefined,
+      repo || options.taskingTools ? buildTaskTools(input.surface, (action) => actions.push(action), input.rawEvidence) : undefined,
       options.driveTools,
       options.peerTools,
     );

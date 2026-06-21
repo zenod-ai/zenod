@@ -59,6 +59,25 @@ export interface WhatsAppDigestStatus {
   } | null;
 }
 
+export interface WhatsAppTranscriptEntry {
+  direction: "inbound" | "outbound";
+  at: number;
+  messageId: string | null;
+  chatId: string;
+  contactId: string | null;
+  bodyText: string;
+  status: string;
+  mediaType: string | null;
+  sentMessageId?: string | null;
+}
+
+export interface WhatsAppTranscriptQuery {
+  sinceMs?: number;
+  contactId?: string;
+  chatId?: string;
+  limit?: number;
+}
+
 function safeJson(value: unknown): string {
   return JSON.stringify(value ?? {}, (_key, item: unknown) => {
     if (typeof item === "bigint") return item.toString();
@@ -250,6 +269,17 @@ export class WhatsAppStore {
     this.db.prepare("UPDATE whatsapp_messages SET processing_status = ? WHERE message_id = ?").run(status, messageId);
   }
 
+  recordInboundTranscript(messageId: string, transcript: string): void {
+    this.db
+      .prepare(
+        `UPDATE whatsapp_messages
+         SET body_text = ?
+         WHERE message_id = ?
+           AND direction = 'inbound'`,
+      )
+      .run(transcript, messageId);
+  }
+
   recordOutboundAudit(input: {
     messageId?: string | null;
     chatId: string;
@@ -394,6 +424,69 @@ export class WhatsAppStore {
           }
         : null,
     };
+  }
+
+  recentTranscript(input: WhatsAppTranscriptQuery = {}): WhatsAppTranscriptEntry[] {
+    const sinceMs = input.sinceMs ?? Date.now() - 2 * 60 * 60 * 1000;
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
+    const contact = input.contactId ? normalizeWhatsAppIdentifier(input.contactId) : "";
+    const chat = input.chatId ?? "";
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM (
+           SELECT
+             direction,
+             COALESCE(message_timestamp, received_at) AS at,
+             message_id AS messageId,
+             chat_id AS chatId,
+             contact_id AS contactId,
+             body_text AS bodyText,
+             processing_status AS status,
+             media_type AS mediaType,
+             NULL AS sentMessageId
+           FROM whatsapp_messages
+           WHERE received_at >= ?
+           UNION ALL
+           SELECT
+             'outbound' AS direction,
+             created_at AS at,
+             message_id AS messageId,
+             chat_id AS chatId,
+             contact_id AS contactId,
+             body_text AS bodyText,
+             status AS status,
+             NULL AS mediaType,
+             sent_message_id AS sentMessageId
+           FROM whatsapp_outbound_audit
+           WHERE created_at >= ?
+         )
+         WHERE (? = '' OR REPLACE(REPLACE(REPLACE(COALESCE(contactId, ''), '@s.whatsapp.net', ''), '@lid', ''), '+', '') LIKE '%' || ? || '%')
+           AND (? = '' OR chatId = ?)
+         ORDER BY at ASC
+         LIMIT ?`,
+      )
+      .all(sinceMs, sinceMs, contact, contact, chat, chat, limit) as unknown as Array<{
+      direction: "inbound" | "outbound";
+      at: number;
+      messageId: string | null;
+      chatId: string;
+      contactId: string | null;
+      bodyText: string;
+      status: string;
+      mediaType: string | null;
+      sentMessageId: string | null;
+    }>;
+    return rows.map((row) => ({
+      direction: row.direction,
+      at: row.at,
+      messageId: row.messageId,
+      chatId: row.chatId,
+      contactId: row.contactId,
+      bodyText: row.bodyText,
+      status: row.status,
+      mediaType: row.mediaType,
+      ...(row.sentMessageId ? { sentMessageId: row.sentMessageId } : {}),
+    }));
   }
 
   countMessages(): number {

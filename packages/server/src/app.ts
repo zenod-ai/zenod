@@ -412,6 +412,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       description:
         "File a new memory into the user's vault through Zenod's librarian (records evidence + files the meaning with citations). Use when the user wants something remembered. ASYNC — returns 'queued'; the filing finishes in the background. Only say it's stored once that's confirmed.",
     },
+    {
+      as: "get_recent_conversation_transcript",
+      mcp: "get_recent_conversation_transcript",
+      arg: "contactId",
+      inputSchema: "zenod.get_recent_conversation_transcript",
+      description:
+        "Owner: Zenod. Deterministically read recent WhatsApp/phone conversation transcript from the channel audit store. Use for 'last two hours phone transcript' or recent voice-note review; returns timestamps, inbound/outbound text, message ids, status, and voice-note transcript text when available.",
+    },
   ];
   // Archus's "top tools": named delegation handles that ALL route to Archus's chat
   // (chat_with_archus runs engine.chat synchronously and, for a backlog agent, has the
@@ -1461,6 +1469,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           agent.name,
           runtime.executionQueue ? () => runtime.executionStore.recent() : undefined,
           agent.backlog ? runtime.buildBacklogIssueReader() : undefined,
+          (input) => runtime.whatsappStore.recentTranscript(input),
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

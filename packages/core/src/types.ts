@@ -106,6 +106,16 @@ export interface TaskingInput {
   text: string;
   surface: TaskingSurface;
   conversationKey: string;
+  /**
+   * Raw source evidence for this turn, when the transport had to normalize the
+   * user's input before tasking. Example: a WhatsApp voice note is transcribed
+   * into `text` for the agent to act on, but any capture/store tool call must
+   * file the exact transcript as verbatim evidence, not a model-written digest.
+   */
+  rawEvidence?: {
+    content: string;
+    hints?: string[];
+  };
 }
 
 export interface TaskingAction {
