@@ -1,8 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AddressInfo } from "node:net";
+import { serve, type ServerType } from "@hono/node-server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ExternalTaskingTools } from "zenod";
+import type { ExternalTaskingTools, PeerTools } from "zenod";
+import { ARCHUS_AGENT, CONSOLE_AGENT } from "../src/agent.js";
+import { createApp } from "../src/app.js";
 import { consolePeerConversationKey, formatConsolePeerDelegation, Runtime } from "../src/runtime.js";
 
 describe("runtime tasking tools", () => {
@@ -137,6 +141,81 @@ describe("runtime tasking tools", () => {
       "https://api.github.com/repos/AlfaBlok/obsidian-brain/issues/108/comments?per_page=20",
       "https://api.github.com/repos/AlfaBlok/obsidian-brain/pulls/110",
     ].sort());
+  });
+
+  it("exposes typed Archus issue reads to Console peer tools", async () => {
+    const calls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (!String(url).startsWith("https://api.github.com/")) return originalFetch(url, init);
+        calls.push(String(url));
+        const path = String(url).replace("https://api.github.com", "");
+        if (path === "/repos/AlfaBlok/obsidian-brain/issues/108") {
+          return new Response(
+            JSON.stringify({
+              number: 108,
+              title: "Produce Backlog System Plan",
+              body: "## Objective\nProduce the plan.",
+              state: "open",
+              html_url: "https://github.com/AlfaBlok/obsidian-brain/issues/108",
+              created_at: "2026-06-19T11:00:00Z",
+              updated_at: "2026-06-20T14:29:00Z",
+              labels: [{ name: "owner:agent" }, { name: "status:needs-review" }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (path === "/repos/AlfaBlok/obsidian-brain/issues/108/comments?per_page=20") {
+          return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(`unexpected ${url}`, { status: 500 });
+      }),
+    );
+
+    const archusDir = await mkdtemp(join(tmpdir(), "zenod-runtime-archus-"));
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-runtime-console-"));
+    let archusServer: ServerType | undefined;
+    const archusRuntime = new Runtime(archusDir, ARCHUS_AGENT);
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    try {
+      archusRuntime.settings.setRaw("backlog_repo", "AlfaBlok/obsidian-brain");
+      archusRuntime.settings.setRaw("github_token", "ghp_test");
+      const archusApp = createApp(archusRuntime);
+      archusServer = serve({ fetch: archusApp.fetch, port: 0 });
+      const archusPort = (archusServer.address() as AddressInfo).port;
+      consoleRuntime.settings.setPeers([
+        {
+          name: "archus",
+          url: `http://127.0.0.1:${archusPort}/mcp`,
+          token: archusRuntime.settings.apiToken(),
+          tools: [
+            {
+              as: "archus_get_issue",
+              mcp: "archus.get_issue",
+              arg: "target",
+              inputSchema: "archus.get_issue",
+              description: "Owner: Archus. Deterministically read one exact GitHub issue.",
+            },
+          ],
+        },
+      ]);
+
+      const tools = (consoleRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+      expect(tools.archus_get_issue.inputSchema).toBeDefined();
+      const result = await tools.archus_get_issue.run({ target: "AlfaBlok/obsidian-brain#108" });
+
+      expect(result).toContain("AlfaBlok/obsidian-brain#108 Produce Backlog System Plan");
+      expect(result).toContain("https://github.com/AlfaBlok/obsidian-brain/issues/108");
+      expect(calls).toContain("https://api.github.com/repos/AlfaBlok/obsidian-brain/issues/108");
+    } finally {
+      archusServer?.close();
+      archusRuntime.close();
+      consoleRuntime.close();
+      await rm(archusDir, { recursive: true, force: true });
+      await rm(consoleDir, { recursive: true, force: true });
+    }
   });
 
   it("queueExecution hydrates the target issue before minting and dispatching", async () => {

@@ -22,9 +22,11 @@ import {
   type ExternalTaskingTools,
   type LintReport,
   type LlmUsageReport,
+  type PeerTools,
   type TokenCostMeasurement,
 } from "zenod";
 import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue, setExecutionState } from "zenod";
+import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { ExecutionQueue } from "./executionQueue.js";
 import { buildExecutionQueue } from "./executionLane.js";
@@ -38,7 +40,8 @@ import { TaskJobStore } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
 import { ExecutionStore } from "./executionStore.js";
 import { OAuthStore } from "./oauthStore.js";
-import { callPeer } from "./peerClient.js";
+import { callPeer, callPeerWithArgs } from "./peerClient.js";
+import { V4_FIND_ISSUE_SHAPE, V4_GET_ISSUE_SHAPE, V4_LIST_ISSUES_SHAPE } from "./mcpToolSchemas.js";
 import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
@@ -54,6 +57,19 @@ export class NotConfiguredError extends Error {
 const CONSOLE_PARENT_CONVERSATION_KEY = "default";
 const MAX_PEER_CONTEXT_MESSAGES = 8;
 const MAX_PEER_CONTEXT_CHARS = 400;
+
+function peerToolInputSchema(schemaKey?: string): ZodTypeAny | undefined {
+  switch (schemaKey) {
+    case "archus.get_issue":
+      return z.object(V4_GET_ISSUE_SHAPE);
+    case "archus.find_issue":
+      return z.object(V4_FIND_ISSUE_SHAPE);
+    case "archus.list_issues":
+      return z.object(V4_LIST_ISSUES_SHAPE);
+    default:
+      return undefined;
+  }
+}
 
 type GitHubIssueRead = {
   number: number;
@@ -261,8 +277,8 @@ export class Runtime {
    * call (`ask_<name>`), forwarding over MCP via callPeer. Available to any agent;
    * it's how the vaultless Console answers memory questions by asking Zenod.
    */
-  private buildPeerTools(): Record<string, { description: string; run: (input: string) => Promise<string> }> {
-    const tools: Record<string, { description: string; run: (input: string) => Promise<string> }> = {};
+  private buildPeerTools(): PeerTools {
+    const tools: PeerTools = {};
     const parentConversationId = conversationId("web", CONSOLE_PARENT_CONVERSATION_KEY);
     const shouldForwardConsoleContext = this.agent.name === "console";
     for (const peer of this.settings.peers()) {
@@ -281,14 +297,21 @@ export class Runtime {
               },
             ];
       for (const spec of specs) {
+        const inputSchema = peerToolInputSchema(spec.inputSchema);
         tools[spec.as] = {
           description: spec.description,
-          run: async (input: string) => {
+          ...(inputSchema ? { inputSchema } : {}),
+          run: async (input: string | Record<string, unknown>) => {
+            if (inputSchema) {
+              const args = typeof input === "object" && input !== null ? input : { [spec.arg]: String(input ?? "") };
+              return callPeerWithArgs(peer, spec.mcp, args);
+            }
+            const textInput = typeof input === "string" ? input : String(input.input ?? "");
             if (!shouldForwardConsoleContext || !spec.mcp.startsWith("chat_with_")) {
-              return callPeer(peer, spec.mcp, spec.arg, input);
+              return callPeer(peer, spec.mcp, spec.arg, textInput);
             }
             const window = await this.state.recentWindow(parentConversationId);
-            const message = formatConsolePeerDelegation(input, {
+            const message = formatConsolePeerDelegation(textInput, {
               parentConversationId,
               peerName: peer.name,
               messages: window,

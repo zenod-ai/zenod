@@ -419,6 +419,30 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // issue"); Archus's own LLM still does the real work. Pick the one that matches intent.
   const ARCHUS_BACKLOG_TOOLS = [
     {
+      as: "archus_get_issue",
+      mcp: "archus.get_issue",
+      arg: "target",
+      inputSchema: "archus.get_issue",
+      description:
+        "Owner: Archus. Deterministically read one exact GitHub issue by target owner/repo#N. Use this first for 'does this issue exist?', 'what does issue X say?', or any exact issue URL/number with repo. This is the authority for GitHub issue existence/details.",
+    },
+    {
+      as: "archus_find_issue",
+      mcp: "archus.find_issue",
+      arg: "reference",
+      inputSchema: "archus.find_issue",
+      description:
+        "Owner: Archus. Resolve a fuzzy issue reference such as '#108', 'issue 108', 'that ticket', or title text. Returns a unique issue, candidates, or not-found evidence with searched scope. Use before claiming an unqualified issue does or does not exist.",
+    },
+    {
+      as: "archus_list_issues",
+      mcp: "archus.list_issues",
+      arg: "repo",
+      inputSchema: "archus.list_issues",
+      description:
+        "Owner: Archus. List GitHub issues using explicit filters such as repo, state, labels, and date windows. Use for backlog inventory questions, not execution runner status.",
+    },
+    {
       as: "ask_archus",
       mcp: "chat_with_archus",
       arg: "message",
@@ -522,7 +546,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     needsRepo: boolean;
     repoSetting?: "vault_repo" | "backlog_repo";
     repoLabel?: string;
-    peerTools: { as: string; mcp: string; arg: string; description: string }[];
+    peerTools: { as: string; mcp: string; arg: string; inputSchema?: string; description: string }[];
   }
   const SUITE_AGENTS: SuiteAgentSpec[] = [
     {
