@@ -199,6 +199,9 @@ describe("GitHub App flow", () => {
           { status: 200 },
         );
       }
+      if (path === "/repos/zenod-ai/fixture/issues/52/comments?per_page=100" && !init?.method) {
+        return new Response(JSON.stringify([{ body: "Older comment." }]), { status: 200 });
+      }
       if (path === "/repos/zenod-ai/fixture/issues/52/comments" && init?.method === "POST") {
         return new Response(JSON.stringify({ html_url: "https://github.com/zenod-ai/fixture/issues/52#comment" }), { status: 201 });
       }
@@ -242,6 +245,40 @@ describe("GitHub App flow", () => {
     expect(JSON.parse(String(addLabels[1]!.body))).toEqual({ labels: ["owner:agent"] });
     const setStatus = fetchMock.mock.calls.filter((call) => String(call[0]).endsWith("/issues/52/labels") && call[1]?.method === "PUT").at(-1)!;
     expect(JSON.parse(String(setStatus[1]!.body))).toEqual({ labels: ["owner:agent", "status:blocked"] });
+  });
+
+  it("does not post an exact duplicate issue comment", async () => {
+    const settings = runtime.settings;
+    settings.set("vault_repo", "zenod-ai/fixture");
+    settings.set("github_token", "ghp_test");
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const path = String(url).replace("https://api.github.com", "");
+      if (path === "/repos/zenod-ai/fixture/issues/52" && !init?.method) {
+        return new Response(
+          JSON.stringify({
+            html_url: "https://github.com/zenod-ai/fixture/issues/52",
+            labels: [{ name: "status:proposed" }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/52/comments?per_page=100" && !init?.method) {
+        return new Response(JSON.stringify([{ body: "Already posted." }]), { status: 200 });
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/52/comments" && init?.method === "POST") {
+        return new Response("duplicate post should not happen", { status: 500 });
+      }
+      return new Response(`unexpected ${init?.method ?? "GET"} ${path}`, { status: 500 });
+    });
+
+    const result = await editGithubIssue(settings, {
+      issueNumber: 52,
+      comment: "Already posted.",
+    });
+
+    expect(result.operations).toEqual(["comment already present"]);
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).endsWith("/issues/52/comments") && call[1]?.method === "POST")).toBe(false);
   });
 
   it("requires explicit queue approval before setting status:queued", async () => {
