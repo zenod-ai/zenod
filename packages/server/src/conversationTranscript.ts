@@ -36,12 +36,13 @@ export function transcriptQueryFromToolArgs(args: ConversationTranscriptToolArgs
 } {
   const parsedWindow = typeof args.windowMinutes === "number" && Number.isFinite(args.windowMinutes) ? args.windowMinutes : 120;
   const parsedLimit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : undefined;
+  const parsedMessageId = typeof args.messageId === "string" && args.messageId ? args.messageId : undefined;
   return {
-    sinceMs: Date.now() - parsedWindow * 60 * 1000,
+    sinceMs: parsedMessageId ? 0 : Date.now() - parsedWindow * 60 * 1000,
     windowMinutes: parsedWindow,
     ...(typeof args.contactId === "string" && args.contactId ? { contactId: args.contactId } : {}),
     ...(typeof args.chatId === "string" && args.chatId ? { chatId: args.chatId } : {}),
-    ...(typeof args.messageId === "string" && args.messageId ? { messageId: args.messageId } : {}),
+    ...(parsedMessageId ? { messageId: parsedMessageId } : {}),
     ...(parsedLimit ? { limit: parsedLimit } : {}),
   };
 }
