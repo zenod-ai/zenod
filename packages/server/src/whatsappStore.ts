@@ -462,7 +462,7 @@ export class WhatsAppStore {
          )
          WHERE (? = '' OR REPLACE(REPLACE(REPLACE(COALESCE(contactId, ''), '@s.whatsapp.net', ''), '@lid', ''), '+', '') LIKE '%' || ? || '%')
            AND (? = '' OR chatId = ?)
-         ORDER BY at ASC
+         ORDER BY at DESC
          LIMIT ?`,
       )
       .all(sinceMs, sinceMs, contact, contact, chat, chat, limit) as unknown as Array<{
@@ -476,7 +476,7 @@ export class WhatsAppStore {
       mediaType: string | null;
       sentMessageId: string | null;
     }>;
-    return rows.map((row) => ({
+    return rows.reverse().map((row) => ({
       direction: row.direction,
       at: row.at,
       messageId: row.messageId,
