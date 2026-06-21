@@ -234,6 +234,10 @@ export interface EditGithubIssueResult {
   labels?: string[];
 }
 
+interface GithubCommentResponse {
+  body?: string | null;
+}
+
 interface GithubIssueResponse {
   html_url: string;
   labels: Array<{ name: string } | string>;
@@ -401,11 +405,16 @@ export async function editGithubIssue(settings: ConnectionSettings, input: EditG
   }
 
   if (input.comment) {
-    await githubRequest(settings, `${issuePath}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ body: input.comment }),
-    });
-    operations.push("posted comment");
+    const comments = await githubRequest<GithubCommentResponse[]>(settings, `${issuePath}/comments?per_page=100`);
+    if (comments.some((comment) => comment.body === input.comment)) {
+      operations.push("comment already present");
+    } else {
+      await githubRequest(settings, `${issuePath}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: input.comment }),
+      });
+      operations.push("posted comment");
+    }
   }
 
   return {
