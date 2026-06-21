@@ -375,6 +375,8 @@ describe("Archus MCP v4 issue reads", () => {
 
     const got = await client.callTool({ name: "archus.get_issue", arguments: { target: "AlfaBlok/obsidian-brain#103" } });
     expect(JSON.stringify(got.content)).toContain("state: open");
+    expect(JSON.stringify(got.content)).toContain("Acceptance criteria: explain the Fusion spike.");
+    expect(JSON.stringify(got.content)).toContain("runner launched");
     expect(JSON.stringify(got.content)).toContain(issue103.html_url);
     expect(got.structuredContent).toEqual(
       expect.objectContaining({
