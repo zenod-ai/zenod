@@ -552,6 +552,14 @@ describe("Epaminon MCP execution status", () => {
         "AlfaBlok/obsidian-brain#108",
       ]);
 
+      const executionIssue = await client.callTool({ name: "execution_status", arguments: { message: "AlfaBlok/obsidian-brain#109" } });
+      expect(
+        (executionIssue.structuredContent as { tickets: Array<{ executionId: string; target: string }> }).tickets.map((ticket) => ({
+          executionId: ticket.executionId,
+          target: ticket.target,
+        })),
+      ).toEqual([{ executionId: "109", target: "AlfaBlok/obsidian-brain#108" }]);
+
       const broad = await client.callTool({ name: "execution_status", arguments: { message: "Show the current recent execution backlog." } });
       expect((broad.structuredContent as { tickets: Array<unknown>; filtered: number }).filtered).toBe(3);
     } finally {
@@ -575,6 +583,23 @@ describe("Epaminon MCP execution status", () => {
             kind: "execution_status",
             executionId: "104",
             workIssue: "AlfaBlok/obsidian-brain#103",
+            state: "running",
+          }),
+        ],
+      }),
+    );
+
+    const byExecutionIssue = await client.callTool({
+      name: "epaminon.execution_status",
+      arguments: { executionIssue: "AlfaBlok/obsidian-brain#109" },
+    });
+    expect(byExecutionIssue.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [
+          expect.objectContaining({
+            kind: "execution_status",
+            executionId: "109",
+            workIssue: "AlfaBlok/obsidian-brain#108",
             state: "running",
           }),
         ],
