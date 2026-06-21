@@ -158,6 +158,16 @@ class FakeLlm implements BrainLlm {
       });
       return { text, readPaths: [] };
     }
+    if (taskTools && input.question.startsWith("DUPLICATEEDIT:")) {
+      const edit = {
+        repo: "zenod-ai/zenod",
+        issueNumber: 92,
+        comment: "post the smoke-test comment once",
+      };
+      const first = await taskTools.editIssue(edit);
+      const second = await taskTools.editIssue(edit);
+      return { text: `${first}\n${second}`, readPaths: [] };
+    }
     if (taskTools && input.question.startsWith("QUERYBACKLOG")) {
       const text = await taskTools.queryBacklog("open issues");
       return { text, readPaths: [] };
@@ -805,6 +815,58 @@ describe("BrainEngine", () => {
         issueNumber: 91,
         labelsAdd: ["codex-live-test"],
         comment: "post the smoke-test comment",
+      },
+    ]);
+  });
+
+  it("deduplicates identical mutation calls within one tasking turn", async () => {
+    const calls: unknown[] = [];
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        async createIssue() {
+          return "created";
+        },
+        async labelIssue() {
+          return "labeled";
+        },
+        async editIssue(input) {
+          calls.push(input);
+          return "Edited #92: https://github.com/zenod-ai/zenod/issues/92";
+        },
+        async queryBacklog() {
+          return "";
+        },
+        async serviceBacklog() {
+          return "";
+        },
+        async approveQueue() {
+          return "queued";
+        },
+      },
+    });
+
+    const reply = await e.handleTasking({ text: "DUPLICATEEDIT: comment #92", surface: "web", conversationKey: "duplicate-edit" });
+
+    expect(calls).toEqual([
+      {
+        repo: "zenod-ai/zenod",
+        issueNumber: 92,
+        comment: "post the smoke-test comment once",
+      },
+    ]);
+    expect(reply.actions).toEqual([
+      {
+        tool: "editIssue",
+        input: {
+          repo: "zenod-ai/zenod",
+          issueNumber: 92,
+          comment: "post the smoke-test comment once",
+        },
+        result: "Edited #92: https://github.com/zenod-ai/zenod/issues/92",
       },
     ]);
   });
