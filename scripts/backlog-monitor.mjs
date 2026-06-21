@@ -19,7 +19,8 @@
 //   ZENOD_BACKLOG_REPO  the CENTRAL backlog repo (default AlfaBlok/obsidian-brain)
 //   ZENOD_REPO          default target repo for code work + fan-in (default zenod-ai/zenod)
 //   ZENOD_WORKDIR       the target-repo checkout for the fanout (default /runner/work/zenod)
-//   ZENOD_APP_URL / ZENOD_API_TOKEN   for /api/notify
+//   ZENOD_NOTIFY_URL / ZENOD_NOTIFY_TOKEN   for /api/notify
+//     defaults to the Console URL/token, then the legacy app URL/token.
 //   ZENOD_POLL_MS / ZENOD_POKE_PORT / ZENOD_CONCURRENCY / ZENOD_STATE / ZENOD_BASE
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
@@ -30,8 +31,6 @@ import { dirname } from "node:path";
 const BACKLOG = process.env.ZENOD_BACKLOG_REPO || "AlfaBlok/obsidian-brain";
 const REPO = process.env.ZENOD_REPO || "zenod-ai/zenod"; // default target repo + fan-in repo
 const WORKDIR = process.env.ZENOD_WORKDIR || "/runner/work/zenod";
-const APP_URL = (process.env.ZENOD_APP_URL || "").replace(/\/$/, "");
-const API_TOKEN = process.env.ZENOD_API_TOKEN || "";
 const POLL_MS = Number(process.env.ZENOD_POLL_MS || 120000);
 const POKE_PORT = Number(process.env.ZENOD_POKE_PORT || 8787);
 const CONCURRENCY = Number(process.env.ZENOD_CONCURRENCY || 3);
@@ -44,6 +43,7 @@ const BASE_BRANCH = process.env.ZENOD_BASE || "main";
 const EPAMINON_URL = (process.env.ZENOD_EPAMINON_URL || "http://zenod-epaminon:8080").replace(/\/$/, "");
 const CONSOLE_URL = (process.env.ZENOD_CONSOLE_URL || "").replace(/\/$/, "");
 const CONSOLE_TOKEN = process.env.ZENOD_CONSOLE_TOKEN || "";
+const { url: NOTIFY_URL, token: NOTIFY_TOKEN } = notifyConfig(process.env);
 let LANE_SECRET = process.env.ZENOD_EXEC_LANE_SECRET || "";
 const AUTO_MERGE_ENV = parseBooleanSetting(process.env.ZENOD_AUTO_MERGE);
 // How long a merge-gate alarm stays quiet before it may remind again. A blocked
@@ -95,6 +95,11 @@ function parseBooleanSetting(value) {
   if (["0", "false", "no", "off"].includes(String(value).toLowerCase())) return false;
   return null;
 }
+function notifyConfig(env = process.env) {
+  const url = (env.ZENOD_NOTIFY_URL || env.ZENOD_CONSOLE_URL || env.ZENOD_APP_URL || "").replace(/\/$/, "");
+  const token = env.ZENOD_NOTIFY_TOKEN || env.ZENOD_CONSOLE_TOKEN || env.ZENOD_API_TOKEN || "";
+  return { url, token };
+}
 function stateWithEnvOverrides(state) {
   if (AUTO_MERGE_ENV !== null) state.autoMerge = AUTO_MERGE_ENV;
   return state;
@@ -108,14 +113,14 @@ function saveState(s) {
 // the ping back to where the work was requested. Omitted/null → the app falls
 // back to WhatsApp, the historical default.
 async function notify(text, surface) {
-  if (!APP_URL || !API_TOKEN) {
+  if (!NOTIFY_URL || !NOTIFY_TOKEN) {
     log("NOTIFY (no app configured):", surface ? `[${surface}]` : "", text);
     return;
   }
   try {
-    const res = await fetch(`${APP_URL}/api/notify`, {
+    const res = await fetch(`${NOTIFY_URL}/api/notify`, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${API_TOKEN}` },
+      headers: { "content-type": "application/json", authorization: `Bearer ${NOTIFY_TOKEN}` },
       body: JSON.stringify(surface ? { text, surface } : { text }),
     });
     log("notify ->", res.status, surface ? `[${surface}]` : "", text.slice(0, 60));
@@ -213,10 +218,20 @@ function launcherHealthy() {
   return true;
 }
 
+function workdirForRepo(repo) {
+  if (repo === REPO) return WORKDIR;
+  const safe = String(repo || "")
+    .replace(/[^A-Za-z0-9._/-]+/g, "-")
+    .replace(/\//g, "__")
+    .replace(/^-|-$/g, "");
+  return `${dirname(WORKDIR)}/${safe || "target-repo"}`;
+}
+
 function launchFanout(target, execNumber, extraEnv = {}) {
+  const targetWorkdir = workdirForRepo(target);
   const args = [
     "start", "--repo", target, "--issues", String(execNumber),
-    "--workdir", WORKDIR, "--draft-pr", "--github-status",
+    "--workdir", targetWorkdir, "--draft-pr", "--github-status",
     "--concurrency", String(CONCURRENCY),
   ];
   const child = spawn("zenod-fanout-codex", args, { stdio: "ignore", detached: true, env: { ...process.env, ...extraEnv } });
@@ -224,18 +239,20 @@ function launchFanout(target, execNumber, extraEnv = {}) {
   // unhandled 'error' event that crashes the whole monitor.
   child.on("error", (err) => log(`fanout spawn error (post-probe) for ${target}#${execNumber}: ${err.code || err.message}`));
   child.unref();
-  log(`launched fanout for ${target}#${execNumber}`);
+  log(`launched fanout for ${target}#${execNumber} workdir=${targetWorkdir}`);
 }
 
 function execStatusAndComment(target, execNumber) {
   try {
     const out = gh(["issue", "view", String(execNumber), "--repo", target, "--json", "labels,comments"]);
     const o = JSON.parse(out);
-    const status = (o.labels || []).map((l) => l.name).find((n) => n.startsWith("status:")) || null;
+    const names = (o.labels || []).map((l) => l.name);
+    const status = names.find((n) => n.startsWith("status:")) || null;
+    const originLabel = names.find((n) => n.startsWith("origin:")) || null;
     const comments = o.comments || [];
-    return { status, lastComment: comments.length ? comments[comments.length - 1].body : "" };
+    return { status, origin: originLabel ? originLabel.slice("origin:".length) : null, lastComment: comments.length ? comments[comments.length - 1].body : "" };
   } catch {
-    return { status: null, lastComment: "" };
+    return { status: null, origin: null, lastComment: "" };
   }
 }
 
@@ -383,7 +400,7 @@ function launchDispatched(executionId, target, context, state) {
     ...(LANE_SECRET ? { ZENOD_EXEC_LANE_SECRET: LANE_SECRET } : {}),
     ZENOD_EPAMINON_URL: EPAMINON_URL,
   });
-  state.dispatched[executionId] = { repo: t.repo, issueN: t.number, target, reportedStatus: null };
+  state.dispatched[executionId] = { repo: t.repo, issueN: t.number, target, workdir: workdirForRepo(t.repo), reportedStatus: null };
   return { ok: true };
 }
 
@@ -391,7 +408,7 @@ function launchDispatched(executionId, target, context, state) {
 // terminal-ish transitions (needs-review / complete / blocked) back to Epaminon once.
 async function reportDispatched(state) {
   for (const [executionId, d] of Object.entries(state.dispatched || {})) {
-    const { status, lastComment } = execStatusAndComment(d.repo, d.issueN);
+    const { status, origin, lastComment } = execStatusAndComment(d.repo, d.issueN);
     const prUrl = prUrlForExec(d.repo, d.issueN);
     const o = dispatchedOutcome(status, prUrl);
     if (o.kind === "none") continue;
@@ -406,7 +423,16 @@ async function reportDispatched(state) {
         ...(o.evidenceUrl ? { evidence_url: o.evidenceUrl } : {}),
       });
     }
-    if (ok) d.reportedStatus = status;
+    if (ok) {
+      d.reportedStatus = status;
+      if (o.kind === "blocked") {
+        await notify(`⛔ Execution ${executionId} (${d.target}) — blocked, needs your decision${lastComment ? `:\n${lastComment.slice(0, 280)}` : "."}`, origin);
+      } else if (o.outward) {
+        await notify(`✅ Execution ${executionId} (${d.target}) — ready for review${o.evidenceUrl ? `: ${o.evidenceUrl}` : "."}`, origin);
+      } else {
+        await notify(`✅ Execution ${executionId} (${d.target}) — done.`, origin);
+      }
+    }
   }
 }
 
@@ -966,6 +992,8 @@ async function handleRun(req, res) {
     const result = launchDispatched(executionId, String(body.target), String(body.context || ""), state);
     if (!result.ok) {
       await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: result.note });
+    } else {
+      await notify(`🤖 Codex working on execution ${executionId} — ${String(body.target)}`);
     }
     saveState(state);
     res.writeHead(result.ok ? 202 : 422).end(result.ok ? "launched\n" : "could not launch\n");
@@ -990,7 +1018,7 @@ function main() {
     }
   }).listen(POKE_PORT, () => log(`poke listener on :${POKE_PORT}`));
 
-  log(`starting — backlog=${BACKLOG} target_default=${REPO} poll=${POLL_MS}ms app=${APP_URL || "(none)"}`);
+  log(`starting — backlog=${BACKLOG} target_default=${REPO} poll=${POLL_MS}ms notify=${NOTIFY_URL || "(none)"}`);
   void scan("startup");
   setInterval(() => void scan("poll"), POLL_MS);
 }
@@ -1003,6 +1031,7 @@ export {
   mergeApprovalForIssue,
   mergeNoteDedupKey,
   normalizeState,
+  notifyConfig,
   recordMergeAttempt,
   shouldSendMergeNote,
   detectIntegrationStatus,
@@ -1011,6 +1040,7 @@ export {
   latestComment,
   pickupNotification,
   parseTarget,
+  workdirForRepo,
   dispatchedOutcome,
 };
 

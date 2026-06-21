@@ -10,6 +10,8 @@ COPY apps/site/package.json apps/site/
 RUN npm ci
 
 COPY tsconfig.base.json ./
+COPY scripts ./scripts
+COPY docs/tool-output-schemas.v4.json ./docs/tool-output-schemas.v4.json
 COPY packages ./packages
 COPY apps ./apps
 RUN npm run build

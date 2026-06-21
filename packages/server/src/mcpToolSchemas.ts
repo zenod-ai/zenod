@@ -43,6 +43,39 @@ export const EXECUTION_STATUS_SHAPE = {
   message: z.string().optional().describe("Optional natural-language filter, e.g. an execution id or owner/repo#N target."),
 };
 
+export const V4_EXECUTION_STATUS_SHAPE = {
+  workIssue: z.string().min(1).optional().describe("Exact work issue target, e.g. owner/repo#123."),
+  executionIssue: z.string().min(1).optional().describe("Exact execution issue target, when known."),
+  executionId: z.string().min(1).optional().describe("Exact execution id minted by Archus/Epaminon."),
+  state: z
+    .enum(["queued", "running", "needs_review", "blocked", "done", "failed"])
+    .optional()
+    .describe("Optional canonical v4 execution state filter."),
+  since: z.string().min(1).optional().describe("Optional ISO timestamp; only executions updated at or after this time are returned."),
+  limit: z.number().int().positive().max(100).optional().describe("Maximum executions to return. Defaults to 20."),
+};
+
+export const V4_GET_ISSUE_SHAPE = {
+  target: z.string().min(1).describe("Exact issue target as owner/repo#123."),
+};
+
+export const V4_FIND_ISSUE_SHAPE = {
+  reference: z.string().min(1).describe("Fuzzy or partial issue reference, e.g. '#108', 'that runner ticket', or title text."),
+  repos: z.array(z.string().min(1)).optional().describe("Repos to search, as owner/repo. Defaults to the configured backlog repo."),
+  recentWindow: z.string().min(1).optional().describe("Optional human-readable window echoed in issue_not_found evidence, e.g. '48h'."),
+  labels: z.array(z.string().min(1)).optional().describe("Optional labels that returned issues must include."),
+  limit: z.number().int().positive().max(25).optional().describe("Maximum candidates to return. Defaults to 10."),
+};
+
+export const V4_LIST_ISSUES_SHAPE = {
+  repo: z.string().min(1).optional().describe("Repo to list, as owner/repo. Defaults to the configured backlog repo."),
+  state: z.enum(["open", "closed", "all"]).optional().describe("GitHub issue state. Defaults to open."),
+  labels: z.array(z.string().min(1)).optional().describe("Labels that returned issues must include."),
+  createdSince: z.string().min(1).optional().describe("Optional ISO timestamp; only issues created at or after this time are returned."),
+  updatedSince: z.string().min(1).optional().describe("Optional ISO timestamp; only issues updated at or after this time are returned."),
+  limit: z.number().int().positive().max(100).optional().describe("Maximum issues to return. Defaults to 20."),
+};
+
 export const CREATE_ISSUE_SHAPE = {
   repo: z.string().min(1).optional().describe("owner/repo. Defaults to the agent's configured backlog/vault repo."),
   title: z.string().min(1).describe("Issue title."),

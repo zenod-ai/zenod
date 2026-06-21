@@ -58,9 +58,11 @@ describe("PHYLAX_AGENT (notification gatekeeper)", () => {
   });
 });
 
-describe("OUTBOUND_AGENT (outbound comms)", () => {
+describe("OUTBOUND_AGENT (marketing/outbound comms)", () => {
   it("is the vaultless, repo-less guardian of sending", () => {
     expect(OUTBOUND_AGENT.name).toBe("outbound");
+    expect(OUTBOUND_AGENT.displayName).toBe("Callistheness");
+    expect(OUTBOUND_AGENT.tagline).toBe("Marketing agent");
     expect(OUTBOUND_AGENT.vaultless).toBe(true);
     expect(OUTBOUND_AGENT.outbound).toBe(true);
     // It owns no GitHub home — it sends, it does not curate or execute tickets.

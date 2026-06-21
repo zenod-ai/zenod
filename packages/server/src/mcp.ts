@@ -12,7 +12,12 @@ import {
   EXECUTION_STATUS_SHAPE,
   GET_MEMORY_SHAPE,
   SEARCH_MEMORY_SHAPE,
+  V4_FIND_ISSUE_SHAPE,
+  V4_EXECUTION_STATUS_SHAPE,
+  V4_GET_ISSUE_SHAPE,
+  V4_LIST_ISSUES_SHAPE,
 } from "./mcpToolSchemas.js";
+import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./toolOutput.js";
 
 /**
  * The long tools (task_brain, run_task, store_memory) run a multi-minute LLM
@@ -28,6 +33,18 @@ export interface TaskJobs {
 export type GithubIssueEditor = (input: EditGithubIssueInput) => Promise<EditGithubIssueResult>;
 export type GithubIssueCreator = (input: CreateGithubIssueInput) => Promise<CreateGithubIssueResult>;
 export type ExecutionStatusReader = () => ExecutionTicket[] | null;
+export interface BacklogIssueReader {
+  getIssue(input: { target: string }): Promise<ToolResponse>;
+  findIssue(input: { reference: string; repos?: string[]; recentWindow?: string; labels?: string[]; limit?: number }): Promise<ToolResponse>;
+  listIssues(input: {
+    repo?: string;
+    state?: "open" | "closed" | "all";
+    labels?: string[];
+    createdSince?: string;
+    updatedSince?: string;
+    limit?: number;
+  }): Promise<ToolResponse>;
+}
 
 /** Human-facing text for a finished task_brain job — mirrors the old reply. */
 function formatTaskingReply(result: TaskingReply): string {
@@ -79,6 +96,80 @@ function filterExecutionTickets(tickets: ExecutionTicket[], message?: string): E
   });
 }
 
+type V4ExecutionState = "queued" | "running" | "needs_review" | "blocked" | "done" | "failed";
+
+function canonicalExecutionState(state: ExecutionTicket["state"]): V4ExecutionState {
+  if (state === "needs-review" || state === "approved") return "needs_review";
+  return state;
+}
+
+function filterExecutionTicketsV4(
+  tickets: ExecutionTicket[],
+  filters: {
+    workIssue?: string;
+    executionIssue?: string;
+    executionId?: string;
+    state?: V4ExecutionState;
+    since?: string;
+    limit?: number;
+  },
+): ExecutionTicket[] {
+  const sinceMs = filters.since ? Date.parse(filters.since) : NaN;
+  return tickets
+    .filter((ticket) => {
+      if (filters.executionId && ticket.executionId !== filters.executionId) return false;
+      if (filters.workIssue && ticket.target !== filters.workIssue) return false;
+      if (filters.executionIssue && ticket.executionId !== filters.executionIssue && ticket.target !== filters.executionIssue) return false;
+      if (filters.state && canonicalExecutionState(ticket.state) !== filters.state) return false;
+      if (Number.isFinite(sinceMs) && ticket.updatedAt < sinceMs) return false;
+      return true;
+    })
+    .slice(0, filters.limit ?? 20);
+}
+
+function executionStatusEvidence(ticket: ExecutionTicket) {
+  const blockers = ticket.state === "blocked" && ticket.note ? [ticket.note] : [];
+  const resultRefs = ticket.evidenceUrl ? [ticket.evidenceUrl] : [];
+  return evidence("execution_status", {
+    executionId: ticket.executionId,
+    workIssue: ticket.target,
+    state: canonicalExecutionState(ticket.state),
+    runnerStatus: ticket.state,
+    ...(blockers.length ? { blockers } : {}),
+    ...(resultRefs.length ? { resultRefs } : {}),
+    updatedAt: new Date(ticket.updatedAt).toISOString(),
+  });
+}
+
+function v4ExecutionStatusResponse(
+  tickets: ExecutionTicket[],
+  filters: {
+    workIssue?: string;
+    executionIssue?: string;
+    executionId?: string;
+    state?: V4ExecutionState;
+    since?: string;
+    limit?: number;
+  },
+) {
+  const filteredTickets = filterExecutionTicketsV4(tickets, filters);
+  if (filteredTickets.length === 0) {
+    return toolResponse({
+      text: "No executions matched the requested scope.",
+      evidence: [
+        evidence("execution_none", {
+          searchScope: filters,
+          executions: [],
+        }),
+      ],
+    });
+  }
+  return toolResponse({
+    text: formatExecutionStatus(filteredTickets),
+    evidence: filteredTickets.map(executionStatusEvidence),
+  });
+}
+
 /** Human-facing text for a finished store_memory job — mirrors the old reply. */
 function formatStoreResult(result: StoreResult): string {
   return [
@@ -119,6 +210,7 @@ export function buildMcpServer(
   createGithubIssue?: GithubIssueCreator,
   agentName: string = "zenod",
   readExecutionStatus?: ExecutionStatusReader,
+  readBacklogIssues?: BacklogIssueReader,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -187,6 +279,68 @@ export function buildMcpServer(
           structuredContent: { tickets: filteredTickets, total: tickets.length, filtered: filteredTickets.length, executor: true },
         };
       },
+    );
+
+    server.registerTool(
+      "epaminon.execution_status",
+      {
+        title: "Execution status",
+        description:
+          "Owner: Epaminon. Deterministic v4 read of the execution queue using explicit fields only. Does not use fuzzy message input and does not start work.",
+        inputSchema: V4_EXECUTION_STATUS_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ workIssue, executionIssue, executionId, state, since, limit }) => {
+        const tickets = readExecutionStatus();
+        if (!tickets) {
+          return toMcpToolResult(
+            "epaminon.execution_status",
+            toolResponse({
+              evidence: [],
+              errors: [{ code: "executor_not_configured", message: "This agent is not configured as an executor." }],
+            }),
+          );
+        }
+        return toMcpToolResult("epaminon.execution_status", v4ExecutionStatusResponse(tickets, { workIssue, executionIssue, executionId, state, since, limit }));
+      },
+    );
+  }
+
+  if (readBacklogIssues) {
+    server.registerTool(
+      "archus.get_issue",
+      {
+        title: "Get issue",
+        description:
+          "Owner: Archus. Deterministic v4 read of one exact GitHub issue by qualified target owner/repo#N. Returns issue evidence only on successful read; a missing exact issue is a tool error, not a fuzzy search.",
+        inputSchema: V4_GET_ISSUE_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async (input) => toMcpToolResult("archus.get_issue", await readBacklogIssues.getIssue(input)),
+    );
+
+    server.registerTool(
+      "archus.find_issue",
+      {
+        title: "Find issue",
+        description:
+          "Owner: Archus. Structured resolver for fuzzy issue references. Use when repo or number is unclear. Returns issue_resolved on a unique hit, candidates when ambiguous, or issue_not_found with searched scope.",
+        inputSchema: V4_FIND_ISSUE_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async (input) => toMcpToolResult("archus.find_issue", await readBacklogIssues.findIssue(input)),
+    );
+
+    server.registerTool(
+      "archus.list_issues",
+      {
+        title: "List issues",
+        description:
+          "Owner: Archus. Deterministic v4 issue inventory read using explicit filters. Empty results mean no issues matched the echoed filters, not that a fuzzy reference never existed.",
+        inputSchema: V4_LIST_ISSUES_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async (input) => toMcpToolResult("archus.list_issues", await readBacklogIssues.listIssues(input)),
     );
   }
 

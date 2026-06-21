@@ -1,4 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { normalizeObjectSchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 import { VERSION } from "zenod";
 import { z, type ZodRawShape } from "zod";
 
@@ -11,7 +14,12 @@ import {
   GET_TASK_RESULT_SHAPE,
   SEARCH_MEMORY_SHAPE,
   STORE_MEMORY_SHAPE,
+  V4_EXECUTION_STATUS_SHAPE,
+  V4_FIND_ISSUE_SHAPE,
+  V4_GET_ISSUE_SHAPE,
+  V4_LIST_ISSUES_SHAPE,
 } from "./mcpToolSchemas.js";
+import { getToolOutputSchema } from "./toolOutput.js";
 
 /**
  * Archus's WRITE surface is semantic, not mechanical. A backlog write is a
@@ -55,6 +63,8 @@ interface GatewayTool {
   title: string;
   description: string;
   inputSchema: ZodRawShape;
+  v4OutputSchemaName?: string;
+  requiresV4ToolNames?: boolean;
   annotations: { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean; openWorldHint: boolean };
 }
 
@@ -128,6 +138,39 @@ const GATEWAY_TOOLS: GatewayTool[] = [
   // Archus's writes + reasoning — all routed to his guardian brain (intent in,
   // Archus decides placement/structure/labels and acts). Named for intent signal.
   {
+    name: "archus.get_issue",
+    owner: "archus",
+    title: "Get issue",
+    description:
+      "Owner: Archus. Deterministic v4 read of one exact GitHub issue by qualified target owner/repo#N. Use this instead of chat when the issue id is exact.",
+    inputSchema: V4_GET_ISSUE_SHAPE,
+    v4OutputSchemaName: "archus.get_issue",
+    requiresV4ToolNames: true,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: "archus.find_issue",
+    owner: "archus",
+    title: "Find issue",
+    description:
+      "Owner: Archus. Structured resolver for fuzzy issue references such as '#108', 'that ticket', or title text. Returns a unique resolution, candidates, or not-found evidence with searched scope. Does not mutate.",
+    inputSchema: V4_FIND_ISSUE_SHAPE,
+    v4OutputSchemaName: "archus.find_issue",
+    requiresV4ToolNames: true,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: "archus.list_issues",
+    owner: "archus",
+    title: "List issues",
+    description:
+      "Owner: Archus. Deterministic v4 inventory read for open/closed/all issues with explicit repo, label, date, and limit filters. Does not resolve fuzzy references.",
+    inputSchema: V4_LIST_ISSUES_SHAPE,
+    v4OutputSchemaName: "archus.list_issues",
+    requiresV4ToolNames: true,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  {
     name: "create_issue",
     owner: "archus",
     peerTool: "chat_with_archus",
@@ -170,7 +213,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
-  // Outbound's send surface. Every public tool is a WRITE that publishes/sends —
+  // Callistheness's send surface. Every public tool is a WRITE that publishes/sends —
   // outward-facing and irreversible — so each is a semantic intent routed to his
   // guardian brain (chat_with_outbound), which drafts in the user's voice and MUST
   // confirm the exact content/target before it ever calls a connector. The brain,
@@ -183,7 +226,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
       "The user wants to post the following to X (Twitter). Draft it in their voice and, unless they have already confirmed this exact text in the conversation, show the final post and ASK them to confirm before sending — do not post unconfirmed: ",
     title: "Post to X (Twitter)",
     description:
-      "Tell Outbound to post to X. Describe (or give) what to post in natural language; Outbound drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. Refuses spam/mass sends.",
+      "Tell Callistheness to post to X. Describe (or give) what to post in natural language; Callistheness drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. Refuses spam/mass sends.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },
@@ -195,7 +238,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
       "The user wants to submit the following to Reddit. Confirm the target subreddit, title, and body, drafted in their voice, and — unless they have already confirmed this exact content — ASK them to confirm before submitting; do not post unconfirmed: ",
     title: "Post to Reddit",
     description:
-      "Tell Outbound to submit a Reddit post. Say what to post and to which subreddit; Outbound drafts it, confirms the exact content and target first (it is public and irreversible), then submits and returns the URL. Refuses spam/cross-post floods.",
+      "Tell Callistheness to submit a Reddit post. Say what to post and to which subreddit; Callistheness drafts it, confirms the exact content and target first (it is public and irreversible), then submits and returns the URL. Refuses spam/cross-post floods.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },
@@ -207,7 +250,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
       "The user wants to send the following email. Confirm the recipient, subject, and body, drafted in their voice, and — unless they have already confirmed this exact message and recipient — ASK them to confirm before sending; a sent email cannot be recalled: ",
     title: "Send an email",
     description:
-      "Tell Outbound to send an email. Give the recipient and what to say; Outbound drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms. Refuses spam/mass mailing.",
+      "Tell Callistheness to send an email. Give the recipient and what to say; Callistheness drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms. Refuses spam/mass mailing.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },
@@ -215,9 +258,9 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     name: "ask_outbound",
     owner: "outbound",
     peerTool: "chat_with_outbound",
-    title: "Ask Outbound (comms brain)",
+    title: "Ask Callistheness (marketing brain)",
     description:
-      "Ask Outbound to help with outbound communications — draft a tweet/post/email, adapt tone for a channel, or plan a send. He reasons in the user's voice and may draft, but never publishes/sends without explicit confirmation. For composing and advice, not a committed send.",
+      "Ask Callistheness to help with marketing/outbound communications — draft a tweet/post/email, adapt tone for a channel, or plan a send. He reasons in the user's voice and may draft, but never publishes/sends without explicit confirmation. For composing and advice, not a committed send.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
@@ -251,6 +294,17 @@ const GATEWAY_TOOLS: GatewayTool[] = [
   // the run is driven by the deterministic Archus↔Epaminon lane, which is
   // internal-only and must never be republished on this public gateway.
   {
+    name: "epaminon.execution_status",
+    owner: "epaminon",
+    title: "Execution status",
+    description:
+      "Owner: Epaminon. Deterministic v4 read of the execution queue using explicit fields only: workIssue, executionIssue, executionId, state, since, and limit. Does not use fuzzy message input and does not start work.",
+    inputSchema: V4_EXECUTION_STATUS_SHAPE,
+    v4OutputSchemaName: "epaminon.execution_status",
+    requiresV4ToolNames: true,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
     name: "execution_status",
     owner: "epaminon",
     title: "Check execution status",
@@ -261,6 +315,74 @@ const GATEWAY_TOOLS: GatewayTool[] = [
   },
 ];
 
+const CHAT_WITH_CONSOLE_OUTPUT_SCHEMA = "console.chat_with_console";
+
+type RegisteredToolLike = {
+  title?: string;
+  description?: string;
+  inputSchema?: unknown;
+  annotations?: Record<string, unknown>;
+  execution?: unknown;
+  _meta?: Record<string, unknown>;
+  enabled: boolean;
+};
+
+function truthyEnv(value: string | undefined): boolean {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").toLowerCase());
+}
+
+function strictOutputSchemaAllowlist(env = process.env): Set<string> {
+  return new Set(
+    String(env.ZENOD_V4_STRICT_TOOLS ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+}
+
+function shouldAdvertiseStrictOutputSchema(publishedName: string, schemaName: string, env = process.env): boolean {
+  if (!truthyEnv(env.ZENOD_V4_STRICT_OUTPUT_SCHEMA)) return false;
+  const allowed = strictOutputSchemaAllowlist(env);
+  return allowed.has("*") || allowed.has(publishedName) || allowed.has(schemaName);
+}
+
+function v4ToolNamesEnabled(env = process.env): boolean {
+  return truthyEnv(env.ZENOD_V4_TOOL_NAMES);
+}
+
+function jsonInputSchema(inputSchema: unknown): Record<string, unknown> {
+  const obj = normalizeObjectSchema(inputSchema as never);
+  return obj ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: "input" }) : { type: "object", properties: {}, required: [] };
+}
+
+function installStrictOutputSchemaListOverride(server: McpServer, outputSchemaNames: Map<string, string>): void {
+  if (!truthyEnv(process.env.ZENOD_V4_STRICT_OUTPUT_SCHEMA)) return;
+  server.server.setRequestHandler(ListToolsRequestSchema, () => {
+    const registered = (server as unknown as { _registeredTools: Record<string, RegisteredToolLike> })._registeredTools;
+    return {
+      tools: Object.entries(registered)
+        .filter(([, tool]) => tool.enabled)
+        .map(([name, tool]) => {
+          const definition: Record<string, unknown> = {
+            name,
+            title: tool.title,
+            description: tool.description,
+            inputSchema: jsonInputSchema(tool.inputSchema),
+            annotations: tool.annotations,
+            execution: tool.execution,
+            _meta: tool._meta,
+          };
+          const schemaName = outputSchemaNames.get(name);
+          if (schemaName && shouldAdvertiseStrictOutputSchema(name, schemaName)) {
+            const outputSchema = getToolOutputSchema(schemaName);
+            if (outputSchema) definition.outputSchema = outputSchema;
+          }
+          return definition;
+        }),
+    };
+  });
+}
+
 /**
  * Build the Console's gateway MCP server. `resolvePeer` returns the connected
  * peer for an owner name (or null if that agent isn't enabled). Each published
@@ -269,7 +391,9 @@ const GATEWAY_TOOLS: GatewayTool[] = [
  */
 export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig | null, chatWithConsole?: ConsoleChatRunner): McpServer {
   const server = new McpServer({ name: "zenod-console-gateway", version: VERSION });
+  const outputSchemaNames = new Map<string, string>();
   if (chatWithConsole) {
+    outputSchemaNames.set("chat_with_console", CHAT_WITH_CONSOLE_OUTPUT_SCHEMA);
     server.registerTool(
       "chat_with_console",
       {
@@ -283,8 +407,10 @@ export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig
     );
   }
   for (const t of GATEWAY_TOOLS) {
+    if (t.requiresV4ToolNames && !v4ToolNamesEnabled()) continue;
     const peer = resolvePeer(t.owner);
     if (!peer) continue; // owner agent not enabled → don't advertise its tools
+    if (t.v4OutputSchemaName) outputSchemaNames.set(t.name, t.v4OutputSchemaName);
     server.registerTool(
       t.name,
       { title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations },
@@ -298,5 +424,6 @@ export function buildMeshGatewayServer(resolvePeer: (name: string) => PeerConfig
       },
     );
   }
+  installStrictOutputSchemaListOverride(server, outputSchemaNames);
   return server;
 }

@@ -4,9 +4,9 @@ import { VERSION } from "zenod";
 import type { PeerTools } from "zenod";
 
 /**
- * The Outbound agent's PRIVATE send tools, wired into its chat brain.
+ * The Callistheness agent's PRIVATE send tools, wired into its chat brain.
  *
- * Outbound is the guardian of SENDING: post to X, post to Reddit, send email. Each
+ * Callistheness is the guardian of SENDING: post to X, post to Reddit, send email. Each
  * capability lives in its OWN deployed MCP connector (the vendored x-mcp for X,
  * a reddit-mcp and a mail-mcp cloned from the x-mcp shape) — "group by job, one
  * agent composed from several internal MCP servers" (docs/SUITE-SCAFFOLD.md). The
@@ -18,7 +18,7 @@ import type { PeerTools } from "zenod";
  * outward-facing and irreversible, so the send is gated by the brain's judgment,
  * not exposed as a raw deterministic write.
  *
- * Connector endpoints are read from the environment (the headless Outbound
+ * Connector endpoints are read from the environment (the headless Callistheness
  * container is env-configured on its compose, exactly like the x-mcp containers).
  * A connector whose URL is unset is simply "not connected yet" — the tool returns a
  * clear, non-throwing message so a model tool-call can't crash, and so Reddit/email
@@ -127,7 +127,7 @@ async function callConnector(
 }
 
 /**
- * Build the Outbound agent's send tools as PeerTools (the engine's generic
+ * Build Callistheness's send tools as PeerTools (the engine's generic
  * server-provided tool slot — the same vehicle the mesh uses). Each takes the
  * composed content as a single string and publishes it via its connector. A
  * connector with no configured URL returns a "not connected yet" message instead

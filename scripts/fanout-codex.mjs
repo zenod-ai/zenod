@@ -228,9 +228,24 @@ async function ensureCheckout(repo, workdir, base) {
     run("git", ["clone", `https://github.com/${repo}.git`, workdir], { stdio: "inherit" });
   }
   if (!existsSync(join(workdir, ".git"))) throw new Error(`${workdir} is not a git checkout`);
+  const remote = run("git", ["remote", "get-url", "origin"], { cwd: workdir, allowFailure: true }).stdout.trim();
+  if (!remoteMatchesRepo(remote, repo)) {
+    throw new Error(`${workdir} origin (${remote || "missing"}) does not match --repo ${repo}; use a repo-specific --workdir`);
+  }
   run("git", ["fetch", "origin", base, "--prune"], { cwd: workdir, stdio: "inherit" });
   run("git", ["checkout", base], { cwd: workdir, stdio: "inherit" });
   run("git", ["pull", "--ff-only", "origin", base], { cwd: workdir, stdio: "inherit" });
+}
+
+function remoteMatchesRepo(remote, repo) {
+  const wanted = String(repo || "").replace(/\.git$/, "").toLowerCase();
+  const value = String(remote || "").trim().replace(/\.git$/, "").toLowerCase();
+  if (!wanted || !value) return false;
+  return (
+    value === wanted ||
+    value.endsWith(`/${wanted}`) ||
+    value.endsWith(`:${wanted}`)
+  );
 }
 
 function verifyPrereqs({ allowNode18 = false } = {}) {
@@ -788,7 +803,17 @@ async function commitPushPr({ opts, manifest, issueNumber, finalText }) {
   const dirty = changedFiles(cwd);
   if (dirty.length > 0) {
     run("git", ["add", "-A"], { cwd });
-    run("git", ["commit", "-m", `fix #${issueNumber}: ${worker.title}`], { cwd, allowFailure: true, stdio: "inherit" });
+    const commit = run("git", ["commit", "-m", `fix #${issueNumber}: ${worker.title}`], { cwd, allowFailure: true });
+    if (commit.status !== 0 && changedFiles(cwd).length > 0) {
+      await controllerBlocked({
+        opts,
+        manifest,
+        issueNumber,
+        reason: `git commit failed: ${(commit.stderr || commit.stdout || "unknown error").trim().slice(0, 600)}`,
+        finalText,
+      });
+      return;
+    }
   }
   const ahead = run("git", ["rev-list", "--count", `origin/${manifest.base}..HEAD`], { cwd, allowFailure: true }).stdout.trim();
   const hasCommits = Number(ahead) > 0;
@@ -840,11 +865,44 @@ async function commitPushPr({ opts, manifest, issueNumber, finalText }) {
     "--draft",
   ], { cwd, allowFailure: true });
   const prUrl = (pr.stdout + pr.stderr).match(/https:\/\/github\.com\/\S+\/pull\/\d+/)?.[0] ?? null;
+  if (!prUrl) {
+    await controllerBlocked({
+      opts,
+      manifest,
+      issueNumber,
+      reason: `draft PR creation failed: ${(pr.stderr || pr.stdout || "no PR URL returned").trim().slice(0, 800)}`,
+      finalText,
+    });
+    return;
+  }
   await updateWorkerStatus(runDir, issueNumber, { status: "complete", prUrl });
   if (opts.githubStatus) {
     syncIssueStatusLabel(manifest.repo, issueNumber, "complete", { hasReviewableWork: true });
     await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete", worker.branch, finalText, prUrl), true);
   }
+}
+
+async function controllerBlocked({ opts, manifest, issueNumber, reason, finalText }) {
+  const worker = manifest.workers[String(issueNumber)];
+  const blocker = {
+    status: "blocked",
+    reason: "controller-failed",
+    question: reason,
+    attempted: ["worker completed", "controller tried to commit/push/open PR"],
+    suggestedNextStep: "Inspect the runner controller error, fix the environment or repo mapping, then rerun the ticket.",
+  };
+  await updateWorkerStatus(manifest.runDir, issueNumber, {
+    status: "blocked",
+    finishedAt: nowIso(),
+    blocker,
+    error: reason,
+  });
+  if (opts.githubStatus) {
+    syncIssueStatusLabel(manifest.repo, issueNumber, "blocked");
+    await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "controller-blocked", worker.branch, finalText), true);
+    await commentIssue(manifest.repo, issueNumber, blockerComment(manifest.runId, worker.branch, blocker), true);
+  }
+  await reportExecutionBlocked(opts, reason);
 }
 
 function blockerComment(runIdValue, branch, blocker) {
@@ -1203,6 +1261,7 @@ export {
   detectBlocker,
   clarityCheck,
   executionBlockedRequest,
+  remoteMatchesRepo,
 };
 
 // Run main() only when invoked as the entry script — but resolve symlinks first.

@@ -1,0 +1,175 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  compileAllToolOutputSchemas,
+  evidence,
+  ToolOutputValidationError,
+  toolResponse,
+  toMcpToolResult,
+  validateToolResponse,
+} from "../src/toolOutput.js";
+
+describe("v4 tool output validation", () => {
+  it("compiles every generated packaged schema at startup", () => {
+    expect(() => compileAllToolOutputSchemas()).not.toThrow();
+  });
+
+  it("requires the evidence array", () => {
+    expect(() => validateToolResponse("archus.get_issue", {})).toThrow(ToolOutputValidationError);
+  });
+
+  it("accepts the expected evidence kind for a tool", () => {
+    const output = toolResponse({
+      evidence: [
+        evidence("issue", {
+          target: "zenod-ai/zenod#237",
+          url: "https://github.com/zenod-ai/zenod/issues/237",
+          title: "Contract epic",
+          state: "open",
+        }),
+      ],
+    });
+
+    expect(validateToolResponse("archus.get_issue", output)).toBe(output);
+  });
+
+  it("rejects evidence shapes outside a tool's public contract", () => {
+    const output = toolResponse({
+      evidence: [evidence("memory_stored", { jobId: "j1", status: "done", commitSha: "abc", pagesTouched: [] })],
+    });
+
+    expect(() => validateToolResponse("archus.get_issue", output)).toThrow(/must have required property|must be equal/);
+  });
+
+  it("rejects right-kind evidence with missing required fields", () => {
+    const output = toolResponse({
+      evidence: [evidence("issue_created")],
+    });
+
+    expect(() => validateToolResponse("archus.request_backlog_action", output)).toThrow(/target/);
+  });
+
+  it("fails closed on unknown tool names", () => {
+    const output = toolResponse({ evidence: [] });
+
+    expect(() => validateToolResponse("archus.typo", output)).toThrow(/Unknown v4 tool output schema/);
+  });
+
+  it("requires currentState on write-tool errors", () => {
+    const output = toolResponse({
+      evidence: [],
+      errors: [{ code: "readback_failed", message: "GitHub did not confirm the write." }],
+    });
+
+    expect(() => validateToolResponse("archus.request_backlog_action", output)).toThrow(/currentState/);
+  });
+
+  it("allows read-tool errors without currentState", () => {
+    const output = toolResponse({
+      evidence: [],
+      errors: [{ code: "not_found", message: "No such issue." }],
+    });
+
+    expect(validateToolResponse("archus.get_issue", output)).toBe(output);
+  });
+
+  it("rejects same-operation ambiguity plus write evidence", () => {
+    const output = toolResponse({
+      operations: [{ operationId: "op-1", interpretedAs: "create", status: "needs_input" }],
+      questions: [{ operationId: "op-1", text: "Which repo?" }],
+      evidence: [
+        evidence("issue_created", {
+          operationId: "op-1",
+          target: "zenod-ai/zenod#250",
+          url: "https://github.com/zenod-ai/zenod/issues/250",
+          verified: true,
+        }),
+      ],
+    });
+
+    expect(() => validateToolResponse("archus.request_backlog_action", output)).toThrow(/op-1/);
+  });
+
+  it("does not treat execution_blocked as a mutation", () => {
+    const output = toolResponse({
+      operations: [{ operationId: "op-1", interpretedAs: "run", status: "blocked" }],
+      questions: [{ operationId: "op-1", text: "Which repo should this run in?" }],
+      evidence: [
+        evidence("execution_blocked", {
+          operationId: "op-1",
+          executionId: "exec-1",
+          state: "blocked",
+          blockers: ["ambiguous target"],
+        }),
+      ],
+    });
+
+    expect(validateToolResponse("archus.run_issue", output)).toBe(output);
+  });
+
+  it("rejects same-operation error plus write evidence", () => {
+    const output = toolResponse({
+      operations: [{ operationId: "op-1", interpretedAs: "create", status: "blocked" }],
+      errors: [{ operationId: "op-1", code: "readback_failed", message: "GitHub did not confirm.", currentState: {} }],
+      evidence: [
+        evidence("issue_created", {
+          operationId: "op-1",
+          target: "zenod-ai/zenod#250",
+          url: "https://github.com/zenod-ai/zenod/issues/250",
+          verified: true,
+        }),
+      ],
+    });
+
+    expect(() => validateToolResponse("archus.request_backlog_action", output)).toThrow(/both an error/);
+  });
+
+  it("allows a completed write operation and a different ambiguous operation in one turn", () => {
+    const output = toolResponse({
+      operations: [
+        { operationId: "op-1", interpretedAs: "create", status: "completed" },
+        { operationId: "op-2", interpretedAs: "run", status: "needs_input" },
+      ],
+      candidates: [{ operationId: "op-2", target: "zenod-ai/zenod#108", confidence: 0.5 }],
+      evidence: [
+        evidence("issue_created", {
+          operationId: "op-1",
+          target: "zenod-ai/zenod#250",
+          url: "https://github.com/zenod-ai/zenod/issues/250",
+          verified: true,
+        }),
+      ],
+    });
+
+    expect(validateToolResponse("archus.request_backlog_action", output)).toBe(output);
+  });
+
+  it("maps MCP isError only from structured errors", () => {
+    const notFound = toolResponse({
+      evidence: [evidence("issue_not_found", { searchedRepos: ["zenod-ai/zenod"], searchedWindow: "48h", candidates: [] })],
+    });
+    const failedRead = toolResponse({
+      evidence: [],
+      errors: [{ code: "github_unavailable", message: "GitHub request failed." }],
+    });
+
+    expect(toMcpToolResult("archus.find_issue", notFound).isError).toBeUndefined();
+    expect(toMcpToolResult("archus.get_issue", failedRead).isError).toBe(true);
+  });
+
+  it("forwards non-conforming MCP output by default instead of breaking the live tool", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const malformed = toolResponse({
+        evidence: [evidence("issue_created", { target: "zenod-ai/zenod#250" })],
+      });
+
+      const result = toMcpToolResult("archus.request_backlog_action", malformed);
+
+      expect(result.structuredContent).toBe(malformed);
+      expect(result.isError).toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("archus.request_backlog_action returned non-conforming"));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

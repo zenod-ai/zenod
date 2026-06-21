@@ -4,7 +4,7 @@ import { VERSION } from "zenod";
 
 /**
  * The mesh: one agent calling another over MCP. A peer agent exposes its tools at
- * an MCP endpoint (e.g. https://app.zenod.dev/mcp); we connect as a client with a
+ * an MCP endpoint (e.g. https://c1.zenod.dev/mcp); we connect as a client with a
  * bearer token and call one of its tools. This is how the vaultless Console
  * delegates a memory question to Zenod (`ask_brain`) — it has no vault of its own.
  */
@@ -23,7 +23,7 @@ export interface PeerToolSpec {
 export interface PeerConfig {
   /** Short id, e.g. "zenod" — surfaced to the chat as the tool `ask_<name>`. */
   name: string;
-  /** The peer's MCP endpoint URL, e.g. https://app.zenod.dev/mcp */
+  /** The peer's MCP endpoint URL, e.g. https://c1.zenod.dev/mcp */
   url: string;
   /** Bearer token the peer accepts (its api_token, or an OAuth token). */
   token: string;

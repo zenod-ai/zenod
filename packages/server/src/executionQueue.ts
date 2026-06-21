@@ -55,7 +55,7 @@ export interface ExecutionQueueOptions {
   /** Start the runner/worker for a ticket. Epaminon-internal; the worker later calls
    *  back via reportOutcome/reportBlocked. Errors here fail the ticket. */
   launch: (ticket: ExecutionTicket) => void | Promise<void>;
-  /** Ship an APPROVED outward outcome — route to Outbound (send) or the runner (merge)
+  /** Ship an APPROVED outward outcome — route to Callistheness (send) or the runner (merge)
    *  — and return the evidence URL. Errors fail the ticket. */
   ship: (ticket: ExecutionTicket) => Promise<string>;
   /** Report an Epaminon-owned state edge up to Archus (apply_execution_event). Must be
@@ -193,7 +193,7 @@ export class ExecutionQueue {
 
   /**
    * `approve_execution` (Archus → Epaminon). The human approved the content at
-   * needs-review; ship it (route to Outbound/runner via the `ship` seam) and report
+   * needs-review; ship it (route to Callistheness/runner via the `ship` seam) and report
    * `done` with the real evidence URL. Idempotent: approving an already-shipped ticket
    * is a no-op. A ship failure fails the ticket.
    */

@@ -1,5 +1,9 @@
 # Research → Recommendation: is the suite the right shape?
 
+Tool naming note: this research note predates the v4 public contract. Use
+[behavioral-intent-patterns-and-chat-test-strategy-v4.md](./behavioral-intent-patterns-and-chat-test-strategy-v4.md)
+as canonical for public tool names and output schemas.
+
 **Question (Jordi):** are we building the wrong shape? Resolve Central, the mesh, and the
 "Council" — with reference to how real multi-agent systems are built, not just my opinion.
 
@@ -64,7 +68,7 @@ crisp contract (objective, output format, boundaries) or it drifts. [anthropic-m
   Its identity is "you can do everything"; its tools are the other agents.
 - **Crucial design choice — agents-as-tools, not flattened union.** The Council should NOT
   hold all ~40 leaf tools flat (that bloats context and confuses routing). It holds **one
-  delegation tool per agent**: `ask_zenod(task)`, `archus(task)`, `outbound(task)`,
+  delegation tool per agent**: `ask_brain(task)`, `archus(task)`, `outbound(task)`,
   `epaminon(task)`, … Each delegates to that agent's own LLM+tools and returns a result; the
   Council synthesizes and keeps talking to you. ~6 tools, not 40. This is the manager pattern,
   and it also resolves the earlier "tool-list scoping/bloat" worry.
@@ -89,7 +93,7 @@ Jordi's refinement, which collapses the biggest remaining mess (per-agent web se
   it's **Council + 1 agent**. You talk to Z0 *through* the Council, transparently. No separate
   "single agent chats by itself" path — uniformity preserved.
 - **Agents are headless MCP servers.** No per-agent web chat. Reached two ways: (a)
-  *conversationally* via the Council (it delegates with `ask_zenod(task)` etc.); (b)
+  *conversationally* via the Council (it delegates with `ask_brain(task)` etc.); (b)
   *machine-to-machine* directly over authenticated MCP — a peer agent uses Z0's memory tools
   without the Council in the loop.
 - **One human UI: the Council's.** Each agent contributes only its **config panel** (Z0 →
@@ -108,7 +112,7 @@ Why this is *more* uniform, not less:
 **Honest caveats (planned, not surprises):**
 - The **Council is the single human entry point** — if it's down, no chat (agents still work
   machine-to-machine). Acceptable; one healthy front-end beats seven.
-- **Migration:** Z0 today *is* app.zenod.dev and *holds the WhatsApp session*. In this model the
+- **Migration:** Z0 today *is* c1.zenod.dev and *holds the WhatsApp session*. In this model the
   **Council** takes the gateways + the main domain; Z0 becomes a headless MCP server behind it.
   The WhatsApp number moves Z0 → Council at cutover. One-time, plannable.
 

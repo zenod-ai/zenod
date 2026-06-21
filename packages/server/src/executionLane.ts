@@ -13,7 +13,7 @@ import type { Settings } from "./settings.js";
  * - `report`  → POST `apply_execution_event` to Archus (deterministic, no-LLM). REAL,
  *   but inert until `exec_lane_secret` + `exec_archus_url` are provisioned.
  * - `launch`  → hand the ticket to the runner (run-on-command). STUB until #194.
- * - `ship`    → route an approved outward outcome to Outbound (send) / runner (merge).
+ * - `ship`    → route an approved outward outcome to Callistheness (send) / runner (merge).
  *   STUB until #197.
  */
 
@@ -85,7 +85,7 @@ async function launchExecution(settings: Settings, t: ExecutionTicket): Promise<
   }
 }
 
-/** STUB (#197): route an approved outward outcome to Outbound (send) / runner (merge). */
+/** STUB (#197): route an approved outward outcome to Callistheness (send) / runner (merge). */
 async function shipExecution(t: ExecutionTicket): Promise<string> {
   throw new Error(`ship not wired yet (#197): cannot ship ${t.executionId} (${t.target})`);
 }

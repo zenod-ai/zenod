@@ -41,7 +41,13 @@ services:
       - zenod-agent-codex-home:/runner/codex-home
       - zenod-agent-gh:/runner/gh
     environment:
-      ZENOD_APP_URL: ${ZENOD_APP_URL:-https://app.zenod.dev}
+      # Proactive runner notifications ("working", "needs review", "blocked",
+      # "merged") are delivered through the Console because it owns the live
+      # WhatsApp/Telegram sockets. Legacy ZENOD_APP_URL/ZENOD_API_TOKEN are kept
+      # only as fallback inputs for older deployments.
+      ZENOD_NOTIFY_URL: ${ZENOD_NOTIFY_URL:-http://zenod-console:8080}
+      ZENOD_NOTIFY_TOKEN: ${ZENOD_NOTIFY_TOKEN:-}
+      ZENOD_APP_URL: ${ZENOD_APP_URL:-https://c1.zenod.dev}
       ZENOD_API_TOKEN: ${ZENOD_API_TOKEN}
       # Console MCP gateway: workers register this one endpoint and inherit every
       # enabled agent's curated semantic tools, forwarded to each owner with that

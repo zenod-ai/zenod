@@ -5,9 +5,9 @@ import type { AddressInfo } from "node:net";
 import { serve, type ServerType } from "@hono/node-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { BrainEngine } from "zenod";
-import { EPAMINON_AGENT } from "../src/agent.js";
+import { ARCHUS_AGENT, EPAMINON_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -281,6 +281,169 @@ describe("MCP endpoint", () => {
   });
 });
 
+describe("Archus MCP v4 issue reads", () => {
+  let dir: string;
+  let runtime: Runtime;
+  let server: ServerType;
+  let url: URL;
+  let token: string;
+  let originalFetch: typeof globalThis.fetch;
+
+  const issue103 = {
+    number: 103,
+    title: "Fusion spike planning",
+    html_url: "https://github.com/AlfaBlok/obsidian-brain/issues/103",
+    labels: [{ name: "owner:agent" }, { name: "status:proposed" }],
+    created_at: "2026-06-18T10:00:00Z",
+    updated_at: "2026-06-19T10:00:00Z",
+    state: "open",
+    body: "Acceptance criteria: explain the Fusion spike. Scope: repo docs. Source context: voice note.",
+  };
+  const issue108 = {
+    number: 108,
+    title: "Runner notification bug",
+    html_url: "https://github.com/AlfaBlok/obsidian-brain/issues/108",
+    labels: [{ name: "bug" }],
+    created_at: "2026-06-19T11:00:00Z",
+    updated_at: "2026-06-20T11:00:00Z",
+    state: "open",
+    body: "Notifications did not fire.",
+  };
+
+  beforeAll(async () => {
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!url.startsWith("https://api.github.com/")) return originalFetch(input, init);
+      if (url.includes("/repos/AlfaBlok/obsidian-brain/issues/103/comments")) {
+        return new Response(JSON.stringify([{ body: "runner launched", html_url: `${issue103.html_url}#issuecomment-1`, created_at: "2026-06-19T10:30:00Z" }]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/repos/AlfaBlok/obsidian-brain/issues/103")) {
+        return new Response(JSON.stringify(issue103), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/repos/AlfaBlok/obsidian-brain/issues/999")) {
+        return new Response(JSON.stringify({ message: "Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/repos/AlfaBlok/obsidian-brain/issues?")) {
+        return new Response(JSON.stringify([issue108, issue103]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ message: `Unhandled ${url}` }), { status: 500, headers: { "Content-Type": "application/json" } });
+    }) as typeof globalThis.fetch;
+
+    dir = await mkdtemp(join(tmpdir(), "zenod-archus-mcp-"));
+    runtime = new Runtime(dir, ARCHUS_AGENT);
+    runtime.settings.setRaw("backlog_repo", "AlfaBlok/obsidian-brain");
+    runtime.settings.setRaw("github_token", "test-token");
+    token = runtime.settings.regenerateApiToken();
+    const app = createApp(runtime);
+    server = serve({ fetch: app.fetch, port: 0 });
+    const { port } = server.address() as AddressInfo;
+    url = new URL(`http://127.0.0.1:${port}/mcp`);
+  });
+
+  afterAll(async () => {
+    globalThis.fetch = originalFetch;
+    server.close();
+    runtime.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  async function connect() {
+    const transport = new StreamableHTTPClientTransport(url, {
+      requestInit: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const client = new Client({ name: "archus-test-client", version: "0.0.0" });
+    await client.connect(transport);
+    return client;
+  }
+
+  it("exposes structured get/list/find issue reads", async () => {
+    const client = await connect();
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name).sort()).toEqual(
+      expect.arrayContaining(["archus.get_issue", "archus.find_issue", "archus.list_issues"]),
+    );
+
+    const got = await client.callTool({ name: "archus.get_issue", arguments: { target: "AlfaBlok/obsidian-brain#103" } });
+    expect(got.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [
+          expect.objectContaining({
+            kind: "issue",
+            target: "AlfaBlok/obsidian-brain#103",
+            title: "Fusion spike planning",
+            url: issue103.html_url,
+          }),
+        ],
+      }),
+    );
+
+    const listed = await client.callTool({ name: "archus.list_issues", arguments: { state: "open", labels: ["bug"] } });
+    expect(listed.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [
+          expect.objectContaining({
+            kind: "issue_list",
+            issues: [expect.objectContaining({ target: "AlfaBlok/obsidian-brain#108", title: "Runner notification bug" })],
+          }),
+        ],
+      }),
+    );
+
+    const resolved = await client.callTool({ name: "archus.find_issue", arguments: { reference: "#103" } });
+    expect(resolved.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [
+          expect.objectContaining({
+            kind: "issue_resolved",
+            target: "AlfaBlok/obsidian-brain#103",
+            url: issue103.html_url,
+          }),
+        ],
+      }),
+    );
+
+    const ambiguous = await client.callTool({ name: "archus.find_issue", arguments: { reference: "issue" } });
+    expect(ambiguous.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [],
+        candidates: expect.arrayContaining([
+          expect.objectContaining({ target: "AlfaBlok/obsidian-brain#103" }),
+          expect.objectContaining({ target: "AlfaBlok/obsidian-brain#108" }),
+        ]),
+      }),
+    );
+
+    const missingResolver = await client.callTool({ name: "archus.find_issue", arguments: { reference: "does-not-exist", recentWindow: "48h" } });
+    expect(missingResolver.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [
+          expect.objectContaining({
+            kind: "issue_not_found",
+            searchedRepos: ["AlfaBlok/obsidian-brain"],
+            searchedWindow: "48h",
+            candidates: [],
+          }),
+        ],
+      }),
+    );
+    expect(missingResolver.isError).toBeUndefined();
+
+    const missingGet = await client.callTool({ name: "archus.get_issue", arguments: { target: "AlfaBlok/obsidian-brain#999" } });
+    expect(missingGet.isError).toBe(true);
+    expect(missingGet.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [],
+        errors: [expect.objectContaining({ code: "issue_not_found" })],
+      }),
+    );
+    await client.close();
+  });
+});
+
 describe("Epaminon MCP execution status", () => {
   let dir: string;
   let runtime: Runtime;
@@ -337,6 +500,46 @@ describe("Epaminon MCP execution status", () => {
       }),
     ]);
     expect(JSON.stringify(result.content)).toContain("AlfaBlok/obsidian-brain#103");
+    await client.close();
+  });
+
+  it("exposes epaminon.execution_status as the typed v4 status read", async () => {
+    const client = await connect();
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name)).toContain("epaminon.execution_status");
+
+    const result = await client.callTool({
+      name: "epaminon.execution_status",
+      arguments: { workIssue: "AlfaBlok/obsidian-brain#103" },
+    });
+    expect(result.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [
+          expect.objectContaining({
+            kind: "execution_status",
+            executionId: "104",
+            workIssue: "AlfaBlok/obsidian-brain#103",
+            state: "running",
+          }),
+        ],
+      }),
+    );
+
+    const missing = await client.callTool({
+      name: "epaminon.execution_status",
+      arguments: { executionId: "missing" },
+    });
+    expect(missing.structuredContent).toEqual(
+      expect.objectContaining({
+        evidence: [
+          expect.objectContaining({
+            kind: "execution_none",
+            executions: [],
+          }),
+        ],
+      }),
+    );
+    expect(missing.isError).toBeUndefined();
     await client.close();
   });
 });
