@@ -172,7 +172,7 @@ const fmt = (nums: number[]): string => nums.map((n) => `#${n}`).join(", ");
 const EXECUTION_STATE_RE =
   /\b(exec:(?:queued|running|needs-review|approved|blocked|done)|execution ticket|queued for execution|runner\s+(?:picked up|started|launched|reported|blocked)|running|picked up|dispatched|launched|started|ran|did(?: not|n't) run)\b/i;
 const NEGATIVE_QUEUE_RE =
-  /\b(?:no|not|never|did(?: not|n't))\b[\s\S]{0,80}\b(?:run|ran|running|picked up|dispatched|launched|started)\b/i;
+  /\b(?:no|never|did(?: not|n't))\b[\s\S]{0,80}\b(?:run|ran|running|picked up|dispatched|launched|started)\b|\bnot\b[\s\S]{0,80}\b(?:running|picked up|dispatched|launched|started)\b/i;
 const NEGATIVE_CREATED_QUEUED_RE = /\b(?:no|not|never)\b[\s\S]{0,80}\bcreated\b[\s\S]{0,80}\bqueued\b/i;
 
 function claimsExecutionState(prose: string): boolean {

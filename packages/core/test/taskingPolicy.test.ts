@@ -211,6 +211,21 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, [created(119)])).toBe(reply);
   });
 
+  it("does not treat quoted issue instructions like 'do not run' as execution-status claims", () => {
+    const reply =
+      "**Closed** (smoke test passed; “do not run”).\n" +
+      "AlfaBlok/obsidian-brain#121 — “Console post266 link smoke”. Labels: `status:proposed`, `type:bug`.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "archus_read_exact_github_issue",
+        input: { target: "AlfaBlok/obsidian-brain#121" },
+        result:
+          "AlfaBlok/obsidian-brain#121 - Console post266 link smoke - state: closed - https://github.com/AlfaBlok/obsidian-brain/issues/121\nBody: Temporary smoke test. Do not run this issue.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("does not correct a queue receipt backed by queue_execution", () => {
     const reply = "Execution ticket opened and queued: [#108](https://github.com/AlfaBlok/obsidian-brain/issues/108), live execution #109.";
     const actions: RecordedAction[] = [
