@@ -225,6 +225,7 @@ describe("MCP endpoint", () => {
       .join("\n");
     expect(text).toContain("voice_mcp_1");
     expect(text).toContain("media=ptt");
+    expect(text).toContain("chars=34");
     expect(text).toContain("raw voice transcript from WhatsApp");
     expect(text).toContain("reply to the voice note");
     expect((result.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);

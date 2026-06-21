@@ -59,7 +59,8 @@ export function formatConversationTranscript(entries: ConversationTranscriptEntr
       const status = entry.status ? `; status=${entry.status}` : "";
       const id = entry.messageId ? `; message=${entry.messageId}` : "";
       const body = entry.bodyText.trim() || "(empty body/transcript not available)";
-      return `[${at}] ${entry.direction} ${who}${id}${media}${status}\n${body}`;
+      const chars = entry.bodyText.trim() ? `; chars=${entry.bodyText.length}` : "";
+      return `[${at}] ${entry.direction} ${who}${id}${media}${status}${chars}\n${body}`;
     })
     .join("\n\n");
 }
