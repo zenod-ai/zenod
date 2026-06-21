@@ -49,6 +49,7 @@ import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
 import { TelegramGateway } from "./telegramGateway.js";
 import { evidence, type ToolResponse, toolResponse } from "./toolOutput.js";
+import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 
 export class NotConfiguredError extends Error {
   constructor() {
@@ -147,6 +148,13 @@ export class Runtime {
       settings: this.settings,
       store: this.whatsappStore,
       getEngine: () => this.getEngine(),
+      recordAssistantMessage: (event, text) =>
+        this.state.appendMessage(
+          conversationId("whatsapp", normalizeWhatsAppIdentifier(event.senderId) || event.senderId),
+          "assistant",
+          text,
+          "whatsapp",
+        ),
     });
     this.telegram = new TelegramGateway({
       settings: this.settings,
