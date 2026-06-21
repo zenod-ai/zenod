@@ -146,6 +146,18 @@ class FakeLlm implements BrainLlm {
       });
       return { text, readPaths: [] };
     }
+    if (taskTools && input.question.startsWith("EDITISSUEBLANKS:")) {
+      const text = await taskTools.editIssue({
+        repo: "zenod-ai/zenod",
+        issueNumber: 91,
+        title: "",
+        body: "",
+        labelsAdd: ["codex-live-test"],
+        comment: "post the smoke-test comment",
+        status: "",
+      });
+      return { text, readPaths: [] };
+    }
     if (taskTools && input.question.startsWith("QUERYBACKLOG")) {
       const text = await taskTools.queryBacklog("open issues");
       return { text, readPaths: [] };
@@ -751,6 +763,49 @@ describe("BrainEngine", () => {
       "edit:zenod-ai/zenod:90:needs-update:## Obj",
       "query:open issues",
       "service:ready",
+    ]);
+  });
+
+  it("omits blank edit_issue fields before calling the external GitHub editor", async () => {
+    const calls: unknown[] = [];
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      taskingTools: {
+        async createIssue() {
+          return "created";
+        },
+        async labelIssue() {
+          return "labeled";
+        },
+        async editIssue(input) {
+          calls.push(input);
+          return "edited";
+        },
+        async queryBacklog() {
+          return "";
+        },
+        async serviceBacklog() {
+          return "";
+        },
+        async approveQueue() {
+          return "queued";
+        },
+      },
+    });
+
+    const reply = await e.handleTasking({ text: "EDITISSUEBLANKS: comment and label #91", surface: "web", conversationKey: "blank-edit" });
+
+    expect(reply.actions.map((action) => action.tool)).toEqual(["editIssue"]);
+    expect(calls).toEqual([
+      {
+        repo: "zenod-ai/zenod",
+        issueNumber: 91,
+        labelsAdd: ["codex-live-test"],
+        comment: "post the smoke-test comment",
+      },
     ]);
   });
 

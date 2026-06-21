@@ -649,7 +649,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
       // status:queued or status:approved-merge, so editing a ticket can revise
       // scope/body/status without escalating execution.
       editIssue: async (input) => {
-        const normalized = { ...input, repo: input.repo || defaultRepo() };
+        const nonBlank = (value: string | undefined): string | undefined => (value?.trim() ? value : undefined);
+        const normalized = {
+          ...input,
+          repo: input.repo || defaultRepo(),
+          title: nonBlank(input.title),
+          body: nonBlank(input.body),
+          comment: nonBlank(input.comment),
+          status: nonBlank(input.status),
+          stateReason: nonBlank(input.stateReason) as typeof input.stateReason | undefined,
+        };
         return runMutation("editIssue", normalized, () =>
           options.taskingTools
             ? options.taskingTools.editIssue({
