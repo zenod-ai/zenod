@@ -6,6 +6,12 @@ import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } f
 import type { TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
 import type { ExecutionTicket } from "./executionQueue.js";
 import {
+  formatConversationTranscript,
+  transcriptQueryFromToolArgs,
+  type ConversationTranscriptEntry,
+  type ConversationTranscriptReader,
+} from "./conversationTranscript.js";
+import {
   ASK_BRAIN_SHAPE,
   CREATE_ISSUE_SHAPE,
   EDIT_GITHUB_ISSUE_SHAPE,
@@ -46,24 +52,6 @@ export interface BacklogIssueReader {
     limit?: number;
   }): Promise<ToolResponse>;
 }
-export interface ConversationTranscriptEntry {
-  direction: "inbound" | "outbound";
-  at: number;
-  messageId: string | null;
-  chatId: string;
-  contactId: string | null;
-  bodyText: string;
-  status: string;
-  mediaType: string | null;
-  sentMessageId?: string | null;
-}
-export type ConversationTranscriptReader = (input: {
-  sinceMs?: number;
-  contactId?: string;
-  chatId?: string;
-  limit?: number;
-}) => ConversationTranscriptEntry[];
-
 /** Human-facing text for a finished task_brain job — mirrors the old reply. */
 function formatTaskingReply(result: TaskingReply): string {
   const actions =
@@ -103,23 +91,6 @@ function formatExecutionStatus(tickets: ExecutionTicket[]): string {
       return parts.join(" — ");
     })
     .join("\n");
-}
-
-function formatConversationTranscript(entries: ConversationTranscriptEntry[]): string {
-  if (entries.length === 0) {
-    return "No WhatsApp transcript entries matched the requested window/scope.";
-  }
-  return entries
-    .map((entry) => {
-      const at = new Date(entry.at).toISOString();
-      const who = entry.direction === "inbound" ? entry.contactId ?? "inbound" : "Zenod";
-      const media = entry.mediaType ? `; media=${entry.mediaType}` : "";
-      const status = entry.status ? `; status=${entry.status}` : "";
-      const id = entry.messageId ? `; message=${entry.messageId}` : "";
-      const body = entry.bodyText.trim() || "(empty body/transcript not available)";
-      return `[${at}] ${entry.direction} ${who}${id}${media}${status}\n${body}`;
-    })
-    .join("\n\n");
 }
 
 function filterExecutionTickets(tickets: ExecutionTicket[], message?: string): ExecutionTicket[] {
@@ -320,11 +291,11 @@ export function buildMcpServer(
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
       async ({ windowMinutes, contactId, chatId, limit }) => {
-        const sinceMs = Date.now() - (windowMinutes ?? 120) * 60 * 1000;
-        const entries = readConversationTranscript({ sinceMs, contactId, chatId, limit });
+        const query = transcriptQueryFromToolArgs({ windowMinutes, contactId, chatId, limit });
+        const entries = readConversationTranscript(query);
         return {
           content: [{ type: "text", text: formatConversationTranscript(entries) }],
-          structuredContent: { entries, count: entries.length, sinceMs, windowMinutes: windowMinutes ?? 120 },
+          structuredContent: { entries, count: entries.length, sinceMs: query.sinceMs, windowMinutes: query.windowMinutes },
         };
       },
     );

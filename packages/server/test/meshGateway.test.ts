@@ -150,6 +150,48 @@ describe("Console mesh gateway contract", () => {
     ]);
   });
 
+  it("serves recent conversation transcripts from the Console channel audit store", async () => {
+    runtime.whatsappStore.recordInbound({
+      messageId: "voice-local-transcript",
+      chatId: "110771719696610@lid",
+      senderId: "34618217703@s.whatsapp.net",
+      senderName: "Jordi",
+      chatName: "Jordi",
+      isGroup: false,
+      timestamp: Math.floor(Date.now() / 1000),
+      body: "local console transcript text",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: {},
+      raw: {},
+    });
+
+    const client = await connectGateway();
+    try {
+      const result = await client.callTool({
+        name: "get_recent_conversation_transcript",
+        arguments: { windowMinutes: 10, contactId: "34618217703", limit: 5 },
+      });
+      expect(JSON.stringify(result.content)).toContain("local console transcript text");
+      expect(result.structuredContent).toEqual(
+        expect.objectContaining({
+          count: 1,
+          entries: expect.arrayContaining([
+            expect.objectContaining({
+              messageId: "voice-local-transcript",
+              bodyText: "local console transcript text",
+              mediaType: "ptt",
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
   it("never republishes internal execution-lane or raw mechanical tools", async () => {
     const tools = await listGatewayToolNames();
     expect(tools).not.toContain("enqueue_execution");

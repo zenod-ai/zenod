@@ -1454,6 +1454,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
               };
             }
           },
+          (input) => runtime.whatsappStore.recentTranscript(input),
         )
       : buildMcpServer(
           () => runtime.getEngine(),
