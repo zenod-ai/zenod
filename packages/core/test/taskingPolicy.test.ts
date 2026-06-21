@@ -141,6 +141,45 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("corrects a positive execution narrative when Epaminon found no execution for that issue", () => {
+    const reply =
+      "AlfaBlok/obsidian-brain#107 ran via child #108, completed successfully, opened PR #110, and changed docs/BACKLOG-SYSTEM-PLAN.md.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_read_issue_execution_status",
+        input: { input: "AlfaBlok/obsidian-brain#107" },
+        result: "No execution tickets currently queued, running, blocked, awaiting review, approved, done, or failed.",
+      },
+      {
+        tool: "archus_read_exact_github_issue",
+        input: { input: "AlfaBlok/obsidian-brain#107" },
+        result: "Issue body mentions child #108 and PR #110.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("no execution ticket for #107");
+    expect(out).toContain("Do not treat issue-body comments");
+  });
+
+  it("allows a no-execution answer for the parent while separately naming child execution evidence", () => {
+    const reply =
+      "No execution is recorded for AlfaBlok/obsidian-brain#107 itself. Related child #108 has execution #109 in needs-review with PR #110.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_read_issue_execution_status",
+        input: { input: "AlfaBlok/obsidian-brain#107" },
+        result: "No execution tickets currently queued, running, blocked, awaiting review, approved, done, or failed.",
+      },
+      {
+        tool: "epaminon_read_issue_execution_status",
+        input: { input: "AlfaBlok/obsidian-brain#108" },
+        result: "#109 — AlfaBlok/obsidian-brain#108 — needs-review — evidence: https://github.com/AlfaBlok/obsidian-brain/pull/110",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("does not correct a queue receipt backed by queue_execution", () => {
     const reply = "Execution ticket opened and queued: [#108](https://github.com/AlfaBlok/obsidian-brain/issues/108), live execution #109.";
     const actions: RecordedAction[] = [

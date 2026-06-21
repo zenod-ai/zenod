@@ -38,6 +38,7 @@ function ensureProposedStatus(labels: string[]): string[] {
 /** A recorded tasking tool call. Structurally compatible with TaskingAction. */
 export interface RecordedAction {
   tool: string;
+  input?: Record<string, unknown>;
   result: string;
 }
 
@@ -181,6 +182,46 @@ function hasExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean 
   });
 }
 
+function executionStatusToolName(tool: string): boolean {
+  const normalized = tool.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return normalized === "executionstatus" || normalized === "epaminonreadissueexecutionstatus";
+}
+
+function actionInputText(input: Record<string, unknown> | undefined): string {
+  if (!input) return "";
+  return Object.values(input)
+    .map((value) => (typeof value === "string" ? value : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function noExecutionNumbers(actions: ReadonlyArray<RecordedAction>): Set<number> {
+  const nums = new Set<number>();
+  for (const action of actions) {
+    if (!executionStatusToolName(action.tool)) continue;
+    if (!/\bNo execution tickets\b/i.test(action.result)) continue;
+    for (const n of issueNumbersIn(actionInputText(action.input))) nums.add(n);
+  }
+  return nums;
+}
+
+const POSITIVE_EXECUTION_RE =
+  /\b(?:ran|executed|completed|finished|done|succeeded|opened\s+PR|pull request|files?\s+changed|changed\s+files?|merged|needs-review|awaiting review)\b/i;
+const NEGATIVE_EXECUTION_LINE_RE = /\b(?:no|not|never|without|none|does(?: not|n't)|did(?: not|n't))\b/i;
+
+function claimsPositiveExecutionForNoExecutionTarget(prose: string, noExecNums: ReadonlySet<number>): number[] {
+  const contradicted = new Set<number>();
+  for (const line of prose.split("\n")) {
+    if (!POSITIVE_EXECUTION_RE.test(line)) continue;
+    if (NEGATIVE_EXECUTION_LINE_RE.test(line)) continue;
+    const lineNums = issueNumbersIn(line);
+    for (const n of noExecNums) {
+      if (lineNums.has(n)) contradicted.add(n);
+    }
+  }
+  return [...contradicted];
+}
+
 /**
  * Build a user-facing reply from the tool results when the model produced no
  * final text (e.g. it exhausted its step budget mid-tool-call, leaving
@@ -208,6 +249,16 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const receipts = createReceipts(actions);
   const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
   const executionGrounded = hasExecutionGrounding(actions);
+  const contradictedNoExecution = claimsPositiveExecutionForNoExecutionTarget(prose, noExecutionNumbers(actions));
+
+  if (contradictedNoExecution.length > 0) {
+    return [
+      `⚠️ Correction — Epaminon's live execution read found no execution ticket for ${fmt(contradictedNoExecution)} this turn.`,
+      "Do not treat issue-body comments, child-ticket notes, PR references, or narrative history as proof that this specific issue ran.",
+      "",
+      text,
+    ].join("\n");
+  }
 
   // Ground truth beats verb-matching: when a create_issue tool actually RAN and
   // FAILED this turn, any reply that then presents issue numbers no successful
