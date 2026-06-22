@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout } from "./fanout-codex.mjs";
+
+function git(cwd, args) {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return result.stdout.trim();
+}
 
 test("detectBlocker does NOT block a completed handoff that merely describes status labels", () => {
   // Real regression: a worker whose change SETS status:blocked described it in prose.
@@ -117,4 +127,37 @@ test("remoteMatchesRepo accepts common GitHub remote forms and rejects wrong che
   assert.equal(remoteMatchesRepo("git@github.com:AlfaBlok/obsidian-brain.git", "AlfaBlok/obsidian-brain"), true);
   assert.equal(remoteMatchesRepo("https://github.com/zenod-ai/zenod.git", "AlfaBlok/obsidian-brain"), false);
   assert.equal(remoteMatchesRepo("", "AlfaBlok/obsidian-brain"), false);
+});
+
+test("resetBaseCheckout heals dirty stale runner cache checkout", () => {
+  const root = mkdtempSync(join(tmpdir(), "zenod-fanout-reset-"));
+  const origin = join(root, "origin.git");
+  const seed = join(root, "seed");
+  const work = join(root, "work");
+  try {
+    git(root, ["init", "--bare", origin]);
+    git(root, ["init", seed]);
+    git(seed, ["config", "user.email", "test@example.com"]);
+    git(seed, ["config", "user.name", "Test"]);
+    writeFileSync(join(seed, "tracked.txt"), "v1\n");
+    git(seed, ["add", "tracked.txt"]);
+    git(seed, ["commit", "-m", "v1"]);
+    git(seed, ["branch", "-M", "main"]);
+    git(seed, ["remote", "add", "origin", origin]);
+    git(seed, ["push", "-u", "origin", "main"]);
+
+    git(root, ["clone", origin, work]);
+    writeFileSync(join(seed, "tracked.txt"), "v2\n");
+    git(seed, ["commit", "-am", "v2"]);
+    git(seed, ["push", "origin", "main"]);
+    git(work, ["fetch", "origin", "main"]);
+    writeFileSync(join(work, "tracked.txt"), "dirty local residue\n");
+
+    resetBaseCheckout(work, "main");
+
+    assert.equal(readFileSync(join(work, "tracked.txt"), "utf8"), "v2\n");
+    assert.equal(git(work, ["status", "--porcelain"]), "");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

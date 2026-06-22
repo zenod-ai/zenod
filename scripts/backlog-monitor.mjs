@@ -25,7 +25,7 @@
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 
 const BACKLOG = process.env.ZENOD_BACKLOG_REPO || "AlfaBlok/obsidian-brain";
@@ -60,6 +60,7 @@ const NOTIFY_COOLDOWN_MS = Number(process.env.ZENOD_NOTIFY_COOLDOWN_MS || 12 * 6
 // the next scan. Tunable via env.
 const MERGE_ATTEMPT_HISTORY = Number(process.env.ZENOD_MERGE_ATTEMPT_HISTORY || 200);
 const BRIDGE_MERGE_ATTEMPT_HISTORY = 30;
+const LAUNCH_EARLY_EXIT_MS = Number(process.env.ZENOD_LAUNCH_EARLY_EXIT_MS || 30_000);
 const STATUS_LABEL_PRIORITY = [
   "status:blocked",
   "status:needs-review",
@@ -242,19 +243,65 @@ function workdirForRepo(repo) {
   return `${dirname(WORKDIR)}/${safe || "target-repo"}`;
 }
 
-function launchFanout(target, execNumber, extraEnv = {}) {
+function safeFilePart(value) {
+  return String(value || "")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80) || "unknown";
+}
+
+function launchLogPath(target, execNumber, now = Date.now()) {
+  return `${dirname(STATE_PATH)}/launch-${now}-${safeFilePart(target)}-${execNumber}.log`;
+}
+
+function shouldReportEarlyLaunchExit(code, elapsedMs, windowMs = LAUNCH_EARLY_EXIT_MS) {
+  return code !== 0 && elapsedMs <= windowMs;
+}
+
+function earlyLaunchFailureNote(target, execNumber, code, signal, logPath) {
+  const exit = signal ? `signal ${signal}` : `exit code ${code}`;
+  return `fanout launcher for ${target}#${execNumber} stopped immediately with ${exit}; see runner log ${logPath}`;
+}
+
+function launchFanout(target, execNumber, extraEnv = {}, options = {}) {
   const targetWorkdir = workdirForRepo(target);
+  mkdirSync(dirname(STATE_PATH), { recursive: true });
+  const logPath = launchLogPath(target, execNumber);
+  const fd = openSync(logPath, "a");
   const args = [
     "start", "--repo", target, "--issues", String(execNumber),
     "--workdir", targetWorkdir, "--draft-pr", "--github-status",
     "--concurrency", String(CONCURRENCY),
   ];
-  const child = spawn("zenod-fanout-codex", args, { stdio: "ignore", detached: true, env: { ...process.env, ...extraEnv } });
+  const startedAt = Date.now();
+  const child = spawn("zenod-fanout-codex", args, { stdio: ["ignore", fd, fd], detached: true, env: { ...process.env, ...extraEnv } });
   // Belt-and-suspenders: catch any late async spawn error so it can never become an
   // unhandled 'error' event that crashes the whole monitor.
-  child.on("error", (err) => log(`fanout spawn error (post-probe) for ${target}#${execNumber}: ${err.code || err.message}`));
+  child.on("error", (err) => {
+    try {
+      closeSync(fd);
+    } catch {
+      // already closed
+    }
+    const note = `fanout launcher failed to spawn for ${target}#${execNumber}: ${err.code || err.message}; see runner log ${logPath}`;
+    log(note);
+    void options.onEarlyExit?.(note);
+  });
+  child.on("exit", (code, signal) => {
+    try {
+      closeSync(fd);
+    } catch {
+      // already closed
+    }
+    const elapsedMs = Date.now() - startedAt;
+    if (!shouldReportEarlyLaunchExit(code, elapsedMs)) return;
+    const note = earlyLaunchFailureNote(target, execNumber, code, signal, logPath);
+    log(note);
+    void options.onEarlyExit?.(note);
+  });
   child.unref();
-  log(`launched fanout for ${target}#${execNumber} workdir=${targetWorkdir}`);
+  log(`launched fanout for ${target}#${execNumber} workdir=${targetWorkdir} log=${logPath}`);
+  return { pid: child.pid, logPath };
 }
 
 function execStatusAndComment(target, execNumber) {
@@ -397,6 +444,18 @@ async function reportToEpaminon(path, body) {
   }
 }
 
+async function markDispatchedLaunchBlocked(executionId, target, note) {
+  const state = loadState();
+  const d = state.dispatched?.[executionId];
+  if (!d || d.reportedStatus) return;
+  d.reportedStatus = "launch-blocked";
+  d.launchBlocker = note;
+  d.launchBlockedAt = new Date().toISOString();
+  saveState(state);
+  const ok = await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note });
+  if (ok) await notify(`⛔ Execution ${executionId} (${target}) — launch blocked: ${note}`);
+}
+
 // Launch an Epaminon-dispatched ticket: work its target work-ticket directly (no
 // central materialize — the dispatched target IS the issue).
 function launchDispatched(executionId, target, context, state) {
@@ -409,13 +468,24 @@ function launchDispatched(executionId, target, context, state) {
     log(`/run: launcher not healthy — ${executionId} not started`);
     return { ok: false, note: "runner launcher is not healthy; fanout could not start" };
   }
-  launchFanout(t.repo, t.number, {
+  const launch = launchFanout(t.repo, t.number, {
     ZENOD_EXECUTION_ID: String(executionId),
     ZENOD_EXECUTION_CONTEXT: String(context || ""),
     ...(LANE_SECRET ? { ZENOD_EXEC_LANE_SECRET: LANE_SECRET } : {}),
     ZENOD_EPAMINON_URL: EPAMINON_URL,
+  }, {
+    onEarlyExit: (note) => markDispatchedLaunchBlocked(executionId, target, note),
   });
-  state.dispatched[executionId] = { repo: t.repo, issueN: t.number, target, workdir: workdirForRepo(t.repo), reportedStatus: null };
+  state.dispatched[executionId] = {
+    repo: t.repo,
+    issueN: t.number,
+    target,
+    workdir: workdirForRepo(t.repo),
+    pid: launch.pid ?? null,
+    launchLogPath: launch.logPath,
+    launchedAt: new Date().toISOString(),
+    reportedStatus: null,
+  };
   return { ok: true };
 }
 
@@ -1058,6 +1128,9 @@ export {
   parseTarget,
   workdirForRepo,
   dispatchedOutcome,
+  shouldReportEarlyLaunchExit,
+  earlyLaunchFailureNote,
+  launchLogPath,
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
