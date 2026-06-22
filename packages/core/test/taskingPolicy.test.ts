@@ -489,6 +489,16 @@ describe("peerMutationGuardFailure", () => {
       ),
     ).toBeNull();
   });
+
+  it("blocks archus_run_issue when a create-and-run request has no exact existing issue", () => {
+    const failure = peerMutationGuardFailure(
+      "archus_run_issue",
+      "Please create a temporary live verification issue in zenod-ai/zenod and run it with Epaminon.",
+    );
+
+    expect(failure).toContain("running requires an exact work issue");
+    expect(failure).toContain("create-and-run");
+  });
 });
 
 describe("coerceEditIssueLabelsForUserRequest", () => {

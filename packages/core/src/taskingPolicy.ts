@@ -46,6 +46,7 @@ const READ_ONLY_REQUEST_RE =
   /\b(read[- ]only|do not mutate|don't mutate|do not change|don't change|do not edit|don't edit|do not close|don't close|no mutation|no mutations|just (?:check|read|search|find|list|show|tell)|what (?:is|are)|status of|what's the status|show me|tell me about)\b/i;
 const EXECUTION_STATUS_REQUEST_RE =
   /(?:^\s*(?:did|was|is|has|have|what(?:'s| is))\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished|status)\b|\b(?:execution|run|runner|queue)\s+status\b|\bstatus\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished)\b)/i;
+const QUALIFIED_ISSUE_REF_RE = /\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+\b/;
 
 function normalizedToolName(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -134,6 +135,9 @@ export function peerMutationGuardFailure(tool: string, userRequest: string): str
   const normalized = normalizedToolName(tool);
   if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest)) {
     return `Blocked ${tool}: explicit backlog writes/runs must use the dedicated Archus write/run tool, not ask_archus.`;
+  }
+  if (normalized === "archusrunissue" && !QUALIFIED_ISSUE_REF_RE.test(userRequest)) {
+    return `Blocked ${tool}: running requires an exact work issue already named by the user as owner/repo#N. For create-and-run requests, send the full natural-language request to Archus instead of inventing a target.`;
   }
   const explicitMutation = hasExplicitMutationIntent(tool, userRequest);
   if (READ_ONLY_REQUEST_RE.test(userRequest) && !explicitMutation) {
