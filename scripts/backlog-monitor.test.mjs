@@ -25,6 +25,7 @@ import {
   shouldReportEarlyLaunchExit,
   earlyLaunchFailureNote,
   launchLogPath,
+  targetBootstrapLabels,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
@@ -42,6 +43,13 @@ test("primaryStatusLabel prefers terminal worker state over stale proposed label
   assert.equal(primaryStatusLabel(["status:proposed", "test", "status:complete"]), "status:complete");
   assert.equal(primaryStatusLabel(["status:proposed", "status:needs-review"]), "status:needs-review");
   assert.equal(primaryStatusLabel(["status:proposed", "status:running"]), "status:running");
+});
+
+test("target bootstrap labels repair owner and only add queued when no status exists", () => {
+  assert.deepEqual(targetBootstrapLabels([]), ["owner:agent", "status:queued"]);
+  assert.deepEqual(targetBootstrapLabels(["status:proposed"]), ["owner:agent"]);
+  assert.deepEqual(targetBootstrapLabels(["owner:agent"]), ["status:queued"]);
+  assert.deepEqual(targetBootstrapLabels(["owner:agent", "status:running"]), []);
 });
 
 test("ensureFanInBatch records only multi-issue launches", () => {
