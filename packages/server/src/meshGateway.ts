@@ -204,7 +204,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     },
     title: "Archus run issue",
     description:
-      "Owner: Archus. Start execution for one exact work issue. Input must be a qualified target owner/repo#N. Archus validates the issue is runnable, mints the execution ticket, and dispatches Epaminon through the private lane. Do not use this to ask whether something ran; use epaminon.execution_status/execution_status for status reads.",
+      "Owner: Archus. Start execution for one exact work issue. Input must be a qualified target owner/repo#N. Archus validates the issue is runnable, mints the execution ticket in its configured central execution backlog, and dispatches Epaminon through the private lane. Do not invent a target-owner backlog repo. Do not use this to ask whether something ran; use epaminon.execution_status/execution_status for status reads.",
     inputSchema: RUN_ISSUE_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },

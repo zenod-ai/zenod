@@ -394,6 +394,7 @@ describe("server API", () => {
       expect(epaminon?.tools?.map((tool) => tool.as)).toEqual(["epaminon_read_issue_execution_status"]);
       expect(epaminon?.tools?.[0]?.description).toContain("did it run");
       expect(archus?.tools?.find((tool) => tool.as === "archus_run_issue")?.description).toContain("calls its private queueExecution tool");
+      expect(archus?.tools?.find((tool) => tool.as === "archus_run_issue")?.description).toContain("central execution backlog");
       expect(archus?.tools?.find((tool) => tool.as === "archus_request_backlog_action")?.description).toContain("Do NOT use for running");
     } finally {
       consoleRuntime.close();
