@@ -867,14 +867,34 @@ export class Runtime {
       },
       queueExecution: async ({ target, title, context, repo }) => {
         const parsedTarget = parseQualifiedIssue(target);
-        const targetIssue = await githubJson<{
+        let targetIssue = await githubJson<{
           number: number;
           title: string;
           body: string;
           html_url: string;
           labels: Array<{ name: string }>;
         }>(`/repos/${encodeURIComponent(parsedTarget.repo).replace("%2F", "/")}/issues/${parsedTarget.number}`);
-        const failures = validateRunnableIssue(targetIssue);
+        let failures = validateRunnableIssue(targetIssue);
+        if (failures.length === 1 && failures[0] === `missing ${OWNER_AGENT} label`) {
+          const existingLabels = issueLabelNames(targetIssue);
+          const bootstrapLabels = [OWNER_AGENT, ...(existingLabels.some((label) => label.startsWith("status:")) ? [] : [STATUS_PROPOSED])];
+          try {
+            await githubJson(`/repos/${encodeURIComponent(parsedTarget.repo).replace("%2F", "/")}/issues/${parsedTarget.number}/labels`, {
+              method: "POST",
+              body: JSON.stringify({ labels: bootstrapLabels }),
+            });
+          } catch (err) {
+            throw new Error(`target ${target} is not runnable: failed to bootstrap ${OWNER_AGENT} label (${(err as Error).message})`);
+          }
+          targetIssue = await githubJson<{
+            number: number;
+            title: string;
+            body: string;
+            html_url: string;
+            labels: Array<{ name: string }>;
+          }>(`/repos/${encodeURIComponent(parsedTarget.repo).replace("%2F", "/")}/issues/${parsedTarget.number}`);
+          failures = validateRunnableIssue(targetIssue);
+        }
         if (failures.length > 0) {
           throw new Error(`target ${target} is not runnable: ${failures.join("; ")}`);
         }

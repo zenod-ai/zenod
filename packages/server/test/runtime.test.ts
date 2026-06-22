@@ -350,6 +350,78 @@ describe("runtime tasking tools", () => {
     ]);
   });
 
+  it("queueExecution bootstraps owner:agent on an otherwise-runnable target issue", async () => {
+    runtime.settings.setRaw("backlog_repo", "owner/central");
+    runtime.settings.setRaw("exec_lane_secret", "lane-secret");
+    runtime.settings.setRaw("epaminon_base_url", "http://epaminon.test");
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init: RequestInit = {}) => {
+        calls.push({ url: String(url), init });
+        const path = String(url).replace("https://api.github.com", "");
+        if (path === "/repos/zenod-ai/fixture/issues/296" && !init.method) {
+          const bootstrapped = calls.some(
+            (call) => call.url === "https://api.github.com/repos/zenod-ai/fixture/issues/296/labels" && call.init.method === "POST",
+          );
+          return new Response(
+            JSON.stringify({
+              number: 296,
+              title: "Target-repo execution bootstrap",
+              body: [
+                "## Objective",
+                "Fix target-repo execution bootstrap in packages/server/src/runtime.ts.",
+                "## Scope",
+                "Only repair queueExecution label bootstrap.",
+                "## Acceptance criteria",
+                "- Exact target issues can be queued without manual labels.",
+                "## Source context",
+                "- https://github.com/AlfaBlok/obsidian-brain/issues/146",
+              ].join("\n"),
+              html_url: "https://github.com/zenod-ai/fixture/issues/296",
+              labels: bootstrapped ? [{ name: "owner:agent" }, { name: "status:proposed" }] : [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (path === "/repos/zenod-ai/fixture/issues/296/labels" && init.method === "POST") {
+          expect(JSON.parse(String(init.body))).toEqual({ labels: ["owner:agent", "status:proposed"] });
+          return new Response(JSON.stringify([{ name: "owner:agent" }, { name: "status:proposed" }]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (path === "/repos/owner/central/issues" && init.method === "POST") {
+          return new Response(JSON.stringify({ number: 147, html_url: "https://github.com/owner/central/issues/147" }), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (String(url) === "http://epaminon.test/api/exec/enqueue" && init.method === "POST") {
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(`unexpected ${init.method ?? "GET"} ${url}`, { status: 500 });
+      }),
+    );
+
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+    const result = await tools.queueExecution({
+      target: "zenod-ai/fixture#296",
+      title: "Run fixture#296",
+      context: "Start this now.",
+      repo: "owner/central",
+    });
+
+    expect(result).toContain("Minted execution ticket owner/central#147");
+    expect(calls.map((call) => `${call.init.method ?? "GET"} ${call.url}`)).toEqual([
+      "GET https://api.github.com/repos/zenod-ai/fixture/issues/296",
+      "POST https://api.github.com/repos/zenod-ai/fixture/issues/296/labels",
+      "GET https://api.github.com/repos/zenod-ai/fixture/issues/296",
+      "POST https://api.github.com/repos/owner/central/issues",
+      "POST http://epaminon.test/api/exec/enqueue",
+    ]);
+  });
+
   it("queueExecution refuses to mint when the target issue is not runnable", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     vi.stubGlobal(
