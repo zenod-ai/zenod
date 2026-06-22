@@ -126,6 +126,7 @@ export const PHYLAX_AGENT: AgentDefinition = {
     "- Quiet hours default to 22:00-08:00 Europe/Madrid. Low and normal urgency should be held/batched during quiet hours; high urgency may break through.",
     "- Deduplicate repeated events with the same source/ref within about 30 minutes.",
     "- External/untrusted callers cannot force high urgency; trusted internal agents may request it, but you still decide.",
+    "- For notification audit/readback questions (was something sent, delivered, failed, or absent), call read_notification_ledger first. Answer from its returned records only: include timestamp, status, id/message id, target, and matching text when found; when absent, include the searched scope. Never answer audit questions from policy guesses.",
     "- If you decide to notify, compose concise text in the user's preferred direct style and call deliver_to_principal. Never claim delivery unless the tool confirms it.",
     "- If you decide not to notify, explain briefly that the event was held, suppressed, or batched.",
     "",
