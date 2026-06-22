@@ -22,6 +22,9 @@ import {
   parseTarget,
   workdirForRepo,
   dispatchedOutcome,
+  shouldReportEarlyLaunchExit,
+  earlyLaunchFailureNote,
+  launchLogPath,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
@@ -334,5 +337,21 @@ test("notifyConfig prefers Console notify route over legacy app URL", () => {
       ZENOD_CONSOLE_TOKEN: "console",
     }),
     { url: "http://zenod-console:8080", token: "console" },
+  );
+});
+
+test("early launch exit detection reports immediate nonzero child exits only", () => {
+  assert.equal(shouldReportEarlyLaunchExit(1, 250), true);
+  assert.equal(shouldReportEarlyLaunchExit(null, 250), true);
+  assert.equal(shouldReportEarlyLaunchExit(0, 250), false);
+  assert.equal(shouldReportEarlyLaunchExit(1, 45_000, 30_000), false);
+});
+
+test("early launch failure note includes target and runner log path", () => {
+  const logPath = launchLogPath("zenod-ai/zenod", 296, 123);
+  assert.match(logPath, /launch-123-zenod-ai-zenod-296\.log$/);
+  assert.match(
+    earlyLaunchFailureNote("zenod-ai/zenod", 296, 1, null, logPath),
+    /fanout launcher for zenod-ai\/zenod#296 stopped immediately with exit code 1; see runner log .*296\.log/,
   );
 });

@@ -234,8 +234,19 @@ async function ensureCheckout(repo, workdir, base) {
     throw new Error(`${workdir} origin (${remote || "missing"}) does not match --repo ${repo}; use a repo-specific --workdir`);
   }
   run("git", ["fetch", "origin", base, "--prune"], { cwd: workdir, stdio: "inherit" });
-  run("git", ["checkout", base], { cwd: workdir, stdio: "inherit" });
-  run("git", ["pull", "--ff-only", "origin", base], { cwd: workdir, stdio: "inherit" });
+  resetBaseCheckout(workdir, base);
+}
+
+function resetBaseCheckout(workdir, base) {
+  const ref = `origin/${base}`;
+  const checkout = run("git", ["checkout", "-B", base, ref], { cwd: workdir, allowFailure: true, stdio: "inherit" });
+  if (checkout.status !== 0) {
+    run("git", ["reset", "--hard"], { cwd: workdir, stdio: "inherit" });
+    run("git", ["clean", "-fd", "-e", ".fanout/"], { cwd: workdir, stdio: "inherit" });
+    run("git", ["checkout", "-B", base, ref], { cwd: workdir, stdio: "inherit" });
+  }
+  run("git", ["reset", "--hard", ref], { cwd: workdir, stdio: "inherit" });
+  run("git", ["clean", "-fd", "-e", ".fanout/"], { cwd: workdir, stdio: "inherit" });
 }
 
 function remoteMatchesRepo(remote, repo) {
@@ -1263,6 +1274,7 @@ export {
   clarityCheck,
   executionBlockedRequest,
   remoteMatchesRepo,
+  resetBaseCheckout,
 };
 
 // Run main() only when invoked as the entry script — but resolve symlinks first.
