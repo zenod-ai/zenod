@@ -289,8 +289,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   // `execution_status` — the human read (Console/chat). Normal agent-token auth (this
   // path is NOT under /api/exec/, so it does not bypass auth). Returns the live queue.
-  app.get("/api/executions", (c) => {
+  app.get("/api/executions", async (c) => {
     if (!runtime.executionQueue) return c.json({ error: "not an executor agent" }, 404);
+    await runtime.reconcileMergedExecutionReviews();
     return c.json({ tickets: runtime.executionStore.recent() });
   });
 

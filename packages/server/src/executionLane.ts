@@ -1,6 +1,7 @@
 import { ExecutionQueue, type ExecutionEvent, type ExecutionTicket } from "./executionQueue.js";
 import type { ExecutionStore } from "./executionStore.js";
 import type { Settings } from "./settings.js";
+import { installationTokenForRepo } from "zenod";
 
 /**
  * Epaminon's execution lane — the ExecutionQueue wired to the protocol's seams
@@ -26,11 +27,53 @@ export function buildExecutionQueue(settings: Settings, store: ExecutionStore): 
     concurrency,
     initialTickets: store.active(),
     launch: (t) => launchExecution(settings, t),
-    ship: (t) => shipExecution(t),
+    ship: (t) => shipExecution(settings, t),
     report: (e) => reportToArchus(settings, e),
     onChange: (t) => store.upsert(t),
     now: () => Date.now(),
   });
+}
+
+export function parseGithubPullUrl(url: string | undefined): { repo: string; number: number } | null {
+  if (!url) return null;
+  const match = url.match(/^https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)(?:[/?#].*)?$/);
+  if (!match?.[1] || !match[2]) return null;
+  return { repo: match[1], number: Number(match[2]) };
+}
+
+type GitHubPullRead = {
+  html_url: string;
+  state: string;
+  merged?: boolean;
+  merged_at?: string | null;
+};
+
+async function githubToken(settings: Settings, repo: string): Promise<string> {
+  if (settings.hasGithubApp()) return installationTokenForRepo(settings, repo);
+  const token = settings.getRaw("github_token");
+  if (!token) throw new Error("GitHub token or app installation is required");
+  return token;
+}
+
+async function readGithubPull(settings: Settings, repo: string, number: number): Promise<GitHubPullRead> {
+  const token = await githubToken(settings, repo);
+  const response = await fetch(`https://api.github.com/repos/${encodeURIComponent(repo).replace("%2F", "/")}/pulls/${number}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "zenod",
+      Accept: "application/vnd.github+json",
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`GitHub PR read failed: ${response.status} ${await response.text()}`);
+  return (await response.json()) as GitHubPullRead;
+}
+
+export async function mergedGithubPullEvidence(settings: Settings, evidenceUrl: string | undefined): Promise<string | null> {
+  const ref = parseGithubPullUrl(evidenceUrl);
+  if (!ref) return null;
+  const pull = await readGithubPull(settings, ref.repo, ref.number);
+  return pull.merged || Boolean(pull.merged_at) ? pull.html_url : null;
 }
 
 /**
@@ -85,7 +128,15 @@ async function launchExecution(settings: Settings, t: ExecutionTicket): Promise<
   }
 }
 
-/** STUB (#197): route an approved outward outcome to Callistheness (send) / runner (merge). */
-async function shipExecution(t: ExecutionTicket): Promise<string> {
+/**
+ * Route an approved outward outcome to its owning shipper.
+ *
+ * Today the only durable code path is PR evidence that has already been merged
+ * by GitHub. Reconcile that to `done` from GitHub's readback. Open PR merging
+ * and non-PR senders remain explicit future shippers; do not fake completion.
+ */
+async function shipExecution(settings: Settings, t: ExecutionTicket): Promise<string> {
+  const mergedPullUrl = await mergedGithubPullEvidence(settings, t.evidenceUrl);
+  if (mergedPullUrl) return mergedPullUrl;
   throw new Error(`ship not wired yet (#197): cannot ship ${t.executionId} (${t.target})`);
 }

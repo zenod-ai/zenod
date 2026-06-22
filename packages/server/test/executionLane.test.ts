@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 import { EPAMINON_AGENT, ZENOD_AGENT } from "../src/agent.js";
@@ -26,6 +26,7 @@ describe("execution lane — Epaminon receivers", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
@@ -132,6 +133,75 @@ describe("execution lane — Epaminon receivers", () => {
         }),
       ]),
     );
+  });
+
+  it("execution_status reconciles needs-review PR evidence to done once GitHub says the PR is merged", async () => {
+    runtime.settings.setRaw("exec_lane_secret", SECRET);
+    runtime.settings.setRaw("github_token", "gh-test-token");
+    await app.request("/api/exec/enqueue", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: 15, target: "zenod-ai/zenod#296", context: "c" }),
+    });
+    await app.request("/api/exec/outcome", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: 15, outward: true, evidence_url: "https://github.com/zenod-ai/zenod/pull/302" }),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        expect(String(input)).toBe("https://api.github.com/repos/zenod-ai/zenod/pulls/302");
+        return new Response(JSON.stringify({ html_url: "https://github.com/zenod-ai/zenod/pull/302", state: "closed", merged: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const res = await app.request("/api/executions", { headers: { Authorization: `Bearer ${runtime.settings.apiToken()}` } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { tickets: Array<{ executionId: string; state: string; evidenceUrl?: string }> };
+
+    expect(body.tickets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          executionId: "15",
+          state: "done",
+          evidenceUrl: "https://github.com/zenod-ai/zenod/pull/302",
+        }),
+      ]),
+    );
+    expect(runtime.executionQueue!.get("15")?.state).toBe("done");
+  });
+
+  it("execution_status leaves needs-review PR evidence parked while the PR is still open", async () => {
+    runtime.settings.setRaw("exec_lane_secret", SECRET);
+    runtime.settings.setRaw("github_token", "gh-test-token");
+    await app.request("/api/exec/enqueue", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: 16, target: "zenod-ai/zenod#297", context: "c" }),
+    });
+    await app.request("/api/exec/outcome", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: 16, outward: true, evidence_url: "https://github.com/zenod-ai/zenod/pull/304" }),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ html_url: "https://github.com/zenod-ai/zenod/pull/304", state: "open", merged: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const res = await app.request("/api/executions", { headers: { Authorization: `Bearer ${runtime.settings.apiToken()}` } });
+    expect(res.status).toBe(200);
+
+    expect(runtime.executionQueue!.get("16")?.state).toBe("needs-review");
   });
 
   it("approve on a ticket not awaiting review surfaces the illegal transition", async () => {
