@@ -394,6 +394,28 @@ function hasExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean 
   });
 }
 
+const TERMINAL_EXECUTION_RE = new RegExp(
+  [
+    String.raw`\bexecution\s+(?:complete|completed|done|finished|succeeded|failed)\b`,
+    String.raw`\b(?:run|execution|executed)[^\n.]{0,80}\b(?:complete|completed|done|finished|succeeded|failed)\b`,
+    String.raw`\b(?:complete|completed|done|finished|succeeded|failed)[^\n.]{0,80}\b(?:run|execution|executed)\b`,
+    String.raw`\bcreated\s*\+\s*executed\b`,
+  ].join("|"),
+  "i",
+);
+
+function claimsTerminalExecutionState(prose: string): boolean {
+  if (!TERMINAL_EXECUTION_RE.test(prose)) return false;
+  return issueNumbersIn(prose).size > 0 || /\b(issue|ticket|execution|epaminon|runner)\b/i.test(prose);
+}
+
+function hasTerminalExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean {
+  return actions.some((action) => {
+    if (/^ERROR:/.test(action.result) || !executionStatusToolName(action.tool)) return false;
+    return /\b(?:exec:)?(?:done|failed)\b|—\s*(?:done|failed)\b|"state"\s*:\s*"(?:done|failed)"/i.test(action.result);
+  });
+}
+
 function executionStatusToolName(tool: string): boolean {
   const normalized = tool.toLowerCase().replace(/[^a-z0-9]/g, "");
   return normalized === "executionstatus" || normalized === "epaminonreadissueexecutionstatus";
@@ -478,6 +500,15 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     return [
       `⚠️ Correction — Epaminon's live execution read found no execution ticket for ${fmt(contradictedNoExecution)} this turn.`,
       "Do not treat issue-body comments, child-ticket notes, PR references, or narrative history as proof that this specific issue ran.",
+      "",
+      text,
+    ].join("\n");
+  }
+
+  if (claimsTerminalExecutionState(prose) && !hasTerminalExecutionGrounding(actions)) {
+    return [
+      "⚠️ Correction — I could not confirm a terminal execution state this turn, so do not rely on any claim below that execution is complete/done/failed.",
+      "A queue or dispatch receipt only proves the run was queued/dispatched. Terminal claims need a live execution_status result showing done or failed.",
       "",
       text,
     ].join("\n");
