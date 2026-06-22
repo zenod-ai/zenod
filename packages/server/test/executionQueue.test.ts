@@ -136,6 +136,32 @@ describe("ExecutionQueue — blocked / unblock / fail", () => {
     expect(h.launched).toEqual(["a", "b"]);
   });
 
+  it("allows a real outcome to supersede the synthetic restart-interrupted block", async () => {
+    const events: ExecutionEvent[] = [];
+    const q = new ExecutionQueue({
+      concurrency: 1,
+      initialTickets: [
+        {
+          executionId: "a",
+          target: "o/r#a",
+          context: "do a",
+          state: "blocked",
+          note: "interrupted by a server restart",
+          updatedAt: 1,
+        },
+      ],
+      launch: () => undefined,
+      ship: async () => "ship://a",
+      report: (e) => events.push(e),
+    });
+
+    await q.reportOutcome({ executionId: "a", outward: false });
+
+    expect(q.get("a")).toMatchObject({ state: "done" });
+    expect(q.get("a")?.note).toBeUndefined();
+    expect(events).toEqual([{ executionId: "a", state: "done", evidenceUrl: undefined, note: undefined }]);
+  });
+
   it("fails the ticket when launch throws", async () => {
     let clock = 0;
     const events: ExecutionEvent[] = [];

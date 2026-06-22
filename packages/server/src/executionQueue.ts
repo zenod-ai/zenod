@@ -78,6 +78,12 @@ const TRANSITIONS: Record<ExecState, ExecState[]> = {
   failed: [],
 };
 
+const RESTART_INTERRUPTED_NOTE = "interrupted by a server restart";
+
+function isRestartInterruptedBlock(ticket: ExecutionTicket): boolean {
+  return ticket.state === "blocked" && ticket.note === RESTART_INTERRUPTED_NOTE;
+}
+
 export class IllegalTransitionError extends Error {
   constructor(id: string, from: ExecState, to: ExecState) {
     super(`execution ${id}: illegal transition ${from} → ${to}`);
@@ -171,6 +177,10 @@ export class ExecutionQueue {
    */
   async reportOutcome(input: { executionId: string; outward: boolean; evidenceUrl?: string; note?: string }): Promise<void> {
     const t = this.require(input.executionId);
+    if (isRestartInterruptedBlock(t)) {
+      t.state = "running";
+      t.note = undefined;
+    }
     if (t.state !== "running") return; // tolerate duplicate/out-of-order callbacks
     t.outward = input.outward;
     if (input.evidenceUrl !== undefined) t.evidenceUrl = input.evidenceUrl;
