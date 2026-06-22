@@ -356,7 +356,7 @@ export async function editGithubIssue(settings: ConnectionSettings, input: EditG
     if (input.state !== undefined) operations.push(closing ? "closed" : "reopened");
   }
 
-  if (input.labelsSet) {
+  if (input.labelsSet?.length) {
     labels = normalizeLabelIssueLabels(input.labelsSet);
     const labelResponse = await githubRequest<GithubLabelsResponse>(settings, `${issuePath}/labels`, {
       method: "PUT",

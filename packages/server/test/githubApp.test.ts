@@ -281,6 +281,41 @@ describe("GitHub App flow", () => {
     expect(fetchMock.mock.calls.some((call) => String(call[0]).endsWith("/issues/52/comments") && call[1]?.method === "POST")).toBe(false);
   });
 
+  it("ignores empty labelsSet when closing so labels are not wiped", async () => {
+    const settings = runtime.settings;
+    settings.set("vault_repo", "zenod-ai/fixture");
+    settings.set("github_token", "ghp_test");
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const path = String(url).replace("https://api.github.com", "");
+      if (path === "/repos/zenod-ai/fixture/issues/52" && !init?.method) {
+        return new Response(
+          JSON.stringify({
+            html_url: "https://github.com/zenod-ai/fixture/issues/52",
+            labels: [{ name: "status:proposed" }, { name: "v5" }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (path === "/repos/zenod-ai/fixture/issues/52" && init?.method === "PATCH") {
+        return new Response(
+          JSON.stringify({
+            html_url: "https://github.com/zenod-ai/fixture/issues/52",
+            labels: [{ name: "status:proposed" }, { name: "v5" }],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(`unexpected ${init?.method ?? "GET"} ${path}`, { status: 500 });
+    });
+
+    const result = await editGithubIssue(settings, { issueNumber: 52, state: "closed", labelsSet: [] });
+
+    expect(result.labels).toEqual(["status:proposed", "v5"]);
+    expect(result.operations).toEqual(["closed"]);
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).endsWith("/issues/52/labels"))).toBe(false);
+  });
+
   it("requires explicit queue approval before setting status:queued", async () => {
     const settings = runtime.settings;
     settings.set("vault_repo", "zenod-ai/fixture");
