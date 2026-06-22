@@ -1262,6 +1262,30 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json(result);
   });
 
+  app.post("/api/notifications/search", async (c) => {
+    type NotificationSearchBody = { query?: string; windowMinutes?: number; contactId?: string; chatId?: string; limit?: number };
+    const body = await c.req
+      .json<NotificationSearchBody>()
+      .catch((): NotificationSearchBody => ({}));
+    const windowMinutes = Number.isFinite(body.windowMinutes)
+      ? Math.max(1, Math.min(Number(body.windowMinutes), 7 * 24 * 60))
+      : 24 * 60;
+    const limit = Number.isFinite(body.limit) ? Math.max(1, Math.min(Number(body.limit), 200)) : 50;
+    const sinceMs = Date.now() - windowMinutes * 60 * 1000;
+    const records = runtime.whatsappStore.recentNotifications({
+      sinceMs,
+      limit,
+      ...(body.query?.trim() ? { query: body.query.trim() } : {}),
+      ...(body.contactId?.trim() ? { contactId: body.contactId.trim() } : {}),
+      ...(body.chatId?.trim() ? { chatId: body.chatId.trim() } : {}),
+    });
+    return c.json({
+      records,
+      count: records.length,
+      searchedScope: { channel: "whatsapp", windowMinutes, query: body.query?.trim() ?? "", limit },
+    });
+  });
+
   app.post("/api/test/chat", async (c) => {
     const body = await c.req.json<SyntheticChatRequest>().catch((): SyntheticChatRequest => ({}));
     if (!body.message?.trim()) return c.json({ error: "message is required" }, 400);
