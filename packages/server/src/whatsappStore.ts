@@ -79,6 +79,27 @@ export interface WhatsAppTranscriptQuery {
   limit?: number;
 }
 
+export interface WhatsAppNotificationEntry {
+  notificationId: string;
+  channel: "whatsapp";
+  at: number;
+  messageId: string | null;
+  sentMessageId: string | null;
+  chatId: string;
+  contactId: string | null;
+  bodyText: string;
+  status: string;
+  errorText: string | null;
+}
+
+export interface WhatsAppNotificationQuery {
+  sinceMs?: number;
+  contactId?: string;
+  chatId?: string;
+  query?: string;
+  limit?: number;
+}
+
 function safeJson(value: unknown): string {
   return JSON.stringify(value ?? {}, (_key, item: unknown) => {
     if (typeof item === "bigint") return item.toString();
@@ -490,6 +511,52 @@ export class WhatsAppStore {
       mediaType: row.mediaType,
       ...(row.sentMessageId ? { sentMessageId: row.sentMessageId } : {}),
     }));
+  }
+
+  recentNotifications(input: WhatsAppNotificationQuery = {}): WhatsAppNotificationEntry[] {
+    const sinceMs = input.sinceMs ?? Date.now() - 24 * 60 * 60 * 1000;
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const contact = input.contactId ? normalizeWhatsAppIdentifier(input.contactId) : "";
+    const chat = input.chatId ?? "";
+    const query = input.query?.trim() ?? "";
+    const rows = this.db
+      .prepare(
+        `SELECT
+           audit_id AS notificationId,
+           created_at AS at,
+           message_id AS messageId,
+           sent_message_id AS sentMessageId,
+           chat_id AS chatId,
+           contact_id AS contactId,
+           body_text AS bodyText,
+           status,
+           error_text AS errorText
+         FROM whatsapp_outbound_audit
+         WHERE created_at >= ?
+           AND (status = 'notify' OR COALESCE(message_id, '') LIKE 'notify-%')
+           AND (? = '' OR REPLACE(REPLACE(REPLACE(COALESCE(contact_id, ''), '@s.whatsapp.net', ''), '@lid', ''), '+', '') LIKE '%' || ? || '%')
+           AND (? = '' OR chat_id = ?)
+           AND (
+             ? = ''
+             OR body_text LIKE '%' || ? || '%'
+             OR COALESCE(message_id, '') LIKE '%' || ? || '%'
+             OR COALESCE(sent_message_id, '') LIKE '%' || ? || '%'
+           )
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(sinceMs, contact, contact, chat, chat, query, query, query, query, limit) as unknown as Array<{
+      notificationId: string;
+      at: number;
+      messageId: string | null;
+      sentMessageId: string | null;
+      chatId: string;
+      contactId: string | null;
+      bodyText: string;
+      status: string;
+      errorText: string | null;
+    }>;
+    return rows.map((row) => ({ ...row, channel: "whatsapp" }));
   }
 
   countMessages(): number {

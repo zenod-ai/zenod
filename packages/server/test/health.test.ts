@@ -106,6 +106,45 @@ describe("server API", () => {
     expect(runtime.settings.get("github_token")).toBe("ghp_secret1234");
   });
 
+  it("serves proactive notification audit records to authenticated callers", async () => {
+    const token = runtime.settings.apiToken();
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    runtime.whatsappStore.recordOutboundAudit({
+      messageId: "reply-ordinary",
+      chatId: "34618217703@s.whatsapp.net",
+      contactId: "34618217703@s.whatsapp.net",
+      bodyText: "ordinary chat reply",
+      status: "sent",
+      sentMessageId: "sent_reply",
+    });
+    runtime.whatsappStore.recordOutboundAudit({
+      messageId: "notify-34618217703-1782149999",
+      chatId: "34618217703@s.whatsapp.net",
+      contactId: "34618217703@s.whatsapp.net",
+      bodyText: "✅ Execution 142 (AlfaBlok/obsidian-brain#141) — done.",
+      status: "notify",
+      sentMessageId: "sent_142",
+    });
+
+    const res = await app.request("/api/notifications/search", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ query: "142", windowMinutes: 60, limit: 10 }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(1);
+    expect(body.records).toEqual([
+      expect.objectContaining({
+        channel: "whatsapp",
+        messageId: "notify-34618217703-1782149999",
+        sentMessageId: "sent_142",
+        status: "notify",
+        bodyText: "✅ Execution 142 (AlfaBlok/obsidian-brain#141) — done.",
+      }),
+    ]);
+  });
+
   it("engine routes report not-configured as 409", async () => {
     const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
     const res = await app.request("/api/ask", {
