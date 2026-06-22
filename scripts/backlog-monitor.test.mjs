@@ -14,6 +14,7 @@ import {
   normalizeState,
   notifyConfig,
   pickupNotification,
+  primaryStatusLabel,
   recordMergeAttempt,
   reviewHeldByFanInBatch,
   shouldSendMergeNote,
@@ -32,6 +33,12 @@ test("pickup notification says Codex is working with issue title and repo", () =
     pickupNotification({ number: 56, title: "Work-started visibility", target: "zenod-ai/zenod" }),
     "🤖 Codex working on #56 — Work-started visibility (zenod-ai/zenod)",
   );
+});
+
+test("primaryStatusLabel prefers terminal worker state over stale proposed labels", () => {
+  assert.equal(primaryStatusLabel(["status:proposed", "test", "status:complete"]), "status:complete");
+  assert.equal(primaryStatusLabel(["status:proposed", "status:needs-review"]), "status:needs-review");
+  assert.equal(primaryStatusLabel(["status:proposed", "status:running"]), "status:running");
 });
 
 test("ensureFanInBatch records only multi-issue launches", () => {
