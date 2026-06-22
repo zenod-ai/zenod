@@ -888,7 +888,6 @@ export class Runtime {
           labels: Array<{ name: string }>;
         }>(`/repos/${encodeURIComponent(parsedTarget.repo).replace("%2F", "/")}/issues/${parsedTarget.number}`);
         let failures = validateRunnableIssue(targetIssue);
-        let labelBootstrapNote: string | null = null;
         if (failures.length === 1 && failures[0] === `missing ${OWNER_AGENT} label`) {
           const existingLabels = issueLabelNames(targetIssue);
           const bootstrapLabels = [OWNER_AGENT, ...(existingLabels.some((label) => label.startsWith("status:")) ? [] : [STATUS_PROPOSED])];
@@ -899,28 +898,21 @@ export class Runtime {
             });
           } catch (err) {
             const message = (err as Error).message;
-            if (!/GitHub returned 403/.test(message)) {
-              throw new Error(`target ${target} is not runnable: failed to bootstrap ${OWNER_AGENT} label (${message})`);
-            }
-            labelBootstrapNote =
-              `target label bootstrap skipped because GitHub denied label writes (${message}); central execution ticket is the runnable record`;
-            failures = [];
+            throw new Error(`target ${target} is not runnable: failed to bootstrap ${OWNER_AGENT} label (${message})`);
           }
-          if (!labelBootstrapNote) {
-            targetIssue = await githubJson<{
-              number: number;
-              title: string;
-              body: string;
-              html_url: string;
-              labels: Array<{ name: string }>;
-            }>(`/repos/${encodeURIComponent(parsedTarget.repo).replace("%2F", "/")}/issues/${parsedTarget.number}`);
-            failures = validateRunnableIssue(targetIssue);
-          }
+          targetIssue = await githubJson<{
+            number: number;
+            title: string;
+            body: string;
+            html_url: string;
+            labels: Array<{ name: string }>;
+          }>(`/repos/${encodeURIComponent(parsedTarget.repo).replace("%2F", "/")}/issues/${parsedTarget.number}`);
+          failures = validateRunnableIssue(targetIssue);
         }
         if (failures.length > 0) {
           throw new Error(`target ${target} is not runnable: ${failures.join("; ")}`);
         }
-        let executionContext = hydratedExecutionContext(target, targetIssue, labelBootstrapNote ? `${context}\n\n${labelBootstrapNote}` : context);
+        let executionContext = hydratedExecutionContext(target, targetIssue, context);
         // Mint the execution ticket (exec:queued) — minting IS queuing.
         const requestedExecutionRepo = repo?.trim();
         const configuredExecutionRepo = this.settings.getRaw("backlog_repo") || defaultRepo();
@@ -972,7 +964,7 @@ export class Runtime {
         }
         return `Minted execution ticket ${minted.repo}#${minted.executionId} (exec:queued) for ${target}${
           dispatched ? " and dispatched to Epaminon" : " — awaiting Epaminon dispatch (execution lane not yet provisioned)"
-        }${labelBootstrapNote ? `; ${labelBootstrapNote}` : ""}${executionRepoFallbackNote ? `; ${executionRepoFallbackNote}` : ""}: ${minted.issueUrl}`;
+        }${executionRepoFallbackNote ? `; ${executionRepoFallbackNote}` : ""}: ${minted.issueUrl}`;
       },
       approveExecution: async ({ executionId, finalContent, repo }) => {
         // Flip the exec ticket to exec:approved (the human's go), then dispatch to

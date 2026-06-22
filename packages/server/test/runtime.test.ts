@@ -422,7 +422,7 @@ describe("runtime tasking tools", () => {
     ]);
   });
 
-  it("queueExecution falls back to the central execution ticket when label bootstrap is permission-denied", async () => {
+  it("queueExecution refuses before minting when required label bootstrap is permission-denied", async () => {
     runtime.settings.setRaw("backlog_repo", "owner/central");
     runtime.settings.setRaw("exec_lane_secret", "lane-secret");
     runtime.settings.setRaw("epaminon_base_url", "http://epaminon.test");
@@ -459,39 +459,22 @@ describe("runtime tasking tools", () => {
             headers: { "content-type": "application/json" },
           });
         }
-        if (path === "/repos/owner/central/issues" && init.method === "POST") {
-          const body = JSON.parse(String(init.body));
-          expect(body.body).toContain("target label bootstrap skipped because GitHub denied label writes");
-          expect(body.body).toContain("central execution ticket is the runnable record");
-          return new Response(JSON.stringify({ number: 148, html_url: "https://github.com/owner/central/issues/148" }), {
-            status: 201,
-            headers: { "content-type": "application/json" },
-          });
-        }
-        if (String(url) === "http://epaminon.test/api/exec/enqueue" && init.method === "POST") {
-          const body = JSON.parse(String(init.body));
-          expect(body.context).toContain("central execution ticket is the runnable record");
-          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
-        }
         return new Response(`unexpected ${init.method ?? "GET"} ${url}`, { status: 500 });
       }),
     );
 
     const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
-    const result = await tools.queueExecution({
-      target: "zenod-ai/fixture#296",
-      title: "Run fixture#296",
-      context: "Start this now.",
-      repo: "owner/central",
-    });
-
-    expect(result).toContain("Minted execution ticket owner/central#148");
-    expect(result).toContain("central execution ticket is the runnable record");
+    await expect(
+      tools.queueExecution({
+        target: "zenod-ai/fixture#296",
+        title: "Run fixture#296",
+        context: "Start this now.",
+        repo: "owner/central",
+      }),
+    ).rejects.toThrow("failed to bootstrap owner:agent label");
     expect(calls.map((call) => `${call.init.method ?? "GET"} ${call.url}`)).toEqual([
       "GET https://api.github.com/repos/zenod-ai/fixture/issues/296",
       "POST https://api.github.com/repos/zenod-ai/fixture/issues/296/labels",
-      "POST https://api.github.com/repos/owner/central/issues",
-      "POST http://epaminon.test/api/exec/enqueue",
     ]);
   });
 
