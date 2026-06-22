@@ -40,6 +40,7 @@ export interface TaskJobs {
 export type GithubIssueEditor = (input: EditGithubIssueInput) => Promise<EditGithubIssueResult>;
 export type GithubIssueCreator = (input: CreateGithubIssueInput) => Promise<CreateGithubIssueResult>;
 export type ExecutionStatusReader = () => ExecutionTicket[] | null;
+export type BeforeExecutionStatusRead = () => Promise<void> | void;
 export interface BacklogIssueReader {
   getIssue(input: { target: string }): Promise<ToolResponse>;
   findIssue(input: { reference: string; repos?: string[]; recentWindow?: string; labels?: string[]; limit?: number }): Promise<ToolResponse>;
@@ -235,6 +236,7 @@ export function buildMcpServer(
   createGithubIssue?: GithubIssueCreator,
   agentName: string = "zenod",
   readExecutionStatus?: ExecutionStatusReader,
+  beforeReadExecutionStatus?: BeforeExecutionStatusRead,
   readBacklogIssues?: BacklogIssueReader,
   readConversationTranscript?: ConversationTranscriptReader,
 ): McpServer {
@@ -312,6 +314,7 @@ export function buildMcpServer(
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
       async ({ message }) => {
+        await beforeReadExecutionStatus?.();
         const tickets = readExecutionStatus();
         if (!tickets) {
           return {
@@ -338,6 +341,7 @@ export function buildMcpServer(
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
       async ({ workIssue, executionIssue, executionId, state, since, limit }) => {
+        await beforeReadExecutionStatus?.();
         const tickets = readExecutionStatus();
         if (!tickets) {
           return toMcpToolResult(

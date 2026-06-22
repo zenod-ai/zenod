@@ -1494,6 +1494,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           (input) => createGithubIssue(settings, input),
           agent.name,
           runtime.executionQueue ? () => runtime.executionStore.recent() : undefined,
+          runtime.executionQueue ? () => runtime.reconcileMergedExecutionReviews() : undefined,
           agent.backlog ? runtime.buildBacklogIssueReader() : undefined,
           (input) => runtime.whatsappStore.recentTranscript(input),
         );

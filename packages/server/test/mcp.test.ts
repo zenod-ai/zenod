@@ -719,4 +719,37 @@ describe("Epaminon MCP execution status", () => {
     expect(missing.isError).toBeUndefined();
     await client.close();
   });
+
+  it("runs merged-PR reconciliation before MCP execution_status reads", async () => {
+    runtime.settings.setRaw("github_token", "gh-test-token");
+    await runtime.executionQueue!.reportOutcome({
+      executionId: "109",
+      outward: true,
+      evidenceUrl: "https://github.com/zenod-ai/zenod/pull/302",
+    });
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "https://api.github.com/repos/zenod-ai/zenod/pulls/302") {
+          return new Response(JSON.stringify({ html_url: "https://github.com/zenod-ai/zenod/pull/302", state: "closed", merged: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return originalFetch(input, init);
+      }),
+    );
+    const client = await connect();
+    try {
+      const result = await client.callTool({ name: "execution_status", arguments: { message: "AlfaBlok/obsidian-brain#109" } });
+      expect((result.structuredContent as { tickets: Array<{ executionId: string; state: string }> }).tickets).toEqual([
+        expect.objectContaining({ executionId: "109", state: "done" }),
+      ]);
+    } finally {
+      await client.close();
+      vi.unstubAllGlobals();
+    }
+  });
 });
