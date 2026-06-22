@@ -324,6 +324,33 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("corrects a terminal execution claim backed only by a queue receipt", () => {
+    const reply =
+      "Done. Created + executed zenod-ai/zenod#303 (no-op verified, no changes). Execution complete.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "queueExecution",
+        result:
+          "Minted execution ticket AlfaBlok/obsidian-brain#151 (exec:queued) for zenod-ai/zenod#303 and dispatched to Epaminon: https://github.com/AlfaBlok/obsidian-brain/issues/151",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("could not confirm a terminal execution state");
+    expect(out).toContain("queue or dispatch receipt only proves");
+  });
+
+  it("allows a terminal execution answer backed by live execution_status", () => {
+    const reply = "Execution #151 is done for zenod-ai/zenod#303.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_read_issue_execution_status",
+        result: "#151 — zenod-ai/zenod#303 — done — evidence: https://github.com/zenod-ai/zenod/pull/303",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("adds the execution ticket URL when a queue_execution receipt is present but Console prose omits it", () => {
     const reply = "Queued execution ticket #104 for zenod-ai/fixture#103.";
     const actions: RecordedAction[] = [
