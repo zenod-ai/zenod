@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  coerceEditIssueLabelsForUserRequest,
   peerMutationGuardFailure,
   reconcileTaskingReply,
   summarizeActionsForReply,
@@ -440,6 +441,28 @@ describe("peerMutationGuardFailure", () => {
       "require an explicit write/run/send instruction",
     );
     expect(peerMutationGuardFailure("archus_run_issue", "Run AlfaBlok/obsidian-brain#121 now.")).toBeNull();
+  });
+});
+
+describe("coerceEditIssueLabelsForUserRequest", () => {
+  it("treats model labelsSet as labelsAdd when the user asked to add labels", () => {
+    expect(coerceEditIssueLabelsForUserRequest("Update #129: add labels test and v5.", null, ["test", "v5"])).toEqual({
+      labelsAdd: ["test", "v5"],
+      labelsSet: null,
+    });
+  });
+
+  it("preserves labelsSet when the user explicitly asked to set labels exactly", () => {
+    expect(
+      coerceEditIssueLabelsForUserRequest("Update #129: set labels exactly to status:proposed, test, v5.", null, [
+        "status:proposed",
+        "test",
+        "v5",
+      ]),
+    ).toEqual({
+      labelsAdd: null,
+      labelsSet: ["status:proposed", "test", "v5"],
+    });
   });
 });
 

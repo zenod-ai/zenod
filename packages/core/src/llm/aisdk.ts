@@ -2,7 +2,7 @@ import { generateObject, generateText, stepCountIs, streamText, tool, type Model
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
-import { peerMutationGuardFailure } from "../taskingPolicy.js";
+import { coerceEditIssueLabelsForUserRequest, peerMutationGuardFailure } from "../taskingPolicy.js";
 import type {
   AnswerInput,
   AnswerResult,
@@ -670,22 +670,24 @@ export class AiSdkBrainLlm implements BrainLlm {
                 .nullable()
                 .describe("why it closed; null defaults to 'completed' when closing"),
             }),
-            execute: ({ repo, issueNumber, title, body, labelsAdd, labelsRemove, labelsSet, comment, status, state, stateReason }) =>
-              caught(() =>
+            execute: ({ repo, issueNumber, title, body, labelsAdd, labelsRemove, labelsSet, comment, status, state, stateReason }) => {
+              const labels = coerceEditIssueLabelsForUserRequest(input.question, labelsAdd, labelsSet);
+              return caught(() =>
                 taskTools.editIssue({
                   ...(repo ? { repo } : {}),
                   issueNumber,
                   ...(title !== null ? { title } : {}),
                   ...(body !== null ? { body } : {}),
-                  ...(labelsAdd ? { labelsAdd } : {}),
+                  ...(labels.labelsAdd ? { labelsAdd: labels.labelsAdd } : {}),
                   ...(labelsRemove ? { labelsRemove } : {}),
-                  ...(labelsSet ? { labelsSet } : {}),
+                  ...(labels.labelsSet ? { labelsSet: labels.labelsSet } : {}),
                   ...(comment ? { comment } : {}),
                   ...(status !== null ? { status } : {}),
                   ...(state !== null ? { state } : {}),
                   ...(stateReason !== null ? { stateReason } : {}),
                 }),
-              ),
+              );
+            },
           }),
           close_issue: tool({
             description:

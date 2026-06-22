@@ -145,6 +145,18 @@ export function peerMutationGuardFailure(tool: string, userRequest: string): str
   return null;
 }
 
+export function coerceEditIssueLabelsForUserRequest(
+  userRequest: string,
+  labelsAdd: string[] | null | undefined,
+  labelsSet: string[] | null | undefined,
+): { labelsAdd: string[] | null | undefined; labelsSet: string[] | null | undefined } {
+  if (!labelsSet?.length || labelsAdd?.length) return { labelsAdd, labelsSet };
+  const asksToAddLabels = /\badd\b[\s\S]{0,40}\blabels?\b|\blabels?\b[\s\S]{0,40}\badd\b/i.test(userRequest);
+  const asksToReplaceLabels = /\b(set|replace)\b[\s\S]{0,40}\blabels?\b|\blabels?\b[\s\S]{0,40}\b(exactly|only)\b/i.test(userRequest);
+  if (!asksToAddLabels || asksToReplaceLabels) return { labelsAdd, labelsSet };
+  return { labelsAdd: labelsSet, labelsSet: null };
+}
+
 // Perfective mutation verbs. Offers ("want me to create…", "I'll open…") use
 // other forms and don't trip the guard.
 const MUTATION_VERBS = "created|filed|opened|raised|logged|placed|queued|merged|approved|closed|edited|updated|commented|labeled|labelled";
