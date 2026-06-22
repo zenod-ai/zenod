@@ -441,6 +441,12 @@ describe("peerMutationGuardFailure", () => {
       "require an explicit write/run/send instruction",
     );
     expect(peerMutationGuardFailure("archus_run_issue", "Run AlfaBlok/obsidian-brain#121 now.")).toBeNull();
+    expect(
+      peerMutationGuardFailure(
+        "archus_run_issue",
+        "Run exact issue AlfaBlok/obsidian-brain#138 with Epaminon now. This is an explicit execution request for #138 only.",
+      ),
+    ).toBeNull();
   });
 });
 
