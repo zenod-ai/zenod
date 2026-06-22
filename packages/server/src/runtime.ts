@@ -31,7 +31,7 @@ import { installationToken, installationTokenForRepo, editGithubIssue, mintExecu
 import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { ExecutionQueue } from "./executionQueue.js";
-import { buildExecutionQueue } from "./executionLane.js";
+import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
 import { buildOutboundTools } from "./outboundTools.js";
 import { buildNotifierTools } from "./notifierTools.js";
@@ -137,6 +137,19 @@ export class Runtime {
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
   private readonly taskingContext = new AsyncLocalStorage<{ parentConversationId: string; rawEvidence?: TaskingInput["rawEvidence"] }>();
+
+  async reconcileMergedExecutionReviews(): Promise<void> {
+    if (!this.executionQueue) return;
+    const reviewTickets = this.executionQueue.snapshot().filter((ticket) => ticket.state === "needs-review" && ticket.evidenceUrl);
+    for (const ticket of reviewTickets) {
+      try {
+        const mergedPullUrl = await mergedGithubPullEvidence(this.settings, ticket.evidenceUrl);
+        if (mergedPullUrl) await this.executionQueue.approve({ executionId: ticket.executionId });
+      } catch (err) {
+        console.warn(`[exec-lane] could not reconcile ${ticket.executionId} from PR evidence: ${(err as Error).message}`);
+      }
+    }
+  }
 
   constructor(readonly dataDir: string, readonly agent: AgentDefinition = ZENOD_AGENT) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
