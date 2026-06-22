@@ -42,6 +42,87 @@ export interface RecordedAction {
   result: string;
 }
 
+const READ_ONLY_REQUEST_RE =
+  /\b(read[- ]only|do not mutate|don't mutate|do not change|don't change|do not edit|don't edit|do not close|don't close|no mutation|no mutations|just (?:check|read|search|find|list|show|tell)|what (?:is|are)|status of|what's the status|show me|tell me about)\b/i;
+const EXECUTION_STATUS_REQUEST_RE =
+  /\b(?:did|was|is|has|have|what(?:'s| is)|status)\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished|status)\b/i;
+
+function normalizedToolName(tool: string): string {
+  return tool.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isPeerMutationTool(tool: string): boolean {
+  const normalized = normalizedToolName(tool);
+  return (
+    normalized === "openissue" ||
+    normalized === "editissue" ||
+    normalized === "closeissue" ||
+    normalized === "archusrequestbacklogaction" ||
+    normalized === "archusrunissue" ||
+    normalized === "queueexecution" ||
+    normalized === "approveexecution" ||
+    normalized === "posttweet" ||
+    normalized === "postreddit" ||
+    normalized === "sendemail" ||
+    normalized === "delivertoprincipal" ||
+    normalized === "raiseevent"
+  );
+}
+
+function hasExplicitMutationIntent(tool: string, request: string): boolean {
+  const normalized = normalizedToolName(tool);
+  if (normalized === "closeissue") {
+    return /\b(close|resolve|mark\s+(?:as\s+)?(?:done|complete|completed|closed)|archive)\b/i.test(request);
+  }
+  if (normalized === "openissue") {
+    return /\b(create|open|file|log|raise|add)\b[\s\S]{0,80}\b(issue|ticket|bug|backlog)\b/i.test(request);
+  }
+  if (normalized === "editissue") {
+    return /\b(edit|update|change|comment|label|rename|patch)\b[\s\S]{0,100}\b(issue|ticket|#\d+|github)\b/i.test(request);
+  }
+  if (normalized === "archusrequestbacklogaction") {
+    return (
+      /\b(create|open|file|log|raise|add)\b[\s\S]{0,80}\b(issue|ticket|bug|backlog)\b/i.test(request) ||
+      /\b(edit|update|change|comment|label|rename|patch|close|resolve)\b[\s\S]{0,100}\b(issue|ticket|#\d+|github)\b/i.test(request)
+    );
+  }
+  if (normalized === "archusrunissue" || normalized === "queueexecution" || normalized === "approveexecution") {
+    return (
+      !EXECUTION_STATUS_REQUEST_RE.test(request) &&
+      /\b(run|execute|start|queue|launch|dispatch|approve)\b[\s\S]{0,100}\b(issue|ticket|#\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\b/i.test(
+        request,
+      )
+    );
+  }
+  if (normalized === "posttweet" || normalized === "postreddit") {
+    return /\b(post|publish|send)\b/i.test(request);
+  }
+  if (normalized === "sendemail") {
+    return /\b(send|email|mail)\b/i.test(request);
+  }
+  if (normalized === "delivertoprincipal" || normalized === "raiseevent") {
+    return /\b(notify|alert|send|raise|tell\s+Jordi)\b/i.test(request);
+  }
+  return false;
+}
+
+/**
+ * Peer write tools are real side effects routed through other agents. The model
+ * may invent a write subtask during a read-only/status turn; block that before
+ * it reaches the peer. Prose reconciliation can correct claims, but it cannot
+ * undo a closed issue or sent message.
+ */
+export function peerMutationGuardFailure(tool: string, userRequest: string): string | null {
+  if (!isPeerMutationTool(tool)) return null;
+  if (READ_ONLY_REQUEST_RE.test(userRequest)) {
+    return `Blocked ${tool}: the user's current request is read-only/status-oriented, so mutating peer tools are not allowed this turn.`;
+  }
+  if (!hasExplicitMutationIntent(tool, userRequest)) {
+    return `Blocked ${tool}: mutating peer tools require an explicit write/run/send instruction from the user's current message.`;
+  }
+  return null;
+}
+
 // Perfective mutation verbs. Offers ("want me to create…", "I'll open…") use
 // other forms and don't trip the guard.
 const MUTATION_VERBS = "created|filed|opened|raised|logged|placed|queued|merged|approved|closed|edited|updated|commented|labeled|labelled";

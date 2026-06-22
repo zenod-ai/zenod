@@ -2,6 +2,7 @@ import { generateObject, generateText, stepCountIs, streamText, tool, type Model
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
+import { peerMutationGuardFailure } from "../taskingPolicy.js";
 import type {
   AnswerInput,
   AnswerResult,
@@ -810,6 +811,12 @@ export class AiSdkBrainLlm implements BrainLlm {
           inputSchema: (peer.inputSchema ?? z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") })) as never,
           execute: async (peerInput) => {
             const args = (peerInput ?? {}) as Record<string, unknown>;
+            const guardFailure = peerMutationGuardFailure(name, input.question);
+            if (guardFailure) {
+              const result = `ERROR: ${guardFailure}`;
+              input.onPeerAction?.(name, args, result);
+              return result;
+            }
             const result = await caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? ""))));
             input.onPeerAction?.(name, args, result);
             return result;

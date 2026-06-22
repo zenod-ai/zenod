@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { reconcileTaskingReply, summarizeActionsForReply, type RecordedAction } from "../src/taskingPolicy.js";
+import {
+  peerMutationGuardFailure,
+  reconcileTaskingReply,
+  summarizeActionsForReply,
+  type RecordedAction,
+} from "../src/taskingPolicy.js";
 
 const created = (n: number, repo = "AlfaBlok/obsidian-brain"): RecordedAction => ({
   tool: "createIssue",
@@ -391,6 +396,36 @@ describe("reconcileTaskingReply", () => {
       "> Created issue #62: https://github.com/AlfaBlok/obsidian-brain/issues/62\n\n" +
       "So that was the one. (I later second-guessed myself and corrected it.)";
     expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+});
+
+describe("peerMutationGuardFailure", () => {
+  it("blocks mutating peer tools during an explicit read-only issue lookup", () => {
+    const failure = peerMutationGuardFailure(
+      "close_issue",
+      "V5 read-only test. What is issue 108? Resolve it before answering, and include the issue link.",
+    );
+
+    expect(failure).toContain("read-only/status-oriented");
+  });
+
+  it("blocks mutating peer tools when the user did not ask for a write", () => {
+    const failure = peerMutationGuardFailure("close_issue", "I need context on issue 108.");
+
+    expect(failure).toContain("require an explicit write/run/send instruction");
+  });
+
+  it("allows explicit backlog writes", () => {
+    expect(peerMutationGuardFailure("close_issue", "Close AlfaBlok/obsidian-brain#121 after the smoke test.")).toBeNull();
+    expect(peerMutationGuardFailure("open_issue", "Create a bug issue for the transcript receipt regression.")).toBeNull();
+    expect(peerMutationGuardFailure("archus_request_backlog_action", "Update issue #121 with this comment.")).toBeNull();
+  });
+
+  it("keeps execution status questions read-only but allows explicit runs", () => {
+    expect(peerMutationGuardFailure("archus_run_issue", "Did AlfaBlok/obsidian-brain#121 run?")).toContain(
+      "require an explicit write/run/send instruction",
+    );
+    expect(peerMutationGuardFailure("archus_run_issue", "Run AlfaBlok/obsidian-brain#121 now.")).toBeNull();
   });
 });
 
