@@ -421,6 +421,20 @@ describe("peerMutationGuardFailure", () => {
     expect(peerMutationGuardFailure("archus_request_backlog_action", "Update issue #121 with this comment.")).toBeNull();
   });
 
+  it("allows explicit writes whose issue body mentions read-only safety checks", () => {
+    const request =
+      "Open a central brain backlog issue titled \"V5: complete controlled Archus write sweep\". " +
+      "The body should include done criteria covering cleanup so read-only turns do not even try write tools.";
+
+    expect(peerMutationGuardFailure("archus_request_backlog_action", request)).toBeNull();
+  });
+
+  it("does not let ask_archus become the write-tool bypass", () => {
+    const request = "Please ask Archus to open a central brain backlog issue titled \"V5: complete controlled Archus write sweep\".";
+
+    expect(peerMutationGuardFailure("ask_archus", request)).toContain("dedicated Archus write/run tool");
+  });
+
   it("keeps execution status questions read-only but allows explicit runs", () => {
     expect(peerMutationGuardFailure("archus_run_issue", "Did AlfaBlok/obsidian-brain#121 run?")).toContain(
       "require an explicit write/run/send instruction",
