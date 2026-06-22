@@ -360,7 +360,7 @@ function queueExecutionError(actions: ReadonlyArray<RecordedAction>): string | u
 const fmt = (nums: number[]): string => nums.map((n) => `#${n}`).join(", ");
 
 const EXECUTION_STATUS_WORDS =
-  "queued|running|needs-review|approved|blocked|done|failed|picked up|started|launched|dispatched|ran|run|executed";
+  "queued|running|needs-review|approved|blocked|done|failed|picked up|started|launched|dispatched|ran|executed";
 const EXECUTION_STATE_RE = new RegExp(
   [
     String.raw`\b(exec:(?:queued|running|needs-review|approved|blocked|done)|queued for execution|runner\s+(?:picked up|started|launched|reported|blocked)|running|picked up|dispatched|launched|started|ran|did(?: not|n't) run)\b`,
