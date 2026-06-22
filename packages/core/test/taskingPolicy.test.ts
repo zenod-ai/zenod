@@ -226,6 +226,20 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, [])).toBe(reply);
   });
 
+  it("does not treat runnable execution-label metadata as an execution claim", () => {
+    const reply = [
+      "**Read results (no mutations performed):**",
+      "",
+      "- **zenod-ai/zenod#296** — state: open; labels: none of the runnable execution labels (`owner:agent`, `execution`, etc.) present; link: https://github.com/zenod-ai/zenod/issues/296",
+      "- **AlfaBlok/obsidian-brain#146** — state: open; labels: bug, status:proposed, execution, central, archus, permissions; link: https://github.com/AlfaBlok/obsidian-brain/issues/146",
+      "",
+      "**Runnable status:** #296 is **not runnable** by Archus.",
+      "**Exact reason:** it lacks the required execution labels (`owner:agent` etc.).",
+      "**Durable tracker:** AlfaBlok/obsidian-brain#146 tracks the missing bootstrap/repair path.",
+    ].join("\n");
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
   it("corrects a positive execution narrative when Epaminon found no execution for that issue", () => {
     const reply =
       "AlfaBlok/obsidian-brain#107 ran via child #108, completed successfully, opened PR #110, and changed docs/BACKLOG-SYSTEM-PLAN.md.";
