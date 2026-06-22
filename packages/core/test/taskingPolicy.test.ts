@@ -439,6 +439,20 @@ describe("reconcileTaskingReply", () => {
       "So that was the one. (I later second-guessed myself and corrected it.)";
     expect(reconcileTaskingReply(reply, [])).toBe(reply);
   });
+
+  it("does not apply create-claim correction to close/update turns whose comment mentions old issue refs", () => {
+    const reply =
+      "Unable to close AlfaBlok/obsidian-brain#137 (403: insufficient permissions). No close action performed.\n\n" +
+      "Requested closing comment mentioned: created #129, #135, #108, #109, #287, #288, and #133.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "close_issue",
+        result: "Unable to close #137: GitHub returned 403: insufficient permissions",
+      },
+    ];
+
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
 });
 
 describe("peerMutationGuardFailure", () => {
@@ -473,6 +487,19 @@ describe("peerMutationGuardFailure", () => {
 
   it("does not let ask_archus become the write-tool bypass", () => {
     const request = "Please ask Archus to open a central brain backlog issue titled \"V5: complete controlled Archus write sweep\".";
+
+    expect(peerMutationGuardFailure("ask_archus", request)).toContain("dedicated Archus write/run tool");
+  });
+
+  it("allows read-only ask_archus judgment questions that mention create/open behavior", () => {
+    const request =
+      "Read-only probe: if I ask to open a high-level central backlog bug through Archus, which repo should Archus use? Do not create or edit anything.";
+
+    expect(peerMutationGuardFailure("ask_archus", request)).toBeNull();
+  });
+
+  it("still blocks ask_archus when the current request actually asks it to create", () => {
+    const request = "Ask Archus to create a central backlog bug for the permission issue.";
 
     expect(peerMutationGuardFailure("ask_archus", request)).toContain("dedicated Archus write/run tool");
   });

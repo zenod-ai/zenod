@@ -43,7 +43,7 @@ export interface RecordedAction {
 }
 
 const READ_ONLY_REQUEST_RE =
-  /\b(read[- ]only|do not mutate|don't mutate|do not change|don't change|do not edit|don't edit|do not close|don't close|no mutation|no mutations|just (?:check|read|search|find|list|show|tell)|what (?:is|are)|status of|what's the status|show me|tell me about)\b/i;
+  /\b(read[- ]only|do not mutate|don't mutate|do not change|don't change|do not create|don't create|do not open|don't open|do not file|don't file|do not edit|don't edit|do not close|don't close|no mutation|no mutations|just (?:check|read|search|find|list|show|tell)|what (?:is|are|would)|what would|status of|what's the status|show me|tell me about)\b/i;
 const EXECUTION_STATUS_REQUEST_RE =
   /(?:^\s*(?:did|was|is|has|have|what(?:'s| is))\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished|status)\b|\b(?:execution|run|runner|queue)\s+status\b|\bstatus\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished)\b)/i;
 const QUALIFIED_ISSUE_REF_RE = /\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+\b/;
@@ -133,9 +133,10 @@ function hasExplicitMutationIntent(tool: string, request: string): boolean {
 export function peerMutationGuardFailure(tool: string, userRequest: string): string | null {
   if (!isPeerMutationTool(tool)) return null;
   const normalized = normalizedToolName(tool);
-  if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest)) {
+  if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest) && !READ_ONLY_REQUEST_RE.test(userRequest)) {
     return `Blocked ${tool}: explicit backlog writes/runs must use the dedicated Archus write/run tool, not ask_archus.`;
   }
+  if (normalized === "askarchus") return null;
   if (normalized === "archusrunissue" && !QUALIFIED_ISSUE_REF_RE.test(userRequest)) {
     return `Blocked ${tool}: running requires an exact work issue already named by the user as owner/repo#N. For create-and-run requests, send the full natural-language request to Archus instead of inventing a target.`;
   }
@@ -165,6 +166,7 @@ export function coerceEditIssueLabelsForUserRequest(
 // other forms and don't trip the guard.
 const MUTATION_VERBS = "created|filed|opened|raised|logged|placed|queued|merged|approved|closed|edited|updated|commented|labeled|labelled";
 const CREATION_VERBS = "created|filed|opened|raised|logged|placed";
+const NON_CREATION_MUTATION_VERBS = "queued|merged|approved|closed|edited|updated|commented|labeled|labelled";
 
 // A mutation verb is only a *claim about this turn* when it's active voice. A
 // be-verb/modal/infinitive before it marks a description, not a receipt:
@@ -302,6 +304,13 @@ function issueWriteReceipt(action: RecordedAction): IssueWriteReceipt | null {
 
 function issueWriteReceipts(actions: ReadonlyArray<RecordedAction>): IssueWriteReceipt[] {
   return actions.map(issueWriteReceipt).filter((receipt): receipt is IssueWriteReceipt => Boolean(receipt));
+}
+
+function ranNonCreateIssueWrite(actions: ReadonlyArray<RecordedAction>): boolean {
+  return actions.some((action) => {
+    const normalized = normalizedToolName(action.tool);
+    return normalized === "editissue" || normalized === "closeissue" || normalized === "labelissue";
+  });
 }
 
 function executionWriteReceipt(action: RecordedAction): ExecutionWriteReceipt | null {
@@ -568,7 +577,8 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const claimsCreation =
     hasActiveClaim(prose, CREATION_VERBS) &&
     (presented.size > 0 || /\b(issue|ticket)\b/i.test(prose)) &&
-    !(executionGrounded && /\bexecution ticket\b/i.test(prose));
+    !(executionGrounded && /\bexecution ticket\b/i.test(prose)) &&
+    !ranNonCreateIssueWrite(actions);
 
   // The demonstrated bug: a creation is claimed but nothing was created. A status
   // summary grounded in real tool data is NOT that — a query_backlog table whose
@@ -613,7 +623,8 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // Any other mutation claim that cites an issue number no tool produced or
   // touched this turn (fabricated queue/merge/label receipts) — but only a
   // number presented right next to the verb, not one merely mentioned nearby.
-  const unproven = [...numbersClaimedAdjacent(prose, MUTATION_VERBS)].filter(
+  const mutationVerbsToPolice = ranNonCreateIssueWrite(actions) ? NON_CREATION_MUTATION_VERBS : MUTATION_VERBS;
+  const unproven = [...numbersClaimedAdjacent(prose, mutationVerbsToPolice)].filter(
     (n) => !proven.has(n) && !(executionGrounded && noExecNums.has(n) && NEGATIVE_QUEUE_RE.test(prose)),
   );
   if (unproven.length > 0) {
