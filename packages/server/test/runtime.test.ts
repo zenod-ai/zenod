@@ -495,6 +495,79 @@ describe("runtime tasking tools", () => {
     ]);
   });
 
+  it("queueExecution retries the configured central backlog when a guessed execution repo is missing", async () => {
+    runtime.settings.setRaw("backlog_repo", "owner/central");
+    runtime.settings.setRaw("exec_lane_secret", "lane-secret");
+    runtime.settings.setRaw("epaminon_base_url", "http://epaminon.test");
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init: RequestInit = {}) => {
+        calls.push({ url: String(url), init });
+        const path = String(url).replace("https://api.github.com", "");
+        if (path === "/repos/zenod-ai/fixture/issues/296" && !init.method) {
+          return new Response(
+            JSON.stringify({
+              number: 296,
+              title: "Target-repo execution bootstrap",
+              body: [
+                "## Objective",
+                "Fix target-repo execution bootstrap in packages/server/src/runtime.ts.",
+                "## Scope",
+                "Only repair queueExecution defaults.",
+                "## Acceptance criteria",
+                "- Exact target issues queue into the central execution backlog.",
+                "## Source context",
+                "- https://github.com/AlfaBlok/obsidian-brain/issues/146",
+              ].join("\n"),
+              html_url: "https://github.com/zenod-ai/fixture/issues/296",
+              labels: [{ name: "owner:agent" }, { name: "status:proposed" }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (path === "/repos/zenod-ai/backlog/issues" && init.method === "POST") {
+          return new Response(JSON.stringify({ message: "Not Found", status: "404" }), {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (path === "/repos/owner/central/issues" && init.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          expect(body.body).toContain("execution backlog repo zenod-ai/backlog was unavailable");
+          expect(body.body).toContain("used configured central backlog owner/central");
+          return new Response(JSON.stringify({ number: 149, html_url: "https://github.com/owner/central/issues/149" }), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (String(url) === "http://epaminon.test/api/exec/enqueue" && init.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          expect(body.context).toContain("used configured central backlog owner/central");
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(`unexpected ${init.method ?? "GET"} ${url}`, { status: 500 });
+      }),
+    );
+
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+    const result = await tools.queueExecution({
+      target: "zenod-ai/fixture#296",
+      title: "Run fixture#296",
+      context: "Start this now.",
+      repo: "zenod-ai/backlog",
+    });
+
+    expect(result).toContain("Minted execution ticket owner/central#149");
+    expect(result).toContain("used configured central backlog owner/central");
+    expect(calls.map((call) => `${call.init.method ?? "GET"} ${call.url}`)).toEqual([
+      "GET https://api.github.com/repos/zenod-ai/fixture/issues/296",
+      "POST https://api.github.com/repos/zenod-ai/backlog/issues",
+      "POST https://api.github.com/repos/owner/central/issues",
+      "POST http://epaminon.test/api/exec/enqueue",
+    ]);
+  });
+
   it("queueExecution refuses to mint when the target issue is not runnable", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     vi.stubGlobal(

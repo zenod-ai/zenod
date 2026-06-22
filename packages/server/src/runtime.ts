@@ -907,14 +907,40 @@ export class Runtime {
         if (failures.length > 0) {
           throw new Error(`target ${target} is not runnable: ${failures.join("; ")}`);
         }
-        const hydratedContext = hydratedExecutionContext(target, targetIssue, labelBootstrapNote ? `${context}\n\n${labelBootstrapNote}` : context);
+        let executionContext = hydratedExecutionContext(target, targetIssue, labelBootstrapNote ? `${context}\n\n${labelBootstrapNote}` : context);
         // Mint the execution ticket (exec:queued) — minting IS queuing.
-        const minted = await mintExecutionIssue(this.settings, {
-          ...(repo ? { repo } : {}),
-          title,
-          context: hydratedContext,
-          target,
-        });
+        const requestedExecutionRepo = repo?.trim();
+        const configuredExecutionRepo = this.settings.getRaw("backlog_repo") || defaultRepo();
+        const initialExecutionRepo = requestedExecutionRepo || configuredExecutionRepo;
+        let executionRepoFallbackNote: string | null = null;
+        let minted;
+        try {
+          minted = await mintExecutionIssue(this.settings, {
+            ...(initialExecutionRepo ? { repo: initialExecutionRepo } : {}),
+            title,
+            context: executionContext,
+            target,
+          });
+        } catch (err) {
+          const message = (err as Error).message;
+          if (
+            !requestedExecutionRepo ||
+            !configuredExecutionRepo ||
+            requestedExecutionRepo === configuredExecutionRepo ||
+            !/GitHub returned 404/.test(message)
+          ) {
+            throw err;
+          }
+          executionRepoFallbackNote =
+            `execution backlog repo ${requestedExecutionRepo} was unavailable (${message}); used configured central backlog ${configuredExecutionRepo}`;
+          executionContext = `${executionContext}\n\n${executionRepoFallbackNote}`;
+          minted = await mintExecutionIssue(this.settings, {
+            repo: configuredExecutionRepo,
+            title,
+            context: executionContext,
+            target,
+          });
+        }
         // Best-effort dispatch to Epaminon over the internal lane. Until the Console
         // cross-provisions exec_lane_secret (and Epaminon's enqueue receiver is up),
         // the ticket is still minted and visible — we just report it as awaiting.
@@ -925,7 +951,7 @@ export class Runtime {
           dispatched = await fetch(`${base}/api/exec/enqueue`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
-            body: JSON.stringify({ execution_id: minted.executionId, target, context: hydratedContext }),
+            body: JSON.stringify({ execution_id: minted.executionId, target, context: executionContext }),
             signal: AbortSignal.timeout(4000),
           })
             .then((r) => r.ok)
@@ -933,7 +959,7 @@ export class Runtime {
         }
         return `Minted execution ticket ${minted.repo}#${minted.executionId} (exec:queued) for ${target}${
           dispatched ? " and dispatched to Epaminon" : " — awaiting Epaminon dispatch (execution lane not yet provisioned)"
-        }${labelBootstrapNote ? `; ${labelBootstrapNote}` : ""}: ${minted.issueUrl}`;
+        }${labelBootstrapNote ? `; ${labelBootstrapNote}` : ""}${executionRepoFallbackNote ? `; ${executionRepoFallbackNote}` : ""}: ${minted.issueUrl}`;
       },
       approveExecution: async ({ executionId, finalContent, repo }) => {
         // Flip the exec ticket to exec:approved (the human's go), then dispatch to

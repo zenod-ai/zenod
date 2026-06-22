@@ -470,7 +470,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "chat_with_archus",
       arg: "message",
       description:
-        "Owner: Archus. Start execution for an exact work issue after the user asks to run/start/execute it. The input must include a qualified issue target like owner/repo#123. Archus validates the ticket and calls its private queueExecution tool, minting an execution ticket for Epaminon. Do NOT use for status questions like did it run, was it picked up, queued, blocked, or completed; use Epaminon for those reads.",
+        "Owner: Archus. Start execution for an exact work issue after the user asks to run/start/execute it. The input must include a qualified issue target like owner/repo#123. Archus validates the ticket and calls its private queueExecution tool, minting an execution ticket in Archus's configured central execution backlog for Epaminon. Archus must not invent target-owner backlog repos. Do NOT use for status questions like did it run, was it picked up, queued, blocked, or completed; use Epaminon for those reads.",
     },
     {
       as: "open_issue",

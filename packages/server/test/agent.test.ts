@@ -41,6 +41,15 @@ describe("EPAMINON_AGENT (executor)", () => {
   });
 });
 
+describe("ARCHUS_AGENT (backlog guardian)", () => {
+  it("its persona keeps execution tickets in the configured central backlog", () => {
+    const persona = ARCHUS_AGENT.persona.toLowerCase();
+    expect(persona).toContain("configured central execution backlog");
+    expect(persona).toContain("leave queue_execution.repo null");
+    expect(persona).toContain("never invent a repo like owner/backlog");
+  });
+});
+
 describe("PHYLAX_AGENT (notification gatekeeper)", () => {
   it("is the vaultless, repo-less guardian of inbound attention", () => {
     expect(PHYLAX_AGENT.name).toBe("phylax");
