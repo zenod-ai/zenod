@@ -54,6 +54,7 @@ function normalizedToolName(tool: string): string {
 function isPeerMutationTool(tool: string): boolean {
   const normalized = normalizedToolName(tool);
   return (
+    normalized === "askarchus" ||
     normalized === "openissue" ||
     normalized === "editissue" ||
     normalized === "closeissue" ||
@@ -69,10 +70,26 @@ function isPeerMutationTool(tool: string): boolean {
   );
 }
 
+function hasAnyArchusWriteIntent(request: string): boolean {
+  return (
+    /\b(create|open|file|log|raise|add)\b[\s\S]{0,80}\b(issue|ticket|bug|backlog)\b/i.test(request) ||
+    /\b(edit|update|change|comment|label|rename|patch|close)\b[\s\S]{0,100}\b(issue|ticket|#\d+|github)\b/i.test(request) ||
+    /\b(run|execute|start|queue|launch|dispatch|approve)\b[\s\S]{0,100}\b(issue|ticket|#\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\b/i.test(
+      request,
+    )
+  );
+}
+
 function hasExplicitMutationIntent(tool: string, request: string): boolean {
   const normalized = normalizedToolName(tool);
+  if (normalized === "askarchus") return false;
   if (normalized === "closeissue") {
-    return /\b(close|resolve|mark\s+(?:as\s+)?(?:done|complete|completed|closed)|archive)\b/i.test(request);
+    return (
+      /\b(close|archive)\b[\s\S]{0,80}\b(issue|ticket|#\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\b/i.test(request) ||
+      /\bmark\s+(?:it|issue|ticket|#\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)?\s*(?:as\s+)?(?:done|complete|completed|closed)\b/i.test(
+        request,
+      )
+    );
   }
   if (normalized === "openissue") {
     return /\b(create|open|file|log|raise|add)\b[\s\S]{0,80}\b(issue|ticket|bug|backlog)\b/i.test(request);
@@ -83,7 +100,7 @@ function hasExplicitMutationIntent(tool: string, request: string): boolean {
   if (normalized === "archusrequestbacklogaction") {
     return (
       /\b(create|open|file|log|raise|add)\b[\s\S]{0,80}\b(issue|ticket|bug|backlog)\b/i.test(request) ||
-      /\b(edit|update|change|comment|label|rename|patch|close|resolve)\b[\s\S]{0,100}\b(issue|ticket|#\d+|github)\b/i.test(request)
+      /\b(edit|update|change|comment|label|rename|patch|close)\b[\s\S]{0,100}\b(issue|ticket|#\d+|github)\b/i.test(request)
     );
   }
   if (normalized === "archusrunissue" || normalized === "queueexecution" || normalized === "approveexecution") {
@@ -114,10 +131,15 @@ function hasExplicitMutationIntent(tool: string, request: string): boolean {
  */
 export function peerMutationGuardFailure(tool: string, userRequest: string): string | null {
   if (!isPeerMutationTool(tool)) return null;
-  if (READ_ONLY_REQUEST_RE.test(userRequest)) {
+  const normalized = normalizedToolName(tool);
+  if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest)) {
+    return `Blocked ${tool}: explicit backlog writes/runs must use the dedicated Archus write/run tool, not ask_archus.`;
+  }
+  const explicitMutation = hasExplicitMutationIntent(tool, userRequest);
+  if (READ_ONLY_REQUEST_RE.test(userRequest) && !explicitMutation) {
     return `Blocked ${tool}: the user's current request is read-only/status-oriented, so mutating peer tools are not allowed this turn.`;
   }
-  if (!hasExplicitMutationIntent(tool, userRequest)) {
+  if (!explicitMutation) {
     return `Blocked ${tool}: mutating peer tools require an explicit write/run/send instruction from the user's current message.`;
   }
   return null;
