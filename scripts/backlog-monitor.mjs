@@ -60,6 +60,16 @@ const NOTIFY_COOLDOWN_MS = Number(process.env.ZENOD_NOTIFY_COOLDOWN_MS || 12 * 6
 // the next scan. Tunable via env.
 const MERGE_ATTEMPT_HISTORY = Number(process.env.ZENOD_MERGE_ATTEMPT_HISTORY || 200);
 const BRIDGE_MERGE_ATTEMPT_HISTORY = 30;
+const STATUS_LABEL_PRIORITY = [
+  "status:blocked",
+  "status:needs-review",
+  "status:complete",
+  "status:approved-merge",
+  "status:merged",
+  "status:running",
+  "status:queued",
+  "status:proposed",
+];
 
 function log(...a) {
   console.log(new Date().toISOString(), "[monitor]", ...a);
@@ -133,6 +143,11 @@ function pickupNotification(central) {
   return `🤖 Codex working on #${central.number} — ${central.title} (${central.target})`;
 }
 
+function primaryStatusLabel(names) {
+  const set = new Set(names || []);
+  return STATUS_LABEL_PRIORITY.find((name) => set.has(name)) || (names || []).find((name) => name.startsWith("status:")) || null;
+}
+
 // ---- central backlog (obsidian-brain) ----
 
 // owner:agent central issues with their status + target repo.
@@ -151,7 +166,7 @@ function listCentralIssues() {
       title: i.title,
       url: i.url,
       body: i.body || "",
-      status: names.find((n) => n.startsWith("status:")) || null,
+      status: primaryStatusLabel(names),
       target: target ? target.slice("target:".length) : REPO,
       origin: origin ? origin.slice("origin:".length) : null, // chat channel the ticket came from
       autoMerge: names.includes("auto-merge") || names.includes("auto_merge"),
@@ -247,7 +262,7 @@ function execStatusAndComment(target, execNumber) {
     const out = gh(["issue", "view", String(execNumber), "--repo", target, "--json", "labels,comments"]);
     const o = JSON.parse(out);
     const names = (o.labels || []).map((l) => l.name);
-    const status = names.find((n) => n.startsWith("status:")) || null;
+    const status = primaryStatusLabel(names);
     const originLabel = names.find((n) => n.startsWith("origin:")) || null;
     const comments = o.comments || [];
     return { status, origin: originLabel ? originLabel.slice("origin:".length) : null, lastComment: comments.length ? comments[comments.length - 1].body : "" };
@@ -1039,6 +1054,7 @@ export {
   updateFanInBatches,
   latestComment,
   pickupNotification,
+  primaryStatusLabel,
   parseTarget,
   workdirForRepo,
   dispatchedOutcome,

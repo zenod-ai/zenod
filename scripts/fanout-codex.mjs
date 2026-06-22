@@ -21,6 +21,7 @@ const STATUSES = new Set([
 ]);
 
 const ISSUE_STATUS_LABELS = new Map([
+  ["status:proposed", { color: "FEF2C0", description: "Candidate from agent research; not yet approved for work" }],
   ["status:queued", { color: "C5DEF5", description: "Queued for an agent run" }],
   ["status:running", { color: "FBCA04", description: "Actively being worked by an agent" }],
   ["status:blocked", { color: "B60205", description: "Blocked or failed and needs human intervention" }],
