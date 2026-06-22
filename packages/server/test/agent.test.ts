@@ -55,6 +55,9 @@ describe("PHYLAX_AGENT (notification gatekeeper)", () => {
     expect(persona).toContain("event/fact");
     expect(persona).toContain("quiet hours");
     expect(persona).toContain("deliver_to_principal");
+    expect(persona).toContain("read_notification_ledger");
+    expect(persona).toContain("searched scope");
+    expect(persona).toContain("never answer audit questions from policy guesses");
   });
 });
 

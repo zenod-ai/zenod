@@ -47,6 +47,22 @@ describe("notifier tools", () => {
     });
   });
 
+  it("parses natural singular lookback windows for notification ledger reads", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ records: [] }), { status: 200 }));
+    const tools = buildNotifierTools({
+      PHYLAX_CONSOLE_URL: "http://console.test/",
+      PHYLAX_CONSOLE_TOKEN: "console-token",
+    });
+    const result = await tools.read_notification_ledger.run("Was there a notification for execution #999999 in the last hour?");
+    expect(result).toContain("windowMinutes=60");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://console.test/api/notifications/search",
+      expect.objectContaining({
+        body: JSON.stringify({ query: "999999", windowMinutes: 60, limit: 20 }),
+      }),
+    );
+  });
+
   it("refuses delivery when the Console token is missing", async () => {
     const tools = buildNotifierTools({ PHYLAX_CONSOLE_URL: "http://console.test" });
     await expect(tools.deliver_to_principal.run("hello")).resolves.toContain("PHYLAX_CONSOLE_TOKEN is missing");

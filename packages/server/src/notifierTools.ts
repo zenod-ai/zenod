@@ -17,9 +17,9 @@ interface NotificationRecord {
 
 function parseLedgerRequest(input: string): { query?: string; windowMinutes: number; limit: number } {
   const text = input.trim();
-  const duration = text.match(/\blast\s+(\d+)\s*(minute|minutes|hour|hours|day|days)\b/i);
+  const duration = text.match(/\blast\s+(?:(\d+)\s*)?(minute|minutes|hour|hours|day|days)\b/i);
   const unit = duration?.[2]?.toLowerCase();
-  const amount = duration ? Number(duration[1]) : NaN;
+  const amount = duration ? Number(duration[1] ?? "1") : NaN;
   const windowMinutes =
     Number.isFinite(amount) && unit
       ? unit.startsWith("day")
