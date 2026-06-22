@@ -45,7 +45,7 @@ export interface RecordedAction {
 const READ_ONLY_REQUEST_RE =
   /\b(read[- ]only|do not mutate|don't mutate|do not change|don't change|do not edit|don't edit|do not close|don't close|no mutation|no mutations|just (?:check|read|search|find|list|show|tell)|what (?:is|are)|status of|what's the status|show me|tell me about)\b/i;
 const EXECUTION_STATUS_REQUEST_RE =
-  /\b(?:did|was|is|has|have|what(?:'s| is)|status)\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished|status)\b/i;
+  /(?:^\s*(?:did|was|is|has|have|what(?:'s| is))\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished|status)\b|\b(?:execution|run|runner|queue)\s+status\b|\bstatus\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished)\b)/i;
 
 function normalizedToolName(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9]/g, "");
