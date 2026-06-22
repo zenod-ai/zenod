@@ -149,6 +149,14 @@ function primaryStatusLabel(names) {
   return STATUS_LABEL_PRIORITY.find((name) => set.has(name)) || (names || []).find((name) => name.startsWith("status:")) || null;
 }
 
+function targetBootstrapLabels(existingNames) {
+  const names = new Set(existingNames || []);
+  const missing = [];
+  if (!names.has("owner:agent")) missing.push("owner:agent");
+  if (![...names].some((name) => name.startsWith("status:"))) missing.push("status:queued");
+  return missing;
+}
+
 // ---- central backlog (obsidian-brain) ----
 
 // owner:agent central issues with their status + target repo.
@@ -182,6 +190,29 @@ function ensureLabel(repo, name) {
     gh(["label", "create", name, "--repo", repo, "--force"]);
   } catch (e) {
     log(`ensureLabel ${name} on ${repo} (ignored):`, e.message);
+  }
+}
+
+// Epaminon-dispatched runs work the target issue directly. Archus may not have
+// label-write access there, so the runner repairs the target issue labels with
+// its repo-scoped GitHub credentials before launching Codex.
+function repairTargetBootstrapLabels(repo, issueNumber) {
+  let names = [];
+  try {
+    const out = gh(["issue", "view", String(issueNumber), "--repo", repo, "--json", "labels"]);
+    names = (JSON.parse(out).labels || []).map((label) => label.name);
+  } catch (e) {
+    return { ok: false, labels: [], note: `could not read target labels for ${repo}#${issueNumber}: ${e.message}` };
+  }
+  const labels = targetBootstrapLabels(names);
+  if (labels.length === 0) return { ok: true, labels: [] };
+  for (const label of labels) ensureLabel(repo, label);
+  try {
+    gh(["issue", "edit", String(issueNumber), "--repo", repo, "--add-label", labels.join(",")]);
+    log(`repaired target labels for ${repo}#${issueNumber}: ${labels.join(", ")}`);
+    return { ok: true, labels };
+  } catch (e) {
+    return { ok: false, labels, note: `could not repair target labels for ${repo}#${issueNumber}: ${e.message}` };
   }
 }
 
@@ -464,6 +495,11 @@ function launchDispatched(executionId, target, context, state) {
     log(`/run: bad target "${target}" for ${executionId}`);
     return { ok: false, note: `bad execution target "${target}"; expected owner/repo#N` };
   }
+  const repair = repairTargetBootstrapLabels(t.repo, t.number);
+  if (!repair.ok) {
+    log(`/run: target label repair failed — ${executionId} not started: ${repair.note}`);
+    return { ok: false, note: repair.note };
+  }
   if (!launcherHealthy()) {
     log(`/run: launcher not healthy — ${executionId} not started`);
     return { ok: false, note: "runner launcher is not healthy; fanout could not start" };
@@ -483,6 +519,7 @@ function launchDispatched(executionId, target, context, state) {
     workdir: workdirForRepo(t.repo),
     pid: launch.pid ?? null,
     launchLogPath: launch.logPath,
+    repairedLabels: repair.labels,
     launchedAt: new Date().toISOString(),
     reportedStatus: null,
   };
@@ -1125,6 +1162,7 @@ export {
   latestComment,
   pickupNotification,
   primaryStatusLabel,
+  targetBootstrapLabels,
   parseTarget,
   workdirForRepo,
   dispatchedOutcome,

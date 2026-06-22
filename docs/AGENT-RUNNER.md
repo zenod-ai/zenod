@@ -6,6 +6,8 @@ Autonomous workers do not connect directly to each suite agent. The runner write
 
 Execution ownership is moving to the Archus/Epaminon execution-ticket protocol: Archus mints central `type:execution` tickets and Epaminon dispatches concrete work to the runner. Any remaining `status:queued` scanning in the runner is a migration path until the runner is fully run-on-command.
 
+When Epaminon dispatches a target-repo work issue, the runner repairs that target issue's bootstrap labels before launch using its repo-scoped GitHub credentials. It adds `owner:agent` when missing and adds `status:queued` only if the issue has no existing `status:*` label; `zenod-fanout-codex` then advances the status to `status:running` and terminal labels. This is the deterministic repair path for target repos where Archus/Console cannot mutate labels directly, linked to the V5 platform gap in AlfaBlok/obsidian-brain#146.
+
 ## Build
 
 ```sh
