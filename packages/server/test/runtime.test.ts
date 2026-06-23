@@ -261,7 +261,10 @@ describe("runtime tasking tools", () => {
         if (path === "/repos/owner/vault/issues?state=all&per_page=100&sort=updated&direction=desc") {
           return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
         }
-        if (path.startsWith("/search/issues?")) {
+        if (path === "/search/issues?q=durable%20user%20journeys%20is%3Aissue%20in%3Atitle%2Cbody%20repo%3Aowner%2Fvault&per_page=5&sort=updated&order=desc") {
+          return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (path === "/search/issues?q=durable%20user%20journeys%20is%3Aissue%20in%3Atitle%2Cbody%20repo%3Azenod-ai%2Fzenod&per_page=5&sort=updated&order=desc") {
           return new Response(
             JSON.stringify({
               items: [
@@ -294,7 +297,8 @@ describe("runtime tasking tools", () => {
     expect(result.text).toContain("Resolved durable user journeys to zenod-ai/zenod#314");
     expect(calls).toEqual([
       "/repos/owner/vault/issues?state=all&per_page=100&sort=updated&direction=desc",
-      "/search/issues?q=durable%20user%20journeys%20is%3Aissue%20in%3Atitle%2Cbody&per_page=5&sort=updated&order=desc",
+      "/search/issues?q=durable%20user%20journeys%20is%3Aissue%20in%3Atitle%2Cbody%20repo%3Aowner%2Fvault&per_page=5&sort=updated&order=desc",
+      "/search/issues?q=durable%20user%20journeys%20is%3Aissue%20in%3Atitle%2Cbody%20repo%3Azenod-ai%2Fzenod&per_page=5&sort=updated&order=desc",
     ]);
   });
 
