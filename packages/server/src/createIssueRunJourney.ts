@@ -56,6 +56,31 @@ export function normalizeIssueRequest<T extends { repo?: string; labels?: string
   };
 }
 
+const OBJECTIVE_RE = /\b(objective|goal|purpose)\s*:/i;
+const SCOPE_RE = /\b(scope|in scope|out of scope|non-goals?)\s*:/i;
+const DONE_RE = /\b(acceptance criteria|done when|definition of done|success criteria|expected outcome|outcome)\s*:/i;
+const CONTEXT_RE = /\b(source context|context|source refs?|relevant files?|evidence)\s*:/i;
+
+export function validateCreateIssueThenRunRequest(request: CreateIssueThenRunInput): string[] {
+  const issue = normalizeIssueRequest(request.issue, repoFromText(request.originalRequest));
+  const body = issue.body?.trim() ?? "";
+  const missing: string[] = [];
+
+  if (!issue.repo) {
+    missing.push("target repo");
+  }
+  if (!body) {
+    missing.push("issue body");
+    return missing;
+  }
+  if (!OBJECTIVE_RE.test(body)) missing.push("objective");
+  if (!SCOPE_RE.test(body)) missing.push("scope boundaries");
+  if (!DONE_RE.test(body)) missing.push("acceptance criteria or done condition");
+  if (!CONTEXT_RE.test(body)) missing.push("source context");
+
+  return missing;
+}
+
 export function peerToolText(result: PeerToolResult): string {
   return result.content
     .filter((item) => item.type === "text")
@@ -112,6 +137,30 @@ export async function createIssueThenRunJourney(input: {
     },
     now(),
   );
+
+  const missingRunnableInputs = validateCreateIssueThenRunRequest({ ...request, issue });
+  if (missingRunnableInputs.length > 0) {
+    const clarifyStep = input.store.addStep(
+      journey.id,
+      {
+        owner: "console",
+        title: "Clarify create-and-run request",
+        input: {
+          intent: "journey.create_issue_then_run.clarify",
+          missing: missingRunnableInputs,
+          expectedArtifactKinds: [],
+        },
+        idempotencyKey: `journey:${journey.id}:console:clarify_create_issue_then_run`,
+      },
+      now(),
+    );
+    const reason = `Create-and-run needs clarification before any issue is created or dispatched: missing ${missingRunnableInputs.join(
+      ", ",
+    )}. Ask the user for the missing details in one question, then retry after the ticket is runnable.`;
+    input.store.blockStep(clarifyStep.id, reason, now());
+    return blockedResult(input.store, journey.id, reason);
+  }
+
   const createStep = input.store.addStep(
     journey.id,
     {
