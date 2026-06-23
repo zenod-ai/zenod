@@ -592,32 +592,39 @@ export class Runtime {
     }
   }
 
-  private async githubToken(repo?: string): Promise<string | null> {
+  private async githubTokens(repo?: string): Promise<string[]> {
+    const pat = this.settings.get("github_token");
     if (this.settings.hasGithubApp()) {
-      return repo ? installationTokenForRepo(this.settings, repo) : installationToken(this.settings);
+      const appToken = repo ? await installationTokenForRepo(this.settings, repo) : await installationToken(this.settings);
+      return pat && pat !== appToken ? [appToken, pat] : [appToken];
     }
-    return this.settings.get("github_token");
+    return pat ? [pat] : [];
   }
 
   private async githubJson<T>(path: string, init: RequestInit = {}): Promise<T> {
     const repoMatch = path.match(/^\/repos\/([^/]+)\/([^/]+)/);
-    const token = await this.githubToken(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined);
-    if (!token) throw new Error("GitHub token or app installation is required");
-    const response = await fetch(`https://api.github.com${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "User-Agent": "zenod",
-        Accept: "application/vnd.github+json",
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...(init.headers ?? {}),
-      },
-    });
-    if (!response.ok) {
+    const tokens = await this.githubTokens(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined);
+    if (tokens.length === 0) throw new Error("GitHub token or app installation is required");
+    for (let index = 0; index < tokens.length; index += 1) {
+      const response = await fetch(`https://api.github.com${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${tokens[index]}`,
+          "User-Agent": "zenod",
+          Accept: "application/vnd.github+json",
+          ...(init.body ? { "Content-Type": "application/json" } : {}),
+          ...(init.headers ?? {}),
+        },
+      });
+      if (response.ok) {
+        if (response.status === 204) return undefined as T;
+        return (await response.json()) as T;
+      }
       const body = await response.text().catch(() => "");
+      if (response.status === 403 && index + 1 < tokens.length) continue;
       throw new Error(`GitHub returned ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
     }
-    return (await response.json()) as T;
+    throw new Error("GitHub request failed");
   }
 
   buildBacklogIssueReader() {
@@ -882,24 +889,7 @@ export class Runtime {
     // defaults to its central backlog repo.
     const defaultRepo = () => this.settings.get("vault_repo") || this.settings.getRaw("backlog_repo") || "";
     const githubJson = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
-      const repoMatch = path.match(/^\/repos\/([^/]+)\/([^/]+)/);
-      const token = await this.githubToken(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined);
-      if (!token) throw new Error("GitHub token or app installation is required");
-      const response = await fetch(`https://api.github.com${path}`, {
-        ...init,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "User-Agent": "zenod",
-          Accept: "application/vnd.github+json",
-          ...(init.body ? { "Content-Type": "application/json" } : {}),
-          ...(init.headers ?? {}),
-        },
-      });
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(`GitHub returned ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
-      }
-      return (await response.json()) as T;
+      return this.githubJson<T>(path, init);
     };
 
     type GitHubIssue = {

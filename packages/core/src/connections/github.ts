@@ -287,33 +287,38 @@ function defaultIssueRepo(settings: ConnectionSettings): string | null {
   return settings.getRaw("vault_repo") || settings.getRaw("backlog_repo") || null;
 }
 
-async function configuredGithubToken(settings: ConnectionSettings, repo?: string): Promise<string> {
+async function configuredGithubTokens(settings: ConnectionSettings, repo?: string): Promise<string[]> {
+  const pat = settings.getRaw("github_token");
   if (settings.hasGithubApp()) {
-    return repo ? installationTokenForRepo(settings, repo) : installationToken(settings);
+    const appToken = repo ? await installationTokenForRepo(settings, repo) : await installationToken(settings);
+    return pat && pat !== appToken ? [appToken, pat] : [appToken];
   }
-  const token = settings.getRaw("github_token");
-  if (!token) throw new Error("GitHub token or app installation is required");
-  return token;
+  if (!pat) throw new Error("GitHub token or app installation is required");
+  return [pat];
 }
 
 async function githubRequest<T>(settings: ConnectionSettings, path: string, init: RequestInit = {}): Promise<T> {
-  const token = await configuredGithubToken(settings, repoFromPath(path));
-  const response = await fetch(`https://api.github.com${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "User-Agent": "zenod",
-      Accept: "application/vnd.github+json",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
-  if (!response.ok) {
+  const tokens = await configuredGithubTokens(settings, repoFromPath(path));
+  for (let index = 0; index < tokens.length; index += 1) {
+    const response = await fetch(`https://api.github.com${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${tokens[index]}`,
+        "User-Agent": "zenod",
+        Accept: "application/vnd.github+json",
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.headers ?? {}),
+      },
+    });
+    if (response.ok) {
+      if (response.status === 204) return undefined as T;
+      return (await response.json()) as T;
+    }
     const body = await response.text().catch(() => "");
+    if (response.status === 403 && index + 1 < tokens.length) continue;
     throw new Error(`GitHub returned ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
   }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  throw new Error("GitHub request failed");
 }
 
 /**
