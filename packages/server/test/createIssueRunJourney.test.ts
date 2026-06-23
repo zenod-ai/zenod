@@ -118,6 +118,61 @@ describe("createIssueThenRunJourney", () => {
     });
   });
 
+  it("passes a repo from the original create-and-run request into the Archus create step", async () => {
+    await withStore(async (store) => {
+      const calls: Array<{ peer: string; tool: string; args: Record<string, unknown> }> = [];
+      const callTool: JourneyPeerToolCaller = async (peer, tool, args) => {
+        calls.push({ peer: peer.name, tool, args });
+        if (peer.name === "archus") {
+          return {
+            content: [{ type: "text", text: "Created zenod-ai/zenod#720" }],
+            structuredContent: {
+              repo: "zenod-ai/zenod",
+              issueNumber: 720,
+              issueUrl: "https://github.com/zenod-ai/zenod/issues/720",
+              labels: ["status:proposed"],
+            },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "Queued direct-test-720" }],
+          structuredContent: {
+            ticket: {
+              executionId: "direct-test-720",
+              target: args.target,
+              context: "Run it",
+              state: "queued",
+              updatedAt: 123,
+            },
+          },
+        };
+      };
+
+      const result = await createIssueThenRunJourney({
+        store,
+        archus,
+        epaminon,
+        callTool,
+        request: {
+          originalRequest: "create a ticket in zenod-ai/zenod and run it",
+          issue: {
+            title: "Repo inferred create then run",
+            body: "Objective: prove repo inference.",
+            labels: ["status:proposed"],
+          },
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(calls[0]).toMatchObject({
+        peer: "archus",
+        tool: "create_issue",
+        args: { repo: "zenod-ai/zenod", title: "Repo inferred create then run" },
+      });
+      expect(calls[1].args.target).toBe("zenod-ai/zenod#720");
+    });
+  });
+
   it("keeps the created issue artifact when Epaminon cannot run it", async () => {
     await withStore(async (store) => {
       const callTool: JourneyPeerToolCaller = async (peer) => {

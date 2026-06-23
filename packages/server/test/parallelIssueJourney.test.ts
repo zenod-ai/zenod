@@ -125,6 +125,74 @@ describe("createIssuesJourney", () => {
     });
   });
 
+  it("applies an owner/repo from the original request when issue objects omit repo", async () => {
+    await withStore(async (store) => {
+      const calls: Array<Record<string, unknown>> = [];
+      const result = await createIssuesJourney({
+        store,
+        archus,
+        request: request({
+          originalRequest: "create two issues in zenod-ai/zenod",
+          issues: [
+            { title: "Repo inferred A", labels: ["status:proposed", "stability"] },
+            { title: "Repo inferred B", labels: ["status:proposed", "stability"] },
+          ],
+          notify: undefined,
+        }),
+        callTool: async (_peer, _tool, args) => {
+          calls.push(args);
+          const index = calls.length;
+          return {
+            content: [{ type: "text", text: `Created zenod-ai/zenod#${700 + index}` }],
+            structuredContent: {
+              repo: "zenod-ai/zenod",
+              issueNumber: 700 + index,
+              issueUrl: `https://github.com/zenod-ai/zenod/issues/${700 + index}`,
+              labels: ["status:proposed", "stability"],
+            },
+          };
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(calls).toEqual([
+        expect.objectContaining({ repo: "zenod-ai/zenod", title: "Repo inferred A", labels: ["status:proposed", "stability"] }),
+        expect.objectContaining({ repo: "zenod-ai/zenod", title: "Repo inferred B", labels: ["status:proposed", "stability"] }),
+      ]);
+    });
+  });
+
+  it("treats accidental repo-like labels as the target repo instead of GitHub labels", async () => {
+    await withStore(async (store) => {
+      const calls: Array<Record<string, unknown>> = [];
+      await createIssuesJourney({
+        store,
+        archus,
+        request: request({
+          originalRequest: "create issues",
+          issues: [{ title: "Repo label A", labels: ["status:proposed", "repo", "zenod-ai/zenod"] }],
+          notify: undefined,
+        }),
+        callTool: async (_peer, _tool, args) => {
+          calls.push(args);
+          return {
+            content: [{ type: "text", text: "Created zenod-ai/zenod#710" }],
+            structuredContent: {
+              repo: "zenod-ai/zenod",
+              issueNumber: 710,
+              issueUrl: "https://github.com/zenod-ai/zenod/issues/710",
+              labels: ["status:proposed"],
+            },
+          };
+        },
+      });
+
+      expect(calls).toEqual([
+        expect.objectContaining({ repo: "zenod-ai/zenod", title: "Repo label A", labels: ["status:proposed"] }),
+      ]);
+    });
+  });
+
   it("does not notify when one upstream issue creation blocks", async () => {
     await withStore(async (store) => {
       const calls: Array<{ peer: string; tool: string }> = [];
