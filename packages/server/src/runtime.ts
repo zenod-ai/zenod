@@ -43,6 +43,7 @@ import { TaskJobQueue } from "./taskJobQueue.js";
 import { ExecutionStore } from "./executionStore.js";
 import { JourneyStore } from "./journeyStore.js";
 import { JourneyMonitor } from "./journeyMonitor.js";
+import { createJourneyAuthorityReconciler } from "./journeyAuthorityReconciler.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
@@ -212,11 +213,19 @@ export class Runtime {
     this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"));
     this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine());
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
-    this.journeyStore = new JourneyStore(join(dataDir, "journeys.sqlite"));
-    this.journeyMonitor = new JourneyMonitor(this.journeyStore);
-    this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
     // The executor (Epaminon) owns an execution queue; no other agent does.
     this.executionQueue = agent.executor === true ? buildExecutionQueue(this.settings, this.executionStore) : null;
+    this.journeyStore = new JourneyStore(join(dataDir, "journeys.sqlite"));
+    this.journeyMonitor = new JourneyMonitor(this.journeyStore, {
+      reconcileStep: createJourneyAuthorityReconciler({
+        readIssue: async (target) => this.buildBacklogIssueReader().getIssue({ target }),
+        readExecution: async (reference) => {
+          if (!this.executionQueue) return null;
+          return this.executionQueue.get(reference) ?? this.executionQueue.snapshot().find((ticket) => ticket.target === reference) ?? null;
+        },
+      }),
+    });
+    this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
   }
 
   get workdir(): string {

@@ -29,7 +29,7 @@ export type JourneyReconcileAction =
       artifacts?: AddJourneyArtifactInput[];
     };
 
-export type JourneyStepReconciler = (input: { step: JourneyStep; snapshot: JourneySnapshot }) => JourneyReconcileAction;
+export type JourneyStepReconciler = (input: { step: JourneyStep; snapshot: JourneySnapshot }) => JourneyReconcileAction | Promise<JourneyReconcileAction>;
 
 export interface JourneyMonitorResult {
   blocked: JourneyStep[];
@@ -60,11 +60,9 @@ export class JourneyMonitor {
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => {
-      try {
-        this.runOnce();
-      } catch (err) {
+      this.runOnce().catch((err: unknown) => {
         console.error("[journey-monitor] failed:", err);
-      }
+      });
     }, this.intervalMs);
     this.timer.unref();
   }
@@ -75,19 +73,25 @@ export class JourneyMonitor {
     this.timer = null;
   }
 
-  runOnce(limit = 50): JourneyMonitorResult {
+  async runOnce(limit = 50): Promise<JourneyMonitorResult> {
     const now = this.now();
-    const blocked = this.store.blockOverdueSteps(now, limit);
-    if (!this.reconcileStep) return { blocked, claimed: [], reconciled: [] };
+    if (!this.reconcileStep) {
+      return { blocked: this.store.blockOverdueSteps(now, limit), claimed: [], reconciled: [] };
+    }
 
     const claimed = this.store.claimDueSteps(now, this.leaseMs, limit);
+    const blocked: JourneyStep[] = [];
     const reconciled: JourneyMonitorResult["reconciled"] = [];
     for (const step of claimed) {
       const snapshot = this.store.snapshot(step.journeyId);
       if (!snapshot) continue;
-      const action = this.reconcileStep({ step, snapshot });
+      const action = await this.reconcileStep({ step, snapshot });
       reconciled.push({ step, action });
       this.applyAction(step, action, now);
+      if (action.status === "blocked" || action.status === "failed") {
+        const updated = this.store.getStep(step.id);
+        if (updated) blocked.push(updated);
+      }
     }
     return { blocked, claimed, reconciled };
   }

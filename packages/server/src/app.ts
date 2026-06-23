@@ -353,7 +353,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json(runtime.journeyStore.snapshot(journey.id), 201);
   });
 
-  app.post("/api/journeys/monitor/run", (c) => c.json(runtime.journeyMonitor.runOnce()));
+  app.post("/api/journeys/monitor/run", async (c) => c.json(await runtime.journeyMonitor.runOnce()));
 
   app.post("/api/journeys/create-issue-then-run", async (c) => {
     type CreateIssueThenRunBody = {

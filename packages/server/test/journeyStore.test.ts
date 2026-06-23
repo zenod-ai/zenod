@@ -21,7 +21,7 @@ async function withStore<T>(fn: (store: JourneyStore, path: string) => T | Promi
 
 describe("JourneyStore", () => {
   it("creates a durable journey with ordered steps and an event trace", async () => {
-    await withStore((store) => {
+    await withStore(async (store) => {
       const journey = store.create(
         {
           conversationId: "whatsapp:+123",
@@ -71,7 +71,7 @@ describe("JourneyStore", () => {
   });
 
   it("uses idempotency keys to avoid duplicate mutating steps and artifacts", async () => {
-    await withStore((store) => {
+    await withStore(async (store) => {
       const journey = store.create({ surface: "console", originalRequest: "create issue" }, 100);
       const first = store.addStep(
         journey.id,
@@ -99,7 +99,7 @@ describe("JourneyStore", () => {
   });
 
   it("records callback handoff state and completes the journey when all steps complete", async () => {
-    await withStore((store) => {
+    await withStore(async (store) => {
       const journey = store.create({ surface: "console", originalRequest: "do one thing" }, 100);
       const step = store.addStep(journey.id, { owner: "archus", title: "Read issue" }, 110);
 
@@ -123,7 +123,7 @@ describe("JourneyStore", () => {
   });
 
   it("blocks overdue dispatched steps without touching future or pending steps", async () => {
-    await withStore((store) => {
+    await withStore(async (store) => {
       const journey = store.create({ surface: "console", originalRequest: "multi-step" }, 100);
       const overdue = store.addStep(journey.id, { owner: "archus", title: "callback due" }, 110);
       const future = store.addStep(journey.id, { owner: "epaminon", title: "callback later" }, 120);
@@ -132,7 +132,7 @@ describe("JourneyStore", () => {
       store.dispatchStep(future.id, { deadlineAt: 500 }, 150);
 
       const monitor = new JourneyMonitor(store, { now: () => 250 });
-      const { blocked } = monitor.runOnce();
+      const { blocked } = await monitor.runOnce();
 
       expect(blocked.map((step) => step.id)).toEqual([overdue.id]);
       expect(store.getStep(overdue.id)).toMatchObject({ status: "blocked" });
