@@ -137,6 +137,8 @@ describe("Console mesh gateway contract", () => {
       "close_issue",
       "create_issue",
       "edit_issue",
+      "epaminon.run_ephemeral_task",
+      "epaminon.run_existing_issue",
       "execution_status",
       "get_memory",
       "get_recent_conversation_transcript",
@@ -452,6 +454,28 @@ describe("Console mesh gateway contract", () => {
     }
   });
 
+  it("routes exact run requests to Epaminon's native run tool", async () => {
+    const client = await connectGateway();
+    try {
+      const result = await client.callTool({
+        name: "epaminon.run_existing_issue",
+        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch." },
+      });
+      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string } };
+      expect(structured.ticket).toMatchObject({
+        target: "zenod-ai/zenod#270",
+        state: "running",
+      });
+      expect(structured.ticket.executionId).toMatch(/^direct-/);
+      expect(structured.ticket.context).toContain("Use the current branch.");
+      expect(epaminonRuntime.executionQueue!.snapshot()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ executionId: structured.ticket.executionId, target: "zenod-ai/zenod#270" })]),
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
   it("exposes chat_with_console through the Console chat path", async () => {
     const client = await connectGateway();
     try {
@@ -467,6 +491,28 @@ describe("Console mesh gateway contract", () => {
           conversationKey: "mesh-gateway-chat-smoke",
           actions: [],
         }),
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("routes one-off tasks to Epaminon's native ephemeral execution tool", async () => {
+    const client = await connectGateway();
+    try {
+      const result = await client.callTool({
+        name: "epaminon.run_ephemeral_task",
+        arguments: { objective: "Research one thing without filing a ticket.", instructions: "Keep it short." },
+      });
+      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string } };
+      expect(structured.ticket).toMatchObject({
+        target: `ephemeral:${structured.ticket.executionId}`,
+        state: "running",
+      });
+      expect(structured.ticket.executionId).toMatch(/^ephemeral-/);
+      expect(structured.ticket.context).toContain("Research one thing");
+      expect(epaminonRuntime.executionQueue!.snapshot()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ executionId: structured.ticket.executionId, target: structured.ticket.target })]),
       );
     } finally {
       await client.close();

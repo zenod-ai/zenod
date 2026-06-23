@@ -192,6 +192,12 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Queuing for execution";
     case "approve_execution":
       return "Approving execution to ship";
+    case "console_create_issue_then_run":
+      return "Creating and running a journey";
+    case "console_create_issues":
+      return "Creating issue journey";
+    case "console_run_ephemeral_task":
+      return "Running a one-off journey";
     // Epaminon (executor) — running queued tickets and reporting outcomes.
     case "run_ticket":
       return "Running a ticket";
@@ -843,7 +849,7 @@ export class AiSdkBrainLlm implements BrainLlm {
       peerEntries.length
         ? `You have tools from connected peer agents (the mesh): ${peerEntries
             .map(([name]) => name)
-            .join(", ")}. They reach capabilities you do NOT hold locally — above all the user's memory/vault (search it, read it, ask about it, add to it). Use them to answer anything about the user's notes/knowledge or to remember something for them; prefer them over saying you can't help. add_memory is async — say it's queued, not stored, unless confirmed.`
+            .join(", ")}. Treat the tool owner as the authority boundary. Archus owns GitHub issue/backlog reads and writes. Epaminon owns execution starts and execution status. Zenod owns memory/vault reads and writes. Phylax owns notification decisions and delivery. Console owns cross-agent journeys and user-promise tracking. Use the narrowest owner tool that matches the user's intent; do not send an execution question to Archus, and do not send a backlog edit to Epaminon. If a Console journey tool exactly matches a multi-step request, use that ONE journey tool instead of manually chaining specialist tools: create-and-run newly filed issue -> console_create_issue_then_run; create multiple issues and optionally notify -> console_create_issues; one-off work with no durable ticket -> console_run_ephemeral_task. For exact run/start/execute requests on an existing owner/repo#N issue, call Epaminon's run-existing-issue tool when available. For one-off execution/research/operational work where the user did NOT ask to create/file/open a durable ticket, call Console's ephemeral journey tool when available, otherwise call Epaminon's ephemeral-task tool, instead of creating a GitHub issue by default. For 'did it run?', 'was it picked up?', 'what happened?', call Epaminon's execution-status tool. For backlog create/edit/close, call Archus. For memory search/read/store, call Zenod. When the user asks for multiple side effects (for example create a ticket and run it, run it then notify me, store this then open a follow-up), treat it as a sequenced journey: complete the first owner step, carry its returned URL/id into the next owner step, and clearly report any blocked step instead of pretending the whole journey finished. If target repo, exact issue, done condition, side effects, or order is ambiguous, ask ONE concrete clarification before mutating or dispatching.`
         : "",
     ].filter(Boolean);
 

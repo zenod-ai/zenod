@@ -752,4 +752,45 @@ describe("Epaminon MCP execution status", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("exposes Epaminon-owned exact issue execution start", async () => {
+    const client = await connect();
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.map((t) => t.name)).toContain("epaminon.run_existing_issue");
+
+      const result = await client.callTool({
+        name: "epaminon.run_existing_issue",
+        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch." },
+      });
+      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string } };
+      expect(structured.ticket).toMatchObject({ target: "zenod-ai/zenod#270" });
+      expect(["queued", "running"]).toContain(structured.ticket.state);
+      expect(structured.ticket.executionId).toMatch(/^direct-/);
+      expect(structured.ticket.context).toContain("Use the current branch.");
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("exposes Epaminon-owned ephemeral task execution without a GitHub issue target", async () => {
+    const client = await connect();
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.map((t) => t.name)).toContain("epaminon.run_ephemeral_task");
+
+      const result = await client.callTool({
+        name: "epaminon.run_ephemeral_task",
+        arguments: { objective: "Research one thing without creating a backlog ticket.", artifactPolicy: "return summary only" },
+      });
+      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string } };
+      expect(structured.ticket.executionId).toMatch(/^ephemeral-/);
+      expect(structured.ticket.target).toBe(`ephemeral:${structured.ticket.executionId}`);
+      expect(["queued", "running"]).toContain(structured.ticket.state);
+      expect(structured.ticket.context).toContain("Research one thing");
+      expect(structured.ticket.context).toContain("return summary only");
+    } finally {
+      await client.close();
+    }
+  });
 });

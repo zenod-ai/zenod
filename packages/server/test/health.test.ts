@@ -6,6 +6,7 @@ import type { BrainEngine } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 import { CONSOLE_AGENT, type AgentDefinition } from "../src/agent.js";
+import { journeyStepIdempotencyKey } from "../src/journeyContracts.js";
 
 describe("server API", () => {
   let dir: string;
@@ -143,6 +144,119 @@ describe("server API", () => {
         bodyText: "✅ Execution 142 (AlfaBlok/obsidian-brain#141) — done.",
       }),
     ]);
+  });
+
+  it("exposes a durable journey ledger for multi-agent handoffs", async () => {
+    const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
+    const created = await app.request("/api/journeys", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        conversationId: "whatsapp:+123",
+        surface: "whatsapp",
+        originalRequest: "create a ticket and run it",
+        steps: [
+          { owner: "archus", title: "Create issue", input: { repo: "AlfaBlok/zenod" } },
+          { owner: "epaminon", title: "Run issue", input: { fromPreviousStep: true }, deadlineAt: 1 },
+        ],
+      }),
+    });
+    expect(created.status).toBe(201);
+    const snapshot = await created.json();
+    expect(snapshot.steps.map((step: { owner: string }) => step.owner)).toEqual(["archus", "epaminon"]);
+
+    const firstStepId = snapshot.steps[0].id as string;
+    const secondStepId = snapshot.steps[1].id as string;
+    const dispatched = await app.request(`/api/journey-steps/${firstStepId}/dispatch`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ deadlineAt: Date.now() + 60_000 }),
+    });
+    expect(dispatched.status).toBe(200);
+
+    const completed = await app.request(`/api/journey-steps/${firstStepId}/complete`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ result: { target: "AlfaBlok/zenod#123" } }),
+    });
+    expect(completed.status).toBe(200);
+
+    await app.request(`/api/journey-steps/${secondStepId}/dispatch`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ deadlineAt: 1 }),
+    });
+    const monitor = await app.request("/api/journeys/monitor/run", { method: "POST", headers });
+    expect(monitor.status).toBe(200);
+    expect((await monitor.json()).blocked).toEqual([expect.objectContaining({ id: secondStepId, status: "blocked" })]);
+
+    const readback = await app.request(`/api/journeys/${snapshot.journey.id}`, { headers });
+    expect(readback.status).toBe(200);
+    const finalSnapshot = await readback.json();
+    expect(finalSnapshot.journey.status).toBe("blocked");
+    expect(finalSnapshot.events.map((event: { type: string }) => event.type)).toContain("journey_blocked");
+  });
+
+  it("accepts authenticated journey callbacks and advances dependent steps", async () => {
+    const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
+    const created = await app.request("/api/journeys", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        conversationId: "whatsapp:+123",
+        surface: "whatsapp",
+        originalRequest: "create a ticket and run it",
+        steps: [{ owner: "archus", title: "Create issue", input: { expectedArtifactKinds: ["github_issue"] } }],
+      }),
+    });
+    const initial = await created.json();
+    const journeyId = initial.journey.id as string;
+    const archusStepId = initial.steps[0].id as string;
+    const epaminonStep = runtime.journeyStore.addStep(journeyId, {
+      owner: "epaminon",
+      title: "Run issue",
+      dependencyIds: [archusStepId],
+      wakeAt: 1,
+    });
+
+    expect(runtime.journeyStore.claimDueSteps(10).map((step) => step.id)).toEqual([archusStepId]);
+
+    const callbackBody = {
+      journeyId,
+      stepId: archusStepId,
+      status: "completed",
+      idempotencyKey: journeyStepIdempotencyKey(journeyId, archusStepId),
+      result: { target: "zenod-ai/zenod#500" },
+      createdArtifacts: [
+        {
+          kind: "github_issue",
+          artifactKey: "github:zenod-ai/zenod#500",
+          data: { target: "zenod-ai/zenod#500", url: "https://github.com/zenod-ai/zenod/issues/500" },
+        },
+      ],
+    };
+    const callback = await app.request(`/internal/journeys/${journeyId}/steps/${archusStepId}/callback`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(callbackBody),
+    });
+    expect(callback.status).toBe(200);
+    const callbackJson = await callback.json();
+    expect(callbackJson.readySteps).toEqual([expect.objectContaining({ id: epaminonStep.id, owner: "epaminon" })]);
+
+    expect(runtime.journeyStore.claimDueSteps(20).map((step) => step.id)).toEqual([epaminonStep.id]);
+    expect(runtime.journeyStore.artifactsForJourney(journeyId)).toEqual([
+      expect.objectContaining({ artifactKey: "github:zenod-ai/zenod#500", kind: "github_issue" }),
+    ]);
+
+    const duplicate = await app.request(`/internal/journeys/${journeyId}/steps/${archusStepId}/callback`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(callbackBody),
+    });
+    expect(duplicate.status).toBe(200);
+    expect(await duplicate.json()).toMatchObject({ duplicate: true });
+    expect(runtime.journeyStore.artifactsForJourney(journeyId)).toHaveLength(1);
   });
 
   it("engine routes report not-configured as 409", async () => {
@@ -391,10 +505,15 @@ describe("server API", () => {
       expect(archus?.tools?.map((tool) => tool.as)).not.toEqual(
         expect.arrayContaining(["archus_get_issue", "archus_find_issue", "archus_list_issues"]),
       );
-      expect(epaminon?.tools?.map((tool) => tool.as)).toEqual(["epaminon_read_issue_execution_status"]);
-      expect(epaminon?.tools?.[0]?.description).toContain("did it run");
-      expect(archus?.tools?.find((tool) => tool.as === "archus_run_issue")?.description).toContain("calls its private queueExecution tool");
-      expect(archus?.tools?.find((tool) => tool.as === "archus_run_issue")?.description).toContain("central execution backlog");
+      expect(epaminon?.tools?.map((tool) => tool.as)).toEqual([
+        "epaminon_run_existing_issue",
+        "epaminon_run_ephemeral_task",
+        "epaminon_read_issue_execution_status",
+      ]);
+      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_existing_issue")?.description).toContain("Start execution");
+      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_ephemeral_task")?.description).toContain("one-off execution");
+      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_read_issue_execution_status")?.description).toContain("did it run");
+      expect(archus?.tools?.find((tool) => tool.as === "archus_run_issue")?.description).toContain("Legacy fallback");
       expect(archus?.tools?.find((tool) => tool.as === "archus_request_backlog_action")?.description).toContain("Do NOT use for running");
     } finally {
       consoleRuntime.close();

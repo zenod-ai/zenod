@@ -279,6 +279,33 @@ describe("runtime tasking tools", () => {
     }
   });
 
+  it("exposes Console-owned durable journey tools only on Console", async () => {
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-runtime-console-journeys-"));
+    const archusDir = await mkdtemp(join(tmpdir(), "zenod-runtime-archus-journeys-"));
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    const archusRuntime = new Runtime(archusDir, ARCHUS_AGENT);
+    try {
+      const consoleTools = (consoleRuntime as unknown as { buildConsoleJourneyTools(): PeerTools }).buildConsoleJourneyTools();
+      expect(Object.keys(consoleTools).sort()).toEqual([
+        "console_create_issue_then_run",
+        "console_create_issues",
+        "console_run_ephemeral_task",
+      ]);
+      expect(consoleTools.console_create_issue_then_run?.description).toContain("Durable multi-step workflow");
+      expect(consoleTools.console_create_issue_then_run?.inputSchema).toBeDefined();
+      expect(consoleTools.console_create_issues?.description).toContain("multiple independent GitHub issues");
+      expect(consoleTools.console_run_ephemeral_task?.description).toContain("one-off execution");
+
+      const archusTools = (archusRuntime as unknown as { buildConsoleJourneyTools(): PeerTools }).buildConsoleJourneyTools();
+      expect(archusTools).toEqual({});
+    } finally {
+      consoleRuntime.close();
+      archusRuntime.close();
+      await rm(consoleDir, { recursive: true, force: true });
+      await rm(archusDir, { recursive: true, force: true });
+    }
+  });
+
   it("queueExecution hydrates the target issue before minting and dispatching", async () => {
     runtime.settings.setRaw("backlog_repo", "owner/central");
     runtime.settings.setRaw("exec_lane_secret", "lane-secret");
@@ -638,11 +665,22 @@ describe("Console peer delegation context", () => {
       const tools = (consoleRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
       const taskingContext = (
         consoleRuntime as unknown as {
-          taskingContext: { run<T>(store: { parentConversationId: string }, callback: () => Promise<T>): Promise<T> };
+          taskingContext: {
+            run<T>(
+              store: { parentConversationId: string; surface: string; originalRequest: string },
+              callback: () => Promise<T>,
+            ): Promise<T>;
+          };
         }
       ).taskingContext;
-      const first = await taskingContext.run({ parentConversationId: "web:thread-a" }, () => tools.ask_archus.run("first request"));
-      const second = await taskingContext.run({ parentConversationId: "web:thread-b" }, () => tools.ask_archus.run("second request"));
+      const first = await taskingContext.run(
+        { parentConversationId: "web:thread-a", surface: "web", originalRequest: "first user message" },
+        () => tools.ask_archus.run("first request"),
+      );
+      const second = await taskingContext.run(
+        { parentConversationId: "web:thread-b", surface: "web", originalRequest: "second user message" },
+        () => tools.ask_archus.run("second request"),
+      );
 
       expect(first).toContain("peerKey=web-thread-a-archus");
       expect(first).toContain("Parent Console conversation: web:thread-a");
@@ -650,6 +688,18 @@ describe("Console peer delegation context", () => {
       expect(second).toContain("Parent Console conversation: web:thread-b");
       expect(first).not.toContain("peerKey=web-default-archus");
       expect(second).not.toContain("peerKey=web-default-archus");
+      const journeys = consoleRuntime.journeyStore.recent();
+      expect(journeys).toHaveLength(2);
+      expect(journeys.map((journey) => journey.conversationId).sort()).toEqual(["web:thread-a", "web:thread-b"]);
+      const firstJourney = journeys.find((journey) => journey.conversationId === "web:thread-a")!;
+      expect(firstJourney).toMatchObject({ originalRequest: "first user message", status: "active" });
+      expect(consoleRuntime.journeyStore.stepsForJourney(firstJourney.id)).toEqual([
+        expect.objectContaining({
+          owner: "archus",
+          title: "ask_archus -> chat_with_archus",
+          status: "completed",
+        }),
+      ]);
     } finally {
       archusServer?.close();
       archusRuntime.close();

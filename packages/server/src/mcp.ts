@@ -23,6 +23,8 @@ import {
   V4_EXECUTION_STATUS_SHAPE,
   V4_GET_ISSUE_SHAPE,
   V4_LIST_ISSUES_SHAPE,
+  RUN_ISSUE_SHAPE,
+  RUN_EPHEMERAL_TASK_SHAPE,
 } from "./mcpToolSchemas.js";
 import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./toolOutput.js";
 
@@ -41,6 +43,8 @@ export type GithubIssueEditor = (input: EditGithubIssueInput) => Promise<EditGit
 export type GithubIssueCreator = (input: CreateGithubIssueInput) => Promise<CreateGithubIssueResult>;
 export type ExecutionStatusReader = () => ExecutionTicket[] | null;
 export type BeforeExecutionStatusRead = () => Promise<void> | void;
+export type ExistingIssueRunner = (input: { target: string; instructions?: string; repo?: string }) => Promise<ExecutionTicket>;
+export type EphemeralTaskRunner = (input: { objective: string; instructions?: string; artifactPolicy?: string }) => Promise<ExecutionTicket>;
 export interface BacklogIssueReader {
   getIssue(input: { target: string }): Promise<ToolResponse>;
   findIssue(input: { reference: string; repos?: string[]; recentWindow?: string; labels?: string[]; limit?: number }): Promise<ToolResponse>;
@@ -239,6 +243,8 @@ export function buildMcpServer(
   beforeReadExecutionStatus?: BeforeExecutionStatusRead,
   readBacklogIssues?: BacklogIssueReader,
   readConversationTranscript?: ConversationTranscriptReader,
+  runExistingIssue?: ExistingIssueRunner,
+  runEphemeralTask?: EphemeralTaskRunner,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -304,6 +310,51 @@ export function buildMcpServer(
   }
 
   if (readExecutionStatus) {
+    if (runExistingIssue) {
+      server.registerTool(
+        "epaminon.run_existing_issue",
+        {
+          title: "Run existing issue",
+          description:
+            "Owner: Epaminon. Start execution for one exact existing work issue. Input must be a qualified target owner/repo#N; this does not resolve fuzzy references and does not answer status questions.",
+          inputSchema: RUN_ISSUE_SHAPE,
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+        },
+        async (input) => {
+          const ticket = await runExistingIssue(input);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Queued execution ${ticket.executionId} for ${ticket.target}: ${ticket.state}`,
+              },
+            ],
+            structuredContent: { ticket },
+          };
+        },
+      );
+    }
+
+    if (runEphemeralTask) {
+      server.registerTool(
+        "epaminon.run_ephemeral_task",
+        {
+          title: "Run ephemeral task",
+          description:
+            "Owner: Epaminon. Start one one-off execution task tracked in the execution queue/journey without creating a GitHub backlog issue by default. Use for ephemeral research or operational work when the user did not ask for a durable ticket.",
+          inputSchema: RUN_EPHEMERAL_TASK_SHAPE,
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+        },
+        async (input) => {
+          const ticket = await runEphemeralTask(input);
+          return {
+            content: [{ type: "text", text: `Queued ephemeral execution ${ticket.executionId}: ${ticket.state}` }],
+            structuredContent: { ticket },
+          };
+        },
+      );
+    }
+
     server.registerTool(
       "execution_status",
       {

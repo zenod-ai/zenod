@@ -41,10 +41,22 @@ import { IngestQueue } from "./ingestQueue.js";
 import { TaskJobStore } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
 import { ExecutionStore } from "./executionStore.js";
+import { JourneyStore } from "./journeyStore.js";
+import { JourneyMonitor } from "./journeyMonitor.js";
 import { OAuthStore } from "./oauthStore.js";
-import { callPeer, callPeerWithArgs } from "./peerClient.js";
+import { callPeer, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
-import { GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE, V4_FIND_ISSUE_SHAPE, V4_GET_ISSUE_SHAPE, V4_LIST_ISSUES_SHAPE } from "./mcpToolSchemas.js";
+import { createIssueThenRunJourney, type CreateIssueThenRunInput, type CreateIssueThenRunResult } from "./createIssueRunJourney.js";
+import { createIssuesJourney, type CreateIssuesJourneyInput, type CreateIssuesJourneyResult } from "./parallelIssueJourney.js";
+import { runEphemeralJourney, type RunEphemeralJourneyInput, type RunEphemeralJourneyResult } from "./ephemeralJourney.js";
+import {
+  GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+  RUN_EPHEMERAL_TASK_SHAPE,
+  RUN_ISSUE_SHAPE,
+  V4_FIND_ISSUE_SHAPE,
+  V4_GET_ISSUE_SHAPE,
+  V4_LIST_ISSUES_SHAPE,
+} from "./mcpToolSchemas.js";
 import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
@@ -62,6 +74,14 @@ const CONSOLE_PARENT_CONVERSATION_KEY = "default";
 const MAX_PEER_CONTEXT_MESSAGES = 8;
 const MAX_PEER_CONTEXT_CHARS = 400;
 
+interface TaskingRunContext {
+  parentConversationId: string;
+  surface: string;
+  originalRequest: string;
+  rawEvidence?: TaskingInput["rawEvidence"];
+  journeyId?: string;
+}
+
 function peerToolInputSchema(schemaKey?: string): ZodTypeAny | undefined {
   switch (schemaKey) {
     case "archus.get_issue":
@@ -72,6 +92,10 @@ function peerToolInputSchema(schemaKey?: string): ZodTypeAny | undefined {
       return z.object(V4_LIST_ISSUES_SHAPE);
     case "zenod.get_recent_conversation_transcript":
       return z.object(GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE);
+    case "epaminon.run_existing_issue":
+      return z.object(RUN_ISSUE_SHAPE);
+    case "epaminon.run_ephemeral_task":
+      return z.object(RUN_EPHEMERAL_TASK_SHAPE);
     default:
       return undefined;
   }
@@ -130,13 +154,15 @@ export class Runtime {
   readonly taskJobStore: TaskJobStore;
   readonly taskJobQueue: TaskJobQueue;
   readonly executionStore: ExecutionStore;
+  readonly journeyStore: JourneyStore;
+  readonly journeyMonitor: JourneyMonitor;
   readonly usageStore: UsageStore;
   /** The executor's queue (Epaminon only) — the state authority for the execution
    *  lane. Null on every other agent. Wired to the protocol seams in executionLane. */
   readonly executionQueue: ExecutionQueue | null;
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
-  private readonly taskingContext = new AsyncLocalStorage<{ parentConversationId: string; rawEvidence?: TaskingInput["rawEvidence"] }>();
+  private readonly taskingContext = new AsyncLocalStorage<TaskingRunContext>();
 
   async reconcileMergedExecutionReviews(): Promise<void> {
     if (!this.executionQueue) return;
@@ -186,6 +212,8 @@ export class Runtime {
     this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"));
     this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine());
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
+    this.journeyStore = new JourneyStore(join(dataDir, "journeys.sqlite"));
+    this.journeyMonitor = new JourneyMonitor(this.journeyStore);
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
     // The executor (Epaminon) owns an execution queue; no other agent does.
     this.executionQueue = agent.executor === true ? buildExecutionQueue(this.settings, this.executionStore) : null;
@@ -272,6 +300,7 @@ export class Runtime {
     const driveTools = vaultless ? null : buildDriveTools(this.settings, this.ingestQueue);
     // Mesh: peer-agent delegation tools, available to any agent (vault or not).
     const peerTools = this.buildPeerTools();
+    Object.assign(peerTools, this.buildConsoleJourneyTools());
     // Callistheness's private send tools (post_tweet/post_reddit/send_email) ride the
     // same generic tool slot — its guardian brain wields them and confirms first.
     if (outbound) Object.assign(peerTools, buildOutboundTools());
@@ -298,14 +327,21 @@ export class Runtime {
     });
     this.engine = {
       ...engine,
-      handleTasking: (input) =>
-        this.taskingContext.run(
-          {
-            parentConversationId: conversationId(input.surface, input.conversationKey),
-            ...(input.rawEvidence ? { rawEvidence: input.rawEvidence } : {}),
-          },
-          () => engine.handleTasking(input),
-        ),
+      handleTasking: (input) => {
+        const context: TaskingRunContext = {
+          parentConversationId: conversationId(input.surface, input.conversationKey),
+          surface: input.surface,
+          originalRequest: input.text,
+          ...(input.rawEvidence ? { rawEvidence: input.rawEvidence } : {}),
+        };
+        return this.taskingContext.run(context, async () => {
+          try {
+            return await engine.handleTasking(input);
+          } finally {
+            if (context.journeyId) this.journeyStore.completeJourneyIfReady(context.journeyId);
+          }
+        });
+      },
     };
     return this.engine;
   }
@@ -350,27 +386,29 @@ export class Runtime {
                   ...(Array.isArray(args.hints) ? args.hints.filter((hint): hint is string => typeof hint === "string") : []),
                   ...(rawEvidence.hints ?? []),
                 ];
-                return callPeerWithArgs(peer, spec.mcp, {
+                const forwarded = {
                   ...args,
                   content: rawEvidence.content,
                   verbatim: true,
                   ...(hints.length ? { hints } : {}),
-                });
+                };
+                return this.recordPeerDelegation(peer, spec, forwarded, () => callPeerWithArgs(peer, spec.mcp, forwarded));
               }
-              return callPeerWithArgs(peer, spec.mcp, args);
+              return this.recordPeerDelegation(peer, spec, args, () => callPeerWithArgs(peer, spec.mcp, args));
             }
             const textInput = typeof input === "string" ? input : String(input.input ?? "");
             const rawEvidence = this.taskingContext.getStore()?.rawEvidence;
             if (rawEvidence && spec.mcp === "store_memory") {
               const hints = rawEvidence.hints ?? [];
-              return callPeerWithArgs(peer, spec.mcp, {
+              const forwarded = {
                 content: rawEvidence.content,
                 verbatim: true,
                 ...(hints.length ? { hints } : {}),
-              });
+              };
+              return this.recordPeerDelegation(peer, spec, forwarded, () => callPeerWithArgs(peer, spec.mcp, forwarded));
             }
             if (!shouldForwardConsoleContext || !spec.mcp.startsWith("chat_with_")) {
-              return callPeer(peer, spec.mcp, spec.arg, textInput);
+              return this.recordPeerDelegation(peer, spec, textInput, () => callPeer(peer, spec.mcp, spec.arg, textInput));
             }
             const parentConversationId = this.taskingContext.getStore()?.parentConversationId ?? conversationId("web", CONSOLE_PARENT_CONVERSATION_KEY);
             const window = await this.state.recentWindow(parentConversationId);
@@ -379,15 +417,179 @@ export class Runtime {
               peerName: peer.name,
               messages: window,
             });
-            return callPeer(peer, spec.mcp, spec.arg, message, {
-              surface: "web",
-              conversationKey: consolePeerConversationKey(parentConversationId, peer.name),
-            });
+            return this.recordPeerDelegation(peer, spec, { input: textInput, parentConversationId }, () =>
+              callPeer(peer, spec.mcp, spec.arg, message, {
+                surface: "web",
+                conversationKey: consolePeerConversationKey(parentConversationId, peer.name),
+              }),
+            );
           },
         };
       }
     }
     return tools;
+  }
+
+  private buildConsoleJourneyTools(): PeerTools {
+    if (this.agent.name !== "console") return {};
+    const contextFor = (input: { originalRequest?: unknown }) => {
+      const context = this.taskingContext.getStore();
+      return {
+        originalRequest:
+          typeof input.originalRequest === "string" && input.originalRequest.trim()
+            ? input.originalRequest.trim()
+            : (context?.originalRequest ?? "Console journey request"),
+        conversationId: context?.parentConversationId ?? null,
+        surface: context?.surface ?? "console",
+      };
+    };
+    const formatCreateRunResult = (result: CreateIssueThenRunResult): string => [
+      `Journey ${result.journeyId}: ${result.status}.`,
+      result.message,
+      ...(result.createdIssue ? [`Created issue: ${result.createdIssue.target} - ${result.createdIssue.url}`] : []),
+      ...(result.execution
+        ? [`Execution: ${result.execution.executionId} for ${result.execution.target} (${result.execution.state})`]
+        : []),
+    ].join("\n");
+    const formatCreateIssuesResult = (result: CreateIssuesJourneyResult): string => [
+      `Journey ${result.journeyId}: ${result.status}.`,
+      result.message,
+      ...result.createdIssues.map((issue) => `Created issue: ${issue.target} - ${issue.url}`),
+      ...(result.notificationText ? [`Notification handoff: ${result.notificationText}`] : []),
+    ].join("\n");
+    const formatEphemeralResult = (result: RunEphemeralJourneyResult): string => [
+      `Journey ${result.journeyId}: ${result.status}.`,
+      result.message,
+      ...(result.execution
+        ? [`Execution: ${result.execution.executionId} for ${result.execution.target} (${result.execution.state})`]
+        : []),
+    ].join("\n");
+
+    return {
+      console_create_issue_then_run: {
+        description:
+          "Owner: Console. Durable multi-step workflow for one request that explicitly asks to create/file/open a GitHub issue AND run/start/execute that newly created issue. This creates a journey, asks Archus to create the issue, then gives Epaminon the structured created issue artifact. Use this instead of separately calling Archus and Epaminon for create-and-run.",
+        inputSchema: z.object({
+          originalRequest: z.string().optional().describe("the user's original request; omit to use the current message"),
+          issue: z.object({
+            repo: z.string().optional().describe("owner/repo target; omit to let Archus/default config decide"),
+            title: z.string().describe("GitHub issue title"),
+            body: z.string().optional().describe("runnable issue body with objective, scope, acceptance criteria, and source context"),
+            labels: z.array(z.string()).optional().describe("labels to request on the created issue"),
+          }),
+          runInstructions: z.string().optional().describe("extra instructions Epaminon needs when running the created issue"),
+        }),
+        run: async (input) => {
+          const args = input as Partial<CreateIssueThenRunInput> & { issue?: CreateIssueThenRunInput["issue"] };
+          if (!args.issue?.title) return "ERROR: issue.title is required.";
+          const result = await this.createIssueThenRun({
+            ...contextFor(args),
+            issue: args.issue,
+            ...(args.runInstructions ? { runInstructions: args.runInstructions } : {}),
+          });
+          return formatCreateRunResult(result);
+        },
+      },
+      console_create_issues: {
+        description:
+          "Owner: Console. Durable workflow for a single user request that asks for multiple independent GitHub issues, optionally followed by a Phylax notification after all issue URLs are verified. Creates one journey with parallel Archus steps and an optional notification handoff.",
+        inputSchema: z.object({
+          originalRequest: z.string().optional().describe("the user's original request; omit to use the current message"),
+          issues: z
+            .array(
+              z.object({
+                repo: z.string().optional().describe("owner/repo target; omit to let Archus/default config decide"),
+                title: z.string().describe("GitHub issue title"),
+                body: z.string().optional().describe("runnable issue body with objective, scope, acceptance criteria, and source context"),
+                labels: z.array(z.string()).optional().describe("labels to request on this issue"),
+              }),
+            )
+            .min(1)
+            .describe("issues to create"),
+          notify: z
+            .object({ message: z.string().optional().describe("notification context for Phylax") })
+            .optional()
+            .describe("set only when the user asks to notify/ping/report back after issue creation"),
+        }),
+        run: async (input) => {
+          const args = input as Partial<CreateIssuesJourneyInput> & { issues?: CreateIssuesJourneyInput["issues"] };
+          if (!args.issues?.length) return "ERROR: issues[] is required.";
+          const result = await this.createIssues({
+            ...contextFor(args),
+            issues: args.issues,
+            ...(args.notify ? { notify: args.notify } : {}),
+          });
+          return formatCreateIssuesResult(result);
+        },
+      },
+      console_run_ephemeral_task: {
+        description:
+          "Owner: Console. Durable workflow for one-off execution/research/ops where the user did NOT ask to create/file/open a GitHub issue. Creates a journey and asks Epaminon to run an ephemeral task without inventing a backlog ticket.",
+        inputSchema: z.object({
+          originalRequest: z.string().optional().describe("the user's original request; omit to use the current message"),
+          objective: z.string().describe("the one-off objective to execute"),
+          instructions: z.string().optional().describe("extra execution constraints/context"),
+          artifactPolicy: z.string().optional().describe("where/how Epaminon should report artifacts, if the user specified it"),
+        }),
+        run: async (input) => {
+          const args = input as Partial<RunEphemeralJourneyInput>;
+          if (!args.objective) return "ERROR: objective is required.";
+          const result = await this.runEphemeralTask({
+            ...contextFor(args),
+            objective: args.objective,
+            ...(args.instructions ? { instructions: args.instructions } : {}),
+            ...(args.artifactPolicy ? { artifactPolicy: args.artifactPolicy } : {}),
+          });
+          return formatEphemeralResult(result);
+        },
+      },
+    };
+  }
+
+  private ensureTaskingJourney(context: TaskingRunContext): string {
+    if (context.journeyId) return context.journeyId;
+    const journey = this.journeyStore.create({
+      conversationId: context.parentConversationId,
+      surface: context.surface ?? "console",
+      originalRequest: context.originalRequest ?? "Console peer delegation",
+      context: { owner: "console", source: "peer_delegation" },
+    });
+    context.journeyId = journey.id;
+    return journey.id;
+  }
+
+  private async recordPeerDelegation<T>(
+    peer: PeerConfig,
+    spec: PeerToolSpec,
+    input: unknown,
+    call: () => Promise<T>,
+  ): Promise<T> {
+    const context = this.taskingContext.getStore();
+    if (this.agent.name !== "console" || !context) return call();
+
+    const journeyId = this.ensureTaskingJourney(context);
+    const step = this.journeyStore.addStep(journeyId, {
+      owner: peer.name,
+      title: `${spec.as} -> ${spec.mcp}`,
+      input: {
+        tool: spec.as,
+        mcpTool: spec.mcp,
+        input: compactJourneyValue(input),
+      },
+    });
+    this.journeyStore.dispatchStep(step.id, { deadlineAt: Date.now() + 5 * 60_000 });
+    try {
+      const result = await call();
+      if (peerResultIsError(result)) {
+        this.journeyStore.blockStep(step.id, "peer delegation returned an error");
+      } else {
+        this.journeyStore.completeStep(step.id, { result: compactJourneyValue(result) });
+      }
+      return result;
+    } catch (err) {
+      this.journeyStore.blockStep(step.id, err instanceof Error ? err.message : String(err));
+      throw err;
+    }
   }
 
   private async githubToken(repo?: string): Promise<string | null> {
@@ -1064,6 +1266,51 @@ export class Runtime {
     await rm(this.workdir, { recursive: true, force: true });
   }
 
+  async createIssueThenRun(input: CreateIssueThenRunInput): Promise<CreateIssueThenRunResult> {
+    if (this.agent.name !== "console") {
+      throw new Error("create-issue-then-run journeys are owned by the Console");
+    }
+    const archus = this.settings.peers().find((peer) => peer.name === "archus");
+    const epaminon = this.settings.peers().find((peer) => peer.name === "epaminon");
+    if (!archus) throw new Error("Archus peer is not configured");
+    if (!epaminon) throw new Error("Epaminon peer is not configured");
+    return createIssueThenRunJourney({
+      store: this.journeyStore,
+      archus,
+      epaminon,
+      request: input,
+    });
+  }
+
+  async createIssues(input: CreateIssuesJourneyInput): Promise<CreateIssuesJourneyResult> {
+    if (this.agent.name !== "console") {
+      throw new Error("parallel issue journeys are owned by the Console");
+    }
+    const archus = this.settings.peers().find((peer) => peer.name === "archus");
+    const phylax = this.settings.peers().find((peer) => peer.name === "phylax");
+    if (!archus) throw new Error("Archus peer is not configured");
+    if (input.notify && !phylax) throw new Error("Phylax peer is not configured");
+    return createIssuesJourney({
+      store: this.journeyStore,
+      archus,
+      ...(phylax ? { phylax } : {}),
+      request: input,
+    });
+  }
+
+  async runEphemeralTask(input: RunEphemeralJourneyInput): Promise<RunEphemeralJourneyResult> {
+    if (this.agent.name !== "console") {
+      throw new Error("ephemeral execution journeys are owned by the Console");
+    }
+    const epaminon = this.settings.peers().find((peer) => peer.name === "epaminon");
+    if (!epaminon) throw new Error("Epaminon peer is not configured");
+    return runEphemeralJourney({
+      store: this.journeyStore,
+      epaminon,
+      request: input,
+    });
+  }
+
   close(): void {
     this.whatsapp.close();
     void this.telegram.close();
@@ -1072,6 +1319,8 @@ export class Runtime {
     this.ingestStore.close();
     this.taskJobStore.close();
     this.executionStore.close();
+    this.journeyMonitor.stop();
+    this.journeyStore.close();
     this.usageStore.close();
   }
 }
@@ -1110,6 +1359,24 @@ function logTokenCost(measurement: TokenCostMeasurement): void {
       .filter(Boolean)
       .join(" "),
   );
+}
+
+function compactJourneyValue(value: unknown): unknown {
+  if (typeof value === "string") return value.slice(0, 2_000);
+  if (value === null || typeof value !== "object") return value;
+  try {
+    const json = JSON.stringify(value);
+    if (json.length > 2_000) return { truncatedJson: json.slice(0, 2_000) };
+    return JSON.parse(json) as unknown;
+  } catch {
+    return String(value).slice(0, 2_000);
+  }
+}
+
+function peerResultIsError(result: unknown): boolean {
+  if (typeof result === "string") return result.startsWith("Could not reach peer agent");
+  if (!result || typeof result !== "object") return false;
+  return (result as { isError?: unknown }).isError === true;
 }
 
 /** Verify a GitHub token can see the vault repo. */

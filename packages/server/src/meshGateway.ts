@@ -20,6 +20,7 @@ import {
   GET_TASK_RESULT_SHAPE,
   REQUEST_BACKLOG_ACTION_SHAPE,
   RUN_ISSUE_SHAPE,
+  RUN_EPHEMERAL_TASK_SHAPE,
   SEARCH_MEMORY_SHAPE,
   STORE_MEMORY_SHAPE,
   V4_EXECUTION_STATUS_SHAPE,
@@ -327,10 +328,26 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
-  // Epaminon's execution surface is READ-ONLY here. "Run X" is Archus's call (he
-  // mints + dispatches the execution ticket); Epaminon exposes no write-intents —
-  // the run is driven by the deterministic Archus↔Epaminon lane, which is
-  // internal-only and must never be republished on this public gateway.
+  {
+    name: "epaminon.run_existing_issue",
+    owner: "epaminon",
+    title: "Run existing issue",
+    description:
+      "Owner: Epaminon. Start execution for one exact existing work issue. Input must be a qualified target owner/repo#N. Use this for direct run/start/execute requests when the issue already exists. Do not use for status questions; use epaminon.execution_status/execution_status.",
+    inputSchema: RUN_ISSUE_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "epaminon.run_ephemeral_task",
+    owner: "epaminon",
+    title: "Run ephemeral task",
+    description:
+      "Owner: Epaminon. Start one one-off execution task without creating a GitHub issue by default. Use for ephemeral research or operational work when the user did not ask for a durable backlog ticket.",
+    inputSchema: RUN_EPHEMERAL_TASK_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  },
+  // Epaminon owns execution reads and exact existing-issue execution starts.
+  // Backlog creation/update stays with Archus.
   {
     name: "epaminon.execution_status",
     owner: "epaminon",
