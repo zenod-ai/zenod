@@ -580,6 +580,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // Connecting Drive, or changing the quality, is the moment to fetch the
     // (newly) chosen transcription model to the persistent volume.
     if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
+    if (agent.name === "console") await syncGithubCredentialsToRepoAgents();
     return c.json({ settings: settings.masked(), configured: settings.configured() });
   });
 
@@ -599,6 +600,26 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     }
     runtime.invalidate();
     return c.json({ ok: true, repo });
+  });
+
+  // Change THIS agent's GitHub credentials in place. Provisioning is one-shot,
+  // but GitHub connections can be added or repaired later from the Console.
+  app.post("/api/agent/github", async (c) => {
+    const body = await c.req
+      .json<{
+        github_token?: string;
+        github_app_id?: string;
+        github_app_private_key?: string;
+        github_app_installation_id?: string;
+        github_app_slug?: string;
+      }>()
+      .catch(() => ({}) as Record<string, string>);
+    if (body.github_token) settings.set("github_token", body.github_token);
+    for (const key of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug"] as const) {
+      if (body[key]) settings.setRaw(key, body[key]!);
+    }
+    runtime.invalidate();
+    return c.json({ ok: true, hasGithubToken: Boolean(settings.get("github_token")), hasGithubApp: settings.hasGithubApp() });
   });
 
   // Execution-lane config push (#196). The Console cross-provisions the
@@ -928,6 +949,42 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     }
   }
 
+  const githubCredentialPayload = (): Record<string, string> => {
+    const payload: Record<string, string> = {};
+    const ghToken = settings.get("github_token");
+    if (ghToken) payload.github_token = ghToken;
+    for (const key of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug"] as const) {
+      const value = settings.getRaw(key);
+      if (value) payload[key] = value;
+    }
+    return payload;
+  };
+
+  const syncGithubCredentialsToRepoAgents = async (names?: string[]): Promise<void> => {
+    if (agent.name !== "console") return;
+    const payload = githubCredentialPayload();
+    if (Object.keys(payload).length === 0) return;
+    const only = names ? new Set(names) : null;
+    await Promise.all(
+      SUITE_AGENTS.filter((a) => a.needsRepo && (!only || only.has(a.name))).map(async (a) => {
+        const token = settings.agentToken(a.name);
+        if (!token) return;
+        const res = await fetch(`${a.internalBaseUrl}/api/agent/github`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        }).catch(() => null);
+        if (!res?.ok) {
+          console.warn(`[team] GitHub credential sync to ${a.name} failed${res ? ` (${res.status})` : ""}`);
+        }
+      }),
+    );
+  };
+
+  void syncGithubCredentialsToRepoAgents().catch((err: unknown) => {
+    console.warn("[team] GitHub credential startup sync failed:", err);
+  });
+
   app.get("/api/team", async (c) => {
     const enabled = new Set(settings.peers().map((p) => p.name));
     const tokens = settings.agentTokens();
@@ -1059,6 +1116,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     });
     settings.setPeers(peers);
     runtime.invalidate();
+    await syncGithubCredentialsToRepoAgents([sa.name]);
     // If this enable completed the Archus+Epaminon pair, light up the execution lane.
     await provisionExecLaneIfReady();
     return c.json({ ok: true });

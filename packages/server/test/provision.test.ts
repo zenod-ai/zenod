@@ -80,4 +80,24 @@ describe("headless provisioning", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("accepts GitHub credential sync after one-shot provisioning", async () => {
+    await app.request("/api/provision", { method: "POST", body: JSON.stringify({ token: "t1" }) });
+
+    const res = await app.request("/api/agent/github", {
+      method: "POST",
+      headers: { Authorization: "Bearer t1" },
+      body: JSON.stringify({
+        github_token: "ghp_synced",
+        github_app_id: "99",
+        github_app_private_key: "pem",
+        github_app_installation_id: "777",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ ok: true, hasGithubToken: true, hasGithubApp: true });
+    expect(runtime.settings.get("github_token")).toBe("ghp_synced");
+    expect(runtime.settings.getRaw("github_app_installation_id")).toBe("777");
+  });
 });
