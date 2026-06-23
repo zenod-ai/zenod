@@ -100,7 +100,7 @@ export const DEFAULT_MAX_STEPS = 8;
 export const MIN_MAX_STEPS = 2;
 export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
-export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
+export const MAX_ANSWER_OUTPUT_TOKENS = 1024;
 export const MAX_WORK_OUTPUT_TOKENS = 4096;
 
 /** Clamp a configured step budget to a sane range; falls back to the default. */
