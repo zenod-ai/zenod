@@ -431,8 +431,20 @@ function blockedConsoleJourney(actions: ReadonlyArray<RecordedAction>): string |
   return blocked?.result;
 }
 
+function runningEphemeralJourney(actions: ReadonlyArray<RecordedAction>): string | undefined {
+  const running = [...actions].reverse().find((action) => {
+    const tool = action.tool.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return tool === "consolerunephemeraltask" && /\bQueued ephemeral execution\b[\s\S]+\brunning\b|\bExecution: [^\n]+ \(running\)/i.test(action.result);
+  });
+  return running?.result;
+}
+
 function acknowledgesBlockedJourney(prose: string): boolean {
   return /\b(?:blocked|failed|could(?: not|n't)|unable|did(?: not|n't)|has(?: not|n't)|not completed|not done)\b/i.test(prose);
+}
+
+function acknowledgesRunningEphemeral(prose: string): boolean {
+  return /\b(?:queued|running|started|execution|epaminon|in progress|not complete|not done)\b/i.test(prose);
 }
 
 const fmt = (nums: number[]): string => nums.map((n) => `#${n}`).join(", ");
@@ -599,11 +611,20 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const noExecNums = noExecutionNumbers(actions);
   const contradictedNoExecution = claimsPositiveExecutionForNoExecutionTarget(prose, noExecNums);
   const blockedJourney = blockedConsoleJourney(actions);
+  const runningEphemeral = runningEphemeralJourney(actions);
 
   if (blockedJourney && !acknowledgesBlockedJourney(prose)) {
     return [
       "⚠️ Correction — the Console journey blocked; the requested work did not complete.",
       blockedJourney,
+    ].join("\n");
+  }
+
+  if (runningEphemeral && !acknowledgesRunningEphemeral(prose)) {
+    return [
+      "⚠️ Correction — the one-off execution is running, not complete yet.",
+      "Do not treat the requested output text as the result until Epaminon reports a terminal execution state.",
+      runningEphemeral,
     ].join("\n");
   }
 

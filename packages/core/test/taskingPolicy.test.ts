@@ -428,6 +428,26 @@ describe("reconcileTaskingReply", () => {
     expect(out).not.toContain(reply);
   });
 
+  it("corrects a final-looking ephemeral answer backed only by a running receipt", () => {
+    const reply = "ephemeral smoke sentinel-1782249200 observed";
+    const actions: RecordedAction[] = [
+      {
+        tool: "console_run_ephemeral_task",
+        input: { objective: "return a short summary saying `ephemeral smoke sentinel-1782249200 observed`" },
+        result:
+          "Journey ad32205e-7741-4e52-9a9c-d5364b714dcf: completed.\n" +
+          "Queued ephemeral execution ephemeral-1782249088537-c4e9f1e9 (running).\n" +
+          "Execution: ephemeral-1782249088537-c4e9f1e9 for ephemeral:ephemeral-1782249088537-c4e9f1e9 (running)",
+      },
+    ];
+
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("one-off execution is running");
+    expect(out).toContain("Queued ephemeral execution");
+    expect(out).not.toContain(reply);
+  });
+
   it("corrects a terminal execution claim backed only by a queue receipt", () => {
     const reply =
       "Done. Created + executed zenod-ai/zenod#303 (no-op verified, no changes). Execution complete.";
