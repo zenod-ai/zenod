@@ -202,6 +202,53 @@ describe("runtime tasking tools", () => {
     expect(result.text).toContain("zenod-ai/fixture#108 - Produce Backlog System Plan - https://github.com/zenod-ai/fixture/issues/108");
   });
 
+  it("findIssue searches all configured repos when no repo is specified", async () => {
+    runtime.settings.set("vault_repo", "owner/vault");
+    runtime.settings.setRaw("backlog_repo", "zenod-ai/fixture");
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const path = String(url).replace("https://api.github.com", "");
+        calls.push(path);
+        if (path === "/repos/owner/vault/issues?state=all&per_page=100&sort=updated&direction=desc") {
+          return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (path === "/repos/zenod-ai/fixture/issues?state=all&per_page=100&sort=updated&direction=desc") {
+          return new Response(
+            JSON.stringify([
+              {
+                number: 314,
+                title: "[Epic] Stabilize cross-agent work via durable user journeys",
+                body: "Journey Ledger owns context and callbacks.",
+                state: "open",
+                html_url: "https://github.com/zenod-ai/fixture/issues/314",
+                created_at: "2026-06-22T10:00:00Z",
+                updated_at: "2026-06-22T11:00:00Z",
+                labels: [{ name: "stability" }],
+              },
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(`unexpected ${url}`, { status: 500 });
+      }),
+    );
+
+    const reader = (runtime as unknown as {
+      buildBacklogIssueReader(): {
+        findIssue(input: { reference: string; limit?: number }): Promise<{ text?: string }>;
+      };
+    }).buildBacklogIssueReader();
+    const result = await reader.findIssue({ reference: "durable user journeys", limit: 5 });
+
+    expect(result.text).toContain("Resolved durable user journeys to zenod-ai/fixture#314");
+    expect(calls).toEqual([
+      "/repos/owner/vault/issues?state=all&per_page=100&sort=updated&direction=desc",
+      "/repos/zenod-ai/fixture/issues?state=all&per_page=100&sort=updated&direction=desc",
+    ]);
+  });
+
   it("exposes typed Archus issue reads to Console peer tools", async () => {
     const calls: string[] = [];
     const originalFetch = globalThis.fetch;

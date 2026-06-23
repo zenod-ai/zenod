@@ -272,6 +272,17 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, [])).toBe(reply);
   });
 
+  it("does not treat tool inventory bullets as execution claims", () => {
+    const reply = [
+      "**Console-owned workflow tools (read-only list):**",
+      "",
+      "- `console_create_issue_then_run`: Creates a durable journey for requests that need BOTH filing a new GitHub issue and then immediately running/executing it.",
+      "- `console_create_issues`: Creates a durable journey for requests needing multiple independent GitHub issues created in parallel.",
+      "- `console_run_ephemeral_task`: Creates a durable journey for one-off execution/research/ops work.",
+    ].join("\n");
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
   it("does not treat runnable execution-label metadata as an execution claim", () => {
     const reply = [
       "**Read results (no mutations performed):**",
