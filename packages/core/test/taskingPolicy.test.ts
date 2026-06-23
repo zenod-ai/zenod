@@ -165,6 +165,33 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, [{ tool: "queryBacklog", result: "Open issues: 1\n#58 Runner auto-merge mode" }])).toBe(reply);
   });
 
+  it("expands a terse exact-not-found answer with the checked GitHub target", () => {
+    const reply = "**No.**";
+    const actions: RecordedAction[] = [
+      {
+        tool: "archus_read_exact_github_issue",
+        input: { target: "zenod-ai/zenod#99999" },
+        result: "zenod-ai/zenod#99999 was not found in GitHub.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe("zenod-ai/zenod#99999 was not found in GitHub.");
+  });
+
+  it("expands an exact issue status answer that collapsed to only the URL", () => {
+    const reply = "https://github.com/zenod-ai/zenod/issues/314";
+    const actions: RecordedAction[] = [
+      {
+        tool: "archus_read_exact_github_issue",
+        input: { target: "zenod-ai/zenod#314" },
+        result:
+          "zenod-ai/zenod#314 - [Epic] Stabilize cross-agent work via durable user journeys - state: open; labels: stability, owner:agent, status:proposed, suite-v2; updated: 2026-06-22T22:39:14Z - https://github.com/zenod-ai/zenod/issues/314\nBody: ...",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(
+      "zenod-ai/zenod#314 is open. [Epic] Stabilize cross-agent work via durable user journeys. Labels: stability, owner:agent, status:proposed, suite-v2. https://github.com/zenod-ai/zenod/issues/314",
+    );
+  });
+
   it("does not touch vault captures that happen to use a completion verb", () => {
     const reply = "Logged this to your vault under Areas/Insurance.md.";
     expect(reconcileTaskingReply(reply, [{ tool: "capture", result: "Filed: Log/2026-06-14.md#^e-1" }])).toBe(reply);
@@ -197,6 +224,25 @@ describe("reconcileTaskingReply", () => {
       {
         tool: "execution_status",
         result: "Execution 109: exec:running target AlfaBlok/obsidian-brain#108 started 2026-06-19T14:25:28Z",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("does not treat read-only candidate lists plus no-side-effect disclaimers as execution claims", () => {
+    const reply = [
+      '**Candidates for "journey ledger" (none matched exactly):**',
+      "- AlfaBlok/obsidian-brain#140 - Bug: completed Epaminon fan-out leaves execution ticket stuck running — https://github.com/AlfaBlok/obsidian-brain/issues/140",
+      "- AlfaBlok/obsidian-brain#143 - Bug: Phylax cannot access notification ledger for audit questions — https://github.com/AlfaBlok/obsidian-brain/issues/143",
+      "",
+      "No issues were edited or run.",
+    ].join("\n");
+    const actions: RecordedAction[] = [
+      { tool: "archus_search_github_issues", input: { reference: "journey ledger" }, result: "No issue matched journey ledger." },
+      {
+        tool: "archus_search_github_issues",
+        input: { reference: "ledger" },
+        result: "Found candidates #140 and #143; choose one before mutating anything.",
       },
     ];
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);

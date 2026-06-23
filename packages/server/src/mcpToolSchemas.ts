@@ -103,6 +103,16 @@ export const RUN_ISSUE_SHAPE = {
   repo: z.string().min(1).optional().describe("Optional central backlog repo where Archus should mint the execution ticket, as owner/repo."),
 };
 
+export const RUN_EPHEMERAL_TASK_SHAPE = {
+  objective: z.string().min(1).describe("The one-off task objective. This does not create a GitHub issue by default."),
+  instructions: z.string().min(1).optional().describe("Optional constraints, context, or success criteria for the ephemeral run."),
+  artifactPolicy: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Optional guidance for where durable output should land, e.g. 'return summary only' or 'create follow-up issues only if needed'."),
+};
+
 export const CREATE_ISSUE_SHAPE = {
   repo: z.string().min(1).optional().describe("owner/repo. Defaults to the agent's configured backlog/vault repo."),
   title: z.string().min(1).describe("Issue title."),

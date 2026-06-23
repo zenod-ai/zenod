@@ -47,6 +47,7 @@ import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } 
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
 import { type AgentDefinition } from "./agent.js";
 import { driveArchiveUnavailableReason } from "./voiceArchive.js";
+import { validateStepCallback, type StepCallbackResult } from "./journeyContracts.js";
 
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
@@ -56,6 +57,10 @@ export interface AppOptions {
 }
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
 
 export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
   const app = new Hono<{ Bindings: HttpBindings }>();
@@ -81,6 +86,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   runtime.ingestQueue.resume();
   // Likewise drain any agentic MCP jobs (task_brain/run_task) left queued.
   runtime.taskJobQueue.resume();
+  // Mark any delegated journey steps whose callback deadline has expired.
+  runtime.journeyMonitor.start();
 
   app.onError((err, c) => {
     if (err instanceof NotConfiguredError) return c.json({ error: err.message, code: "not_configured" }, 409);
@@ -171,6 +178,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     if (path.startsWith("/api/exec/")) return next();
     return auth(c, next);
   });
+
+  app.use("/internal/*", auth);
 
   // Headless provisioning: the Console mints this agent's token and pushes it (plus
   // config + shared keys) here; the agent instantiates itself and goes live. One-shot.
@@ -293,6 +302,266 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     if (!runtime.executionQueue) return c.json({ error: "not an executor agent" }, 404);
     await runtime.reconcileMergedExecutionReviews();
     return c.json({ tickets: runtime.executionStore.recent() });
+  });
+
+  app.get("/api/journeys", (c) => c.json({ journeys: runtime.journeyStore.recent() }));
+
+  app.post("/api/journeys", async (c) => {
+    type CreateJourneyBody = {
+      conversationId?: string | null;
+      surface?: string;
+      originalRequest?: string;
+      context?: Record<string, unknown>;
+      steps?: Array<{
+        owner?: string;
+        title?: string;
+        input?: Record<string, unknown>;
+        dependencyIds?: string[];
+        idempotencyKey?: string | null;
+        dispatchAfter?: number | null;
+        deadlineAt?: number | null;
+      }>;
+    };
+    const body = await c.req
+      .json<CreateJourneyBody>()
+      .catch((): CreateJourneyBody => ({}));
+    if (!body.originalRequest?.trim()) return c.json({ error: "originalRequest is required" }, 400);
+    const steps = body.steps ?? [];
+    for (const step of steps) {
+      if (!step.owner?.trim() || !step.title?.trim()) {
+        return c.json({ error: "each step requires owner and title" }, 400);
+      }
+    }
+    const journey = runtime.journeyStore.create({
+      conversationId: body.conversationId ?? null,
+      surface: body.surface?.trim() || "api",
+      originalRequest: body.originalRequest,
+      context: body.context ?? {},
+    });
+    for (const step of steps) {
+      runtime.journeyStore.addStep(journey.id, {
+        owner: step.owner!,
+        title: step.title!,
+        input: step.input ?? {},
+        dependencyIds: stringArray(step.dependencyIds),
+        idempotencyKey: step.idempotencyKey ?? null,
+        dispatchAfter: step.dispatchAfter ?? null,
+        deadlineAt: step.deadlineAt ?? null,
+      });
+    }
+    return c.json(runtime.journeyStore.snapshot(journey.id), 201);
+  });
+
+  app.post("/api/journeys/monitor/run", (c) => c.json(runtime.journeyMonitor.runOnce()));
+
+  app.post("/api/journeys/create-issue-then-run", async (c) => {
+    type CreateIssueThenRunBody = {
+      conversationId?: string | null;
+      surface?: string;
+      originalRequest?: string;
+      issue?: {
+        repo?: string;
+        title?: string;
+        body?: string;
+        labels?: string[];
+      };
+      runInstructions?: string;
+    };
+    const body = await c.req.json<CreateIssueThenRunBody>().catch((): CreateIssueThenRunBody => ({}));
+    if (!body.originalRequest?.trim()) return c.json({ error: "originalRequest is required" }, 400);
+    if (!body.issue?.title?.trim()) return c.json({ error: "issue.title is required" }, 400);
+    const result = await runtime.createIssueThenRun({
+      originalRequest: body.originalRequest,
+      conversationId: body.conversationId ?? null,
+      surface: body.surface?.trim() || "api",
+      issue: {
+        ...(body.issue.repo?.trim() ? { repo: body.issue.repo.trim() } : {}),
+        title: body.issue.title,
+        ...(body.issue.body !== undefined ? { body: body.issue.body } : {}),
+        labels: stringArray(body.issue.labels),
+      },
+      ...(body.runInstructions?.trim() ? { runInstructions: body.runInstructions } : {}),
+    });
+    return c.json(result, result.status === "completed" ? 201 : 409);
+  });
+
+  app.post("/api/journeys/create-issues", async (c) => {
+    type CreateIssuesBody = {
+      conversationId?: string | null;
+      surface?: string;
+      originalRequest?: string;
+      issues?: Array<{
+        repo?: string;
+        title?: string;
+        body?: string;
+        labels?: string[];
+      }>;
+      notify?: {
+        message?: string;
+      };
+    };
+    const body = await c.req.json<CreateIssuesBody>().catch((): CreateIssuesBody => ({}));
+    if (!body.originalRequest?.trim()) return c.json({ error: "originalRequest is required" }, 400);
+    const issues = body.issues ?? [];
+    if (issues.length === 0) return c.json({ error: "issues must contain at least one issue" }, 400);
+    const normalizedIssues = [];
+    for (const issue of issues) {
+      if (!issue.title?.trim()) return c.json({ error: "each issue requires title" }, 400);
+      normalizedIssues.push({
+        ...(issue.repo?.trim() ? { repo: issue.repo.trim() } : {}),
+        title: issue.title,
+        ...(issue.body !== undefined ? { body: issue.body } : {}),
+        labels: stringArray(issue.labels),
+      });
+    }
+    const result = await runtime.createIssues({
+      originalRequest: body.originalRequest,
+      conversationId: body.conversationId ?? null,
+      surface: body.surface?.trim() || "api",
+      issues: normalizedIssues,
+      ...(body.notify ? { notify: { ...(body.notify.message?.trim() ? { message: body.notify.message } : {}) } } : {}),
+    });
+    return c.json(result, result.status === "completed" ? 201 : 409);
+  });
+
+  app.post("/api/journeys/run-ephemeral-task", async (c) => {
+    type RunEphemeralBody = {
+      conversationId?: string | null;
+      surface?: string;
+      originalRequest?: string;
+      objective?: string;
+      instructions?: string;
+      artifactPolicy?: string;
+    };
+    const body = await c.req.json<RunEphemeralBody>().catch((): RunEphemeralBody => ({}));
+    if (!body.originalRequest?.trim()) return c.json({ error: "originalRequest is required" }, 400);
+    if (!body.objective?.trim()) return c.json({ error: "objective is required" }, 400);
+    const result = await runtime.runEphemeralTask({
+      originalRequest: body.originalRequest,
+      conversationId: body.conversationId ?? null,
+      surface: body.surface?.trim() || "api",
+      objective: body.objective,
+      ...(body.instructions?.trim() ? { instructions: body.instructions } : {}),
+      ...(body.artifactPolicy?.trim() ? { artifactPolicy: body.artifactPolicy } : {}),
+    });
+    return c.json(result, result.status === "completed" ? 201 : 409);
+  });
+
+  app.get("/api/journeys/:id", (c) => {
+    const snapshot = runtime.journeyStore.snapshot(c.req.param("id"));
+    if (!snapshot) return c.json({ error: "journey not found" }, 404);
+    return c.json(snapshot);
+  });
+
+  app.post("/api/journeys/:id/steps", async (c) => {
+    const journey = runtime.journeyStore.get(c.req.param("id"));
+    if (!journey) return c.json({ error: "journey not found" }, 404);
+    type CreateJourneyStepBody = {
+      owner?: string;
+      title?: string;
+      input?: Record<string, unknown>;
+      dependencyIds?: string[];
+      idempotencyKey?: string | null;
+      dispatchAfter?: number | null;
+      deadlineAt?: number | null;
+    };
+    const body = await c.req
+      .json<CreateJourneyStepBody>()
+      .catch((): CreateJourneyStepBody => ({}));
+    if (!body.owner?.trim() || !body.title?.trim()) return c.json({ error: "owner and title are required" }, 400);
+    const step = runtime.journeyStore.addStep(journey.id, {
+      owner: body.owner,
+      title: body.title,
+      input: body.input ?? {},
+      dependencyIds: stringArray(body.dependencyIds),
+      idempotencyKey: body.idempotencyKey ?? null,
+      dispatchAfter: body.dispatchAfter ?? null,
+      deadlineAt: body.deadlineAt ?? null,
+    });
+    return c.json({ step }, 201);
+  });
+
+  app.post("/api/journey-steps/:id/dispatch", async (c) => {
+    if (!runtime.journeyStore.getStep(c.req.param("id"))) return c.json({ error: "journey step not found" }, 404);
+    const body = await c.req.json<{ deadlineAt?: number | null }>().catch((): { deadlineAt?: number | null } => ({}));
+    return c.json({ step: runtime.journeyStore.dispatchStep(c.req.param("id"), { deadlineAt: body.deadlineAt ?? null }) });
+  });
+
+  app.post("/api/journey-steps/:id/complete", async (c) => {
+    if (!runtime.journeyStore.getStep(c.req.param("id"))) return c.json({ error: "journey step not found" }, 404);
+    const body = await c.req.json<{ result?: Record<string, unknown> }>().catch((): { result?: Record<string, unknown> } => ({}));
+    return c.json({ step: runtime.journeyStore.completeStep(c.req.param("id"), body.result ?? {}) });
+  });
+
+  app.post("/api/journey-steps/:id/block", async (c) => {
+    if (!runtime.journeyStore.getStep(c.req.param("id"))) return c.json({ error: "journey step not found" }, 404);
+    const body = await c.req.json<{ reason?: string }>().catch((): { reason?: string } => ({}));
+    if (!body.reason?.trim()) return c.json({ error: "reason is required" }, 400);
+    return c.json({ step: runtime.journeyStore.blockStep(c.req.param("id"), body.reason) });
+  });
+
+  app.post("/internal/journeys/:journeyId/steps/:stepId/callback", async (c) => {
+    const journeyId = c.req.param("journeyId");
+    const stepId = c.req.param("stepId");
+    const step = runtime.journeyStore.getStep(stepId);
+    if (!step || step.journeyId !== journeyId) return c.json({ error: "journey step not found" }, 404);
+
+    const callback = await c.req
+      .json<StepCallbackResult>()
+      .catch((): StepCallbackResult => ({
+        journeyId: "",
+        stepId: "",
+        status: "failed",
+        idempotencyKey: "",
+      }));
+    const expectedArtifactKinds = stringArray(step.input.expectedArtifactKinds);
+    const validation = validateStepCallback(step, callback, { expectedArtifactKinds });
+    if (!validation.ok) return c.json({ error: "invalid callback", errors: validation.errors }, 400);
+
+    if (validation.duplicate) {
+      return c.json({
+        duplicate: true,
+        snapshot: runtime.journeyStore.snapshot(journeyId),
+      });
+    }
+
+    runtime.journeyStore.recordStepCallback(
+      stepId,
+      {
+        status: callback.status,
+        artifacts: callback.createdArtifacts?.map((artifact) => ({ kind: artifact.kind, artifactKey: artifact.artifactKey })) ?? [],
+      },
+    );
+
+    for (const artifact of callback.createdArtifacts ?? []) {
+      runtime.journeyStore.addArtifact(journeyId, {
+        stepId,
+        kind: artifact.kind,
+        artifactKey: artifact.artifactKey,
+        data: artifact.data,
+      });
+    }
+
+    let updatedStep;
+    if (callback.status === "completed") {
+      updatedStep = runtime.journeyStore.completeStep(stepId, callback.result ?? {});
+      runtime.journeyStore.completeJourneyIfReady(journeyId);
+    } else if (callback.status === "running") {
+      updatedStep = runtime.journeyStore.runStep(stepId);
+    } else if (callback.status === "blocked") {
+      const reason = [...(callback.blockers ?? []), callback.questionForUser].filter(Boolean).join("; ");
+      updatedStep = runtime.journeyStore.blockStep(stepId, reason || "step blocked by agent callback");
+    } else {
+      const reason = callback.blockers?.join("; ") || "step failed by agent callback";
+      updatedStep = runtime.journeyStore.failStep(stepId, reason);
+    }
+
+    return c.json({
+      duplicate: false,
+      step: updatedStep,
+      readySteps: runtime.journeyStore.readyPendingDependents(journeyId),
+      snapshot: runtime.journeyStore.snapshot(journeyId),
+    });
   });
 
   app.get("/api/settings", (c) =>
@@ -471,7 +740,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "chat_with_archus",
       arg: "message",
       description:
-        "Owner: Archus. Start execution ONLY for an exact existing work issue that the user already named as owner/repo#123 in the current message. Do not invent or guess a target number. For create-and-run requests where the issue does not exist yet, use Archus's backlog action/open-issue path with the full natural-language request so Archus creates the issue and then queues the created issue itself. Archus validates the ticket and calls its private queueExecution tool, minting an execution ticket in Archus's configured central execution backlog for Epaminon. Do NOT use for status questions like did it run, was it picked up, queued, blocked, or completed; use Epaminon for those reads.",
+        "Legacy fallback. Prefer epaminon_run_existing_issue for exact run/start/execute requests. Use Archus only when the request also needs backlog creation or issue triage before a run can be defined. Do NOT use for status questions; use Epaminon for those reads.",
     },
     {
       as: "open_issue",
@@ -495,10 +764,25 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         "Close a GitHub issue. Say which one (owner/repo#N), and optionally a closing comment. Archus closes it and confirms.",
     },
   ];
-  // Epaminon's "top tool": a single READ handle. "Run X" is Archus's call (he mints
-  // + dispatches the execution ticket); Epaminon writes no backlog and exposes no
-  // write-intents — the run is driven by the deterministic /api/exec lane, not chat.
+  // Epaminon's "top tools": exact existing-issue execution starts and execution reads.
+  // Backlog creation/update stays with Archus; Epaminon owns the execution queue.
   const EPAMINON_EXECUTION_TOOLS = [
+    {
+      as: "epaminon_run_existing_issue",
+      mcp: "epaminon.run_existing_issue",
+      arg: "target",
+      inputSchema: "epaminon.run_existing_issue",
+      description:
+        "Owner: Epaminon. Start execution for one exact existing GitHub issue/work ticket. Input must include target owner/repo#123. Use for run/start/execute requests when the issue already exists. Do NOT use for status questions; use epaminon_read_issue_execution_status.",
+    },
+    {
+      as: "epaminon_run_ephemeral_task",
+      mcp: "epaminon.run_ephemeral_task",
+      arg: "objective",
+      inputSchema: "epaminon.run_ephemeral_task",
+      description:
+        "Owner: Epaminon. Start one one-off execution task without creating a GitHub issue by default. Use for ephemeral research or operational work when the user did not ask for a durable backlog ticket. Do NOT use for code changes that need review or for requests that explicitly ask to create/file/open a ticket.",
+    },
     {
       as: "epaminon_read_issue_execution_status",
       mcp: "execution_status",
@@ -927,11 +1211,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.post("/api/drive/disconnect", (c) => {
     settings.set("google_service_account_json", "");
-    settings.set("google_oauth_client_id", "");
-    settings.set("google_oauth_client_secret", "");
     settings.setRaw("google_oauth_refresh_token", "");
     settings.setRaw("google_oauth_email", "");
     settings.setRaw("google_oauth_state", "");
+    settings.set("google_drive_folder_id", "");
     runtime.invalidate();
     return c.json({ ok: true });
   });
@@ -1497,6 +1780,31 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           runtime.executionQueue ? () => runtime.reconcileMergedExecutionReviews() : undefined,
           agent.backlog ? runtime.buildBacklogIssueReader() : undefined,
           (input) => runtime.whatsappStore.recentTranscript(input),
+          runtime.executionQueue
+            ? async ({ target, instructions }) => {
+                const executionId = `direct-${Date.now()}-${randomBytes(4).toString("hex")}`;
+                const context = [`Direct Epaminon run requested for ${target}.`, instructions ? `User instructions: ${instructions}` : ""]
+                  .filter(Boolean)
+                  .join("\n");
+                await runtime.executionQueue!.enqueue({ executionId, target, context });
+                return runtime.executionQueue!.get(executionId)!;
+              }
+            : undefined,
+          runtime.executionQueue
+            ? async ({ objective, instructions, artifactPolicy }) => {
+                const executionId = `ephemeral-${Date.now()}-${randomBytes(4).toString("hex")}`;
+                const context = [
+                  "Ephemeral one-off execution requested.",
+                  `Objective: ${objective}`,
+                  instructions ? `Instructions: ${instructions}` : "",
+                  artifactPolicy ? `Artifact policy: ${artifactPolicy}` : "Artifact policy: do not create backlog issues unless explicitly needed.",
+                ]
+                  .filter(Boolean)
+                  .join("\n");
+                await runtime.executionQueue!.enqueue({ executionId, target: `ephemeral:${executionId}`, context });
+                return runtime.executionQueue!.get(executionId)!;
+              }
+            : undefined,
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

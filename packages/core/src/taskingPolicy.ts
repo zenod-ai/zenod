@@ -286,6 +286,14 @@ interface ExecutionWriteReceipt {
   url: string;
 }
 
+interface IssueReadReceipt {
+  target: string;
+  title: string;
+  state: string;
+  labels: string;
+  url: string;
+}
+
 function issueWriteReceipt(action: RecordedAction): IssueWriteReceipt | null {
   if (/^ERROR:/.test(action.result)) return null;
   const created = normalizedCreateReceipt(action);
@@ -328,6 +336,50 @@ function executionWriteReceipt(action: RecordedAction): ExecutionWriteReceipt | 
 
 function executionWriteReceipts(actions: ReadonlyArray<RecordedAction>): ExecutionWriteReceipt[] {
   return actions.map(executionWriteReceipt).filter((receipt): receipt is ExecutionWriteReceipt => Boolean(receipt));
+}
+
+function issueNotFoundReceipts(actions: ReadonlyArray<RecordedAction>): string[] {
+  const targets: string[] = [];
+  for (const action of actions) {
+    if (/^ERROR:/.test(action.result)) continue;
+    const match = /\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\s+was not found in GitHub\b/i.exec(action.result);
+    if (match) targets.push(match[1]!);
+  }
+  return [...new Set(targets)];
+}
+
+function issueReadReceipts(actions: ReadonlyArray<RecordedAction>): IssueReadReceipt[] {
+  const receipts: IssueReadReceipt[] = [];
+  for (const action of actions) {
+    if (/^ERROR:/.test(action.result)) continue;
+    const match =
+      /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\s+-\s+(.+?)\s+-\s+state:\s*([^;]+);\s*labels:\s*([^;]+);\s*updated:\s*.*?\s+-\s*(https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+)\b/i.exec(
+        action.result,
+      );
+    if (match) {
+      receipts.push({
+        target: match[1]!,
+        title: match[2]!,
+        state: match[3]!.trim(),
+        labels: match[4]!.trim(),
+        url: match[5]!,
+      });
+    }
+  }
+  return receipts;
+}
+
+function isTerseNegativeAnswer(text: string): boolean {
+  const normalized = text
+    .replace(/\*\*/g, "")
+    .replace(/[.!?\s]+$/g, "")
+    .trim()
+    .toLowerCase();
+  return /^(?:no|not found|does not exist|doesn't exist|it does not exist|it doesn't exist)$/.test(normalized);
+}
+
+function isOnlyIssueUrl(text: string): boolean {
+  return /^https:\/\/github\.com\/[^\s)]+\/[^\s)]+\/issues\/\d+\.?$/i.test(text.trim());
 }
 
 function hasIssueUrl(text: string, issueNumber: number): boolean {
@@ -385,10 +437,24 @@ const EXECUTION_STATE_RE = new RegExp(
 const NEGATIVE_QUEUE_RE =
   /\b(?:no|never|did(?: not|n't))\b[\s\S]{0,80}\b(?:run|ran|running|picked up|dispatched|launched|started)\b|\bnot\b[\s\S]{0,80}\b(?:running|picked up|dispatched|launched|started)\b/i;
 const NEGATIVE_CREATED_QUEUED_RE = /\b(?:no|not|never)\b[\s\S]{0,80}\bcreated\b[\s\S]{0,80}\bqueued\b/i;
+const GENERIC_NO_SIDE_EFFECT_RE =
+  /\bno issues? (?:were |was )?(?:edited|changed|created|closed)(?:[, ]+(?:or|and)?\s*(?:run|queued|edited|changed|created|closed))*\b/i;
+const GITHUB_ISSUE_LIST_ITEM_RE = /^[-*]\s+.*https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+\b/i;
+const DIRECT_EXECUTION_ASSERTION_RE =
+  /\b(?:ran via|was run|has run|did run|is running|was running|execution status|no execution|queued for execution|picked up|runner (?:picked up|started|launched|reported|blocked))\b/i;
+
+function executionClaimLines(prose: string): string[] {
+  return prose
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !GENERIC_NO_SIDE_EFFECT_RE.test(line))
+    .filter((line) => !(GITHUB_ISSUE_LIST_ITEM_RE.test(line) && !DIRECT_EXECUTION_ASSERTION_RE.test(line)))
+    .filter((line) => EXECUTION_STATE_RE.test(line) || NEGATIVE_QUEUE_RE.test(line) || NEGATIVE_CREATED_QUEUED_RE.test(line));
+}
 
 function claimsExecutionState(prose: string): boolean {
-  if (!EXECUTION_STATE_RE.test(prose) && !NEGATIVE_QUEUE_RE.test(prose) && !NEGATIVE_CREATED_QUEUED_RE.test(prose)) return false;
-  return issueNumbersIn(prose).size > 0 || /\b(issue|ticket|execution|epaminon|runner)\b/i.test(prose);
+  return executionClaimLines(prose).some((line) => issueNumbersIn(line).size > 0 || /\b(issue|ticket|execution|epaminon|runner)\b/i.test(line));
 }
 
 function hasExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean {
@@ -418,8 +484,13 @@ const TERMINAL_EXECUTION_RE = new RegExp(
 );
 
 function claimsTerminalExecutionState(prose: string): boolean {
-  if (!TERMINAL_EXECUTION_RE.test(prose)) return false;
-  return issueNumbersIn(prose).size > 0 || /\b(issue|ticket|execution|epaminon|runner)\b/i.test(prose);
+  return prose
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !GENERIC_NO_SIDE_EFFECT_RE.test(line))
+    .filter((line) => !(GITHUB_ISSUE_LIST_ITEM_RE.test(line) && !DIRECT_EXECUTION_ASSERTION_RE.test(line)))
+    .some((line) => TERMINAL_EXECUTION_RE.test(line) && (issueNumbersIn(line).size > 0 || /\b(issue|ticket|execution|epaminon|runner)\b/i.test(line)));
 }
 
 function hasTerminalExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean {
@@ -504,6 +575,8 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const receipts = createReceipts(actions);
   const writeReceipts = issueWriteReceipts(actions);
   const executionReceipts = executionWriteReceipts(actions);
+  const notFoundReceipts = issueNotFoundReceipts(actions);
+  const readReceipts = issueReadReceipts(actions);
   const createdNums = new Set(receipts.map((r) => Number(/^Created issue #(\d+):/.exec(r)![1])));
   const executionGrounded = hasExecutionGrounding(actions);
   const noExecNums = noExecutionNumbers(actions);
@@ -566,6 +639,15 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   if (claimsExecutionState(prose) && executionReceipts.length > 0) {
     const missingExecutionReceipts = executionReceipts.filter((receipt) => !hasIssueUrl(prose, receipt.issueNumber));
     if (missingExecutionReceipts.length > 0) return `${missingExecutionReceipts.map(markdownExecutionReceipt).join("\n")}\n\n${text}`;
+  }
+
+  if (notFoundReceipts.length > 0 && isTerseNegativeAnswer(prose)) {
+    return notFoundReceipts.map((target) => `${target} was not found in GitHub.`).join("\n");
+  }
+
+  if (readReceipts.length === 1 && isOnlyIssueUrl(prose)) {
+    const receipt = readReceipts[0]!;
+    return `${receipt.target} is ${receipt.state}. ${receipt.title}. Labels: ${receipt.labels}. ${receipt.url}`;
   }
 
   // Only police active claims the model makes about THIS turn. Read-only
