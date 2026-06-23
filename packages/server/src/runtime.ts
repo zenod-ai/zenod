@@ -681,6 +681,18 @@ export class Runtime {
       this.githubJson<GitHubIssueRead[]>(
         `/repos/${repoPath(repo)}/issues?state=${encodeURIComponent(state)}&per_page=${Math.min(Math.max(limit, 1), 100)}&sort=updated&direction=desc`,
       );
+    const searchIssues = async (reference: string, limit: number): Promise<Array<{ repo: string; issue: GitHubIssueRead }>> => {
+      const query = `${reference.trim()} is:issue in:title,body`;
+      const result = await this.githubJson<{ items?: GitHubIssueRead[] }>(
+        `/search/issues?q=${encodeURIComponent(query)}&per_page=${Math.min(Math.max(limit, 1), 100)}&sort=updated&order=desc`,
+      );
+      return (result.items ?? [])
+        .map((issue) => {
+          const match = issue.html_url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/\d+\b/);
+          return match ? { repo: match[1]!, issue } : null;
+        })
+        .filter((item): item is { repo: string; issue: GitHubIssueRead } => Boolean(item));
+    };
     const matchesLabels = (issue: GitHubIssueRead, labels: string[] | undefined): boolean => {
       if (!labels?.length) return true;
       const names = new Set(labelsOf(issue));
@@ -817,6 +829,17 @@ export class Runtime {
               const haystack = [issue.title, issue.body ?? "", labelsOf(issue).join(" "), issue.html_url].join(" ").toLowerCase();
               if (!haystack.includes(normalized)) continue;
               fuzzyCandidates.push(candidateFromIssue(repo, issue, "title/body/label match", 0.65));
+              if (fuzzyCandidates.length >= limit) break;
+            }
+          }
+          if (fuzzyCandidates.length === 0 && !repos?.length) {
+            const searchedTargets = new Set<string>();
+            for (const { repo, issue } of await searchIssues(reference, limit).catch(() => [])) {
+              if (!matchesLabels(issue, labels)) continue;
+              const target = issueTarget(repo, issue);
+              if (searchedTargets.has(target)) continue;
+              searchedTargets.add(target);
+              fuzzyCandidates.push(candidateFromIssue(repo, issue, "github issue search match", 0.55));
               if (fuzzyCandidates.length >= limit) break;
             }
           }

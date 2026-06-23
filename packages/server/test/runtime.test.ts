@@ -249,6 +249,55 @@ describe("runtime tasking tools", () => {
     ]);
   });
 
+  it("findIssue falls back to GitHub issue search when configured repos miss an unscoped reference", async () => {
+    runtime.settings.set("vault_repo", "owner/vault");
+    runtime.settings.setRaw("backlog_repo", "");
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const path = String(url).replace("https://api.github.com", "");
+        calls.push(path);
+        if (path === "/repos/owner/vault/issues?state=all&per_page=100&sort=updated&direction=desc") {
+          return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (path.startsWith("/search/issues?")) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  number: 314,
+                  title: "[Epic] Stabilize cross-agent work via durable user journeys",
+                  body: "Journey Ledger owns context and callbacks.",
+                  state: "open",
+                  html_url: "https://github.com/zenod-ai/zenod/issues/314",
+                  created_at: "2026-06-22T10:00:00Z",
+                  updated_at: "2026-06-22T11:00:00Z",
+                  labels: [{ name: "stability" }],
+                },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(`unexpected ${url}`, { status: 500 });
+      }),
+    );
+
+    const reader = (runtime as unknown as {
+      buildBacklogIssueReader(): {
+        findIssue(input: { reference: string; limit?: number }): Promise<{ text?: string }>;
+      };
+    }).buildBacklogIssueReader();
+    const result = await reader.findIssue({ reference: "durable user journeys", limit: 5 });
+
+    expect(result.text).toContain("Resolved durable user journeys to zenod-ai/zenod#314");
+    expect(calls).toEqual([
+      "/repos/owner/vault/issues?state=all&per_page=100&sort=updated&direction=desc",
+      "/search/issues?q=durable%20user%20journeys%20is%3Aissue%20in%3Atitle%2Cbody&per_page=5&sort=updated&order=desc",
+    ]);
+  });
+
   it("exposes typed Archus issue reads to Console peer tools", async () => {
     const calls: string[] = [];
     const originalFetch = globalThis.fetch;
