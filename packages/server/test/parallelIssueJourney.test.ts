@@ -193,6 +193,40 @@ describe("createIssuesJourney", () => {
     });
   });
 
+  it("ignores an empty notify object instead of sending a notification", async () => {
+    await withStore(async (store) => {
+      const calls: Array<{ peer: string; tool: string }> = [];
+      const result = await createIssuesJourney({
+        store,
+        archus,
+        phylax,
+        request: request({
+          originalRequest: "create two issues and return their links",
+          issues: [{ repo: "zenod-ai/zenod", title: "No empty notify A" }],
+          notify: { message: "" },
+        }),
+        callTool: async (peer, tool) => {
+          calls.push({ peer: peer.name, tool });
+          return {
+            content: [{ type: "text", text: "Created zenod-ai/zenod#720" }],
+            structuredContent: {
+              repo: "zenod-ai/zenod",
+              issueNumber: 720,
+              issueUrl: "https://github.com/zenod-ai/zenod/issues/720",
+              labels: ["status:proposed"],
+            },
+          };
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.notificationText).toBeUndefined();
+      expect(calls).toEqual([{ peer: "archus", tool: "create_issue" }]);
+      expect(result.snapshot.steps.map((step) => `${step.owner}:${step.status}`)).toEqual(["archus:completed"]);
+      expect(result.snapshot.artifacts.map((artifact) => artifact.kind)).toEqual(["github_issue"]);
+    });
+  });
+
   it("does not notify when one upstream issue creation blocks", async () => {
     await withStore(async (store) => {
       const calls: Array<{ peer: string; tool: string }> = [];
