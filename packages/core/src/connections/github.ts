@@ -135,7 +135,11 @@ export async function installationToken(settings: ConnectionSettings): Promise<s
  * stored installation. Falls back to the stored single-installation token on any
  * failure, so behaviour is never worse than the previous single-repo path.
  */
-export async function installationTokenForRepo(settings: ConnectionSettings, repo: string): Promise<string> {
+export async function installationTokenForRepo(
+  settings: ConnectionSettings,
+  repo: string,
+  options: { strict?: boolean } = {},
+): Promise<string> {
   const appId = settings.getRaw("github_app_id");
   const pem = settings.getRaw("github_app_private_key");
   if (!appId || !pem || !repo.includes("/")) return installationToken(settings);
@@ -146,17 +150,30 @@ export async function installationTokenForRepo(settings: ConnectionSettings, rep
     const jwt = appJwt(appId, pem);
     const headers = { Accept: "application/vnd.github+json", Authorization: `Bearer ${jwt}`, "User-Agent": "zenod" };
     const found = await fetch(`https://api.github.com/repos/${repoPath(repo)}/installation`, { headers });
-    if (!found.ok) return installationToken(settings);
+    if (!found.ok) {
+      if (options.strict) {
+        throw new Error(
+          `GitHub App is not installed on ${repo} or cannot access it (${found.status}). Install the app on that repo or configure a GitHub token.`,
+        );
+      }
+      return installationToken(settings);
+    }
     const installation = (await found.json()) as { id: number };
     const minted = await fetch(`https://api.github.com/app/installations/${installation.id}/access_tokens`, {
       method: "POST",
       headers,
     });
-    if (!minted.ok) return installationToken(settings);
+    if (!minted.ok) {
+      if (options.strict) {
+        throw new Error(`GitHub App token request for ${repo} failed (${minted.status}). Configure a GitHub token or reinstall the app.`);
+      }
+      return installationToken(settings);
+    }
     const data = (await minted.json()) as { token: string; expires_at: string };
     tokenCache.set(cacheKey, { token: data.token, expiresAt: Date.parse(data.expires_at) });
     return data.token;
   } catch {
+    if (options.strict) throw new Error(`GitHub App is not installed on ${repo} or cannot access it. Configure a GitHub token or reinstall the app.`);
     return installationToken(settings);
   }
 }
@@ -287,9 +304,18 @@ function defaultIssueRepo(settings: ConnectionSettings): string | null {
   return settings.getRaw("vault_repo") || settings.getRaw("backlog_repo") || null;
 }
 
-async function configuredGithubTokens(settings: ConnectionSettings, repo?: string): Promise<string[]> {
+async function configuredGithubTokens(settings: ConnectionSettings, repo?: string, requireRepoInstallation = false): Promise<string[]> {
   const pat = settings.getRaw("github_token");
   if (settings.hasGithubApp()) {
+    if (repo && requireRepoInstallation) {
+      try {
+        const appToken = await installationTokenForRepo(settings, repo, { strict: true });
+        return pat && pat !== appToken ? [appToken, pat] : [appToken];
+      } catch (err) {
+        if (pat) return [pat];
+        throw err;
+      }
+    }
     const appToken = repo ? await installationTokenForRepo(settings, repo) : await installationToken(settings);
     return pat && pat !== appToken ? [appToken, pat] : [appToken];
   }
@@ -298,7 +324,9 @@ async function configuredGithubTokens(settings: ConnectionSettings, repo?: strin
 }
 
 async function githubRequest<T>(settings: ConnectionSettings, path: string, init: RequestInit = {}): Promise<T> {
-  const tokens = await configuredGithubTokens(settings, repoFromPath(path));
+  const method = (init.method ?? "GET").toUpperCase();
+  const requireRepoInstallation = method !== "GET" && method !== "HEAD";
+  const tokens = await configuredGithubTokens(settings, repoFromPath(path), requireRepoInstallation);
   for (let index = 0; index < tokens.length; index += 1) {
     const response = await fetch(`https://api.github.com${path}`, {
       ...init,

@@ -592,9 +592,18 @@ export class Runtime {
     }
   }
 
-  private async githubTokens(repo?: string): Promise<string[]> {
+  private async githubTokens(repo?: string, requireRepoInstallation = false): Promise<string[]> {
     const pat = this.settings.get("github_token");
     if (this.settings.hasGithubApp()) {
+      if (repo && requireRepoInstallation) {
+        try {
+          const appToken = await installationTokenForRepo(this.settings, repo, { strict: true });
+          return pat && pat !== appToken ? [appToken, pat] : [appToken];
+        } catch (err) {
+          if (pat) return [pat];
+          throw err;
+        }
+      }
       const appToken = repo ? await installationTokenForRepo(this.settings, repo) : await installationToken(this.settings);
       return pat && pat !== appToken ? [appToken, pat] : [appToken];
     }
@@ -603,7 +612,9 @@ export class Runtime {
 
   private async githubJson<T>(path: string, init: RequestInit = {}): Promise<T> {
     const repoMatch = path.match(/^\/repos\/([^/]+)\/([^/]+)/);
-    const tokens = await this.githubTokens(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined);
+    const method = (init.method ?? "GET").toUpperCase();
+    const requireRepoInstallation = method !== "GET" && method !== "HEAD";
+    const tokens = await this.githubTokens(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined, requireRepoInstallation);
     if (tokens.length === 0) throw new Error("GitHub token or app installation is required");
     for (let index = 0; index < tokens.length; index += 1) {
       const response = await fetch(`https://api.github.com${path}`, {

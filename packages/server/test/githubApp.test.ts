@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appJwt, appStatus, buildManifest, disconnectApp, editGithubIssue, installationToken } from "zenod";
+import { appJwt, appStatus, buildManifest, createGithubIssue, disconnectApp, editGithubIssue, installationToken } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -127,6 +127,33 @@ describe("GitHub App flow", () => {
 
     expect(result.issueUrl).toBe("https://github.com/zenod-ai/fallback-fixture/issues/52");
     expect(issueCalls).toEqual(["Bearer ghs_repo_scoped_without_issue_write", "Bearer ghp_fallback"]);
+  });
+
+  it("refuses repo mutations through an app that is not installed on the target repo unless a PAT exists", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const settings = runtime.settings;
+    settings.setRaw("github_app_id", "public-create-trap-app");
+    settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
+    settings.setRaw("github_app_installation_id", "stored-installation");
+
+    const calls: Array<{ path: string; method: string }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const path = String(url).replace("https://api.github.com", "");
+      calls.push({ path, method: init?.method ?? "GET" });
+      if (path === "/repos/zenod-ai/uninstalled-public/installation") {
+        return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
+      }
+      return new Response(`unexpected ${init?.method ?? "GET"} ${path}`, { status: 500 });
+    });
+
+    await expect(
+      createGithubIssue(settings, {
+        repo: "zenod-ai/uninstalled-public",
+        title: "Should not be publicly created",
+      }),
+    ).rejects.toThrow(/GitHub App is not installed on zenod-ai\/uninstalled-public|Configure a GitHub token/);
+
+    expect(calls).toEqual([{ path: "/repos/zenod-ai/uninstalled-public/installation", method: "GET" }]);
   });
 
   it("selects the active provider's key for configured()", () => {
