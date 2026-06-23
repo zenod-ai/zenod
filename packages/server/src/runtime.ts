@@ -622,6 +622,8 @@ export class Runtime {
 
   buildBacklogIssueReader() {
     const defaultRepo = () => this.settings.get("vault_repo") || this.settings.getRaw("backlog_repo") || "";
+    const configuredRepos = () =>
+      [...new Set([this.settings.get("vault_repo"), this.settings.getRaw("backlog_repo")].filter((repo): repo is string => Boolean(repo)))];
     const repoPath = (repo: string) => encodeURIComponent(repo).replace("%2F", "/");
     const parseTarget = (target: string): { repo: string; number: number } | null => {
       const match = target.trim().match(/^([^#\s]+\/[^#\s]+)#(\d+)$/);
@@ -782,7 +784,7 @@ export class Runtime {
         labels?: string[];
         limit?: number;
       }): Promise<ToolResponse> => {
-        const searchedRepos = repos?.length ? repos : [defaultRepo()].filter(Boolean);
+        const searchedRepos = repos?.length ? repos : configuredRepos();
         if (searchedRepos.length === 0) {
           return toolResponse({
             text: "No GitHub repository is configured.",
