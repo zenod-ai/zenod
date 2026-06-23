@@ -201,14 +201,15 @@ function issueList(value) {
   return [...new Set(issues)];
 }
 
-function branchName(issue) {
+function branchName(issue, runId = "") {
   const slug = String(issue.title ?? `issue-${issue.number}`)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 52)
     .replace(/^-|-$/g, "");
-  return `codex/issue-${issue.number}-${slug || "work"}`;
+  const suffix = String(runId).replace(/^fanout-/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `codex/issue-${issue.number}-${slug || "work"}${suffix ? `-${suffix}` : ""}`;
 }
 
 function resolveGoal(opts, issues) {
@@ -991,7 +992,7 @@ async function start(opts) {
   for (const number of issues) {
     const issue = fetchIssue(opts.repo, number);
     const clarity = clarityCheck(issue, { execLane, executionContext });
-    const branch = branchName(issue);
+    const branch = branchName(issue, id);
     const worktree = join(workdir, ".fanout", "worktrees", `${id}-issue-${number}`);
     const promptPath = join(thisRunDir, `issue-${number}.prompt.md`);
     const prompt = workerPrompt({ issue, repo: opts.repo, branch, base, runDir: thisRunDir, worktree, goal: manifest.goal });
@@ -1275,6 +1276,7 @@ export {
   executionBlockedRequest,
   remoteMatchesRepo,
   resetBaseCheckout,
+  branchName,
 };
 
 // Run main() only when invoked as the entry script — but resolve symlinks first.

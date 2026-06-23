@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName } from "./fanout-codex.mjs";
 
 function git(cwd, args) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -127,6 +127,15 @@ test("remoteMatchesRepo accepts common GitHub remote forms and rejects wrong che
   assert.equal(remoteMatchesRepo("git@github.com:AlfaBlok/obsidian-brain.git", "AlfaBlok/obsidian-brain"), true);
   assert.equal(remoteMatchesRepo("https://github.com/zenod-ai/zenod.git", "AlfaBlok/obsidian-brain"), false);
   assert.equal(remoteMatchesRepo("", "AlfaBlok/obsidian-brain"), false);
+});
+
+test("branchName stays issue-readable but unique per fanout run", () => {
+  const issue = { number: 168, title: "Journey ladder L2 run routing smoke" };
+  const first = branchName(issue, "fanout-20260623T154337Z");
+  const second = branchName(issue, "fanout-20260623T154437Z");
+  assert.equal(first, "codex/issue-168-journey-ladder-l2-run-routing-smoke-20260623t154337z");
+  assert.equal(second, "codex/issue-168-journey-ladder-l2-run-routing-smoke-20260623t154437z");
+  assert.notEqual(first, second);
 });
 
 test("resetBaseCheckout heals dirty stale runner cache checkout", () => {
