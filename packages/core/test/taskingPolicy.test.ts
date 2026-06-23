@@ -408,6 +408,26 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("corrects a successful-looking answer when a Console journey blocked", () => {
+    const reply = "ephemeral smoke sentinel-1782246200 observed";
+    const actions: RecordedAction[] = [
+      {
+        tool: "console_run_ephemeral_task",
+        input: { objective: "return a short summary saying `ephemeral smoke sentinel-1782246200 observed`" },
+        result:
+          "Journey a5e7b87c-e982-41f2-bd2d-4a5cc82ebf45: blocked.\n" +
+          "Epaminon blocked ephemeral execution ephemeral-1782247229818-840d40a0: bad execution target \"ephemeral:ephemeral-1782247229818-840d40a0\"; expected owner/repo#N\n" +
+          "Execution: ephemeral-1782247229818-840d40a0 for ephemeral:ephemeral-1782247229818-840d40a0 (blocked)",
+      },
+    ];
+
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("the Console journey blocked");
+    expect(out).toContain("Epaminon blocked ephemeral execution");
+    expect(out).toContain(reply);
+  });
+
   it("corrects a terminal execution claim backed only by a queue receipt", () => {
     const reply =
       "Done. Created + executed zenod-ai/zenod#303 (no-op verified, no changes). Execution complete.";

@@ -98,6 +98,20 @@ export async function runEphemeralJourney(input: {
     },
     now(),
   );
+  if (execution.state === "blocked" || execution.state === "failed") {
+    const reason = execution.note
+      ? `Epaminon ${execution.state} ephemeral execution ${execution.executionId}: ${execution.note}`
+      : `Epaminon ${execution.state} ephemeral execution ${execution.executionId}.`;
+    input.store.blockStep(step.id, reason, now());
+    return {
+      journeyId: journey.id,
+      execution,
+      status: "blocked",
+      message: reason,
+      snapshot: input.store.snapshot(journey.id)!,
+    };
+  }
+
   input.store.completeStep(step.id, { execution }, now());
   input.store.completeJourneyIfReady(journey.id, now());
   return {
