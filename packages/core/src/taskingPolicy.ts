@@ -604,8 +604,6 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     return [
       "⚠️ Correction — the Console journey blocked; the requested work did not complete.",
       blockedJourney,
-      "",
-      text,
     ].join("\n");
   }
 
