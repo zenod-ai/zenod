@@ -3,12 +3,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { createIssueThenRunJourney, type JourneyPeerToolCaller } from "../src/createIssueRunJourney.js";
+import {
+  createIssueThenRunJourney,
+  validateCreateIssueThenRunRequest,
+  type JourneyPeerToolCaller,
+} from "../src/createIssueRunJourney.js";
 import { JourneyStore } from "../src/journeyStore.js";
 import type { PeerConfig } from "../src/peerClient.js";
 
 const archus: PeerConfig = { name: "archus", url: "http://archus.test/mcp", token: "archus-token" };
 const epaminon: PeerConfig = { name: "epaminon", url: "http://epaminon.test/mcp", token: "epaminon-token" };
+const runnableBody = [
+  "Objective: prove artifact handoff.",
+  "Scope: no code changes; only validate the journey handoff.",
+  "Acceptance criteria: Epaminon receives the exact created issue.",
+  "Source context: live intent ladder create-then-run smoke.",
+].join("\n");
 
 async function withStore<T>(fn: (store: JourneyStore) => T | Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "zenod-create-run-"));
@@ -64,7 +74,7 @@ describe("createIssueThenRunJourney", () => {
           issue: {
             repo: "AlfaBlok/zenod",
             title: "Smoke create then run",
-            body: "Objective: prove artifact handoff.\nDone: Epaminon receives the exact created issue.",
+            body: runnableBody,
           },
           runInstructions: "Run the created issue.",
         },
@@ -106,7 +116,7 @@ describe("createIssueThenRunJourney", () => {
         callTool,
         request: {
           originalRequest: "create a ticket and run it",
-          issue: { title: "Won't be created" },
+          issue: { repo: "AlfaBlok/zenod", title: "Won't be created", body: runnableBody },
         },
       });
 
@@ -157,7 +167,12 @@ describe("createIssueThenRunJourney", () => {
           originalRequest: "create a ticket in zenod-ai/zenod and run it",
           issue: {
             title: "Repo inferred create then run",
-            body: "Objective: prove repo inference.",
+            body: [
+              "Objective: prove repo inference.",
+              "Scope: no code changes; create and run only this fixture ticket.",
+              "Acceptance criteria: the Archus create call receives zenod-ai/zenod.",
+              "Source context: original request names zenod-ai/zenod.",
+            ].join("\n"),
             labels: ["status:proposed"],
           },
         },
@@ -200,7 +215,7 @@ describe("createIssueThenRunJourney", () => {
         callTool,
         request: {
           originalRequest: "create a ticket and run it",
-          issue: { repo: "AlfaBlok/zenod", title: "Create succeeds, run blocks" },
+          issue: { repo: "AlfaBlok/zenod", title: "Create succeeds, run blocks", body: runnableBody },
         },
       });
 
@@ -213,5 +228,53 @@ describe("createIssueThenRunJourney", () => {
       ]);
       expect(result.snapshot.steps.map((step) => `${step.owner}:${step.status}`)).toEqual(["archus:completed", "epaminon:blocked"]);
     });
+  });
+
+  it("blocks before creating or running when create-and-run lacks runnable details", async () => {
+    await withStore(async (store) => {
+      const calls: Array<{ peer: string; tool: string }> = [];
+      const callTool: JourneyPeerToolCaller = async (peer, tool) => {
+        calls.push({ peer: peer.name, tool });
+        throw new Error("peer tools should not be called for ambiguous create-and-run");
+      };
+
+      const result = await createIssueThenRunJourney({
+        store,
+        archus,
+        epaminon,
+        callTool,
+        request: {
+          originalRequest: "Add this and run it: make the journey ladder ambiguity smoke sentinel better.",
+          issue: {
+            title: "Improve journey ladder ambiguity smoke sentinel",
+            body: "Make the journey ladder ambiguity smoke test better.",
+          },
+        },
+      });
+
+      expect(result.status).toBe("blocked");
+      expect(result.createdIssue).toBeUndefined();
+      expect(result.execution).toBeUndefined();
+      expect(result.message).toContain("missing target repo");
+      expect(result.message).toContain("scope boundaries");
+      expect(result.message).toContain("acceptance criteria or done condition");
+      expect(result.message).toContain("source context");
+      expect(calls).toEqual([]);
+      expect(result.snapshot.steps).toEqual([
+        expect.objectContaining({ owner: "console", title: "Clarify create-and-run request", status: "blocked" }),
+      ]);
+    });
+  });
+
+  it("reports missing runnable fields deterministically", () => {
+    expect(
+      validateCreateIssueThenRunRequest({
+        originalRequest: "create and run this in AlfaBlok/zenod",
+        issue: {
+          title: "Thin ticket",
+          body: "Objective: improve the thing.",
+        },
+      }),
+    ).toEqual(["scope boundaries", "acceptance criteria or done condition", "source context"]);
   });
 });
