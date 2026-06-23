@@ -77,6 +77,21 @@ describe("execution lane — Epaminon receivers", () => {
     expect(t?.state).toBe("running");
   });
 
+  it("does not post Console/Epaminon-owned string execution ids to Archus's numeric event endpoint", async () => {
+    runtime.settings.setRaw("exec_lane_secret", SECRET);
+    runtime.settings.setRaw("exec_archus_url", "https://archus.test");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("unexpected", { status: 500 }));
+
+    await runtime.executionQueue!.enqueue({
+      executionId: "ephemeral-smoke-1",
+      target: "ephemeral:ephemeral-smoke-1",
+      context: "one-off no-ticket execution",
+    });
+
+    expect(runtime.executionQueue!.get("ephemeral-smoke-1")?.state).toBe("running");
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("archus.test/api/exec/event"), expect.anything());
+  });
+
   it("enqueue requires execution_id and target (400)", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
     const res = await app.request("/api/exec/enqueue", {

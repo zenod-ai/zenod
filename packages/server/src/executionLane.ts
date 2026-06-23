@@ -83,6 +83,10 @@ export async function mergedGithubPullEvidence(settings: Settings, evidenceUrl: 
  * un-provisioned path so a boot before enable doesn't crash the queue.
  */
 async function reportToArchus(settings: Settings, e: ExecutionEvent): Promise<void> {
+  const executionId = Number(e.executionId);
+  if (!Number.isInteger(executionId) || executionId < 1) {
+    return;
+  }
   const secret = settings.getRaw("exec_lane_secret");
   const base = settings.getRaw("exec_archus_url");
   if (!secret || !base) {
@@ -95,7 +99,7 @@ async function reportToArchus(settings: Settings, e: ExecutionEvent): Promise<vo
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
     body: JSON.stringify({
-      execution_id: Number(e.executionId),
+      execution_id: executionId,
       state: e.state,
       ...(e.evidenceUrl ? { evidence_url: e.evidenceUrl } : {}),
       ...(e.note ? { note: e.note } : {}),
