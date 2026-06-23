@@ -520,4 +520,43 @@ describe("server API", () => {
       await rm(consoleDir, { recursive: true, force: true });
     }
   });
+
+  it("Console settings save syncs GitHub credentials to enabled repo agents", async () => {
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-console-gh-sync-"));
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    const consoleApp = createApp(consoleRuntime);
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; body: unknown; auth: string | null }> = [];
+    try {
+      consoleRuntime.settings.setAgentToken("archus", "archus-token");
+      consoleRuntime.settings.setPeers([{ name: "archus", url: "http://zenod-archus2:8080/mcp", token: "archus-token" }]);
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({
+          url: String(input),
+          body: init?.body ? JSON.parse(String(init.body)) : null,
+          auth: (init?.headers as Record<string, string> | undefined)?.Authorization ?? null,
+        });
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }) as typeof fetch;
+
+      const res = await consoleApp.request("/api/settings", {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${consoleRuntime.settings.apiToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ github_token: "ghp_console_sync" }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(calls).toEqual([
+        {
+          url: "http://zenod-archus2:8080/api/agent/github",
+          auth: "Bearer archus-token",
+          body: { github_token: "ghp_console_sync" },
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      consoleRuntime.close();
+      await rm(consoleDir, { recursive: true, force: true });
+    }
+  });
 });
