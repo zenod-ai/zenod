@@ -27,6 +27,9 @@ import {
   earlyLaunchFailureNote,
   launchLogPath,
   targetBootstrapLabels,
+  parseEphemeralTarget,
+  ephemeralFinalState,
+  ephemeralPrompt,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
@@ -336,6 +339,42 @@ test("normalizeState preserves the dispatched map (survives restart)", () => {
   const s = normalizeState({ dispatched: { "42": { repo: "o/r", issueN: 42, reportedStatus: null } } });
   assert.deepEqual(s.dispatched, { "42": { repo: "o/r", issueN: 42, reportedStatus: null } });
   assert.deepEqual(normalizeState({}).dispatched, {});
+});
+
+test("normalizeState preserves ephemeral execution state (survives restart)", () => {
+  const s = normalizeState({
+    ephemeral: {
+      "ephemeral-1": {
+        target: "ephemeral:ephemeral-1",
+        finalPath: "/tmp/final.md",
+        reportedStatus: "complete",
+      },
+    },
+  });
+  assert.equal(s.ephemeral["ephemeral-1"].reportedStatus, "complete");
+  assert.equal(s.ephemeral["ephemeral-1"].target, "ephemeral:ephemeral-1");
+  assert.deepEqual(normalizeState({}).ephemeral, {});
+});
+
+test("parseEphemeralTarget accepts only ephemeral execution ids", () => {
+  assert.deepEqual(parseEphemeralTarget("ephemeral:ephemeral-123_abc"), { executionId: "ephemeral-123_abc" });
+  assert.equal(parseEphemeralTarget("AlfaBlok/obsidian-brain#173"), null);
+  assert.equal(parseEphemeralTarget("ephemeral:"), null);
+});
+
+test("ephemeralFinalState trusts the final Status line and falls back to exit code", () => {
+  assert.equal(ephemeralFinalState(0, "Status: complete\nSummary: done"), "complete");
+  assert.equal(ephemeralFinalState(0, "Status: blocked\nQuestion: need input"), "blocked");
+  assert.equal(ephemeralFinalState(0, "Status: failed\n"), "failed");
+  assert.equal(ephemeralFinalState(0, "no status line"), "complete");
+  assert.equal(ephemeralFinalState(1, "no status line"), "failed");
+});
+
+test("ephemeralPrompt forbids default GitHub issue side effects and requires a status line", () => {
+  const prompt = ephemeralPrompt("ephemeral-1", "Objective: summarize this");
+  assert.match(prompt, /do not create, edit, close, or run a GitHub issue unless the user explicitly asked/);
+  assert.match(prompt, /Status: complete/);
+  assert.match(prompt, /Objective: summarize this/);
 });
 
 test("workdirForRepo keeps default repo stable and isolates cross-repo dispatches", () => {

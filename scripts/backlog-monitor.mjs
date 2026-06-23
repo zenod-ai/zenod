@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
 const BACKLOG = process.env.ZENOD_BACKLOG_REPO || "AlfaBlok/obsidian-brain";
 const REPO = process.env.ZENOD_REPO || "zenod-ai/zenod"; // default target repo + fan-in repo
@@ -98,6 +98,7 @@ function normalizeState(state) {
     bridges: state?.bridges ?? {}, // central # -> { target, exec, mirrored }
     mergeAttempts: Array.isArray(state?.mergeAttempts) ? state.mergeAttempts : [],
     dispatched: state?.dispatched ?? {}, // execution_id -> { repo, issueN, target, reportedStatus }
+    ephemeral: state?.ephemeral ?? {}, // execution_id -> { target, promptPath, finalPath, reportedStatus }
   };
 }
 function parseBooleanSetting(value) {
@@ -285,6 +286,10 @@ function safeFilePart(value) {
     .slice(0, 80) || "unknown";
 }
 
+function safePathPart(value) {
+  return String(value || "unknown").replace(/[^A-Za-z0-9_.-]+/g, "_");
+}
+
 function launchLogPath(target, execNumber, now = Date.now()) {
   return `${dirname(STATE_PATH)}/launch-${now}-${safeFilePart(target)}-${execNumber}.log`;
 }
@@ -428,6 +433,48 @@ function parseTarget(target) {
   return m ? { repo: m[1], number: Number(m[2]) } : null;
 }
 
+function parseEphemeralTarget(target) {
+  const m = String(target || "").match(/^ephemeral:([A-Za-z0-9_.:-]+)$/);
+  return m ? { executionId: m[1] } : null;
+}
+
+function ephemeralRunPaths(executionId) {
+  const root = join(dirname(STATE_PATH), "ephemeral", safePathPart(executionId));
+  return {
+    root,
+    scratch: join(root, "scratch"),
+    promptPath: join(root, "prompt.md"),
+    finalPath: join(root, "final.md"),
+    eventsPath: join(root, "events.jsonl"),
+  };
+}
+
+function ephemeralPrompt(executionId, context) {
+  return [
+    "You are Epaminon executing one one-off task for the user.",
+    "",
+    "This task is ephemeral: do not create, edit, close, or run a GitHub issue unless the user explicitly asked for that in the context.",
+    "Use the available Console MCP tools only when they are needed to complete the requested work.",
+    "Keep any filesystem work inside the current scratch directory unless the user explicitly names another target.",
+    "",
+    `Execution id: ${executionId}`,
+    "",
+    "Context:",
+    context || "(no context provided)",
+    "",
+    "Final handoff requirements:",
+    "- Start the final answer with one line: `Status: complete`, `Status: blocked`, or `Status: failed`.",
+    "- If blocked, include the concrete blocker and the one question or next action needed.",
+    "- If complete, include a concise summary of what was done and any evidence/pointers.",
+  ].join("\n");
+}
+
+function ephemeralFinalState(exitCode, finalText) {
+  const statusLine = String(finalText || "").match(/^\s*(?:[-*]\s*)?status:\s*(complete|blocked|failed)\b/im);
+  if (statusLine) return statusLine[1].toLowerCase();
+  return exitCode === 0 ? "complete" : "failed";
+}
+
 // PURE: map a dispatched run's target-issue status (+ whether a PR exists) to the
 // exec-lane outcome Epaminon expects. `none` = not terminal yet (keep watching).
 // Outward (a PR to merge) parks at needs-review; an internal completion with no PR
@@ -491,9 +538,101 @@ async function markDispatchedLaunchBlocked(executionId, target, note) {
   if (ok) await notify(`⛔ Execution ${executionId} (${target}) — launch blocked: ${note}`);
 }
 
+function noteFromFinalText(finalText, fallback) {
+  const compact = String(finalText || "").trim().replace(/\s+/g, " ");
+  return compact ? compact.slice(0, 1000) : fallback;
+}
+
+async function reportEphemeralFinished(executionId, target, exitCode, finalPath) {
+  const finalText = existsSync(finalPath) ? readFileSync(finalPath, "utf8") : "";
+  const stateName = ephemeralFinalState(exitCode, finalText);
+  const note = noteFromFinalText(finalText, `ephemeral worker exited with code ${exitCode ?? "unknown"}`);
+  const persisted = loadState();
+  const entry = persisted.ephemeral?.[executionId];
+  if (entry?.reportedStatus) return;
+  if (!persisted.ephemeral) persisted.ephemeral = {};
+  persisted.ephemeral[executionId] = {
+    ...(entry ?? { target }),
+    reportedStatus: stateName,
+    finishedAt: new Date().toISOString(),
+    exitCode,
+    finalPath,
+  };
+  saveState(persisted);
+
+  if (stateName === "complete") {
+    const ok = await reportToEpaminon("/api/exec/outcome", { execution_id: executionId, outward: false, note });
+    if (ok) await notify(`✅ Execution ${executionId} (${target}) — done.`);
+    return;
+  }
+
+  const blockedNote = stateName === "blocked" ? note : `ephemeral worker failed: ${note}`;
+  const ok = await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: blockedNote });
+  if (ok) await notify(`⛔ Execution ${executionId} (${target}) — ${stateName}: ${blockedNote.slice(0, 240)}`);
+}
+
+function launchEphemeral(executionId, target, context, state) {
+  const existing = state.ephemeral?.[executionId];
+  if (existing?.pid && !existing.reportedStatus) return { ok: true, duplicate: true };
+  const paths = ephemeralRunPaths(executionId);
+  mkdirSync(paths.scratch, { recursive: true });
+  writeFileSync(paths.promptPath, ephemeralPrompt(executionId, context));
+  const fd = openSync(paths.eventsPath, "a");
+  const args = [
+    "exec",
+    "--json",
+    "--cd",
+    paths.scratch,
+    "--dangerously-bypass-approvals-and-sandbox",
+    "--output-last-message",
+    paths.finalPath,
+    "-",
+  ];
+  const child = spawn("codex", args, {
+    cwd: paths.scratch,
+    stdio: ["pipe", fd, fd],
+    detached: true,
+    env: process.env,
+  });
+  child.stdin.end(readFileSync(paths.promptPath, "utf8"));
+  child.on("error", (err) => {
+    try {
+      closeSync(fd);
+    } catch {
+      // already closed
+    }
+    const note = `ephemeral runner failed to spawn for ${executionId}: ${err.code || err.message}`;
+    log(note);
+    void reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note });
+  });
+  child.on("exit", (code) => {
+    try {
+      closeSync(fd);
+    } catch {
+      // already closed
+    }
+    void reportEphemeralFinished(executionId, target, code, paths.finalPath);
+  });
+  child.unref();
+  state.ephemeral[executionId] = {
+    target,
+    promptPath: paths.promptPath,
+    finalPath: paths.finalPath,
+    eventsPath: paths.eventsPath,
+    scratch: paths.scratch,
+    pid: child.pid ?? null,
+    launchedAt: new Date().toISOString(),
+    reportedStatus: null,
+  };
+  log(`launched ephemeral execution ${executionId} scratch=${paths.scratch}`);
+  return { ok: true };
+}
+
 // Launch an Epaminon-dispatched ticket: work its target work-ticket directly (no
 // central materialize — the dispatched target IS the issue).
 function launchDispatched(executionId, target, context, state) {
+  if (parseEphemeralTarget(target)) return launchEphemeral(executionId, target, context, state);
+
   const t = parseTarget(target);
   if (!t) {
     log(`/run: bad target "${target}" for ${executionId}`);
@@ -1167,7 +1306,10 @@ export {
   pickupNotification,
   primaryStatusLabel,
   targetBootstrapLabels,
+  parseEphemeralTarget,
   parseTarget,
+  ephemeralFinalState,
+  ephemeralPrompt,
   workdirForRepo,
   dispatchedOutcome,
   shouldReportEarlyLaunchExit,
