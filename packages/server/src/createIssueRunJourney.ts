@@ -34,6 +34,28 @@ export interface CreateIssueThenRunResult {
 
 export type JourneyPeerToolCaller = (peer: PeerConfig, tool: string, args: Record<string, unknown>) => Promise<PeerToolResult>;
 
+const REPO_REF_RE = /\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\b/;
+
+export function repoFromText(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  const match = REPO_REF_RE.exec(text);
+  return match?.[1];
+}
+
+export function normalizeIssueRequest<T extends { repo?: string; labels?: string[] }>(
+  issue: T,
+  fallbackRepo?: string,
+): T {
+  const labelRepo = issue.labels?.find((label) => REPO_REF_RE.test(label));
+  const repo = issue.repo || labelRepo || fallbackRepo;
+  const labels = issue.labels?.filter((label) => label !== "repo" && label !== labelRepo);
+  return {
+    ...issue,
+    ...(repo ? { repo } : {}),
+    ...(labels ? { labels } : {}),
+  };
+}
+
 export function peerToolText(result: PeerToolResult): string {
   return result.content
     .filter((item) => item.type === "text")
@@ -77,6 +99,7 @@ export async function createIssueThenRunJourney(input: {
   const now = input.now ?? Date.now;
   const callTool = input.callTool ?? callPeerTool;
   const request = input.request;
+  const issue = normalizeIssueRequest(request.issue, repoFromText(request.originalRequest));
   const journey = input.store.create(
     {
       conversationId: request.conversationId ?? null,
@@ -96,10 +119,10 @@ export async function createIssueThenRunJourney(input: {
       title: "Create GitHub issue",
       input: {
         intent: "github.issue.create",
-        repo: request.issue.repo,
-        title: request.issue.title,
-        body: request.issue.body,
-        labels: request.issue.labels ?? [],
+        repo: issue.repo,
+        title: issue.title,
+        body: issue.body,
+        labels: issue.labels ?? [],
         expectedArtifactKinds: ["github_issue"],
       },
       idempotencyKey: `journey:${journey.id}:archus:create_issue`,
@@ -125,10 +148,10 @@ export async function createIssueThenRunJourney(input: {
 
   input.store.dispatchStep(createStep.id, { deadlineAt: now() + 5 * 60_000 }, now());
   const createResult = await callTool(input.archus, "create_issue", {
-    ...(request.issue.repo ? { repo: request.issue.repo } : {}),
-    title: request.issue.title,
-    ...(request.issue.body !== undefined ? { body: request.issue.body } : {}),
-    labels: request.issue.labels ?? [],
+    ...(issue.repo ? { repo: issue.repo } : {}),
+    title: issue.title,
+    ...(issue.body !== undefined ? { body: issue.body } : {}),
+    labels: issue.labels ?? [],
   });
   if (createResult.isError) {
     const reason = peerToolText(createResult) || "Archus create_issue failed";

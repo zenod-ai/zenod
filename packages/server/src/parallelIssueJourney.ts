@@ -1,6 +1,13 @@
 import type { JourneySnapshot, JourneyStore } from "./journeyStore.js";
 import { callPeerTool, type PeerConfig, type PeerToolResult } from "./peerClient.js";
-import { createdIssueFromStructured, peerToolText, type CreatedIssueArtifact, type JourneyPeerToolCaller } from "./createIssueRunJourney.js";
+import {
+  createdIssueFromStructured,
+  normalizeIssueRequest,
+  peerToolText,
+  repoFromText,
+  type CreatedIssueArtifact,
+  type JourneyPeerToolCaller,
+} from "./createIssueRunJourney.js";
 
 export interface CreateIssuesJourneyInput {
   originalRequest: string;
@@ -37,6 +44,8 @@ export async function createIssuesJourney(input: {
   const now = input.now ?? Date.now;
   const callTool = input.callTool ?? callPeerTool;
   const request = input.request;
+  const fallbackRepo = repoFromText(request.originalRequest);
+  const issues = request.issues.map((issue) => normalizeIssueRequest(issue, fallbackRepo));
   const journey = input.store.create(
     {
       conversationId: request.conversationId ?? null,
@@ -50,7 +59,7 @@ export async function createIssuesJourney(input: {
     now(),
   );
 
-  const createSteps = request.issues.map((issue, index) =>
+  const createSteps = issues.map((issue, index) =>
     input.store.addStep(
       journey.id,
       {
@@ -93,7 +102,7 @@ export async function createIssuesJourney(input: {
   const failures: string[] = [];
   await Promise.all(
     createSteps.map(async (step, index) => {
-      const issue = request.issues[index]!;
+      const issue = issues[index]!;
       input.store.dispatchStep(step.id, { deadlineAt: now() + 5 * 60_000 }, now());
       const result = await callTool(input.archus, "create_issue", {
         ...(issue.repo ? { repo: issue.repo } : {}),
@@ -134,7 +143,7 @@ export async function createIssuesJourney(input: {
       journeyId: journey.id,
       createdIssues,
       status: "blocked",
-      message: `Created ${createdIssues.length}/${request.issues.length} issue(s); blocked: ${failures.join("; ")}`,
+      message: `Created ${createdIssues.length}/${issues.length} issue(s); blocked: ${failures.join("; ")}`,
       snapshot: input.store.snapshot(journey.id)!,
     };
   }

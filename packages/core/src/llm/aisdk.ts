@@ -814,6 +814,29 @@ export class AiSdkBrainLlm implements BrainLlm {
     // tool (e.g. `ask_zenod`) that forwards a free-form request to that peer and
     // returns its answer. The model sees them as ordinary tools.
     const peerEntries = Object.entries(peerTools ?? {});
+    const sameTurnPeerMutations = new Map<string, Promise<string>>();
+    const peerMutationDedupeKey = (name: string, args: Record<string, unknown>): string | null => {
+      if (name === "console_create_issues") {
+        const issues = Array.isArray(args.issues) ? args.issues : [];
+        return `${name}:${JSON.stringify(
+          issues.map((issue) => {
+            const item = issue && typeof issue === "object" ? (issue as Record<string, unknown>) : {};
+            return {
+              title: typeof item.title === "string" ? item.title.trim() : "",
+              body: typeof item.body === "string" ? item.body.trim() : "",
+            };
+          }),
+        )}`;
+      }
+      if (name === "console_create_issue_then_run") {
+        const issue = args.issue && typeof args.issue === "object" ? (args.issue as Record<string, unknown>) : {};
+        return `${name}:${JSON.stringify({
+          title: typeof issue.title === "string" ? issue.title.trim() : "",
+          body: typeof issue.body === "string" ? issue.body.trim() : "",
+        })}`;
+      }
+      return null;
+    };
     const peerToolSet = Object.fromEntries(
       peerEntries.map(([name, peer]) => [
         name,
@@ -828,9 +851,15 @@ export class AiSdkBrainLlm implements BrainLlm {
               input.onPeerAction?.(name, args, result);
               return result;
             }
-            const result = await caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? ""))));
-            input.onPeerAction?.(name, args, result);
-            return result;
+            const dedupeKey = peerMutationDedupeKey(name, args);
+            const existing = dedupeKey ? sameTurnPeerMutations.get(dedupeKey) : undefined;
+            if (existing) return existing;
+            const pending = caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? "")))).then((result) => {
+              input.onPeerAction?.(name, args, result);
+              return result;
+            });
+            if (dedupeKey) sameTurnPeerMutations.set(dedupeKey, pending);
+            return pending;
           },
         }),
       ]),

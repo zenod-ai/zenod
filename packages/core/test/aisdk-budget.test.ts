@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 // Capture the config handed to generateText so we can assert the step budget is
 // injected into the prompt, the cap is dynamic, and the last step forces text.
@@ -79,5 +80,62 @@ describe("answer tool-step budget", () => {
     expect(system).toContain("For one-off execution/research/operational work where the user did NOT ask to create/file/open a durable ticket");
     expect(system).toContain("When the user asks for multiple side effects");
     expect(system).toContain("ask ONE concrete clarification before mutating or dispatching");
+  });
+
+  it("deduplicates same-turn Console create-issues peer calls by issue content", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    const actions: unknown[] = [];
+    await llm.answer(
+      {
+        question: "create two issues in zenod-ai/zenod",
+        vaultBriefing: "brief",
+        conversation: [],
+        onPeerAction: (tool, input, result) => actions.push({ tool, input, result }),
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        console_create_issues: {
+          description: "Owner: Console. Create multiple independent GitHub issues.",
+          inputSchema: z.object({
+            originalRequest: z.string().optional(),
+            issues: z.array(
+              z.object({
+                title: z.string(),
+                body: z.string().optional(),
+                labels: z.array(z.string()).optional(),
+              }),
+            ),
+          }),
+          run: async (input) => {
+            calls.push(input);
+            return "Journey created once";
+          },
+        },
+      },
+    );
+
+    const tool = captured.config.tools.console_create_issues;
+    const first = await tool.execute({
+      originalRequest: "create two issues in zenod-ai/zenod",
+      issues: [
+        { title: "Smoke A", body: "same body", labels: ["status:proposed", "stability"] },
+        { title: "Smoke B", body: "same body", labels: ["status:proposed", "stability"] },
+      ],
+    });
+    const second = await tool.execute({
+      originalRequest: "create two issues in zenod-ai/zenod",
+      issues: [
+        { title: "Smoke A", body: "same body", labels: ["status:proposed", "repo", "zenod-ai/zenod"] },
+        { title: "Smoke B", body: "same body", labels: ["status:proposed", "repo", "zenod-ai/zenod"] },
+      ],
+    });
+
+    expect(first).toBe("Journey created once");
+    expect(second).toBe("Journey created once");
+    expect(calls).toHaveLength(1);
+    expect(actions).toHaveLength(1);
   });
 });
