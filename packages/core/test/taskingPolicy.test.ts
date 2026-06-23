@@ -425,7 +425,7 @@ describe("reconcileTaskingReply", () => {
     expect(out).toMatch(/^⚠️ Correction/);
     expect(out).toContain("the Console journey blocked");
     expect(out).toContain("Epaminon blocked ephemeral execution");
-    expect(out).toContain(reply);
+    expect(out).not.toContain(reply);
   });
 
   it("corrects a terminal execution claim backed only by a queue receipt", () => {
