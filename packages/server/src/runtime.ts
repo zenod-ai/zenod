@@ -621,9 +621,11 @@ export class Runtime {
   }
 
   buildBacklogIssueReader() {
+    const productRepo = "zenod-ai/zenod";
     const defaultRepo = () => this.settings.get("vault_repo") || this.settings.getRaw("backlog_repo") || "";
     const configuredRepos = () =>
       [...new Set([this.settings.get("vault_repo"), this.settings.getRaw("backlog_repo")].filter((repo): repo is string => Boolean(repo)))];
+    const discoveryRepos = () => [...new Set([...configuredRepos(), productRepo])];
     const repoPath = (repo: string) => encodeURIComponent(repo).replace("%2F", "/");
     const parseTarget = (target: string): { repo: string; number: number } | null => {
       const match = target.trim().match(/^([^#\s]+\/[^#\s]+)#(\d+)$/);
@@ -681,17 +683,19 @@ export class Runtime {
       this.githubJson<GitHubIssueRead[]>(
         `/repos/${repoPath(repo)}/issues?state=${encodeURIComponent(state)}&per_page=${Math.min(Math.max(limit, 1), 100)}&sort=updated&direction=desc`,
       );
-    const searchIssues = async (reference: string, limit: number): Promise<Array<{ repo: string; issue: GitHubIssueRead }>> => {
-      const query = `${reference.trim()} is:issue in:title,body`;
-      const result = await this.githubJson<{ items?: GitHubIssueRead[] }>(
-        `/search/issues?q=${encodeURIComponent(query)}&per_page=${Math.min(Math.max(limit, 1), 100)}&sort=updated&order=desc`,
-      );
-      return (result.items ?? [])
-        .map((issue) => {
-          const match = issue.html_url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/\d+\b/);
-          return match ? { repo: match[1]!, issue } : null;
-        })
-        .filter((item): item is { repo: string; issue: GitHubIssueRead } => Boolean(item));
+    const searchIssues = async (reference: string, repos: string[], limit: number): Promise<Array<{ repo: string; issue: GitHubIssueRead }>> => {
+      const found: Array<{ repo: string; issue: GitHubIssueRead }> = [];
+      for (const repo of repos) {
+        const query = `${reference.trim()} is:issue in:title,body repo:${repo}`;
+        const result = await this.githubJson<{ items?: GitHubIssueRead[] }>(
+          `/search/issues?q=${encodeURIComponent(query)}&per_page=${Math.min(Math.max(limit, 1), 100)}&sort=updated&order=desc`,
+        ).catch(() => ({ items: [] }));
+        for (const issue of result.items ?? []) {
+          found.push({ repo, issue });
+          if (found.length >= limit) return found;
+        }
+      }
+      return found;
     };
     const matchesLabels = (issue: GitHubIssueRead, labels: string[] | undefined): boolean => {
       if (!labels?.length) return true;
@@ -834,7 +838,7 @@ export class Runtime {
           }
           if (fuzzyCandidates.length === 0 && !repos?.length) {
             const searchedTargets = new Set<string>();
-            for (const { repo, issue } of await searchIssues(reference, limit).catch(() => [])) {
+            for (const { repo, issue } of await searchIssues(reference, discoveryRepos(), limit)) {
               if (!matchesLabels(issue, labels)) continue;
               const target = issueTarget(repo, issue);
               if (searchedTargets.has(target)) continue;
