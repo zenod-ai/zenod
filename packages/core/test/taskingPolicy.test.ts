@@ -381,6 +381,18 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("does not correct a direct Epaminon run receipt as unconfirmed execution state", () => {
+    const reply = "Queued execution direct-1782228836750-46a6500e for AlfaBlok/obsidian-brain#168: running.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_run_existing_issue",
+        input: { target: "AlfaBlok/obsidian-brain#168" },
+        result: "Queued execution direct-1782228836750-46a6500e for AlfaBlok/obsidian-brain#168: running",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("corrects a terminal execution claim backed only by a queue receipt", () => {
     const reply =
       "Done. Created + executed zenod-ai/zenod#303 (no-op verified, no changes). Execution complete.";
