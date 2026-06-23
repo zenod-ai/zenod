@@ -84,6 +84,51 @@ describe("GitHub App flow", () => {
     expect(settings.configured()).toBe(true); // no PAT needed
   });
 
+  it("falls back to the configured PAT when a repo-scoped app token gets a 403", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const settings = runtime.settings;
+    settings.setRaw("github_app_id", "fallback-app");
+    settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
+    settings.setRaw("github_app_installation_id", "fallback-installation");
+    settings.set("github_token", "ghp_fallback");
+
+    const issueCalls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const path = String(url).replace("https://api.github.com", "");
+      const auth = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "");
+      if (path === "/repos/zenod-ai/fallback-fixture/installation") {
+        return new Response(JSON.stringify({ id: 888 }), { status: 200 });
+      }
+      if (path === "/app/installations/888/access_tokens") {
+        return new Response(
+          JSON.stringify({ token: "ghs_repo_scoped_without_issue_write", expires_at: new Date(Date.now() + 3600_000).toISOString() }),
+          { status: 201 },
+        );
+      }
+      if (path === "/repos/zenod-ai/fallback-fixture/issues/52") {
+        issueCalls.push(auth);
+        if (auth === "Bearer ghs_repo_scoped_without_issue_write") {
+          return new Response("Resource not accessible by integration", { status: 403 });
+        }
+        if (auth === "Bearer ghp_fallback") {
+          return new Response(
+            JSON.stringify({
+              html_url: "https://github.com/zenod-ai/fallback-fixture/issues/52",
+              labels: [{ name: "status:proposed" }],
+            }),
+            { status: 200 },
+          );
+        }
+      }
+      return new Response(`unexpected ${init?.method ?? "GET"} ${path}`, { status: 500 });
+    });
+
+    const result = await editGithubIssue(settings, { repo: "zenod-ai/fallback-fixture", issueNumber: 52 });
+
+    expect(result.issueUrl).toBe("https://github.com/zenod-ai/fallback-fixture/issues/52");
+    expect(issueCalls).toEqual(["Bearer ghs_repo_scoped_without_issue_write", "Bearer ghp_fallback"]);
+  });
+
   it("selects the active provider's key for configured()", () => {
     const settings = runtime.settings;
     settings.set("vault_repo", "owner/vault");
