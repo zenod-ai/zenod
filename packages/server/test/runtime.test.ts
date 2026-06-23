@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrainEngine, ExternalTaskingTools, PeerTools } from "zenod";
 import { ARCHUS_AGENT, CONSOLE_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
+import type { CreateIssueThenRunInput, CreateIssueThenRunResult } from "../src/createIssueRunJourney.js";
 import { consolePeerConversationKey, formatConsolePeerDelegation, Runtime } from "../src/runtime.js";
 
 async function waitFor<T>(read: () => T, done: (value: T) => boolean): Promise<T> {
@@ -403,6 +404,78 @@ describe("runtime tasking tools", () => {
       archusRuntime.close();
       await rm(consoleDir, { recursive: true, force: true });
       await rm(archusDir, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards terminal-only notification intent and does not label a running create-run handoff complete", async () => {
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-runtime-console-create-run-"));
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    try {
+      const calls: CreateIssueThenRunInput[] = [];
+      (consoleRuntime as unknown as {
+        createIssueThenRun(input: CreateIssueThenRunInput): Promise<CreateIssueThenRunResult>;
+      }).createIssueThenRun = async (input) => {
+        calls.push(input);
+        return {
+          journeyId: "journey-test-1",
+          status: "completed",
+          message: "Created AlfaBlok/obsidian-brain#175 and dispatched execution direct-test-175 (running).",
+          createdIssue: {
+            target: "AlfaBlok/obsidian-brain#175",
+            repo: "AlfaBlok/obsidian-brain",
+            issueNumber: 175,
+            url: "https://github.com/AlfaBlok/obsidian-brain/issues/175",
+            labels: [],
+          },
+          execution: {
+            executionId: "direct-test-175",
+            target: "AlfaBlok/obsidian-brain#175",
+            context: "Run it",
+            state: "running",
+            updatedAt: 123,
+          },
+          snapshot: {
+            journey: {
+              id: "journey-test-1",
+              conversationId: null,
+              surface: "whatsapp",
+              originalRequest: "create and run it",
+              context: {},
+              status: "completed",
+              createdAt: 100,
+              updatedAt: 100,
+              completedAt: 100,
+            },
+            steps: [],
+            artifacts: [],
+            events: [],
+          },
+        };
+      };
+
+      const tools = (consoleRuntime as unknown as { buildConsoleJourneyTools(): PeerTools }).buildConsoleJourneyTools();
+      const result = await tools.console_create_issue_then_run.run({
+        originalRequest: "create this issue and run it; notify only after terminal",
+        issue: {
+          repo: "AlfaBlok/obsidian-brain",
+          title: "Create run terminal notify",
+          body: "Objective: test.\nScope: no code.\nAcceptance criteria: dispatch only.\nSource context: runtime test.",
+        },
+        runInstructions: "No code changes.",
+        notifyOnStart: false,
+      });
+
+      expect(calls).toEqual([
+        expect.objectContaining({
+          notifyOnStart: false,
+          issue: expect.objectContaining({ title: "Create run terminal notify" }),
+        }),
+      ]);
+      expect(result).toContain("Journey journey-test-1: execution handoff dispatched.");
+      expect(result).not.toContain("Journey journey-test-1: completed.");
+    } finally {
+      consoleRuntime.close();
+      await rm(consoleDir, { recursive: true, force: true });
     }
   });
 

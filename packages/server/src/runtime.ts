@@ -139,6 +139,13 @@ export function formatConsolePeerDelegation(input: string, options: { parentConv
   ].join("\n");
 }
 
+function createRunStatusLabel(result: CreateIssueThenRunResult): string {
+  if (result.status === "blocked") return "blocked";
+  const state = result.execution?.state;
+  if (state === "done" || state === "failed" || state === "blocked") return result.status;
+  return "execution handoff dispatched";
+}
+
 /**
  * Owns the engine lifecycle: builds it lazily from runtime settings and
  * rebuilds after settings change. One instance per process.
@@ -453,7 +460,7 @@ export class Runtime {
       };
     };
     const formatCreateRunResult = (result: CreateIssueThenRunResult): string => [
-      `Journey ${result.journeyId}: ${result.status}.`,
+      `Journey ${result.journeyId}: ${createRunStatusLabel(result)}.`,
       result.message,
       ...(result.createdIssue ? [`Created issue: ${result.createdIssue.target} - ${result.createdIssue.url}`] : []),
       ...(result.execution
@@ -496,6 +503,7 @@ export class Runtime {
             ...contextFor(args),
             issue: args.issue,
             ...(args.runInstructions ? { runInstructions: args.runInstructions } : {}),
+            ...(args.notifyOnStart !== undefined ? { notifyOnStart: args.notifyOnStart } : {}),
           });
           return formatCreateRunResult(result);
         },
