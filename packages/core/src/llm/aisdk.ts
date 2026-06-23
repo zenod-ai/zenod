@@ -100,6 +100,8 @@ export const DEFAULT_MAX_STEPS = 8;
 export const MIN_MAX_STEPS = 2;
 export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
+export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
+export const MAX_WORK_OUTPUT_TOKENS = 4096;
 
 /** Clamp a configured step budget to a sane range; falls back to the default. */
 export function clampMaxSteps(value: number | undefined): number {
@@ -377,6 +379,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     try {
       const retry = await generateText({
         model,
+        maxOutputTokens: MAX_ANSWER_OUTPUT_TOKENS,
         messages: [
           ...priorMessages,
           ...responseMessages,
@@ -894,6 +897,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     const systemText = [input.vaultBriefing, ...briefingExtras, budgetNote].filter(Boolean).join("\n\n");
     const config = {
       model: this.model(this.askModelId),
+      maxOutputTokens: MAX_ANSWER_OUTPUT_TOKENS,
       // System prefix as a cached message rather than top-level `system`, so the
       // (large, stable) vault briefing is reused across turns instead of re-billed.
       messages: [
@@ -1088,6 +1092,7 @@ export class AiSdkBrainLlm implements BrainLlm {
 
     const result = await generateText({
       model: this.model(this.askModelId),
+      maxOutputTokens: MAX_WORK_OUTPUT_TOKENS,
       // Cache the briefing-laden system prefix: propose and execute (plus any
       // execute retries) run back-to-back with the same briefing → cache reads.
       messages: [
