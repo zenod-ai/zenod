@@ -468,6 +468,7 @@ function hasExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean 
       tool === "queueexecution" ||
       tool === "executionstatus" ||
       tool === "epaminonreadissueexecutionstatus" ||
+      tool === "epaminonrunexistingissue" ||
       tool === "approveexecution"
     ) return true;
     return /\b(exec:(?:queued|running|needs-review|approved|blocked|done)|Minted execution ticket|Execution \d+|Epaminon)\b/i.test(
