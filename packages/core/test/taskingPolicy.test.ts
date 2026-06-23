@@ -393,6 +393,21 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("does not correct a create-then-run journey receipt as unconfirmed execution state", () => {
+    const reply = "Created AlfaBlok/obsidian-brain#169 and dispatched execution direct-1782230500486-18e3cdb1 running.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "console_create_issue_then_run",
+        input: { issue: { title: "Journey ladder L2 create then run smoke" } },
+        result:
+          "Journey bd2c6f32-589a-4424-955a-b530fd3905b4: completed.\n" +
+          "Created AlfaBlok/obsidian-brain#169 (https://github.com/AlfaBlok/obsidian-brain/issues/169) and dispatched execution direct-1782230500486-18e3cdb1 (running).\n" +
+          "Execution: direct-1782230500486-18e3cdb1 for AlfaBlok/obsidian-brain#169 (running)",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("corrects a terminal execution claim backed only by a queue receipt", () => {
     const reply =
       "Done. Created + executed zenod-ai/zenod#303 (no-op verified, no changes). Execution complete.";
