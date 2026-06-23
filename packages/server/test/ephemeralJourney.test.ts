@@ -89,4 +89,37 @@ describe("runEphemeralJourney", () => {
       expect(result.snapshot.artifacts).toHaveLength(0);
     });
   });
+
+  it("blocks the journey when Epaminon returns a blocked ephemeral execution ticket", async () => {
+    await withStore(async (store) => {
+      const result = await runEphemeralJourney({
+        store,
+        epaminon,
+        request: request(),
+        callTool: async () => ({
+          content: [{ type: "text", text: "Queued ephemeral execution ephemeral-test-2: blocked" }],
+          structuredContent: {
+            ticket: {
+              executionId: "ephemeral-test-2",
+              target: "ephemeral:ephemeral-test-2",
+              context: "Research one thing",
+              state: "blocked",
+              note: 'bad execution target "ephemeral:ephemeral-test-2"; expected owner/repo#N',
+              updatedAt: 123,
+            },
+          },
+        }),
+      });
+
+      expect(result.status).toBe("blocked");
+      expect(result.message).toContain("Epaminon blocked ephemeral execution ephemeral-test-2");
+      expect(result.message).toContain("expected owner/repo#N");
+      expect(result.execution?.state).toBe("blocked");
+      expect(result.snapshot.journey.status).toBe("blocked");
+      expect(result.snapshot.steps).toEqual([expect.objectContaining({ owner: "epaminon", status: "blocked" })]);
+      expect(result.snapshot.artifacts).toEqual([
+        expect.objectContaining({ kind: "execution_record", artifactKey: "execution:ephemeral-test-2" }),
+      ]);
+    });
+  });
 });

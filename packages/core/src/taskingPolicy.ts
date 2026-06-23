@@ -423,6 +423,18 @@ function queueExecutionError(actions: ReadonlyArray<RecordedAction>): string | u
   return failed?.result.replace(/^ERROR:\s*/, "");
 }
 
+function blockedConsoleJourney(actions: ReadonlyArray<RecordedAction>): string | undefined {
+  const blocked = [...actions].reverse().find((action) => {
+    const tool = action.tool.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return tool.startsWith("console") && /\bJourney [^\n]+: blocked\b|\bExecution: [^\n]+ \(blocked\)/i.test(action.result);
+  });
+  return blocked?.result;
+}
+
+function acknowledgesBlockedJourney(prose: string): boolean {
+  return /\b(?:blocked|failed|could(?: not|n't)|unable|did(?: not|n't)|has(?: not|n't)|not completed|not done)\b/i.test(prose);
+}
+
 const fmt = (nums: number[]): string => nums.map((n) => `#${n}`).join(", ");
 
 const EXECUTION_STATUS_WORDS =
@@ -586,6 +598,16 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const executionGrounded = hasExecutionGrounding(actions);
   const noExecNums = noExecutionNumbers(actions);
   const contradictedNoExecution = claimsPositiveExecutionForNoExecutionTarget(prose, noExecNums);
+  const blockedJourney = blockedConsoleJourney(actions);
+
+  if (blockedJourney && !acknowledgesBlockedJourney(prose)) {
+    return [
+      "⚠️ Correction — the Console journey blocked; the requested work did not complete.",
+      blockedJourney,
+      "",
+      text,
+    ].join("\n");
+  }
 
   if (contradictedNoExecution.length > 0) {
     return [
