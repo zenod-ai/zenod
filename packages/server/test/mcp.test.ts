@@ -761,13 +761,16 @@ describe("Epaminon MCP execution status", () => {
 
       const result = await client.callTool({
         name: "epaminon.run_existing_issue",
-        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch." },
+        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch.", notifyOnStart: false },
       });
-      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string } };
+      const structured = result.structuredContent as {
+        ticket: { executionId: string; target: string; state: string; context: string; notifyOnStart?: boolean };
+      };
       expect(structured.ticket).toMatchObject({ target: "zenod-ai/zenod#270" });
       expect(["queued", "running"]).toContain(structured.ticket.state);
       expect(structured.ticket.executionId).toMatch(/^direct-/);
       expect(structured.ticket.context).toContain("Use the current branch.");
+      expect(structured.ticket.notifyOnStart).toBe(false);
     } finally {
       await client.close();
     }

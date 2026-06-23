@@ -27,6 +27,7 @@ describe("execution lane — Epaminon receivers", () => {
 
   afterEach(async () => {
     vi.unstubAllGlobals();
+    delete process.env.ZENOD_RUNNER_POKE_URL;
     runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
@@ -75,6 +76,37 @@ describe("execution lane — Epaminon receivers", () => {
     const t = runtime.executionQueue!.get("42");
     expect(t?.target).toBe("zenod-ai/zenod#42");
     expect(t?.state).toBe("running");
+  });
+
+  it("preserves terminal-only notification preference and passes it to the runner", async () => {
+    runtime.settings.setRaw("exec_lane_secret", SECRET);
+    process.env.ZENOD_RUNNER_POKE_URL = "http://runner.test";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("launched", { status: 202 }));
+
+    const res = await app.request("/api/exec/enqueue", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({
+        execution_id: "terminal-only-1",
+        target: "zenod-ai/zenod#42",
+        context: "notify only after terminal state",
+        notify_on_start: false,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(runtime.executionQueue!.get("terminal-only-1")).toMatchObject({ notifyOnStart: false, state: "running" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://runner.test/run",
+      expect.objectContaining({
+        body: JSON.stringify({
+          execution_id: "terminal-only-1",
+          target: "zenod-ai/zenod#42",
+          context: "notify only after terminal state",
+          notify_on_start: false,
+        }),
+      }),
+    );
   });
 
   it("does not post Console/Epaminon-owned string execution ids to Archus's numeric event endpoint", async () => {

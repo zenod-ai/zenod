@@ -333,7 +333,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "epaminon",
     title: "Run existing issue",
     description:
-      "Owner: Epaminon. Start execution for one exact existing work issue. Input must be a qualified target owner/repo#N. Use this for direct run/start/execute requests when the issue already exists. Do not use for status questions; use epaminon.execution_status/execution_status.",
+      "Owner: Epaminon. Start execution for one exact existing work issue. Input must be a qualified target owner/repo#N. Use this for direct run/start/execute requests when the issue already exists. Do not use for status questions; use epaminon.execution_status/execution_status. If the user asks to notify only after terminal/blocked state, pass notifyOnStart=false.",
     inputSchema: RUN_ISSUE_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },

@@ -123,7 +123,12 @@ async function launchExecution(settings: Settings, t: ExecutionTicket): Promise<
     const res = await fetch(`${base.replace(/\/$/, "")}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(secret ? { "X-Lane-Secret": secret } : {}) },
-      body: JSON.stringify({ execution_id: t.executionId, target: t.target, context: t.context }),
+      body: JSON.stringify({
+        execution_id: t.executionId,
+        target: t.target,
+        context: t.context,
+        ...(t.notifyOnStart === false ? { notify_on_start: false } : {}),
+      }),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) console.warn(`[exec-lane] runner refused /run for ${t.executionId} (HTTP ${res.status}) — awaiting runner #194`);

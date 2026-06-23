@@ -144,6 +144,10 @@ function pickupNotification(central) {
   return `🤖 Codex working on #${central.number} — ${central.title} (${central.target})`;
 }
 
+function shouldNotifyOnExecutionStart(body) {
+  return body?.notify_on_start !== false;
+}
+
 function primaryStatusLabel(names) {
   const set = new Set(names || []);
   return STATUS_LABEL_PRIORITY.find((name) => set.has(name)) || (names || []).find((name) => name.startsWith("status:")) || null;
@@ -1099,7 +1103,7 @@ async function scan(reason) {
 
 // POST /run — Epaminon dispatches an execution ticket to be worked now (#194).
 // Lane-secret gated (so only Epaminon can trigger a Codex run). Body:
-// { execution_id, target: "owner/repo#N", context }.
+// { execution_id, target: "owner/repo#N", context, notify_on_start?: boolean }.
 async function handleRun(req, res) {
   try {
     const chunks = [];
@@ -1114,7 +1118,7 @@ async function handleRun(req, res) {
     const result = launchDispatched(executionId, String(body.target), String(body.context || ""), state);
     if (!result.ok) {
       await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: result.note });
-    } else {
+    } else if (shouldNotifyOnExecutionStart(body)) {
       await notify(`🤖 Codex working on execution ${executionId} — ${String(body.target)}`);
     }
     saveState(state);
@@ -1169,6 +1173,7 @@ export {
   shouldReportEarlyLaunchExit,
   earlyLaunchFailureNote,
   launchLogPath,
+  shouldNotifyOnExecutionStart,
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
