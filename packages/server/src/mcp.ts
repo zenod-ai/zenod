@@ -43,7 +43,12 @@ export type GithubIssueEditor = (input: EditGithubIssueInput) => Promise<EditGit
 export type GithubIssueCreator = (input: CreateGithubIssueInput) => Promise<CreateGithubIssueResult>;
 export type ExecutionStatusReader = () => ExecutionTicket[] | null;
 export type BeforeExecutionStatusRead = () => Promise<void> | void;
-export type ExistingIssueRunner = (input: { target: string; instructions?: string; repo?: string }) => Promise<ExecutionTicket>;
+export type ExistingIssueRunner = (input: {
+  target: string;
+  instructions?: string;
+  repo?: string;
+  notifyOnStart?: boolean;
+}) => Promise<ExecutionTicket>;
 export type EphemeralTaskRunner = (input: { objective: string; instructions?: string; artifactPolicy?: string }) => Promise<ExecutionTicket>;
 export interface BacklogIssueReader {
   getIssue(input: { target: string }): Promise<ToolResponse>;

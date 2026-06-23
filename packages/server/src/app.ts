@@ -234,7 +234,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const bad = execLaneGate(c.req.header("X-Lane-Secret"));
     if (bad) return c.json({ error: bad.error }, bad.status);
     const body = await c.req
-      .json<{ execution_id?: number | string; target?: string; context?: string }>()
+      .json<{ execution_id?: number | string; target?: string; context?: string; notify_on_start?: boolean }>()
       .catch(() => ({}) as Record<string, unknown>);
     const executionId = body.execution_id != null ? String(body.execution_id) : "";
     if (!executionId || !body.target) return c.json({ error: "execution_id and target are required" }, 400);
@@ -242,6 +242,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       executionId,
       target: String(body.target),
       context: String(body.context ?? ""),
+      ...(body.notify_on_start === false ? { notifyOnStart: false } : {}),
     });
     return c.json({ ok: true });
   });
@@ -794,7 +795,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       arg: "target",
       inputSchema: "epaminon.run_existing_issue",
       description:
-        "Owner: Epaminon. Start execution for one exact existing GitHub issue/work ticket. Input must include target owner/repo#123. Use for run/start/execute requests when the issue already exists. Do NOT use for status questions; use epaminon_read_issue_execution_status.",
+        "Owner: Epaminon. Start execution for one exact existing GitHub issue/work ticket. Input must include target owner/repo#123. Use for run/start/execute requests when the issue already exists. Do NOT use for status questions; use epaminon_read_issue_execution_status. If the user says to notify only after terminal/blocked state, set notifyOnStart=false.",
     },
     {
       as: "epaminon_run_ephemeral_task",
@@ -1839,12 +1840,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           agent.backlog ? runtime.buildBacklogIssueReader() : undefined,
           (input) => runtime.whatsappStore.recentTranscript(input),
           runtime.executionQueue
-            ? async ({ target, instructions }) => {
+            ? async ({ target, instructions, notifyOnStart }) => {
                 const executionId = `direct-${Date.now()}-${randomBytes(4).toString("hex")}`;
                 const context = [`Direct Epaminon run requested for ${target}.`, instructions ? `User instructions: ${instructions}` : ""]
                   .filter(Boolean)
                   .join("\n");
-                await runtime.executionQueue!.enqueue({ executionId, target, context });
+                await runtime.executionQueue!.enqueue({
+                  executionId,
+                  target,
+                  context,
+                  ...(notifyOnStart === false ? { notifyOnStart: false } : {}),
+                });
                 return runtime.executionQueue!.get(executionId)!;
               }
             : undefined,

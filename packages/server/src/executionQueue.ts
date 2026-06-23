@@ -36,6 +36,8 @@ export interface ExecutionTicket {
   finalContent?: string;
   /** Whether this run's outcome is outward/irreversible (gates needs-review vs done). */
   outward?: boolean;
+  /** Whether the runner should notify when work starts. Terminal/block notifications still apply. */
+  notifyOnStart?: boolean;
   updatedAt: number;
 }
 
@@ -156,13 +158,14 @@ export class ExecutionQueue {
    * and start it if there's a slot. Idempotent: a duplicate id is ignored (so a
    * re-dispatch after a retry never double-runs).
    */
-  async enqueue(input: { executionId: string; target: string; context: string }): Promise<void> {
+  async enqueue(input: { executionId: string; target: string; context: string; notifyOnStart?: boolean }): Promise<void> {
     if (this.tickets.has(input.executionId)) return;
     const ticket: ExecutionTicket = {
       executionId: input.executionId,
       target: input.target,
       context: input.context,
       state: "queued",
+      ...(input.notifyOnStart === false ? { notifyOnStart: false } : {}),
       updatedAt: this.opts.now(),
     };
     this.tickets.set(input.executionId, ticket);

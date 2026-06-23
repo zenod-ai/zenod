@@ -23,6 +23,7 @@ import {
   workdirForRepo,
   dispatchedOutcome,
   shouldReportEarlyLaunchExit,
+  shouldNotifyOnExecutionStart,
   earlyLaunchFailureNote,
   launchLogPath,
   targetBootstrapLabels,
@@ -37,6 +38,12 @@ test("pickup notification says Codex is working with issue title and repo", () =
     pickupNotification({ number: 56, title: "Work-started visibility", target: "zenod-ai/zenod" }),
     "🤖 Codex working on #56 — Work-started visibility (zenod-ai/zenod)",
   );
+});
+
+test("direct execution pickup notification can be suppressed for terminal-only notification requests", () => {
+  assert.equal(shouldNotifyOnExecutionStart({}), true);
+  assert.equal(shouldNotifyOnExecutionStart({ notify_on_start: true }), true);
+  assert.equal(shouldNotifyOnExecutionStart({ notify_on_start: false }), false);
 });
 
 test("primaryStatusLabel prefers terminal worker state over stale proposed labels", () => {

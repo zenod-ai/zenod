@@ -101,6 +101,10 @@ export const RUN_ISSUE_SHAPE = {
     .describe("Exact work issue to run, as owner/repo#123. Do not pass a fuzzy reference."),
   instructions: z.string().min(1).optional().describe("Optional user instructions to include in Archus's execution request."),
   repo: z.string().min(1).optional().describe("Optional central backlog repo where Archus should mint the execution ticket, as owner/repo."),
+  notifyOnStart: z
+    .boolean()
+    .optional()
+    .describe("Set false only when the user explicitly asks not to be notified until terminal/blocked execution state."),
 };
 
 export const RUN_EPHEMERAL_TASK_SHAPE = {
