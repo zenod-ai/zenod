@@ -477,7 +477,7 @@ export class Runtime {
     return {
       console_create_issue_then_run: {
         description:
-          "Owner: Console. Durable multi-step workflow for one request that explicitly asks to create/file/open a GitHub issue AND run/start/execute that newly created issue. Use only when the request is runnable: target repo is known and the issue body has objective, scope boundaries, acceptance/done condition, and source context. If any of those are missing, ask one clarification before using this tool. This creates a journey, asks Archus to create the issue, then gives Epaminon the structured created issue artifact. Use this instead of separately calling Archus and Epaminon for create-and-run.",
+          "Owner: Console. Durable multi-step workflow for one request that explicitly asks to create/file/open a GitHub issue AND run/start/execute that newly created issue. Use only when the request is runnable: target repo is known and the issue body has objective, scope boundaries, acceptance/done condition, and source context. If any of those are missing, ask one clarification before using this tool. This creates a journey, asks Archus to create the issue, then gives Epaminon the structured created issue artifact. Use this instead of separately calling Archus and Epaminon for create-and-run. If the user asks to notify only after terminal/blocked state, set notifyOnStart=false.",
         inputSchema: z.object({
           originalRequest: z.string().optional().describe("the user's original request; omit to use the current message"),
           issue: z.object({
@@ -487,6 +487,7 @@ export class Runtime {
             labels: z.array(z.string()).optional().describe("labels to request on the created issue"),
           }),
           runInstructions: z.string().optional().describe("extra instructions Epaminon needs when running the created issue"),
+          notifyOnStart: z.boolean().optional().describe("Set false when the user wants notification only after terminal/blocked execution state."),
         }),
         run: async (input) => {
           const args = input as Partial<CreateIssueThenRunInput> & { issue?: CreateIssueThenRunInput["issue"] };

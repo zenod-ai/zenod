@@ -230,6 +230,57 @@ describe("createIssueThenRunJourney", () => {
     });
   });
 
+  it("passes notifyOnStart=false to Epaminon for terminal-only notification requests", async () => {
+    await withStore(async (store) => {
+      const calls: Array<{ peer: string; tool: string; args: Record<string, unknown> }> = [];
+      const callTool: JourneyPeerToolCaller = async (peer, tool, args) => {
+        calls.push({ peer: peer.name, tool, args });
+        if (peer.name === "archus") {
+          return {
+            content: [{ type: "text", text: "Created AlfaBlok/zenod#502" }],
+            structuredContent: {
+              repo: "AlfaBlok/zenod",
+              issueNumber: 502,
+              issueUrl: "https://github.com/AlfaBlok/zenod/issues/502",
+              labels: ["status:proposed"],
+            },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "Queued direct-test-502" }],
+          structuredContent: {
+            ticket: {
+              executionId: "direct-test-502",
+              target: args.target,
+              context: "Run it",
+              state: "queued",
+              updatedAt: 123,
+            },
+          },
+        };
+      };
+
+      const result = await createIssueThenRunJourney({
+        store,
+        archus,
+        epaminon,
+        callTool,
+        request: {
+          originalRequest: "create this and run it, then notify me only after Epaminon reports terminal or blocked",
+          issue: { repo: "AlfaBlok/zenod", title: "Create run terminal notify", body: runnableBody },
+          runInstructions: "Do not send a pickup/start notification; terminal notification only.",
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(calls[1]).toMatchObject({
+        peer: "epaminon",
+        tool: "epaminon.run_existing_issue",
+        args: { target: "AlfaBlok/zenod#502", notifyOnStart: false },
+      });
+    });
+  });
+
   it("blocks before creating or running when create-and-run lacks runnable details", async () => {
     await withStore(async (store) => {
       const calls: Array<{ peer: string; tool: string }> = [];

@@ -13,6 +13,7 @@ export interface CreateIssueThenRunInput {
     labels?: string[];
   };
   runInstructions?: string;
+  notifyOnStart?: boolean;
 }
 
 export interface CreatedIssueArtifact {
@@ -79,6 +80,12 @@ export function validateCreateIssueThenRunRequest(request: CreateIssueThenRunInp
   if (!CONTEXT_RE.test(body)) missing.push("source context");
 
   return missing;
+}
+
+function wantsTerminalOnlyNotification(request: CreateIssueThenRunInput): boolean {
+  if (request.notifyOnStart === false) return true;
+  const text = [request.originalRequest, request.runInstructions].filter(Boolean).join("\n");
+  return /\bnotify\s*(?:me\s*)?(?:only\s*)?after\b/i.test(text) || /\bterminal(?:\/|\s+or\s+)blocked\b/i.test(text) || /\bdo not send (?:a )?(?:pickup|start)/i.test(text);
 }
 
 export function peerToolText(result: PeerToolResult): string {
@@ -228,9 +235,11 @@ export async function createIssueThenRunJourney(input: {
   input.store.completeStep(createStep.id, { createdIssue }, now());
 
   input.store.dispatchStep(runStep.id, { deadlineAt: now() + 5 * 60_000 }, now());
+  const notifyOnStart = wantsTerminalOnlyNotification(request) ? false : undefined;
   const executionResult = await callTool(input.epaminon, "epaminon.run_existing_issue", {
     target: createdIssue.target,
     ...(request.runInstructions ? { instructions: request.runInstructions } : {}),
+    ...(notifyOnStart === false ? { notifyOnStart: false } : {}),
   });
   if (executionResult.isError) {
     const reason = peerToolText(executionResult) || "Epaminon run_existing_issue failed";
