@@ -20,7 +20,7 @@ async function withStore<T>(fn: (store: JourneyStore) => T | Promise<T>): Promis
 
 describe("JourneyMonitor", () => {
   it("ignores future wakeups, then claims and reconciles due steps", async () => {
-    await withStore((store) => {
+    await withStore(async (store) => {
       const journey = store.create({ surface: "console", originalRequest: "create issue" }, 100);
       const step = store.addStep(journey.id, { owner: "archus", title: "Create issue", wakeAt: 500 }, 110);
 
@@ -28,7 +28,7 @@ describe("JourneyMonitor", () => {
         now: () => 400,
         reconcileStep: () => ({ status: "completed", result: { ignored: true } }),
       });
-      expect(early.runOnce()).toMatchObject({ blocked: [], claimed: [], reconciled: [] });
+      await expect(early.runOnce()).resolves.toMatchObject({ blocked: [], claimed: [], reconciled: [] });
 
       const due = new JourneyMonitor(store, {
         now: () => 600,
@@ -45,7 +45,7 @@ describe("JourneyMonitor", () => {
           ],
         }),
       });
-      expect(due.runOnce()).toMatchObject({
+      await expect(due.runOnce()).resolves.toMatchObject({
         blocked: [],
         claimed: [expect.objectContaining({ id: step.id })],
         reconciled: [{ step: expect.objectContaining({ id: step.id }), action: expect.objectContaining({ status: "completed" }) }],
@@ -59,7 +59,7 @@ describe("JourneyMonitor", () => {
   });
 
   it("blocks a due step when reconciliation cannot find authority evidence", async () => {
-    await withStore((store) => {
+    await withStore(async (store) => {
       const journey = store.create({ surface: "console", originalRequest: "create issue" }, 100);
       const step = store.addStep(journey.id, { owner: "archus", title: "Create issue", wakeAt: 100 }, 110);
       const monitor = new JourneyMonitor(store, {
@@ -67,7 +67,7 @@ describe("JourneyMonitor", () => {
         reconcileStep: () => ({ status: "blocked", reason: "no GitHub issue found for idempotency key" }),
       });
 
-      const result = monitor.runOnce();
+      const result = await monitor.runOnce();
 
       expect(result.claimed).toEqual([expect.objectContaining({ id: step.id })]);
       expect(store.snapshot(journey.id)).toMatchObject({
@@ -78,7 +78,7 @@ describe("JourneyMonitor", () => {
   });
 
   it("does not claim the same due step while a lease is active", async () => {
-    await withStore((store) => {
+    await withStore(async (store) => {
       const journey = store.create({ surface: "console", originalRequest: "run issue" }, 100);
       const step = store.addStep(journey.id, { owner: "epaminon", title: "Run issue", wakeAt: 100 }, 110);
       const first = new JourneyMonitor(store, {
@@ -92,8 +92,8 @@ describe("JourneyMonitor", () => {
         reconcileStep: () => ({ status: "blocked", reason: "should not run" }),
       });
 
-      expect(first.runOnce().claimed).toEqual([expect.objectContaining({ id: step.id, leaseUntil: 1_200 })]);
-      expect(second.runOnce().claimed).toEqual([]);
+      expect((await first.runOnce()).claimed).toEqual([expect.objectContaining({ id: step.id, leaseUntil: 1_200 })]);
+      expect((await second.runOnce()).claimed).toEqual([]);
       expect(store.getStep(step.id)).toMatchObject({ status: "pending", leaseUntil: 1_200 });
     });
   });
