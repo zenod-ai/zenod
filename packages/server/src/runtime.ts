@@ -230,6 +230,7 @@ export class Runtime {
           if (!this.executionQueue) return null;
           return this.executionQueue.get(reference) ?? this.executionQueue.snapshot().find((ticket) => ticket.target === reference) ?? null;
         },
+        readMemoryJob: async (jobId) => this.taskJobQueue.get(jobId),
       }),
     });
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
