@@ -46,6 +46,7 @@ export async function createIssuesJourney(input: {
   const request = input.request;
   const fallbackRepo = repoFromText(request.originalRequest);
   const issues = request.issues.map((issue) => normalizeIssueRequest(issue, fallbackRepo));
+  const notifyMessage = request.notify?.message?.trim();
   const journey = input.store.create(
     {
       conversationId: request.conversationId ?? null,
@@ -53,7 +54,7 @@ export async function createIssuesJourney(input: {
       originalRequest: request.originalRequest,
       context: {
         interpretedGoal: "create multiple GitHub issues and optionally notify with the verified result",
-        pattern: request.notify ? "parallel_issue_creation_then_notify" : "parallel_issue_creation",
+        pattern: notifyMessage ? "parallel_issue_creation_then_notify" : "parallel_issue_creation",
       },
     },
     now(),
@@ -79,7 +80,7 @@ export async function createIssuesJourney(input: {
     ),
   );
   const notifyStep =
-    request.notify && input.phylax
+    notifyMessage && input.phylax
       ? input.store.addStep(
           journey.id,
           {
@@ -88,7 +89,7 @@ export async function createIssuesJourney(input: {
             dependencyIds: createSteps.map((step) => step.id),
             input: {
               intent: "notification.send",
-              message: request.notify.message,
+              message: notifyMessage,
               dependsOn: createSteps.map((step) => step.id),
               expectedArtifactKinds: ["notification"],
             },
@@ -153,7 +154,7 @@ export async function createIssuesJourney(input: {
     input.store.readyPendingDependents(journey.id, now());
     input.store.dispatchStep(notifyStep.id, { deadlineAt: now() + 5 * 60_000 }, now());
     const summary = [
-      request.notify?.message || "Notify Jordi that the requested GitHub issues were created.",
+      notifyMessage,
       "",
       "Verified created issues:",
       ...createdIssues.map((issue) => `- ${issue.target}: ${issue.url}`),
