@@ -93,6 +93,30 @@ const fixtures: FixtureExpectation[] = [
     mustContain: ["create no GitHub issue unless the user asks"],
   },
   {
+    name: "read-only smoke with epic wording should not create backlog",
+    text: [
+      "Read-only smoke test for the durable intake epic.",
+      "Please do not create issues, run tickets, store memory, notify anyone, or mutate any authority.",
+      "I want to make sure this long note is decomposed correctly.",
+      "Can you audit whether the voice note was properly processed?",
+      "Can you investigate what happened to the prior backlog UI request and report the searched scope?",
+      "I want you to use Zenod first for memory retrieval and contrast it with direct Obsidian or GitHub search.",
+      "Maybe this is a separate point: create a benchmark design for Zenod retrieval with token cost and reliability measurement, but do not actually create it in this smoke.",
+      "Also think about the escalation path where Epaminon gets blocked, Console receives the blocker, and Phylax notifies me only with evidence.",
+      "Finally, consider screenshot follow-up comments as related intake evidence.",
+    ].join(" "),
+    actionTypes: ["answer_now", "research", "research", "research", "notify_or_escalate", "research"],
+    resolutions: [
+      "answer_now",
+      "new_current_intent",
+      "query_prior_durable_work",
+      "new_current_intent",
+      "notify_or_escalate",
+      "new_current_intent",
+    ],
+    mustContain: ["Search existing memory/issues first", "Involve Phylax only with the event"],
+  },
+  {
     name: "priority change updates an existing durable work intent",
     text: [
       "Actually make the media attachment handling ticket higher priority than the benchmark ticket.",
