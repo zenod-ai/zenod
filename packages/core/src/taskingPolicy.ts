@@ -211,6 +211,17 @@ function hasActiveClaim(prose: string, verbs: string): boolean {
   return false;
 }
 
+function hasActiveIssueCreationClaim(prose: string): boolean {
+  const noun = "(?:issue|ticket|bug|backlog)";
+  const re = new RegExp(`(?:\\b(${CREATION_VERBS})\\b[\\s\\S]{0,80}\\b${noun}\\b|\\b${noun}\\b[\\s\\S]{0,80}\\b(${CREATION_VERBS})\\b)`, "gi");
+  for (const m of prose.matchAll(re)) {
+    const verbIndex = m.index + m[0].search(new RegExp(`\\b(${CREATION_VERBS})\\b`, "i"));
+    if (DESCRIPTIVE_LEAD.test(prose.slice(Math.max(0, verbIndex - 28), verbIndex))) continue;
+    return true;
+  }
+  return false;
+}
+
 /**
  * Issue numbers presented right next to a mutation verb on the same line —
  * "Queued #99", "#51 merged", or a receipt URL. A bare status-list noun
@@ -704,7 +715,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
 
   const claimsCreation =
     hasActiveClaim(prose, CREATION_VERBS) &&
-    (presented.size > 0 || /\b(issue|ticket)\b/i.test(prose)) &&
+    (presented.size > 0 || hasActiveIssueCreationClaim(prose)) &&
     !(executionGrounded && /\bexecution ticket\b/i.test(prose)) &&
     !ranNonCreateIssueWrite(actions);
 

@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -746,6 +747,15 @@ describe("WhatsAppGateway", () => {
       await gateway.handleEvent(audioEvent() as never);
       // One inline reply, no ack.
       await waitFor(() => socket.sent.length, (count) => count === 1);
+      const db = new DatabaseSync(join(dir, "whatsapp", "whatsapp.sqlite"));
+      try {
+        const row = db.prepare("SELECT storage_status FROM whatsapp_message_media WHERE message_id = ?").get("voice_1") as
+          | { storage_status: string }
+          | undefined;
+        expect(row?.storage_status).toBe("archive_unavailable");
+      } finally {
+        db.close();
+      }
 
       await gateway.handleEvent({
         ...(eventFromBaileysMessage(
