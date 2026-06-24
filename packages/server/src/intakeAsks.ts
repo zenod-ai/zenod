@@ -32,7 +32,7 @@ const MIN_MULTI_ASK_LENGTH = 500;
 
 const START_MARKER = /\b(?:also|finally|another thing|separate point|while you(?:'| a)?re at it|and then|then|so maybe|can you|could you|i want|i need|please|the question is)\b/gi;
 const EXPLICIT_ASK_SIGNAL =
-  /\b(?:can you|could you|please|i want|i need|research|investigate|look up|status|what happened|did this happen|create|open|file|ticket|issue|epic|backlog|run|execute|launch|start|notify|notification|phylax|escalat|priority|higher priority|blocked|handle that request)\b/i;
+  /\b(?:can you|could you|please|i want|i need|research|investigate|audit|look up|status|what happened|did this happen|create|open|file|ticket|issue|epic|backlog|run|execute|launch|start|notify|notification|phylax|escalat|priority|higher priority|blocked|handle that request)\b/i;
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -77,13 +77,18 @@ function classifyAsk(text: string): IntakeAskActionType {
   const notificationIsOnlyNegatedConstraint = /\bdo not\b[^.]{0,120}\b(?:notify|ping|write to me|send)\b/.test(lower);
   if (hasNotificationRequest && !notificationIsOnlyNegatedConstraint) return "notify_or_escalate";
   if (/\b(?:codex|epaminon|runner)\b/.test(lower)) return "execute";
-  if (/\b(?:what happened|did it become|existing|prior|previous|find it|look up|lookup|inspect|investigate|status)\b/.test(lower)) {
+  if (/\b(?:what happened|did it become|existing|prior|previous|find it|look up|lookup|inspect|investigate|audit|status)\b/.test(lower)) {
     return "research";
   }
   if (/\b(?:before we decide whether to open|unless i explicitly ask|do not turn (?:this|it)?[^.]{0,40}into)\b[^.]{0,80}\b(?:tickets?|issues?|backlog)\b/.test(lower)) {
     return "answer_now";
   }
-  if (/\b(?:create|open|file|ticket|issue|epic|backlog|priority|higher priority|urgent|rank)\b/.test(lower)) return "create_backlog";
+  if (
+    /\b(?:create|open|file|ticket|issue|priority|higher priority|urgent|rank)\b/.test(lower) ||
+    (/\b(?:backlog|epic)\b/.test(lower) && /\b(?:create|open|file|add|update|change|prioritize|higher priority)\b/.test(lower))
+  ) {
+    return "create_backlog";
+  }
   if (
     (/\bzenod\b|\bzenot\b|\bznot\b|\bxenot\b/.test(lower) && /\b(?:memory|brain|vault|retrieval|search|contrast|compare)\b/.test(lower)) ||
     (/\b(?:direct|obsidian|github|contrast|compare)\b/.test(lower) && /\b(?:search|brain|memory|retrieval)\b/.test(lower))
