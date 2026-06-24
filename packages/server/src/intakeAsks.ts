@@ -1,0 +1,150 @@
+export type IntakeAskActionType = "answer_now" | "research" | "create_backlog" | "execute" | "notify_or_escalate" | "clarify";
+
+export interface IntakeAsk {
+  id: string;
+  actionType: IntakeAskActionType;
+  summary: string;
+  sourceText: string;
+}
+
+const MAX_ASKS = 8;
+const MIN_MULTI_ASK_LENGTH = 500;
+
+const START_MARKER = /\b(?:also|another thing|separate point|while you(?:'| a)?re at it|and then|so maybe|can you|could you|i want|i need|please|the question is)\b/gi;
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function trimSentence(text: string, max = 180): string {
+  const normalized = normalizeWhitespace(text);
+  if (normalized.length <= max) return normalized;
+  const cut = normalized.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${cut.slice(0, Math.max(60, lastSpace)).trim()}...`;
+}
+
+function splitCandidateSegments(text: string): string[] {
+  const normalized = normalizeWhitespace(text);
+  if (!normalized) return [];
+  const boundaries = new Set<number>([0]);
+  for (const match of normalized.matchAll(START_MARKER)) {
+    if (match.index !== undefined && match.index > 80) boundaries.add(match.index);
+  }
+  for (const match of normalized.matchAll(/[?.!]\s+(?=[A-Z]|\b(?:Also|And|So|Can|Could|I|The)\b)/g)) {
+    if (match.index !== undefined) boundaries.add(match.index + match[0].length);
+  }
+  const sorted = [...boundaries].sort((a, b) => a - b);
+  const segments: string[] = [];
+  for (let i = 0; i < sorted.length; i += 1) {
+    const start = sorted[i]!;
+    const end = sorted[i + 1] ?? normalized.length;
+    const segment = normalized.slice(start, end).trim();
+    if (segment.length >= 35) segments.push(segment);
+  }
+  return segments;
+}
+
+function classifyAsk(text: string): IntakeAskActionType {
+  const lower = text.toLowerCase();
+  if (/\b(?:notify|notification|phylax|ping me|write to me|whatsapp|escalat|ask me)\b/.test(lower)) return "notify_or_escalate";
+  if (/\b(?:run|execute|launch|codex|epaminon|runner)\b/.test(lower)) return "execute";
+  if (/\b(?:create|open|file|ticket|issue|epic|backlog)\b/.test(lower)) return "create_backlog";
+  if (/\b(?:find|look up|lookup|research|inspect|investigate|compare|contrast|benchmark|diagnos|measure|token|status|what happened)\b/.test(lower)) {
+    return "research";
+  }
+  if (/\b(?:should|which|clarify|confirm|question)\b/.test(lower) || lower.endsWith("?")) return "clarify";
+  return "answer_now";
+}
+
+function summarizeAsk(segment: string, actionType: IntakeAskActionType): string {
+  const source = normalizeWhitespace(segment);
+  const lower = source.toLowerCase();
+  if (/\bvoice note\b/.test(lower) && /\b(?:managed|handled|processed|properly)\b/.test(lower)) {
+    return "Audit whether the voice note was properly processed and handled.";
+  }
+  if (/\b(?:ui|user interface)\b/.test(lower) && /\b(?:backlog|node|request)\b/.test(lower)) {
+    return "Investigate what happened to the prior backlog UI request.";
+  }
+  if (
+    (/\bzenod\b|\bzenot\b|\bznot\b|\bxenot\b/.test(lower) && /\b(?:direct|obsidian|github|contrast|compare|research memory)\b/.test(lower)) ||
+    (/\b(?:direct|obsidian|github|contrast|compare)\b/.test(lower) && /\b(?:search|brain|memory)\b/.test(lower))
+  ) {
+    return "Use Zenod for memory retrieval and contrast it with direct Obsidian/GitHub search.";
+  }
+  if (/\bbenchmark/.test(lower) || (/\btoken/.test(lower) && /\b(?:cost|reliability|tests?)\b/.test(lower))) {
+    return "Design a Zenod retrieval benchmark with token cost and reliability checks.";
+  }
+  if (/\bscreenshots?\b|\bimages?\b|\battachments?\b/.test(lower)) {
+    return "Handle screenshots and follow-up comments as related intake evidence.";
+  }
+  if (/\bphylax\b/.test(lower) || /\bnotification\b/.test(lower) || /\bescalat/.test(lower)) {
+    return "Test the escalation path from execution back to Console/Phylax/user.";
+  }
+  const prefix =
+    actionType === "research"
+      ? "Research"
+      : actionType === "create_backlog"
+        ? "Create backlog for"
+        : actionType === "execute"
+          ? "Execute"
+          : actionType === "notify_or_escalate"
+            ? "Notify/escalate"
+            : actionType === "clarify"
+              ? "Clarify"
+              : "Answer";
+  return `${prefix}: ${trimSentence(source, 120)}`;
+}
+
+function mergeSimilarAsks(asks: IntakeAsk[]): IntakeAsk[] {
+  const seen = new Set<string>();
+  const merged: IntakeAsk[] = [];
+  for (const ask of asks) {
+    const key = ask.summary.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push({ ...ask, id: `ask-${merged.length + 1}` });
+  }
+  return merged;
+}
+
+export function extractIntakeAsks(text: string): IntakeAsk[] {
+  const normalized = normalizeWhitespace(text);
+  if (normalized.length < MIN_MULTI_ASK_LENGTH && !/\b(?:also|another thing|separate point|while you(?:'| a)?re at it)\b/i.test(normalized)) {
+    return [];
+  }
+  const asks = splitCandidateSegments(normalized)
+    .map((segment) => {
+      const actionType = classifyAsk(segment);
+      return {
+        id: "",
+        actionType,
+        summary: summarizeAsk(segment, actionType),
+        sourceText: trimSentence(segment, 260),
+      };
+    })
+    .filter((ask) => ask.actionType !== "answer_now" || /\b(?:can you|i want|i need|please|question)\b/i.test(ask.sourceText));
+  return mergeSimilarAsks(asks).slice(0, MAX_ASKS);
+}
+
+export function formatIntakeAsks(asks: IntakeAsk[]): string {
+  return asks.map((ask, index) => `${index + 1}. [${ask.actionType}] ${ask.summary}`).join("\n");
+}
+
+export function intakeAsksContextNote(asks: IntakeAsk[]): string {
+  return [
+    "Console intake decomposition detected multiple asks in the current user message.",
+    "Treat them as separate asks. Do not flatten them into one vague answer. If acting on one ask, keep the others visible as open/pending unless you have receipts.",
+    "",
+    "Detected asks:",
+    formatIntakeAsks(asks),
+    "",
+    "Source snippets:",
+    ...asks.map((ask) => `- ${ask.id}: ${ask.sourceText}`),
+  ].join("\n");
+}
+
+export function prefixReplyWithIntakeAsks(reply: string, asks: IntakeAsk[]): string {
+  if (asks.length <= 1 || /^Detected asks:/i.test(reply.trim())) return reply;
+  return [`Detected asks:`, formatIntakeAsks(asks), "", reply].join("\n");
+}

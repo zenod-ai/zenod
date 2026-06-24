@@ -1185,10 +1185,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
     const actions: TaskingAction[] = [];
     const briefing = await vaultBriefing();
-    reportTokenCost("tasking", [briefing.text, ...window.map((m) => m.text), input.text], briefing);
+    const question = input.contextNote ? `${input.contextNote}\n\nOriginal user message:\n${input.text}` : input.text;
+    reportTokenCost("tasking", [briefing.text, ...window.map((m) => m.text), question], briefing);
     const result = await llm.answer(
       {
-        question: input.text,
+        question,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         onPeerAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
