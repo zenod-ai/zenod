@@ -69,6 +69,28 @@ export interface WhatsAppTranscriptEntry {
   status: string;
   mediaType: string | null;
   sentMessageId?: string | null;
+  media?: WhatsAppTranscriptMedia[];
+  linkedReceipts?: WhatsAppTranscriptReceipt[];
+}
+
+export interface WhatsAppTranscriptMedia {
+  mediaId: number;
+  mediaType: string;
+  mimeType: string | null;
+  fileName: string | null;
+  storageStatus: string;
+}
+
+export interface WhatsAppTranscriptReceipt {
+  at: number;
+  status: string;
+  sentMessageId: string | null;
+  bodyText: string;
+  driveLinks: string[];
+  driveFileIds: string[];
+  vaultEvidenceRefs: string[];
+  vaultCommits: string[];
+  vaultLinks: string[];
 }
 
 export interface WhatsAppTranscriptQuery {
@@ -116,6 +138,36 @@ function epochMsFromWhatsAppTimestamp(value: unknown): number | null {
       : Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
   return Math.round(seconds * 1000);
+}
+
+function uniqueMatches(text: string, re: RegExp): string[] {
+  return [...new Set([...text.matchAll(re)].map((match) => match[1]).filter((value): value is string => Boolean(value)))];
+}
+
+function driveFileIdFromLink(link: string): string | null {
+  const match = /\/file\/d\/([^/?#]+)/.exec(link);
+  return match?.[1] ?? null;
+}
+
+function receiptFromOutbound(row: {
+  at: number;
+  status: string;
+  sentMessageId: string | null;
+  bodyText: string;
+}): WhatsAppTranscriptReceipt | null {
+  if (!/^Storage receipt\b/i.test(row.bodyText.trim())) return null;
+  const driveLinks = uniqueMatches(row.bodyText, /(https:\/\/drive\.google\.com\/[^\s)]+)/g);
+  return {
+    at: row.at,
+    status: row.status,
+    sentMessageId: row.sentMessageId,
+    bodyText: row.bodyText,
+    driveLinks,
+    driveFileIds: driveLinks.map(driveFileIdFromLink).filter((id): id is string => Boolean(id)),
+    vaultEvidenceRefs: uniqueMatches(row.bodyText, /^Vault evidence:\s*(.+)$/gm),
+    vaultCommits: uniqueMatches(row.bodyText, /^Vault commit:\s*([0-9a-f]{7,40})$/gim),
+    vaultLinks: uniqueMatches(row.bodyText, /(https:\/\/github\.com\/[^\s)]+)/g),
+  };
 }
 
 export class WhatsAppStore {
@@ -510,6 +562,74 @@ export class WhatsAppStore {
       mediaType: string | null;
       sentMessageId: string | null;
     }>;
+    const inboundMessageIds = [
+      ...new Set(rows.filter((row) => row.direction === "inbound" && row.messageId).map((row) => row.messageId as string)),
+    ];
+    const mediaByMessage = new Map<string, WhatsAppTranscriptMedia[]>();
+    const receiptsByMessage = new Map<string, WhatsAppTranscriptReceipt[]>();
+    if (inboundMessageIds.length > 0) {
+      const placeholders = inboundMessageIds.map(() => "?").join(",");
+      const mediaRows = this.db
+        .prepare(
+          `SELECT
+             message_id AS messageId,
+             media_id AS mediaId,
+             media_type AS mediaType,
+             mime_type AS mimeType,
+             file_name AS fileName,
+             storage_status AS storageStatus
+           FROM whatsapp_message_media
+           WHERE message_id IN (${placeholders})
+           ORDER BY media_id ASC`,
+        )
+        .all(...inboundMessageIds) as unknown as Array<{
+        messageId: string;
+        mediaId: number;
+        mediaType: string;
+        mimeType: string | null;
+        fileName: string | null;
+        storageStatus: string;
+      }>;
+      for (const row of mediaRows) {
+        const bucket = mediaByMessage.get(row.messageId) ?? [];
+        bucket.push({
+          mediaId: row.mediaId,
+          mediaType: row.mediaType,
+          mimeType: row.mimeType,
+          fileName: row.fileName,
+          storageStatus: row.storageStatus,
+        });
+        mediaByMessage.set(row.messageId, bucket);
+      }
+
+      const receiptRows = this.db
+        .prepare(
+          `SELECT
+             message_id AS messageId,
+             created_at AS at,
+             status,
+             sent_message_id AS sentMessageId,
+             body_text AS bodyText
+           FROM whatsapp_outbound_audit
+           WHERE message_id IN (${placeholders})
+           ORDER BY created_at ASC`,
+        )
+        .all(...inboundMessageIds) as unknown as Array<{
+        messageId: string;
+        at: number;
+        status: string;
+        sentMessageId: string | null;
+        bodyText: string;
+      }>;
+      for (const row of receiptRows) {
+        const receipt = receiptFromOutbound(row);
+        if (!receipt) continue;
+        const bucket = receiptsByMessage.get(row.messageId) ?? [];
+        bucket.push(receipt);
+        receiptsByMessage.set(row.messageId, bucket);
+      }
+    }
+
     return rows.reverse().map((row) => ({
       direction: row.direction,
       at: row.at,
@@ -520,6 +640,8 @@ export class WhatsAppStore {
       status: row.status,
       mediaType: row.mediaType,
       ...(row.sentMessageId ? { sentMessageId: row.sentMessageId } : {}),
+      ...(row.messageId && mediaByMessage.has(row.messageId) ? { media: mediaByMessage.get(row.messageId) } : {}),
+      ...(row.messageId && receiptsByMessage.has(row.messageId) ? { linkedReceipts: receiptsByMessage.get(row.messageId) } : {}),
     }));
   }
 

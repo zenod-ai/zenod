@@ -471,7 +471,7 @@ export function buildMeshGatewayServer(
       {
         title: "Get recent conversation transcript",
         description:
-          "Owner: Console. Deterministically read recent WhatsApp/phone conversation transcript from the Console channel audit store. Includes inbound/outbound lines, timestamps, message ids, status, media type, and transcribed voice-note text when available. Use messageId when the user names a specific WhatsApp message or voice note; that returns the matching row and linked replies/receipts. Use broader window/contact filters for recent phone transcript reviews; empty transcript bodies are explicit gaps.",
+          "Owner: Console. Deterministically read recent WhatsApp/phone conversation transcript from the Console channel audit store. Includes inbound/outbound lines, timestamps, message ids, status, media type, transcribed voice-note text, structured media evidence, media storage status, and linked storage receipts when available. Use messageId when the user names a specific WhatsApp message, voice note, or screenshot; that returns the matching row and linked replies/receipts. Use broader window/contact filters for recent phone transcript reviews; empty transcript bodies or missing media receipts are explicit evidence gaps.",
         inputSchema: GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
