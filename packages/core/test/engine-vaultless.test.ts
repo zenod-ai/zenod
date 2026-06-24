@@ -81,6 +81,23 @@ describe("engine — vaultless (Console shell)", () => {
     expect(result).toMatch(/Axa policy ends March 2027/);
   });
 
+  it("uses tasking context notes for the model without storing them as the user message", async () => {
+    const { engine, llm } = vaultlessEngine();
+    await engine.handleTasking({
+      text: "raw user voice transcript",
+      surface: "whatsapp",
+      conversationKey: "ctx-note",
+      contextNote: "Detected asks:\n1. [research] Investigate the backlog UI request.",
+    });
+
+    expect(llm.lastInput?.question).toContain("Detected asks:");
+    expect(llm.lastInput?.question).toContain("Original user message:\nraw user voice transcript");
+
+    await engine.handleTasking({ text: "what did I just ask?", surface: "whatsapp", conversationKey: "ctx-note" });
+    expect(llm.lastInput?.conversation[0]).toEqual({ role: "user", text: "raw user voice transcript" });
+    expect(llm.lastInput?.conversation[0]?.text).not.toContain("Detected asks:");
+  });
+
   it("gates the vault-only methods with a clear error", async () => {
     const { engine } = vaultlessEngine();
     await expect(engine.ask("what do I know?")).rejects.toThrow(/no vault/i);

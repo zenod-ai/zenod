@@ -116,6 +116,11 @@ export interface TaskingInput {
     content: string;
     hints?: string[];
   };
+  /**
+   * Structured context for the model only. The engine still stores `text` as the
+   * user's message; this note is extra guidance derived by the transport/shell.
+   */
+  contextNote?: string;
 }
 
 export interface TaskingAction {

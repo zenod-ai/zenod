@@ -50,6 +50,7 @@ import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./con
 import { createIssueThenRunJourney, type CreateIssueThenRunInput, type CreateIssueThenRunResult } from "./createIssueRunJourney.js";
 import { createIssuesJourney, type CreateIssuesJourneyInput, type CreateIssuesJourneyResult } from "./parallelIssueJourney.js";
 import { runEphemeralJourney, type RunEphemeralJourneyInput, type RunEphemeralJourneyResult } from "./ephemeralJourney.js";
+import { extractIntakeAsks, intakeAsksContextNote, prefixReplyWithIntakeAsks } from "./intakeAsks.js";
 import {
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
@@ -345,6 +346,9 @@ export class Runtime {
     this.engine = {
       ...engine,
       handleTasking: (input) => {
+        const asks = this.agent.name === "console" ? extractIntakeAsks(input.text) : [];
+        const contextNote = asks.length > 1 ? [input.contextNote, intakeAsksContextNote(asks)].filter(Boolean).join("\n\n") : input.contextNote;
+        const taskingInput = contextNote ? { ...input, contextNote } : input;
         const context: TaskingRunContext = {
           parentConversationId: conversationId(input.surface, input.conversationKey),
           surface: input.surface,
@@ -353,7 +357,8 @@ export class Runtime {
         };
         return this.taskingContext.run(context, async () => {
           try {
-            return await engine.handleTasking(input);
+            const reply = await engine.handleTasking(taskingInput);
+            return asks.length > 1 ? { ...reply, text: prefixReplyWithIntakeAsks(reply.text, asks) } : reply;
           } finally {
             if (context.journeyId) this.journeyStore.completeJourneyIfReady(context.journeyId);
           }
