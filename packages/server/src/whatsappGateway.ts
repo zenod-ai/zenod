@@ -31,7 +31,13 @@ import {
   senderIsAllowed,
   type WhatsAppSettings,
 } from "./whatsappConfig.js";
-import { WhatsAppStore, type WhatsAppInboundEvent, type WhatsAppStoreDiagnostics } from "./whatsappStore.js";
+import {
+  WhatsAppStore,
+  type WhatsAppInboundEvent,
+  type WhatsAppMediaFollowUpLink,
+  type WhatsAppStoreDiagnostics,
+  type WhatsAppTranscriptFollowUp,
+} from "./whatsappStore.js";
 
 export type WhatsAppConnectionState = "disabled" | "disconnected" | "pairing" | "connected" | "error";
 
@@ -754,7 +760,8 @@ export class WhatsAppGateway {
       // like text. Keeping/filing a substantive note happens after the reply.
     }
 
-    const localStatus = this.localDigestStatusReply(event);
+    const mediaFollowUp = event.hasMedia ? null : this.options.store.linkRecentMediaFollowUp(event);
+    const localStatus = this.localDigestStatusReply(event, mediaFollowUp);
     if (localStatus) {
       this.options.store.markMessageStatus(event.messageId, "replied_from_digest_state");
       await this.sendReply(event, localStatus, "sent");
@@ -778,7 +785,7 @@ export class WhatsAppGateway {
       this.options.store.markMessageStatus(event.messageId, "processing");
       const engine = await this.options.getEngine();
       const reply = await engine.handleTasking({
-        text: input.text,
+        text: this.withMediaFollowUpContext(input.text, mediaFollowUp),
         surface: "whatsapp",
         conversationKey: normalizeWhatsAppIdentifier(event.senderId) || event.senderId,
         ...(input.rawEvidence ? { rawEvidence: input.rawEvidence } : {}),
@@ -920,7 +927,7 @@ export class WhatsAppGateway {
     ].join("\n");
   }
 
-  private localDigestStatusReply(event: WhatsAppInboundEvent): string | null {
+  private localDigestStatusReply(event: WhatsAppInboundEvent, mediaFollowUp: WhatsAppMediaFollowUpLink | null = null): string | null {
     const text = event.body.trim();
     if (!text) return null;
     if (!this.isLocalDigestStatusQuestion(text)) return null;
@@ -937,6 +944,7 @@ export class WhatsAppGateway {
       return [
         `Latest media ingest status: ${status.status}.`,
         `Source: ${source}, received ${received}.`,
+        ...(mediaFollowUp ? [`Follow-up attached: ${mediaFollowUp.followupText}`] : []),
         "",
         status.lastReport.bodyText,
       ].join("\n");
@@ -946,15 +954,35 @@ export class WhatsAppGateway {
       `Latest media ingest status: ${status.status}.`,
       `Source: ${source}, received ${received}.`,
       `Digest job: wa-${status.messageId}.`,
+      ...(mediaFollowUp ? [`Follow-up attached to ${mediaFollowUp.mediaMessageId}: ${mediaFollowUp.followupText}`] : []),
       "No final digest report has been recorded yet.",
     ].join("\n");
+  }
+
+  private withMediaFollowUpContext(text: string, mediaFollowUp: WhatsAppMediaFollowUpLink | null): string {
+    if (!mediaFollowUp) return text;
+    const ageSeconds = Math.round(mediaFollowUp.ageMs / 1000);
+    return [
+      "WhatsApp media follow-up context:",
+      `This message was sent ${ageSeconds}s after ${mediaFollowUp.mediaType ?? "media"} message ${mediaFollowUp.mediaMessageId}.`,
+      `Current media processing status: ${mediaFollowUp.mediaStatus}.`,
+      "Treat the user's text as a comment/annotation on that media intake unless they clearly redirect.",
+      "",
+      "User follow-up text:",
+      text,
+    ].join("\n");
+  }
+
+  private formatLinkedFollowUps(followUps: WhatsAppTranscriptFollowUp[]): string {
+    if (followUps.length === 0) return "";
+    return ["", "Linked follow-up comment(s):", ...followUps.map((item) => `- ${item.messageId}: ${item.bodyText}`), ""].join("\n");
   }
 
   private isLocalDigestStatusQuestion(text: string): boolean {
     const asksForStatus = /\b(status|progress|done|finished|complete|completed|happen(?:ed)?|where|filed|transcrib(?:e|ed|ing)|digest(?:ed|ion)?)\b/i.test(
       text,
     );
-    const asksAboutIngest = /\b(image|photo|media|attachment|note|transcript|digest|ingest|file)\b/i.test(text);
+    const asksAboutIngest = /\b(image|picture|photo|screenshot|media|attachment|note|transcript|digest|ingest|file)\b/i.test(text);
     if (!asksForStatus || !asksAboutIngest) return false;
 
     // This shortcut is only for quick local status checks. Longer tasking
@@ -1039,7 +1067,8 @@ export class WhatsAppGateway {
         const sender = normalizeWhatsAppIdentifier(event.senderId) || event.senderName;
         const description = await engine.describeImage(data, mimeType);
         const captionLine = event.body.trim() ? `\nCaption: ${event.body.trim()}\n\n` : "\n\n";
-        const text = `WhatsApp image from ${sender}:${captionLine}${description}`;
+        const followUps = this.options.store.followUpsForMedia(event.messageId);
+        const text = `WhatsApp image from ${sender}:${captionLine}${description}${this.formatLinkedFollowUps(followUps)}`;
         const conversationKey = normalizeWhatsAppIdentifier(event.senderId) || event.senderId;
         const reply = await engine.handleTasking({ text, surface: "whatsapp", conversationKey });
         this.options.store.markMessageStatus(event.messageId, "replied");
@@ -1156,7 +1185,10 @@ export class WhatsAppGateway {
           archiveUnavailableReason,
           archiveLabel,
         });
-        if (receipt) return this.sendBackgroundReply(event, receipt, "sent");
+        if (receipt) {
+          const followUps = media?.kind === "image" ? this.options.store.followUpsForMedia(event.messageId) : [];
+          return this.sendBackgroundReply(event, `${receipt}${this.formatLinkedFollowUps(followUps)}`, "sent");
+        }
       })
       .catch((err: unknown) => {
         console.error("[whatsapp] storage receipt failed:", err);

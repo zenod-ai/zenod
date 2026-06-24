@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { conversationId, type BrainEngine, type StoreInput, type StoreResult } from "zenod";
 import { createApp } from "../src/app.js";
+import { formatConversationTranscript } from "../src/conversationTranscript.js";
 import { Runtime } from "../src/runtime.js";
 import {
   maskPhoneNumber,
@@ -149,6 +150,28 @@ function audioEvent(overrides: Record<string, unknown> = {}) {
     mediaRaw: {},
     raw: {
       key: { id: "voice_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
+    },
+    ...overrides,
+  };
+}
+
+function imageEvent(overrides: Record<string, unknown> = {}) {
+  return {
+    messageId: "image_1",
+    chatId: "34611111111@s.whatsapp.net",
+    senderId: "34611111111@s.whatsapp.net",
+    senderName: "Tester",
+    chatName: "Tester",
+    isGroup: false,
+    timestamp: 1_800_000_000,
+    body: "",
+    hasMedia: true,
+    mediaType: "image",
+    mimeType: "image/jpeg",
+    fileName: "photo.jpg",
+    mediaRaw: {},
+    raw: {
+      key: { id: "image_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
     },
     ...overrides,
   };
@@ -774,6 +797,90 @@ describe("WhatsAppGateway", () => {
       expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBeUndefined();
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("links immediate text follow-ups to the recent image intake in transcript readback", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-media-followup-store-"));
+    const store = new WhatsAppStore(join(dir, "whatsapp.sqlite"));
+    try {
+      store.recordInbound(imageEvent() as never);
+      store.markMessageStatus("image_1", "digest_queued");
+      const commentEvent = imageEvent({
+        messageId: "comment_1",
+        body: "this comment is related to the picture: please remember the red marker",
+        hasMedia: false,
+        mediaType: null,
+        mimeType: null,
+        fileName: null,
+        mediaRaw: undefined,
+        raw: { key: { id: "comment_1" } },
+      });
+      store.recordInbound(commentEvent as never);
+
+      const linked = store.linkRecentMediaFollowUp(commentEvent as never);
+
+      expect(linked).toMatchObject({
+        mediaMessageId: "image_1",
+        followupMessageId: "comment_1",
+        mediaStatus: "digest_queued",
+      });
+      const [image] = store.recentTranscript({ messageId: "image_1" });
+      expect(image?.linkedFollowUps).toEqual([
+        expect.objectContaining({
+          messageId: "comment_1",
+          bodyText: "this comment is related to the picture: please remember the red marker",
+        }),
+      ]);
+      const transcript = formatConversationTranscript(store.recentTranscript({ messageId: "image_1" }));
+      expect(transcript).toContain("Linked follow-up comment(s):");
+      expect(transcript).toContain("please remember the red marker");
+    } finally {
+      store.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("answers pending media status with the attached follow-up comment instead of a bare not-done", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-media-followup-status-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      runtime.whatsappStore.recordInbound(imageEvent() as never);
+      runtime.whatsappStore.markMessageStatus("image_1", "digest_queued");
+
+      await gateway.handleEvent(
+        imageEvent({
+          messageId: "comment_1",
+          body: "this comment is related to the picture, did this happen already?",
+          hasMedia: false,
+          mediaType: null,
+          mimeType: null,
+          fileName: null,
+          mediaRaw: undefined,
+          raw: { key: { id: "comment_1" } },
+        }) as never,
+      );
+
+      expect(socket.sent).toHaveLength(1);
+      expect(socket.sent[0]!.text).toContain("Latest media ingest status: digest_queued");
+      expect(socket.sent[0]!.text).toContain("Follow-up attached to image_1");
+      expect(socket.sent[0]!.text).toContain("No final digest report has been recorded yet.");
+      const [image] = runtime.whatsappStore.recentTranscript({ messageId: "image_1" });
+      expect(image?.linkedFollowUps?.[0]?.bodyText).toContain("did this happen already");
+    } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });
     }
