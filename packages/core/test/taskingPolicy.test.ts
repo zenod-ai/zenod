@@ -265,6 +265,22 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("does not treat explicit read-only/no-mutation confirmations as execution claims", () => {
+    const reply = [
+      "Per your explicit read-only instruction, I did not create issues, run tickets, store memory, or notify anyone.",
+      "",
+      "Detected asks:",
+      "1. [research] Investigate what happened to the prior backlog UI request.",
+      "2. [create_backlog] Design a Zenod retrieval benchmark.",
+      "",
+      "Current intent ledger:",
+      "1. [open -> query_prior_durable_work] Investigate what happened to the prior backlog UI request.",
+      "2. [open -> propose_durable_backlog] Design a Zenod retrieval benchmark.",
+    ].join("\n");
+
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
   it("does not correct an execution status answer backed by the Console-facing Epaminon status tool", () => {
     const reply = "#109 is needs-review for AlfaBlok/obsidian-brain#108.";
     const actions: RecordedAction[] = [

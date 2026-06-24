@@ -476,6 +476,7 @@ const NEGATIVE_QUEUE_RE =
 const NEGATIVE_CREATED_QUEUED_RE = /\b(?:no|not|never)\b[\s\S]{0,80}\bcreated\b[\s\S]{0,80}\bqueued\b/i;
 const GENERIC_NO_SIDE_EFFECT_RE =
   /\bno issues? (?:were |was )?(?:edited|changed|created|closed)(?:[, ]+(?:or|and)?\s*(?:run|queued|edited|changed|created|closed))*\b/i;
+const READ_ONLY_CONSTRAINT_LINE_RE = /\b(?:read[- ]only|per (?:your )?(?:explicit )?instruction|no mutations?|no actions?|no side effects?)\b/i;
 const GITHUB_ISSUE_LIST_ITEM_RE = /^[-*]\s+.*https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+\b/i;
 const TOOL_DESCRIPTION_LIST_ITEM_RE = /^[-*]\s+`[a-z0-9_.-]+`\s*:/i;
 const DIRECT_EXECUTION_ASSERTION_RE =
@@ -487,6 +488,7 @@ function executionClaimLines(prose: string): string[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => !GENERIC_NO_SIDE_EFFECT_RE.test(line))
+    .filter((line) => !READ_ONLY_CONSTRAINT_LINE_RE.test(line))
     .filter((line) => !TOOL_DESCRIPTION_LIST_ITEM_RE.test(line))
     .filter((line) => !(GITHUB_ISSUE_LIST_ITEM_RE.test(line) && !DIRECT_EXECUTION_ASSERTION_RE.test(line)))
     .filter((line) => EXECUTION_STATE_RE.test(line) || NEGATIVE_QUEUE_RE.test(line) || NEGATIVE_CREATED_QUEUED_RE.test(line));
