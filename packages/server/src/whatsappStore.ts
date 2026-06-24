@@ -302,6 +302,16 @@ export class WhatsAppStore {
       .run(transcript, messageId);
   }
 
+  markMediaStorageStatus(messageId: string, status: string): void {
+    this.db
+      .prepare(
+        `UPDATE whatsapp_message_media
+         SET storage_status = ?
+         WHERE message_id = ?`,
+      )
+      .run(status, messageId);
+  }
+
   recordOutboundAudit(input: {
     messageId?: string | null;
     chatId: string;

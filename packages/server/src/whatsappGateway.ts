@@ -18,7 +18,6 @@ import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { formatStorageReceipt } from "./storageReceipt.js";
 import {
-  agentKeptNote,
   archiveImage,
   archiveVoiceNote,
   driveArchiveUnavailableReason,
@@ -1117,19 +1116,23 @@ export class WhatsAppGateway {
     media?: { input: VoiceAudio; kind: "voice" | "image" },
   ): void {
     const jobId = extractJobId(reply);
-    // Archive the original media to Drive only when the agent kept the note —
-    // same gate for voice and images, so the binary lands in Drive alongside
-    // the vault note describing it.
-    const shouldArchive = media && agentKeptNote(reply);
-    if (!jobId && !shouldArchive) return;
+    // Archive the original media whenever we have the bytes. Memory filing is a
+    // separate agent decision, but the raw attachment is source evidence and must
+    // not depend on whether the model chose to keep distilled meaning.
     const archiveLabel = media?.kind === "image" ? "image" : "audio";
-    const archiveUnavailableReason = shouldArchive ? driveArchiveUnavailableReason(this.options.settings) : null;
+    const archiveUnavailableReason = media ? driveArchiveUnavailableReason(this.options.settings) : null;
+    const shouldArchive = Boolean(media) && archiveUnavailableReason === null;
+    if (media && !shouldArchive) {
+      this.options.store.markMediaStorageStatus(event.messageId, "archive_unavailable");
+    }
+    if (!jobId && !shouldArchive) return;
     const peers = this.options.settings.peers();
     const poll = jobId && peers.length ? pollPeerJob(peers, jobId) : Promise.resolve(null);
-    const archive = shouldArchive
-      ? (media.kind === "image"
-          ? archiveImage(this.options.settings, media.input)
-          : archiveVoiceNote(this.options.settings, media.input))
+    const archiveMedia = shouldArchive ? media : undefined;
+    const archive = archiveMedia
+      ? (archiveMedia.kind === "image"
+          ? archiveImage(this.options.settings, archiveMedia.input)
+          : archiveVoiceNote(this.options.settings, archiveMedia.input))
           .then((res) => ({ result: res }))
           .catch((err: unknown) => ({ error: err }))
       : Promise.resolve(null);
@@ -1137,6 +1140,10 @@ export class WhatsAppGateway {
       .then(([job, archived]) => {
         const archivedResult = archived && "result" in archived ? archived.result : undefined;
         const archivedError = archived && "error" in archived ? archived.error : undefined;
+        if (media) {
+          const status = archivedResult ? "archived" : archivedError ? "archive_failed" : "archive_skipped";
+          this.options.store.markMediaStorageStatus(event.messageId, status);
+        }
         if (job?.status === "error" && !archivedResult && !archivedError) {
           return this.sendBackgroundReply(event, "⚠️ Filing failed — let me know if you'd like to retry.", "sent");
         }

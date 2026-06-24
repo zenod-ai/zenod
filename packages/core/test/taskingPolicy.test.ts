@@ -71,6 +71,14 @@ describe("reconcileTaskingReply", () => {
     expect(out).toContain("no GitHub issue was created");
   });
 
+  it("does not emit a creation correction for a read reply that only says a topic was raised", () => {
+    const reply = [
+      "Point 6: The benchmark epic can be turned into a tracked journey once the notification-flow test is prioritised.",
+      "Point 7: You flagged the notification path test as higher priority. I’ve raised that as the immediate focus.",
+    ].join("\n");
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
   it("does not correct a partial result: leaves the genuinely-created issue when another create failed", () => {
     const reply = "Created issue #25: https://github.com/zenod-ai/zenod/issues/25";
     const actions: RecordedAction[] = [
