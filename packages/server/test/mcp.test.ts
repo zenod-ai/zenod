@@ -206,6 +206,7 @@ describe("MCP endpoint", () => {
       raw: {},
     });
     runtime.whatsappStore.recordInboundTranscript("voice_mcp_1", "raw voice transcript from WhatsApp");
+    runtime.whatsappStore.markMediaStorageStatus("voice_mcp_1", "archived");
     runtime.whatsappStore.recordOutboundAudit({
       messageId: "voice_mcp_1",
       chatId: "34611111111@s.whatsapp.net",
@@ -213,6 +214,21 @@ describe("MCP endpoint", () => {
       bodyText: "reply to the voice note",
       status: "sent",
       sentMessageId: "sent_voice_mcp_1",
+    });
+    runtime.whatsappStore.recordOutboundAudit({
+      messageId: "voice_mcp_1",
+      chatId: "34611111111@s.whatsapp.net",
+      contactId: "34611111111@s.whatsapp.net",
+      bodyText:
+        "Storage receipt\n" +
+        "Drive audio: voice-2026-06-24T14-06-08-990Z-34611111111.ogg\n" +
+        "Drive link: https://drive.google.com/file/d/drive-file-voice-mcp-1/view?usp=drivesdk\n" +
+        "Vault evidence: Log/2026-06-24.md#^e-test\n" +
+        "Vault commit: 1234567890abcdef\n" +
+        "Vault link(s):\n" +
+        "- https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-06-24.md",
+      status: "sent",
+      sentMessageId: "sent_voice_mcp_1_receipt",
     });
 
     const result = await client.callTool({
@@ -225,10 +241,19 @@ describe("MCP endpoint", () => {
       .join("\n");
     expect(text).toContain("voice_mcp_1");
     expect(text).toContain("media=ptt");
+    expect(text).toContain("storage=archived");
+    expect(text).toContain("drive-file-voice-mcp-1");
     expect(text).toContain("chars=34");
     expect(text).toContain("raw voice transcript from WhatsApp");
     expect(text).toContain("reply to the voice note");
-    expect((result.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
+    const entries = (result.structuredContent as { entries: Array<Record<string, unknown>> }).entries;
+    expect(entries).toHaveLength(3);
+    const inbound = entries.find((entry) => entry.direction === "inbound") as
+      | { media?: Array<{ storageStatus?: string }>; linkedReceipts?: Array<{ driveFileIds?: string[]; vaultEvidenceRefs?: string[] }> }
+      | undefined;
+    expect(inbound?.media?.[0]?.storageStatus).toBe("archived");
+    expect(inbound?.linkedReceipts?.[0]?.driveFileIds).toContain("drive-file-voice-mcp-1");
+    expect(inbound?.linkedReceipts?.[0]?.vaultEvidenceRefs).toContain("Log/2026-06-24.md#^e-test");
 
     const exact = await client.callTool({
       name: "get_recent_conversation_transcript",
@@ -240,7 +265,9 @@ describe("MCP endpoint", () => {
       .join("\n");
     expect(exactText).toContain("raw voice transcript from WhatsApp");
     expect(exactText).toContain("reply to the voice note");
-    expect((exact.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
+    expect(exactText).toContain("storage=archived");
+    expect(exactText).toContain("Drive link: https://drive.google.com/file/d/drive-file-voice-mcp-1/view?usp=drivesdk");
+    expect((exact.structuredContent as { entries: unknown[] }).entries).toHaveLength(3);
 
     const oldExact = await client.callTool({
       name: "get_recent_conversation_transcript",
