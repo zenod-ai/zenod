@@ -24,6 +24,7 @@ export interface CurrentIntentEntry {
   status: CurrentIntentStatus;
   resolution: CurrentIntentResolution;
   reason: string;
+  safeAction: string;
 }
 
 const MAX_ASKS = 8;
@@ -66,8 +67,9 @@ function splitCandidateSegments(text: string): string[] {
 
 function classifyAsk(text: string): IntakeAskActionType {
   const lower = text.toLowerCase();
+  if (/\b(?:run|execute|launch|start)\b/.test(lower)) return "execute";
   if (/\b(?:notify|notification|phylax|ping me|write to me|whatsapp|escalat|ask me)\b/.test(lower)) return "notify_or_escalate";
-  if (/\b(?:run|execute|launch|codex|epaminon|runner)\b/.test(lower)) return "execute";
+  if (/\b(?:codex|epaminon|runner)\b/.test(lower)) return "execute";
   if (/\b(?:what happened|did it become|existing|prior|previous|find it|look up|lookup|inspect|investigate|status)\b/.test(lower)) {
     return "research";
   }
@@ -163,24 +165,69 @@ export function resolveCurrentIntents(asks: IntakeAsk[]): CurrentIntentEntry[] {
     const lower = `${ask.summary} ${ask.sourceText}`.toLowerCase();
     const base = { askId: ask.id, actionType: ask.actionType, summary: ask.summary, sourceText: ask.sourceText };
     if (ask.actionType === "clarify") {
-      return { ...base, status: "awaiting_user", resolution: "awaiting_user", reason: "The ask is ambiguous and needs user clarification before action." };
+      return {
+        ...base,
+        status: "awaiting_user",
+        resolution: "awaiting_user",
+        reason: "The ask is ambiguous and needs user clarification before action.",
+        safeAction: "Ask one concrete clarification; do not mutate any authority until the user answers.",
+      };
     }
     if (ask.actionType === "execute") {
-      return { ...base, status: "open", resolution: "delegate_execution", reason: "Execution belongs to Epaminon after the target and approval are clear." };
+      const hasNotificationFollowup = /\b(?:notify|notification|phylax|ping me|write to me|whatsapp|escalat|ask me)\b/.test(lower);
+      return {
+        ...base,
+        status: "open",
+        resolution: "delegate_execution",
+        reason: "Execution belongs to Epaminon after the target and approval are clear.",
+        safeAction: hasNotificationFollowup
+          ? "Delegate to Epaminon only with an exact target and explicit run approval; after execution evidence exists, involve Phylax with the event, urgency, and source evidence."
+          : "Delegate to Epaminon only with an exact target and explicit run approval; otherwise ask for the missing target/scope.",
+      };
     }
     if (ask.actionType === "notify_or_escalate") {
-      return { ...base, status: "open", resolution: "notify_or_escalate", reason: "Notification or escalation belongs to Phylax/Console routing after evidence exists." };
+      return {
+        ...base,
+        status: "open",
+        resolution: "notify_or_escalate",
+        reason: "Notification or escalation belongs to Phylax/Console routing after evidence exists.",
+        safeAction: "Involve Phylax only with the event, urgency, and source evidence; otherwise keep the notification step pending.",
+      };
     }
     if (ask.actionType === "create_backlog") {
-      return { ...base, status: "open", resolution: "propose_durable_backlog", reason: "This appears to need a durable GitHub/backlog record if not already present." };
+      return {
+        ...base,
+        status: "open",
+        resolution: "propose_durable_backlog",
+        reason: "This appears to need a durable GitHub/backlog record if not already present.",
+        safeAction: "Create/propose a GitHub issue only if the user asked for durable tracking; include the issue URL before saying it was created.",
+      };
     }
     if (/\b(?:what happened|prior|previous|existing|did it become|already|ever become)\b/.test(lower)) {
-      return { ...base, status: "open", resolution: "query_prior_durable_work", reason: "The ask references prior work, so Console should search existing memory/issues before proposing new work." };
+      return {
+        ...base,
+        status: "open",
+        resolution: "query_prior_durable_work",
+        reason: "The ask references prior work, so Console should search existing memory/issues before proposing new work.",
+        safeAction: "Search existing memory/issues first and report the searched scope; do not create a duplicate unless the search misses and the user wants one.",
+      };
     }
     if (ask.actionType === "research") {
-      return { ...base, status: "open", resolution: "new_current_intent", reason: "This is a distinct research intent to track until answered or delegated." };
+      return {
+        ...base,
+        status: "open",
+        resolution: "new_current_intent",
+        reason: "This is a distinct research intent to track until answered or delegated.",
+        safeAction: "Answer or research directly; create no GitHub issue unless the user asks to track it durably.",
+      };
     }
-    return { ...base, status: "open", resolution: "answer_now", reason: "Console can answer directly or keep it visible while other asks are handled." };
+    return {
+      ...base,
+      status: "open",
+      resolution: "answer_now",
+      reason: "Console can answer directly or keep it visible while other asks are handled.",
+      safeAction: "Answer directly and mark the ask fulfilled only if the reply actually addresses it.",
+    };
   });
 }
 
@@ -188,6 +235,10 @@ export function formatCurrentIntentLedger(entries: CurrentIntentEntry[]): string
   return entries
     .map((entry, index) => `${index + 1}. [${entry.status} -> ${entry.resolution}] ${entry.summary}`)
     .join("\n");
+}
+
+export function formatSafeActionPlan(entries: CurrentIntentEntry[]): string {
+  return entries.map((entry, index) => `${index + 1}. ${entry.summary} — ${entry.safeAction}`).join("\n");
 }
 
 export function intakeAsksContextNote(asks: IntakeAsk[]): string {
@@ -202,6 +253,11 @@ export function intakeAsksContextNote(asks: IntakeAsk[]): string {
     "Current intent ledger decisions:",
     formatCurrentIntentLedger(intents),
     "",
+    "Safe action plan:",
+    formatSafeActionPlan(intents),
+    "",
+    "Receipt rule: never say created, filed, queued, running, stored, notified, or closed unless the same turn has the concrete authority receipt/link. If no receipt exists, say pending, searched, or needs clarification.",
+    "",
     "Source snippets:",
     ...asks.map((ask) => `- ${ask.id}: ${ask.sourceText}`),
   ].join("\n");
@@ -209,5 +265,17 @@ export function intakeAsksContextNote(asks: IntakeAsk[]): string {
 
 export function prefixReplyWithIntakeAsks(reply: string, asks: IntakeAsk[]): string {
   if (asks.length <= 1 || /^Detected asks:/i.test(reply.trim())) return reply;
-  return [`Detected asks:`, formatIntakeAsks(asks), "", "Current intent ledger:", formatCurrentIntentLedger(resolveCurrentIntents(asks)), "", reply].join("\n");
+  const intents = resolveCurrentIntents(asks);
+  return [
+    `Detected asks:`,
+    formatIntakeAsks(asks),
+    "",
+    "Current intent ledger:",
+    formatCurrentIntentLedger(intents),
+    "",
+    "Safe action plan:",
+    formatSafeActionPlan(intents),
+    "",
+    reply,
+  ].join("\n");
 }

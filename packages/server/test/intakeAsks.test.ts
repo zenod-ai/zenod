@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { extractIntakeAsks, formatCurrentIntentLedger, formatIntakeAsks, intakeAsksContextNote, resolveCurrentIntents } from "../src/intakeAsks.js";
+import {
+  extractIntakeAsks,
+  formatCurrentIntentLedger,
+  formatIntakeAsks,
+  formatSafeActionPlan,
+  intakeAsksContextNote,
+  resolveCurrentIntents,
+} from "../src/intakeAsks.js";
 
 describe("intake ask extraction", () => {
   it("extracts the anchor voice-note asks into visible classified items", () => {
@@ -52,6 +59,25 @@ describe("intake ask extraction", () => {
     });
     expect(formatted).toContain("[open -> query_prior_durable_work]");
     expect(formatted).toContain("[open -> propose_durable_backlog]");
+    expect(intents[0]?.safeAction).toContain("Search existing memory/issues first");
+    expect(intents[1]?.safeAction).toContain("include the issue URL");
+  });
+
+  it("builds a safe action plan with receipt and clarification boundaries", () => {
+    const asks = extractIntakeAsks(
+      [
+        "Can you investigate what happened to the prior backlog UI request?",
+        "Also open a ticket for implementing the Zenod retrieval benchmark.",
+        "Finally run the resulting ticket through Epaminon and notify me only when it needs my review.",
+      ].join(" "),
+    );
+
+    const plan = formatSafeActionPlan(resolveCurrentIntents(asks));
+
+    expect(plan).toContain("Search existing memory/issues first");
+    expect(plan).toContain("include the issue URL before saying it was created");
+    expect(plan).toContain("Delegate to Epaminon only with an exact target");
+    expect(plan).toContain("after execution evidence exists, involve Phylax");
   });
 
   it("treats no-mutation instructions as constraints and keeps later screenshot asks", () => {
@@ -80,6 +106,8 @@ describe("intake ask extraction", () => {
     const note = intakeAsksContextNote(asks);
     expect(note).toContain("Treat them as separate asks");
     expect(note).toContain("Current intent ledger decisions:");
+    expect(note).toContain("Safe action plan:");
+    expect(note).toContain("Receipt rule: never say created, filed, queued, running, stored, notified, or closed");
     expect(note).toContain("Source snippets:");
   });
 });
