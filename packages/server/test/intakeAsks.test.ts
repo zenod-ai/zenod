@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractIntakeAsks, formatIntakeAsks, intakeAsksContextNote } from "../src/intakeAsks.js";
+import { extractIntakeAsks, formatCurrentIntentLedger, formatIntakeAsks, intakeAsksContextNote, resolveCurrentIntents } from "../src/intakeAsks.js";
 
 describe("intake ask extraction", () => {
   it("extracts the anchor voice-note asks into visible classified items", () => {
@@ -38,6 +38,22 @@ describe("intake ask extraction", () => {
     expect(formatIntakeAsks(asks)).toContain("Zenod retrieval benchmark");
   });
 
+  it("resolves prior-work questions as queries before proposing new durable work", () => {
+    const asks = extractIntakeAsks(
+      "Can you investigate what happened to the prior backlog UI request and tell me whether it became a ticket? Also open a ticket for implementing the Zenod retrieval benchmark.",
+    );
+    const intents = resolveCurrentIntents(asks);
+    const formatted = formatCurrentIntentLedger(intents);
+
+    expect(intents[0]).toMatchObject({
+      actionType: "research",
+      resolution: "query_prior_durable_work",
+      status: "open",
+    });
+    expect(formatted).toContain("[open -> query_prior_durable_work]");
+    expect(formatted).toContain("[open -> propose_durable_backlog]");
+  });
+
   it("treats no-mutation instructions as constraints and keeps later screenshot asks", () => {
     const asks = extractIntakeAsks(
       [
@@ -63,6 +79,7 @@ describe("intake ask extraction", () => {
 
     const note = intakeAsksContextNote(asks);
     expect(note).toContain("Treat them as separate asks");
+    expect(note).toContain("Current intent ledger decisions:");
     expect(note).toContain("Source snippets:");
   });
 });

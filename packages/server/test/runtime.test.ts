@@ -8,6 +8,7 @@ import type { BrainEngine, ExternalTaskingTools, PeerTools } from "zenod";
 import { ARCHUS_AGENT, CONSOLE_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import type { CreateIssueThenRunInput, CreateIssueThenRunResult } from "../src/createIssueRunJourney.js";
+import { extractIntakeAsks } from "../src/intakeAsks.js";
 import { consolePeerConversationKey, formatConsolePeerDelegation, Runtime } from "../src/runtime.js";
 
 async function waitFor<T>(read: () => T, done: (value: T) => boolean): Promise<T> {
@@ -808,6 +809,49 @@ describe("Console peer delegation context", () => {
     expect(text).toContain("Console: Epaminon: No Fusion tickets currently dispatched on my side.");
     expect(text).toContain("Current request to archus:\nwhat is blocked?");
     expect(text).toContain("not durable memory");
+  });
+
+  it("records extracted asks as current-intent artifacts on the Console journey", async () => {
+    const consoleDir = await mkdtemp(join(tmpdir(), "zenod-runtime-current-intents-console-"));
+    const consoleRuntime = new Runtime(consoleDir, CONSOLE_AGENT);
+    try {
+      const text = [
+        "Can you investigate what happened to the prior backlog UI request and tell me whether it became a ticket?",
+        "Also open a ticket for implementing the Zenod retrieval benchmark.",
+      ].join(" ");
+      const asks = extractIntakeAsks(text);
+      (
+        consoleRuntime as unknown as {
+          recordCurrentIntentLedger(context: { parentConversationId: string; surface: string; originalRequest: string }, asks: typeof asks): void;
+        }
+      ).recordCurrentIntentLedger({ parentConversationId: "whatsapp:+123", surface: "whatsapp", originalRequest: text }, asks);
+
+      const [journey] = consoleRuntime.journeyStore.recent();
+      expect(journey).toMatchObject({
+        conversationId: "whatsapp:+123",
+        status: "active",
+        context: { owner: "console", source: "current_intent_ledger" },
+      });
+      const artifacts = consoleRuntime.journeyStore.snapshot(journey!.id)?.artifacts ?? [];
+      expect(artifacts).toHaveLength(2);
+      expect(artifacts[0]).toMatchObject({
+        kind: "current_intent",
+        data: expect.objectContaining({
+          status: "open",
+          resolution: "query_prior_durable_work",
+        }),
+      });
+      expect(artifacts[1]).toMatchObject({
+        kind: "current_intent",
+        data: expect.objectContaining({
+          status: "open",
+          resolution: "propose_durable_backlog",
+        }),
+      });
+    } finally {
+      consoleRuntime.close();
+      await rm(consoleDir, { recursive: true, force: true });
+    }
   });
 
   it("keys peer chat delegation by the active Console conversation, not a shared default thread", async () => {

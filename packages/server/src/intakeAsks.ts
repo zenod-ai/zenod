@@ -1,10 +1,29 @@
 export type IntakeAskActionType = "answer_now" | "research" | "create_backlog" | "execute" | "notify_or_escalate" | "clarify";
+export type CurrentIntentStatus = "open" | "fulfilled" | "blocked" | "awaiting_user" | "delegated" | "superseded" | "failed";
+export type CurrentIntentResolution =
+  | "answer_now"
+  | "query_prior_durable_work"
+  | "new_current_intent"
+  | "propose_durable_backlog"
+  | "delegate_execution"
+  | "notify_or_escalate"
+  | "awaiting_user";
 
 export interface IntakeAsk {
   id: string;
   actionType: IntakeAskActionType;
   summary: string;
   sourceText: string;
+}
+
+export interface CurrentIntentEntry {
+  askId: string;
+  actionType: IntakeAskActionType;
+  summary: string;
+  sourceText: string;
+  status: CurrentIntentStatus;
+  resolution: CurrentIntentResolution;
+  reason: string;
 }
 
 const MAX_ASKS = 8;
@@ -49,11 +68,12 @@ function classifyAsk(text: string): IntakeAskActionType {
   const lower = text.toLowerCase();
   if (/\b(?:notify|notification|phylax|ping me|write to me|whatsapp|escalat|ask me)\b/.test(lower)) return "notify_or_escalate";
   if (/\b(?:run|execute|launch|codex|epaminon|runner)\b/.test(lower)) return "execute";
-  if (/\b(?:create|open|file|ticket|issue|epic|backlog)\b/.test(lower)) return "create_backlog";
-  if (/\b(?:screenshots?|images?|attachments?|follow-up comments?)\b/.test(lower)) return "research";
-  if (/\b(?:find|look up|lookup|research|inspect|investigate|compare|contrast|benchmark|diagnos|measure|token|status|what happened)\b/.test(lower)) {
+  if (/\b(?:what happened|did it become|existing|prior|previous|find it|look up|lookup|inspect|investigate|status)\b/.test(lower)) {
     return "research";
   }
+  if (/\b(?:create|open|file|ticket|issue|epic|backlog)\b/.test(lower)) return "create_backlog";
+  if (/\b(?:screenshots?|images?|attachments?|follow-up comments?)\b/.test(lower)) return "research";
+  if (/\b(?:research|compare|contrast|benchmark|diagnos|measure|token)\b/.test(lower)) return "research";
   if (/\b(?:should|which|clarify|confirm|question)\b/.test(lower) || lower.endsWith("?")) return "clarify";
   return "answer_now";
 }
@@ -138,13 +158,49 @@ export function formatIntakeAsks(asks: IntakeAsk[]): string {
   return asks.map((ask, index) => `${index + 1}. [${ask.actionType}] ${ask.summary}`).join("\n");
 }
 
+export function resolveCurrentIntents(asks: IntakeAsk[]): CurrentIntentEntry[] {
+  return asks.map((ask) => {
+    const lower = `${ask.summary} ${ask.sourceText}`.toLowerCase();
+    const base = { askId: ask.id, actionType: ask.actionType, summary: ask.summary, sourceText: ask.sourceText };
+    if (ask.actionType === "clarify") {
+      return { ...base, status: "awaiting_user", resolution: "awaiting_user", reason: "The ask is ambiguous and needs user clarification before action." };
+    }
+    if (ask.actionType === "execute") {
+      return { ...base, status: "open", resolution: "delegate_execution", reason: "Execution belongs to Epaminon after the target and approval are clear." };
+    }
+    if (ask.actionType === "notify_or_escalate") {
+      return { ...base, status: "open", resolution: "notify_or_escalate", reason: "Notification or escalation belongs to Phylax/Console routing after evidence exists." };
+    }
+    if (ask.actionType === "create_backlog") {
+      return { ...base, status: "open", resolution: "propose_durable_backlog", reason: "This appears to need a durable GitHub/backlog record if not already present." };
+    }
+    if (/\b(?:what happened|prior|previous|existing|did it become|already|ever become)\b/.test(lower)) {
+      return { ...base, status: "open", resolution: "query_prior_durable_work", reason: "The ask references prior work, so Console should search existing memory/issues before proposing new work." };
+    }
+    if (ask.actionType === "research") {
+      return { ...base, status: "open", resolution: "new_current_intent", reason: "This is a distinct research intent to track until answered or delegated." };
+    }
+    return { ...base, status: "open", resolution: "answer_now", reason: "Console can answer directly or keep it visible while other asks are handled." };
+  });
+}
+
+export function formatCurrentIntentLedger(entries: CurrentIntentEntry[]): string {
+  return entries
+    .map((entry, index) => `${index + 1}. [${entry.status} -> ${entry.resolution}] ${entry.summary}`)
+    .join("\n");
+}
+
 export function intakeAsksContextNote(asks: IntakeAsk[]): string {
+  const intents = resolveCurrentIntents(asks);
   return [
     "Console intake decomposition detected multiple asks in the current user message.",
     "Treat them as separate asks. Do not flatten them into one vague answer. If acting on one ask, keep the others visible as open/pending unless you have receipts.",
     "",
     "Detected asks:",
     formatIntakeAsks(asks),
+    "",
+    "Current intent ledger decisions:",
+    formatCurrentIntentLedger(intents),
     "",
     "Source snippets:",
     ...asks.map((ask) => `- ${ask.id}: ${ask.sourceText}`),
@@ -153,5 +209,5 @@ export function intakeAsksContextNote(asks: IntakeAsk[]): string {
 
 export function prefixReplyWithIntakeAsks(reply: string, asks: IntakeAsk[]): string {
   if (asks.length <= 1 || /^Detected asks:/i.test(reply.trim())) return reply;
-  return [`Detected asks:`, formatIntakeAsks(asks), "", reply].join("\n");
+  return [`Detected asks:`, formatIntakeAsks(asks), "", "Current intent ledger:", formatCurrentIntentLedger(resolveCurrentIntents(asks)), "", reply].join("\n");
 }
