@@ -720,6 +720,13 @@ function shouldBlockMergeGate(approval, issueStatus) {
   return approval.autoMerge === true || issueStatus === "status:approved-merge";
 }
 
+function blockMergeGateIfNeeded(approval, issue, setStatus = setCentralStatus) {
+  if (!shouldBlockMergeGate(approval, issue.status)) return false;
+  setStatus(issue.number, approval.fromStatus, "status:blocked");
+  issue.status = "status:blocked";
+  return true;
+}
+
 // Keep only the most recent `max` entries of an audit array, in place.
 function trimTail(arr, max) {
   if (arr.length > max) arr.splice(0, arr.length - max);
@@ -1090,11 +1097,9 @@ async function scan(reason) {
         recordMergeAttempt(state, bridge, c, { autoMerge: approval.autoMerge, outcome: "no-open-pr", prUrl });
         continue;
       }
-      // Record EVERY gate evaluation (full audit), but only ACT — flip the
-      // central status, comment, ping the owner — when the dedup+cooldown gate
-      // says this is a fresh alarm. A blocked PR thus alarms once and then stays
-      // quiet, instead of re-pinging on every scan as GitHub's mergeable field
-      // flaps between conflicting / unknown / CI-failed (see shouldSendMergeNote).
+      // Record EVERY gate evaluation (full audit). A hard blocker also moves the
+      // central ticket out of the merge gate immediately; the notification
+      // cooldown below only controls pings/comments, not structural state repair.
       const note = async (key, text, options = {}) => {
         recordMergeAttempt(state, bridge, c, {
           autoMerge: approval.autoMerge,
@@ -1102,12 +1107,11 @@ async function scan(reason) {
           outcome: options.outcome ?? key,
           detail: options.detail ?? "",
         });
+        if (options.blockMergeGate) {
+          blockMergeGateIfNeeded(approval, c);
+        }
         if (!shouldSendMergeNote(bridge, key, Date.now())) return;
         bridge.mergeNote = mergeNoteDedupKey(key);
-        if (options.blockMergeGate && shouldBlockMergeGate(approval, c.status)) {
-          setCentralStatus(c.number, approval.fromStatus, "status:blocked");
-          c.status = "status:blocked";
-        }
         if (options.comment && approval.autoMerge) {
           try {
             gh(["issue", "comment", String(c.number), "--repo", BACKLOG, "--body", text]);
@@ -1306,6 +1310,7 @@ export {
   recordMergeAttempt,
   shouldSendMergeNote,
   shouldBlockMergeGate,
+  blockMergeGateIfNeeded,
   detectIntegrationStatus,
   reviewHeldByFanInBatch,
   updateFanInBatches,
