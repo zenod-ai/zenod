@@ -79,6 +79,15 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, [])).toBe(reply);
   });
 
+  it("does not treat 'never filed' status reports as this-turn creation claims", () => {
+    const reply = [
+      "Point 2: Voice-note request never became a node.",
+      "Point 3: Status = never filed, never actioned. Recommended next step: file focused Nearchus ticket if desired.",
+      "Point 6: Benchmark epic (10-question battery, token counting) queued behind the notification-path test.",
+    ].join("\n\n");
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
   it("does not correct a partial result: leaves the genuinely-created issue when another create failed", () => {
     const reply = "Created issue #25: https://github.com/zenod-ai/zenod/issues/25";
     const actions: RecordedAction[] = [

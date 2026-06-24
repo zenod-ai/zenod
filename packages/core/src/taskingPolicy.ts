@@ -175,13 +175,14 @@ const NON_CREATION_MUTATION_VERBS = "queued|merged|approved|closed|edited|update
 // "is already queued") — still a state description, not a this-turn receipt —
 // so allow one. Without this, listing capabilities, quoting docs, or merely
 // confirming a ticket's existing status tripped a false correction.
-const DESCRIPTIVE_ADVERBS = "indeed|already|now|currently|still|also|truly|certainly|definitely|clearly|recently|just|previously";
+const DESCRIPTIVE_ADVERBS =
+  "indeed|already|now|currently|still|also|truly|certainly|definitely|clearly|recently|just|previously|never";
 // Coordinated participles share the same descriptive subject — "is approved/queued",
 // "was filed and queued" — so once the head is excused by the be-verb, excuse the
 // trailing chain joined by a slash, comma, or and/or too. Otherwise only the first
 // participle was treated as a description and the second still tripped a correction.
 const DESCRIPTIVE_LEAD = new RegExp(
-  `\\b(is|are|was|were|be|been|being|get|gets|got|can|could|will|would|to|cannot|can't|not)\\s*` +
+  `\\b(is|are|was|were|be|been|being|get|gets|got|can|could|will|would|to|cannot|can't|not|never)\\s*` +
     `(?:(?:${DESCRIPTIVE_ADVERBS})\\s+)*` +
     `(?:(?:${MUTATION_VERBS})\\s*(?:[/,]\\s*|\\s+(?:and|or)\\s+))*$`,
   "i",
