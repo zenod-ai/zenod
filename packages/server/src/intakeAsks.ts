@@ -30,7 +30,9 @@ export interface CurrentIntentEntry {
 const MAX_ASKS = 8;
 const MIN_MULTI_ASK_LENGTH = 500;
 
-const START_MARKER = /\b(?:also|finally|another thing|separate point|while you(?:'| a)?re at it|and then|so maybe|can you|could you|i want|i need|please|the question is)\b/gi;
+const START_MARKER = /\b(?:also|finally|another thing|separate point|while you(?:'| a)?re at it|and then|then|so maybe|can you|could you|i want|i need|please|the question is)\b/gi;
+const EXPLICIT_ASK_SIGNAL =
+  /\b(?:can you|could you|please|i want|i need|research|investigate|look up|status|what happened|did this happen|create|open|file|ticket|issue|epic|backlog|run|execute|launch|start|notify|notification|phylax|escalat|priority|higher priority|blocked|handle that request)\b/i;
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -67,13 +69,28 @@ function splitCandidateSegments(text: string): string[] {
 
 function classifyAsk(text: string): IntakeAskActionType {
   const lower = text.toLowerCase();
+  if (/\b(?:not sure which|which repository|which repo|which issue|which ticket|which request|ambiguous|show candidates)\b/.test(lower)) {
+    return "clarify";
+  }
   if (/\b(?:run|execute|launch|start)\b/.test(lower)) return "execute";
-  if (/\b(?:notify|notification|phylax|ping me|write to me|whatsapp|escalat|ask me)\b/.test(lower)) return "notify_or_escalate";
+  const hasNotificationRequest = /\b(?:notify|notification|phylax|ping me|write to me|escalat|ask me)\b/.test(lower);
+  const notificationIsOnlyNegatedConstraint = /\bdo not\b[^.]{0,120}\b(?:notify|ping|write to me|send)\b/.test(lower);
+  if (hasNotificationRequest && !notificationIsOnlyNegatedConstraint) return "notify_or_escalate";
   if (/\b(?:codex|epaminon|runner)\b/.test(lower)) return "execute";
   if (/\b(?:what happened|did it become|existing|prior|previous|find it|look up|lookup|inspect|investigate|status)\b/.test(lower)) {
     return "research";
   }
-  if (/\b(?:create|open|file|ticket|issue|epic|backlog)\b/.test(lower)) return "create_backlog";
+  if (/\b(?:before we decide whether to open|unless i explicitly ask|do not turn (?:this|it)?[^.]{0,40}into)\b[^.]{0,80}\b(?:tickets?|issues?|backlog)\b/.test(lower)) {
+    return "answer_now";
+  }
+  if (/\b(?:create|open|file|ticket|issue|epic|backlog|priority|higher priority|urgent|rank)\b/.test(lower)) return "create_backlog";
+  if (
+    (/\bzenod\b|\bzenot\b|\bznot\b|\bxenot\b/.test(lower) && /\b(?:memory|brain|vault|retrieval|search|contrast|compare)\b/.test(lower)) ||
+    (/\b(?:direct|obsidian|github|contrast|compare)\b/.test(lower) && /\b(?:search|brain|memory|retrieval)\b/.test(lower))
+  ) {
+    return "research";
+  }
+  if (/\b(?:summarize|explain|direct explanation|concise answer|answer before)\b/.test(lower)) return "answer_now";
   if (/\b(?:screenshots?|images?|attachments?|follow-up comments?)\b/.test(lower)) return "research";
   if (/\b(?:research|compare|contrast|benchmark|diagnos|measure|token)\b/.test(lower)) return "research";
   if (/\b(?:should|which|clarify|confirm|question)\b/.test(lower) || lower.endsWith("?")) return "clarify";
@@ -82,7 +99,7 @@ function classifyAsk(text: string): IntakeAskActionType {
 
 function isConstraintOnly(text: string): boolean {
   const lower = text.toLowerCase();
-  return /\b(?:please\s+)?do not\b/.test(lower) && /\b(?:create|run|execute|store|notify|file|open|mutat|send)\b/.test(lower);
+  return /\b(?:please\s+)?do not\b/.test(lower) && /\b(?:create|run|execute|store|notify|file|open|mutat|send|backlog|ticket|issue)\b/.test(lower);
 }
 
 function summarizeAsk(segment: string, actionType: IntakeAskActionType): string {
@@ -94,14 +111,15 @@ function summarizeAsk(segment: string, actionType: IntakeAskActionType): string 
   if (/\b(?:ui|user interface)\b/.test(lower) && /\b(?:backlog|node|request)\b/.test(lower)) {
     return "Investigate what happened to the prior backlog UI request.";
   }
+  if (/\bbenchmark/.test(lower) || (/\btoken/.test(lower) && /\b(?:cost|reliability|tests?)\b/.test(lower))) {
+    return "Design a Zenod retrieval benchmark with token cost and reliability checks.";
+  }
   if (
-    (/\bzenod\b|\bzenot\b|\bznot\b|\bxenot\b/.test(lower) && /\b(?:direct|obsidian|github|contrast|compare|research memory)\b/.test(lower)) ||
+    (/\bzenod\b|\bzenot\b|\bznot\b|\bxenot\b/.test(lower) &&
+      /\b(?:memory|brain|vault|retrieval|search|direct|obsidian|contrast|compare|research memory)\b/.test(lower)) ||
     (/\b(?:direct|obsidian|github|contrast|compare)\b/.test(lower) && /\b(?:search|brain|memory)\b/.test(lower))
   ) {
     return "Use Zenod for memory retrieval and contrast it with direct Obsidian/GitHub search.";
-  }
-  if (/\bbenchmark/.test(lower) || (/\btoken/.test(lower) && /\b(?:cost|reliability|tests?)\b/.test(lower))) {
-    return "Design a Zenod retrieval benchmark with token cost and reliability checks.";
   }
   if (/\bscreenshots?\b|\bimages?\b|\battachments?\b/.test(lower)) {
     return "Handle screenshots and follow-up comments as related intake evidence.";
@@ -138,7 +156,11 @@ function mergeSimilarAsks(asks: IntakeAsk[]): IntakeAsk[] {
 
 export function extractIntakeAsks(text: string): IntakeAsk[] {
   const normalized = normalizeWhitespace(text);
-  if (normalized.length < MIN_MULTI_ASK_LENGTH && !/\b(?:also|another thing|separate point|while you(?:'| a)?re at it)\b/i.test(normalized)) {
+  if (
+    normalized.length < MIN_MULTI_ASK_LENGTH &&
+    !/\b(?:also|another thing|separate point|while you(?:'| a)?re at it|then|finally)\b/i.test(normalized) &&
+    !EXPLICIT_ASK_SIGNAL.test(normalized)
+  ) {
     return [];
   }
   const asks = splitCandidateSegments(normalized)
