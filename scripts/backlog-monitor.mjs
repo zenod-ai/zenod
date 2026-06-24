@@ -715,6 +715,11 @@ function mergeApprovalForIssue(state, issue) {
   return { eligible: false, autoMerge: false, fromStatus: issue.status };
 }
 
+function shouldBlockMergeGate(approval, issueStatus) {
+  if (!approval?.eligible) return false;
+  return approval.autoMerge === true || issueStatus === "status:approved-merge";
+}
+
 // Keep only the most recent `max` entries of an audit array, in place.
 function trimTail(arr, max) {
   if (arr.length > max) arr.splice(0, arr.length - max);
@@ -1099,8 +1104,9 @@ async function scan(reason) {
         });
         if (!shouldSendMergeNote(bridge, key, Date.now())) return;
         bridge.mergeNote = mergeNoteDedupKey(key);
-        if (options.blockAutoMerge && approval.autoMerge && c.status === "status:needs-review") {
-          setCentralStatus(c.number, "status:needs-review", "status:blocked");
+        if (options.blockMergeGate && shouldBlockMergeGate(approval, c.status)) {
+          setCentralStatus(c.number, approval.fromStatus, "status:blocked");
+          c.status = "status:blocked";
         }
         if (options.comment && approval.autoMerge) {
           try {
@@ -1136,7 +1142,7 @@ async function scan(reason) {
       if (g.state === "CLOSED") {
         await note("closed", `⚠️ #${c.number} ${c.title} — PR was closed without merging. ${prUrl}`, {
           comment: true,
-          blockAutoMerge: true,
+          blockMergeGate: true,
         });
         continue;
       }
@@ -1144,14 +1150,14 @@ async function scan(reason) {
       if (g.mergeable === "CONFLICTING") {
         await note("conflict", `⛔ #${c.number} ${c.title} — branch conflicts with main; needs a rebase/resolve. ${prUrl}`, {
           comment: true,
-          blockAutoMerge: true,
+          blockMergeGate: true,
         });
         continue;
       }
       if (g.failed) {
         await note("failed", `⛔ #${c.number} ${c.title} — CI is failing; can't merge. ${prUrl}`, {
           comment: true,
-          blockAutoMerge: true,
+          blockMergeGate: true,
         });
         continue;
       }
@@ -1181,7 +1187,7 @@ async function scan(reason) {
         } catch {
           await note("conflict", `⛔ #${c.number} ${c.title} — couldn't update branch to main (likely a conflict); needs resolve. ${prUrl}`, {
             comment: true,
-            blockAutoMerge: true,
+            blockMergeGate: true,
             outcome: "update-branch-failed",
           });
         }
@@ -1207,7 +1213,7 @@ async function scan(reason) {
         else {
           await note("mergeerr", `⚠️ #${c.number} ${c.title} — merge failed: ${String(e.message).slice(0, 160)}. ${prUrl}`, {
             comment: true,
-            blockAutoMerge: true,
+            blockMergeGate: true,
             outcome: "merge-failed",
             detail: String(e.message).slice(0, 300),
           });
@@ -1299,6 +1305,7 @@ export {
   notifyConfig,
   recordMergeAttempt,
   shouldSendMergeNote,
+  shouldBlockMergeGate,
   detectIntegrationStatus,
   reviewHeldByFanInBatch,
   updateFanInBatches,

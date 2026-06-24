@@ -17,6 +17,7 @@ import {
   primaryStatusLabel,
   recordMergeAttempt,
   reviewHeldByFanInBatch,
+  shouldBlockMergeGate,
   shouldSendMergeNote,
   updateFanInBatches,
   parseTarget,
@@ -103,6 +104,26 @@ test("auto-merge is opt-in and manual approval stays eligible", () => {
     autoMerge: true,
     fromStatus: "status:needs-review",
   });
+});
+
+test("hard merge blockers move manual approved-merge tickets out of the merge loop", () => {
+  const manualApproval = mergeApprovalForIssue(
+    normalizeState({}),
+    { number: 68, title: "manual merge", status: "status:approved-merge", autoMerge: false },
+  );
+  assert.equal(shouldBlockMergeGate(manualApproval, "status:approved-merge"), true);
+
+  const plainReview = mergeApprovalForIssue(
+    normalizeState({}),
+    { number: 69, title: "review only", status: "status:needs-review", autoMerge: false },
+  );
+  assert.equal(shouldBlockMergeGate(plainReview, "status:needs-review"), false);
+
+  const autoApproval = mergeApprovalForIssue(
+    normalizeState({ autoMerge: true }),
+    { number: 70, title: "auto merge", status: "status:needs-review", autoMerge: false },
+  );
+  assert.equal(shouldBlockMergeGate(autoApproval, "status:needs-review"), true);
 });
 
 test("merge attempts are recorded in monitor state and bridge audit", () => {
