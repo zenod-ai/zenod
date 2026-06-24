@@ -640,8 +640,8 @@ export class WhatsAppStore {
       status: row.status,
       mediaType: row.mediaType,
       ...(row.sentMessageId ? { sentMessageId: row.sentMessageId } : {}),
-      ...(row.messageId && mediaByMessage.has(row.messageId) ? { media: mediaByMessage.get(row.messageId) } : {}),
-      ...(row.messageId && receiptsByMessage.has(row.messageId) ? { linkedReceipts: receiptsByMessage.get(row.messageId) } : {}),
+      ...(row.direction === "inbound" && row.messageId && mediaByMessage.has(row.messageId) ? { media: mediaByMessage.get(row.messageId) } : {}),
+      ...(row.direction === "inbound" && row.messageId && receiptsByMessage.has(row.messageId) ? { linkedReceipts: receiptsByMessage.get(row.messageId) } : {}),
     }));
   }
 

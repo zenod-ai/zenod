@@ -254,6 +254,8 @@ describe("MCP endpoint", () => {
     expect(inbound?.media?.[0]?.storageStatus).toBe("archived");
     expect(inbound?.linkedReceipts?.[0]?.driveFileIds).toContain("drive-file-voice-mcp-1");
     expect(inbound?.linkedReceipts?.[0]?.vaultEvidenceRefs).toContain("Log/2026-06-24.md#^e-test");
+    const outboundEntries = entries.filter((entry) => entry.direction === "outbound");
+    expect(outboundEntries.every((entry) => !("media" in entry) && !("linkedReceipts" in entry))).toBe(true);
 
     const exact = await client.callTool({
       name: "get_recent_conversation_transcript",
