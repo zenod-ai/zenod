@@ -10,6 +10,7 @@ export interface ConversationTranscriptEntry {
   sentMessageId?: string | null;
   media?: ConversationTranscriptMedia[];
   linkedReceipts?: ConversationTranscriptReceipt[];
+  linkedFollowUps?: ConversationTranscriptFollowUp[];
 }
 
 export interface ConversationTranscriptMedia {
@@ -30,6 +31,12 @@ export interface ConversationTranscriptReceipt {
   vaultEvidenceRefs: string[];
   vaultCommits: string[];
   vaultLinks: string[];
+}
+
+export interface ConversationTranscriptFollowUp {
+  at: number;
+  messageId: string;
+  bodyText: string;
 }
 
 export type ConversationTranscriptReader = (input: {
@@ -95,11 +102,16 @@ export function formatConversationTranscript(entries: ConversationTranscriptEntr
             })
             .join("\n")}`
         : "";
+      const followUps = entry.linkedFollowUps?.length
+        ? `\nLinked follow-up comment(s):\n${entry.linkedFollowUps
+            .map((followUp) => `- ${new Date(followUp.at).toISOString()} message=${followUp.messageId}: ${followUp.bodyText}`)
+            .join("\n")}`
+        : "";
       const status = entry.status ? `; status=${entry.status}` : "";
       const id = entry.messageId ? `; message=${entry.messageId}` : "";
       const body = entry.bodyText.trim() || "(empty body/transcript not available)";
       const chars = entry.bodyText.trim() ? `; chars=${entry.bodyText.length}` : "";
-      return `[${at}] ${entry.direction} ${who}${id}${media}${status}${chars}\n${body}${mediaDetails}${receipts}`;
+      return `[${at}] ${entry.direction} ${who}${id}${media}${status}${chars}\n${body}${mediaDetails}${followUps}${receipts}`;
     })
     .join("\n\n");
 }

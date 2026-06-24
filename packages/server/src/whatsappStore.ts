@@ -71,6 +71,7 @@ export interface WhatsAppTranscriptEntry {
   sentMessageId?: string | null;
   media?: WhatsAppTranscriptMedia[];
   linkedReceipts?: WhatsAppTranscriptReceipt[];
+  linkedFollowUps?: WhatsAppTranscriptFollowUp[];
 }
 
 export interface WhatsAppTranscriptMedia {
@@ -91,6 +92,22 @@ export interface WhatsAppTranscriptReceipt {
   vaultEvidenceRefs: string[];
   vaultCommits: string[];
   vaultLinks: string[];
+}
+
+export interface WhatsAppTranscriptFollowUp {
+  at: number;
+  messageId: string;
+  bodyText: string;
+}
+
+export interface WhatsAppMediaFollowUpLink {
+  mediaMessageId: string;
+  followupMessageId: string;
+  mediaType: string | null;
+  mediaStatus: string;
+  mediaReceivedAt: number;
+  ageMs: number;
+  followupText: string;
 }
 
 export interface WhatsAppTranscriptQuery {
@@ -241,6 +258,13 @@ export class WhatsAppStore {
         status TEXT NOT NULL,
         error_text TEXT,
         sent_message_id TEXT,
+        created_at INTEGER NOT NULL,
+        raw_json TEXT NOT NULL DEFAULT '{}'
+      );
+
+      CREATE TABLE IF NOT EXISTS whatsapp_media_followups (
+        followup_message_id TEXT PRIMARY KEY,
+        media_message_id TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         raw_json TEXT NOT NULL DEFAULT '{}'
       );
@@ -510,6 +534,82 @@ export class WhatsAppStore {
     };
   }
 
+  linkRecentMediaFollowUp(event: WhatsAppInboundEvent, maxAgeMs = 10 * 60 * 1000): WhatsAppMediaFollowUpLink | null {
+    if (event.hasMedia) return null;
+    const text = event.body.trim();
+    if (!this.isMediaFollowUpText(text)) return null;
+    const current = this.db
+      .prepare("SELECT received_at AS receivedAt FROM whatsapp_messages WHERE message_id = ?")
+      .get(event.messageId) as { receivedAt: number } | undefined;
+    const eventAt = current?.receivedAt ?? Date.now();
+    const since = eventAt - maxAgeMs;
+    const media = this.db
+      .prepare(
+        `SELECT
+           message_id AS messageId,
+           received_at AS receivedAt,
+           media_type AS mediaType,
+           processing_status AS mediaStatus
+         FROM whatsapp_messages
+         WHERE direction='inbound'
+           AND has_media=1
+           AND (media_type IS NULL OR media_type NOT IN ('ptt','audio'))
+           AND received_at <= ?
+           AND received_at >= ?
+           AND chat_id = ?
+           AND contact_id = ?
+         ORDER BY received_at DESC
+         LIMIT 1`,
+      )
+      .get(eventAt, since, event.chatId, event.senderId) as
+      | { messageId: string; receivedAt: number; mediaType: string | null; mediaStatus: string }
+      | undefined;
+    if (!media) return null;
+
+    const ageMs = Math.max(0, eventAt - media.receivedAt);
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO whatsapp_media_followups (
+           followup_message_id, media_message_id, created_at, raw_json
+         )
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(event.messageId, media.messageId, Date.now(), safeJson({ reason: "nearby_media_followup", ageMs }));
+    return {
+      mediaMessageId: media.messageId,
+      followupMessageId: event.messageId,
+      mediaType: media.mediaType,
+      mediaStatus: media.mediaStatus,
+      mediaReceivedAt: media.receivedAt,
+      ageMs,
+      followupText: text,
+    };
+  }
+
+  followUpsForMedia(messageId: string): WhatsAppTranscriptFollowUp[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT
+             f.followup_message_id AS messageId,
+             COALESCE(m.message_timestamp, m.received_at) AS at,
+             m.body_text AS bodyText
+           FROM whatsapp_media_followups f
+           JOIN whatsapp_messages m ON m.message_id = f.followup_message_id
+           WHERE f.media_message_id = ?
+           ORDER BY at ASC`,
+        )
+        .all(messageId) as unknown as WhatsAppTranscriptFollowUp[]
+    ).map((row) => ({ at: row.at, messageId: row.messageId, bodyText: row.bodyText }));
+  }
+
+  private isMediaFollowUpText(text: string): boolean {
+    if (!text || text.length > 500) return false;
+    return /\b(?:related to|for|about|regarding|comment(?: is)?|add(?:ing)? this comment|attach(?: this)?|did this happen already|did it happen already)\b[\s\S]{0,120}\b(?:picture|image|screenshot|photo|attachment|media|this|that)\b/i.test(
+      text,
+    );
+  }
+
   recentTranscript(input: WhatsAppTranscriptQuery = {}): WhatsAppTranscriptEntry[] {
     const sinceMs = input.sinceMs ?? Date.now() - 2 * 60 * 60 * 1000;
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
@@ -567,6 +667,7 @@ export class WhatsAppStore {
     ];
     const mediaByMessage = new Map<string, WhatsAppTranscriptMedia[]>();
     const receiptsByMessage = new Map<string, WhatsAppTranscriptReceipt[]>();
+    const followUpsByMessage = new Map<string, WhatsAppTranscriptFollowUp[]>();
     if (inboundMessageIds.length > 0) {
       const placeholders = inboundMessageIds.map(() => "?").join(",");
       const mediaRows = this.db
@@ -628,6 +729,30 @@ export class WhatsAppStore {
         bucket.push(receipt);
         receiptsByMessage.set(row.messageId, bucket);
       }
+
+      const followUpRows = this.db
+        .prepare(
+          `SELECT
+             f.media_message_id AS mediaMessageId,
+             f.followup_message_id AS messageId,
+             COALESCE(m.message_timestamp, m.received_at) AS at,
+             m.body_text AS bodyText
+           FROM whatsapp_media_followups f
+           JOIN whatsapp_messages m ON m.message_id = f.followup_message_id
+           WHERE f.media_message_id IN (${placeholders})
+           ORDER BY at ASC`,
+        )
+        .all(...inboundMessageIds) as unknown as Array<{
+        mediaMessageId: string;
+        messageId: string;
+        at: number;
+        bodyText: string;
+      }>;
+      for (const row of followUpRows) {
+        const bucket = followUpsByMessage.get(row.mediaMessageId) ?? [];
+        bucket.push({ at: row.at, messageId: row.messageId, bodyText: row.bodyText });
+        followUpsByMessage.set(row.mediaMessageId, bucket);
+      }
     }
 
     return rows.reverse().map((row) => ({
@@ -642,6 +767,9 @@ export class WhatsAppStore {
       ...(row.sentMessageId ? { sentMessageId: row.sentMessageId } : {}),
       ...(row.direction === "inbound" && row.messageId && mediaByMessage.has(row.messageId) ? { media: mediaByMessage.get(row.messageId) } : {}),
       ...(row.direction === "inbound" && row.messageId && receiptsByMessage.has(row.messageId) ? { linkedReceipts: receiptsByMessage.get(row.messageId) } : {}),
+      ...(row.direction === "inbound" && row.messageId && followUpsByMessage.has(row.messageId)
+        ? { linkedFollowUps: followUpsByMessage.get(row.messageId) }
+        : {}),
     }));
   }
 
