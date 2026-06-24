@@ -18,6 +18,7 @@ import {
   recordMergeAttempt,
   reviewHeldByFanInBatch,
   shouldBlockMergeGate,
+  blockMergeGateIfNeeded,
   shouldSendMergeNote,
   updateFanInBatches,
   parseTarget,
@@ -124,6 +125,20 @@ test("hard merge blockers move manual approved-merge tickets out of the merge lo
     { number: 70, title: "auto merge", status: "status:needs-review", autoMerge: false },
   );
   assert.equal(shouldBlockMergeGate(autoApproval, "status:needs-review"), true);
+});
+
+test("hard merge blockers update status even when the notification is on cooldown", () => {
+  const bridge = { notifications: { blocked: 1000 } };
+  const issue = { number: 68, title: "manual merge", status: "status:approved-merge", autoMerge: false };
+  const approval = mergeApprovalForIssue(normalizeState({}), issue);
+  const calls = [];
+
+  const blocked = blockMergeGateIfNeeded(approval, issue, (...args) => calls.push(args));
+
+  assert.equal(blocked, true);
+  assert.equal(issue.status, "status:blocked");
+  assert.deepEqual(calls, [[68, "status:approved-merge", "status:blocked"]]);
+  assert.equal(shouldSendMergeNote(bridge, "conflict", 1500, 10000), false);
 });
 
 test("merge attempts are recorded in monitor state and bridge audit", () => {
