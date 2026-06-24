@@ -38,6 +38,24 @@ describe("intake ask extraction", () => {
     expect(formatIntakeAsks(asks)).toContain("Zenod retrieval benchmark");
   });
 
+  it("treats no-mutation instructions as constraints and keeps later screenshot asks", () => {
+    const asks = extractIntakeAsks(
+      [
+        "Please do not create issues, run tickets, store memory, or notify me. This is a read-only test.",
+        "Can you investigate what happened to the prior backlog UI request?",
+        "Also, use Zenod memory first and contrast it with direct Obsidian or GitHub search.",
+        "Maybe this is a separate point: design a small benchmark for Zenod retrieval with token cost and reliability measurement.",
+        "Also handle screenshots and follow-up comments as related evidence in the same recent conversation.",
+        "Finally, think about the Epaminon to Console to Phylax escalation path and tell me what would need to be tested there.",
+      ].join(" "),
+    );
+    const formatted = formatIntakeAsks(asks);
+
+    expect(formatted).not.toContain("do not create");
+    expect(formatted).toContain("Handle screenshots and follow-up comments");
+    expect(formatted).toContain("escalation path");
+  });
+
   it("formats a context note that tells the model not to flatten asks", () => {
     const asks = extractIntakeAsks(
       "Can you research the prior backlog UI request? Also create a benchmark for Zenod retrieval with token cost and reliability measurement.",

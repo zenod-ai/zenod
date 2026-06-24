@@ -10,7 +10,7 @@ export interface IntakeAsk {
 const MAX_ASKS = 8;
 const MIN_MULTI_ASK_LENGTH = 500;
 
-const START_MARKER = /\b(?:also|another thing|separate point|while you(?:'| a)?re at it|and then|so maybe|can you|could you|i want|i need|please|the question is)\b/gi;
+const START_MARKER = /\b(?:also|finally|another thing|separate point|while you(?:'| a)?re at it|and then|so maybe|can you|could you|i want|i need|please|the question is)\b/gi;
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -50,11 +50,17 @@ function classifyAsk(text: string): IntakeAskActionType {
   if (/\b(?:notify|notification|phylax|ping me|write to me|whatsapp|escalat|ask me)\b/.test(lower)) return "notify_or_escalate";
   if (/\b(?:run|execute|launch|codex|epaminon|runner)\b/.test(lower)) return "execute";
   if (/\b(?:create|open|file|ticket|issue|epic|backlog)\b/.test(lower)) return "create_backlog";
+  if (/\b(?:screenshots?|images?|attachments?|follow-up comments?)\b/.test(lower)) return "research";
   if (/\b(?:find|look up|lookup|research|inspect|investigate|compare|contrast|benchmark|diagnos|measure|token|status|what happened)\b/.test(lower)) {
     return "research";
   }
   if (/\b(?:should|which|clarify|confirm|question)\b/.test(lower) || lower.endsWith("?")) return "clarify";
   return "answer_now";
+}
+
+function isConstraintOnly(text: string): boolean {
+  const lower = text.toLowerCase();
+  return /\b(?:please\s+)?do not\b/.test(lower) && /\b(?:create|run|execute|store|notify|file|open|mutat|send)\b/.test(lower);
 }
 
 function summarizeAsk(segment: string, actionType: IntakeAskActionType): string {
@@ -114,6 +120,7 @@ export function extractIntakeAsks(text: string): IntakeAsk[] {
     return [];
   }
   const asks = splitCandidateSegments(normalized)
+    .filter((segment) => !isConstraintOnly(segment))
     .map((segment) => {
       const actionType = classifyAsk(segment);
       return {
