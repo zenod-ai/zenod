@@ -50,7 +50,7 @@ import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./con
 import { createIssueThenRunJourney, type CreateIssueThenRunInput, type CreateIssueThenRunResult } from "./createIssueRunJourney.js";
 import { createIssuesJourney, type CreateIssuesJourneyInput, type CreateIssuesJourneyResult } from "./parallelIssueJourney.js";
 import { runEphemeralJourney, type RunEphemeralJourneyInput, type RunEphemeralJourneyResult } from "./ephemeralJourney.js";
-import { extractIntakeAsks, intakeAsksContextNote, prefixReplyWithIntakeAsks } from "./intakeAsks.js";
+import { extractIntakeAsks, intakeAsksContextNote, prefixReplyWithIntakeAsks, resolveCurrentIntents, type IntakeAsk } from "./intakeAsks.js";
 import {
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
@@ -355,6 +355,7 @@ export class Runtime {
           originalRequest: input.text,
           ...(input.rawEvidence ? { rawEvidence: input.rawEvidence } : {}),
         };
+        if (asks.length > 1) this.recordCurrentIntentLedger(context, asks);
         return this.taskingContext.run(context, async () => {
           try {
             const reply = await engine.handleTasking(taskingInput);
@@ -570,16 +571,28 @@ export class Runtime {
     };
   }
 
-  private ensureTaskingJourney(context: TaskingRunContext): string {
+  private ensureTaskingJourney(context: TaskingRunContext, source = "peer_delegation"): string {
     if (context.journeyId) return context.journeyId;
     const journey = this.journeyStore.create({
       conversationId: context.parentConversationId,
       surface: context.surface ?? "console",
       originalRequest: context.originalRequest ?? "Console peer delegation",
-      context: { owner: "console", source: "peer_delegation" },
+      context: { owner: "console", source },
     });
     context.journeyId = journey.id;
     return journey.id;
+  }
+
+  private recordCurrentIntentLedger(context: TaskingRunContext, asks: IntakeAsk[]): void {
+    if (this.agent.name !== "console") return;
+    const journeyId = this.ensureTaskingJourney(context, "current_intent_ledger");
+    for (const intent of resolveCurrentIntents(asks)) {
+      this.journeyStore.addArtifact(journeyId, {
+        kind: "current_intent",
+        artifactKey: `current-intent:${intent.askId}`,
+        data: { ...intent },
+      });
+    }
   }
 
   private async recordPeerDelegation<T>(
