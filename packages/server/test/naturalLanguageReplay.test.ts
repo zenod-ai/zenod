@@ -58,7 +58,7 @@ const fixtures: FixtureExpectation[] = [
       "notify_or_escalate",
       "new_current_intent",
     ],
-    mustContain: ["Safe action plan", "Use Zenod for memory retrieval", "Involve Phylax only with the event"],
+    mustContain: ["Use Zenod for memory retrieval", "Involve Phylax only with the event"],
   },
   {
     name: "that ticket reference must resolve candidates before mutation",
@@ -171,6 +171,10 @@ describe("natural-language intake replay suite", () => {
     for (const expected of fixture.mustContain ?? []) {
       expect(evidenceText).toContain(expected);
     }
+    expect(reply).toBe("Replay answer body.");
+    expect(reply).not.toContain("Detected asks");
+    expect(reply).not.toContain("Current intent ledger");
+    expect(reply).not.toContain("Safe action plan");
   });
 
   it("keeps fake receipt words out of a provider-credit failure response", () => {

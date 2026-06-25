@@ -291,18 +291,6 @@ export function intakeAsksContextNote(asks: IntakeAsk[]): string {
 }
 
 export function prefixReplyWithIntakeAsks(reply: string, asks: IntakeAsk[]): string {
-  if (asks.length <= 1 || /^Detected asks:/i.test(reply.trim())) return reply;
-  const intents = resolveCurrentIntents(asks);
-  return [
-    `Detected asks:`,
-    formatIntakeAsks(asks),
-    "",
-    "Current intent ledger:",
-    formatCurrentIntentLedger(intents),
-    "",
-    "Safe action plan:",
-    formatSafeActionPlan(intents),
-    "",
-    reply,
-  ].join("\n");
+  void asks;
+  return reply;
 }
