@@ -605,6 +605,30 @@ export function summarizeActionsForReply(actions: ReadonlyArray<RecordedAction>)
   return lines.join("\n\n");
 }
 
+const INTERNAL_TASKING_SECTION_RE = /^\s*(Detected asks|Current intent ledger|Safe action plan):\s*$/i;
+
+function stripInternalTaskingScaffold(text: string): string {
+  const lines = text.split("\n");
+  const firstContent = lines.findIndex((line) => line.trim().length > 0);
+  if (firstContent < 0 || !INTERNAL_TASKING_SECTION_RE.test(lines[firstContent]!)) return text;
+
+  const kept: string[] = [];
+  let skipping = false;
+  for (const line of lines) {
+    if (INTERNAL_TASKING_SECTION_RE.test(line)) {
+      skipping = true;
+      continue;
+    }
+    if (skipping) {
+      if (!line.trim()) continue;
+      if (/^\s*\d+\.\s+/.test(line)) continue;
+      skipping = false;
+    }
+    kept.push(line);
+  }
+  return kept.join("\n").trimStart();
+}
+
 /**
  * Reconcile a tasking reply against the tools that actually ran this turn.
  * Returns the reply unchanged when its mutation claims check out, or prepends a
@@ -612,6 +636,7 @@ export function summarizeActionsForReply(actions: ReadonlyArray<RecordedAction>)
  * Pure and deterministic so it can be unit-tested against real transcripts.
  */
 export function reconcileTaskingReply(text: string, actions: ReadonlyArray<RecordedAction>): string {
+  text = stripInternalTaskingScaffold(text);
   const prose = assertedProse(text);
   const presented = issueNumbersIn(prose);
   const proven = provenNumbers(actions);

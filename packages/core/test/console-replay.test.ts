@@ -464,6 +464,60 @@ describe("Console behavior replay harness", () => {
     expect(reply.text).toContain("I have not filed or run anything");
   });
 
+  it("strips internal intent ledgers from long-message digest replies", async () => {
+    const transcript = longVoiceLikeReflection();
+    const peerTools: PeerTools = {
+      zenod_digest_message: {
+        description: "digest long messages",
+        run: async () =>
+          JSON.stringify({
+            receipt: { source: "whatsapp:test-vn", transcriptRef: "Log/test.md#^e-vn" },
+            interpretation: "Smoke test for digest-first path on long voice notes.",
+            intentList: [
+              {
+                type: "route_only",
+                text: "Show interpreted routing without mutating anything.",
+                confidence: 0.92,
+                suggestedOwner: "console",
+                requiresConfirmation: false,
+              },
+            ],
+          }),
+      },
+    };
+    const leakedScaffold = [
+      "Detected asks:",
+      "1. [answer_now] Answer: I want you to digest this before deciding what to do.",
+      "2. [execute] Execute: store raw voice-note evidence.",
+      "",
+      "Current intent ledger:",
+      "1. [open -> answer_now] Answer: I want you to digest this before deciding what to do.",
+      "2. [open -> delegate_execution] Execute: store raw voice-note evidence.",
+      "",
+      "Safe action plan:",
+      "1. Answer: I want you to digest this before deciding what to do. — Answer directly.",
+      "2. Execute: store raw voice-note evidence. — Delegate only after approval.",
+      "",
+      "**Understood:** Stabilize digest-first handling for long voice notes. No mutation requested for this smoke test.",
+      "",
+      "**Routing:**",
+      "- Raw evidence -> Zenod.",
+      "- Potential backlog item -> Archus only after approval.",
+      "- Execution -> Epaminon only after explicit run approval.",
+    ].join("\n");
+    const llm = new RecordingLlm(leakedScaffold);
+    const engine = createEngine({ llm, state: new SqliteStateStore(":memory:"), peerTools });
+
+    const reply = await engine.handleTasking({ text: transcript, surface: "whatsapp", conversationKey: "long-vn-scaffold" });
+
+    expect(reply.actions[0]).toMatchObject({ tool: "zenod_digest_message" });
+    expect(reply.text).not.toContain("Detected asks");
+    expect(reply.text).not.toContain("Current intent ledger");
+    expect(reply.text).not.toContain("Safe action plan");
+    expect(reply.text).toContain("**Understood:**");
+    expect(reply.text).toContain("Raw evidence -> Zenod");
+  });
+
   it("does not force Zenod digestion for short direct execution commands", async () => {
     const peerTools: PeerTools = {
       zenod_digest_message: {
