@@ -36,7 +36,7 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
-import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
+import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
 
 const LONG_MESSAGE_DIGEST_CHARS = 1_200;
@@ -479,20 +479,20 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return [...snapshot.files, ...attachments].sort().join("\n") || "(empty vault)";
       },
       writeNote: async (path: string, content: string) => {
-        const clean = guardedPath(path);
+        const clean = normalizeMarkdownNotePath(guardedPath(path));
         await mkdir(dirname(join(vaultPath, clean)), { recursive: true });
         await writeFile(join(vaultPath, clean), content.endsWith("\n") ? content : `${content}\n`);
         return `wrote ${clean}`;
       },
       moveNote: async (from: string, to: string) => {
-        const cleanFrom = guardedPath(from);
-        const cleanTo = guardedPath(to);
+        const cleanFrom = normalizeMarkdownNotePath(guardedPath(from));
+        const cleanTo = normalizeMarkdownNotePath(guardedPath(to));
         await mkdir(dirname(join(vaultPath, cleanTo)), { recursive: true });
         await rename(join(vaultPath, cleanFrom), join(vaultPath, cleanTo));
         return `moved ${cleanFrom} -> ${cleanTo}`;
       },
       deleteNote: async (path: string) => {
-        const clean = guardedPath(path);
+        const clean = normalizeMarkdownNotePath(guardedPath(path));
         await rm(join(vaultPath, clean));
         return `deleted ${clean}`;
       },
@@ -1056,6 +1056,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
         await repo.discardChanges();
         throw new Error(`classification failed, store rolled back cleanly: ${(err as Error).message}`);
       }
+      classification = {
+        ...classification,
+        pages: classification.pages.map((page) => ({ ...page, path: normalizeMarkdownNotePath(page.path) })),
+      };
 
       // 4. Branch on confidence — ask, don't guess.
       if (classification.confidence < config.confidenceThreshold || classification.pages.length === 0) {

@@ -61,6 +61,12 @@ export function basenameOf(relPath: string): string {
   return last.replace(/\.md$/, "");
 }
 
+/** Normalize a vault-relative note path to the markdown filename Zenod owns. */
+export function normalizeMarkdownNotePath(relPath: string): string {
+  const clean = relPath.replaceAll("\\", "/").replace(/^\/+/, "");
+  return clean.endsWith(".md") ? clean : `${clean}.md`;
+}
+
 export function isIndexFile(relPath: string): boolean {
   const base = basenameOf(relPath);
   return base === "index" || base.endsWith("Index");

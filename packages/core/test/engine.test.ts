@@ -33,6 +33,7 @@ class FakeLlm implements BrainLlm {
   composeCalls = 0;
   confidence = 0.95;
   failComposeAttempts = 0;
+  classifyPath = "Areas/Insurance.md";
   answerInputs: AnswerInput[] = [];
   workInputs: WorkLoopInput[] = [];
 
@@ -42,7 +43,7 @@ class FakeLlm implements BrainLlm {
       confidence: this.confidence,
       summary: "note new insurance fact",
       tags: ["insurance"],
-      pages: [{ path: "Areas/Insurance.md", action: "update", title: "Insurance" }],
+      pages: [{ path: this.classifyPath, action: "update", title: "Insurance" }],
       ...(this.confidence < 0.7 ? { question: "Which area does this belong to?" } : {}),
     };
   }
@@ -378,6 +379,20 @@ describe("BrainEngine", () => {
     expect(report.errors).toEqual([]);
     const verify = await VaultRepo.open({ workdir: join(dir, "verify"), remoteUrl: join(dir, "origin.git") });
     expect(await verify.headSha()).toBe(result.commitSha);
+  });
+
+  it("normalizes classifier meaning-page paths to .md before writing", async () => {
+    llm.classifyPath = "Areas/Insurance";
+    const result = await engine().store({
+      content: "I just got travel insurance with Axa, policy ends March 2027.",
+      source: "cli",
+    });
+
+    expect(result.question).toBeUndefined();
+    expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
+    await expect(readFile(join(repo.path, "Areas/Insurance.md"), "utf8")).resolves.toContain("# Insurance");
+    await expect(readFile(join(repo.path, "Areas/Insurance"), "utf8")).rejects.toThrow();
+    expect((await engine().lint()).errors).toEqual([]);
   });
 
   it("low confidence lands as an Inbox stub with a question (DoD #6)", async () => {
