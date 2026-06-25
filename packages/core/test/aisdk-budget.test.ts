@@ -74,12 +74,89 @@ describe("answer tool-step budget", () => {
     );
 
     const system = captured.config.messages[0].content as string;
-    expect(system).toContain("Archus owns GitHub issue/backlog reads and writes");
-    expect(system).toContain("Epaminon owns execution starts and execution status");
+    expect(system).toContain("Archus owns the central GitHub backlog only");
+    expect(system).toContain("do not ask Archus to write that target repo");
+    expect(system).toContain("Epaminon owns execution starts, execution status, and Codex-backed work in product/code repos");
     expect(system).toContain("For exact run/start/execute requests on an existing owner/repo#N issue, call Epaminon's run-existing-issue tool");
-    expect(system).toContain("For one-off execution/research/operational work where the user did NOT ask to create/file/open a durable ticket");
+    expect(system).toContain("For one-off execution/research/operational work or product-repo mutation");
     expect(system).toContain("When the user asks for multiple side effects");
     expect(system).toContain("ask ONE concrete clarification before mutating or dispatching");
+  });
+
+  it("blocks Archus writes to repos outside Archus's central backlog authority", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    const actions: unknown[] = [];
+    await llm.answer(
+      {
+        question: "Please create an issue in zenod-ai/zenod for the GitHub access bug.",
+        vaultBriefing: "brief",
+        conversation: [],
+        onPeerAction: (tool, input, result) => actions.push({ tool, input, result }),
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        open_issue: {
+          owner: "archus",
+          authorityRepo: "AlfaBlok/obsidian-brain",
+          description: "Owner: Archus. Open/create a central backlog issue only.",
+          run: async (input) => {
+            calls.push(input);
+            return "created";
+          },
+        },
+      },
+    );
+
+    const result = await captured.config.tools.open_issue.execute({
+      input: "Create an issue in zenod-ai/zenod titled GitHub access bug.",
+    });
+
+    expect(result).toContain("ERROR: Blocked open_issue");
+    expect(result).toContain("Archus can directly write only its central backlog repo AlfaBlok/obsidian-brain");
+    expect(result).toContain("use Epaminon/Codex execution instead");
+    expect(calls).toHaveLength(0);
+    expect(actions).toEqual([
+      expect.objectContaining({
+        tool: "open_issue",
+        result: expect.stringContaining("Blocked open_issue"),
+      }),
+    ]);
+  });
+
+  it("allows Archus writes to its configured central backlog repo", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    await llm.answer(
+      {
+        question: "Please create an issue in AlfaBlok/obsidian-brain for the GitHub access bug.",
+        vaultBriefing: "brief",
+        conversation: [],
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        open_issue: {
+          owner: "archus",
+          authorityRepo: "AlfaBlok/obsidian-brain",
+          description: "Owner: Archus. Open/create a central backlog issue only.",
+          run: async (input) => {
+            calls.push(input);
+            return "created central issue";
+          },
+        },
+      },
+    );
+
+    const result = await captured.config.tools.open_issue.execute({
+      input: "Create an issue in AlfaBlok/obsidian-brain titled GitHub access bug.",
+    });
+
+    expect(result).toBe("created central issue");
+    expect(calls).toHaveLength(1);
   });
 
   it("deduplicates same-turn Console create-issues peer calls by issue content", async () => {

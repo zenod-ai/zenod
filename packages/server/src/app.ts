@@ -755,14 +755,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "chat_with_archus",
       arg: "message",
       description:
-        "Ask Archus a general backlog/GitHub-issue question that is not covered by the exact read/search/list tools. Archus owns GitHub issues and backlog triage. Do NOT use for execution runner status such as ran, picked up, queued by runner, blocked while running, or completed; use Epaminon for execution.",
+        "Ask Archus a general central-backlog/GitHub-issue question that is not covered by the exact read/search/list tools. Archus owns the configured central backlog repo, not arbitrary product/code repos. Do NOT use for execution runner status such as ran, picked up, queued by runner, blocked while running, or completed; use Epaminon for execution.",
     },
     {
       as: "archus_request_backlog_action",
       mcp: "chat_with_archus",
       arg: "message",
       description:
-        "Owner: Archus. Change the GitHub backlog: create an issue, update/comment/label an issue, or close an issue. Pass the user's request in natural language. Archus decides repo placement, labels, structure, duplicate handling, and returns issue numbers + URLs. Do NOT use for running/executing a ticket.",
+        "Owner: Archus. Change the configured central GitHub backlog only: create an issue, update/comment/label an issue, or close an issue in Archus's central backlog repo. Pass the user's request in natural language. If the user asks to change a product/code repo such as zenod-ai/zenod, do NOT use Archus to write that repo; use Epaminon/Codex execution or create a central tracking item that names the target repo. Do NOT use for running/executing a ticket.",
     },
     {
       as: "archus_run_issue",
@@ -776,21 +776,21 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "chat_with_archus",
       arg: "message",
       description:
-        "Open/create a GitHub issue. Pass the user's request in natural language (what to file, and which repo — or leave it for the central backlog). Archus writes a runnable ticket and returns its number + URL.",
+        "Open/create a central backlog issue only. Pass the user's request in natural language; Archus writes to its configured central backlog repo and returns its number + URL. Do NOT use this to create issues directly in product/code repos such as zenod-ai/zenod; that is Epaminon/Codex execution work.",
     },
     {
       as: "edit_issue",
       mcp: "chat_with_archus",
       arg: "message",
       description:
-        "Edit an existing GitHub issue — update its title/body, add a comment, or change labels. Say which issue (owner/repo#N) and what to change, in natural language.",
+        "Edit an existing central backlog issue — update its title/body, add a comment, or change labels. Say which central issue (owner/repo#N) and what to change, in natural language. Do NOT use this for product/code repos; route those mutations through Epaminon/Codex.",
     },
     {
       as: "close_issue",
       mcp: "chat_with_archus",
       arg: "message",
       description:
-        "Close a GitHub issue. Say which one (owner/repo#N), and optionally a closing comment. Archus closes it and confirms.",
+        "Close a central backlog issue. Say which central issue (owner/repo#N), and optionally a closing comment. Archus closes it and confirms. Do NOT use this for product/code repos; route those mutations through Epaminon/Codex.",
     },
   ];
   // Epaminon's "top tools": exact existing-issue execution starts and execution reads.
@@ -810,7 +810,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       arg: "objective",
       inputSchema: "epaminon.run_ephemeral_task",
       description:
-        "Owner: Epaminon. Start one one-off execution task without creating a GitHub issue by default. Use for ephemeral research or operational work when the user did not ask for a durable backlog ticket. Do NOT use for code changes that need review or for requests that explicitly ask to create/file/open a ticket.",
+        "Owner: Epaminon. Start one one-off Codex execution task without creating a central backlog issue by default. Use for ephemeral research, operational work, or product/code-repo mutations that Archus should not perform directly, including creating or editing a GitHub issue in a target repo such as zenod-ai/zenod. Do NOT use when the user specifically wants a durable central backlog record first.",
     },
     {
       as: "epaminon_read_issue_execution_status",

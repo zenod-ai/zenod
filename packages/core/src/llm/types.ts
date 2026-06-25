@@ -140,6 +140,13 @@ export interface VaultReadTools {
 export interface PeerTool {
   description: string;
   inputSchema?: unknown;
+  /**
+   * Repository this peer is allowed to mutate directly. For Archus this is the
+   * central backlog repo, not arbitrary product/code repos.
+   */
+  authorityRepo?: string;
+  /** Peer id, e.g. "archus"; used for owner-boundary guards. */
+  owner?: string;
   run(input: string | Record<string, unknown>): Promise<string>;
 }
 export type PeerTools = Record<string, PeerTool>;
