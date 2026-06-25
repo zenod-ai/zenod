@@ -511,10 +511,13 @@ describe("server API", () => {
         "epaminon_read_issue_execution_status",
       ]);
       expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_existing_issue")?.description).toContain("Start execution");
-      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_ephemeral_task")?.description).toContain("one-off execution");
+      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_ephemeral_task")?.description).toContain("one-off Codex execution");
+      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_ephemeral_task")?.description).toContain("product/code-repo mutations");
       expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_read_issue_execution_status")?.description).toContain("did it run");
       expect(archus?.tools?.find((tool) => tool.as === "archus_run_issue")?.description).toContain("Legacy fallback");
       expect(archus?.tools?.find((tool) => tool.as === "archus_request_backlog_action")?.description).toContain("Do NOT use for running");
+      expect(archus?.tools?.find((tool) => tool.as === "archus_request_backlog_action")?.description).toContain("configured central GitHub backlog only");
+      expect(archus?.tools?.find((tool) => tool.as === "open_issue")?.description).toContain("central backlog issue only");
     } finally {
       consoleRuntime.close();
       await rm(consoleDir, { recursive: true, force: true });

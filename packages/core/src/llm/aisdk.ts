@@ -818,6 +818,36 @@ export class AiSdkBrainLlm implements BrainLlm {
     // returns its answer. The model sees them as ordinary tools.
     const peerEntries = Object.entries(peerTools ?? {});
     const sameTurnPeerMutations = new Map<string, Promise<string>>();
+    const repoRefFromPeerArgs = (args: Record<string, unknown>): string | null => {
+      const values: string[] = [];
+      for (const key of ["repo", "target", "message", "input", "objective", "instructions", "originalRequest"] as const) {
+        const value = args[key];
+        if (typeof value === "string") values.push(value);
+      }
+      const issue = args.issue && typeof args.issue === "object" ? (args.issue as Record<string, unknown>) : null;
+      if (issue) {
+        for (const key of ["repo", "body", "title"] as const) {
+          const value = issue[key];
+          if (typeof value === "string") values.push(value);
+        }
+      }
+      const match = values.join("\n").match(/\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:#\d+)?\b/);
+      return match?.[1] ?? null;
+    };
+    const archusWriteBoundaryFailure = (name: string, peer: PeerTools[string], args: Record<string, unknown>): string | null => {
+      if (peer.owner !== "archus") return null;
+      const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const isArchusWrite =
+        normalized === "openissue" ||
+        normalized === "editissue" ||
+        normalized === "closeissue" ||
+        normalized === "archusrequestbacklogaction";
+      if (!isArchusWrite || !peer.authorityRepo) return null;
+      const requestedRepo = repoRefFromPeerArgs(args);
+      if (!requestedRepo || requestedRepo === peer.authorityRepo) return null;
+      return `Blocked ${name}: Archus can directly write only its central backlog repo ${peer.authorityRepo}. ` +
+        `The requested repo ${requestedRepo} is a product/target repo. For target-repo issue creation, edits, labels, or code-repo work, use Epaminon/Codex execution instead; if durable tracking is needed, create or update a central backlog item in ${peer.authorityRepo} that names target:${requestedRepo}.`;
+    };
     const peerMutationDedupeKey = (name: string, args: Record<string, unknown>): string | null => {
       if (name === "console_create_issues") {
         const issues = Array.isArray(args.issues) ? args.issues : [];
@@ -854,6 +884,12 @@ export class AiSdkBrainLlm implements BrainLlm {
               input.onPeerAction?.(name, args, result);
               return result;
             }
+            const boundaryFailure = archusWriteBoundaryFailure(name, peer, args);
+            if (boundaryFailure) {
+              const result = `ERROR: ${boundaryFailure}`;
+              input.onPeerAction?.(name, args, result);
+              return result;
+            }
             const dedupeKey = peerMutationDedupeKey(name, args);
             const existing = dedupeKey ? sameTurnPeerMutations.get(dedupeKey) : undefined;
             if (existing) return existing;
@@ -881,7 +917,7 @@ export class AiSdkBrainLlm implements BrainLlm {
       peerEntries.length
         ? `You have tools from connected peer agents (the mesh): ${peerEntries
             .map(([name]) => name)
-            .join(", ")}. Treat the tool owner as the authority boundary. Archus owns GitHub issue/backlog reads and writes. Epaminon owns execution starts and execution status. Zenod owns memory/vault reads and writes. Phylax owns notification decisions and delivery. Console owns cross-agent journeys and user-promise tracking. Use the narrowest owner tool that matches the user's intent; do not send an execution question to Archus, and do not send a backlog edit to Epaminon. If a Console journey tool exactly matches a multi-step request, use that ONE journey tool instead of manually chaining specialist tools: create-and-run newly filed issue -> console_create_issue_then_run; create multiple issues and optionally notify -> console_create_issues; one-off work with no durable ticket -> console_run_ephemeral_task. For exact run/start/execute requests on an existing owner/repo#N issue, call Epaminon's run-existing-issue tool when available. If that same request says to notify only after terminal/blocked state, pass notifyOnStart=false so the runner skips the pickup ping while still sending terminal/block notifications. For one-off execution/research/operational work where the user did NOT ask to create/file/open a durable ticket, call Console's ephemeral journey tool when available, otherwise call Epaminon's ephemeral-task tool, instead of creating a GitHub issue by default; if that tool only returns queued/running, say it is queued/running and do not print the requested final task output until Epaminon's execution-status says done. For 'did it run?', 'was it picked up?', 'what happened?', call Epaminon's execution-status tool. For backlog create/edit/close, call Archus. For memory search/read/store, call Zenod. When the user asks for multiple side effects (for example create a ticket and run it, run it then notify me, store this then open a follow-up), treat it as a sequenced journey: complete the first owner step, carry its returned URL/id into the next owner step, and clearly report any blocked step instead of pretending the whole journey finished. If target repo, exact issue, done condition, side effects, or order is ambiguous, ask ONE concrete clarification before mutating or dispatching.`
+            .join(", ")}. Treat the tool owner as the authority boundary. Archus owns the central GitHub backlog only: create/edit/close through Archus must target Archus's configured central backlog repo, not arbitrary product or code repos. Epaminon owns execution starts, execution status, and Codex-backed work in product/code repos. Zenod owns memory/vault reads and writes. Phylax owns notification decisions and delivery. Console owns cross-agent journeys and user-promise tracking. Use the narrowest owner tool that matches the user's intent; do not send an execution question to Archus, and do not send a central backlog edit to Epaminon. If a user asks to create/edit/label/close an issue directly in a target repo such as zenod-ai/zenod, do not ask Archus to write that target repo; use Epaminon/Codex execution, or create a central Archus backlog item that names the target repo for later execution. If a Console journey tool exactly matches a multi-step request, use that ONE journey tool instead of manually chaining specialist tools: create-and-run newly filed central issue -> console_create_issue_then_run; create multiple central backlog issues and optionally notify -> console_create_issues; one-off/product-repo work through Codex -> console_run_ephemeral_task. For exact run/start/execute requests on an existing owner/repo#N issue, call Epaminon's run-existing-issue tool when available. If that same request says to notify only after terminal/blocked state, pass notifyOnStart=false so the runner skips the pickup ping while still sending terminal/block notifications. For one-off execution/research/operational work or product-repo mutation where Archus should not write directly, call Console's ephemeral journey tool when available, otherwise call Epaminon's ephemeral-task tool; if that tool only returns queued/running, say it is queued/running and do not print the requested final task output until Epaminon's execution-status says done. For 'did it run?', 'was it picked up?', 'what happened?', call Epaminon's execution-status tool. For central backlog create/edit/close, call Archus. For memory search/read/store, call Zenod. When the user asks for multiple side effects (for example create a ticket and run it, run it then notify me, store this then open a follow-up), treat it as a sequenced journey: complete the first owner step, carry its returned URL/id into the next owner step, and clearly report any blocked step instead of pretending the whole journey finished. If target repo, exact issue, done condition, side effects, or order is ambiguous, ask ONE concrete clarification before mutating or dispatching.`
         : "",
     ].filter(Boolean);
 

@@ -397,6 +397,8 @@ export class Runtime {
         tools[spec.as] = {
           description: spec.description,
           ...(inputSchema ? { inputSchema } : {}),
+          owner: peer.name,
+          ...(peer.repo ? { authorityRepo: peer.repo } : {}),
           run: async (input: string | Record<string, unknown>) => {
             if (inputSchema) {
               const args = typeof input === "object" && input !== null ? input : { [spec.arg]: String(input ?? "") };
