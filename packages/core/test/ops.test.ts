@@ -1,3 +1,6 @@
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { getNote, NoteNotFoundError } from "../src/ops/get.js";
@@ -55,6 +58,24 @@ describe("getNote", () => {
     expect(note.frontmatter.title).toBe("Insurance");
     expect(note.body).toContain("Axa");
     expect(note.githubUrl).toContain("/blob/main/Areas/Insurance.md");
+  });
+
+  it("falls back to a legacy extensionless note when the caller asks for the .md path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-get-note-"));
+    try {
+      await mkdir(join(dir, "Projects"), { recursive: true });
+      await writeFile(
+        join(dir, "Projects/AI SDK 7 Selective Adoption Memo"),
+        "---\ntitle: AI SDK 7 Selective Adoption Memo\ntype: project\ntags: []\nsummary: Legacy extensionless page.\n---\n\n# AI SDK 7 Selective Adoption Memo\n",
+      );
+
+      const note = await getNote(dir, "Projects/AI SDK 7 Selective Adoption Memo.md", LOCATION);
+      expect(note.frontmatter.title).toBe("AI SDK 7 Selective Adoption Memo");
+      expect(note.path).toBe("Projects/AI SDK 7 Selective Adoption Memo");
+      expect(note.body).toContain("Selective Adoption Memo");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("throws NoteNotFoundError for missing notes", async () => {
