@@ -187,6 +187,7 @@ const DESCRIPTIVE_LEAD = new RegExp(
     `(?:(?:${MUTATION_VERBS})\\s*(?:[/,]\\s*|\\s+(?:and|or)\\s+))*$`,
   "i",
 );
+const NEGATED_MUTATION_LEAD = /\b(?:no|not|never|nothing|none|without|did(?: not|n't)|does(?: not|n't)|was(?: not|n't)|were(?: not|n't))\b(?!\s+only\b)[\s\S]{0,48}$/i;
 
 /**
  * The model's own this-turn assertions — with markdown blockquotes and fenced
@@ -206,7 +207,8 @@ function assertedProse(text: string): string {
 function hasActiveClaim(prose: string, verbs: string): boolean {
   const re = new RegExp(`\\b(${verbs})\\b`, "gi");
   for (const m of prose.matchAll(re)) {
-    if (DESCRIPTIVE_LEAD.test(prose.slice(Math.max(0, m.index - 28), m.index))) continue;
+    const lead = prose.slice(Math.max(0, m.index - 48), m.index);
+    if (DESCRIPTIVE_LEAD.test(lead) || NEGATED_MUTATION_LEAD.test(lead)) continue;
     return true;
   }
   return false;
@@ -217,7 +219,8 @@ function hasActiveIssueCreationClaim(prose: string): boolean {
   const re = new RegExp(`(?:\\b(${CREATION_VERBS})\\b[\\s\\S]{0,80}\\b${noun}\\b|\\b${noun}\\b[\\s\\S]{0,80}\\b(${CREATION_VERBS})\\b)`, "gi");
   for (const m of prose.matchAll(re)) {
     const verbIndex = m.index + m[0].search(new RegExp(`\\b(${CREATION_VERBS})\\b`, "i"));
-    if (DESCRIPTIVE_LEAD.test(prose.slice(Math.max(0, verbIndex - 28), verbIndex))) continue;
+    const lead = prose.slice(Math.max(0, verbIndex - 48), verbIndex);
+    if (DESCRIPTIVE_LEAD.test(lead) || NEGATED_MUTATION_LEAD.test(lead)) continue;
     return true;
   }
   return false;
@@ -236,7 +239,10 @@ function numbersClaimedAdjacent(prose: string, verbs: string): Set<number> {
     // Only active-voice verbs count — a verb in descriptive position ("#76 is
     // already queued") names the existing state, not a receipt for this turn.
     const activeAt = [...line.matchAll(verbRe)]
-      .filter((vm) => !DESCRIPTIVE_LEAD.test(line.slice(Math.max(0, vm.index - 28), vm.index)))
+      .filter((vm) => {
+        const lead = line.slice(Math.max(0, vm.index - 48), vm.index);
+        return !DESCRIPTIVE_LEAD.test(lead) && !NEGATED_MUTATION_LEAD.test(lead);
+      })
       .map((vm) => vm.index);
     if (activeAt.length === 0) continue;
     for (const m of line.matchAll(/#(\d+)\b/g)) {

@@ -79,6 +79,7 @@ describe("answer tool-step budget", () => {
     expect(system).toContain("Epaminon owns execution starts, execution status, and Codex-backed work in product/code repos");
     expect(system).toContain("For exact run/start/execute requests on an existing owner/repo#N issue, call Epaminon's run-existing-issue tool");
     expect(system).toContain("For one-off execution/research/operational work or product-repo mutation");
+    expect(system).toContain("Do not invent secondary backlog/create asks");
     expect(system).toContain("When the user asks for multiple side effects");
     expect(system).toContain("ask ONE concrete clarification before mutating or dispatching");
   });

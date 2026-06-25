@@ -88,6 +88,26 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, [])).toBe(reply);
   });
 
+  it("does not correct explicit no-op planning replies that say nothing was filed", () => {
+    const reply = [
+      "Nothing was filed — want me to create it now?",
+      "",
+      "Archus owns the central backlog item.",
+      "The target repo must be named explicitly inside the central issue.",
+    ].join("\n");
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
+  it("does not treat negative creation statements as fabricated creation claims", () => {
+    const replies = [
+      "No GitHub issue was created by this request.",
+      "No backlog item was opened.",
+      "None of the tickets were filed.",
+      "I did not create an issue.",
+    ];
+    for (const reply of replies) expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
   it("does not correct a partial result: leaves the genuinely-created issue when another create failed", () => {
     const reply = "Created issue #25: https://github.com/zenod-ai/zenod/issues/25";
     const actions: RecordedAction[] = [
