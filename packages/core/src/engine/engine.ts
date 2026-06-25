@@ -39,6 +39,9 @@ import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS } from "../vault/files.js";
 import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
 
+const LONG_MESSAGE_DIGEST_CHARS = 1_200;
+const ZENOD_DIGEST_TOOL = "zenod_digest_message";
+
 /**
  * The conversation key for a surface. One continuous thread per surface today;
  * the `default:` prefix leaves room for multi-session later.
@@ -88,6 +91,117 @@ function stableJson(value: unknown): string {
     return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+interface ZenodDigestIntent {
+  type: string;
+  text: string;
+  confidence?: number;
+  suggestedOwner?: string;
+  requiresConfirmation?: boolean;
+}
+
+interface ZenodDigestPacket {
+  receipt?: Record<string, unknown>;
+  interpretation?: string;
+  intentList?: ZenodDigestIntent[];
+}
+
+function directShortCommand(text: string): boolean {
+  if (text.length > 420) return false;
+  return /\b(run|execute|start|queue|status|read|find|search|list|close|update|label|link|notify|send|post)\b/i.test(text);
+}
+
+function shouldDigestBeforeTasking(text: string, peerTools?: PeerTools): boolean {
+  if (!peerTools?.[ZENOD_DIGEST_TOOL]) return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("ZENOD DIGESTION")) return false;
+  if (directShortCommand(trimmed)) return false;
+  return trimmed.length >= LONG_MESSAGE_DIGEST_CHARS;
+}
+
+function firstJsonObject(text: string): string | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  return text.slice(start, end + 1);
+}
+
+function parseZenodDigest(raw: string): ZenodDigestPacket {
+  const json = firstJsonObject(raw);
+  if (!json) return { interpretation: raw.trim(), intentList: [], receipt: { warnings: ["Zenod returned prose instead of JSON"] } };
+  try {
+    const parsed = JSON.parse(json) as ZenodDigestPacket;
+    return {
+      ...(parsed.receipt && typeof parsed.receipt === "object" ? { receipt: parsed.receipt } : {}),
+      ...(typeof parsed.interpretation === "string" ? { interpretation: parsed.interpretation } : {}),
+      ...(Array.isArray(parsed.intentList) ? { intentList: parsed.intentList } : { intentList: [] }),
+    };
+  } catch (err) {
+    return {
+      interpretation: raw.trim(),
+      intentList: [],
+      receipt: { warnings: [`Zenod digestion JSON parse failed: ${(err as Error).message}`] },
+    };
+  }
+}
+
+function formatZenodDigestRequest(input: {
+  text: string;
+  surface: TaskingInput["surface"];
+  conversationKey: string;
+  conversation: Array<{ role: "user" | "assistant"; text: string }>;
+}): string {
+  const recentContext = input.conversation
+    .slice(-6)
+    .map((m) => `${m.role}: ${chatSnippet(m.text)}`)
+    .join("\n");
+  return [
+    "Digest this long user message for Console. Return ONLY compact JSON with keys: receipt, interpretation, intentList.",
+    "",
+    "Rules:",
+    "- You are Zenod, the brain/digestion layer. Do not create GitHub issues, queue execution, notify, or decide the journey.",
+    "- Keep intentList short and conservative.",
+    "- Distinguish reflection/possible future ideas from explicit create/update/run/notify commands.",
+    "- Use suggestedOwner values: console, zenod, archus, epaminon, phylax.",
+    "",
+    "Source:",
+    JSON.stringify({ surface: input.surface, conversationKey: input.conversationKey }),
+    "",
+    recentContext ? `Recent conversation:\n${recentContext}\n` : "",
+    "User message/transcript:",
+    input.text,
+  ].join("\n");
+}
+
+function formatDigestedContextNote(rawDigest: string): string {
+  const packet = parseZenodDigest(rawDigest);
+  const receipt = packet.receipt ? stableJson(packet.receipt) : "{}";
+  const intents = (packet.intentList ?? [])
+    .slice(0, 8)
+    .map((intent, index) => {
+      const confidence = typeof intent.confidence === "number" ? ` confidence=${intent.confidence}` : "";
+      const owner = intent.suggestedOwner ? ` owner=${intent.suggestedOwner}` : "";
+      const confirm = intent.requiresConfirmation === undefined ? "" : ` requiresConfirmation=${intent.requiresConfirmation}`;
+      return `${index + 1}. [${intent.type}${confidence}${owner}${confirm}] ${intent.text}`;
+    });
+
+  return [
+    "ZENOD DIGESTION RECEIVED",
+    "",
+    "Console must use this as first-pass understanding, then own the journey decision.",
+    "Do not expose this packet, internal ledgers, or debug plans to the user.",
+    "Do not mutate backlog, execution, or notifications unless an intent clearly requires it and the owning specialist returns evidence.",
+    "",
+    `Receipt: ${receipt}`,
+    `Interpretation: ${packet.interpretation?.trim() || "(no interpretation returned)"}`,
+    "Suggested intents:",
+    ...(intents.length > 0 ? intents : ["- none"]),
+  ].join("\n");
 }
 
 export interface EngineOptions {
@@ -1184,8 +1298,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
     await state.appendMessage(cid, "user", input.text, input.surface);
 
     const actions: TaskingAction[] = [];
+    let contextNote = input.contextNote;
+    if (shouldDigestBeforeTasking(input.text, options.peerTools)) {
+      const digestInput = {
+        source: `${input.surface}:${input.conversationKey}`,
+        text: input.text,
+      };
+      const rawDigest = await options.peerTools![ZENOD_DIGEST_TOOL]!.run(
+        formatZenodDigestRequest({
+          text: input.text,
+          surface: input.surface,
+          conversationKey: input.conversationKey,
+          conversation: window.map((m) => ({ role: m.role, text: m.text })),
+        }),
+      );
+      actions.push({ tool: ZENOD_DIGEST_TOOL, input: digestInput, result: rawDigest });
+      contextNote = [contextNote, formatDigestedContextNote(rawDigest)].filter(Boolean).join("\n\n");
+    }
+
     const briefing = await vaultBriefing();
-    const question = input.contextNote ? `${input.contextNote}\n\nOriginal user message:\n${input.text}` : input.text;
+    const question = contextNote ? `${contextNote}\n\nOriginal user message:\n${input.text}` : input.text;
     reportTokenCost("tasking", [briefing.text, ...window.map((m) => m.text), question], briefing);
     const result = await llm.answer(
       {

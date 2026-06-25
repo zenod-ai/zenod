@@ -9,6 +9,7 @@ import type {
   Classification,
   ClassifyInput,
   ComposePageInput,
+  PeerTools,
   VaultReadTools,
   WorkLoopInput,
   WorkLoopResult,
@@ -58,11 +59,57 @@ class ReplayLlm implements BrainLlm {
   }
 }
 
-function replayEngine(cases: ReplayCase[]) {
+function replayEngine(cases: ReplayCase[], peerTools?: PeerTools) {
   return createEngine({
     llm: new ReplayLlm(new Map(cases.map((c) => [c.prompt, c]))),
     state: new SqliteStateStore(":memory:"),
+    ...(peerTools ? { peerTools } : {}),
   });
+}
+
+class RecordingLlm implements BrainLlm {
+  readonly questions: string[] = [];
+
+  constructor(
+    private readonly response: string,
+    private readonly actions: ReplayAction[] = [],
+  ) {}
+
+  async classify(_input: ClassifyInput): Promise<Classification> {
+    throw new Error("not used by Console digest tests");
+  }
+
+  async composePage(_input: ComposePageInput): Promise<string> {
+    throw new Error("not used by Console digest tests");
+  }
+
+  async describeImage(): Promise<string> {
+    throw new Error("not used by Console digest tests");
+  }
+
+  async answer(input: AnswerInput, _tools: VaultReadTools): Promise<AnswerResult> {
+    this.questions.push(input.question);
+    for (const action of this.actions) input.onPeerAction?.(action.tool, action.input ?? {}, action.result);
+    return { text: this.response, readPaths: [] };
+  }
+
+  async work(_input: WorkLoopInput): Promise<WorkLoopResult> {
+    throw new Error("not used by Console digest tests");
+  }
+
+  async extractBacklog(_input: BacklogExtractInput): Promise<BacklogExtractResult> {
+    throw new Error("not used by Console digest tests");
+  }
+}
+
+function longVoiceLikeReflection(): string {
+  return [
+    "I want to think through the Idealista data product strategy.",
+    "One option is to sell real estate opportunities directly, but that feels too exposed.",
+    "Another option is a defensive Airbnb or Telegram product where the data gives people daily opportunities.",
+    "I am not necessarily asking you to create tickets yet; I want to understand the shape and maybe decide later.",
+    "There is also a wacky public infrastructure idea about decentralized listings, but it is more of a future thought.",
+  ].join(" ").repeat(8);
 }
 
 describe("Console behavior replay harness", () => {
@@ -363,5 +410,124 @@ describe("Console behavior replay harness", () => {
     expect(reply.actions.map((action) => action.tool)).toEqual(["archus_search_github_issues"]);
     expect(reply.text).toContain("I did not close anything");
     expect(reply.text).toContain("which one do you mean");
+  });
+
+  it("routes long reflective voice-note text through Zenod digestion before Console answers", async () => {
+    const transcript = longVoiceLikeReflection();
+    const digestCalls: string[] = [];
+    const peerTools: PeerTools = {
+      zenod_digest_message: {
+        description: "digest long messages",
+        run: async (input) => {
+          digestCalls.push(String(input));
+          return JSON.stringify({
+            receipt: { source: "whatsapp:test-vn", rawAudio: "drive:file-1", transcriptRef: "Log/test.md#^e-vn" },
+            interpretation:
+              "This is a strategy reflection about monetizing Idealista/Airbnb analytics, with some possible future product ideas.",
+            intentList: [
+              {
+                type: "reflection",
+                text: "Think through product positioning before filing work.",
+                confidence: 0.91,
+                suggestedOwner: "console",
+                requiresConfirmation: false,
+              },
+              {
+                type: "possible_backlog",
+                text: "Explore an Airbnb/Telegram product concept later.",
+                confidence: 0.64,
+                suggestedOwner: "archus",
+                requiresConfirmation: true,
+              },
+            ],
+          });
+        },
+      },
+    };
+    const llm = new RecordingLlm(
+      "I understand this as a strategy reflection about Idealista/Airbnb analytics. I have not filed or run anything; I can turn the Airbnb/Telegram concept into a ticket if you want.",
+    );
+    const engine = createEngine({ llm, state: new SqliteStateStore(":memory:"), peerTools });
+
+    const reply = await engine.handleTasking({ text: transcript, surface: "whatsapp", conversationKey: "long-vn" });
+
+    expect(digestCalls).toHaveLength(1);
+    expect(digestCalls[0]).toContain("Return ONLY compact JSON");
+    expect(digestCalls[0]).toContain("User message/transcript:");
+    expect(llm.questions[0]).toContain("ZENOD DIGESTION RECEIVED");
+    expect(llm.questions[0]).toContain("Interpretation: This is a strategy reflection");
+    expect(llm.questions[0]).toContain("Original user message:");
+    expect(reply.actions[0]).toMatchObject({ tool: "zenod_digest_message" });
+    expect(reply.text).not.toContain("Detected asks");
+    expect(reply.text).not.toContain("Current intent ledger");
+    expect(reply.text).not.toContain("Safe action plan");
+    expect(reply.text).toContain("I have not filed or run anything");
+  });
+
+  it("does not force Zenod digestion for short direct execution commands", async () => {
+    const peerTools: PeerTools = {
+      zenod_digest_message: {
+        description: "digest long messages",
+        run: async () => {
+          throw new Error("short direct commands should not be digested");
+        },
+      },
+    };
+    const llm = new RecordingLlm("Queued execution [owner/central#104](https://github.com/owner/central/issues/104).", [
+      {
+        tool: "queueExecution",
+        input: { target: "zenod-ai/fixture#103" },
+        result:
+          "Minted execution ticket owner/central#104 (exec:queued) for zenod-ai/fixture#103 and dispatched to Epaminon: https://github.com/owner/central/issues/104",
+      },
+    ]);
+    const engine = createEngine({ llm, state: new SqliteStateStore(":memory:"), peerTools });
+
+    const reply = await engine.handleTasking({
+      text: "run zenod-ai/fixture#103",
+      surface: "whatsapp",
+      conversationKey: "short-run",
+    });
+
+    expect(llm.questions).toEqual(["run zenod-ai/fixture#103"]);
+    expect(reply.actions.map((action) => action.tool)).toEqual(["queueExecution"]);
+    expect(reply.text).toContain("Queued execution");
+  });
+
+  it("lets Console route an explicit backlog intent from Zenod digestion to Archus evidence", async () => {
+    const transcript = `${longVoiceLikeReflection()} Also, create a task to explore this as a Telegram product with acceptance criteria.`;
+    const peerTools: PeerTools = {
+      zenod_digest_message: {
+        description: "digest long messages",
+        run: async () =>
+          JSON.stringify({
+            receipt: { source: "whatsapp:test-vn", transcriptRef: "Log/test.md#^e-create" },
+            interpretation: "This is strategy reflection plus one explicit request to create a task.",
+            intentList: [
+              {
+                type: "create_backlog",
+                text: "Create a task to explore the Telegram product concept with acceptance criteria.",
+                confidence: 0.88,
+                suggestedOwner: "archus",
+                requiresConfirmation: false,
+              },
+            ],
+          }),
+      },
+    };
+    const llm = new RecordingLlm("Created [#400](https://github.com/zenod-ai/zenod/issues/400) for the Telegram product exploration.", [
+      {
+        tool: "archus_request_backlog_action",
+        input: { message: "Create a task to explore the Telegram product concept with acceptance criteria." },
+        result: "Created [#400](https://github.com/zenod-ai/zenod/issues/400) (status:proposed).",
+      },
+    ]);
+    const engine = createEngine({ llm, state: new SqliteStateStore(":memory:"), peerTools });
+
+    const reply = await engine.handleTasking({ text: transcript, surface: "whatsapp", conversationKey: "long-create" });
+
+    expect(reply.actions.map((action) => action.tool)).toEqual(["zenod_digest_message", "archus_request_backlog_action"]);
+    expect(reply.text).toContain("[#400](https://github.com/zenod-ai/zenod/issues/400)");
+    expect(reply.text).not.toContain("Detected asks");
   });
 });
