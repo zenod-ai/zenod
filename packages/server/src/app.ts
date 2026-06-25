@@ -678,6 +678,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // Zenod's memory toolset — each maps to one of z2's MCP tools, exposed to the Console chat.
   const ZENOD_MEMORY_TOOLS = [
     {
+      as: "zenod_digest_message",
+      mcp: "chat_with_zenod",
+      arg: "message",
+      description:
+        "Owner: Zenod. Digest a long user message, voice-note transcript, or attachment-derived text before Console updates journeys. Return a compact JSON packet with receipt, interpretation, and intentList only. Do not create GitHub issues, queue execution, notify, or decide the journey; Console owns those decisions.",
+    },
+    {
       as: "ask_zenod",
       mcp: "ask_brain",
       arg: "question",
