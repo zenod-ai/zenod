@@ -505,14 +505,14 @@ describe("server API", () => {
       expect(archus?.tools?.map((tool) => tool.as)).not.toEqual(
         expect.arrayContaining(["archus_get_issue", "archus_find_issue", "archus_list_issues"]),
       );
+      // #stab: the issue-less epaminon_run_ephemeral_task is retired from the Console
+      // surface; one-offs are ticket-backed via console_run_ephemeral_task.
       expect(epaminon?.tools?.map((tool) => tool.as)).toEqual([
         "epaminon_run_existing_issue",
-        "epaminon_run_ephemeral_task",
         "epaminon_read_issue_execution_status",
       ]);
       expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_existing_issue")?.description).toContain("Start execution");
-      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_ephemeral_task")?.description).toContain("one-off Codex execution");
-      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_ephemeral_task")?.description).toContain("product/code-repo mutations");
+      expect(epaminon?.tools?.map((tool) => tool.as)).not.toContain("epaminon_run_ephemeral_task");
       expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_read_issue_execution_status")?.description).toContain("did it run");
       expect(archus?.tools?.find((tool) => tool.as === "archus_run_issue")?.description).toContain("Legacy fallback");
       expect(archus?.tools?.find((tool) => tool.as === "archus_request_backlog_action")?.description).toContain("Do NOT use for running");

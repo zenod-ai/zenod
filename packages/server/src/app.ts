@@ -809,14 +809,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       description:
         "Owner: Epaminon. Start execution for one exact existing GitHub issue/work ticket. Input must include target owner/repo#123. Use for run/start/execute requests when the issue already exists. Do NOT use for status questions; use epaminon_read_issue_execution_status. If the user says to notify only after terminal/blocked state, set notifyOnStart=false.",
     },
-    {
-      as: "epaminon_run_ephemeral_task",
-      mcp: "epaminon.run_ephemeral_task",
-      arg: "objective",
-      inputSchema: "epaminon.run_ephemeral_task",
-      description:
-        "Owner: Epaminon. Start one one-off Codex execution task without creating a central backlog issue by default. Use for ephemeral research, operational work, or product/code-repo mutations that Archus should not perform directly, including creating or editing a GitHub issue in a target repo such as zenod-ai/zenod. Do NOT use when the user specifically wants a durable central backlog record first. Fire EXACTLY ONE ephemeral per user task — do NOT also queue a separate 'verification' run; the commit/PR evidence is verified automatically and is visible via execution_status. Ephemerals start immediately and run in parallel, so you CANNOT sequence them: never queue one described as running 'after' another finishes. When the task works a known codebase, resolve the user's informal project name to owner/repo (and a path if known) from your Known projects list and pass repo/path so the worker clones the right repo instead of guessing.",
-    },
+    // NOTE (#stab): the issue-less `epaminon_run_ephemeral_task` is intentionally NOT
+    // exposed here. One-off tasks must be ticket-backed — run them through the Console's
+    // `console_run_ephemeral_task` journey, which mints a real execution ticket (a GitHub
+    // issue) and dispatches Epaminon against it. The old tool created issue-less runs that
+    // left no durable trace; that path is retired from the front-end surface.
     {
       as: "epaminon_read_issue_execution_status",
       mcp: "execution_status",

@@ -30,7 +30,8 @@ import {
 import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue, setExecutionState } from "zenod";
 import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
-import { loadProjectRegistry, projectRegistrySection } from "./projectRegistry.js";
+import { loadProjectRegistry, projectRegistrySection, resolveProject } from "./projectRegistry.js";
+import { buildOneOffIssueBody, oneOffIssueTitle } from "./oneOffExecution.js";
 import { ExecutionQueue } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
@@ -50,7 +51,7 @@ import { callPeer, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
 import { createIssueThenRunJourney, type CreateIssueThenRunInput, type CreateIssueThenRunResult } from "./createIssueRunJourney.js";
 import { createIssuesJourney, type CreateIssuesJourneyInput, type CreateIssuesJourneyResult } from "./parallelIssueJourney.js";
-import { runEphemeralJourney, type RunEphemeralJourneyInput, type RunEphemeralJourneyResult } from "./ephemeralJourney.js";
+import { type RunEphemeralJourneyInput, type RunEphemeralJourneyResult } from "./ephemeralJourney.js";
 import { extractIntakeAsks, intakeAsksContextNote, prefixReplyWithIntakeAsks, resolveCurrentIntents, type IntakeAsk } from "./intakeAsks.js";
 import {
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
@@ -556,7 +557,7 @@ export class Runtime {
       },
       console_run_ephemeral_task: {
         description:
-          "Owner: Console. Durable workflow for one-off execution/research/ops where the user did NOT ask to create/file/open a GitHub issue. Creates a journey and asks Epaminon to run an ephemeral task without inventing a backlog ticket.",
+          "Owner: Console. Durable workflow for one-off execution/research/ops where the user did NOT ask to create a planning ticket first. THIS is the only way to run a one-off: it mints a real execution ticket (a GitHub issue holding the job description) via Archus and has Epaminon run against it, so every run is durable and traceable — there are no issue-less runs. Pass repo/path when the task works a known codebase. Use for any 'just do X' one-off; no separate backlog ticket is created, but the execution ticket always is.",
         inputSchema: z.object({
           originalRequest: z.string().optional().describe("the user's original request; omit to use the current message"),
           objective: z.string().describe("the one-off objective to execute"),
@@ -1380,13 +1381,44 @@ export class Runtime {
     if (this.agent.name !== "console") {
       throw new Error("ephemeral execution journeys are owned by the Console");
     }
-    const epaminon = this.settings.peers().find((peer) => peer.name === "epaminon");
-    if (!epaminon) throw new Error("Epaminon peer is not configured");
-    return runEphemeralJourney({
-      store: this.journeyStore,
-      epaminon,
-      request: input,
+    // #stab: there are no issue-less executions. A one-off still gets a real execution
+    // ticket (a GitHub issue holding the job description) that Archus mints and Epaminon
+    // runs against — so it is durable, traceable, and records its outcome on the issue.
+    // "Ephemeral" means "no separate planning/backlog ticket", never "no ticket". This
+    // routes through create-issue-then-run instead of the old issue-less enqueue.
+    const registry = loadProjectRegistry();
+    const match = resolveProject(registry, input.repo || input.objective);
+    const repo =
+      input.repo || match?.repo || this.settings.getRaw("backlog_repo") || this.settings.get("vault_repo") || "";
+    const path = input.path || match?.path;
+    const result = await this.createIssueThenRun({
+      originalRequest: input.originalRequest,
+      conversationId: input.conversationId ?? null,
+      surface: input.surface ?? "console",
+      issue: {
+        ...(repo ? { repo } : {}),
+        title: oneOffIssueTitle(input.objective),
+        body: buildOneOffIssueBody({
+          objective: input.objective,
+          ...(input.instructions ? { instructions: input.instructions } : {}),
+          ...(repo ? { repo } : {}),
+          ...(path ? { path } : {}),
+          ...(match?.deployNote ? { deployNote: match.deployNote } : {}),
+          ...(input.artifactPolicy ? { artifactPolicy: input.artifactPolicy } : {}),
+        }),
+        labels: ["one-off"],
+      },
+      ...(input.instructions ? { runInstructions: input.instructions } : {}),
     });
+    return {
+      journeyId: result.journeyId,
+      ...(result.execution ? { execution: result.execution } : {}),
+      status: result.status,
+      message: result.createdIssue
+        ? `Created execution ticket ${result.createdIssue.target} (${result.createdIssue.url}). ${result.message}`
+        : result.message,
+      snapshot: result.snapshot,
+    };
   }
 
   close(): void {
