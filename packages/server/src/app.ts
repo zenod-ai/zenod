@@ -46,6 +46,7 @@ import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./se
 import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
 import { type AgentDefinition } from "./agent.js";
+import { loadProjectRegistry, resolveProject } from "./projectRegistry.js";
 import { driveArchiveUnavailableReason } from "./voiceArchive.js";
 import { validateStepCallback, type StepCallbackResult } from "./journeyContracts.js";
 
@@ -432,6 +433,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       originalRequest?: string;
       objective?: string;
       instructions?: string;
+      repo?: string;
+      path?: string;
       artifactPolicy?: string;
     };
     const body = await c.req.json<RunEphemeralBody>().catch((): RunEphemeralBody => ({}));
@@ -443,6 +446,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       surface: body.surface?.trim() || "api",
       objective: body.objective,
       ...(body.instructions?.trim() ? { instructions: body.instructions } : {}),
+      ...(body.repo?.trim() ? { repo: body.repo } : {}),
+      ...(body.path?.trim() ? { path: body.path } : {}),
       ...(body.artifactPolicy?.trim() ? { artifactPolicy: body.artifactPolicy } : {}),
     });
     return c.json(result, result.status === "completed" ? 201 : 409);
@@ -810,7 +815,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       arg: "objective",
       inputSchema: "epaminon.run_ephemeral_task",
       description:
-        "Owner: Epaminon. Start one one-off Codex execution task without creating a central backlog issue by default. Use for ephemeral research, operational work, or product/code-repo mutations that Archus should not perform directly, including creating or editing a GitHub issue in a target repo such as zenod-ai/zenod. Do NOT use when the user specifically wants a durable central backlog record first.",
+        "Owner: Epaminon. Start one one-off Codex execution task without creating a central backlog issue by default. Use for ephemeral research, operational work, or product/code-repo mutations that Archus should not perform directly, including creating or editing a GitHub issue in a target repo such as zenod-ai/zenod. Do NOT use when the user specifically wants a durable central backlog record first. Fire EXACTLY ONE ephemeral per user task — do NOT also queue a separate 'verification' run; the commit/PR evidence is verified automatically and is visible via execution_status. Ephemerals start immediately and run in parallel, so you CANNOT sequence them: never queue one described as running 'after' another finishes. When the task works a known codebase, resolve the user's informal project name to owner/repo (and a path if known) from your Known projects list and pass repo/path so the worker clones the right repo instead of guessing.",
     },
     {
       as: "epaminon_read_issue_execution_status",
@@ -1862,12 +1867,20 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
               }
             : undefined,
           runtime.executionQueue
-            ? async ({ objective, instructions, artifactPolicy }) => {
+            ? async ({ objective, instructions, artifactPolicy, repo, path }) => {
                 const executionId = `ephemeral-${Date.now()}-${randomBytes(4).toString("hex")}`;
+                // Resolve a known-project alias (T4) so the worker gets a concrete repo/path
+                // instead of "find it yourself" — the cause of guess-and-fail runs (T5).
+                const match = resolveProject(loadProjectRegistry(), repo || objective);
+                const targetRepo = repo || match?.repo;
+                const targetPath = path || match?.path;
                 const context = [
                   "Ephemeral one-off execution requested.",
                   `Objective: ${objective}`,
                   instructions ? `Instructions: ${instructions}` : "",
+                  targetRepo ? `Target repo: ${targetRepo}. Clone and work THIS repo; do not guess or search for a different one.` : "",
+                  targetPath ? `Target path within repo: ${targetPath}` : "",
+                  match?.deployNote ? `Deploy reality: ${match.deployNote}` : "",
                   artifactPolicy ? `Artifact policy: ${artifactPolicy}` : "Artifact policy: do not create backlog issues unless explicitly needed.",
                 ]
                   .filter(Boolean)

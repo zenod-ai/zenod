@@ -10,6 +10,8 @@ export interface RunEphemeralJourneyInput {
   objective: string;
   instructions?: string;
   artifactPolicy?: string;
+  repo?: string;
+  path?: string;
 }
 
 export interface RunEphemeralJourneyResult {
@@ -63,6 +65,8 @@ export async function runEphemeralJourney(input: {
   const result = await callTool(input.epaminon, "epaminon.run_ephemeral_task", {
     objective: request.objective,
     ...(request.instructions ? { instructions: request.instructions } : {}),
+    ...(request.repo ? { repo: request.repo } : {}),
+    ...(request.path ? { path: request.path } : {}),
     ...(request.artifactPolicy ? { artifactPolicy: request.artifactPolicy } : {}),
   });
   if (result.isError) {

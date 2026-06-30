@@ -110,6 +110,12 @@ export const RUN_ISSUE_SHAPE = {
 export const RUN_EPHEMERAL_TASK_SHAPE = {
   objective: z.string().min(1).describe("The one-off task objective. This does not create a GitHub issue by default."),
   instructions: z.string().min(1).optional().describe("Optional constraints, context, or success criteria for the ephemeral run."),
+  repo: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Target GitHub repo as owner/repo when the task works a known codebase. Resolve the user's informal project name to this BEFORE calling; pass it so the worker clones the right repo instead of guessing."),
+  path: z.string().min(1).optional().describe("Sub-path within the repo where the relevant code lives, if known (e.g. 'app/telegram-bot')."),
   artifactPolicy: z
     .string()
     .min(1)

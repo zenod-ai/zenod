@@ -30,6 +30,7 @@ import {
 import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue, setExecutionState } from "zenod";
 import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
+import { loadProjectRegistry, projectRegistrySection } from "./projectRegistry.js";
 import { ExecutionQueue } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
@@ -327,7 +328,11 @@ export class Runtime {
       ...(repo ? { repo } : {}),
       llm,
       state: this.state,
-      persona: this.agent.persona,
+      // Front-end routing agents get the project registry appended so they resolve the
+      // user's informal project names to a concrete repo/path without asking (#stab T4).
+      persona: ["zenod", "console", "archus"].includes(this.agent.name)
+        ? `${this.agent.persona}${projectRegistrySection(loadProjectRegistry())}`
+        : this.agent.persona,
       ...(repo
         ? {
             location: {
@@ -556,6 +561,8 @@ export class Runtime {
           originalRequest: z.string().optional().describe("the user's original request; omit to use the current message"),
           objective: z.string().describe("the one-off objective to execute"),
           instructions: z.string().optional().describe("extra execution constraints/context"),
+          repo: z.string().optional().describe("target repo as owner/repo when the task works a known codebase"),
+          path: z.string().optional().describe("sub-path within the repo where the relevant code lives, if known"),
           artifactPolicy: z.string().optional().describe("where/how Epaminon should report artifacts, if the user specified it"),
         }),
         run: async (input) => {
@@ -565,6 +572,8 @@ export class Runtime {
             ...contextFor(args),
             objective: args.objective,
             ...(args.instructions ? { instructions: args.instructions } : {}),
+            ...(args.repo ? { repo: args.repo } : {}),
+            ...(args.path ? { path: args.path } : {}),
             ...(args.artifactPolicy ? { artifactPolicy: args.artifactPolicy } : {}),
           });
           return formatEphemeralResult(result);

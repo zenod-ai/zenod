@@ -459,7 +459,7 @@ function ephemeralPrompt(executionId, context) {
     "",
     "This task is ephemeral: do not create, edit, close, or run a GitHub issue unless the user explicitly asked for that in the context.",
     "Use the available Console MCP tools only when they are needed to complete the requested work.",
-    "Keep any filesystem work inside the current scratch directory unless the user explicitly names another target.",
+    "Keep any filesystem work inside the current scratch directory (clone any target repo here). If the context names a Target repo, clone and work THAT repo — do not search for or guess a different one.",
     "",
     `Execution id: ${executionId}`,
     "",
@@ -470,6 +470,8 @@ function ephemeralPrompt(executionId, context) {
     "- Start the final answer with one line: `Status: complete`, `Status: blocked`, or `Status: failed`.",
     "- If blocked, include the concrete blocker and the one question or next action needed.",
     "- If complete, include a concise summary of what was done and any evidence/pointers.",
+    "- Evidence must be REAL and verifiable. If you committed/pushed, include the FULL commit URL (https://github.com/<owner>/<repo>/commit/<sha>) or PR URL — a bare SHA without a URL is NOT accepted as evidence, and a fabricated SHA will be rejected. Never invent a commit, test result, or CI status.",
+    "- Deploy honesty: pushing to a branch is NOT the same as the change being live. If the change must redeploy to take effect, confirm the running service actually picked up the new commit before saying it is live. If you cannot confirm the redeploy, say `pushed but deploy unconfirmed` and do not tell the user they can test it live yet.",
   ].join("\n");
 }
 

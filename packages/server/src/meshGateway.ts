@@ -342,7 +342,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "epaminon",
     title: "Run ephemeral task",
     description:
-      "Owner: Epaminon. Start one one-off execution task without creating a GitHub issue by default. Use for ephemeral research or operational work when the user did not ask for a durable backlog ticket.",
+      "Owner: Epaminon. Start one one-off execution task without creating a GitHub issue by default. Use for ephemeral research or operational work when the user did not ask for a durable backlog ticket. Fire EXACTLY ONE ephemeral per user task — never also queue a separate 'verification' run (evidence is verified automatically and shown by execution_status), and never queue one that 'runs after' another since ephemerals run in parallel immediately. Pass repo (owner/repo) and path when the task works a known codebase so the worker does not have to guess.",
     inputSchema: RUN_EPHEMERAL_TASK_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },

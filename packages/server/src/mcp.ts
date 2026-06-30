@@ -49,7 +49,13 @@ export type ExistingIssueRunner = (input: {
   repo?: string;
   notifyOnStart?: boolean;
 }) => Promise<ExecutionTicket>;
-export type EphemeralTaskRunner = (input: { objective: string; instructions?: string; artifactPolicy?: string }) => Promise<ExecutionTicket>;
+export type EphemeralTaskRunner = (input: {
+  objective: string;
+  instructions?: string;
+  artifactPolicy?: string;
+  repo?: string;
+  path?: string;
+}) => Promise<ExecutionTicket>;
 export interface BacklogIssueReader {
   getIssue(input: { target: string }): Promise<ToolResponse>;
   findIssue(input: { reference: string; repos?: string[]; recentWindow?: string; labels?: string[]; limit?: number }): Promise<ToolResponse>;
