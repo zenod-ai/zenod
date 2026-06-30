@@ -82,6 +82,35 @@ export function validateCreateIssueThenRunRequest(request: CreateIssueThenRunInp
   return missing;
 }
 
+/**
+ * Make a one-off request runnable instead of letting it die at the clarify gate.
+ *
+ * A request with a clear objective used to hard-block on missing *ceremonial*
+ * sections (scope / acceptance / source context) — that silently killed real tasks
+ * (e.g. a research VN that produced nothing). The substance the validator actually
+ * needs is the objective; the rest can be defaulted. So: if the body is already
+ * structured, keep it; if it has content but lacks the sections, fold that content
+ * into a structured body with sensible defaults; only a genuinely empty request
+ * (no body AND no title) is left to the clarify gate (preserving ask-first).
+ */
+export function ensureRunnableBody(issue: { title: string; body?: string }): string {
+  const raw = (issue.body ?? "").trim();
+  if (raw && OBJECTIVE_RE.test(raw) && SCOPE_RE.test(raw) && DONE_RE.test(raw) && CONTEXT_RE.test(raw)) {
+    return raw; // already runnable — leave it untouched
+  }
+  const objective = raw || issue.title.trim();
+  if (!objective) return raw; // nothing actionable — let the validator block and ask
+  return [
+    `Objective: ${objective}`,
+    "",
+    "Scope: Complete the objective above; make no unrelated changes.",
+    "",
+    "Acceptance criteria: The objective is achieved. For code work the change is committed and pushed with the real commit/PR URL reported as evidence; for research/ops the result is committed or reported as described.",
+    "",
+    "Source context: One-off task auto-structured from the user's request; full intent is in the objective.",
+  ].join("\n");
+}
+
 function wantsTerminalOnlyNotification(request: CreateIssueThenRunInput): boolean {
   if (request.notifyOnStart === false) return true;
   const text = [request.originalRequest, request.runInstructions].filter(Boolean).join("\n");
@@ -132,6 +161,9 @@ export async function createIssueThenRunJourney(input: {
   const callTool = input.callTool ?? callPeerTool;
   const request = input.request;
   const issue = normalizeIssueRequest(request.issue, repoFromText(request.originalRequest));
+  // Auto-structure a clear request so it doesn't silently die at the clarify gate on
+  // missing ceremonial sections (#stab). Only a genuinely empty request still blocks.
+  issue.body = ensureRunnableBody(issue);
   const journey = input.store.create(
     {
       conversationId: request.conversationId ?? null,

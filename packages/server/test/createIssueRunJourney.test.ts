@@ -281,7 +281,7 @@ describe("createIssueThenRunJourney", () => {
     });
   });
 
-  it("blocks before creating or running when create-and-run lacks runnable details", async () => {
+  it("still blocks when the target repo is missing (a clear objective auto-fills the rest, but repo is required)", async () => {
     await withStore(async (store) => {
       const calls: Array<{ peer: string; tool: string }> = [];
       const callTool: JourneyPeerToolCaller = async (peer, tool) => {
@@ -306,14 +306,56 @@ describe("createIssueThenRunJourney", () => {
       expect(result.status).toBe("blocked");
       expect(result.createdIssue).toBeUndefined();
       expect(result.execution).toBeUndefined();
+      // The clear objective auto-structures (scope/acceptance/source context no longer
+      // block); only the genuinely-required target repo is still missing.
       expect(result.message).toContain("missing target repo");
-      expect(result.message).toContain("scope boundaries");
-      expect(result.message).toContain("acceptance criteria or done condition");
-      expect(result.message).toContain("source context");
+      expect(result.message).not.toContain("scope boundaries");
+      expect(result.message).not.toContain("acceptance criteria or done condition");
       expect(calls).toEqual([]);
       expect(result.snapshot.steps).toEqual([
         expect.objectContaining({ owner: "console", title: "Clarify create-and-run request", status: "blocked" }),
       ]);
+    });
+  });
+
+  it("creates and runs a clear one-off whose body lacks ceremonial sections (the research-VN fix)", async () => {
+    await withStore(async (store) => {
+      const calls: Array<{ peer: string; tool: string }> = [];
+      const callTool: JourneyPeerToolCaller = async (peer, tool, args) => {
+        calls.push({ peer: peer.name, tool });
+        if (tool === "create_issue") {
+          return {
+            isError: false,
+            content: [{ type: "text", text: "created" }],
+            structuredContent: { repo: "AlfaBlok/idea_scraper", issueNumber: 999, issueUrl: "https://github.com/AlfaBlok/idea_scraper/issues/999", labels: [] },
+          };
+        }
+        return {
+          isError: false,
+          content: [{ type: "text", text: "queued" }],
+          structuredContent: { ticket: { executionId: "999", target: "AlfaBlok/idea_scraper#999", state: "queued" } },
+        };
+      };
+
+      const result = await createIssueThenRunJourney({
+        store,
+        archus,
+        epaminon,
+        callTool,
+        request: {
+          originalRequest: "research prompt enhancements for the telegram bot and commit a markdown doc",
+          issue: {
+            repo: "AlfaBlok/idea_scraper",
+            title: "Prompt-enhancement research",
+            body: "Research prompt-enhancement recommendations for the telegram bot and commit a markdown doc.",
+          },
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.createdIssue?.target).toBe("AlfaBlok/idea_scraper#999");
+      expect(result.execution?.executionId).toBe("999");
+      expect(calls.map((c) => c.tool)).toEqual(["create_issue", "epaminon.run_existing_issue"]);
     });
   });
 
