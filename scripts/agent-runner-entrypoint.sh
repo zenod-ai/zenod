@@ -63,18 +63,26 @@ EOF
 }
 
 provision_claude() {
-  mkdir -p "$(dirname "${CLAUDE_CONFIG}")"
-  # Start from {} if the file is missing or not valid JSON; otherwise merge in
-  # place so any existing Claude config is preserved.
-  if ! jq empty "${CLAUDE_CONFIG}" >/dev/null 2>&1; then
-    echo '{}' > "${CLAUDE_CONFIG}"
+  # Claude Code reads its config from CLAUDE_CONFIG_DIR (not $HOME/.claude.json), so
+  # use the official `claude mcp add --scope user` — it writes to the right place and
+  # the headless worker (`claude -p`, non-bare) auto-loads user-scope MCP servers
+  # regardless of which worktree cwd it runs in. Idempotent (remove-then-add).
+  command -v claude >/dev/null 2>&1 || { log "claude: not installed, skipping MCP provisioning"; return 0; }
+  # Console MCP gateway: gives the worker the suite's curated semantic tools
+  # (search_memory/get_memory/ask_zenod, execution_status, etc.) so a code/research
+  # run can consult the vault and backlog mid-task. Bearer = the Console api_token.
+  claude mcp remove console --scope user >/dev/null 2>&1 || true
+  if [ -n "${ZENOD_CONSOLE_TOKEN:-}" ]; then
+    if claude mcp add --transport http --scope user console "${ZENOD_CONSOLE_MCP_URL}" \
+         --header "Authorization: Bearer ${ZENOD_CONSOLE_TOKEN}" >/dev/null 2>&1; then
+      log "claude: added mcp 'console' -> ${ZENOD_CONSOLE_MCP_URL}"
+    else
+      log "WARN: claude mcp add console failed"
+      return 1
+    fi
+  else
+    log "claude: ZENOD_CONSOLE_TOKEN unset — skipping console MCP"
   fi
-  local tmp
-  tmp="$(mktemp)"
-  jq --arg url "${X_MCP_POSTREAD_URL}" \
-     '.mcpServers = (.mcpServers // {}) | .mcpServers.x = {"type":"http","url":$url}' \
-     "${CLAUDE_CONFIG}" > "${tmp}" && mv "${tmp}" "${CLAUDE_CONFIG}"
-  log "claude: wrote mcpServers.x -> ${X_MCP_POSTREAD_URL}"
 }
 
 provision_codex  || log "WARN: codex X MCP config provisioning failed (continuing)"
