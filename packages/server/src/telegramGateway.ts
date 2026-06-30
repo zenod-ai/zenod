@@ -8,6 +8,7 @@ import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { formatStorageReceipt } from "./storageReceipt.js";
 import { agentKeptNote, archiveVoiceNote, driveArchiveUnavailableReason, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
 import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
+import { linkifyGithubRefs } from "./githubLinks.js";
 
 export type TelegramConnectionState = "disabled" | "disconnected" | "connected" | "error";
 
@@ -495,7 +496,8 @@ export class TelegramGateway {
     if (!markdown) return;
     if (this.settings().rich) {
       try {
-        await this.callApi("sendRichMessage", { chat_id: chatId, rich_message: { markdown } });
+        // Inline owner/repo#N → [owner/repo#N](issue url) in the rich markdown.
+        await this.callApi("sendRichMessage", { chat_id: chatId, rich_message: { markdown: linkifyGithubRefs(markdown, { markdown: true }) } });
         return;
       } catch (err) {
         console.warn(
@@ -503,7 +505,7 @@ export class TelegramGateway {
         );
       }
     }
-    for (const chunk of chunkText(markdown, PLAIN_MESSAGE_LIMIT)) {
+    for (const chunk of chunkText(linkifyGithubRefs(markdown, { markdown: false }), PLAIN_MESSAGE_LIMIT)) {
       await this.callApi("sendMessage", { chat_id: chatId, text: chunk });
     }
   }

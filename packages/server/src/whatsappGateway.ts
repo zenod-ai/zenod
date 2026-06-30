@@ -38,6 +38,7 @@ import {
   type WhatsAppStoreDiagnostics,
   type WhatsAppTranscriptFollowUp,
 } from "./whatsappStore.js";
+import { linkifyGithubRefs } from "./githubLinks.js";
 
 export type WhatsAppConnectionState = "disabled" | "disconnected" | "pairing" | "connected" | "error";
 
@@ -562,6 +563,8 @@ export class WhatsAppGateway {
     const recipients: string[] = [];
     const socket = this.socket;
     if (!text?.trim() || !socket) return { sent: 0, recipients };
+    // Make owner/repo#N references tappable (WhatsApp can't hyperlink text → link footer).
+    text = linkifyGithubRefs(text, { markdown: false });
     const owners = this.options.settings.whatsappSettings().allowedSenders.filter((s) => s && s !== "*");
     for (const number of owners) {
       const jid = `${number}@s.whatsapp.net`;
@@ -1202,6 +1205,7 @@ export class WhatsAppGateway {
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
     if (!text) return;
+    text = linkifyGithubRefs(text, { markdown: false });
     const recipientJid = this.recipientJid(event);
     try {
       const sent = await this.socket?.sendMessage(recipientJid, { text });
