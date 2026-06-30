@@ -6,10 +6,12 @@
 FROM node:22-bookworm-slim
 
 ARG CODEX_VERSION=0.137.0
+ARG CLAUDE_CODE_VERSION=latest
 
 ENV NODE_ENV=production \
     HOME=/runner \
     CODEX_HOME=/runner/codex-home \
+    CLAUDE_CONFIG_DIR=/runner/claude-home \
     GH_CONFIG_DIR=/runner/gh \
     FANOUT_WORKDIR=/runner/work \
     NPM_CONFIG_UPDATE_NOTIFIER=false
@@ -28,10 +30,17 @@ RUN apt-get update \
       ripgrep \
  && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /runner/work /runner/codex-home /runner/gh /opt/zenod/scripts
+RUN mkdir -p /runner/work /runner/codex-home /runner/claude-home /runner/gh /opt/zenod/scripts
 
-RUN npm install -g "@openai/codex@${CODEX_VERSION}" \
- && codex --version
+# Two interchangeable worker CLIs: Codex (OpenAI) and Claude Code (Anthropic). The
+# fan-out flow is engine-agnostic; default engine is claude (ZENOD_WORKER_ENGINE).
+# Claude auth mirrors codex: either a long-lived subscription token in
+# CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`), or OAuth creds from a one-time
+# `claude` login persisted in the mounted CLAUDE_CONFIG_DIR (/runner/claude-home).
+# Do NOT set ANTHROPIC_API_KEY when using subscription auth — it overrides OAuth.
+RUN npm install -g "@openai/codex@${CODEX_VERSION}" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+ && codex --version \
+ && claude --version
 
 COPY scripts/fanout-codex.mjs /opt/zenod/scripts/fanout-codex.mjs
 RUN chmod +x /opt/zenod/scripts/fanout-codex.mjs \
@@ -60,7 +69,7 @@ RUN git config --system credential."https://github.com".helper "!gh auth git-cre
 
 WORKDIR /runner/work
 
-VOLUME ["/runner/work", "/runner/codex-home", "/runner/gh"]
+VOLUME ["/runner/work", "/runner/codex-home", "/runner/claude-home", "/runner/gh"]
 
 ENTRYPOINT ["/opt/zenod/scripts/agent-runner-entrypoint.sh"]
 CMD ["bash", "-lc", "echo 'zenod-agent-runner ready'; sleep infinity"]

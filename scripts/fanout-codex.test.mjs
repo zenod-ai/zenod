@@ -5,7 +5,61 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, finalComment } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, finalComment, resolveEngine, resolveModel, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+
+test("resolveEngine defaults to claude, honors explicit flag, and infers from model", () => {
+  assert.equal(resolveEngine({}), "claude");
+  assert.equal(resolveEngine({ engine: "codex" }), "codex");
+  assert.equal(resolveEngine({ model: "gpt-5-codex" }), "codex");
+  assert.equal(resolveEngine({ model: "claude-sonnet-4-6" }), "claude");
+  assert.equal(resolveEngine({ model: "o3" }), "codex");
+});
+
+test("resolveModel defaults Claude to Sonnet 4.6 and leaves Codex to its own config", () => {
+  assert.equal(resolveModel("claude", {}), "claude-sonnet-4-6");
+  assert.equal(resolveModel("claude", { model: "claude-opus-4-1" }), "claude-opus-4-1");
+  assert.equal(resolveModel("codex", {}), null);
+  assert.equal(resolveModel("codex", { model: "gpt-5-codex" }), "gpt-5-codex");
+});
+
+test("buildWorkerSpawn produces correct headless flags per engine", () => {
+  const claude = buildWorkerSpawn({ engine: "claude", worktree: "/wt", finalPath: "/f.md", model: "claude-sonnet-4-6" });
+  assert.equal(claude.bin, "claude");
+  assert.equal(claude.capturesFinalToFile, false);
+  assert.deepEqual(claude.args, ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions", "--model", "claude-sonnet-4-6"]);
+
+  const codex = buildWorkerSpawn({ engine: "codex", worktree: "/wt", finalPath: "/f.md", model: null });
+  assert.equal(codex.bin, "codex");
+  assert.equal(codex.capturesFinalToFile, true);
+  assert.ok(codex.args.includes("--output-last-message") && codex.args.includes("/f.md"));
+  assert.ok(codex.args.includes("--cd") && codex.args.includes("/wt"));
+});
+
+test("extractFinalFromEvents pulls the Claude result event's final text", () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-final-"));
+  const p = join(dir, "events.jsonl");
+  writeFileSync(
+    p,
+    [
+      '{"type":"system","subtype":"init","model":"claude-sonnet-4-6"}',
+      '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"partial"}}}',
+      '{"type":"result","session_id":"s1","result":"Status: complete\\nDid the work; commit https://github.com/o/r/commit/abc1234.","total_cost_usd":0.004}',
+      "",
+    ].join("\n"),
+  );
+  assert.match(extractFinalFromEvents(p), /Status: complete/);
+  assert.match(extractFinalFromEvents(p), /commit https/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("extractWorkerError catches a Claude billing/credit failure too", () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-err-"));
+  const p = join(dir, "events.jsonl");
+  writeFileSync(p, '{"type":"system","subtype":"api_retry","error":"billing_error","error_status":402}\n');
+  assert.match(extractWorkerError(p), /billing_error/);
+  assert.match(classifyWorkerError(extractWorkerError(p)), /out of quota \/ credit|usage limit/i);
+  rmSync(dir, { recursive: true, force: true });
+});
 
 test("extractWorkerError recovers the real cause from the events stream (the #92 quota case)", () => {
   const dir = mkdtempSync(join(tmpdir(), "fanout-events-"));

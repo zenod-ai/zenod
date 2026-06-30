@@ -89,7 +89,8 @@ Start options:
   --concurrency <n>         Max workers to run at once. Default: issue count.
   --goal <text>             Root GOAL for the whole fan-out run.
   --goal-file <path>        File containing the root GOAL.
-  --model <model>           Optional Codex model override.
+  --engine <codex|claude>   Worker CLI. Default: claude (or ZENOD_WORKER_ENGINE).
+  --model <model>           Model override. Default per engine (claude: claude-sonnet-4-6).
   --thinking <effort>       Optional Codex reasoning effort if supported by installed CLI.
   --draft-pr                Push branches and open draft PRs.
   --github-status           Comment start/final/blocker status on GitHub issues.
@@ -261,9 +262,17 @@ function remoteMatchesRepo(remote, repo) {
   );
 }
 
-function verifyPrereqs({ allowNode18 = false } = {}) {
-  for (const cmd of ["git", "gh", "codex"]) {
-    if (!commandExists(cmd)) throw new Error(`Required command not found: ${cmd}`);
+function verifyPrereqs({ allowNode18 = false, engine = "codex" } = {}) {
+  const engineBin = engine === "claude" ? "claude" : "codex";
+  for (const cmd of ["git", "gh", engineBin]) {
+    if (!commandExists(cmd)) {
+      throw new Error(
+        `Required command not found: ${cmd}` +
+          (cmd === "claude"
+            ? " — install @anthropic-ai/claude-code in the runner image and authenticate (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, or a one-time `claude` login persisted in CLAUDE_CONFIG_DIR)."
+            : ""),
+      );
+    }
   }
   const nodeMajor = Number(process.versions.node.split(".")[0]);
   if (!allowNode18 && nodeMajor < 22) {
@@ -676,20 +685,11 @@ async function runWorker({ opts, manifest, issueNumber }) {
   await updateWorkerStatus(runDir, issueNumber, { status: "starting", startedAt: nowIso() });
   if (opts.githubStatus) syncIssueStatusLabel(manifest.repo, issueNumber, "starting");
 
-  const args = [
-    "exec",
-    "--json",
-    "--cd",
-    worker.worktree,
-    "--dangerously-bypass-approvals-and-sandbox",
-    "--output-last-message",
-    finalPath,
-  ];
-  if (opts.model) args.push("--model", opts.model);
-  if (opts.thinking) args.push("-c", `model_reasoning_effort="${opts.thinking}"`);
-  args.push("-");
+  const engine = manifest.options?.engine ?? resolveEngine(opts);
+  const model = manifest.options?.model ?? resolveModel(engine, opts);
+  const spawnSpec = buildWorkerSpawn({ engine, worktree: worker.worktree, finalPath, model, thinking: opts.thinking });
 
-  const child = spawn("codex", args, {
+  const child = spawn(spawnSpec.bin, spawnSpec.args, {
     cwd: worker.worktree,
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env,
@@ -700,7 +700,20 @@ async function runWorker({ opts, manifest, issueNumber }) {
 
   const exitCode = await new Promise((resolveExit) => child.on("close", resolveExit));
   const filesChanged = changedFiles(worker.worktree);
-  const finalText = existsSync(finalPath) ? readFileSync(finalPath, "utf8") : "";
+  // codex writes the final message to finalPath; claude's final text is in the event
+  // stream's `result` event — extract it and persist to finalPath so the rest of the
+  // flow (handoff excerpt, PR body, blocker detection) is identical for both engines.
+  let finalText = spawnSpec.capturesFinalToFile && existsSync(finalPath) ? readFileSync(finalPath, "utf8") : "";
+  if (!spawnSpec.capturesFinalToFile) {
+    finalText = extractFinalFromEvents(eventsPath);
+    if (finalText.trim()) {
+      try {
+        writeFileSync(finalPath, finalText);
+      } catch {
+        // best-effort; finalText is still used below
+      }
+    }
+  }
   const blocker = detectBlocker(finalText);
   let status = exitCode === 0 ? "complete" : "failed";
   if (blocker) status = "blocked";
@@ -807,8 +820,10 @@ function extractWorkerError(eventsPath) {
     } catch {
       continue;
     }
-    if (ev?.type === "error" && ev.message) message = String(ev.message);
-    else if (ev?.type === "turn.failed" && ev.error?.message) message = String(ev.error.message);
+    if (ev?.type === "error" && ev.message) message = String(ev.message); // codex
+    else if (ev?.type === "turn.failed" && ev.error?.message) message = String(ev.error.message); // codex
+    else if (ev?.type === "system" && ev.error) message = `${ev.error}${ev.error_status ? ` (${ev.error_status})` : ""}`; // claude api_retry/billing
+    else if (ev?.type === "result" && ev.is_error) message = String(ev.error || ev.result || "worker reported is_error"); // claude error result
   }
   return message;
 }
@@ -819,10 +834,71 @@ function extractWorkerError(eventsPath) {
 function classifyWorkerError(message) {
   if (!message) return null;
   const m = String(message).replace(/\s+/g, " ").trim();
-  if (/usage limit|quota|rate limit|upgrade to plus|insufficient_quota|too many requests|\b429\b/i.test(m)) {
-    return `Codex is out of quota / hit its usage limit — no work was done. Top up or wait, then re-run. Detail: ${m.slice(0, 240)}`;
+  if (/usage limit|quota|rate limit|rate_limit|upgrade to plus|insufficient_quota|too many requests|billing|credit balance|out of credit|\b429\b|\b402\b/i.test(m)) {
+    return `Worker model is out of quota / credit or hit a usage limit — no work was done. Top up or wait, then re-run. Detail: ${m.slice(0, 240)}`;
   }
   return m.slice(0, 400);
+}
+
+// --- Worker engine selection (codex CLI or Claude Code CLI, same GitHub flow) ---
+// The surrounding flow (clone/branch/commit/push/PR/report) is engine-agnostic; only
+// the inner "run the agent CLI, stream events, capture the final message" differs.
+// Default is Claude (Sonnet 4.6); codex is opt-in via --engine codex, a gpt/o-series
+// model, or ZENOD_WORKER_ENGINE=codex.
+function resolveEngine(opts = {}) {
+  const explicit = String(opts.engine || process.env.ZENOD_WORKER_ENGINE || "").trim().toLowerCase();
+  if (explicit === "codex" || explicit === "claude") return explicit;
+  const model = String(opts.model || "").toLowerCase();
+  if (model && /\b(?:gpt|o3|o4|codex|openai)\b/.test(model)) return "codex";
+  if (model && /\b(?:claude|sonnet|opus|haiku|fable)\b/.test(model)) return "claude";
+  return "claude";
+}
+
+function resolveModel(engine, opts = {}) {
+  if (opts.model) return String(opts.model);
+  if (engine === "claude") return process.env.ZENOD_WORKER_MODEL || "claude-sonnet-4-6";
+  return process.env.ZENOD_WORKER_MODEL_CODEX || null; // codex: fall back to its own config default
+}
+
+// Build the spawn command for the chosen engine. `capturesFinalToFile` says whether the
+// CLI writes the final message itself (codex --output-last-message) or we must extract it
+// from the event stream (claude's `result` event).
+function buildWorkerSpawn({ engine, worktree, finalPath, model, thinking }) {
+  if (engine === "claude") {
+    const args = ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
+    if (model) args.push("--model", model);
+    return { bin: "claude", args, capturesFinalToFile: false, stdinPrompt: true };
+  }
+  const args = ["exec", "--json", "--cd", worktree, "--dangerously-bypass-approvals-and-sandbox", "--output-last-message", finalPath];
+  if (model) args.push("--model", model);
+  if (thinking) args.push("-c", `model_reasoning_effort="${thinking}"`);
+  args.push("-");
+  return { bin: "codex", args, capturesFinalToFile: true, stdinPrompt: true };
+}
+
+// Claude Code has no --output-last-message; its final assistant text is the `result`
+// field of the terminal `{"type":"result",...}` stream-json event. Pull the last one.
+function extractFinalFromEvents(eventsPath) {
+  if (!existsSync(eventsPath)) return "";
+  let raw;
+  try {
+    raw = readFileSync(eventsPath, "utf8");
+  } catch {
+    return "";
+  }
+  let final = "";
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let ev;
+    try {
+      ev = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (ev?.type === "result" && typeof ev.result === "string") final = ev.result;
+  }
+  return final;
 }
 
 function executionBlockedRequest(opts, note) {
@@ -1006,7 +1082,9 @@ async function start(opts) {
   const execLane = Boolean(executionId);
   const goal = executionContext && !opts.goal && !opts.goalFile ? `GOAL: Execute Epaminon-dispatched work.\n\n${executionContext}` : resolveGoal(opts, issues);
 
-  verifyPrereqs({ allowNode18: opts.dryRun });
+  const engine = resolveEngine(opts);
+  const model = resolveModel(engine, opts);
+  verifyPrereqs({ allowNode18: opts.dryRun, engine });
   if (opts.githubStatus) ensureIssueStatusLabels(opts.repo);
   await ensureCheckout(opts.repo, workdir, base);
   await mkdir(thisRunDir, { recursive: true });
@@ -1029,7 +1107,8 @@ async function start(opts) {
       goalSupplied: Boolean(opts.goal || opts.goalFile),
       execLane,
       executionId: executionId || null,
-      model: opts.model ?? null,
+      engine,
+      model: model ?? null,
       thinking: opts.thinking ?? null,
     },
     workers: {},
@@ -1327,6 +1406,10 @@ export {
   extractWorkerError,
   classifyWorkerError,
   finalComment,
+  resolveEngine,
+  resolveModel,
+  buildWorkerSpawn,
+  extractFinalFromEvents,
 };
 
 // Run main() only when invoked as the entry script — but resolve symlinks first.

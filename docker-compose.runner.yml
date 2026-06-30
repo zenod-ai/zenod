@@ -60,6 +60,13 @@ services:
       # Console (GET /api/lane-secret with ZENOD_CONSOLE_TOKEN). ZENOD_EXEC_LANE_SECRET
       # may override the fetch in dev.
       ZENOD_EPAMINON_URL: ${ZENOD_EPAMINON_URL:-http://zenod-epaminon:8080}
+      # Worker engine (codex CLI or Claude Code CLI, same GitHub flow). Default is
+      # Claude/Sonnet 4.6; "use codex" routes a run to codex. CLAUDE_CODE_OAUTH_TOKEN
+      # is the subscription OAuth token from `claude setup-token` (in the Dokploy env).
+      # Do NOT set ANTHROPIC_API_KEY here — it overrides the subscription OAuth.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      ZENOD_WORKER_ENGINE: ${ZENOD_WORKER_ENGINE:-claude}
+      ZENOD_WORKER_MODEL: ${ZENOD_WORKER_MODEL:-claude-sonnet-4-6}
       # Point Codex at the post+read X endpoint so agents can actually tweet
       # (not just read). The entrypoint var is named *_READONLY_URL but it's
       # simply "the endpoint Codex registers" — set here to the posting instance.
