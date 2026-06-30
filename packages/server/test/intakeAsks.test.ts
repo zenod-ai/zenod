@@ -5,8 +5,27 @@ import {
   formatIntakeAsks,
   formatSafeActionPlan,
   intakeAsksContextNote,
+  isExecuteDirective,
   resolveCurrentIntents,
 } from "../src/intakeAsks.js";
+
+describe("execute fast-lane (isExecuteDirective)", () => {
+  it("recognizes a codex/Epaminon task directive, tolerating voice-transcription mangling", () => {
+    // The real research VN that shattered into 6: 'panminon' and 'codec' are mishearings.
+    const researchVn =
+      "I want to give a task to a panminon to run a codec's task to look at this idealista scraper repo and this Twitter bot. And I wanted to do like a small research job that culminates into a research document in Markdown, which it can commit to the repo.";
+    expect(isExecuteDirective(researchVn)).toBe(true);
+    expect(isExecuteDirective("this is a task for codex which I believe is controlled by Epaminon")).toBe(true);
+    expect(isExecuteDirective("have Epaminon run this and push it")).toBe(true);
+  });
+
+  it("does not fire for non-execute capabilities (so they still route/decompose normally)", () => {
+    expect(isExecuteDirective("remember that my flight is at 3pm tomorrow")).toBe(false);
+    expect(isExecuteDirective("can you post a tweet saying hello world")).toBe(false);
+    expect(isExecuteDirective("what's the status of that request from yesterday?")).toBe(false);
+    expect(isExecuteDirective("create a backlog ticket to improve onboarding")).toBe(false);
+  });
+});
 
 describe("intake ask extraction", () => {
   it("extracts the anchor voice-note asks into visible classified items", () => {

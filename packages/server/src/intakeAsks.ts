@@ -159,6 +159,20 @@ function mergeSimilarAsks(asks: IntakeAsk[]): IntakeAsk[] {
   return merged;
 }
 
+// Execute fast-lane (intake contract): a message that names codex/Epaminon AND an
+// action is a directive to RUN one task — not material to digest, decompose, or
+// re-interpret. The Console must take the whole message verbatim to one execution
+// ticket and hand it to Codex. Tolerant of voice-transcription mangling
+// (codex→"codec(s)", Epaminon→"panminon"/"paminon"). See docs/INTAKE-CONTRACT.md.
+const EXECUTE_AGENT_RE = /\b(?:codex|codecs?|epaminon|[eé]paminon|panmin[oó]n|paminon|epaminion)\b/i;
+const EXECUTE_ACTION_RE =
+  /\b(?:task|run|execute|launch|give (?:it|this|the task|a task)|hand (?:it|this)|have (?:it|him)|make|build|implement|change|fix|commit|push|deploy|research|do (?:a|the|this)|work on)\b/i;
+
+export function isExecuteDirective(text: string): boolean {
+  const t = String(text || "");
+  return EXECUTE_AGENT_RE.test(t) && EXECUTE_ACTION_RE.test(t);
+}
+
 export function extractIntakeAsks(text: string): IntakeAsk[] {
   const normalized = normalizeWhitespace(text);
   if (
