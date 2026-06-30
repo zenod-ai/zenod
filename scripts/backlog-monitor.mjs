@@ -25,7 +25,7 @@
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const BACKLOG = process.env.ZENOD_BACKLOG_REPO || "AlfaBlok/obsidian-brain";
@@ -99,6 +99,10 @@ function normalizeState(state) {
     mergeAttempts: Array.isArray(state?.mergeAttempts) ? state.mergeAttempts : [],
     dispatched: state?.dispatched ?? {}, // execution_id -> { repo, issueN, target, reportedStatus }
     ephemeral: state?.ephemeral ?? {}, // execution_id -> { target, promptPath, finalPath, reportedStatus }
+    // Reports to Epaminon that could not be delivered (lane not provisioned, network,
+    // HTTP error). Keyed "path|execution_id"; the scan loop re-flushes them so an
+    // execution never silently sticks at queued/running with its outcome lost (#stab T2).
+    pendingReports: state?.pendingReports ?? {},
   };
 }
 function parseBooleanSetting(value) {
@@ -506,24 +510,162 @@ async function ensureLaneSecret() {
 }
 
 // Report an Epaminon-owned execution edge back to its receivers, lane-secret gated.
-async function reportToEpaminon(path, body) {
+// Retries transient failures with backoff; returns false only after exhausting them
+// (or when the lane is unprovisioned) so callers can durably queue the report (#stab T2).
+async function reportToEpaminon(path, body, attempts = 3) {
   const secret = await ensureLaneSecret();
   if (!secret) {
     log(`exec-lane not provisioned — cannot report ${path} ${body.execution_id}`);
     return false;
   }
-  try {
-    const res = await fetch(`${EPAMINON_URL}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) log(`Epaminon rejected ${path} ${body.execution_id} (HTTP ${res.status})`);
-    return res.ok;
-  } catch (e) {
-    log(`report ${path} ${body.execution_id} failed:`, e.message);
-    return false;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(`${EPAMINON_URL}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) return true;
+      // 4xx (except 429) won't fix itself on retry; stop early.
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+        log(`Epaminon rejected ${path} ${body.execution_id} (HTTP ${res.status}) — not retrying`);
+        return false;
+      }
+      log(`Epaminon ${path} ${body.execution_id} HTTP ${res.status} (attempt ${i + 1}/${attempts})`);
+    } catch (e) {
+      log(`report ${path} ${body.execution_id} failed (attempt ${i + 1}/${attempts}):`, e.message);
+    }
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 500 * 2 ** i));
   }
+  return false;
+}
+
+// Deliver a report to Epaminon, notifying on success. If it cannot be delivered,
+// persist it to state.pendingReports so the scan loop re-flushes it — an execution
+// outcome is never silently dropped (#stab T2). Loads/saves state itself so it is
+// safe to call from detached child-exit handlers that hold no scan state.
+async function dispatchReport(path, body, notifyText) {
+  const ok = await reportToEpaminon(path, body);
+  if (ok) {
+    if (notifyText) await notify(notifyText);
+    return true;
+  }
+  const state = loadState();
+  if (!state.pendingReports) state.pendingReports = {};
+  state.pendingReports[`${path}|${body.execution_id}`] = {
+    path,
+    body,
+    notifyText: notifyText || "",
+    queuedAt: new Date().toISOString(),
+    attempts: 0,
+  };
+  saveState(state);
+  log(`queued pending report ${path} ${body.execution_id} for later flush`);
+  return false;
+}
+
+// Re-attempt every undelivered report. Mutates `state` (caller saves). Epaminon's
+// reportOutcome/reportBlocked tolerate duplicate/out-of-order callbacks, so retrying
+// a report that actually landed is harmless.
+async function flushPendingReports(state) {
+  const pending = state.pendingReports || {};
+  for (const [key, p] of Object.entries(pending)) {
+    const ok = await reportToEpaminon(p.path, p.body);
+    if (ok) {
+      if (p.notifyText) await notify(p.notifyText);
+      delete pending[key];
+      log(`flushed pending report ${key}`);
+    } else {
+      p.attempts = (p.attempts || 0) + 1;
+      p.lastTryAt = new Date().toISOString();
+    }
+  }
+}
+
+// Is a (possibly reparented, detached) PID still alive? signal 0 probes existence
+// without sending a real signal. EPERM means it exists but isn't ours.
+function isPidAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+
+// Read the last `maxBytes` of a file (the diagnostic tail). Empty string if absent.
+// Used to surface a failed Codex run's stderr/stream in its execution note (#stab T1).
+function tailFile(path, maxBytes = 4000) {
+  try {
+    const size = statSync(path).size;
+    if (size === 0) return "";
+    const start = Math.max(0, size - maxBytes);
+    const len = size - start;
+    const fd = openSync(path, "r");
+    try {
+      const buf = Buffer.alloc(len);
+      readSync(fd, buf, 0, len, start);
+      const text = buf.toString("utf8").replace(/\s+/g, " ").trim();
+      return start > 0 ? `…${text}` : text;
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
+// PURE: pull verifiable evidence (GitHub commit/PR URLs) out of a final handoff so a
+// "complete" claim can be checked before it is accepted as done (#stab T3). Returns
+// the distinct commit and PR URLs the worker claims as proof of its work.
+function extractEvidenceClaims(finalText) {
+  const text = String(finalText || "");
+  const commitUrls = [
+    ...new Set((text.match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/commit\/[0-9a-f]{7,40}/gi) || []).map((u) => u.replace(/[).,]+$/, ""))),
+  ];
+  const prUrls = [
+    ...new Set((text.match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+/gi) || []).map((u) => u.replace(/[).,]+$/, ""))),
+  ];
+  return { commitUrls, prUrls };
+}
+
+// Probe gh without throwing (the strict `gh()` throws on non-zero); returns ok flag.
+function ghProbe(args) {
+  try {
+    const r = spawnSync("gh", args, { encoding: "utf8" });
+    return { ok: r.status === 0, out: r.stdout || "", err: r.stderr || "" };
+  } catch (e) {
+    return { ok: false, out: "", err: e.message };
+  }
+}
+
+// Verify claimed commit/PR URLs actually exist on GitHub. Returns the verified and the
+// missing (404) URLs. Network/auth failures are treated as "unconfirmed", NOT missing,
+// so a flaky gh call can never fabricate a false "evidence not found" downgrade.
+function verifyEvidenceClaims(claims) {
+  const verified = [];
+  const missing = [];
+  const unconfirmed = [];
+  const commitRe = /github\.com\/([^/\s]+)\/([^/\s]+)\/commit\/([0-9a-f]{7,40})/i;
+  const prRe = /github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/i;
+  for (const url of claims.commitUrls) {
+    const m = url.match(commitRe);
+    if (!m) continue;
+    const probe = ghProbe(["api", `repos/${m[1]}/${m[2]}/commits/${m[3]}`, "--jq", ".sha"]);
+    if (probe.ok) verified.push(url);
+    else if (/Not Found|HTTP 404|No commit found/i.test(probe.err)) missing.push(url);
+    else unconfirmed.push(url);
+  }
+  for (const url of claims.prUrls) {
+    const m = url.match(prRe);
+    if (!m) continue;
+    const probe = ghProbe(["api", `repos/${m[1]}/${m[2]}/pulls/${m[3]}`, "--jq", ".number"]);
+    if (probe.ok) verified.push(url);
+    else if (/Not Found|HTTP 404/i.test(probe.err)) missing.push(url);
+    else unconfirmed.push(url);
+  }
+  return { verified, missing, unconfirmed };
 }
 
 async function markDispatchedLaunchBlocked(executionId, target, note) {
@@ -545,11 +687,41 @@ function noteFromFinalText(finalText, fallback) {
 
 async function reportEphemeralFinished(executionId, target, exitCode, finalPath) {
   const finalText = existsSync(finalPath) ? readFileSync(finalPath, "utf8") : "";
-  const stateName = ephemeralFinalState(exitCode, finalText);
-  const note = noteFromFinalText(finalText, `ephemeral worker exited with code ${exitCode ?? "unknown"}`);
+  let stateName = ephemeralFinalState(exitCode, finalText);
+  let note = noteFromFinalText(finalText, `ephemeral worker exited with code ${exitCode ?? "unknown"}`);
+  let evidenceUrl = "";
   const persisted = loadState();
   const entry = persisted.ephemeral?.[executionId];
   if (entry?.reportedStatus) return;
+  const eventsPath = entry?.eventsPath || ephemeralRunPaths(executionId).eventsPath;
+
+  // T3 anti-hallucination: a "complete" claim with a commit/PR URL must point at real
+  // GitHub objects. Fabricated evidence (a SHA/PR that does not exist) is downgraded to
+  // blocked rather than reported as done. Verified URLs become the ticket's evidence.
+  if (stateName === "complete") {
+    const claims = extractEvidenceClaims(finalText);
+    if (claims.commitUrls.length || claims.prUrls.length) {
+      const { verified, missing } = verifyEvidenceClaims(claims);
+      if (missing.length) {
+        stateName = "failed";
+        note = `claimed evidence not found on GitHub: ${missing.join(", ")} — not accepting as done. ${note}`.slice(0, 1000);
+      } else if (verified.length) {
+        evidenceUrl = verified.find((u) => /\/pull\//.test(u)) || verified[0];
+      }
+    } else {
+      // Complete but nothing checkable — make the unverifiability visible downstream.
+      note = `${note} [evidence: unverified — no commit/PR URL in final summary]`.slice(0, 1000);
+    }
+  }
+
+  // T1 traceability: a failed/blocked run, or one that produced no final message, must
+  // carry the diagnostic tail of its Codex stream so `execution_status` can answer
+  // "what went wrong?" — instead of the bare "exited with code N".
+  if (stateName !== "complete" || !finalText.trim()) {
+    const tail = tailFile(eventsPath);
+    if (tail) note = `${note}\n--- log tail ---\n${tail}`.slice(0, 1800);
+  }
+
   if (!persisted.ephemeral) persisted.ephemeral = {};
   persisted.ephemeral[executionId] = {
     ...(entry ?? { target }),
@@ -557,18 +729,39 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
     finishedAt: new Date().toISOString(),
     exitCode,
     finalPath,
+    eventsPath,
+    ...(evidenceUrl ? { evidenceUrl } : {}),
   };
   saveState(persisted);
 
   if (stateName === "complete") {
-    const ok = await reportToEpaminon("/api/exec/outcome", { execution_id: executionId, outward: false, note });
-    if (ok) await notify(`✅ Execution ${executionId} (${target}) — done.`);
+    await dispatchReport(
+      "/api/exec/outcome",
+      { execution_id: executionId, outward: false, note, ...(evidenceUrl ? { evidence_url: evidenceUrl } : {}) },
+      `✅ Execution ${executionId} (${target}) — done.${evidenceUrl ? ` ${evidenceUrl}` : ""}`,
+    );
     return;
   }
 
   const blockedNote = stateName === "blocked" ? note : `ephemeral worker failed: ${note}`;
-  const ok = await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: blockedNote });
-  if (ok) await notify(`⛔ Execution ${executionId} (${target}) — ${stateName}: ${blockedNote.slice(0, 240)}`);
+  await dispatchReport(
+    "/api/exec/blocked",
+    { execution_id: executionId, note: blockedNote },
+    `⛔ Execution ${executionId} (${target}) — ${stateName}: ${blockedNote.slice(0, 240)}`,
+  );
+}
+
+// Recover ephemeral runs whose child-exit callback was lost (monitor restart, OOM-killed
+// child, etc.): the PID is gone but no outcome was ever reported. Without this they stay
+// at running/queued forever with no trace (#stab T2). reportEphemeralFinished is idempotent
+// (guards on reportedStatus), so re-reporting an already-reported run is a no-op.
+async function sweepStaleEphemeral(state) {
+  for (const [executionId, e] of Object.entries(state.ephemeral || {})) {
+    if (!e || e.reportedStatus || !e.pid) continue;
+    if (isPidAlive(e.pid)) continue;
+    log(`sweep: ephemeral ${executionId} pid ${e.pid} is gone with no outcome — reporting`);
+    await reportEphemeralFinished(executionId, e.target, e.exitCode ?? 1, e.finalPath || ephemeralRunPaths(executionId).finalPath);
+  }
 }
 
 function launchEphemeral(executionId, target, context, state) {
@@ -603,7 +796,18 @@ function launchEphemeral(executionId, target, context, state) {
     }
     const note = `ephemeral runner failed to spawn for ${executionId}: ${err.code || err.message}`;
     log(note);
-    void reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note });
+    // Mark reported so the stale-ephemeral sweep won't re-report this run (#stab T2).
+    const s = loadState();
+    if (s.ephemeral?.[executionId]) {
+      s.ephemeral[executionId].reportedStatus = "failed";
+      s.ephemeral[executionId].finishedAt = new Date().toISOString();
+      saveState(s);
+    }
+    void dispatchReport(
+      "/api/exec/blocked",
+      { execution_id: executionId, note },
+      `⛔ Execution ${executionId} (${target}) — failed: ${note}`,
+    );
   });
   child.on("exit", (code) => {
     try {
@@ -1242,6 +1446,16 @@ async function scan(reason) {
     await reportDispatched(state);
 
     saveState(state);
+
+    // Durable report recovery (#stab T2): re-deliver any reports that failed earlier,
+    // then recover ephemeral runs whose exit callback was lost. Operates on a freshly
+    // loaded copy so it never clobbers the scan motions above; reportEphemeralFinished
+    // owns its own persistence (idempotent), so no save follows the sweep.
+    const recovery = loadState();
+    await flushPendingReports(recovery);
+    saveState(recovery);
+    await sweepStaleEphemeral(recovery);
+
     log(`scan (${reason}): ${issues.length} central issues, launched ${launched}`);
   } catch (e) {
     log("scan error:", e.message);
@@ -1322,6 +1536,10 @@ export {
   parseTarget,
   ephemeralFinalState,
   ephemeralPrompt,
+  extractEvidenceClaims,
+  tailFile,
+  isPidAlive,
+  flushPendingReports,
   workdirForRepo,
   dispatchedOutcome,
   shouldReportEarlyLaunchExit,

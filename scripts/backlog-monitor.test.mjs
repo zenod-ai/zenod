@@ -32,6 +32,9 @@ import {
   parseEphemeralTarget,
   ephemeralFinalState,
   ephemeralPrompt,
+  extractEvidenceClaims,
+  tailFile,
+  isPidAlive,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
@@ -435,6 +438,50 @@ test("early launch exit detection reports immediate nonzero child exits only", (
   assert.equal(shouldReportEarlyLaunchExit(null, 250), true);
   assert.equal(shouldReportEarlyLaunchExit(0, 250), false);
   assert.equal(shouldReportEarlyLaunchExit(1, 45_000, 30_000), false);
+});
+
+test("normalizeState preserves pendingReports (undelivered outcomes survive restart)", () => {
+  const s = normalizeState({
+    pendingReports: { "/api/exec/blocked|ephemeral-9": { path: "/api/exec/blocked", body: { execution_id: "ephemeral-9" } } },
+  });
+  assert.equal(s.pendingReports["/api/exec/blocked|ephemeral-9"].path, "/api/exec/blocked");
+  assert.deepEqual(normalizeState({}).pendingReports, {});
+});
+
+test("extractEvidenceClaims pulls distinct commit and PR URLs from a final handoff", () => {
+  const text = [
+    "Status: complete",
+    "Pushed commit: https://github.com/AlfaBlok/idea_scraper/commit/2ff0dfd17e6c2e72fe4738a06f2b9081d820a25e",
+    "see also (https://github.com/AlfaBlok/idea_scraper/pull/42).",
+    "duplicate https://github.com/AlfaBlok/idea_scraper/commit/2ff0dfd17e6c2e72fe4738a06f2b9081d820a25e",
+  ].join("\n");
+  const claims = extractEvidenceClaims(text);
+  assert.deepEqual(claims.commitUrls, ["https://github.com/AlfaBlok/idea_scraper/commit/2ff0dfd17e6c2e72fe4738a06f2b9081d820a25e"]);
+  assert.deepEqual(claims.prUrls, ["https://github.com/AlfaBlok/idea_scraper/pull/42"]);
+});
+
+test("extractEvidenceClaims returns nothing for a bare SHA with no URL (the hallucination case)", () => {
+  // The run that fabricated `f5726dbc…` reported only a bare SHA — nothing verifiable,
+  // so it cannot be accepted as evidence and the note must flag it as unverified.
+  const claims = extractEvidenceClaims("Status: complete\nFinal commit SHA: f5726dbccd829b2be37da1d9d806f0335fbc6b37");
+  assert.deepEqual(claims.commitUrls, []);
+  assert.deepEqual(claims.prUrls, []);
+});
+
+test("tailFile returns the trailing diagnostic bytes (or empty for a missing file)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tail-"));
+  const p = join(dir, "events.jsonl");
+  writeFileSync(p, "line one\nERROR something exploded\n");
+  assert.match(tailFile(p), /something exploded/);
+  assert.equal(tailFile(join(dir, "nope.jsonl")), "");
+  writeFileSync(p, "x".repeat(50));
+  assert.equal(tailFile(p, 10).startsWith("…"), true); // truncation marker when clipped
+});
+
+test("isPidAlive reports the current process alive and a bogus pid dead", () => {
+  assert.equal(isPidAlive(process.pid), true);
+  assert.equal(isPidAlive(0), false);
+  assert.equal(isPidAlive(2147483646), false); // implausibly high pid → ESRCH
 });
 
 test("early launch failure note includes target and runner log path", () => {
