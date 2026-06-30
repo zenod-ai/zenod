@@ -704,6 +704,9 @@ async function runWorker({ opts, manifest, issueNumber }) {
   const blocker = detectBlocker(finalText);
   let status = exitCode === 0 ? "complete" : "failed";
   if (blocker) status = "blocked";
+  // A failure with no handoff: recover the real cause from the events stream
+  // (e.g. "You've hit your usage limit") instead of reporting an empty failure.
+  const workerError = status !== "complete" && !finalText.trim() ? classifyWorkerError(extractWorkerError(eventsPath)) : null;
 
   await updateWorkerStatus(runDir, issueNumber, {
     status,
@@ -711,6 +714,7 @@ async function runWorker({ opts, manifest, issueNumber }) {
     finishedAt: nowIso(),
     filesChanged,
     blocker,
+    error: workerError,
     latestModelSummary: finalText.trim().replace(/\s+/g, " ").slice(0, 500) || null,
   });
 
@@ -724,10 +728,13 @@ async function runWorker({ opts, manifest, issueNumber }) {
     return;
   }
   if (exitCode !== 0) {
+    const reason = workerError ?? `Codex worker exited with code ${exitCode} and produced no final handoff.`;
     if (opts.githubStatus) {
       syncIssueStatusLabel(manifest.repo, issueNumber, "failed");
-      await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "failed", worker.branch, finalText), true);
+      await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "failed", worker.branch, finalText, null, reason), true);
     }
+    // Report the real reason back so the user notification says WHY (was silent before).
+    await reportExecutionBlocked(opts, reason);
     return;
   }
 
@@ -776,6 +783,46 @@ function detectBlocker(text) {
     }
   }
   return null;
+}
+
+// When a worker fails before writing its --output-last-message handoff (e.g. Codex
+// refuses on a usage limit), the reason is ONLY in the events stream. Pull the last
+// error / turn.failed message so the failure surfaces a real cause instead of the
+// useless "(no final handoff captured)". (#stab fan-out traceability)
+function extractWorkerError(eventsPath) {
+  if (!existsSync(eventsPath)) return null;
+  let raw;
+  try {
+    raw = readFileSync(eventsPath, "utf8");
+  } catch {
+    return null;
+  }
+  let message = null;
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let ev;
+    try {
+      ev = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (ev?.type === "error" && ev.message) message = String(ev.message);
+    else if (ev?.type === "turn.failed" && ev.error?.message) message = String(ev.error.message);
+  }
+  return message;
+}
+
+// Turn a raw worker error into a short, actionable reason. Quota/limit failures are
+// the common operational case (the user's Codex account is out of credit), so name
+// them plainly with the retry hint the model already gave.
+function classifyWorkerError(message) {
+  if (!message) return null;
+  const m = String(message).replace(/\s+/g, " ").trim();
+  if (/usage limit|quota|rate limit|upgrade to plus|insufficient_quota|too many requests|\b429\b/i.test(m)) {
+    return `Codex is out of quota / hit its usage limit — no work was done. Top up or wait, then re-run. Detail: ${m.slice(0, 240)}`;
+  }
+  return m.slice(0, 400);
 }
 
 function executionBlockedRequest(opts, note) {
@@ -929,8 +976,8 @@ function blockerComment(runIdValue, branch, blocker) {
   ].filter(Boolean).join("\n");
 }
 
-function finalComment(runIdValue, issueNumber, status, branch, finalText, prUrl = null) {
-  const excerpt = finalText.trim().slice(0, 3000) || "(no final handoff captured)";
+function finalComment(runIdValue, issueNumber, status, branch, finalText, prUrl = null, errorText = null) {
+  const excerpt = finalText.trim().slice(0, 3000) || (errorText ? `Worker error: ${errorText}` : "(no final handoff captured)");
   return [
     `Fan-out run \`${runIdValue}\` finished for #${issueNumber}.`,
     "",
@@ -1277,6 +1324,9 @@ export {
   remoteMatchesRepo,
   resetBaseCheckout,
   branchName,
+  extractWorkerError,
+  classifyWorkerError,
+  finalComment,
 };
 
 // Run main() only when invoked as the entry script — but resolve symlinks first.

@@ -5,7 +5,40 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, finalComment } from "./fanout-codex.mjs";
+
+test("extractWorkerError recovers the real cause from the events stream (the #92 quota case)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "fanout-events-"));
+  const p = join(dir, "events.jsonl");
+  writeFileSync(
+    p,
+    [
+      '{"type":"thread.started","thread_id":"x"}',
+      '{"type":"turn.started"}',
+      '{"type":"error","message":"You\'ve hit your usage limit. Upgrade to Plus to continue using Codex, or try again at Jul 26th, 2026 7:56 AM."}',
+      '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Plus to continue using Codex, or try again at Jul 26th, 2026 7:56 AM."}}',
+      "",
+    ].join("\n"),
+  );
+  assert.match(extractWorkerError(p), /usage limit/);
+  rmSync(dir, { recursive: true, force: true });
+  assert.equal(extractWorkerError(join(dir, "missing.jsonl")), null);
+});
+
+test("classifyWorkerError names a quota failure plainly and actionably", () => {
+  const friendly = classifyWorkerError("You've hit your usage limit. Upgrade to Plus ... try again at Jul 26th.");
+  assert.match(friendly, /out of quota|usage limit/i);
+  assert.match(friendly, /re-run|wait|Top up/i);
+  assert.equal(classifyWorkerError(null), null);
+  assert.equal(classifyWorkerError("some unknown crash"), "some unknown crash");
+});
+
+test("finalComment shows the worker error instead of '(no final handoff captured)' when there is no handoff", () => {
+  const withErr = finalComment("run1", 92, "failed", "br", "", null, "Codex is out of quota — no work done.");
+  assert.match(withErr, /Worker error: Codex is out of quota/);
+  assert.doesNotMatch(withErr, /no final handoff captured/);
+  assert.match(finalComment("run1", 92, "failed", "br", ""), /no final handoff captured/);
+});
 
 function git(cwd, args) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
