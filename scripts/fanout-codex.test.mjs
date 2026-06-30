@@ -34,6 +34,7 @@ test("buildWorkerSpawn produces correct headless flags per engine", () => {
   assert.equal(claude.bin, "claude");
   assert.equal(claude.capturesFinalToFile, false);
   assert.deepEqual(claude.args, ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions", "--model", "claude-opus-4-8", "--effort", "low"]);
+  assert.equal(claude.env?.IS_SANDBOX, "1"); // root container needs the sandbox escape hatch
 
   const codex = buildWorkerSpawn({ engine: "codex", worktree: "/wt", finalPath: "/f.md", model: null });
   assert.equal(codex.bin, "codex");

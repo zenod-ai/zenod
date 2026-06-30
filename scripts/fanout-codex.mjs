@@ -694,7 +694,7 @@ async function runWorker({ opts, manifest, issueNumber }) {
   const child = spawn(spawnSpec.bin, spawnSpec.args, {
     cwd: worker.worktree,
     stdio: ["pipe", "pipe", "pipe"],
-    env: process.env,
+    env: { ...process.env, ...(spawnSpec.env ?? {}) },
   });
   child.stdin.end(readFileSync(promptPath, "utf8"));
   await updateWorkerStatus(runDir, issueNumber, { pid: child.pid });
@@ -878,13 +878,16 @@ function buildWorkerSpawn({ engine, worktree, finalPath, model, thinking, effort
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
     if (model) args.push("--model", model);
     if (effort) args.push("--effort", effort);
-    return { bin: "claude", args, capturesFinalToFile: false, stdinPrompt: true };
+    // Claude Code refuses --dangerously-skip-permissions as root unless it knows it's
+    // in a sandbox. The runner is an isolated, throwaway container (root-owned, like
+    // codex), so declare the sandbox escape hatch for the worker process only.
+    return { bin: "claude", args, capturesFinalToFile: false, stdinPrompt: true, env: { IS_SANDBOX: "1" } };
   }
   const args = ["exec", "--json", "--cd", worktree, "--dangerously-bypass-approvals-and-sandbox", "--output-last-message", finalPath];
   if (model) args.push("--model", model);
   if (thinking) args.push("-c", `model_reasoning_effort="${thinking}"`);
   args.push("-");
-  return { bin: "codex", args, capturesFinalToFile: true, stdinPrompt: true };
+  return { bin: "codex", args, capturesFinalToFile: true, stdinPrompt: true, env: {} };
 }
 
 // Claude Code has no --output-last-message; its final assistant text is the `result`
