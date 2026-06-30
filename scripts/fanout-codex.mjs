@@ -90,7 +90,8 @@ Start options:
   --goal <text>             Root GOAL for the whole fan-out run.
   --goal-file <path>        File containing the root GOAL.
   --engine <codex|claude>   Worker CLI. Default: claude (or ZENOD_WORKER_ENGINE).
-  --model <model>           Model override. Default per engine (claude: claude-sonnet-4-6).
+  --model <model>           Model override. Default per engine (claude: claude-opus-4-8).
+  --effort <level>          Claude reasoning effort: low|medium|high|xhigh|max. Default: low.
   --thinking <effort>       Optional Codex reasoning effort if supported by installed CLI.
   --draft-pr                Push branches and open draft PRs.
   --github-status           Comment start/final/blocker status on GitHub issues.
@@ -687,7 +688,8 @@ async function runWorker({ opts, manifest, issueNumber }) {
 
   const engine = manifest.options?.engine ?? resolveEngine(opts);
   const model = manifest.options?.model ?? resolveModel(engine, opts);
-  const spawnSpec = buildWorkerSpawn({ engine, worktree: worker.worktree, finalPath, model, thinking: opts.thinking });
+  const effort = manifest.options?.effort ?? resolveEffort(engine, opts);
+  const spawnSpec = buildWorkerSpawn({ engine, worktree: worker.worktree, finalPath, model, thinking: opts.thinking, effort });
 
   const child = spawn(spawnSpec.bin, spawnSpec.args, {
     cwd: worker.worktree,
@@ -856,17 +858,26 @@ function resolveEngine(opts = {}) {
 
 function resolveModel(engine, opts = {}) {
   if (opts.model) return String(opts.model);
-  if (engine === "claude") return process.env.ZENOD_WORKER_MODEL || "claude-sonnet-4-6";
+  if (engine === "claude") return process.env.ZENOD_WORKER_MODEL || "claude-opus-4-8";
   return process.env.ZENOD_WORKER_MODEL_CODEX || null; // codex: fall back to its own config default
+}
+
+// Reasoning effort. Claude (Opus 4.8) defaults to HIGH, so we pin LOW for cheap,
+// fast worker runs unless overridden (--effort, ZENOD_WORKER_EFFORT). Codex uses its
+// own `thinking`/-c mechanism, so effort stays null there.
+function resolveEffort(engine, opts = {}) {
+  if (engine !== "claude") return opts.thinking ? String(opts.thinking) : null;
+  return String(opts.effort || opts.thinking || process.env.ZENOD_WORKER_EFFORT || "low");
 }
 
 // Build the spawn command for the chosen engine. `capturesFinalToFile` says whether the
 // CLI writes the final message itself (codex --output-last-message) or we must extract it
 // from the event stream (claude's `result` event).
-function buildWorkerSpawn({ engine, worktree, finalPath, model, thinking }) {
+function buildWorkerSpawn({ engine, worktree, finalPath, model, thinking, effort }) {
   if (engine === "claude") {
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
     if (model) args.push("--model", model);
+    if (effort) args.push("--effort", effort);
     return { bin: "claude", args, capturesFinalToFile: false, stdinPrompt: true };
   }
   const args = ["exec", "--json", "--cd", worktree, "--dangerously-bypass-approvals-and-sandbox", "--output-last-message", finalPath];
@@ -1084,6 +1095,7 @@ async function start(opts) {
 
   const engine = resolveEngine(opts);
   const model = resolveModel(engine, opts);
+  const effort = resolveEffort(engine, opts);
   verifyPrereqs({ allowNode18: opts.dryRun, engine });
   if (opts.githubStatus) ensureIssueStatusLabels(opts.repo);
   await ensureCheckout(opts.repo, workdir, base);
@@ -1109,6 +1121,7 @@ async function start(opts) {
       executionId: executionId || null,
       engine,
       model: model ?? null,
+      effort: effort ?? null,
       thinking: opts.thinking ?? null,
     },
     workers: {},
@@ -1408,6 +1421,7 @@ export {
   finalComment,
   resolveEngine,
   resolveModel,
+  resolveEffort,
   buildWorkerSpawn,
   extractFinalFromEvents,
 };

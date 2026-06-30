@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, finalComment, resolveEngine, resolveModel, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, finalComment, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
 
 test("resolveEngine defaults to claude, honors explicit flag, and infers from model", () => {
   assert.equal(resolveEngine({}), "claude");
@@ -15,18 +15,25 @@ test("resolveEngine defaults to claude, honors explicit flag, and infers from mo
   assert.equal(resolveEngine({ model: "o3" }), "codex");
 });
 
-test("resolveModel defaults Claude to Sonnet 4.6 and leaves Codex to its own config", () => {
-  assert.equal(resolveModel("claude", {}), "claude-sonnet-4-6");
-  assert.equal(resolveModel("claude", { model: "claude-opus-4-1" }), "claude-opus-4-1");
+test("resolveModel defaults Claude to Opus 4.8 and leaves Codex to its own config", () => {
+  assert.equal(resolveModel("claude", {}), "claude-opus-4-8");
+  assert.equal(resolveModel("claude", { model: "claude-sonnet-4-6" }), "claude-sonnet-4-6");
   assert.equal(resolveModel("codex", {}), null);
   assert.equal(resolveModel("codex", { model: "gpt-5-codex" }), "gpt-5-codex");
 });
 
+test("resolveEffort defaults Claude to low, honors override, leaves Codex to thinking", () => {
+  assert.equal(resolveEffort("claude", {}), "low");
+  assert.equal(resolveEffort("claude", { effort: "high" }), "high");
+  assert.equal(resolveEffort("codex", {}), null);
+  assert.equal(resolveEffort("codex", { thinking: "high" }), "high");
+});
+
 test("buildWorkerSpawn produces correct headless flags per engine", () => {
-  const claude = buildWorkerSpawn({ engine: "claude", worktree: "/wt", finalPath: "/f.md", model: "claude-sonnet-4-6" });
+  const claude = buildWorkerSpawn({ engine: "claude", worktree: "/wt", finalPath: "/f.md", model: "claude-opus-4-8", effort: "low" });
   assert.equal(claude.bin, "claude");
   assert.equal(claude.capturesFinalToFile, false);
-  assert.deepEqual(claude.args, ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions", "--model", "claude-sonnet-4-6"]);
+  assert.deepEqual(claude.args, ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions", "--model", "claude-opus-4-8", "--effort", "low"]);
 
   const codex = buildWorkerSpawn({ engine: "codex", worktree: "/wt", finalPath: "/f.md", model: null });
   assert.equal(codex.bin, "codex");
