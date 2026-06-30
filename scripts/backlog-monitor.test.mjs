@@ -41,10 +41,10 @@ test("fan-in batch keys are deterministic by issue number", () => {
   assert.equal(batchKey([52, 41, 7]), "7-41-52");
 });
 
-test("pickup notification says Codex is working with issue title and repo", () => {
+test("pickup notification labels the worker by engine (default Claude) with issue title and repo", () => {
   assert.equal(
     pickupNotification({ number: 56, title: "Work-started visibility", target: "zenod-ai/zenod" }),
-    "🤖 Codex working on #56 — Work-started visibility (zenod-ai/zenod)",
+    "🤖 Claude working on #56 — Work-started visibility (zenod-ai/zenod)",
   );
 });
 

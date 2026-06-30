@@ -145,8 +145,18 @@ async function notify(text, surface) {
   }
 }
 
+// Label the worker by the actual engine (codex vs Claude) so "working" notifications
+// don't always say "Codex" when the default engine is now Claude. Env-driven, matching
+// the runner's ZENOD_WORKER_ENGINE (default claude).
+function workerLabel() {
+  const e = String(process.env.ZENOD_WORKER_ENGINE || "claude").toLowerCase();
+  if (e === "codex") return "Codex";
+  if (e === "claude") return "Claude";
+  return e ? e.charAt(0).toUpperCase() + e.slice(1) : "Worker";
+}
+
 function pickupNotification(central) {
-  return `🤖 Codex working on #${central.number} — ${central.title} (${central.target})`;
+  return `🤖 ${workerLabel()} working on #${central.number} — ${central.title} (${central.target})`;
 }
 
 function shouldNotifyOnExecutionStart(body) {
@@ -1484,7 +1494,7 @@ async function handleRun(req, res) {
     if (!result.ok) {
       await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: result.note });
     } else if (shouldNotifyOnExecutionStart(body)) {
-      await notify(`🤖 Codex working on execution ${executionId} — ${String(body.target)}`);
+      await notify(`🤖 ${workerLabel()} working on execution ${executionId} — ${String(body.target)}`);
     }
     saveState(state);
     res.writeHead(result.ok ? 202 : 422).end(result.ok ? "launched\n" : "could not launch\n");
