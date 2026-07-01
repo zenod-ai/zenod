@@ -153,6 +153,7 @@ describe("MCP endpoint", () => {
       "get_memory",
       "get_recent_conversation_transcript",
       "get_task_result",
+      "read_llm_timeline",
       "run_task",
       "search_memory",
       "store_memory",
@@ -282,6 +283,41 @@ describe("MCP endpoint", () => {
     expect(oldExactText).toContain("old exact transcript");
     expect(oldExactText).toContain("old exact receipt");
     expect((oldExact.structuredContent as { entries: unknown[] }).entries).toHaveLength(2);
+    await client.close();
+  });
+
+  it("read_llm_timeline returns the operation-labelled usage ledger, newest-first and filterable", async () => {
+    const client = await connect();
+    const now = Date.now();
+    runtime.usageStore.record(
+      { operation: "classify", provider: "anthropic", model: "claude-haiku-4-5", inputTokens: 100, outputTokens: 10, cachedInputTokens: 0, cacheCreationInputTokens: 0 },
+      now - 90 * 60 * 1000,
+    );
+    runtime.usageStore.record(
+      { operation: "compose", provider: "anthropic", model: "claude-opus-4-8", inputTokens: 2000, outputTokens: 500, cachedInputTokens: 0, cacheCreationInputTokens: 0 },
+      now - 5 * 60 * 1000,
+    );
+    runtime.usageStore.record(
+      { operation: "compose", provider: "openai", model: "gpt-5", inputTokens: 999, outputTokens: 111, cachedInputTokens: 0, cacheCreationInputTokens: 0 },
+      now - 8 * 24 * 60 * 60 * 1000, // outside a 120m window
+    );
+
+    const result = await client.callTool({ name: "read_llm_timeline", arguments: { windowMinutes: 120 } });
+    const text = result.content
+      .filter((item): item is { type: "text"; text: string } => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+    expect(text).toContain("compose — anthropic/claude-opus-4-8");
+    expect(text).toContain("classify — anthropic/claude-haiku-4-5");
+    expect(text).not.toContain("gpt-5"); // outside the window
+    const calls = (result.structuredContent as { calls: Array<{ operation: string }> }).calls;
+    expect(calls[0]?.operation).toBe("compose"); // newest first
+    expect(calls.at(-1)?.operation).toBe("classify");
+
+    const filtered = await client.callTool({ name: "read_llm_timeline", arguments: { windowMinutes: 120, operation: "compose" } });
+    const filteredCalls = (filtered.structuredContent as { calls: Array<{ operation: string }> }).calls;
+    expect(filteredCalls).toHaveLength(1);
+    expect(filteredCalls[0]?.operation).toBe("compose");
     await client.close();
   });
 

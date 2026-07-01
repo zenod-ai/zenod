@@ -16,6 +16,24 @@ cross-referencing two SQLite DBs on the `/data` volume:
 - `/data/usage.sqlite` — the `llm_usage` ledger (gives the per-LLM-call
   timeline *inside* that window, labelled by `operation`).
 
+## Without SSH — the Console MCP tools
+
+You do not need host/SSH/docker access to do the LLM-call half of this. The
+Console MCP gateway runs *inside* the app container (with `/data` mounted) and
+exposes two read-only tools that any instance can call — a fan-out worker in its
+throwaway sandbox, the Console chat, or a peer agent over the mesh:
+
+- **`read_llm_timeline`** — the `llm_usage` ledger as an operation-labelled,
+  newest-first timeline (ts, operation, provider/model, tokens, cost). Args:
+  `windowMinutes` (default 120), optional `operation`/`model` substring filters,
+  `limit`. This replaces "SSH in and run `node:sqlite` against `usage.sqlite`".
+- **`get_recent_conversation_transcript`** — the WhatsApp message audit
+  (inbound/outbound, receipts, media) from `whatsapp.sqlite`.
+
+Both read the durable ledgers, so they work regardless of redeploys. The SSH +
+`node:sqlite` recipes below are still the fallback for anything the tools don't
+surface (raw row inspection, ad-hoc joins).
+
 ## Where things live
 
 - App container: `zenod-uqe3bx.1.<taskid>` on the Dokploy VPS

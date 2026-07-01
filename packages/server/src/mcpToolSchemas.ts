@@ -41,6 +41,13 @@ export const GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE = {
   limit: z.number().int().min(1).max(500).optional().describe("Maximum transcript lines to return. Defaults to 100."),
 };
 
+export const READ_LLM_TIMELINE_SHAPE = {
+  windowMinutes: z.number().int().min(1).max(7 * 24 * 60).optional().describe("Lookback window in minutes. Defaults to 120."),
+  operation: z.string().optional().describe("Optional case-insensitive substring filter on the operation label, e.g. 'compose', 'classify', 'ask'."),
+  model: z.string().optional().describe("Optional case-insensitive substring filter on the model id, e.g. 'opus', 'gpt-5'."),
+  limit: z.number().int().min(1).max(2000).optional().describe("Maximum calls to return (newest first). Defaults to 200."),
+};
+
 export const CHAT_WITH_CONSOLE_SHAPE = {
   message: z.string().min(1).describe("Natural-language prompt to send through the Console chat/tasking path."),
   surface: z

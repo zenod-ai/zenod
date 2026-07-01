@@ -87,6 +87,30 @@ export interface UsageSummary {
   byModel: UsageBucket[];
 }
 
+/** One recorded LLM call, as returned by `UsageStore.timeline`. */
+export interface UsageCall {
+  ts: number;
+  operation: string;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  cacheCreationInputTokens: number;
+  costUsd: number;
+}
+
+export interface UsageTimelineQuery {
+  /** Epoch ms; only calls at or after this are returned. Defaults to 0 (all). */
+  sinceMs?: number;
+  /** Case-insensitive substring filter on the operation label. */
+  operation?: string;
+  /** Case-insensitive substring filter on the model id. */
+  model?: string;
+  /** Max rows (newest first). Clamped to [1, 2000]. Defaults to 200. */
+  limit?: number;
+}
+
 interface AggRow {
   key: string;
   calls: number;
@@ -200,6 +224,59 @@ export class UsageStore {
       )
       .all(since) as unknown as AggRow[];
     return rows.map(rowToBucket);
+  }
+
+  /**
+   * Raw per-call timeline (newest first), the forensics primitive that answers
+   * "what LLM operations ran in this window and how long/expensive each was".
+   * Optional case-insensitive substring filters on operation/model. This is the
+   * durable structured log the session-forensics doc leans on — it survives
+   * container recreate, unlike docker stdout.
+   */
+  timeline(query: UsageTimelineQuery = {}): UsageCall[] {
+    const since = query.sinceMs ?? 0;
+    const limit = Math.min(Math.max(query.limit ?? 200, 1), 2000);
+    const clauses = ["ts >= ?"];
+    const params: Array<string | number> = [since];
+    if (query.operation) {
+      clauses.push("LOWER(operation) LIKE ?");
+      params.push(`%${query.operation.toLowerCase()}%`);
+    }
+    if (query.model) {
+      clauses.push("LOWER(model) LIKE ?");
+      params.push(`%${query.model.toLowerCase()}%`);
+    }
+    params.push(limit);
+    const rows = this.db
+      .prepare(
+        `SELECT ts, operation, provider, model, input_tokens, output_tokens,
+                cached_input_tokens, cache_creation_input_tokens, cost_usd
+         FROM llm_usage WHERE ${clauses.join(" AND ")}
+         ORDER BY ts DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(...params) as unknown as Array<{
+      ts: number;
+      operation: string;
+      provider: string;
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+      cached_input_tokens: number;
+      cache_creation_input_tokens: number;
+      cost_usd: number;
+    }>;
+    return rows.map((row) => ({
+      ts: row.ts,
+      operation: row.operation,
+      provider: row.provider,
+      model: row.model,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cachedInputTokens: row.cached_input_tokens,
+      cacheCreationInputTokens: row.cache_creation_input_tokens,
+      costUsd: row.cost_usd ?? 0,
+    }));
   }
 
   summary(since: number): UsageSummary {

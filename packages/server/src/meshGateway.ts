@@ -12,11 +12,17 @@ import {
   type ConversationTranscriptReader,
 } from "./conversationTranscript.js";
 import {
+  formatSessionLog,
+  sessionLogQueryFromToolArgs,
+  type SessionLogReader,
+} from "./sessionLog.js";
+import {
   ASK_BRAIN_SHAPE,
   CHAT_WITH_CONSOLE_SHAPE,
   EXECUTION_STATUS_SHAPE,
   GET_MEMORY_SHAPE,
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+  READ_LLM_TIMELINE_SHAPE,
   GET_TASK_RESULT_SHAPE,
   REQUEST_BACKLOG_ACTION_SHAPE,
   RUN_ISSUE_SHAPE,
@@ -448,6 +454,7 @@ export function buildMeshGatewayServer(
   resolvePeer: (name: string) => PeerConfig | null,
   chatWithConsole?: ConsoleChatRunner,
   readConversationTranscript?: ConversationTranscriptReader,
+  readSessionLog?: SessionLogReader,
 ): McpServer {
   const server = new McpServer({ name: "zenod-console-gateway", version: VERSION });
   const outputSchemaNames = new Map<string, string>();
@@ -481,6 +488,26 @@ export function buildMeshGatewayServer(
         return {
           content: [{ type: "text", text: formatConversationTranscript(entries) }],
           structuredContent: { entries, count: entries.length, sinceMs: query.sinceMs, windowMinutes: query.windowMinutes },
+        };
+      },
+    );
+  }
+  if (readSessionLog) {
+    server.registerTool(
+      "read_llm_timeline",
+      {
+        title: "Read LLM usage timeline",
+        description:
+          "Owner: Console. Deterministically read the durable LLM-usage ledger (/data/usage.sqlite) as an operation-labelled, newest-first timeline of real (provider-billed) LLM calls — timestamp, operation, provider/model, token counts, and cost per call. This is the 'check the logs' primitive: it reads structured data that survives container recreate, unlike docker stdout which every deploy wipes. Use it to answer 'what ran / why was a reply slow / where did the tokens go' without host or SSH access. Pair with get_recent_conversation_transcript for the message side. Empty results mean nothing ran in the window (or the filter excluded it), not that logging failed.",
+        inputSchema: READ_LLM_TIMELINE_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async (args) => {
+        const query = sessionLogQueryFromToolArgs((args ?? {}) as Record<string, unknown>);
+        const calls = readSessionLog(query);
+        return {
+          content: [{ type: "text", text: formatSessionLog(calls, query.windowMinutes) }],
+          structuredContent: { calls, count: calls.length, sinceMs: query.sinceMs, windowMinutes: query.windowMinutes },
         };
       },
     );

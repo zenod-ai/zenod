@@ -1831,6 +1831,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
             }
           },
           (input) => runtime.whatsappStore.recentTranscript(input),
+          (query) => runtime.usageStore.timeline(query),
         )
       : buildMcpServer(
           () => runtime.getEngine(),
@@ -1886,6 +1887,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
                 return runtime.executionQueue!.get(executionId)!;
               }
             : undefined,
+          (query) => runtime.usageStore.timeline(query),
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

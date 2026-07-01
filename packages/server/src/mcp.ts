@@ -12,11 +12,17 @@ import {
   type ConversationTranscriptReader,
 } from "./conversationTranscript.js";
 import {
+  formatSessionLog,
+  sessionLogQueryFromToolArgs,
+  type SessionLogReader,
+} from "./sessionLog.js";
+import {
   ASK_BRAIN_SHAPE,
   CREATE_ISSUE_SHAPE,
   EDIT_GITHUB_ISSUE_SHAPE,
   EXECUTION_STATUS_SHAPE,
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+  READ_LLM_TIMELINE_SHAPE,
   GET_MEMORY_SHAPE,
   SEARCH_MEMORY_SHAPE,
   V4_FIND_ISSUE_SHAPE,
@@ -256,6 +262,7 @@ export function buildMcpServer(
   readConversationTranscript?: ConversationTranscriptReader,
   runExistingIssue?: ExistingIssueRunner,
   runEphemeralTask?: EphemeralTaskRunner,
+  readSessionLog?: SessionLogReader,
 ): McpServer {
   const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
 
@@ -315,6 +322,27 @@ export function buildMcpServer(
         return {
           content: [{ type: "text", text: formatConversationTranscript(entries) }],
           structuredContent: { entries, count: entries.length, sinceMs: query.sinceMs, windowMinutes: query.windowMinutes },
+        };
+      },
+    );
+  }
+
+  if (readSessionLog) {
+    server.registerTool(
+      "read_llm_timeline",
+      {
+        title: "Read LLM usage timeline",
+        description:
+          "Deterministically read the durable LLM-usage ledger (/data/usage.sqlite) as an operation-labelled, newest-first timeline of real (provider-billed) LLM calls — timestamp, operation, provider/model, token counts, and cost per call. This is the 'check the logs' primitive: it reads structured data that survives container recreate, unlike docker stdout which every deploy wipes. Use it to answer 'what ran / why was a reply slow / where did the tokens go' without host or SSH access. Empty results mean nothing ran in the window (or the filter excluded it), not that logging failed.",
+        inputSchema: READ_LLM_TIMELINE_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ windowMinutes, operation, model, limit }) => {
+        const query = sessionLogQueryFromToolArgs({ windowMinutes, operation, model, limit });
+        const calls = readSessionLog(query);
+        return {
+          content: [{ type: "text", text: formatSessionLog(calls, query.windowMinutes) }],
+          structuredContent: { calls, count: calls.length, sinceMs: query.sinceMs, windowMinutes: query.windowMinutes },
         };
       },
     );
