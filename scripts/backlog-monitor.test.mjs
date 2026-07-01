@@ -38,10 +38,29 @@ import {
   summarizeHandoff,
   mergeStateLine,
   composeTerminalNotification,
+  parseDeliverables,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
   assert.equal(batchKey([52, 41, 7]), "7-41-52");
+});
+
+test("parseDeliverables reads the reportback block and handles none (R1-T4)", () => {
+  const comment = [
+    "Fan-out run `r` finished for #5.",
+    "Status: `complete`",
+    "Branch: `br`",
+    "",
+    "Deliverables:",
+    "- src/a.ts",
+    "- docs/b.md",
+    "",
+    "Worker handoff excerpt:",
+    "did stuff",
+  ].join("\n");
+  assert.deepEqual(parseDeliverables(comment), ["src/a.ts", "docs/b.md"]);
+  assert.deepEqual(parseDeliverables("Status: `complete`\n\nDeliverables: none\n\nWorker handoff excerpt:"), []);
+  assert.deepEqual(parseDeliverables("no block here"), []);
 });
 
 test("summarizeHandoff strips the status line and headers and caps length (R1-T6)", () => {

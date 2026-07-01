@@ -5,7 +5,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, finalComment, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, finalComment, deliverablePaths, deliverablesBlock, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+
+test("deliverablePaths normalizes git status --short lines including renames (R1-T4)", () => {
+  assert.deepEqual(
+    deliverablePaths([" M src/a.ts", "?? docs/new.md", "A  pkg/b.ts", "R  old.ts -> src/renamed.ts"]),
+    ["src/a.ts", "docs/new.md", "pkg/b.ts", "src/renamed.ts"],
+  );
+});
+
+test("deliverablesBlock renders a parseable list or 'none' (R1-T4)", () => {
+  assert.equal(deliverablesBlock([]), "Deliverables: none");
+  assert.equal(deliverablesBlock([" M a.ts", " M b.ts"]), "Deliverables:\n- a.ts\n- b.ts");
+});
+
+test("finalComment embeds the Deliverables block (R1-T4)", () => {
+  const c = finalComment("run1", 5, "complete", "br", "did work", "https://x/pull/9", null, [" M a.ts"]);
+  assert.ok(c.includes("Deliverables:\n- a.ts"));
+  const none = finalComment("run1", 5, "complete-no-commits", "br", "did work");
+  assert.ok(none.includes("Deliverables: none"));
+});
 
 test("resolveEngine defaults to claude, honors explicit flag, and infers from model", () => {
   assert.equal(resolveEngine({}), "claude");

@@ -449,6 +449,25 @@ function prNumberFromUrl(url) {
 // reportback comment. No new worker-side state — this is a read of GitHub. `merged`
 // is honest: a stranded draft PR reports false, not omitted, so downstream recall
 // and notifications can tell the truth about an unmerged deliverable.
+// PURE: parse the machine-parseable "Deliverables:" block from a reportback comment
+// (R1-T4) into a path list — the deterministic source when the live PR file list is
+// unavailable. "Deliverables: none" → []. Stops at the next blank line/section.
+function parseDeliverables(commentText) {
+  const lines = String(commentText || "").split(/\r?\n/);
+  const idx = lines.findIndex((l) => /^Deliverables:/i.test(l.trim()));
+  if (idx < 0) return [];
+  if (/^Deliverables:\s*none\s*$/i.test(lines[idx].trim())) return [];
+  const out = [];
+  for (let i = idx + 1; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (!l) break; // blank line ends the block
+    const m = l.match(/^-\s*(.+)$/);
+    if (!m) break; // a non-list line ends the block
+    out.push(m[1].trim());
+  }
+  return out;
+}
+
 function deliverableManifest(target, execNumber, prUrl, lastComment) {
   const manifest = {
     repo: target,
@@ -469,6 +488,12 @@ function deliverableManifest(target, execNumber, prUrl, lastComment) {
     } catch {
       // PR unreadable (deleted/permissions) — keep the pointer-only manifest.
     }
+  }
+  // Deterministic fallback: if the live PR file list was empty/unavailable, use the
+  // reportback's Deliverables block (R1-T4) so the manifest still carries paths.
+  if (!manifest.paths) {
+    const reported = parseDeliverables(lastComment);
+    if (reported.length) manifest.paths = reported;
   }
   return manifest;
 }
@@ -1645,6 +1670,7 @@ export {
   workdirForRepo,
   dispatchedOutcome,
   deliverableManifest,
+  parseDeliverables,
   summarizeHandoff,
   mergeStateLine,
   composeTerminalNotification,
