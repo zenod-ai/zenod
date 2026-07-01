@@ -35,10 +35,79 @@ import {
   extractEvidenceClaims,
   tailFile,
   isPidAlive,
+  summarizeHandoff,
+  mergeStateLine,
+  composeTerminalNotification,
+  parseDeliverables,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
   assert.equal(batchKey([52, 41, 7]), "7-41-52");
+});
+
+test("parseDeliverables reads the reportback block and handles none (R1-T4)", () => {
+  const comment = [
+    "Fan-out run `r` finished for #5.",
+    "Status: `complete`",
+    "Branch: `br`",
+    "",
+    "Deliverables:",
+    "- src/a.ts",
+    "- docs/b.md",
+    "",
+    "Worker handoff excerpt:",
+    "did stuff",
+  ].join("\n");
+  assert.deepEqual(parseDeliverables(comment), ["src/a.ts", "docs/b.md"]);
+  assert.deepEqual(parseDeliverables("Status: `complete`\n\nDeliverables: none\n\nWorker handoff excerpt:"), []);
+  assert.deepEqual(parseDeliverables("no block here"), []);
+});
+
+test("summarizeHandoff strips the status line and headers and caps length (R1-T6)", () => {
+  assert.equal(
+    summarizeHandoff("Status: complete\n# Result\nProduced the decision matrix and opened a draft PR."),
+    "Result Produced the decision matrix and opened a draft PR.",
+  );
+  assert.equal(summarizeHandoff(""), "");
+  const long = summarizeHandoff("x".repeat(500), 100);
+  assert.ok(long.length <= 100 && long.endsWith("…"));
+});
+
+test("mergeStateLine is honest about unmerged drafts (R1-T6)", () => {
+  assert.equal(mergeStateLine({ merged: true, prUrl: "https://x/pull/1" }), "merged to main");
+  assert.equal(mergeStateLine({ merged: false, prUrl: "https://x/pull/1" }), "PR open — not merged yet");
+  assert.equal(mergeStateLine({}), "completed (no PR — filed artifact)");
+});
+
+test("composeTerminalNotification carries title, summary, honest state, link (R1-T6)", () => {
+  const msg = composeTerminalNotification({
+    executionId: "direct-123",
+    target: "AlfaBlok/idea_scraper#105",
+    outward: true,
+    title: "Legal/commercial decision matrix",
+    manifest: {
+      prUrl: "https://github.com/AlfaBlok/idea_scraper/pull/106",
+      merged: false,
+      handoffExcerpt: "Status: complete\nProduced the matrix; opened a draft PR for review.",
+    },
+  });
+  assert.ok(msg.includes("Legal/commercial decision matrix"), "has issue title");
+  assert.ok(msg.includes("Produced the matrix"), "has handoff summary");
+  assert.ok(msg.includes("not merged yet"), "states honest unmerged state");
+  assert.ok(msg.includes("https://github.com/AlfaBlok/idea_scraper/pull/106"), "has PR link");
+  assert.ok(msg.includes("direct-123"), "keeps execution id as suffix");
+});
+
+test("composeTerminalNotification stays plain for internal (non-outward) done (R1-T6)", () => {
+  const msg = composeTerminalNotification({
+    executionId: "direct-9",
+    target: "o/r#7",
+    outward: false,
+    title: "Filed note",
+    manifest: null,
+  });
+  assert.ok(msg.startsWith("✅ Execution done: o/r#7"));
+  assert.ok(msg.includes("Filed note"));
 });
 
 test("pickup notification labels the worker by engine (default Claude) with issue title and repo", () => {

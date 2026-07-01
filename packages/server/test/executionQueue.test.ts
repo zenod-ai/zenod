@@ -292,3 +292,60 @@ describe("ExecutionQueue — durable state seam", () => {
     }
   });
 });
+
+describe("ExecutionQueue — deliverable manifest (R1-T1)", () => {
+  const manifest = {
+    repo: "AlfaBlok/idea_scraper",
+    issue: 105,
+    prUrl: "https://github.com/AlfaBlok/idea_scraper/pull/106",
+    branch: "codex/issue-105-legal-matrix",
+    headSha: "deadbeef",
+    merged: false,
+    paths: ["ideascraper-vps-v1/telegram-bot/LEGAL_COMMERCIAL_DECISION_MATRIX.md"],
+    handoffExcerpt: "Produced the legal/commercial decision matrix; opened draft PR.",
+  };
+
+  it("carries the deliverable onto the ticket and the reported edge", async () => {
+    const h = harness({ concurrency: 1 });
+    await h.q.enqueue(tk("a"));
+    await h.q.reportOutcome({ executionId: "a", outward: true, evidenceUrl: manifest.prUrl, deliverable: manifest });
+    expect(h.q.get("a")!.deliverable).toEqual(manifest);
+    const edge = h.events.find((e) => e.executionId === "a" && e.state === "needs-review");
+    expect(edge?.deliverable).toEqual(manifest);
+    // Honest unmerged state survives on the parked (needs-review) draft.
+    expect(edge?.deliverable?.merged).toBe(false);
+  });
+
+  it("omits the deliverable on the edge when none is reported (legacy callers)", async () => {
+    const h = harness({ concurrency: 1 });
+    await h.q.enqueue(tk("a"));
+    await h.q.reportOutcome({ executionId: "a", outward: false });
+    const edge = h.events.find((e) => e.executionId === "a" && e.state === "done");
+    expect(edge && "deliverable" in edge).toBe(false);
+    expect(h.q.get("a")!.deliverable).toBeUndefined();
+  });
+
+  it("round-trips the manifest through the durable store (no-PR case too)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-exec-store-"));
+    const path = join(dir, "execution.sqlite");
+    const store = new ExecutionStore(path, () => 1);
+    try {
+      // Full manifest.
+      store.upsert({ executionId: "a", target: "o/r#a", context: "do a", state: "needs-review", deliverable: manifest, updatedAt: 1 });
+      // Commit-only run: no PR, pointer-only manifest.
+      const pointerOnly = { repo: "o/r", issue: 7, handoffExcerpt: "committed to main" };
+      store.upsert({ executionId: "b", target: "o/r#b", context: "do b", state: "done", deliverable: pointerOnly, updatedAt: 2 });
+      store.close();
+
+      const reopened = new ExecutionStore(path, () => 5);
+      try {
+        expect(reopened.get("a")?.deliverable).toEqual(manifest);
+        expect(reopened.get("b")?.deliverable).toEqual(pointerOnly);
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

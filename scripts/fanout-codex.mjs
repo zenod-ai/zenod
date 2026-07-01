@@ -437,6 +437,7 @@ In your final response, include:
 - Status: complete | blocked | failed
 - Context used: issue URL plus any files/docs/memory excerpts you relied on
 - Changes made
+- Deliverables: a list of the changed file paths (one per \`- path\` line), or "Deliverables: none"
 - Tests run, with exact commands
 - Blockers or decisions needed
 - Suggested PR title/body if complete
@@ -952,6 +953,8 @@ async function commitPushPr({ opts, manifest, issueNumber, finalText }) {
   const worker = manifest.workers[String(issueNumber)];
   const cwd = worker.worktree;
   const dirty = changedFiles(cwd);
+  // Capture the deliverable paths BEFORE commit clears the worktree (R1-T4).
+  const deliverables = deliverablePaths(dirty);
   if (dirty.length > 0) {
     run("git", ["add", "-A"], { cwd });
     const commit = run("git", ["commit", "-m", `fix #${issueNumber}: ${worker.title}`], { cwd, allowFailure: true });
@@ -972,14 +975,14 @@ async function commitPushPr({ opts, manifest, issueNumber, finalText }) {
     await updateWorkerStatus(runDir, issueNumber, { status: "complete", error: "No commits produced" });
     if (opts.githubStatus) {
       syncIssueStatusLabel(manifest.repo, issueNumber, "complete");
-      await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete-no-commits", worker.branch, finalText), true);
+      await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete-no-commits", worker.branch, finalText, null, null, deliverables), true);
     }
     return;
   }
   if (opts.noPush || !opts.draftPr) {
     if (opts.githubStatus) {
       syncIssueStatusLabel(manifest.repo, issueNumber, "complete", { hasReviewableWork: true });
-      await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete-local", worker.branch, finalText), true);
+      await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete-local", worker.branch, finalText, null, null, deliverables), true);
     }
     return;
   }
@@ -1029,7 +1032,7 @@ async function commitPushPr({ opts, manifest, issueNumber, finalText }) {
   await updateWorkerStatus(runDir, issueNumber, { status: "complete", prUrl });
   if (opts.githubStatus) {
     syncIssueStatusLabel(manifest.repo, issueNumber, "complete", { hasReviewableWork: true });
-    await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete", worker.branch, finalText, prUrl), true);
+    await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete", worker.branch, finalText, prUrl, null, deliverables), true);
   }
 }
 
@@ -1067,7 +1070,29 @@ function blockerComment(runIdValue, branch, blocker) {
   ].filter(Boolean).join("\n");
 }
 
-function finalComment(runIdValue, issueNumber, status, branch, finalText, prUrl = null, errorText = null) {
+// PURE: normalize `git status --short` lines to clean deliverable paths (R1-T4).
+// Handles the XY status prefix and rename arrows ("R old -> new" keeps new).
+function deliverablePaths(statusLines) {
+  const out = [];
+  for (const raw of statusLines || []) {
+    let s = String(raw).replace(/^[\sA-Z?!]{1,3}/, "").trim();
+    const arrow = s.split(" -> ");
+    s = (arrow.length > 1 ? arrow[arrow.length - 1] : s).replace(/^"|"$/g, "").trim();
+    if (s) out.push(s);
+  }
+  return out;
+}
+
+// PURE: render a stable, machine-parseable Deliverables block for the reportback
+// (R1-T4) — the deterministic source the monitor parses into the manifest. A run
+// with no file changes emits "Deliverables: none".
+function deliverablesBlock(paths) {
+  const list = deliverablePaths(paths);
+  if (!list.length) return "Deliverables: none";
+  return ["Deliverables:", ...list.map((p) => `- ${p}`)].join("\n");
+}
+
+function finalComment(runIdValue, issueNumber, status, branch, finalText, prUrl = null, errorText = null, files = []) {
   const excerpt = finalText.trim().slice(0, 3000) || (errorText ? `Worker error: ${errorText}` : "(no final handoff captured)");
   return [
     `Fan-out run \`${runIdValue}\` finished for #${issueNumber}.`,
@@ -1075,6 +1100,8 @@ function finalComment(runIdValue, issueNumber, status, branch, finalText, prUrl 
     `Status: \`${status}\``,
     `Branch: \`${branch}\``,
     prUrl ? `Draft PR: ${prUrl}` : "",
+    "",
+    deliverablesBlock(files),
     "",
     "Worker handoff excerpt:",
     "",
@@ -1423,6 +1450,8 @@ export {
   extractWorkerError,
   classifyWorkerError,
   finalComment,
+  deliverablePaths,
+  deliverablesBlock,
   resolveEngine,
   resolveModel,
   resolveEffort,

@@ -360,15 +360,20 @@ function launchFanout(target, execNumber, extraEnv = {}, options = {}) {
 
 function execStatusAndComment(target, execNumber) {
   try {
-    const out = gh(["issue", "view", String(execNumber), "--repo", target, "--json", "labels,comments"]);
+    const out = gh(["issue", "view", String(execNumber), "--repo", target, "--json", "labels,comments,title"]);
     const o = JSON.parse(out);
     const names = (o.labels || []).map((l) => l.name);
     const status = primaryStatusLabel(names);
     const originLabel = names.find((n) => n.startsWith("origin:")) || null;
     const comments = o.comments || [];
-    return { status, origin: originLabel ? originLabel.slice("origin:".length) : null, lastComment: comments.length ? comments[comments.length - 1].body : "" };
+    return {
+      status,
+      origin: originLabel ? originLabel.slice("origin:".length) : null,
+      lastComment: comments.length ? comments[comments.length - 1].body : "",
+      title: o.title || "",
+    };
   } catch {
-    return { status: null, origin: null, lastComment: "" };
+    return { status: null, origin: null, lastComment: "", title: "" };
   }
 }
 
@@ -439,6 +444,60 @@ function prNumberFromUrl(url) {
   return m ? Number(m[1]) : null;
 }
 
+// Reconstruct a completed run's deliverable manifest (R1-T1) from artifacts that
+// already exist: the PR (changed files + head SHA/branch + merged state) and the
+// reportback comment. No new worker-side state — this is a read of GitHub. `merged`
+// is honest: a stranded draft PR reports false, not omitted, so downstream recall
+// and notifications can tell the truth about an unmerged deliverable.
+// PURE: parse the machine-parseable "Deliverables:" block from a reportback comment
+// (R1-T4) into a path list — the deterministic source when the live PR file list is
+// unavailable. "Deliverables: none" → []. Stops at the next blank line/section.
+function parseDeliverables(commentText) {
+  const lines = String(commentText || "").split(/\r?\n/);
+  const idx = lines.findIndex((l) => /^Deliverables:/i.test(l.trim()));
+  if (idx < 0) return [];
+  if (/^Deliverables:\s*none\s*$/i.test(lines[idx].trim())) return [];
+  const out = [];
+  for (let i = idx + 1; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (!l) break; // blank line ends the block
+    const m = l.match(/^-\s*(.+)$/);
+    if (!m) break; // a non-list line ends the block
+    out.push(m[1].trim());
+  }
+  return out;
+}
+
+function deliverableManifest(target, execNumber, prUrl, lastComment) {
+  const manifest = {
+    repo: target,
+    issue: execNumber,
+    ...(prUrl ? { prUrl } : {}),
+    ...(lastComment ? { handoffExcerpt: String(lastComment).slice(0, 500) } : {}),
+  };
+  const prNumber = prNumberFromUrl(prUrl);
+  if (prNumber) {
+    try {
+      const out = gh(["pr", "view", String(prNumber), "--repo", target, "--json", "state,headRefName,headRefOid,files"]);
+      const o = JSON.parse(out);
+      if (o.headRefName) manifest.branch = o.headRefName;
+      if (o.headRefOid) manifest.headSha = o.headRefOid;
+      manifest.merged = o.state === "MERGED";
+      const paths = (o.files || []).map((f) => f.path).filter(Boolean);
+      if (paths.length) manifest.paths = paths;
+    } catch {
+      // PR unreadable (deleted/permissions) — keep the pointer-only manifest.
+    }
+  }
+  // Deterministic fallback: if the live PR file list was empty/unavailable, use the
+  // reportback's Deliverables block (R1-T4) so the manifest still carries paths.
+  if (!manifest.paths) {
+    const reported = parseDeliverables(lastComment);
+    if (reported.length) manifest.paths = reported;
+  }
+  return manifest;
+}
+
 // --- Execution lane (#194): run Epaminon-dispatched tickets + report back ---
 
 // Parse a fully-qualified work ticket "owner/repo#N" into { repo, number }.
@@ -489,6 +548,58 @@ function ephemeralFinalState(exitCode, finalText) {
   const statusLine = String(finalText || "").match(/^\s*(?:[-*]\s*)?status:\s*(complete|blocked|failed)\b/im);
   if (statusLine) return statusLine[1].toLowerCase();
   return exitCode === 0 ? "complete" : "failed";
+}
+
+// PURE: shorten a worker's handoff comment to its first meaningful sentence(s),
+// stripping a leading "Status: complete" line and markdown headers, for the terminal
+// notification summary (R1-T6). Caps length so it never dominates the message.
+function summarizeHandoff(handoffExcerpt, max = 320) {
+  let s = String(handoffExcerpt || "")
+    .replace(/^\s*(?:[-*]\s*)?status:\s*(?:complete|blocked|failed)\b[:.]?/im, "")
+    .replace(/^#+\s*/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!s) return "";
+  if (s.length > max) s = `${s.slice(0, max - 1).trimEnd()}…`;
+  return s;
+}
+
+// PURE: honest one-line merge state from the deliverable manifest (R1-T6). A stranded
+// draft/open PR is called out as NOT merged; an internal artifact says so plainly.
+function mergeStateLine(manifest) {
+  if (manifest && manifest.merged === true) return "merged to main";
+  if (manifest && manifest.prUrl) return "PR open — not merged yet";
+  return "completed (no PR — filed artifact)";
+}
+
+// PURE: compose the terminal execution notification (R1-T6). Carries the issue title,
+// a handoff summary, the honest merge state, and the link — instead of a bare url.
+// Actionable content (title, summary, state) is prioritized; the executionId is
+// demoted to a suffix. Body budget keeps it readable on a phone.
+function composeTerminalNotification({ executionId, target, outward, title, manifest }, max = 900) {
+  if (!outward) {
+    // Internal artifact done — short and plain.
+    const t = title ? ` — ${title}` : "";
+    return `✅ Execution done: ${target}${t}\n(${executionId})`;
+  }
+  const head = `✅ Ready for review: ${target}${title ? ` — ${title}` : ""}`;
+  const summary = summarizeHandoff(manifest && manifest.handoffExcerpt);
+  const state = mergeStateLine(manifest);
+  const link = (manifest && manifest.prUrl) || "";
+  const lines = [head];
+  if (summary) lines.push(`\n${summary}`);
+  lines.push(`\nState: ${state}.`);
+  if (link) lines.push(link);
+  lines.push(`(${executionId})`);
+  let out = lines.join("\n");
+  if (out.length > max) {
+    // Trim the summary first (it is the longest yield-able tier), never the state/link.
+    const shorter = summarizeHandoff(manifest && manifest.handoffExcerpt, 120);
+    out = [head, shorter ? `\n${shorter}` : "", `\nState: ${state}.`, link, `(${executionId})`]
+      .filter(Boolean)
+      .join("\n");
+  }
+  return out;
 }
 
 // PURE: map a dispatched run's target-issue status (+ whether a PR exists) to the
@@ -889,29 +1000,33 @@ function launchDispatched(executionId, target, context, state) {
 // terminal-ish transitions (needs-review / complete / blocked) back to Epaminon once.
 async function reportDispatched(state) {
   for (const [executionId, d] of Object.entries(state.dispatched || {})) {
-    const { status, origin, lastComment } = execStatusAndComment(d.repo, d.issueN);
+    const { status, origin, lastComment, title } = execStatusAndComment(d.repo, d.issueN);
     const prUrl = prUrlForExec(d.repo, d.issueN);
     const o = dispatchedOutcome(status, prUrl);
     if (o.kind === "none") continue;
     if (d.reportedStatus === status) continue; // already reported this state
     let ok = false;
+    let manifest = null;
     if (o.kind === "blocked") {
       ok = await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: (lastComment || "").slice(0, 280) });
     } else {
+      manifest = deliverableManifest(d.repo, d.issueN, o.evidenceUrl || prUrl, lastComment);
       ok = await reportToEpaminon("/api/exec/outcome", {
         execution_id: executionId,
         outward: o.outward,
         ...(o.evidenceUrl ? { evidence_url: o.evidenceUrl } : {}),
+        deliverable: manifest,
       });
     }
     if (ok) {
       d.reportedStatus = status;
       if (o.kind === "blocked") {
         await notify(`⛔ Execution ${executionId} (${d.target}) — blocked, needs your decision${lastComment ? `:\n${lastComment.slice(0, 280)}` : "."}`, origin);
-      } else if (o.outward) {
-        await notify(`✅ Execution ${executionId} (${d.target}) — ready for review${o.evidenceUrl ? `: ${o.evidenceUrl}` : "."}`, origin);
       } else {
-        await notify(`✅ Execution ${executionId} (${d.target}) — done.`, origin);
+        await notify(
+          composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest }),
+          origin,
+        );
       }
     }
   }
@@ -1554,6 +1669,11 @@ export {
   flushPendingReports,
   workdirForRepo,
   dispatchedOutcome,
+  deliverableManifest,
+  parseDeliverables,
+  summarizeHandoff,
+  mergeStateLine,
+  composeTerminalNotification,
   shouldReportEarlyLaunchExit,
   earlyLaunchFailureNote,
   launchLogPath,

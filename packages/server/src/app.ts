@@ -49,6 +49,7 @@ import { type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, resolveProject } from "./projectRegistry.js";
 import { driveArchiveUnavailableReason } from "./voiceArchive.js";
 import { validateStepCallback, type StepCallbackResult } from "./journeyContracts.js";
+import type { DeliverableManifest } from "./executionQueue.js";
 
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
@@ -61,6 +62,27 @@ const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
+
+/**
+ * Coerce an untrusted `/api/exec/outcome` deliverable payload into a well-typed
+ * manifest, dropping unknown/ill-typed fields (R1-T1). Returns undefined when there
+ * is no usable manifest so the outcome path stays a no-op for legacy callers.
+ */
+function normalizeDeliverable(value: unknown): DeliverableManifest | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const v = value as Record<string, unknown>;
+  const out: DeliverableManifest = {};
+  if (typeof v.repo === "string" && v.repo) out.repo = v.repo;
+  if (typeof v.issue === "number" && Number.isFinite(v.issue)) out.issue = v.issue;
+  if (typeof v.prUrl === "string" && v.prUrl) out.prUrl = v.prUrl;
+  if (typeof v.branch === "string" && v.branch) out.branch = v.branch;
+  if (typeof v.headSha === "string" && v.headSha) out.headSha = v.headSha;
+  if (typeof v.merged === "boolean") out.merged = v.merged;
+  const paths = stringArray(v.paths);
+  if (paths.length) out.paths = paths;
+  if (typeof v.handoffExcerpt === "string" && v.handoffExcerpt) out.handoffExcerpt = v.handoffExcerpt;
+  return Object.keys(out).length ? out : undefined;
 }
 
 export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
@@ -273,15 +295,23 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const bad = execLaneGate(c.req.header("X-Lane-Secret"));
     if (bad) return c.json({ error: bad.error }, bad.status);
     const body = await c.req
-      .json<{ execution_id?: number | string; outward?: boolean; evidence_url?: string; note?: string }>()
+      .json<{
+        execution_id?: number | string;
+        outward?: boolean;
+        evidence_url?: string;
+        note?: string;
+        deliverable?: unknown;
+      }>()
       .catch(() => ({}) as Record<string, unknown>);
     const executionId = body.execution_id != null ? String(body.execution_id) : "";
     if (!executionId) return c.json({ error: "execution_id is required" }, 400);
+    const deliverable = normalizeDeliverable(body.deliverable);
     await runtime.executionQueue!.reportOutcome({
       executionId,
       outward: Boolean(body.outward),
       ...(body.evidence_url ? { evidenceUrl: String(body.evidence_url) } : {}),
       ...(body.note ? { note: String(body.note) } : {}),
+      ...(deliverable ? { deliverable } : {}),
     });
     return c.json({ ok: true });
   });
