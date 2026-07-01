@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { ExecState, ExecutionTicket } from "./executionQueue.js";
+import type { DeliverableManifest, ExecState, ExecutionTicket } from "./executionQueue.js";
 
 /**
  * Durable state for Epaminon's execution queue. The queue remains the state
@@ -19,10 +19,22 @@ interface Row {
   note: string | null;
   final_content: string | null;
   outward: number | null;
+  deliverable: string | null;
   updated_at: number;
 }
 
+function parseDeliverable(raw: string | null): DeliverableManifest | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as DeliverableManifest) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function rowToTicket(row: Row): ExecutionTicket {
+  const deliverable = parseDeliverable(row.deliverable);
   return {
     executionId: row.execution_id,
     target: row.target,
@@ -32,6 +44,7 @@ function rowToTicket(row: Row): ExecutionTicket {
     ...(row.note ? { note: row.note } : {}),
     ...(row.final_content ? { finalContent: row.final_content } : {}),
     ...(row.outward === null ? {} : { outward: row.outward === 1 }),
+    ...(deliverable ? { deliverable } : {}),
     updatedAt: row.updated_at,
   };
 }
@@ -52,10 +65,17 @@ export class ExecutionStore {
         note TEXT,
         final_content TEXT,
         outward INTEGER,
+        deliverable TEXT,
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS execution_tickets_state ON execution_tickets(state, updated_at);
     `);
+    // Migration for DBs created before the deliverable manifest (R1-T1). Adding a
+    // column is idempotent-by-guard: only ALTER when it's absent.
+    const cols = this.db.prepare(`PRAGMA table_info(execution_tickets)`).all() as unknown as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === "deliverable")) {
+      this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN deliverable TEXT`);
+    }
     // A restart means any in-process runner callback was lost. Preserve the row
     // visibly as blocked instead of pretending it is still running.
     this.db
@@ -74,8 +94,8 @@ export class ExecutionStore {
       .prepare(
         `INSERT INTO execution_tickets (
            execution_id, target, context, state, evidence_url, note,
-           final_content, outward, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           final_content, outward, deliverable, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(execution_id) DO UPDATE SET
            target=excluded.target,
            context=excluded.context,
@@ -84,6 +104,7 @@ export class ExecutionStore {
            note=excluded.note,
            final_content=excluded.final_content,
            outward=excluded.outward,
+           deliverable=excluded.deliverable,
            updated_at=excluded.updated_at`,
       )
       .run(
@@ -95,6 +116,7 @@ export class ExecutionStore {
         ticket.note ?? null,
         ticket.finalContent ?? null,
         ticket.outward === undefined ? null : ticket.outward ? 1 : 0,
+        ticket.deliverable ? JSON.stringify(ticket.deliverable) : null,
         ticket.updatedAt,
       );
   }

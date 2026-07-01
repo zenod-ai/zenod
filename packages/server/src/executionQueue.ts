@@ -20,6 +20,32 @@ export type ExecState = "queued" | "running" | "needs-review" | "approved" | "do
 /** The states Epaminon reports to Archus (his edges). `queued`/`approved` are Archus's. */
 export type ReportedState = "running" | "needs-review" | "done" | "blocked" | "failed";
 
+/**
+ * A completed run's deliverable, reconstructed by the runner-side monitor from
+ * artifacts that already exist (PR changed-files + the reportback comment). It is
+ * the durable pointer to WHERE the work landed and WHAT it produced — never a copy
+ * of the file. `merged` is first-class and honest: a stranded draft PR reports
+ * `merged: false` so downstream recall/notification can tell the truth (R1-T1).
+ */
+export interface DeliverableManifest {
+  /** "owner/repo" of the work ticket. */
+  repo?: string;
+  /** The work-ticket issue number. */
+  issue?: number;
+  /** PR URL, if the run opened one. */
+  prUrl?: string;
+  /** Head branch of the PR/commit. */
+  branch?: string;
+  /** Head commit SHA — lets a fetcher read the file even on an unmerged/deleted branch. */
+  headSha?: string;
+  /** Honest merge state. A draft/unmerged PR is `false`, not omitted. */
+  merged?: boolean;
+  /** Changed file paths (from the PR's file list), the deliverable's location. */
+  paths?: string[];
+  /** First ~500 chars of the worker's final handoff/reportback comment. */
+  handoffExcerpt?: string;
+}
+
 export interface ExecutionTicket {
   /** Stable id minted by Archus; the key for every protocol message. */
   executionId: string;
@@ -38,6 +64,8 @@ export interface ExecutionTicket {
   outward?: boolean;
   /** Whether the runner should notify when work starts. Terminal/block notifications still apply. */
   notifyOnStart?: boolean;
+  /** Deliverable manifest, set once the run reports a terminal/parked outcome (R1-T1). */
+  deliverable?: DeliverableManifest;
   updatedAt: number;
 }
 
@@ -47,6 +75,8 @@ export interface ExecutionEvent {
   state: ReportedState;
   evidenceUrl?: string;
   note?: string;
+  /** Deliverable manifest, carried on the terminal/parked edge (R1-T1). */
+  deliverable?: DeliverableManifest;
 }
 
 export interface ExecutionQueueOptions {
@@ -178,7 +208,13 @@ export class ExecutionQueue {
    * (a PR to merge, a tweet/email to send) parks at `needs-review` for human approval;
    * an internal artifact (a filed note) completes at `done`. Frees the slot either way.
    */
-  async reportOutcome(input: { executionId: string; outward: boolean; evidenceUrl?: string; note?: string }): Promise<void> {
+  async reportOutcome(input: {
+    executionId: string;
+    outward: boolean;
+    evidenceUrl?: string;
+    note?: string;
+    deliverable?: DeliverableManifest;
+  }): Promise<void> {
     const t = this.require(input.executionId);
     if (isRestartInterruptedBlock(t)) {
       t.state = "running";
@@ -188,9 +224,16 @@ export class ExecutionQueue {
     t.outward = input.outward;
     if (input.evidenceUrl !== undefined) t.evidenceUrl = input.evidenceUrl;
     if (input.note !== undefined) t.note = input.note;
+    if (input.deliverable !== undefined) t.deliverable = input.deliverable;
     const to: ReportedState = input.outward ? "needs-review" : "done";
     await this.transition(t, to);
-    await this.opts.report({ executionId: t.executionId, state: to, evidenceUrl: t.evidenceUrl, note: t.note });
+    await this.opts.report({
+      executionId: t.executionId,
+      state: to,
+      evidenceUrl: t.evidenceUrl,
+      note: t.note,
+      ...(t.deliverable ? { deliverable: t.deliverable } : {}),
+    });
     await this.pump();
   }
 

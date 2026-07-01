@@ -439,6 +439,35 @@ function prNumberFromUrl(url) {
   return m ? Number(m[1]) : null;
 }
 
+// Reconstruct a completed run's deliverable manifest (R1-T1) from artifacts that
+// already exist: the PR (changed files + head SHA/branch + merged state) and the
+// reportback comment. No new worker-side state — this is a read of GitHub. `merged`
+// is honest: a stranded draft PR reports false, not omitted, so downstream recall
+// and notifications can tell the truth about an unmerged deliverable.
+function deliverableManifest(target, execNumber, prUrl, lastComment) {
+  const manifest = {
+    repo: target,
+    issue: execNumber,
+    ...(prUrl ? { prUrl } : {}),
+    ...(lastComment ? { handoffExcerpt: String(lastComment).slice(0, 500) } : {}),
+  };
+  const prNumber = prNumberFromUrl(prUrl);
+  if (prNumber) {
+    try {
+      const out = gh(["pr", "view", String(prNumber), "--repo", target, "--json", "state,headRefName,headRefOid,files"]);
+      const o = JSON.parse(out);
+      if (o.headRefName) manifest.branch = o.headRefName;
+      if (o.headRefOid) manifest.headSha = o.headRefOid;
+      manifest.merged = o.state === "MERGED";
+      const paths = (o.files || []).map((f) => f.path).filter(Boolean);
+      if (paths.length) manifest.paths = paths;
+    } catch {
+      // PR unreadable (deleted/permissions) — keep the pointer-only manifest.
+    }
+  }
+  return manifest;
+}
+
 // --- Execution lane (#194): run Epaminon-dispatched tickets + report back ---
 
 // Parse a fully-qualified work ticket "owner/repo#N" into { repo, number }.
@@ -902,6 +931,7 @@ async function reportDispatched(state) {
         execution_id: executionId,
         outward: o.outward,
         ...(o.evidenceUrl ? { evidence_url: o.evidenceUrl } : {}),
+        deliverable: deliverableManifest(d.repo, d.issueN, o.evidenceUrl || prUrl, lastComment),
       });
     }
     if (ok) {
