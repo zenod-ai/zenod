@@ -33,4 +33,27 @@ describe("buildOutboundTools", () => {
     // Configured → it tried to reach the connector and failed (no fake success).
     expect(reddit.toLowerCase()).toContain("could not reach the reddit connector");
   });
+
+  it("post_reddit advertises a structured schema (create_post needs subreddit + title + content)", () => {
+    const tools = buildOutboundTools({});
+    // Reddit is structured; X/email take a single final string (no schema).
+    expect(tools.post_reddit.inputSchema).toBeDefined();
+    expect(tools.post_tweet.inputSchema).toBeUndefined();
+    expect(tools.send_email.inputSchema).toBeUndefined();
+    // Its schema names the discrete fields the connector's create_post requires.
+    const shape = (tools.post_reddit.inputSchema as { shape?: Record<string, unknown> })?.shape;
+    expect(shape && Object.keys(shape).sort()).toEqual(["content", "is_self", "subreddit", "title"]);
+  });
+
+  it("post_reddit forwards its object fields (still no fake send on failure)", async () => {
+    const tools = buildOutboundTools({ OUTBOUND_REDDIT_MCP_URL: "http://127.0.0.1:0/mcp" });
+    const reddit = await tools.post_reddit.run({
+      subreddit: "test",
+      title: "Hello",
+      content: "body text",
+      is_self: true,
+    });
+    // A structured call still reaches the connector (and fails gracefully here).
+    expect(reddit.toLowerCase()).toContain("could not reach the reddit connector");
+  });
 });

@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { z } from "zod";
 import { VERSION } from "zenod";
 import type { PeerTools } from "zenod";
 
@@ -43,6 +44,21 @@ interface ConnectorSpec {
   argEnv: string;
   defaultArg: string;
   description: string;
+  /**
+   * Optional structured input schema. Most channels take ONE final string (X's
+   * `text`) and map it to `defaultArg`. Some connector tools need several fields
+   * (Reddit's `create_post` needs subreddit + title + content), so those set a
+   * schema here: the brain then passes an OBJECT, which `buildArgs` maps to the
+   * connector tool's arguments. When set, the `argEnv`/`defaultArg` single-key
+   * mapping does not apply.
+   */
+  inputSchema?: unknown;
+  /**
+   * Map the tool input to the MCP tool's arguments. Defaults (when unset) to the
+   * single-key mapping `{ [arg]: input }`. A structured connector supplies this to
+   * fan the object out across the tool's real argument keys.
+   */
+  buildArgs?: (input: string | Record<string, unknown>) => Record<string, unknown>;
 }
 
 const CONNECTORS: ConnectorSpec[] = [
@@ -67,8 +83,33 @@ const CONNECTORS: ConnectorSpec[] = [
     defaultTool: "create_post",
     argEnv: "OUTBOUND_REDDIT_MCP_ARG",
     defaultArg: "content",
+    // The vendored reddit-mcp's create_post needs discrete fields, not one blob,
+    // so post_reddit takes a structured object (see services/reddit-mcp).
+    inputSchema: z.object({
+      subreddit: z
+        .string()
+        .describe("Target subreddit WITHOUT the r/ prefix (e.g. 'test'), exactly as the user approved."),
+      title: z.string().describe("The post title, exactly as the user approved it."),
+      content: z
+        .string()
+        .describe("The FINAL post body text for a self post, or the URL for a link post."),
+      is_self: z
+        .boolean()
+        .optional()
+        .describe("true for a text/self post (default), false for a link post."),
+    }),
+    buildArgs: (input) => {
+      // Fallback: a bare string maps to the body only (subreddit/title unknown) so
+      // a mis-shaped call fails loudly at Reddit rather than silently faking a send.
+      if (typeof input === "string") return { content: input };
+      const args: Record<string, unknown> = {};
+      for (const key of ["subreddit", "title", "content", "is_self"] as const) {
+        if (input[key] !== undefined) args[key] = input[key];
+      }
+      return args;
+    },
     description:
-      "Submit a post to Reddit. Input is the FINAL post content (include the target subreddit and title as the user approved them). Only call this AFTER the user has confirmed the exact content and target subreddit — it is public and cannot be undone. Returns the submitted post's URL/id on success.",
+      "Submit a post to Reddit via create_post. Pass an object with the target subreddit (no r/ prefix), the title, and the content (body text for a self post, or the URL for a link post; set is_self:false for a link). Only call this AFTER the user has confirmed the exact subreddit, title, and content — it is public and cannot be undone. Returns the submitted post's URL/id on success.",
   },
   {
     as: "send_email",
@@ -138,7 +179,8 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
   for (const c of CONNECTORS) {
     tools[c.as] = {
       description: c.description,
-      run: async (input: string) => {
+      ...(c.inputSchema ? { inputSchema: c.inputSchema } : {}),
+      run: async (input: string | Record<string, unknown>) => {
         const url = env[c.urlEnv];
         if (!url) {
           return `${c.channel} is not connected yet — its connector is not configured (set ${c.urlEnv}). Tell the user it isn't set up and do NOT claim anything was sent.`;
@@ -146,7 +188,10 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
         const tool = env[c.toolEnv] || c.defaultTool;
         const arg = env[c.argEnv] || c.defaultArg;
         const token = env[c.tokenEnv];
-        return callConnector(url, token, tool, { [arg]: input }, c.channel);
+        const args = c.buildArgs
+          ? c.buildArgs(input)
+          : { [arg]: typeof input === "string" ? input : String((input as Record<string, unknown>).input ?? "") };
+        return callConnector(url, token, tool, args, c.channel);
       },
     };
   }
