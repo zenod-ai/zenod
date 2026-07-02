@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zenod / The Council — Launch Positioning</title>
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#14171c; --ink:#e8e6e1; --dim:#9a968e;
+    --accent:#d4a24e; --accent2:#6ea8a0; --line:#2a2e35; --bad:#c96a5a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden}
+  .deck{height:100vh;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    justify-content:center;padding:6vh 9vw;overflow-y:auto}
+  .slide.active{display:flex}
+  .kicker{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;
+    letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin-bottom:1.2rem}
+  h1{font-size:clamp(2.2rem,5.5vw,4.2rem);font-weight:400;line-height:1.12;margin-bottom:1.4rem}
+  h2{font-size:clamp(1.6rem,3.6vw,2.6rem);font-weight:400;line-height:1.18;margin-bottom:1.6rem}
+  h1 em,h2 em,p em{font-style:italic;color:var(--accent)}
+  p.lede{font-size:clamp(1.05rem,1.7vw,1.3rem);color:var(--dim);line-height:1.6;max-width:60ch}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;margin-top:1rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:1.4rem 1.6rem}
+  .card h3{font-size:1.05rem;color:var(--accent);font-weight:400;margin-bottom:.5rem}
+  .card p{font-size:.95rem;color:var(--dim);line-height:1.55}
+  .card.teal h3{color:var(--accent2)}
+  table{width:100%;border-collapse:collapse;margin-top:.5rem}
+  th,td{text-align:left;padding:.65rem .8rem;border-bottom:1px solid var(--line);
+    font-size:clamp(.85rem,1.3vw,1.02rem);vertical-align:top}
+  th{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--dim);font-weight:400}
+  td:first-child{color:var(--accent);white-space:nowrap}
+  td:nth-child(2){color:var(--dim);white-space:nowrap;font-style:italic}
+  td:last-child{color:var(--ink)}
+  blockquote{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;
+    font-size:clamp(1.15rem,2.2vw,1.6rem);font-style:italic;line-height:1.5;margin:1.2rem 0}
+  .steps{counter-reset:s;margin-top:1rem}
+  .step{display:flex;gap:1.1rem;padding:.7rem 0;border-bottom:1px solid var(--line);align-items:baseline}
+  .step:last-child{border-bottom:none}
+  .step::before{counter-increment:s;content:counter(s);font-family:ui-monospace,Menlo,monospace;
+    color:var(--accent);font-size:.85rem;min-width:1.4rem}
+  .step b{font-weight:400;color:var(--ink)}
+  .step span{color:var(--dim);font-size:.95rem}
+  .tagline{font-family:ui-monospace,Menlo,monospace;color:var(--accent2);font-size:.9rem;margin-top:2rem}
+  .nav{position:fixed;bottom:1.2rem;right:1.6rem;font-family:ui-monospace,Menlo,monospace;
+    font-size:.75rem;color:var(--dim);z-index:10}
+  .nav button{background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;
+    padding:.3rem .7rem;cursor:pointer;font-family:inherit;margin-left:.4rem}
+  .nav button:hover{color:var(--ink);border-color:var(--dim)}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);z-index:10;transition:width .25s}
+  ul.clean{list-style:none;margin-top:.6rem}
+  ul.clean li{padding:.45rem 0;color:var(--dim);font-size:clamp(.95rem,1.5vw,1.15rem);line-height:1.5}
+  ul.clean li b{color:var(--ink);font-weight:400}
+  ul.clean li::before{content:"—";color:var(--accent);margin-right:.7rem}
+  .pill{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.7rem;
+    letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);
+    border-radius:999px;padding:.25rem .8rem;color:var(--accent2);margin:0 .4rem .5rem 0}
+  .big{font-size:clamp(1.3rem,2.6vw,2rem);line-height:1.45;max-width:56ch}
+  .big b{color:var(--accent);font-weight:400}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="progress" id="bar"></div>
+<div class="deck" id="deck">
+
+<!-- 1 · Title -->
+<section class="slide active">
+  <div class="kicker">Launch positioning · July 2026</div>
+  <h1>It's your memory<br>and your <em>team</em>.</h1>
+  <p class="lede">You talk to the Council. Six governors keep your world; you make the calls. Zenod keeps the library. The rest keep everything else.</p>
+  <div class="tagline">zenod.dev &nbsp;·&nbsp; self-hosted &nbsp;·&nbsp; AGPL-3.0 &nbsp;·&nbsp; plain markdown, your git, your keys</div>
+</section>
+
+<!-- 2 · The problem -->
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>Every agent you hire is a brilliant amnesiac.<br><em>You</em> are the context bus.</h2>
+  <ul class="clean">
+    <li><b>You re-explain yourself</b> to Claude, Codex, and every new harness — preferences, projects, history, every session.</li>
+    <li><b>Every agent wants raw access</b> to your notes, your backlog, your inbox, your Twitter. Give it, and each becomes a junk drawer within a week.</li>
+    <li><b>Nobody guards your attention.</b> Ten agents means ten streams of "Done!", half of them contradicting each other.</li>
+  </ul>
+  <blockquote>Scattered context across ten agents doesn't scale. Neither does giving them all the keys.</blockquote>
+</section>
+
+<!-- 3 · The shift -->
+<section class="slide">
+  <div class="kicker">What's new</div>
+  <h2>From a memory agent…<br>to a <em>ring of gatekeepers</em>.</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>Where we started</h3>
+      <p>Zenod: a self-hosted librarian. One agent, one vault. Evidence in, ideas out, every fact a git commit. Still true — still the foundation.</p>
+    </div>
+    <div class="card teal">
+      <h3>Where we are</h3>
+      <p>Every valuable thing you own — memory, backlog, attention, outbound voice — now has a <b>gatekeeper</b>: one agent that governs it, keeps it coherent, and answers for it. Any harness can talk to your ring. None can trash it.</p>
+    </div>
+  </div>
+  <blockquote>Gatekeeper: an agent whose job is to say <em>no</em> on your behalf — so everything else can safely say yes.</blockquote>
+</section>
+
+<!-- 4 · Principles -->
+<section class="slide">
+  <div class="kicker">Principles</div>
+  <h2>Five rules the whole suite obeys</h2>
+  <div class="steps">
+    <div class="step"><b>Everybody reads. One writes.</b> <span>Each domain has exactly one gatekeeper with write authority. Agents ask; they never get raw CRUD.</span></div>
+    <div class="step"><b>Discipline as code, not willpower.</b> <span>Schemas, filing rules, and state machines are enforced deterministically — not in prompts, not in hope.</span></div>
+    <div class="step"><b>You hold the keys.</b> <span>Plain markdown, in a git repo, in your GitHub, on your server. Export with zero loss. AGPL.</span></div>
+    <div class="step"><b>Auditable to the commit.</b> <span>Every memory, every ticket, every send is a commit or a labeled event. `git log` is the audit trail.</span></div>
+    <div class="step"><b>Outward needs your word.</b> <span>PRs, tweets, emails — anything irreversible gates on human approval. Internal artifacts flow autonomously.</span></div>
+  </div>
+</section>
+
+<!-- 5 · The Council roster -->
+<section class="slide">
+  <div class="kicker">The Council</div>
+  <h2>Six governors, one table</h2>
+  <table>
+    <tr><th>Governor</th><th>Governs</th><th>One line</th></tr>
+    <tr><td>Zenod</td><td>Memory</td><td>Keeps everything you've ever fed it; turns evidence into meaning, never forgets.</td></tr>
+    <tr><td>Archus</td><td>the Plan</td><td>Turns memory into a backlog of runnable work. Charts the course.</td></tr>
+    <tr><td>Epaminon</td><td>Execution</td><td>Runs the approved work, commands the agents, brings back results.</td></tr>
+    <tr><td>Phylax</td><td>the Door</td><td>Guards your attention — the one voice the Council speaks back through.</td></tr>
+    <tr><td>Callisthenes</td><td>the Word</td><td>Drafts and sends everything that leaves — posts, replies, mail — only on your word.</td></tr>
+    <tr><td>Nectary</td><td>the Treasury</td><td>Turns the backlog into funded work.</td></tr>
+  </table>
+  <p class="lede" style="margin-top:1.2rem">Zenod is not the boss. The power is the table, not any one seat.</p>
+</section>
+
+<!-- 6 · How harnesses plug in -->
+<section class="slide">
+  <div class="kicker">The ring is open</div>
+  <h2>Any harness can call your Council.<br>It's already <em>authenticated, trained, and gated</em>.</h2>
+  <ul class="clean">
+    <li><b>MCP native.</b> Claude, Codex, Cowork, anything — one bearer token, one endpoint, tools like <code>search_memory</code>, <code>ask_brain</code>, <code>store_memory</code>.</li>
+    <li><b>Your preferences ride along.</b> The ring knows how you like things done; visiting harnesses don't need to be re-taught.</li>
+    <li><b>Deterministic lanes between governors.</b> Archus↔Epaminon speak in facts, not vibes — four deterministic messages, one rare LLM unblock lane.</li>
+    <li><b>Agents that want you go through Phylax.</b> No agent talks to you directly. Dedup'd, sequenced, honest ("draft PR #106, unmerged").</li>
+  </ul>
+</section>
+
+<!-- 7 · Killer demo 1 -->
+<section class="slide">
+  <div class="kicker">Killer demo · 1</div>
+  <h2>Voice note → merged work → filed memory</h2>
+  <div class="steps">
+    <div class="step"><b>You send a WhatsApp voice note.</b> <span>"Look into X and fix it." Transcribed, classified, recorded.</span></div>
+    <div class="step"><b>Archus files a ticket.</b> <span>Work ticket in its home repo, execution ticket in the queue.</span></div>
+    <div class="step"><b>Epaminon runs it with Codex.</b> <span>Outward result (a PR) gates on your approval; internal notes don't.</span></div>
+    <div class="step"><b>Phylax tells you once, honestly.</b> <span>One notification, exact state, nothing truncated.</span></div>
+    <div class="step"><b>Zenod files the outcome.</b> <span>A cited meaning note lands in your vault — findable by every agent forever.</span></div>
+  </div>
+  <p class="lede" style="margin-top:1rem">One voice note in. One commit trail out. That's the whole pitch in 60 seconds of screen recording.</p>
+</section>
+
+<!-- 8 · Killer demos 2 & 3 -->
+<section class="slide">
+  <div class="kicker">Killer demos · 2 &amp; 3</div>
+  <h2>Two more that make people lean in</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>The stranger with perfect memory</h3>
+      <p>Open a <b>fresh Claude or Codex session</b>, point it at your MCP endpoint, and ask "what do I know about my insurance?" It answers with citations, down to the evidence line and git commit — a harness it's never met, using a memory you fully own.</p>
+    </div>
+    <div class="card teal">
+      <h3>The gatekeeper says no</h3>
+      <p>Let an agent try to write junk directly into the vault or spam you with three duplicate "done" pings. Show the librarian refusing raw writes and Phylax collapsing noise into <b>one honest message</b>. Safety demos are rare — and memorable.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 9 · Positioning: two pages, one story -->
+<section class="slide">
+  <div class="kicker">Positioning</div>
+  <h2>Two landing pages. One story.<br>The <em>library</em> and the <em>Council</em>.</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>zenod.dev — the product page</h3>
+      <p>The librarian your agents report to. Concrete, shipped, self-hostable today. This is the <b>wedge</b>: what people install, star, and trust. Gains one new band: "Zenod holds a seat on the Council →".</p>
+    </div>
+    <div class="card teal">
+      <h3>The Council — the story page</h3>
+      <p>Your memory and your team. The gatekeeper thesis, the six governors, the demos. This is the <b>narrative</b> people share and argue about on HN. Every governor card links down to its product page as it ships.</p>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:1.2rem">The suite is the story; Zenod is the proof. Never make one page do both jobs.</p>
+</section>
+
+<!-- 10 · Objections -->
+<section class="slide">
+  <div class="kicker">Honesty layer</div>
+  <h2>What we say before HN says it for us</h2>
+  <ul class="clean">
+    <li><b>"Another multi-agent framework?"</b> No — no framework to learn. It's a running household: opinionated governors over <em>your</em> assets, not a toolkit for building agents.</li>
+    <li><b>"Too early / pre-alpha?"</b> Correct, and we say so: we are user #1, M0 is shipped with 48 deterministic tests, the rest is public roadmap. Early is the point — the vault format is plain markdown, so betting early costs nothing to exit.</li>
+    <li><b>"Why not Mem0 / Letta / a memory API?"</b> Their memory lives in their database. Yours lives in your git repo. When you leave, you take everything, with the audit trail.</li>
+    <li><b>"Greek names are a lot."</b> They're flavor, not homework. You only ever talk to one door: the Council.</li>
+  </ul>
+</section>
+
+<!-- 11 · Launch plan -->
+<section class="slide">
+  <div class="kicker">Launch</div>
+  <h2>Ship the story before the product is done</h2>
+  <div class="steps">
+    <div class="step"><b>Week 1 — the thread.</b> <span>Twitter/X: the gatekeeper thesis + 60-sec voice-note demo video. Build-in-public voice: "I run my life through six agents. Here's the architecture."</span></div>
+    <div class="step"><b>Week 1 — Reddit.</b> <span>r/selfhosted + r/LocalLLaMA: lead with self-host, AGPL, plain markdown, git audit. These crowds convert on ownership, not on agents.</span></div>
+    <div class="step"><b>Week 2 — Show HN.</b> <span>"Show HN: Zenod — a self-hosted librarian your AI agents report to." Zenod-first for HN; the Council page one click deep.</span></div>
+    <div class="step"><b>Ongoing — one governor, one week.</b> <span>Each week, one deep-dive post per governor (Phylax's honesty rules, Archus's deterministic lanes). Compounding content from docs you already wrote.</span></div>
+  </div>
+</section>
+
+<!-- 12 · Close -->
+<section class="slide">
+  <div class="kicker">The one-liner</div>
+  <h1>Stop being the context bus.<br><em>Seat a Council.</em></h1>
+  <p class="lede">Every agent you'll ever hire reports to a ring you own: one librarian for memory, one guard at the door, one voice to the world — plain markdown, your git, your keys.</p>
+  <div style="margin-top:2rem">
+    <span class="pill">zenod.dev</span>
+    <span class="pill">github · AGPL-3.0</span>
+    <span class="pill">alpha — first 100 free</span>
+  </div>
+</section>
+
+</div>
+<div class="nav">
+  <span id="counter">1 / 12</span>
+  <button onclick="go(-1)">←</button>
+  <button onclick="go(1)">→</button>
+</div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];let i=0;
+  function show(n){slides[i].classList.remove('active');i=(n+slides.length)%slides.length;
+    slides[i].classList.add('active');
+    document.getElementById('counter').textContent=(i+1)+' / '+slides.length;
+    document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';}
+  function go(d){show(i+d)}
+  addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(1);
+    if(e.key==='ArrowLeft'||e.key==='PageUp')go(-1);
+    if(e.key==='Home')show(0);if(e.key==='End')show(slides.length-1);});
+  document.getElementById('deck').addEventListener('click',e=>{
+    if(e.target.closest('button')||getSelection().toString())return;go(1);});
+  show(0);
+</script>
+</body>
+</html>

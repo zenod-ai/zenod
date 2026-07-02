@@ -404,6 +404,17 @@ export class JourneyStore {
     return this.artifactByKey(journeyId, input.artifactKey)!;
   }
 
+  /** Refresh an existing artifact's data in place (addArtifact never overwrites). */
+  updateArtifactData(journeyId: string, artifactKey: string, data: JourneyContext, now: number = Date.now()): JourneyArtifact | null {
+    const existing = this.artifactByKey(journeyId, artifactKey);
+    if (!existing) return null;
+    this.db
+      .prepare(`UPDATE journey_artifacts SET data_json=?, updated_at=? WHERE id=?`)
+      .run(JSON.stringify(data ?? {}), now, existing.id);
+    this.touchJourney(journeyId, now);
+    return this.artifactByKey(journeyId, artifactKey);
+  }
+
   dispatchStep(stepId: string, patch: { deadlineAt?: number | null } = {}, now: number = Date.now()): JourneyStep {
     const step = this.requireStep(stepId);
     this.db

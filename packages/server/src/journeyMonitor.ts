@@ -5,6 +5,9 @@ export interface JourneyMonitorOptions {
   leaseMs?: number;
   now?: () => number;
   reconcileStep?: JourneyStepReconciler;
+  /** Extra pass run every tick after step reconciliation (e.g. the execution-result
+   *  ingest sweep, which watches COMPLETED steps' artifacts, not pending steps). */
+  onSweep?: () => void | Promise<void>;
 }
 
 export type JourneyReconcileAction =
@@ -46,6 +49,7 @@ export class JourneyMonitor {
   private readonly leaseMs: number;
   private readonly now: () => number;
   private readonly reconcileStep: JourneyStepReconciler | null;
+  private readonly onSweep: (() => void | Promise<void>) | null;
 
   constructor(
     private readonly store: JourneyStore,
@@ -55,6 +59,7 @@ export class JourneyMonitor {
     this.leaseMs = options.leaseMs ?? 60_000;
     this.now = options.now ?? Date.now;
     this.reconcileStep = options.reconcileStep ?? null;
+    this.onSweep = options.onSweep ?? null;
   }
 
   start(): void {
@@ -76,6 +81,7 @@ export class JourneyMonitor {
   async runOnce(limit = 50): Promise<JourneyMonitorResult> {
     const now = this.now();
     if (!this.reconcileStep) {
+      await this.runSweep();
       return { blocked: this.store.blockOverdueSteps(now, limit), claimed: [], reconciled: [] };
     }
 
@@ -93,7 +99,16 @@ export class JourneyMonitor {
         if (updated) blocked.push(updated);
       }
     }
+    await this.runSweep();
     return { blocked, claimed, reconciled };
+  }
+
+  private async runSweep(): Promise<void> {
+    try {
+      await this.onSweep?.();
+    } catch (err) {
+      console.error("[journey-monitor] sweep failed:", err);
+    }
   }
 
   private applyAction(step: JourneyStep, action: JourneyReconcileAction, now: number): void {

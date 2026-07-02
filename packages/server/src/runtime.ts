@@ -48,6 +48,7 @@ import { ExecutionStore } from "./executionStore.js";
 import { JourneyStore } from "./journeyStore.js";
 import { JourneyMonitor } from "./journeyMonitor.js";
 import { createJourneyAuthorityReconciler } from "./journeyAuthorityReconciler.js";
+import { runExecutionIngestSweep } from "./executionIngestSweep.js";
 import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer, callPeerTool, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
@@ -235,19 +236,22 @@ export class Runtime {
     this.journeyMonitor = new JourneyMonitor(this.journeyStore, {
       reconcileStep: createJourneyAuthorityReconciler({
         readIssue: async (target) => this.buildBacklogIssueReader().getIssue({ target }),
-        readExecution: async (reference) => {
-          if (this.executionQueue) {
-            return this.executionQueue.get(reference) ?? this.executionQueue.snapshot().find((ticket) => ticket.target === reference) ?? null;
-          }
-          // Non-executor agents (the Console — where journeys live) read the execution
-          // authority over the mesh instead of assuming a local queue. Without this the
-          // execution-terminal reconcile branch (and R1-T2 ingest) never runs on the
-          // Console, because readExecution was unconditionally null here.
-          return this.readExecutionFromExecutorPeer(reference);
-        },
+        readExecution: (reference) => this.readExecutionAnywhere(reference),
         readMemoryJob: async (jobId) => this.taskJobQueue.get(jobId),
         fileExecutionMemory: (input) => this.fileExecutionMemory(input),
       }),
+      // R1-T2 production seam: create-and-run journeys complete their execution step
+      // at DISPATCH, so the step reconciler never sees the terminal edge. This sweep
+      // re-reads recorded executions from the authority each tick and files the cited
+      // Zenod note once per executionId (guarded by a zenod_ingest artifact).
+      onSweep: () =>
+        runExecutionIngestSweep({
+          store: this.journeyStore,
+          readExecution: (reference) => this.readExecutionAnywhere(reference),
+          fileMemory: (input) => this.fileExecutionMemory(input),
+        }).then((r) => {
+          if (r.filed || r.refreshed) console.log(`[exec-ingest] sweep: refreshed=${r.refreshed} filed=${r.filed} skipped=${r.skipped}`);
+        }),
     });
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
     this.notificationStore = new NotificationStore(join(dataDir, "notifications.sqlite"));
@@ -397,9 +401,21 @@ export class Runtime {
   }
 
   /**
+   * Read an execution ticket from whichever authority this agent can reach: the local
+   * queue on the executor (Epaminon), else the executor peer over the mesh (the
+   * Console — which owns journeys but not the queue). Without the peer path, the
+   * execution-terminal reconcile/ingest never runs on the Console. Never throws.
+   */
+  async readExecutionAnywhere(reference: string): Promise<ExecutionTicket | null> {
+    if (this.executionQueue) {
+      return this.executionQueue.get(reference) ?? this.executionQueue.snapshot().find((ticket) => ticket.target === reference) ?? null;
+    }
+    return this.readExecutionFromExecutorPeer(reference);
+  }
+
+  /**
    * Read an execution ticket from the executor peer (Epaminon) over the mesh, via its
-   * deterministic `execution_status` tool. Used by non-executor agents — the Console
-   * owns journeys but not the execution queue. Returns null on any failure or miss
+   * deterministic `execution_status` tool. Returns null on any failure or miss
    * (the reconciler then reports "no record", never blocks). Never throws.
    */
   private async readExecutionFromExecutorPeer(reference: string): Promise<ExecutionTicket | null> {
@@ -459,7 +475,7 @@ export class Runtime {
     if (!manifest) {
       // Journey artifacts may lag or predate the manifest — the execution authority
       // (Epaminon's ticket) is the durable source; resolve over the mesh as fallback.
-      const ticket = await this.readExecutionFromExecutorPeer(reference.match(/([^/\s#]+\/[^/\s#]+#\d+)/)?.[1] ?? reference);
+      const ticket = await this.readExecutionAnywhere(reference.match(/([^/\s#]+\/[^/\s#]+#\d+)/)?.[1] ?? reference);
       if (ticket?.deliverable) manifest = ticket.deliverable;
     }
     if (!manifest) {
