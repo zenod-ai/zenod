@@ -474,9 +474,25 @@ async function callComposio(
   }
 }
 
+/**
+ * Forgive a value pasted as a whole env line: strip an accidental `NAME=` prefix
+ * and surrounding quotes/whitespace. A real Composio value (ak_…, a user id) never
+ * starts with `COMPOSIO_API_KEY=`, so this only rescues the paste-the-whole-line
+ * mistake and is a no-op on a clean value.
+ */
+export function normalizeComposioValue(value: string | undefined, envName: string): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value
+    .trim()
+    .replace(new RegExp(`^${envName}\\s*=\\s*`, "i"), "")
+    .replace(/^["']|["']$/g, "")
+    .trim();
+  return cleaned || undefined;
+}
+
 function buildRedditComposioTools(env: NodeJS.ProcessEnv): PeerTools {
-  const apiKey = env[COMPOSIO_API_KEY_ENV];
-  const userId = env[COMPOSIO_USER_ID_ENV];
+  const apiKey = normalizeComposioValue(env[COMPOSIO_API_KEY_ENV], COMPOSIO_API_KEY_ENV);
+  const userId = normalizeComposioValue(env[COMPOSIO_USER_ID_ENV], COMPOSIO_USER_ID_ENV);
   const baseUrl = env[COMPOSIO_BASE_ENV] || COMPOSIO_BASE_DEFAULT;
   // Unconfigured → build nothing, leaving the MCP-based post_reddit (self-host) in
   // place. Never a fake send.

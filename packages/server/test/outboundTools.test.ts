@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOutboundTools, extractMediaId } from "../src/outboundTools.js";
+import { buildOutboundTools, extractMediaId, normalizeComposioValue } from "../src/outboundTools.js";
 
 describe("buildOutboundTools", () => {
   it("exposes the send tools plus the read-only X tools the brain wields", () => {
@@ -157,6 +157,27 @@ describe("Reddit via Composio", () => {
   it("reaches the connector and fails gracefully (no throw, no fake send)", async () => {
     const tools = buildOutboundTools(composioEnv);
     const res = await tools.post_reddit.run({ subreddit: "r/test", title: "Hello", content: "body" });
+    expect(res.toLowerCase()).toContain("could not reach the reddit connector");
+  });
+
+  it("forgives a value pasted as a whole env line (NAME=value + quotes)", () => {
+    // The bug that produced 'Invalid API key: COM**SHOR' — the whole line was pasted.
+    expect(normalizeComposioValue("COMPOSIO_API_KEY=ak_FxycLInZWgeIqix-SHOR", "COMPOSIO_API_KEY")).toBe("ak_FxycLInZWgeIqix-SHOR");
+    expect(normalizeComposioValue('  "ak_clean"  ', "COMPOSIO_API_KEY")).toBe("ak_clean");
+    expect(normalizeComposioValue("ak_clean", "COMPOSIO_API_KEY")).toBe("ak_clean");
+    expect(normalizeComposioValue("COMPOSIO_USER_ID=jordimr", "COMPOSIO_USER_ID")).toBe("jordimr");
+    expect(normalizeComposioValue("", "COMPOSIO_API_KEY")).toBeUndefined();
+  });
+
+  it("normalizes a prefixed key before building the tools (still gated on reachability)", async () => {
+    const tools = buildOutboundTools({
+      COMPOSIO_API_KEY: "COMPOSIO_API_KEY=ak_test",
+      COMPOSIO_USER_ID: "jordimr",
+      COMPOSIO_BASE_URL: "http://127.0.0.1:0",
+    });
+    // Tools still build (prefix stripped, not treated as unconfigured) and reach out.
+    expect(tools.post_reddit).toBeDefined();
+    const res = await tools.post_reddit.run({ subreddit: "test", title: "Hi", content: "b" });
     expect(res.toLowerCase()).toContain("could not reach the reddit connector");
   });
 });
