@@ -1,0 +1,53 @@
+# Vendored Reddit MCP image — the write connector Callistheness reaches to submit
+# posts (create_post). Mirrors services/x-mcp, with two deliberate differences:
+#
+#   * ONE instance, not two. The x-mcp split (readonly vs postread) exists because
+#     autonomous Codex fan-out workers reach x-mcp and must be denied write tools by
+#     topology. Nothing autonomous reaches reddit-mcp — only the attended,
+#     confirm-first Callistheness brain does — so a single write-capable instance on
+#     a private network is the whole surface.
+#   * Endpoint auth. reddit-mcp supports a bearer gate natively (OAUTH_ENABLED +
+#     OAUTH_TOKEN). We turn it on so the endpoint isn't callable by anything on the
+#     network that lacks the token; Callistheness sends it as OUTBOUND_REDDIT_MCP_TOKEN.
+#
+# The network `zenod-reddit-net` is created by this compose (exact name, no project
+# prefix) so the outbound container can join it later with:
+#   docker network connect zenod-reddit-net zenod-outbound
+#
+# Creds: the REDDIT_* values are interpolated from the environment. Standalone,
+# put them in services/reddit-mcp/.env (compose auto-loads it); under Dokploy, set
+# them in the compose's Environment. See .env.example.
+
+networks:
+  zenod-reddit-net:
+    name: zenod-reddit-net
+
+services:
+  reddit-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REDDIT_MCP_REF: "53cca07c80d3d9eacd44fa1ff860b9f9427ffcfa"
+    image: zenod-reddit-mcp
+    container_name: reddit-mcp
+    environment:
+      # --- MCP transport (container) ---
+      TRANSPORT_TYPE: httpStream
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      # --- Endpoint auth (bearer gate) ---
+      # When OAUTH_ENABLED=true the server requires Authorization: Bearer $OAUTH_TOKEN.
+      # Callistheness sends the same value via OUTBOUND_REDDIT_MCP_TOKEN.
+      OAUTH_ENABLED: "true"
+      OAUTH_TOKEN: ${REDDIT_MCP_OAUTH_TOKEN}
+      # --- Reddit app + user credentials ---
+      # CLIENT_ID/SECRET authenticate the app (higher rate limits); USERNAME/PASSWORD
+      # are REQUIRED for the write tools (create_post, reply_to_post, ...).
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET}
+      REDDIT_USERNAME: ${REDDIT_USERNAME}
+      REDDIT_PASSWORD: ${REDDIT_PASSWORD}
+      REDDIT_USER_AGENT: ${REDDIT_USER_AGENT:-zenod-outbound/1.0 by u/zenod-agent}
+    networks: [zenod-reddit-net]
+    restart: unless-stopped

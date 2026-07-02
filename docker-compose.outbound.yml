@@ -24,7 +24,10 @@
 #                   network), then add `zenod-x-net` to this service's networks (see
 #                   the commented block below) AND set OUTBOUND_X_MCP_URL. Until
 #                   then post_tweet reports "X is not connected yet". (issue #180)
-#   Reddit       -> a reddit-mcp (vendor like x-mcp; FOLLOW-UP, issue #185).
+#   Reddit       -> the vendored reddit-mcp (services/reddit-mcp), a single write
+#                   instance (create_post). It creates the `zenod-reddit-net`
+#                   network; Callistheness joins it (external) and reaches
+#                   reddit-mcp by name. Wired below (issue #185).
 #   Email        -> a mail-mcp (clone the x-mcp shape; FOLLOW-UP, issue #185).
 
 networks:
@@ -33,6 +36,10 @@ networks:
   # The x-mcp compose (services/x-mcp) owns/creates this network; x-mcp is deployed,
   # so Callistheness joins it (external) to reach x-mcp-postread by name for posting.
   zenod-x-net:
+    external: true
+  # The reddit-mcp compose (services/reddit-mcp) owns/creates this network; joined
+  # (external) so Callistheness reaches the reddit-mcp write connector by name.
+  zenod-reddit-net:
     external: true
 
 volumes:
@@ -47,8 +54,8 @@ services:
     container_name: zenod-outbound
     restart: unless-stopped
     # dokploy-network (so the Console reaches it) + zenod-x-net (so it reaches the
-    # x-mcp POST connector for tweeting).
-    networks: [dokploy-network, zenod-x-net]
+    # x-mcp POST connector for tweeting) + zenod-reddit-net (the reddit-mcp connector).
+    networks: [dokploy-network, zenod-x-net, zenod-reddit-net]
     volumes:
       - zenod-outbound-data:/data
     environment:
@@ -64,9 +71,15 @@ services:
       # Callistheness's ungated read tools (x_get_post/x_search_posts/x_read_mentions/
       # x_read_timeline/x_get_user/x_whoami). (issue #422)
       OUTBOUND_X_READ_MCP_URL: http://x-mcp-readonly:8000/mcp
-      # Reddit + email connectors — FOLLOW-UP (issue #185). Leave unset so the tools
-      # report "not connected" rather than faking a send; set them once deployed.
-      # OUTBOUND_REDDIT_MCP_URL: http://reddit-mcp:8000/mcp
+      # Reddit connector — the vendored reddit-mcp (services/reddit-mcp), single
+      # write instance serving Streamable HTTP at /mcp on port 3000, posting via
+      # create_post. Reached over zenod-reddit-net by container name. The token must
+      # match reddit-mcp's OAUTH_TOKEN (its REDDIT_MCP_OAUTH_TOKEN secret).
+      OUTBOUND_REDDIT_MCP_URL: http://reddit-mcp:3000/mcp
+      OUTBOUND_REDDIT_MCP_TOKEN: ${REDDIT_MCP_OAUTH_TOKEN}
+      # Email connector — mail-mcp is a FOLLOW-UP (issue #185); leave unset so
+      # send_email reports "not connected" rather than faking a send until deployed.
       # OUTBOUND_MAIL_MCP_URL: http://mail-mcp:8000/mcp
+      # OUTBOUND_MAIL_MCP_TOKEN: ${MAIL_MCP_OAUTH_TOKEN}
     expose:
       - "8080"
