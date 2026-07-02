@@ -89,5 +89,16 @@ services:
       # send_email reports "not connected" rather than faking a send until deployed.
       # OUTBOUND_MAIL_MCP_URL: http://mail-mcp:8000/mcp
       # OUTBOUND_MAIL_MCP_TOKEN: ${MAIL_MCP_OAUTH_TOKEN}
+      #
+      # Reddit via COMPOSIO (interim, issue #420). Composio holds the OAuth
+      # connection to the user's Reddit account and executes the toolkit on their
+      # behalf, so no self-hosted reddit-mcp/zenod-reddit-net is needed for this
+      # path. When these are set, packages/server/src/outboundTools.ts builds the
+      # Composio-backed post_reddit + read tools (search_reddit/read_subreddit/
+      # read_reddit_replies) and OVERRIDES the dormant MCP-based post_reddit above.
+      # COMPOSIO_API_KEY is a Dokploy secret; COMPOSIO_USER_ID is the Composio user
+      # id whose connected Reddit account we post/read as.
+      COMPOSIO_API_KEY: ${COMPOSIO_API_KEY}
+      COMPOSIO_USER_ID: jordimr
     expose:
       - "8080"

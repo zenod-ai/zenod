@@ -380,6 +380,45 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   },
+  // Callistheness's READ surface for Reddit (via his Composio-backed read tools).
+  // Ungated per the flat-tools doctrine — they route to his brain, which calls the
+  // read tool and relays the REAL content. A read never posts.
+  {
+    name: "search_reddit",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "READ-ONLY request: search recent Reddit content across subreddits and return the matches. Use your search_reddit read tool; do NOT post, reply, or write anything. Search query: ",
+    title: "Search Reddit",
+    description:
+      "Search recent Reddit posts/comments across subreddits — Callistheness returns the matches. Read-only; nothing is posted.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: "read_subreddit",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "READ-ONLY request: read the recent posts from the following subreddit and return them. Use your read_subreddit read tool; do NOT post, reply, or write anything. Subreddit (no r/ prefix): ",
+    title: "Read a subreddit",
+    description:
+      "Read the recent posts from a subreddit — Callistheness returns them. Read-only; nothing is posted.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: "read_reddit_replies",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "READ-ONLY request: read the comments/replies on the following Reddit thread and return them. Use your read_reddit_replies read tool; do NOT post, reply, or write anything. Post id or permalink of the thread: ",
+    title: "Read Reddit replies",
+    description:
+      "Read the replies/comments on a Reddit thread (e.g. one of the user's own posts) — Callistheness returns them. Read-only; nothing is posted.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
   // Phylax's inward notification surface. Callers report events/facts; Phylax
   // decides whether/how to reach the principal and uses his private
   // deliver_to_principal tool only after composing the final message.

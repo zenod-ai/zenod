@@ -405,6 +405,158 @@ function buildXReadTools(env: NodeJS.ProcessEnv): PeerTools {
 }
 
 /**
+ * Callistheness's Reddit tools, backed by Composio (INTERIM connector, issue #420).
+ *
+ * Reddit's own developer-app creation is gated, so instead of the self-hosted
+ * reddit-mcp (services/reddit-mcp, PR #426 — kept dormant for the long-term swap)
+ * we reach Reddit through Composio's hosted toolkit: Composio holds the OAuth
+ * connection to the user's Reddit account (COMPOSIO_USER_ID) and executes tools on
+ * their behalf. This is PLUMBING behind the SAME clean surface — post_reddit stays
+ * the guardian-gated write; the reads are ungated per the flat-tools doctrine, and
+ * the word "Composio" never reaches the model. Each tool calls Composio's REST
+ * execute endpoint (POST /api/v3/tools/execute/{slug}) and maps our fields onto the
+ * Reddit toolkit slugs:
+ *   post_reddit         → REDDIT_CREATE_REDDIT_POST   (kind self/link + text/url)
+ *   search_reddit       → REDDIT_SEARCH_ACROSS_SUBREDDITS
+ *   read_subreddit      → REDDIT_RETRIEVE_REDDIT_POST
+ *   read_reddit_replies → REDDIT_RETRIEVE_POST_COMMENTS (comments on ONE thread)
+ *
+ * When COMPOSIO_API_KEY / COMPOSIO_USER_ID are unset these tools are NOT built, so
+ * the MCP-based post_reddit (self-host path) stays in place and nothing fakes a send.
+ * NB: Composio's Reddit toolkit has no unified inbox/notifications tool, so "replies
+ * to me" means the comments on a specific thread (by post id), not a global sweep.
+ */
+const COMPOSIO_API_KEY_ENV = "COMPOSIO_API_KEY";
+const COMPOSIO_USER_ID_ENV = "COMPOSIO_USER_ID";
+const COMPOSIO_BASE_ENV = "COMPOSIO_BASE_URL";
+const COMPOSIO_BASE_DEFAULT = "https://backend.composio.dev";
+const REDDIT_CHANNEL = "Reddit";
+const COMPOSIO_RESULT_CAP = 6000;
+
+/**
+ * Execute one Composio toolkit tool for the connected user and return its result
+ * text. Errors (unreachable, HTTP error, or a `successful:false` payload) come back
+ * as a readable string — never a throw, never a fabricated success.
+ */
+async function callComposio(
+  apiKey: string,
+  userId: string,
+  baseUrl: string,
+  slug: string,
+  args: Record<string, unknown>,
+  channel: string,
+): Promise<string> {
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/api/v3/tools/execute/${slug}`, {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, arguments: args }),
+    });
+    const raw = await res.text();
+    if (!res.ok) {
+      return `The ${channel} connector reported an error (HTTP ${res.status}): ${raw.slice(0, 500) || "(no detail)"}`;
+    }
+    let parsed: Record<string, unknown> | undefined;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return raw.slice(0, COMPOSIO_RESULT_CAP);
+    }
+    if (parsed?.successful === false || parsed?.error) {
+      const detail = parsed.error ?? parsed.data ?? parsed;
+      return `The ${channel} connector did not complete: ${(typeof detail === "string" ? detail : JSON.stringify(detail)).slice(0, 500)}`;
+    }
+    const payload = parsed?.data ?? parsed;
+    const text = typeof payload === "string" ? payload : JSON.stringify(payload);
+    return text.slice(0, COMPOSIO_RESULT_CAP) || `${channel} returned no content.`;
+  } catch (err) {
+    return `Could not reach the ${channel} connector: ${(err as Error).message}`;
+  }
+}
+
+function buildRedditComposioTools(env: NodeJS.ProcessEnv): PeerTools {
+  const apiKey = env[COMPOSIO_API_KEY_ENV];
+  const userId = env[COMPOSIO_USER_ID_ENV];
+  const baseUrl = env[COMPOSIO_BASE_ENV] || COMPOSIO_BASE_DEFAULT;
+  // Unconfigured → build nothing, leaving the MCP-based post_reddit (self-host) in
+  // place. Never a fake send.
+  if (!apiKey || !userId) return {};
+  const call = (slug: string, args: Record<string, unknown>) => callComposio(apiKey, userId, baseUrl, slug, args, REDDIT_CHANNEL);
+  const asObj = (input: unknown, key: string): Record<string, unknown> =>
+    (typeof input === "string" ? { [key]: input } : (input ?? {})) as Record<string, unknown>;
+
+  return {
+    post_reddit: {
+      description:
+        "Submit a post to Reddit (as the connected account). Pass an object with the target subreddit (no r/ prefix), the title, and the content (body text for a self post, or a URL for a link post; set is_self:false for a link). Optionally flair_id if the subreddit requires flair. Only call this AFTER the user has confirmed the exact subreddit, title, and content — it is public and cannot be undone. Returns the submitted post's URL/id on success.",
+      inputSchema: z.object({
+        subreddit: z.string().describe("Target subreddit WITHOUT the r/ prefix (e.g. 'test'), exactly as the user approved."),
+        title: z.string().describe("The post title (<=300 chars), exactly as the user approved it."),
+        content: z.string().describe("The FINAL body text for a self post, or the URL for a link post."),
+        is_self: z.boolean().optional().describe("true for a text/self post (default), false for a link post."),
+        flair_id: z.string().optional().describe("Flair id, only if the subreddit requires one."),
+      }),
+      run: async (input) => {
+        const o = asObj(input, "content");
+        const subreddit = String(o.subreddit ?? "").trim().replace(/^\/?r\//i, "");
+        const title = String(o.title ?? "").trim();
+        const content = String(o.content ?? "");
+        if (!subreddit || !title) return "Provide the target subreddit and the post title.";
+        const isSelf = o.is_self !== false;
+        const args: Record<string, unknown> = { subreddit, title, kind: isSelf ? "self" : "link" };
+        if (isSelf) args.text = content;
+        else args.url = content;
+        if (o.flair_id) args.flair_id = o.flair_id;
+        return call("REDDIT_CREATE_REDDIT_POST", args);
+      },
+    },
+    search_reddit: {
+      description: "Search RECENT Reddit content across subreddits and return the matches. Read-only — never posts. Input: { query, limit? }.",
+      inputSchema: z.object({
+        query: z.string().min(1).describe("The search query."),
+        limit: z.number().optional().describe("Max results (default 5)."),
+      }),
+      run: async (input) => {
+        const o = asObj(input, "query");
+        const query = String(o.query ?? "").trim();
+        if (!query) return "Provide a search query.";
+        const args: Record<string, unknown> = { search_query: query };
+        if (o.limit !== undefined) args.limit = o.limit;
+        return call("REDDIT_SEARCH_ACROSS_SUBREDDITS", args);
+      },
+    },
+    read_subreddit: {
+      description: "Read RECENT posts from a subreddit and return them. Read-only — never posts. Input: { subreddit, size? }.",
+      inputSchema: z.object({
+        subreddit: z.string().min(1).describe("Subreddit WITHOUT the r/ prefix (e.g. 'test')."),
+        size: z.number().optional().describe("Max posts to return (default 5)."),
+      }),
+      run: async (input) => {
+        const o = asObj(input, "subreddit");
+        const subreddit = String(o.subreddit ?? "").trim().replace(/^\/?r\//i, "");
+        if (!subreddit) return "Provide the subreddit to read.";
+        const args: Record<string, unknown> = { subreddit };
+        if (o.size !== undefined) args.size = o.size;
+        return call("REDDIT_RETRIEVE_REDDIT_POST", args);
+      },
+    },
+    read_reddit_replies: {
+      description:
+        "Read the comments/replies on ONE Reddit thread and return them — use this to see replies to a post (e.g. one of the user's own threads). Read-only — never posts. Input: { post_id } — the base-36 post id (the id in the permalink, e.g. 'q5u7q5').",
+      inputSchema: z.object({
+        post_id: z.string().min(1).describe("Base-36 Reddit post id, e.g. 'q5u7q5' (the id in the permalink, without a t3_ prefix)."),
+      }),
+      run: async (input) => {
+        const o = asObj(input, "post_id");
+        const article = String(o.post_id ?? o.article ?? "").trim().replace(/^t3_/, "");
+        if (!article) return "Provide the base-36 post id of the thread to read replies for.";
+        return call("REDDIT_RETRIEVE_POST_COMMENTS", { article });
+      },
+    },
+  };
+}
+
+/**
  * Build Callistheness's send tools as PeerTools (the engine's generic
  * server-provided tool slot — the same vehicle the mesh uses). Each takes the
  * composed content as a single string and publishes it via its connector. A
@@ -444,5 +596,8 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
   // Read-only X tools (fetch post, search, mentions, timeline) reaching x-mcp-readonly.
   // Reads are ungated — the brain calls them directly and relays real content.
   Object.assign(tools, buildXReadTools(env));
+  // Reddit via Composio (interim, #420). When configured these OVERRIDE the MCP-based
+  // post_reddit above and add the ungated Reddit reads; unset → self-host path stays.
+  Object.assign(tools, buildRedditComposioTools(env));
   return tools;
 }

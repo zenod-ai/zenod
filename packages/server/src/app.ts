@@ -911,6 +911,27 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       description:
         "Search recent public X (Twitter) posts — Callistheness returns the matching posts. Read-only; nothing is posted.",
     },
+    {
+      as: "search_reddit",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Search recent Reddit posts/comments across subreddits — Callistheness returns the matches. Read-only; nothing is posted.",
+    },
+    {
+      as: "read_subreddit",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Read the recent posts from a subreddit — Callistheness returns them. Read-only; nothing is posted.",
+    },
+    {
+      as: "read_reddit_replies",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Read the replies/comments on a Reddit thread (e.g. one of the user's own posts) by its post id or permalink — Callistheness returns them. Read-only; nothing is posted.",
+    },
   ];
   const PHYLAX_NOTIFICATION_TOOLS = [
     {

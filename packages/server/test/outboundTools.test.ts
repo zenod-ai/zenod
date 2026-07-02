@@ -124,3 +124,39 @@ describe("extractMediaId", () => {
     expect(extractMediaId("total failure, no id here")).toBeUndefined();
   });
 });
+
+describe("Reddit via Composio", () => {
+  const composioEnv = { COMPOSIO_API_KEY: "ak_test", COMPOSIO_USER_ID: "jordimr", COMPOSIO_BASE_URL: "http://127.0.0.1:0" };
+
+  it("adds the Reddit read tools and overrides post_reddit when Composio is configured", () => {
+    const tools = buildOutboundTools(composioEnv);
+    for (const name of ["post_reddit", "search_reddit", "read_subreddit", "read_reddit_replies"]) {
+      expect(tools[name]).toBeDefined();
+      expect(tools[name].inputSchema).toBeDefined();
+    }
+    // post_reddit is the Composio object schema (has flair_id), not the MCP one.
+    const shape = (tools.post_reddit.inputSchema as { shape?: Record<string, unknown> })?.shape;
+    expect(shape && Object.keys(shape).sort()).toEqual(["content", "flair_id", "is_self", "subreddit", "title"]);
+  });
+
+  it("leaves the MCP-based post_reddit in place (no read tools) when Composio is unset", () => {
+    const tools = buildOutboundTools({});
+    expect(tools.search_reddit).toBeUndefined();
+    const shape = (tools.post_reddit.inputSchema as { shape?: Record<string, unknown> })?.shape;
+    expect(shape && Object.keys(shape).sort()).toEqual(["content", "is_self", "subreddit", "title"]);
+  });
+
+  it("validates required input before reaching Composio", async () => {
+    const tools = buildOutboundTools(composioEnv);
+    expect((await tools.post_reddit.run({ title: "hi" })).toLowerCase()).toContain("target subreddit");
+    expect((await tools.search_reddit.run({ query: "" })).toLowerCase()).toContain("search query");
+    expect((await tools.read_subreddit.run({ subreddit: "" })).toLowerCase()).toContain("subreddit");
+    expect((await tools.read_reddit_replies.run({ post_id: "" })).toLowerCase()).toContain("post id");
+  });
+
+  it("reaches the connector and fails gracefully (no throw, no fake send)", async () => {
+    const tools = buildOutboundTools(composioEnv);
+    const res = await tools.post_reddit.run({ subreddit: "r/test", title: "Hello", content: "body" });
+    expect(res.toLowerCase()).toContain("could not reach the reddit connector");
+  });
+});
