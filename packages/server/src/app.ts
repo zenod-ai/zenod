@@ -1448,6 +1448,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     if (file.size > MAX_WEB_VOICE_NOTE_BYTES) return c.json({ error: "audio file is too large" }, 413);
 
     const data = Buffer.from(await file.arrayBuffer());
+    console.warn(
+      `[voice] web transcribe in: name=${file.name || "(none)"} type=${file.type || "(none)"} bytes=${data.length}`,
+    );
     const result = await transcribeAudio(data, file.name || "web-voice-note.webm", {
       model: settings.whisperModel(),
       groqApiKey: settings.get("groq_api_key"),
@@ -1457,7 +1460,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       longTranscriptionProvider: settings.longTranscriptionProvider(),
       useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
     });
-    if (!result.success)
+    if (!result.success) {
+      console.warn(
+        `[voice] web transcribe FAIL: provider=${result.provider ?? "?"} noSpeech=${result.noSpeech === true} error=${result.error ?? ""}`,
+      );
       return c.json(
         {
           error: result.noSpeech ? result.error : `could not transcribe voice note: ${result.error}`,
@@ -1465,6 +1471,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         },
         422,
       );
+    }
+    console.warn(
+      `[voice] web transcribe OK: provider=${result.provider ?? "?"} chars=${result.transcript?.length ?? 0} text=${JSON.stringify((result.transcript ?? "").slice(0, 80))}`,
+    );
     return c.json({ transcript: result.transcript, provider: result.provider });
   });
 

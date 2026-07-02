@@ -549,7 +549,12 @@ async function transcribeWithGroq(
   const flac = join(dir, "audio.flac");
   try {
     await writeFile(input, data);
-    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "flac", flac], { signal });
+    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "flac", flac], {
+      signal,
+      onStderrLine: (line) => {
+        if (/error|invalid|corrupt|parsing/i.test(line)) console.warn(`[voice] groq ffmpeg (${filename}): ${line}`);
+      },
+    });
     await run(
       "ffmpeg",
       [
