@@ -30,6 +30,10 @@ const SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema";
 
 // Tools that perform a mutation. Their error objects must carry `currentState`.
 export const WRITE_TOOLS = new Set([
+  "archus.backlog_create",
+  "archus.backlog_edit",
+  "archus.backlog_close",
+  "archus.backlog_comment",
   "archus.request_backlog_action",
   "archus.run_issue",
   "outbound.post_tweet",

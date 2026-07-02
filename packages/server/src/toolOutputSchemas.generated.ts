@@ -2708,6 +2708,863 @@ export const TOOL_OUTPUT_SCHEMAS = (
       }
     }
   },
+  "archus.backlog_create": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://zenod.dev/schemas/tool-output/archus.backlog_create.json",
+    "title": "archus.backlog_create output",
+    "type": "object",
+    "required": [
+      "evidence"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "text": {
+        "type": "string"
+      },
+      "operations": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Operation"
+        }
+      },
+      "evidence": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Ev_issue_created"
+        }
+      },
+      "questions": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Question"
+        }
+      },
+      "candidates": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Candidate"
+        }
+      },
+      "errors": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/ToolErrorWrite"
+        }
+      },
+      "meta": {
+        "type": "object",
+        "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
+      }
+    },
+    "$defs": {
+      "ToolErrorWrite": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "currentState"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "currentState": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Candidate": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "matchReason": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Question": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ev_issue_created": {
+        "type": "object",
+        "required": [
+          "kind",
+          "target",
+          "url",
+          "verified"
+        ],
+        "properties": {
+          "kind": {
+            "const": "issue_created"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verified": {
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Operation": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "status"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "interpretedAs": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "blocked",
+              "needs_input"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "archus.backlog_edit": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://zenod.dev/schemas/tool-output/archus.backlog_edit.json",
+    "title": "archus.backlog_edit output",
+    "type": "object",
+    "required": [
+      "evidence"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "text": {
+        "type": "string"
+      },
+      "operations": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Operation"
+        }
+      },
+      "evidence": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Ev_issue_updated"
+        }
+      },
+      "questions": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Question"
+        }
+      },
+      "candidates": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Candidate"
+        }
+      },
+      "errors": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/ToolErrorWrite"
+        }
+      },
+      "meta": {
+        "type": "object",
+        "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
+      }
+    },
+    "$defs": {
+      "ToolErrorWrite": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "currentState"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "currentState": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Candidate": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "matchReason": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Question": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ev_issue_updated": {
+        "type": "object",
+        "required": [
+          "kind",
+          "target",
+          "url",
+          "changedFields",
+          "verified"
+        ],
+        "properties": {
+          "kind": {
+            "const": "issue_updated"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "changedFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verified": {
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Operation": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "status"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "interpretedAs": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "blocked",
+              "needs_input"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "archus.backlog_close": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://zenod.dev/schemas/tool-output/archus.backlog_close.json",
+    "title": "archus.backlog_close output",
+    "type": "object",
+    "required": [
+      "evidence"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "text": {
+        "type": "string"
+      },
+      "operations": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Operation"
+        }
+      },
+      "evidence": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Ev_issue_closed"
+        }
+      },
+      "questions": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Question"
+        }
+      },
+      "candidates": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Candidate"
+        }
+      },
+      "errors": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/ToolErrorWrite"
+        }
+      },
+      "meta": {
+        "type": "object",
+        "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
+      }
+    },
+    "$defs": {
+      "ToolErrorWrite": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "currentState"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "currentState": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Candidate": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "matchReason": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Question": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ev_issue_closed": {
+        "type": "object",
+        "required": [
+          "kind",
+          "target",
+          "url",
+          "state",
+          "verified"
+        ],
+        "properties": {
+          "kind": {
+            "const": "issue_closed"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "state": {
+            "const": "closed"
+          },
+          "verified": {
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Operation": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "status"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "interpretedAs": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "blocked",
+              "needs_input"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "archus.backlog_comment": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://zenod.dev/schemas/tool-output/archus.backlog_comment.json",
+    "title": "archus.backlog_comment output",
+    "type": "object",
+    "required": [
+      "evidence"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "text": {
+        "type": "string"
+      },
+      "operations": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Operation"
+        }
+      },
+      "evidence": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Ev_issue_updated"
+        }
+      },
+      "questions": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Question"
+        }
+      },
+      "candidates": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Candidate"
+        }
+      },
+      "errors": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/ToolErrorWrite"
+        }
+      },
+      "meta": {
+        "type": "object",
+        "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
+      }
+    },
+    "$defs": {
+      "ToolErrorWrite": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "currentState"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "currentState": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Candidate": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "matchReason": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Question": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ev_issue_updated": {
+        "type": "object",
+        "required": [
+          "kind",
+          "target",
+          "url",
+          "changedFields",
+          "verified"
+        ],
+        "properties": {
+          "kind": {
+            "const": "issue_updated"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "changedFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verified": {
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Operation": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "status"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "interpretedAs": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "blocked",
+              "needs_input"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "archus.backlog_list": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://zenod.dev/schemas/tool-output/archus.backlog_list.json",
+    "title": "archus.backlog_list output",
+    "type": "object",
+    "required": [
+      "evidence"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "text": {
+        "type": "string"
+      },
+      "operations": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Operation"
+        }
+      },
+      "evidence": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Ev_issue_list"
+        }
+      },
+      "questions": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Question"
+        }
+      },
+      "candidates": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Candidate"
+        }
+      },
+      "errors": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/ToolError"
+        }
+      },
+      "meta": {
+        "type": "object",
+        "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
+      }
+    },
+    "$defs": {
+      "ToolError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "currentState": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Candidate": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "matchReason": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Question": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ev_issue_list": {
+        "type": "object",
+        "required": [
+          "kind",
+          "issues"
+        ],
+        "properties": {
+          "kind": {
+            "const": "issue_list"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "filters": {
+            "type": "object"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Operation": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "status"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "interpretedAs": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "blocked",
+              "needs_input"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
   "archus.request_backlog_action": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://zenod.dev/schemas/tool-output/archus.request_backlog_action.json",

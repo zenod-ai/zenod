@@ -5,7 +5,32 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, finalComment, deliverablePaths, deliverablesBlock, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, isQuotaError, fallbackEngine, finalComment, deliverablePaths, deliverablesBlock, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+
+test("isQuotaError recognizes the quota/limit error class across both engines (W0)", () => {
+  // The exact codex error that killed executions on 2026-07-02:
+  assert.ok(isQuotaError("You've hit your usage limit. Upgrade to Plus to continue using Codex (https://chatgpt.com/explore/plus), or try again at Jul 26th, 2026 7:56 AM."));
+  assert.ok(isQuotaError("insufficient_quota: You exceeded your current quota"));
+  assert.ok(isQuotaError("429 Too Many Requests"));
+  assert.ok(isQuotaError("Your credit balance is too low"));
+  assert.ok(isQuotaError("rate limit reached, retry later"));
+  // Non-quota failures must NOT trigger the engine fallback:
+  assert.ok(!isQuotaError("TypeError: cannot read properties of undefined"));
+  assert.ok(!isQuotaError("git push failed: permission denied"));
+  assert.ok(!isQuotaError(""));
+  assert.ok(!isQuotaError(null));
+});
+
+test("fallbackEngine swaps codex↔claude (W0)", () => {
+  assert.equal(fallbackEngine("codex"), "claude");
+  assert.equal(fallbackEngine("claude"), "codex");
+});
+
+test("classifyWorkerError still names quota failures plainly (W0 regression guard)", () => {
+  const msg = classifyWorkerError("You've hit your usage limit. Upgrade to Plus to continue using Codex.");
+  assert.ok(msg.includes("out of quota"));
+  assert.equal(classifyWorkerError(null), null);
+});
 
 test("deliverablePaths normalizes git status --short lines including renames (R1-T4)", () => {
   assert.deepEqual(

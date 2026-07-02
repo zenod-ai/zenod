@@ -847,6 +847,24 @@ export class Runtime {
     const configuredRepos = () =>
       [...new Set([this.settings.get("vault_repo"), this.settings.getRaw("backlog_repo")].filter((repo): repo is string => Boolean(repo)))];
     const discoveryRepos = () => [...new Set([...configuredRepos(), productRepo])];
+    // S0-T1: the single hard-wired write destination for the deterministic
+    // backlog writers. A backlog agent (Archus) carries `backlog_repo`; a vault
+    // agent falls back to its vault repo. There is no per-call override.
+    const lifeBacklogRepo = () => this.settings.getRaw("backlog_repo") || this.settings.get("vault_repo") || "";
+    const backlogNotConfigured = (op: string): ToolResponse =>
+      toolResponse({
+        text: `FAILED to ${op} backlog issue: no life-backlog repository is configured.`,
+        errors: [{ code: "repo_not_configured", message: "No backlog_repo (or vault_repo) is configured for this agent.", currentState: {} }],
+      });
+    // S0-T6: a failed write returns FAILED + the verbatim error and NO success
+    // evidence, so nothing that reads like a completed write can be rendered.
+    const backlogWriteFailure = (op: string, repo: string, error: unknown): ToolResponse => {
+      const message = error instanceof Error ? error.message : String(error);
+      return toolResponse({
+        text: `FAILED to ${op} backlog issue in ${repo}: ${message}`,
+        errors: [{ code: `${op}_failed`, message, currentState: { repo } }],
+      });
+    };
     const repoPath = (repo: string) => encodeURIComponent(repo).replace("%2F", "/");
     const parseTarget = (target: string): { repo: string; number: number } | null => {
       const match = target.trim().match(/^([^#\s]+\/[^#\s]+)#(\d+)$/);
@@ -1093,6 +1111,160 @@ export class Runtime {
         return toolResponse({
           text: `No issue matched ${reference}.`,
           evidence: [evidence("issue_not_found", { searchedRepos, searchedWindow: recentWindow, candidates: [] })],
+        });
+      },
+      // --- S0-T1: deterministic life-backlog writers -----------------------
+      // The write destination is the ONE configured life-backlog repo, resolved
+      // here and nowhere overridable — none of these tools accept a repo, so a
+      // write can only ever land in the life backlog (S0-T8 wrong-repo guard by
+      // construction). Every write is confirmed by a follow-up GET before it is
+      // reported as done; a failure returns FAILED + the verbatim GitHub error
+      // and NO success evidence (S0-T6 honesty, also enforced by the output
+      // layer's no-mutation-on-error invariant). Zero LLM in the path.
+      createIssue: async ({ title, body, labels }: { title: string; body?: string; labels?: string[] }): Promise<ToolResponse> => {
+        const repo = lifeBacklogRepo();
+        if (!repo) return backlogNotConfigured("create");
+        try {
+          const created = await this.githubJson<{ number: number; html_url: string }>(`/repos/${repoPath(repo)}/issues`, {
+            method: "POST",
+            body: JSON.stringify({ title, ...(body !== undefined ? { body } : {}), ...(labels?.length ? { labels } : {}) }),
+          });
+          const verified = await readIssue(repo, created.number); // read-back: create is only "done" once GET confirms it
+          const target = issueTarget(repo, verified);
+          return toolResponse({
+            text: `Created ${target}: ${verified.html_url}`,
+            evidence: [
+              evidence("issue_created", {
+                target,
+                url: verified.html_url,
+                title: verified.title,
+                state: verified.state ?? "open",
+                labels: labelsOf(verified),
+                verified: true,
+              }),
+            ],
+          });
+        } catch (error) {
+          return backlogWriteFailure("create", repo, error);
+        }
+      },
+      editIssue: async ({
+        number,
+        title,
+        body,
+        addLabels,
+        removeLabels,
+      }: {
+        number: number;
+        title?: string;
+        body?: string;
+        addLabels?: string[];
+        removeLabels?: string[];
+      }): Promise<ToolResponse> => {
+        const repo = lifeBacklogRepo();
+        if (!repo) return backlogNotConfigured("edit");
+        const issuePath = `/repos/${repoPath(repo)}/issues/${number}`;
+        const changedFields: string[] = [];
+        try {
+          await readIssue(repo, number); // fail fast + honestly if the target does not exist
+          if (title !== undefined || body !== undefined) {
+            await this.githubJson(issuePath, {
+              method: "PATCH",
+              body: JSON.stringify({ ...(title !== undefined ? { title } : {}), ...(body !== undefined ? { body } : {}) }),
+            });
+            if (title !== undefined) changedFields.push("title");
+            if (body !== undefined) changedFields.push("body");
+          }
+          if (addLabels?.length) {
+            await this.githubJson(`${issuePath}/labels`, { method: "POST", body: JSON.stringify({ labels: addLabels }) });
+            changedFields.push("labels");
+          }
+          for (const label of removeLabels ?? []) {
+            await this.githubJson(`${issuePath}/labels/${encodeURIComponent(label)}`, { method: "DELETE" }).catch((err: unknown) => {
+              if (!String((err as Error).message).includes("GitHub returned 404")) throw err;
+            });
+            if (!changedFields.includes("labels")) changedFields.push("labels");
+          }
+          const verified = await readIssue(repo, number); // read-back the final state
+          const target = issueTarget(repo, verified);
+          return toolResponse({
+            text: `Updated ${target} (${changedFields.length ? changedFields.join(", ") : "no fields"}): ${verified.html_url}`,
+            evidence: [evidence("issue_updated", { target, url: verified.html_url, changedFields, verified: true })],
+          });
+        } catch (error) {
+          return backlogWriteFailure("edit", repo, error);
+        }
+      },
+      commentIssue: async ({ number, body }: { number: number; body: string }): Promise<ToolResponse> => {
+        const repo = lifeBacklogRepo();
+        if (!repo) return backlogNotConfigured("comment");
+        const issuePath = `/repos/${repoPath(repo)}/issues/${number}`;
+        try {
+          await readIssue(repo, number);
+          const posted = await this.githubJson<{ id: number; html_url: string }>(`${issuePath}/comments`, {
+            method: "POST",
+            body: JSON.stringify({ body }),
+          });
+          const comments = await readComments(repo, number); // read-back: confirm the comment id is really there
+          if (!comments.some((comment) => (comment as { id?: number }).id === posted.id)) {
+            throw new Error("comment POST returned but the comment was not found on read-back");
+          }
+          const verified = await readIssue(repo, number);
+          const target = issueTarget(repo, verified);
+          return toolResponse({
+            text: `Commented on ${target}: ${posted.html_url}`,
+            evidence: [evidence("issue_updated", { target, url: verified.html_url, changedFields: ["comment"], verified: true })],
+          });
+        } catch (error) {
+          return backlogWriteFailure("comment", repo, error);
+        }
+      },
+      closeIssue: async ({
+        number,
+        comment,
+        reason = "completed",
+      }: {
+        number: number;
+        comment?: string;
+        reason?: "completed" | "not_planned";
+      }): Promise<ToolResponse> => {
+        const repo = lifeBacklogRepo();
+        if (!repo) return backlogNotConfigured("close");
+        const issuePath = `/repos/${repoPath(repo)}/issues/${number}`;
+        try {
+          await readIssue(repo, number);
+          if (comment) {
+            await this.githubJson(`${issuePath}/comments`, { method: "POST", body: JSON.stringify({ body: comment }) });
+          }
+          await this.githubJson(issuePath, { method: "PATCH", body: JSON.stringify({ state: "closed", state_reason: reason }) });
+          const verified = await readIssue(repo, number); // read-back: only "closed" once GET confirms state
+          if (verified.state !== "closed") {
+            throw new Error(`close PATCH returned but the issue is still ${verified.state} on read-back`);
+          }
+          const target = issueTarget(repo, verified);
+          return toolResponse({
+            text: `Closed ${target}: ${verified.html_url}`,
+            evidence: [evidence("issue_closed", { target, url: verified.html_url, state: "closed", verified: true })],
+          });
+        } catch (error) {
+          return backlogWriteFailure("close", repo, error);
+        }
+      },
+      listBacklog: async ({
+        state = "open",
+        labels,
+        limit = 20,
+      }: {
+        state?: "open" | "closed" | "all";
+        labels?: string[];
+        limit?: number;
+      }): Promise<ToolResponse> => {
+        const repo = lifeBacklogRepo();
+        if (!repo) return backlogNotConfigured("list");
+        const issues = (await listRepoIssues(repo, state, limit)).filter((issue) => matchesLabels(issue, labels)).slice(0, limit);
+        return toolResponse({
+          text: [`Found ${issues.length} issue${issues.length === 1 ? "" : "s"} in ${repo}.`, ...issues.map((issue) => formatIssueLine(repo, issue))].join("\n"),
+          evidence: [evidence("issue_list", { filters: { repo, state, labels: labels ?? [], limit }, issues: issues.map((issue) => issueSummary(repo, issue)) })],
         });
       },
     };
