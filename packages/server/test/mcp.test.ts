@@ -728,6 +728,23 @@ describe("Epaminon MCP execution status", () => {
     }
   });
 
+  // #234 read-path honesty: a filter that matches nothing on a NON-empty queue must not
+  // read as "nothing ran" — the text must say tickets exist but were excluded.
+  it("does not phrase a filtered-empty read as 'nothing ran' when the queue is non-empty", async () => {
+    const client = await connect();
+    try {
+      const none = await client.callTool({ name: "execution_status", arguments: { message: "AlfaBlok/obsidian-brain#999999" } });
+      const status = none.structuredContent as { tickets: unknown[]; total: number; filtered: number };
+      expect(status.filtered).toBe(0);
+      expect(status.total).toBeGreaterThan(0);
+      const text = JSON.stringify(none.content);
+      expect(text).toContain("exist on the executor");
+      expect(text).toContain("Do NOT tell the user nothing ran");
+    } finally {
+      await client.close();
+    }
+  });
+
   it("exposes epaminon.execution_status as the typed v4 status read", async () => {
     const client = await connect();
     const { tools } = await client.listTools();

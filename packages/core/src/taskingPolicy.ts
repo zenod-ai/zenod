@@ -465,6 +465,19 @@ function acknowledgesRunningEphemeral(prose: string): boolean {
   return /\b(?:queued|running|started|execution|epaminon|in progress|not complete|not done)\b/i.test(prose);
 }
 
+/**
+ * E1-T6 / #234 — the reply already OWNS the honesty gap ("I couldn't read the
+ * execution status", "couldn't confirm", "wasn't able to check"). In that case the
+ * deterministic ⚠️ Correction banner would only stack a second, redundant hedge on top
+ * of an answer that is already honest — the exact spurious-correction-on-read-only
+ * symptom. When the model has said it couldn't verify/read, leave its text alone.
+ */
+function acknowledgesUnreadExecution(prose: string): boolean {
+  return /\b(?:couldn['’]?t|could not|can['’]?t|cannot|was(?:n['’]?t| not) able to|unable to)\s+(?:confirm|verify|read|check|tell|determine|access)\b/i.test(
+    prose,
+  );
+}
+
 const fmt = (nums: number[]): string => nums.map((n) => `#${n}`).join(", ");
 
 const EXECUTION_STATUS_WORDS =
@@ -682,7 +695,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     ].join("\n");
   }
 
-  if (claimsTerminalExecutionState(prose) && !hasTerminalExecutionGrounding(actions)) {
+  if (claimsTerminalExecutionState(prose) && !hasTerminalExecutionGrounding(actions) && !acknowledgesUnreadExecution(prose)) {
     return [
       "⚠️ Correction — I could not confirm a terminal execution state this turn, so do not rely on any claim below that execution is complete/done/failed.",
       "A queue or dispatch receipt only proves the run was queued/dispatched. Terminal claims need a live execution_status result showing done or failed.",
@@ -716,7 +729,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // Execution state is not ordinary backlog state. A reply like "No, #108/#109
   // were not created or queued" must be grounded in Epaminon's live execution
   // read, not stale chat memory or an Archus paraphrase.
-  if (claimsExecutionState(prose) && !executionGrounded && !isSameTurnCreateWithoutExecutionReceipt(prose, presented, createdNums)) {
+  if (claimsExecutionState(prose) && !executionGrounded && !isSameTurnCreateWithoutExecutionReceipt(prose, presented, createdNums) && !acknowledgesUnreadExecution(prose)) {
     const nums = [...presented];
     const lines = [
       `⚠️ Correction — I couldn't confirm execution state${nums.length ? ` for ${fmt(nums)}` : ""} this turn, so don't rely on the run/pickup claim below.`,

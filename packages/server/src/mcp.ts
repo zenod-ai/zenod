@@ -425,8 +425,17 @@ export function buildMcpServer(
           };
         }
         const filteredTickets = filterExecutionTickets(tickets, message);
+        // #234 read-path honesty: an EMPTY result must not become "no work ran". Only
+        // say "no executions exist" when the queue really is empty; if a filter emptied
+        // a non-empty queue, say so explicitly rather than asserting nothing ran.
+        const text =
+          filteredTickets.length > 0
+            ? formatExecutionStatus(filteredTickets)
+            : tickets.length === 0
+              ? "No execution tickets exist yet (none have ever been queued on this executor)."
+              : `No execution tickets matched this query, but ${tickets.length} exist on the executor. Do NOT tell the user nothing ran — the filter excluded them; broaden the query or list all.`;
         return {
-          content: [{ type: "text", text: formatExecutionStatus(filteredTickets) }],
+          content: [{ type: "text", text }],
           structuredContent: { tickets: filteredTickets, total: tickets.length, filtered: filteredTickets.length, executor: true },
         };
       },

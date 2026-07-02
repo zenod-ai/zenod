@@ -230,6 +230,7 @@ describe("GitHub App flow", () => {
     settings.set("vault_repo", "zenod-ai/fixture");
     settings.set("github_token", "ghp_test");
 
+    let postedComment = false;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
       const path = String(url).replace("https://api.github.com", "");
       if (path === "/repos/zenod-ai/fixture/issues/52" && !init?.method) {
@@ -272,9 +273,14 @@ describe("GitHub App flow", () => {
         );
       }
       if (path === "/repos/zenod-ai/fixture/issues/52/comments?per_page=100" && !init?.method) {
-        return new Response(JSON.stringify([{ body: "Older comment." }]), { status: 200 });
+        // Read-back honesty: after the POST, the new comment is visible.
+        const body = postedComment
+          ? [{ body: "Older comment." }, { body: "Blocked on a product decision." }]
+          : [{ body: "Older comment." }];
+        return new Response(JSON.stringify(body), { status: 200 });
       }
       if (path === "/repos/zenod-ai/fixture/issues/52/comments" && init?.method === "POST") {
+        postedComment = true;
         return new Response(JSON.stringify({ html_url: "https://github.com/zenod-ai/fixture/issues/52#comment" }), { status: 201 });
       }
       return new Response(`unexpected ${init?.method ?? "GET"} ${path}`, { status: 500 });

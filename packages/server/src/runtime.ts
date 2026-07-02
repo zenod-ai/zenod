@@ -1483,8 +1483,13 @@ export class Runtime {
           ...(state !== undefined ? { state } : {}),
           ...(stateReason !== undefined ? { stateReason } : {}),
         });
-        const ops = result.operations.length ? result.operations.join(", ") : "no changes";
-        return `Edited #${result.issueNumber} (${ops}): ${result.issueUrl}`;
+        // E-1 edit-lane honesty (Jordi): the edit lane must not claim success with zero
+        // verified changes. When no operation actually ran, say so plainly so the brain
+        // cannot narrate an edit that didn't happen.
+        if (result.operations.length === 0) {
+          return `No change made to #${result.issueNumber} — nothing to edit was applied: ${result.issueUrl}. Do NOT tell the user the issue was edited.`;
+        }
+        return `Edited #${result.issueNumber} (${result.operations.join(", ")}): ${result.issueUrl}`;
       },
       closeIssue: async ({ repo, issueNumber, comment, notPlanned }) => {
         const result = await editGithubIssue(this.settings, {
