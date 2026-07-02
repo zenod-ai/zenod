@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { createJourneyAuthorityReconciler } from "../src/journeyAuthorityReconciler.js";
+import { createJourneyAuthorityReconciler, buildIngestPacket } from "../src/journeyAuthorityReconciler.js";
 import { JourneyMonitor } from "../src/journeyMonitor.js";
 import { JourneyStore } from "../src/journeyStore.js";
 import { toolResponse } from "../src/toolOutput.js";
@@ -119,6 +119,91 @@ describe("createJourneyAuthorityReconciler", () => {
         status: "blocked",
         blocker: "cannot reconcile GitHub step: no issue target or artifact was recorded",
       });
+    });
+  });
+
+  const deliverable = {
+    repo: "AlfaBlok/idea_scraper",
+    issue: 105,
+    prUrl: "https://github.com/AlfaBlok/idea_scraper/pull/106",
+    branch: "codex/issue-105-legal-matrix",
+    headSha: "deadbeef",
+    merged: false,
+    paths: ["ideascraper-vps-v1/telegram-bot/LEGAL_COMMERCIAL_DECISION_MATRIX.md"],
+    handoffExcerpt: "Produced the decision matrix; opened a draft PR.",
+  };
+
+  it("buildIngestPacket produces a cited, honest meaning note (R1-T2)", () => {
+    const packet = buildIngestPacket(ticket({ context: "Produce a legal/commercial decision matrix", deliverable }));
+    expect(packet).not.toBeNull();
+    expect(packet!.content).toContain("AlfaBlok/idea_scraper#105");
+    expect(packet!.content).toContain("Ask: Produce a legal/commercial decision matrix");
+    expect(packet!.content).toContain("NOT merged yet");
+    expect(packet!.content).toContain("LEGAL_COMMERCIAL_DECISION_MATRIX.md");
+    expect(packet!.content).toContain("pr=https://github.com/AlfaBlok/idea_scraper/pull/106");
+    expect(packet!.content).toContain("merged=false");
+    expect(packet!.hints).toContain("execution result");
+  });
+
+  it("buildIngestPacket returns null without a deliverable (R1-T2)", () => {
+    expect(buildIngestPacket(ticket({ state: "done" }))).toBeNull();
+  });
+
+  it("files a cited Zenod note on a terminal execution with a deliverable, then guards against re-filing (R1-T2)", async () => {
+    await withStore(async (store) => {
+      const journey = store.create({ surface: "console", originalRequest: "run issue" }, 100);
+      const step = store.addStep(
+        journey.id,
+        { owner: "epaminon", title: "Run issue", input: { intent: "execution.issue.run", executionId: "exec-1" }, wakeAt: 100 },
+        110,
+      );
+      const filed: Array<{ executionId: string; content: string }> = [];
+      const reconcile = createJourneyAuthorityReconciler({
+        readExecution: async () => ticket({ state: "needs-review", deliverable }),
+        fileExecutionMemory: async ({ executionId, content }) => {
+          filed.push({ executionId, content });
+          return { evidenceRef: "Log/2026-07-01.md#^e-exec" };
+        },
+      });
+
+      // Pass 1: no guard artifact yet → files once and emits the zenod_ingest guard.
+      const first = await reconcile({ step, snapshot: store.snapshot(journey.id) });
+      expect(filed).toHaveLength(1);
+      const guard = (first.status === "completed" ? first.artifacts ?? [] : []).find((a) => a.kind === "zenod_ingest");
+      expect(guard).toMatchObject({ artifactKey: "zenod-ingest:exec-1" });
+
+      // Persist the guard artifact, then pass 2 must NOT re-file.
+      store.addArtifact(journey.id, { stepId: step.id, ...guard! }, 210);
+      await reconcile({ step, snapshot: store.snapshot(journey.id) });
+      expect(filed).toHaveLength(1);
+    });
+  });
+
+  it("retries ingest when the Zenod filing fails (no guard artifact written) (R1-T2)", async () => {
+    await withStore(async (store) => {
+      const journey = store.create({ surface: "console", originalRequest: "run issue" }, 100);
+      const step = store.addStep(
+        journey.id,
+        { owner: "epaminon", title: "Run issue", input: { intent: "execution.issue.run", executionId: "exec-1" }, wakeAt: 100 },
+        110,
+      );
+      let attempts = 0;
+      const reconcile = createJourneyAuthorityReconciler({
+        readExecution: async () => ticket({ state: "needs-review", deliverable }),
+        fileExecutionMemory: async () => {
+          attempts += 1;
+          return attempts === 1 ? null : { evidenceRef: "Log/x.md#^e" };
+        },
+      });
+
+      const first = await reconcile({ step, snapshot: store.snapshot(journey.id) });
+      expect(attempts).toBe(1);
+      expect((first.status === "completed" ? first.artifacts ?? [] : []).some((a) => a.kind === "zenod_ingest")).toBe(false);
+
+      // No guard persisted → next pass retries and succeeds.
+      const second = await reconcile({ step, snapshot: store.snapshot(journey.id) });
+      expect(attempts).toBe(2);
+      expect((second.status === "completed" ? second.artifacts ?? [] : []).some((a) => a.kind === "zenod_ingest")).toBe(true);
     });
   });
 

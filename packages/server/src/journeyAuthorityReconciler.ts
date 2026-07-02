@@ -8,6 +8,57 @@ export interface JourneyAuthorityReaders {
   readIssue?: (target: string) => Promise<ToolResponse>;
   readExecution?: (reference: string) => Promise<ExecutionTicket | null>;
   readMemoryJob?: (jobId: string) => Promise<TaskJob | null> | TaskJob | null;
+  /** File a distilled+cited meaning note to Zenod for a completed execution (R1-T2).
+   *  Returns the evidence ref on success, or null on failure (so ingest retries). */
+  fileExecutionMemory?: (input: {
+    executionId: string;
+    content: string;
+    hints: string[];
+  }) => Promise<{ evidenceRef?: string } | null>;
+}
+
+const ZENOD_INGEST_KIND = "zenod_ingest";
+const zenodIngestKey = (executionId: string) => `zenod-ingest:${executionId}`;
+
+/**
+ * PURE (R1-T2): build the distilled, cited meaning note Zenod files for a completed
+ * execution. It is meaning + pointer, never a copy of the deliverable: the ask, the
+ * outcome (handoff excerpt), an honest state line, and a machine-greppable citation.
+ * Returns null when there is no deliverable to cite.
+ */
+export function buildIngestPacket(ticket: ExecutionTicket): { content: string; hints: string[] } | null {
+  const d = ticket.deliverable;
+  if (!d) return null;
+  const repo = d.repo ?? "";
+  const issue = typeof d.issue === "number" ? d.issue : undefined;
+  const targetRef = repo && issue != null ? `${repo}#${issue}` : ticket.target;
+  const ask = (ticket.context || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean) || ticket.target;
+  const stateLine =
+    d.merged === true
+      ? "merged to main"
+      : d.prUrl
+        ? "PR open — NOT merged yet"
+        : "completed (no PR — filed artifact)";
+  const paths = (d.paths ?? []).filter(Boolean);
+  const citation = [
+    `repo=${repo || "?"}`,
+    issue != null ? `issue=${issue}` : "",
+    d.prUrl ? `pr=${d.prUrl}` : "",
+    d.branch ? `branch=${d.branch}` : "",
+    d.headSha ? `sha=${d.headSha}` : "",
+    `merged=${d.merged === true}`,
+  ].filter(Boolean).join(" ");
+  const content = [
+    `Execution deliverable — ${targetRef} (${ticket.executionId})`,
+    "",
+    `Ask: ${ask}`,
+    d.handoffExcerpt ? `Outcome: ${d.handoffExcerpt}` : "",
+    `State: ${stateLine}.`,
+    paths.length ? `Files: ${paths.join(", ")}` : "",
+    `Citation: ${citation}`,
+  ].filter(Boolean).join("\n");
+  const hints = ["execution result", repo].filter(Boolean);
+  return { content, hints };
 }
 
 const terminalExecutionStates = new Set(["done", "needs-review", "approved"]);
@@ -197,10 +248,35 @@ async function reconcileExecutionStep(
   }
 
   if (terminalExecutionStates.has(ticket.state)) {
+    const outArtifacts: AddJourneyArtifactInput[] = [...executionArtifact(ticket)];
+    // R1-T2: on a terminal/parked execution with a deliverable, file exactly one
+    // cited meaning note to Zenod. The zenod_ingest artifact (keyed by executionId)
+    // is the idempotency guard — if the snapshot already carries it we never re-file.
+    // On filing failure we leave no artifact so the next reconcile pass retries;
+    // ingest never blocks the execution edge.
+    const alreadyIngested = artifacts.some(
+      (a) => a.kind === ZENOD_INGEST_KIND && a.artifactKey === zenodIngestKey(ticket.executionId),
+    );
+    if (!alreadyIngested && readers.fileExecutionMemory) {
+      const packet = buildIngestPacket(ticket);
+      if (packet) {
+        const filed = await readers.fileExecutionMemory({ executionId: ticket.executionId, ...packet });
+        if (filed) {
+          outArtifacts.push({
+            kind: ZENOD_INGEST_KIND,
+            artifactKey: zenodIngestKey(ticket.executionId),
+            data: {
+              executionId: ticket.executionId,
+              ...(filed.evidenceRef ? { evidenceRef: filed.evidenceRef } : {}),
+            },
+          });
+        }
+      }
+    }
     return {
       status: "completed",
       result: { execution: ticket },
-      artifacts: executionArtifact(ticket),
+      artifacts: outArtifacts,
     };
   }
 
