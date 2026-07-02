@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zenod / The Council — Launch Positioning V3</title>
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#14171c; --ink:#e8e6e1; --dim:#a5a19a;
+    --accent:#d4a24e; --accent2:#6ea8a0; --line:#2a2e35; --bad:#c96a5a; --ok:#7fb069;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden}
+  .deck{height:100vh;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    justify-content:center;padding:5vh 7vw;overflow-y:auto}
+  .slide.active{display:flex}
+  .kicker{font-family:ui-monospace,Menlo,monospace;font-size:.9rem;
+    letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin-bottom:1.2rem}
+  h1{font-size:clamp(2.8rem,6.5vw,5rem);font-weight:400;line-height:1.1;margin-bottom:1.4rem}
+  h2{font-size:clamp(2rem,4.4vw,3.2rem);font-weight:400;line-height:1.16;margin-bottom:1.4rem}
+  h1 em,h2 em,p em{font-style:italic;color:var(--accent)}
+  p.lede{font-size:clamp(1.25rem,2.1vw,1.6rem);color:var(--dim);line-height:1.55;max-width:58ch}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:1rem;align-items:center}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.6rem 1.8rem}
+  .card h3{font-size:1.3rem;color:var(--accent);font-weight:400;margin-bottom:.6rem}
+  .card p{font-size:1.15rem;color:var(--dim);line-height:1.55}
+  .card.teal h3{color:var(--accent2)}
+  blockquote{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;
+    font-size:clamp(1.4rem,2.6vw,1.9rem);font-style:italic;line-height:1.45;margin:1.2rem 0;max-width:56ch}
+  .steps{counter-reset:s;margin-top:.6rem}
+  .step{display:flex;gap:1.1rem;padding:.75rem 0;border-bottom:1px solid var(--line);align-items:baseline}
+  .step:last-child{border-bottom:none}
+  .step::before{counter-increment:s;content:counter(s);font-family:ui-monospace,Menlo,monospace;
+    color:var(--accent);font-size:1rem;min-width:1.5rem}
+  .step b{font-weight:400;color:var(--ink);font-size:clamp(1.1rem,1.8vw,1.35rem)}
+  .step span{color:var(--dim);font-size:clamp(1rem,1.6vw,1.2rem)}
+  ul.clean{list-style:none;margin-top:.6rem}
+  ul.clean li{padding:.55rem 0;color:var(--dim);font-size:clamp(1.15rem,1.9vw,1.45rem);line-height:1.5}
+  ul.clean li b{color:var(--ink);font-weight:400}
+  ul.clean li::before{content:"—";color:var(--accent);margin-right:.7rem}
+  .pill{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;
+    letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);
+    border-radius:999px;padding:.3rem .9rem;color:var(--accent2);margin:0 .4rem .5rem 0}
+  .tagline{font-family:ui-monospace,Menlo,monospace;color:var(--accent2);font-size:1.05rem;margin-top:2rem}
+  .nav{position:fixed;bottom:1.2rem;right:1.6rem;font-family:ui-monospace,Menlo,monospace;
+    font-size:.85rem;color:var(--dim);z-index:10}
+  .nav button{background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;
+    padding:.35rem .8rem;cursor:pointer;font-family:inherit;margin-left:.4rem;font-size:.85rem}
+  .nav button:hover{color:var(--ink);border-color:var(--dim)}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);z-index:10;transition:width .25s}
+  .diagram{width:100%;max-width:1100px;margin:.5rem auto 0}
+  .diagram svg{width:100%;height:auto;display:block}
+  svg text{font-family:Georgia,serif;fill:var(--ink)}
+  svg .mono{font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em}
+  svg .dim{fill:var(--dim)} svg .acc{fill:var(--accent)} svg .acc2{fill:var(--accent2)}
+  svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+  svg .boxacc{fill:var(--panel);stroke:var(--accent);stroke-width:1.5}
+  svg .boxteal{fill:var(--panel);stroke:var(--accent2);stroke-width:1.5}
+  svg .wire{stroke:var(--dim);stroke-width:1.5;fill:none}
+  svg .wireacc{stroke:var(--accent);stroke-width:2;fill:none}
+  svg .wireteal{stroke:var(--accent2);stroke-width:2;fill:none}
+  svg .wirebad{stroke:var(--bad);stroke-width:1.5;fill:none}
+  /* Governor one-pager layout */
+  .gov-head{display:flex;align-items:baseline;gap:1.4rem;flex-wrap:wrap;margin-bottom:.4rem}
+  .gov-head h2{margin-bottom:0}
+  .gov-domain{font-family:ui-monospace,Menlo,monospace;font-size:1rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--accent2)}
+  .status{font-family:ui-monospace,Menlo,monospace;font-size:.8rem;letter-spacing:.14em;
+    text-transform:uppercase;border-radius:999px;padding:.3rem .9rem;margin-left:auto}
+  .status.live{border:1px solid var(--ok);color:var(--ok)}
+  .status.building{border:1px solid var(--accent);color:var(--accent)}
+  .status.soon{border:1px solid var(--dim);color:var(--dim)}
+  .gov-lore{font-style:italic;color:var(--dim);font-size:clamp(1.1rem,1.8vw,1.35rem);
+    line-height:1.5;margin:.6rem 0 1.2rem;max-width:70ch}
+  .gov-lore b{color:var(--accent);font-weight:400;font-style:normal}
+  .gov-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
+  .gov-cell{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:1.1rem 1.3rem}
+  .gov-cell h4{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--accent);font-weight:400;margin-bottom:.5rem}
+  .gov-cell p{font-size:clamp(1rem,1.5vw,1.18rem);color:var(--dim);line-height:1.5}
+  .gov-cell p b{color:var(--ink);font-weight:400}
+  .tools{margin-top:.2rem}
+  .tool{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;
+    background:var(--bg);border:1px solid var(--line);border-radius:7px;
+    padding:.3rem .7rem;color:var(--accent2);margin:0 .35rem .45rem 0}
+  .gov-example{margin-top:1.1rem;background:var(--panel);border-left:3px solid var(--accent2);
+    border-radius:0 11px 11px 0;padding:1rem 1.4rem}
+  .gov-example p{font-size:clamp(1.05rem,1.6vw,1.25rem);color:var(--ink);line-height:1.5}
+  .gov-example .lbl{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--accent2);display:block;margin-bottom:.35rem}
+  /* today vs soon board */
+  .board{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:.6rem}
+  .board h3{font-family:ui-monospace,Menlo,monospace;font-size:.95rem;letter-spacing:.2em;
+    text-transform:uppercase;font-weight:400;margin-bottom:.8rem}
+  .board .today h3{color:var(--ok)} .board .soon h3{color:var(--accent)}
+  .board ul{list-style:none}
+  .board li{padding:.5rem 0;border-bottom:1px solid var(--line);
+    font-size:clamp(1rem,1.6vw,1.2rem);color:var(--dim);line-height:1.45}
+  .board li b{color:var(--ink);font-weight:400}
+  .board .today li::before{content:"✓";color:var(--ok);margin-right:.7rem;font-family:ui-monospace,Menlo,monospace}
+  .board .soon li::before{content:"→";color:var(--accent);margin-right:.7rem;font-family:ui-monospace,Menlo,monospace}
+  @media(max-width:760px){.cols,.gov-grid,.board{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="progress" id="bar"></div>
+<div class="deck" id="deck">
+
+<!-- 1 · Title -->
+<section class="slide active">
+  <div class="kicker">Launch positioning · V3 · July 2026</div>
+  <h1>It's your memory<br>and your <em>team</em>.</h1>
+  <p class="lede">You run the Council. Six governors keep your world; you make the calls. Zenod keeps the library. The rest keep everything else.</p>
+  <div class="tagline">zenod.dev &nbsp;·&nbsp; self-hosted &nbsp;·&nbsp; AGPL-3.0 &nbsp;·&nbsp; plain markdown, your git, your keys</div>
+</section>
+
+<!-- 2 · Mission -->
+<section class="slide">
+  <div class="kicker">Mission · North star</div>
+  <h2>Maximize the share of your life's work that <em>compounds</em> — under your own keys.</h2>
+  <ul class="clean">
+    <li><b>Knowledge compounds</b> only if it's filed, cited, and owned — not scattered across ten vendors' databases.</li>
+    <li><b>Work compounds</b> only if every outcome becomes memory the next task can stand on.</li>
+    <li><b>Attention compounds</b> only if it's guarded — every interruption spent is compounding you gave away.</li>
+  </ul>
+  <blockquote>The metric we maximize: how much of what you and your agents do today makes tomorrow cheaper — without renting your mind to anyone.</blockquote>
+</section>
+
+<!-- 3 · Problem -->
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>Today, <em>you</em> are the context bus.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 340" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="500" cy="170" r="52" class="boxacc"/>
+    <text x="500" y="177" text-anchor="middle" font-size="22" class="acc">YOU</text>
+    <g font-size="17">
+      <rect x="60" y="40" width="170" height="52" class="box" rx="10"/><text x="145" y="72" text-anchor="middle">Claude</text>
+      <rect x="60" y="240" width="170" height="52" class="box" rx="10"/><text x="145" y="272" text-anchor="middle">Codex</text>
+      <rect x="770" y="40" width="170" height="52" class="box" rx="10"/><text x="855" y="72" text-anchor="middle">Notes app</text>
+      <rect x="770" y="140" width="170" height="52" class="box" rx="10"/><text x="855" y="172" text-anchor="middle">Backlog</text>
+      <rect x="770" y="240" width="170" height="52" class="box" rx="10"/><text x="855" y="272" text-anchor="middle">Twitter / Email</text>
+      <rect x="60" y="140" width="170" height="52" class="box" rx="10"/><text x="145" y="172" text-anchor="middle">New harness #7</text>
+    </g>
+    <path d="M230 66 L455 150" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M230 166 L448 170" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M230 266 L455 192" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M770 66 L545 150" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M770 166 L552 170" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M770 266 L545 192" class="wirebad" stroke-dasharray="5 5"/>
+    <text x="500" y="320" text-anchor="middle" font-size="17" class="dim mono">every arrow = you re-explaining, re-authenticating, re-checking</text>
+  </svg></div>
+  <p class="lede">You re-teach every agent, carry context between them, triage every ping. Ten agents means ten amnesiac contractors — and one exhausted coordinator.</p>
+</section>
+
+<!-- 4 · Why single owners -->
+<section class="slide">
+  <div class="kicker">The core insight</div>
+  <h2>Some dimensions of your life need <em>exactly one owner</em>.</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>Three scribes, no library</h3>
+      <p>Let three agents write into your memory and within a week it's a junk drawer: three filing styles, duplicate facts, no provenance. A library needs <b>one librarian</b>.</p>
+    </div>
+    <div class="card">
+      <h3>Three voices, no style</h3>
+      <p>Let three harnesses post on your behalf and you have no voice at all: three tones, three vocabularies, contradicting takes. A public voice needs <b>one herald</b>.</p>
+    </div>
+  </div>
+  <blockquote>Wherever consistency <em>is</em> the value — your memory, your voice, your plan, your attention — convert it to a single owner. That owner is a gatekeeper. Everyone else asks.</blockquote>
+</section>
+
+<!-- 5 · The shift: gatekeeper ring -->
+<section class="slide">
+  <div class="kicker">What's new</div>
+  <h2>The shift: from context bus to <em>ring of gatekeepers</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 360" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="16" class="mono">
+      <rect x="800" y="30" width="170" height="46" class="box" rx="9"/><text x="885" y="59" text-anchor="middle" class="dim">MEMORY VAULT</text>
+      <rect x="800" y="105" width="170" height="46" class="box" rx="9"/><text x="885" y="134" text-anchor="middle" class="dim">BACKLOG</text>
+      <rect x="800" y="180" width="170" height="46" class="box" rx="9"/><text x="885" y="209" text-anchor="middle" class="dim">YOUR ATTENTION</text>
+      <rect x="800" y="255" width="170" height="46" class="box" rx="9"/><text x="885" y="284" text-anchor="middle" class="dim">PUBLIC VOICE</text>
+    </g>
+    <g font-size="18">
+      <rect x="470" y="30" width="200" height="46" class="boxacc" rx="9"/><text x="570" y="59" text-anchor="middle" class="acc">Zenod</text>
+      <rect x="470" y="105" width="200" height="46" class="boxacc" rx="9"/><text x="570" y="134" text-anchor="middle" class="acc">Archus</text>
+      <rect x="470" y="180" width="200" height="46" class="boxacc" rx="9"/><text x="570" y="209" text-anchor="middle" class="acc">Phylax</text>
+      <rect x="470" y="255" width="200" height="46" class="boxacc" rx="9"/><text x="570" y="284" text-anchor="middle" class="acc">Callisthenes</text>
+    </g>
+    <path d="M670 53 L800 53" class="wireacc"/><path d="M670 128 L800 128" class="wireacc"/>
+    <path d="M670 203 L800 203" class="wireacc"/><path d="M670 278 L800 278" class="wireacc"/>
+    <g font-size="17">
+      <rect x="30" y="90" width="180" height="50" class="box" rx="10"/><text x="120" y="121" text-anchor="middle">Any agent</text>
+      <rect x="30" y="190" width="180" height="50" class="box" rx="10"/><text x="120" y="221" text-anchor="middle">Any harness</text>
+    </g>
+    <path d="M210 110 L470 60" class="wireteal"/><path d="M210 118 L470 125" class="wireteal"/>
+    <path d="M210 210 L470 208" class="wireteal"/><path d="M210 220 L470 275" class="wireteal"/>
+    <text x="330" y="330" text-anchor="middle" font-size="17" class="mono acc2">agents ASK the gatekeeper</text>
+    <text x="740" y="330" text-anchor="middle" font-size="17" class="mono acc">only the gatekeeper WRITES</text>
+  </svg></div>
+  <blockquote style="margin-top:.6rem">A gatekeeper is an agent whose job is to say <em>no</em> on your behalf — so everything else can safely say yes.</blockquote>
+</section>
+
+<!-- 6 · You run the Council -->
+<section class="slide">
+  <div class="kicker">Meet the team</div>
+  <h2>You don't get a seat at the Council.<br><em>You run it.</em></h2>
+  <p class="lede" style="margin-bottom:1.2rem">These are your ministers. Each governs one dimension of your life and keeps its order. The names come from the court of Alexander — because he ran exactly this shape:</p>
+  <ul class="clean">
+    <li><b>The satraps</b> — governors he placed over provinces. Each governor here owns one domain.</li>
+    <li><b>The Hetairoi</b> — his inner circle of trusted companions. The Council is a ring of trust, not a bureaucracy.</li>
+    <li><b>The Somatophylakes</b> — his seven bodyguards, the highest honor at court. That is exactly where <em>Phylax</em> stands: the guard at your door.</li>
+  </ul>
+  <blockquote>Six governors keep your world. You make the calls.</blockquote>
+</section>
+
+<!-- 7 · Council table -->
+<section class="slide">
+  <div class="kicker">The Council</div>
+  <h2>Six governors. Each a <em>domain expert</em>. One table.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 430" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="500" cy="215" rx="190" ry="95" class="boxacc" fill="none"/>
+    <text x="500" y="205" text-anchor="middle" font-size="26" class="acc">THE COUNCIL</text>
+    <text x="500" y="238" text-anchor="middle" font-size="15" class="mono dim">one door · one voice · six seats</text>
+    <g font-size="19">
+      <rect x="150" y="30" width="215" height="66" class="box" rx="11"/>
+      <text x="257" y="58" text-anchor="middle" class="acc">Zenod</text>
+      <text x="257" y="82" text-anchor="middle" font-size="14" class="mono dim">MEMORY · librarian</text>
+      <rect x="635" y="30" width="215" height="66" class="box" rx="11"/>
+      <text x="742" y="58" text-anchor="middle" class="acc">Archus</text>
+      <text x="742" y="82" text-anchor="middle" font-size="14" class="mono dim">THE PLAN · navigator</text>
+      <rect x="40" y="185" width="215" height="66" class="box" rx="11"/>
+      <text x="147" y="213" text-anchor="middle" class="acc">Epaminon</text>
+      <text x="147" y="237" text-anchor="middle" font-size="14" class="mono dim">EXECUTION · commander</text>
+      <rect x="745" y="185" width="215" height="66" class="box" rx="11"/>
+      <text x="852" y="213" text-anchor="middle" class="acc">Phylax</text>
+      <text x="852" y="237" text-anchor="middle" font-size="14" class="mono dim">THE DOOR · guard</text>
+      <rect x="150" y="335" width="215" height="66" class="box" rx="11"/>
+      <text x="257" y="363" text-anchor="middle" class="acc">Callisthenes</text>
+      <text x="257" y="387" text-anchor="middle" font-size="14" class="mono dim">THE WORD · herald</text>
+      <rect x="635" y="335" width="215" height="66" class="box" rx="11"/>
+      <text x="742" y="363" text-anchor="middle" class="acc">Nectary</text>
+      <text x="742" y="387" text-anchor="middle" font-size="14" class="mono dim">TREASURY · funding</text>
+    </g>
+    <path d="M300 90 L390 150" class="wire"/><path d="M700 90 L610 150" class="wire"/>
+    <path d="M255 218 L310 216" class="wire"/><path d="M745 218 L690 216" class="wire"/>
+    <path d="M300 340 L390 285" class="wire"/><path d="M700 340 L610 285" class="wire"/>
+  </svg></div>
+  <p class="lede">Zenod is not the boss. The power is the table — and the table answers to you.</p>
+</section>
+
+<!-- 8 · ZENOD one-pager -->
+<section class="slide">
+  <div class="kicker">Governor 1 of 6</div>
+  <div class="gov-head"><h2>Zenod</h2><span class="gov-domain">governs Memory · the Librarian</span><span class="status live">● live today</span></div>
+  <p class="gov-lore">Named for <b>Zenodotus of Ephesus</b>, first librarian of Alexandria — the man who invented alphabetical order and the identifying tag. He didn't write the scrolls. He made them findable forever.</p>
+  <div class="gov-grid">
+    <div class="gov-cell"><h4>Powers</h4><p>Files every capture <b>verbatim</b> as immutable evidence, distills it into living idea pages, answers questions <b>with citations</b> down to the evidence line, lints the vault so it never rots.</p></div>
+    <div class="gov-cell"><h4>Privileges</h4><p>The <b>only writer</b> to your vault. Every other agent — and every visiting harness — asks the librarian. Nobody gets raw file CRUD.</p></div>
+    <div class="gov-cell"><h4>How you reach him</h4><p>Chat via the Council (web, WhatsApp, voice notes) or point <b>any MCP harness</b> at the endpoint. Same brain either way.</p></div>
+    <div class="gov-cell"><h4>Tools</h4><div class="tools"><span class="tool">store_memory</span><span class="tool">search_memory</span><span class="tool">get_memory</span><span class="tool">ask_brain</span></div></div>
+  </div>
+  <div class="gov-example"><span class="lbl">Example</span><p>"I just got travel insurance for the summer trip." → evidence logged in today's journal, <em>Areas/Insurance.md</em> updated with a cited claim, commit pushed. Ask about it next year from any agent: answer with receipts.</p></div>
+</section>
+
+<!-- 9 · ARCHUS one-pager -->
+<section class="slide">
+  <div class="kicker">Governor 2 of 6</div>
+  <div class="gov-head"><h2>Archus</h2><span class="gov-domain">governs the Plan · the Navigator</span><span class="status live">● live today</span></div>
+  <p class="gov-lore">In the spirit of <b>Nearchus</b>, Alexander's admiral — the navigator trusted to chart the fleet's course home. He decides what's ready to sail, and in what order.</p>
+  <div class="gov-grid">
+    <div class="gov-cell"><h4>Powers</h4><p>Turns memory and requests into a <b>backlog of runnable work</b>: work tickets in their home repo, execution tickets in the queue. Readiness-checks everything before dispatch; advises on blockers.</p></div>
+    <div class="gov-cell"><h4>Privileges</h4><p>The <b>only writer</b> to the backlog, and the only one who can <b>enqueue execution</b>. Work doesn't run because an agent felt like it — it runs because Archus queued it.</p></div>
+    <div class="gov-cell"><h4>How you reach him</h4><p>Chat via the Council ("what's on my plate?"). Agents reach him through <b>deterministic lanes</b> — state facts, not vibes.</p></div>
+    <div class="gov-cell"><h4>Tools</h4><div class="tools"><span class="tool">create_issue</span><span class="tool">edit_issue</span><span class="tool">close_issue</span><span class="tool">run_issue</span><span class="tool">ask_archus</span></div></div>
+  </div>
+  <div class="gov-example"><span class="lbl">Example</span><p>A voice note — "look into that failing deploy" — becomes a work ticket in the right repo plus an execution ticket in the queue, labeled, prioritized, and ready for Epaminon. You never opened GitHub.</p></div>
+</section>
+
+<!-- 10 · EPAMINON one-pager -->
+<section class="slide">
+  <div class="kicker">Governor 3 of 6</div>
+  <div class="gov-head"><h2>Epaminon</h2><span class="gov-domain">governs Execution · the Field Commander</span><span class="status live">● live today</span></div>
+  <p class="gov-lore">Named for <b>Epaminondas</b>, the Theban general who broke Sparta's unbeaten army — not with more soldiers, but with better formation. He commands the workers; he doesn't do the fighting himself.</p>
+  <div class="gov-grid">
+    <div class="gov-cell"><h4>Powers</h4><p>Runs approved work by <b>commanding generalist workers</b> (Codex today) armed with the suite's tools: code, memory, social, email. Reports state as <b>facts, not requests</b>.</p></div>
+    <div class="gov-cell"><h4>Privileges</h4><p>The only agent who dispatches workers. Owns <b>no repo and no asset</b> by design — a commander in the field, not a governor of territory. Anything outward gates on your word.</p></div>
+    <div class="gov-cell"><h4>How you reach him</h4><p>You mostly don't — Archus dispatches him. You see his work through Phylax, honestly stated: "draft PR #106, unmerged."</p></div>
+    <div class="gov-cell"><h4>Tools</h4><div class="tools"><span class="tool">run_ephemeral_task</span><span class="tool">run_existing_issue</span><span class="tool">execution_status</span><span class="tool">get_task_result</span></div></div>
+  </div>
+  <div class="gov-example"><span class="lbl">Example</span><p>Execution ticket approved → Epaminon spins up Codex, the fix becomes a PR, the result is reported as a state fact, and the outcome is filed to memory. If it gets blocked, he asks Archus — one question, one answer, back to work.</p></div>
+</section>
+
+<!-- 11 · PHYLAX one-pager -->
+<section class="slide">
+  <div class="kicker">Governor 4 of 6</div>
+  <div class="gov-head"><h2>Phylax</h2><span class="gov-domain">governs the Door · your Guard</span><span class="status building">◐ v1 live · full agent next</span></div>
+  <p class="gov-lore">From the <b>Somatophylakes</b> — Alexander's seven bodyguards, the highest honor at court. <em>Phylax</em> is simply "guard." He stands at the one door between the Council and you.</p>
+  <div class="gov-grid">
+    <div class="gov-cell"><h4>Powers</h4><p><b>Dedups, coalesces, and sequences</b> everything that wants your attention. Composes with honesty — exact states, no hype — and <b>never truncates</b> actionable content.</p></div>
+    <div class="gov-cell"><h4>Privileges</h4><p>The <b>only agent allowed to interrupt you</b>. Every other governor, worker, and visiting agent that wants you goes through the guard.</p></div>
+    <div class="gov-cell"><h4>How he reaches you</h4><p>He reaches <b>you</b> — WhatsApp, web — as the one voice the Council speaks back through. Agents raise events; Phylax decides what's worth your eyes.</p></div>
+    <div class="gov-cell"><h4>Tools</h4><div class="tools"><span class="tool">raise_event</span><span class="tool">ask_phylax</span><span class="tool">notification authority</span></div></div>
+  </div>
+  <div class="gov-example"><span class="lbl">Example</span><p>Three executions finish while you're at dinner, one blocked, one fanned out to two recipients. Without Phylax: nine pings. With him: three messages, zero contradictions, the blocker's question quoted in full.</p></div>
+</section>
+
+<!-- 12 · CALLISTHENES one-pager -->
+<section class="slide">
+  <div class="kicker">Governor 5 of 6</div>
+  <div class="gov-head"><h2>Callisthenes</h2><span class="gov-domain">governs the Word · your Herald</span><span class="status live">● live today</span></div>
+  <p class="gov-lore">Named for <b>Callisthenes of Olynthus</b>, Alexander's court historian — the man whose job was telling the world the story. Yours drafts in your voice, and sends nothing without your word.</p>
+  <div class="gov-grid">
+    <div class="gov-cell"><h4>Powers</h4><p>Drafts and sends <b>everything that leaves</b> — tweets, Reddit posts, email — with skills specific to each channel: hooks, threads, timing, tone. Writes <b>from your brain</b>, so it's always on message.</p></div>
+    <div class="gov-cell"><h4>Privileges</h4><p>The <b>only agent holding your outbound credentials</b>. One voice, one style, one owner. Ships pre-approved content autonomously; everything else waits for your word.</p></div>
+    <div class="gov-cell"><h4>How you reach him</h4><p>Chat via the Council ("draft a thread about the launch"), or let Epaminon hand him approved content. Set up <b>recurring runs</b> — he keeps posting while you sleep.</p></div>
+    <div class="gov-cell"><h4>Tools</h4><div class="tools"><span class="tool">post_tweet</span><span class="tool">post_reddit</span><span class="tool">send_email</span><span class="tool">ask_outbound</span></div></div>
+  </div>
+  <div class="gov-example"><span class="lbl">Example</span><p>A daily task: "draft 10 posts from this week's vault activity." Every one is grounded in your actual notes and decisions — your ideas, your voice, your word before anything ships.</p></div>
+</section>
+
+<!-- 13 · NECTARY one-pager -->
+<section class="slide">
+  <div class="kicker">Governor 6 of 6</div>
+  <div class="gov-head"><h2>Nectary</h2><span class="gov-domain">governs the Treasury</span><span class="status soon">○ named · on the roadmap</span></div>
+  <p class="gov-lore">The <b>nectary</b> is where a flower keeps its nectar — the store of energy that funds everything the plant does next. The last seat at the table, and the most honest one to leave empty for now.</p>
+  <div class="gov-grid">
+    <div class="gov-cell"><h4>Powers (planned)</h4><p>Maps the backlog to a budget: what work is <b>funded</b>, what each execution costs, where the treasury goes.</p></div>
+    <div class="gov-cell"><h4>Privileges (planned)</h4><p>The only agent that can commit spend. Work without funding stays in the backlog; funded work sails.</p></div>
+    <div class="gov-cell"><h4>Why we show it anyway</h4><p>Because the architecture is the promise: a seat is a domain plus a gatekeeper. When money enters the system, it gets a governor like everything else — not a checkbox.</p></div>
+    <div class="gov-cell"><h4>Status</h4><p>Named, designed into the roster, not yet built. We say so out loud — that's the honesty layer.</p></div>
+  </div>
+</section>
+
+<!-- 14 · Council as MCP server -->
+<section class="slide">
+  <div class="kicker">The powerful idea</div>
+  <h2>The Council is itself an <em>MCP server</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 370" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="120" cy="110" r="46" class="boxacc"/>
+    <text x="120" y="117" text-anchor="middle" font-size="20" class="acc">YOU</text>
+    <text x="120" y="180" text-anchor="middle" font-size="14" class="mono dim">web · whatsapp · voice</text>
+    <g font-size="17">
+      <rect x="30" y="235" width="180" height="46" class="box" rx="9"/><text x="120" y="264" text-anchor="middle">Claude</text>
+      <rect x="30" y="295" width="180" height="46" class="box" rx="9"/><text x="120" y="324" text-anchor="middle">Codex · any harness</text>
+    </g>
+    <rect x="370" y="55" width="290" height="270" class="boxteal" rx="14"/>
+    <text x="515" y="92" text-anchor="middle" font-size="22" class="acc2">THE COUNCIL</text>
+    <text x="515" y="115" text-anchor="middle" font-size="14" class="mono dim">one endpoint · one token</text>
+    <g font-size="15" class="mono">
+      <rect x="400" y="135" width="230" height="34" class="box" rx="7"/><text x="515" y="157" text-anchor="middle" class="dim">search_memory</text>
+      <rect x="400" y="177" width="230" height="34" class="box" rx="7"/><text x="515" y="199" text-anchor="middle" class="dim">ask_brain · store_memory</text>
+      <rect x="400" y="219" width="230" height="34" class="box" rx="7"/><text x="515" y="241" text-anchor="middle" class="dim">create_issue · run_issue</text>
+      <rect x="400" y="261" width="230" height="34" class="box" rx="7"/><text x="515" y="283" text-anchor="middle" class="dim">chat_with_&lt;governor&gt;</text>
+    </g>
+    <g font-size="16">
+      <rect x="790" y="70" width="180" height="42" class="box" rx="9"/><text x="880" y="97" text-anchor="middle" class="acc">Zenod</text>
+      <rect x="790" y="125" width="180" height="42" class="box" rx="9"/><text x="880" y="152" text-anchor="middle" class="acc">Archus</text>
+      <rect x="790" y="180" width="180" height="42" class="box" rx="9"/><text x="880" y="207" text-anchor="middle" class="acc">Epaminon</text>
+      <rect x="790" y="235" width="180" height="42" class="box" rx="9"/><text x="880" y="262" text-anchor="middle" class="acc">Phylax · Callisth.</text>
+    </g>
+    <path d="M166 110 L370 110" class="wireacc"/>
+    <text x="268" y="98" text-anchor="middle" font-size="14" class="mono acc">you talk to it</text>
+    <path d="M210 258 L370 220" class="wireteal"/>
+    <path d="M210 318 L370 280" class="wireteal"/>
+    <text x="278" y="330" text-anchor="middle" font-size="14" class="mono acc2">or your agents do</text>
+    <path d="M660 95 L790 91" class="wire"/><path d="M660 150 L790 146" class="wire"/>
+    <path d="M660 205 L790 201" class="wire"/><path d="M660 260 L790 256" class="wire"/>
+  </svg></div>
+  <p class="lede">Point any harness at one endpoint and it inherits your whole operation: authenticated, trained on you, and gated. It never gets the keys — it gets an audience.</p>
+</section>
+
+<!-- 15 · Trained on you -->
+<section class="slide">
+  <div class="kicker">Trained on you</div>
+  <h2>One memory they all share.<br>Every correction <em>trains the whole ring</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 340" xmlns="http://www.w3.org/2000/svg">
+    <rect x="360" y="230" width="280" height="76" class="boxacc" rx="12"/>
+    <text x="500" y="262" text-anchor="middle" font-size="20" class="acc">SHARED MEMORY</text>
+    <text x="500" y="288" text-anchor="middle" font-size="14" class="mono dim">your vault · markdown · git</text>
+    <g font-size="17">
+      <rect x="60" y="60" width="150" height="46" class="box" rx="9"/><text x="135" y="89" text-anchor="middle" class="acc">Zenod</text>
+      <rect x="245" y="60" width="150" height="46" class="box" rx="9"/><text x="320" y="89" text-anchor="middle" class="acc">Archus</text>
+      <rect x="430" y="60" width="150" height="46" class="box" rx="9"/><text x="505" y="89" text-anchor="middle" class="acc">Epaminon</text>
+      <rect x="615" y="60" width="150" height="46" class="box" rx="9"/><text x="690" y="89" text-anchor="middle" class="acc">Phylax</text>
+      <rect x="800" y="60" width="150" height="46" class="box" rx="9"/><text x="875" y="89" text-anchor="middle" class="acc">Callisth.</text>
+    </g>
+    <path d="M210 83 L245 83" class="wireteal" stroke-dasharray="4 4"/>
+    <path d="M395 83 L430 83" class="wireteal" stroke-dasharray="4 4"/>
+    <path d="M580 83 L615 83" class="wireteal" stroke-dasharray="4 4"/>
+    <path d="M765 83 L800 83" class="wireteal" stroke-dasharray="4 4"/>
+    <text x="500" y="38" text-anchor="middle" font-size="14" class="mono acc2">they collaborate — when you tell them to</text>
+    <path d="M135 106 L400 230" class="wire"/><path d="M320 106 L455 230" class="wire"/>
+    <path d="M505 106 L500 230" class="wire"/><path d="M690 106 L545 230" class="wire"/>
+    <path d="M875 106 L600 230" class="wire"/>
+    <text x="790" y="285" font-size="14" class="mono dim">teach once →</text>
+    <text x="790" y="305" font-size="14" class="mono dim">all six learn</text>
+  </svg></div>
+  <ul class="clean" style="margin-top:.4rem">
+    <li><b>Trained on you, by you, over time.</b> Every preference, every correction gets filed — and every governor reads the same pages.</li>
+    <li><b>Tasks recruit the governors they need.</b> A voice note may touch three of them; you never route it yourself.</li>
+  </ul>
+</section>
+
+<!-- 16 · GitHub maximalists -->
+<section class="slide">
+  <div class="kicker">Philosophy</div>
+  <h2>The Council are <em>GitHub maximalists</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 250" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="17">
+      <rect x="40" y="40" width="280" height="90" class="box" rx="11"/>
+      <text x="180" y="78" text-anchor="middle" class="acc">Memory</text>
+      <text x="180" y="106" text-anchor="middle" font-size="14" class="mono dim">markdown repo · every fact a commit</text>
+      <rect x="360" y="40" width="280" height="90" class="box" rx="11"/>
+      <text x="500" y="78" text-anchor="middle" class="acc">Backlog</text>
+      <text x="500" y="106" text-anchor="middle" font-size="14" class="mono dim">issues + labels · exec: state machine</text>
+      <rect x="680" y="40" width="280" height="90" class="box" rx="11"/>
+      <text x="820" y="78" text-anchor="middle" class="acc">Work</text>
+      <text x="820" y="106" text-anchor="middle" font-size="14" class="mono dim">PRs · branches · reviewable diffs</text>
+    </g>
+    <rect x="250" y="170" width="500" height="56" class="boxacc" rx="11"/>
+    <text x="500" y="205" text-anchor="middle" font-size="19" class="acc">git log = the audit trail of your life's work</text>
+    <path d="M180 130 L380 170" class="wire"/><path d="M500 130 L500 170" class="wire"/><path d="M820 130 L620 170" class="wire"/>
+  </svg></div>
+  <ul class="clean">
+    <li><b>No proprietary database.</b> The substrate is repos you already own. Leave anytime; take everything, with history.</li>
+    <li><b>Human and agent writing always distinguishable.</b> Provenance is first-class; discipline is code, not willpower.</li>
+  </ul>
+</section>
+
+<!-- 17 · Principles -->
+<section class="slide">
+  <div class="kicker">Principles</div>
+  <h2>Five rules the whole suite obeys</h2>
+  <div class="steps">
+    <div class="step"><b>Everybody reads. One writes.</b> <span>Each domain has exactly one gatekeeper with write authority. Agents ask; they never get raw CRUD.</span></div>
+    <div class="step"><b>Discipline as code, not willpower.</b> <span>Schemas, filing rules, and state machines are enforced deterministically — not in prompts.</span></div>
+    <div class="step"><b>You hold the keys.</b> <span>Plain markdown, your git, your server, your API keys. Export with zero loss.</span></div>
+    <div class="step"><b>Auditable to the commit.</b> <span>Every memory, ticket, and send is a commit or labeled event.</span></div>
+    <div class="step"><b>Outward needs your word.</b> <span>PRs, tweets, emails gate on human approval. Internal artifacts flow autonomously.</span></div>
+  </div>
+</section>
+
+<!-- 18 · Killer scenario: the on-message herald -->
+<section class="slide">
+  <div class="kicker">Killer scenario · the one to lead with</div>
+  <h2>A herald that posts every day —<br>and is <em>always on message</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 330" xmlns="http://www.w3.org/2000/svg">
+    <!-- train loop left -->
+    <circle cx="105" cy="100" r="42" class="boxacc"/>
+    <text x="105" y="107" text-anchor="middle" font-size="18" class="acc">YOU</text>
+    <rect x="230" y="65" width="200" height="70" class="box" rx="11"/>
+    <text x="330" y="95" text-anchor="middle" font-size="18" class="acc">Zenod</text>
+    <text x="330" y="120" text-anchor="middle" font-size="13" class="mono dim">your brain · trained daily</text>
+    <path d="M147 100 L230 100" class="wireacc"/>
+    <text x="188" y="88" text-anchor="middle" font-size="13" class="mono acc">you talk · it learns</text>
+    <!-- scheduled run -->
+    <rect x="230" y="200" width="200" height="70" class="boxteal" rx="11"/>
+    <text x="330" y="230" text-anchor="middle" font-size="16" class="acc2">Daily run · 09:00</text>
+    <text x="330" y="255" text-anchor="middle" font-size="13" class="mono dim">"draft 10 posts from the vault"</text>
+    <path d="M330 135 L330 200" class="wireteal"/>
+    <!-- herald -->
+    <rect x="510" y="130" width="220" height="80" class="box" rx="11"/>
+    <text x="620" y="162" text-anchor="middle" font-size="18" class="acc">Callisthenes</text>
+    <text x="620" y="188" text-anchor="middle" font-size="13" class="mono dim">channel skills · your style</text>
+    <path d="M430 235 L510 195" class="wireteal"/>
+    <path d="M430 100 L510 150" class="wire"/>
+    <text x="470" y="112" text-anchor="middle" font-size="13" class="mono dim">reads</text>
+    <!-- your word -->
+    <rect x="790" y="60" width="180" height="64" class="boxacc" rx="11"/>
+    <text x="880" y="87" text-anchor="middle" font-size="16" class="acc">YOUR WORD</text>
+    <text x="880" y="110" text-anchor="middle" font-size="13" class="mono dim">approve · edit · skip</text>
+    <path d="M730 150 L790 105" class="wireacc"/>
+    <!-- posted -->
+    <rect x="790" y="210" width="180" height="64" class="box" rx="11"/>
+    <text x="880" y="237" text-anchor="middle" font-size="16">Posted</text>
+    <text x="880" y="260" text-anchor="middle" font-size="13" class="mono dim">twitter · reddit · email</text>
+    <path d="M880 124 L880 210" class="wireteal"/>
+    <text x="640" y="310" text-anchor="middle" font-size="15" class="mono acc2">10 posts a day, all from one brain, one voice, one gate</text>
+  </svg></div>
+  <p class="lede">You train the product just by talking to it. The herald turns that brain into a publishing operation — channel-specific skills, your credentials, your word before anything ships. This is why the suite makes sense: <em>the memory is what makes the voice possible.</em></p>
+</section>
+
+<!-- 19 · Killer demo: voice note pipeline -->
+<section class="slide">
+  <div class="kicker">Killer demo · end to end</div>
+  <h2>Voice note → merged work → filed memory</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 330" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="17">
+      <rect x="20" y="60" width="165" height="80" class="boxteal" rx="11"/>
+      <text x="102" y="93" text-anchor="middle" class="acc2">🎙 Voice note</text>
+      <text x="102" y="120" text-anchor="middle" font-size="13" class="mono dim">whatsapp · transcribed</text>
+      <rect x="235" y="60" width="165" height="80" class="box" rx="11"/>
+      <text x="317" y="93" text-anchor="middle" class="acc">Archus</text>
+      <text x="317" y="120" text-anchor="middle" font-size="13" class="mono dim">files the ticket</text>
+      <rect x="450" y="60" width="165" height="80" class="box" rx="11"/>
+      <text x="532" y="93" text-anchor="middle" class="acc">Epaminon</text>
+      <text x="532" y="120" text-anchor="middle" font-size="13" class="mono dim">runs it with Codex</text>
+      <rect x="665" y="60" width="150" height="80" class="boxacc" rx="11"/>
+      <text x="740" y="93" text-anchor="middle" class="acc">YOUR WORD</text>
+      <text x="740" y="120" text-anchor="middle" font-size="13" class="mono dim">approve the PR</text>
+      <rect x="855" y="60" width="125" height="80" class="box" rx="11"/>
+      <text x="917" y="93" text-anchor="middle">PR ships</text>
+      <text x="917" y="120" text-anchor="middle" font-size="13" class="mono dim">merged</text>
+    </g>
+    <path d="M185 100 L235 100" class="wireteal"/><path d="M400 100 L450 100" class="wireteal"/>
+    <path d="M615 100 L665 100" class="wireteal"/><path d="M815 100 L855 100" class="wireteal"/>
+    <g font-size="17">
+      <rect x="235" y="215" width="240" height="80" class="box" rx="11"/>
+      <text x="355" y="248" text-anchor="middle" class="acc">Phylax</text>
+      <text x="355" y="275" text-anchor="middle" font-size="13" class="mono dim">one honest notification</text>
+      <rect x="545" y="215" width="240" height="80" class="box" rx="11"/>
+      <text x="665" y="248" text-anchor="middle" class="acc">Zenod</text>
+      <text x="665" y="275" text-anchor="middle" font-size="13" class="mono dim">outcome filed · cited · forever</text>
+    </g>
+    <path d="M917 140 L917 255 L785 255" class="wire"/>
+    <path d="M545 255 L475 255" class="wire"/>
+    <path d="M235 255 L102 255 L102 140" class="wireacc"/>
+    <text x="130" y="200" font-size="14" class="mono acc">back to you</text>
+  </svg></div>
+  <p class="lede">One voice note in. One commit trail out. Four governors touched — you routed nothing.</p>
+</section>
+
+<!-- 20 · Working today vs roadmap -->
+<section class="slide">
+  <div class="kicker">Honest scoreboard</div>
+  <h2>Working today. Coming very soon.</h2>
+  <div class="board">
+    <div class="today">
+      <h3>✓ Live now</h3>
+      <ul>
+        <li><b>Store & ask with citations</b> — evidence → ideas, every fact a commit, 48 deterministic tests.</li>
+        <li><b>WhatsApp + voice notes</b> — talk to the Council from your pocket; transcribed, filed, answered.</li>
+        <li><b>Any harness via MCP</b> — Claude, Codex, anything: one token, whole memory.</li>
+        <li><b>Voice → ticket → execution → PR</b> — Archus queues, Epaminon runs, your word gates.</li>
+        <li><b>Outbound on your word</b> — tweets, Reddit posts, email through Callisthenes.</li>
+      </ul>
+    </div>
+    <div class="soon">
+      <h3>→ Next</h3>
+      <ul>
+        <li><b>Daily on-message posting runs</b> — the herald drafts from your brain on schedule.</li>
+        <li><b>Execution results auto-filed</b> — every outcome becomes cited memory (R1, in flight).</li>
+        <li><b>Full notification authority</b> — Phylax as standalone gatekeeper (R2, in flight).</li>
+        <li><b>Google Drive ingestion + Telegram</b> — more doors into the same brain.</li>
+        <li><b>Nectary + hosted alpha</b> — the treasury seat, and Zenod without a server.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 21 · Two pages one story -->
+<section class="slide">
+  <div class="kicker">Positioning</div>
+  <h2>Two landing pages. <em>One story.</em></h2>
+  <div class="diagram"><svg viewBox="0 0 1000 300" xmlns="http://www.w3.org/2000/svg">
+    <rect x="80" y="50" width="360" height="160" class="boxteal" rx="14"/>
+    <text x="260" y="95" text-anchor="middle" font-size="22" class="acc2">THE COUNCIL</text>
+    <text x="260" y="125" text-anchor="middle" font-size="15" class="mono dim">the STORY page</text>
+    <text x="260" y="155" text-anchor="middle" font-size="15" class="dim">gatekeeper thesis · six governors</text>
+    <text x="260" y="180" text-anchor="middle" font-size="15" class="dim">demos · what HN argues about</text>
+    <rect x="560" y="50" width="360" height="160" class="boxacc" rx="14"/>
+    <text x="740" y="95" text-anchor="middle" font-size="22" class="acc">zenod.dev</text>
+    <text x="740" y="125" text-anchor="middle" font-size="15" class="mono dim">the PRODUCT page</text>
+    <text x="740" y="155" text-anchor="middle" font-size="15" class="dim">shipped · self-hostable today</text>
+    <text x="740" y="180" text-anchor="middle" font-size="15" class="dim">what people install, star, trust</text>
+    <path d="M440 110 L560 110" class="wire"/><path d="M560 150 L440 150" class="wire"/>
+    <text x="500" y="100" text-anchor="middle" font-size="13" class="mono dim">proof ↔</text>
+    <text x="500" y="172" text-anchor="middle" font-size="13" class="mono dim">↔ seat</text>
+    <text x="500" y="260" text-anchor="middle" font-size="19" class="acc">The suite is the story. Zenod is the proof.</text>
+  </svg></div>
+  <p class="lede">Never make one page do both jobs: a suite pitch with one shipped component reads as vaporware; a librarian pitch that buries the Council wastes the real story.</p>
+</section>
+
+<!-- 22 · Objections -->
+<section class="slide">
+  <div class="kicker">Honesty layer</div>
+  <h2>What we say before HN says it for us</h2>
+  <ul class="clean">
+    <li><b>"Another multi-agent framework?"</b> No framework to learn. It's a running household: opinionated governors over <em>your</em> assets, not a toolkit.</li>
+    <li><b>"Too early?"</b> Five of six seats are live. The scoreboard slide is public: what works today, what's next. The vault is plain markdown — betting early costs nothing to exit.</li>
+    <li><b>"Why not Mem0 / Letta?"</b> Their memory lives in their database. Yours lives in your git repo, with the audit trail.</li>
+    <li><b>"Greek names are a lot."</b> Flavor, not homework. You only ever talk to one door: the Council.</li>
+  </ul>
+</section>
+
+<!-- 23 · Launch plan -->
+<section class="slide">
+  <div class="kicker">Launch</div>
+  <h2>Ship the story before the product is done</h2>
+  <div class="steps">
+    <div class="step"><b>Week 1 — the thread.</b> <span>Twitter/X: gatekeeper thesis + the daily-herald demo. "My posting agent drafts 10 posts a day from my brain. Here's the architecture."</span></div>
+    <div class="step"><b>Week 1 — Reddit.</b> <span>r/selfhosted + r/LocalLLaMA: lead with ownership — self-host, AGPL, markdown, git audit.</span></div>
+    <div class="step"><b>Week 2 — Show HN.</b> <span>"Show HN: Zenod — a self-hosted librarian your AI agents report to." Council one click deep.</span></div>
+    <div class="step"><b>Ongoing — one governor, one week.</b> <span>Weekly deep-dive per governor — the one-pagers in this deck are the outlines.</span></div>
+  </div>
+</section>
+
+<!-- 24 · Close -->
+<section class="slide">
+  <div class="kicker">The one-liner</div>
+  <h1>Stop being the context bus.<br><em>Run your Council.</em></h1>
+  <p class="lede">Every agent you'll ever hire reports to a ring you own: one librarian for memory, one guard at the door, one voice to the world — plain markdown, your git, your keys.</p>
+  <div style="margin-top:2rem">
+    <span class="pill">zenod.dev</span>
+    <span class="pill">github · AGPL-3.0</span>
+    <span class="pill">alpha — first 100 free</span>
+  </div>
+</section>
+
+</div>
+<div class="nav">
+  <span id="counter">1 / 24</span>
+  <button onclick="go(-1)">←</button>
+  <button onclick="go(1)">→</button>
+</div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];let i=0;
+  function show(n){slides[i].classList.remove('active');i=(n+slides.length)%slides.length;
+    slides[i].classList.add('active');
+    document.getElementById('counter').textContent=(i+1)+' / '+slides.length;
+    document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';}
+  function go(d){show(i+d)}
+  addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(1);
+    if(e.key==='ArrowLeft'||e.key==='PageUp')go(-1);
+    if(e.key==='Home')show(0);if(e.key==='End')show(slides.length-1);});
+  document.getElementById('deck').addEventListener('click',e=>{
+    if(e.target.closest('button')||getSelection().toString())return;go(1);});
+  show(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zenod / The Council — Launch Positioning V5</title>
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#14171c; --ink:#e8e6e1; --dim:#a5a19a;
+    --accent:#d4a24e; --accent2:#6ea8a0; --line:#2a2e35; --bad:#c96a5a; --ok:#7fb069;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden}
+  .deck{height:100vh;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    justify-content:center;padding:5vh 7vw;overflow-y:auto}
+  .slide.active{display:flex}
+  .kicker{font-family:ui-monospace,Menlo,monospace;font-size:.9rem;
+    letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin-bottom:1.2rem}
+  h1{font-size:clamp(2.8rem,6.5vw,5rem);font-weight:400;line-height:1.1;margin-bottom:1.4rem}
+  h2{font-size:clamp(2rem,4.4vw,3.2rem);font-weight:400;line-height:1.16;margin-bottom:1.2rem}
+  h1 em,h2 em,p em{font-style:italic;color:var(--accent)}
+  p.lede{font-size:clamp(1.25rem,2.1vw,1.6rem);color:var(--dim);line-height:1.55;max-width:58ch}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:1rem;align-items:center}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.6rem 1.8rem}
+  .card h3{font-size:1.3rem;color:var(--accent);font-weight:400;margin-bottom:.6rem}
+  .card p{font-size:1.15rem;color:var(--dim);line-height:1.55}
+  blockquote{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;
+    font-size:clamp(1.4rem,2.6vw,1.9rem);font-style:italic;line-height:1.45;margin:1.2rem 0;max-width:56ch}
+  .steps{counter-reset:s;margin-top:.6rem}
+  .step{display:flex;gap:1.1rem;padding:.75rem 0;border-bottom:1px solid var(--line);align-items:baseline}
+  .step:last-child{border-bottom:none}
+  .step::before{counter-increment:s;content:counter(s);font-family:ui-monospace,Menlo,monospace;
+    color:var(--accent);font-size:1rem;min-width:1.5rem}
+  .step b{font-weight:400;color:var(--ink);font-size:clamp(1.1rem,1.8vw,1.35rem)}
+  .step span{color:var(--dim);font-size:clamp(1rem,1.6vw,1.2rem)}
+  ul.clean{list-style:none;margin-top:.6rem}
+  ul.clean li{padding:.55rem 0;color:var(--dim);font-size:clamp(1.15rem,1.9vw,1.45rem);line-height:1.5}
+  ul.clean li b{color:var(--ink);font-weight:400}
+  ul.clean li::before{content:"—";color:var(--accent);margin-right:.7rem}
+  .pill{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;
+    letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);
+    border-radius:999px;padding:.3rem .9rem;color:var(--accent2);margin:0 .4rem .5rem 0}
+  .tagline{font-family:ui-monospace,Menlo,monospace;color:var(--accent2);font-size:1.05rem;margin-top:2rem}
+  .nav{position:fixed;bottom:1.2rem;right:1.6rem;font-family:ui-monospace,Menlo,monospace;
+    font-size:.85rem;color:var(--dim);z-index:10}
+  .nav button{background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;
+    padding:.35rem .8rem;cursor:pointer;font-family:inherit;margin-left:.4rem;font-size:.85rem}
+  .nav button:hover{color:var(--ink);border-color:var(--dim)}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);z-index:10;transition:width .25s}
+  .diagram{width:100%;max-width:1100px;margin:.5rem auto 0}
+  .diagram svg{width:100%;height:auto;display:block}
+  svg text{font-family:Georgia,serif;fill:var(--ink)}
+  svg .mono{font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em}
+  svg .dim{fill:var(--dim)} svg .acc{fill:var(--accent)} svg .acc2{fill:var(--accent2)} svg .ok{fill:var(--ok)}
+  svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+  svg .boxacc{fill:var(--panel);stroke:var(--accent);stroke-width:1.5}
+  svg .boxteal{fill:var(--panel);stroke:var(--accent2);stroke-width:1.5}
+  svg .wire{stroke:var(--dim);stroke-width:1.5;fill:none}
+  svg .wireacc{stroke:var(--accent);stroke-width:2;fill:none}
+  svg .wireteal{stroke:var(--accent2);stroke-width:2;fill:none}
+  svg .wirebad{stroke:var(--bad);stroke-width:1.5;fill:none}
+  svg .emblem{stroke:var(--accent);stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  /* Governor pages */
+  .gov-head{display:flex;align-items:center;gap:1.4rem;flex-wrap:wrap;margin-bottom:.2rem}
+  .gov-head h2{margin-bottom:0}
+  .gov-head .medal{width:76px;height:76px;flex:none}
+  .gov-domain{font-family:ui-monospace,Menlo,monospace;font-size:1rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--accent2)}
+  .status{font-family:ui-monospace,Menlo,monospace;font-size:.8rem;letter-spacing:.14em;
+    text-transform:uppercase;border-radius:999px;padding:.3rem .9rem;margin-left:auto}
+  .status.live{border:1px solid var(--ok);color:var(--ok)}
+  .status.building{border:1px solid var(--accent);color:var(--accent)}
+  .gov-lore{font-style:italic;color:var(--dim);font-size:clamp(1.05rem,1.7vw,1.3rem);
+    line-height:1.5;margin:.5rem 0 .9rem;max-width:75ch}
+  .gov-lore b{color:var(--accent);font-weight:400;font-style:normal}
+  .facts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:.9rem}
+  .fact{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.9rem 1.1rem}
+  .fact h4{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--accent);font-weight:400;margin-bottom:.45rem}
+  .fact ul{list-style:none}
+  .fact li{font-size:clamp(.98rem,1.5vw,1.15rem);color:var(--ink);line-height:1.45;padding:.15rem 0}
+  .fact li span{color:var(--dim)}
+  .tools-row{margin-top:.8rem}
+  .tool{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.88rem;
+    background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    padding:.32rem .75rem;color:var(--accent2);margin:0 .35rem .45rem 0}
+  .board{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:.6rem}
+  .board h3{font-family:ui-monospace,Menlo,monospace;font-size:.95rem;letter-spacing:.2em;
+    text-transform:uppercase;font-weight:400;margin-bottom:.8rem}
+  .board .today h3{color:var(--ok)} .board .soon h3{color:var(--accent)}
+  .board ul{list-style:none}
+  .board li{padding:.5rem 0;border-bottom:1px solid var(--line);
+    font-size:clamp(1rem,1.6vw,1.2rem);color:var(--dim);line-height:1.45}
+  .board li b{color:var(--ink);font-weight:400}
+  .board .today li::before{content:"✓";color:var(--ok);margin-right:.7rem;font-family:ui-monospace,Menlo,monospace}
+  .board .soon li::before{content:"→";color:var(--accent);margin-right:.7rem;font-family:ui-monospace,Menlo,monospace}
+  .roster{list-style:none;margin-top:.4rem}
+  .roster li{display:flex;gap:1.2rem;align-items:baseline;padding:.6rem 0;border-bottom:1px solid var(--line);
+    font-size:clamp(1.1rem,1.9vw,1.45rem)}
+  .roster li:last-child{border-bottom:none}
+  .roster b{color:var(--accent);font-weight:400;min-width:9.5rem}
+  .roster span{color:var(--dim);line-height:1.45}
+  .roster span i{color:var(--ink);font-style:normal}
+  @media(max-width:760px){.cols,.facts,.board{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="progress" id="bar"></div>
+
+<!-- Emblem symbol defs -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <g id="em-ring"><circle cx="45" cy="45" r="42" class="emblem" stroke-width="1.6"/></g>
+    <g id="em-zenod"><use href="#em-ring"/><path class="emblem" d="M30 62 V32 q0 -6 7 -6 q7 0 7 6 V62 M44 32 q0 -6 7 -6 q7 0 7 6 V62 M26 62 H64"/><circle cx="37" cy="26" r="3" class="emblem"/><circle cx="51" cy="26" r="3" class="emblem"/></g>
+    <g id="em-archus"><use href="#em-ring"/><path class="emblem" d="M45 20 L50 40 L70 45 L50 50 L45 70 L40 50 L20 45 L40 40 Z"/><circle cx="45" cy="45" r="5" class="emblem"/></g>
+    <g id="em-epaminon"><use href="#em-ring"/><path class="emblem" d="M32 62 V38 q0 -16 13 -16 q13 0 13 16 V62 M45 40 V62 M32 46 h9 M49 46 h9"/></g>
+    <g id="em-phylax"><use href="#em-ring"/><path class="emblem" d="M45 22 L64 30 V46 q0 16 -19 22 q-19 -6 -19 -22 V30 Z"/><path class="emblem" d="M38 44 h14 M45 37 v14"/></g>
+    <g id="em-call"><use href="#em-ring"/><path class="emblem" d="M24 54 L48 42 L48 30 L66 24 M48 42 q10 4 18 2 M24 54 l-2 8 M30 51 l4 10"/><circle cx="66" cy="24" r="3" class="emblem"/></g>
+    <g id="em-nectary"><use href="#em-ring"/><circle cx="45" cy="45" r="6" class="emblem"/><path class="emblem" d="M45 39 q-6 -12 0 -18 q6 6 0 18 M45 51 q-6 12 0 18 q6 -6 0 -18 M39 45 q-12 -6 -18 0 q6 6 18 0 M51 45 q12 -6 18 0 q-6 6 -18 0"/></g>
+  </defs>
+</svg>
+
+<div class="deck" id="deck">
+
+<!-- 1 · Title -->
+<section class="slide active">
+  <div class="kicker">Launch positioning · V5 · July 2026</div>
+  <h1>It's your memory<br>and your <em>team</em>.</h1>
+  <p class="lede">You run the Council. Six governors keep your world; you make the calls. Zenod keeps the library. The rest keep everything else.</p>
+  <div class="tagline">zenod.dev &nbsp;·&nbsp; self-hosted &nbsp;·&nbsp; AGPL-3.0 &nbsp;·&nbsp; plain markdown, your git, your keys</div>
+</section>
+
+<!-- 2 · The belief / mission -->
+<section class="slide">
+  <div class="kicker">The belief</div>
+  <h2>Better context → better decisions.<br>And your context is <em>mineable</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 230" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="60" width="240" height="110" class="boxacc" rx="12"/>
+    <text x="160" y="105" text-anchor="middle" font-size="20" class="acc">YOUR CONTEXT</text>
+    <text x="160" y="132" text-anchor="middle" font-size="14" class="mono dim">cultivated · owned · cited</text>
+    <text x="160" y="153" text-anchor="middle" font-size="14" class="mono dim">one vault, growing daily</text>
+    <g font-size="16">
+      <rect x="400" y="30" width="200" height="52" class="box" rx="10"/><text x="500" y="62" text-anchor="middle">Agent 1 mines it</text>
+      <rect x="400" y="92" width="200" height="52" class="box" rx="10"/><text x="500" y="124" text-anchor="middle">Agent 2 mines it</text>
+      <rect x="400" y="154" width="200" height="52" class="box" rx="10"/><text x="500" y="186" text-anchor="middle">Agent 10 mines it</text>
+    </g>
+    <path d="M280 100 L400 56" class="wireteal"/><path d="M280 115 L400 118" class="wireteal"/><path d="M280 130 L400 180" class="wireteal"/>
+    <rect x="720" y="60" width="240" height="110" class="boxteal" rx="12"/>
+    <text x="840" y="105" text-anchor="middle" font-size="20" class="acc2">LEVERAGE</text>
+    <text x="840" y="132" text-anchor="middle" font-size="14" class="mono dim">better outputs · zero repetition</text>
+    <text x="840" y="153" text-anchor="middle" font-size="14" class="mono dim">you, compounded</text>
+    <path d="M600 56 L720 100" class="wire"/><path d="M600 118 L720 115" class="wire"/><path d="M600 180 L720 130" class="wire"/>
+  </svg></div>
+  <ul class="clean">
+    <li><b>Invest in your context, own your context</b> — to the exact extent it's mineable, it's worth cultivating.</li>
+    <li><b>Ten agents, one context, zero repeating yourself.</b> That's not convenience — that's compounding.</li>
+  </ul>
+  <blockquote>North star: maximize how much of what you know and do today makes tomorrow cheaper — under your own keys.</blockquote>
+</section>
+
+<!-- 3 · Problem -->
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>Today, <em>you</em> are the context bus.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 340" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="500" cy="170" r="52" class="boxacc"/>
+    <text x="500" y="177" text-anchor="middle" font-size="22" class="acc">YOU</text>
+    <g font-size="17">
+      <rect x="60" y="40" width="170" height="52" class="box" rx="10"/><text x="145" y="72" text-anchor="middle">Claude</text>
+      <rect x="60" y="240" width="170" height="52" class="box" rx="10"/><text x="145" y="272" text-anchor="middle">Codex</text>
+      <rect x="770" y="40" width="170" height="52" class="box" rx="10"/><text x="855" y="72" text-anchor="middle">Notes app</text>
+      <rect x="770" y="140" width="170" height="52" class="box" rx="10"/><text x="855" y="172" text-anchor="middle">Backlog</text>
+      <rect x="770" y="240" width="170" height="52" class="box" rx="10"/><text x="855" y="272" text-anchor="middle">Twitter / Email</text>
+      <rect x="60" y="140" width="170" height="52" class="box" rx="10"/><text x="145" y="172" text-anchor="middle">New harness #7</text>
+    </g>
+    <path d="M230 66 L455 150" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M230 166 L448 170" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M230 266 L455 192" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M770 66 L545 150" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M770 166 L552 170" class="wirebad" stroke-dasharray="5 5"/>
+    <path d="M770 266 L545 192" class="wirebad" stroke-dasharray="5 5"/>
+    <text x="500" y="320" text-anchor="middle" font-size="17" class="dim mono">every arrow = you re-explaining, re-authenticating, re-checking</text>
+  </svg></div>
+  <p class="lede">You re-teach every agent, carry context between them, triage every ping. Your context never compounds — it evaporates at the end of every session.</p>
+</section>
+
+<!-- 3b · Distributed → centralized -->
+<section class="slide">
+  <div class="kicker">The move</div>
+  <h2>Your context lives in <em>N isolated pieces</em>.<br>Centralize it — and give it an owner.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 320" xmlns="http://www.w3.org/2000/svg">
+    <!-- scattered fragments left -->
+    <g font-size="14" class="mono">
+      <rect x="30" y="30" width="150" height="40" class="box" rx="8" transform="rotate(-4 105 50)"/><text x="105" y="55" text-anchor="middle" class="dim" transform="rotate(-4 105 50)">chatgpt history</text>
+      <rect x="200" y="55" width="130" height="40" class="box" rx="8" transform="rotate(3 265 75)"/><text x="265" y="80" text-anchor="middle" class="dim" transform="rotate(3 265 75)">notion</text>
+      <rect x="55" y="105" width="140" height="40" class="box" rx="8" transform="rotate(2 125 125)"/><text x="125" y="130" text-anchor="middle" class="dim" transform="rotate(2 125 125)">apple notes</text>
+      <rect x="215" y="130" width="120" height="40" class="box" rx="8" transform="rotate(-3 275 150)"/><text x="275" y="155" text-anchor="middle" class="dim" transform="rotate(-3 275 150)">email</text>
+      <rect x="40" y="180" width="150" height="40" class="box" rx="8" transform="rotate(3 115 200)"/><text x="115" y="205" text-anchor="middle" class="dim" transform="rotate(3 115 200)">slack threads</text>
+      <rect x="205" y="205" width="140" height="40" class="box" rx="8" transform="rotate(-2 275 225)"/><text x="275" y="230" text-anchor="middle" class="dim" transform="rotate(-2 275 225)">voice memos</text>
+      <rect x="90" y="255" width="180" height="40" class="box" rx="8" transform="rotate(1 180 275)"/><text x="180" y="280" text-anchor="middle" class="dim" transform="rotate(1 180 275)">ten agents' sessions</text>
+      <text x="190" y="20" text-anchor="middle" class="dim">DISTRIBUTED · unmineable</text>
+    </g>
+    <!-- arrow -->
+    <path d="M380 160 L520 160" class="wireacc" stroke-width="3"/>
+    <path d="M505 148 L520 160 L505 172" class="wireacc" stroke-width="3"/>
+    <text x="450" y="140" text-anchor="middle" font-size="15" class="mono acc">centralize</text>
+    <!-- center right -->
+    <circle cx="720" cy="160" r="85" class="boxacc"/>
+    <text x="720" y="150" text-anchor="middle" font-size="20" class="acc">ONE CONTEXT</text>
+    <text x="720" y="178" text-anchor="middle" font-size="13" class="mono dim">your vault · your git</text>
+    <rect x="850" y="120" width="130" height="80" class="boxteal" rx="12"/>
+    <text x="915" y="153" text-anchor="middle" font-size="16" class="acc2">OWNER</text>
+    <text x="915" y="178" text-anchor="middle" font-size="12" class="mono dim">an agent, in charge</text>
+    <path d="M805 160 L850 160" class="wireteal"/>
+    <text x="720" y="290" text-anchor="middle" font-size="15" class="mono acc2">CENTRALIZED · managed · mineable</text>
+  </svg></div>
+  <ul class="clean">
+    <li><b>Centralizing means appointing ownership.</b> A pile needs no owner; an asset does.</li>
+    <li><b>The evolution:</b> distributed context, unowned → centralized context, managed by an agent. That's the whole move.</li>
+  </ul>
+</section>
+
+<!-- 4 · Single owner -->
+<section class="slide">
+  <div class="kicker">The core insight</div>
+  <h2>Some dimensions of your life need <em>exactly one owner</em>.</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>Three scribes, no library</h3>
+      <p>Let three agents write into your memory and within a week it's a junk drawer: three filing styles, duplicate facts, no provenance. A library needs <b>one librarian</b>.</p>
+    </div>
+    <div class="card">
+      <h3>Three voices, no style</h3>
+      <p>Let three harnesses post on your behalf and you have no voice at all: three tones, three vocabularies, contradicting takes. A public voice needs <b>one herald</b>.</p>
+    </div>
+  </div>
+  <blockquote>Wherever consistency <em>is</em> the value — your memory, your voice, your plan, your attention — appoint a single owner. Train him once. Everyone else goes through him.</blockquote>
+</section>
+
+<!-- 5 · Gatekeepers keep order -->
+<section class="slide">
+  <div class="kicker">What's new</div>
+  <h2>Gatekeepers don't say no.<br>They keep <em>order</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 360" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="16" class="mono">
+      <rect x="800" y="30" width="170" height="46" class="box" rx="9"/><text x="885" y="59" text-anchor="middle" class="dim">MEMORY VAULT</text>
+      <rect x="800" y="105" width="170" height="46" class="box" rx="9"/><text x="885" y="134" text-anchor="middle" class="dim">BACKLOG</text>
+      <rect x="800" y="180" width="170" height="46" class="box" rx="9"/><text x="885" y="209" text-anchor="middle" class="dim">YOUR ATTENTION</text>
+      <rect x="800" y="255" width="170" height="46" class="box" rx="9"/><text x="885" y="284" text-anchor="middle" class="dim">PUBLIC VOICE</text>
+    </g>
+    <g font-size="18">
+      <rect x="470" y="30" width="200" height="46" class="boxacc" rx="9"/><text x="570" y="59" text-anchor="middle" class="acc">Zenod</text>
+      <rect x="470" y="105" width="200" height="46" class="boxacc" rx="9"/><text x="570" y="134" text-anchor="middle" class="acc">Archus</text>
+      <rect x="470" y="180" width="200" height="46" class="boxacc" rx="9"/><text x="570" y="209" text-anchor="middle" class="acc">Phylax</text>
+      <rect x="470" y="255" width="200" height="46" class="boxacc" rx="9"/><text x="570" y="284" text-anchor="middle" class="acc">Callisthenes</text>
+    </g>
+    <path d="M670 53 L800 53" class="wireacc"/><path d="M670 128 L800 128" class="wireacc"/>
+    <path d="M670 203 L800 203" class="wireacc"/><path d="M670 278 L800 278" class="wireacc"/>
+    <g font-size="17">
+      <rect x="30" y="90" width="180" height="50" class="box" rx="10"/><text x="120" y="121" text-anchor="middle">Any agent</text>
+      <rect x="30" y="190" width="180" height="50" class="box" rx="10"/><text x="120" y="221" text-anchor="middle">Any harness</text>
+    </g>
+    <path d="M210 110 L470 60" class="wireteal"/><path d="M210 118 L470 125" class="wireteal"/>
+    <path d="M210 210 L470 208" class="wireteal"/><path d="M210 220 L470 275" class="wireteal"/>
+    <text x="330" y="330" text-anchor="middle" font-size="17" class="mono acc2">everyone goes through the gatekeeper</text>
+    <text x="740" y="330" text-anchor="middle" font-size="17" class="mono acc">your taste · your rules · your style</text>
+  </svg></div>
+  <blockquote style="margin-top:.6rem">Train one governor how you like your posts. Then any agent — even the other governors — posts <em>through him</em>. That's not a veto. That's consistency, and if you're building context, consistency is paramount.</blockquote>
+</section>
+
+<!-- 6 · Meet the team -->
+<section class="slide">
+  <div class="kicker">Meet the team · in Greek, the synedrion — the council Alexander convened</div>
+  <h2>You don't get a seat at the Council.<br><em>You run it.</em></h2>
+  <ul class="roster">
+    <li><b>Zenod</b><span>for <i>Zenodotus</i>, first librarian of Alexandria.<br>Runs your memory: a wiki-style GitHub repo — Obsidian-compatible markdown you own.</span></li>
+    <li><b>Archus</b><span>for <i>Nearchus</i>, Alexander's navigator.<br>Runs your backlog: GitHub issues, labels, and the execution queue.</span></li>
+    <li><b>Epaminon</b><span>for <i>Epaminondas</i>, the commander who broke Sparta.<br>Runs your harnesses: dispatches Codex and Claude, brings back results.</span></li>
+    <li><b>Phylax</b><span><i>the Guard</i>, from Alexander's bodyguard corps.<br>Runs your notifications: WhatsApp and Telegram, deduped, one honest voice.</span></li>
+    <li><b>Callisthenes</b><span>for <i>Callisthenes of Olynthus</i>, court chronicler.<br>Runs your outbound: posts tweets, Reddit, and email with your credentials.</span></li>
+    <li><b>Nectary</b><span><i>the Treasury</i>, where the flower keeps its nectar.<br>Funds the backlog: completed issues become capped, revenue-repaid claims.</span></li>
+  </ul>
+  <p class="lede" style="margin-top:1rem">And they're yours: <em>rename them if you like.</em> It's your team — trained on you, expert in you — the entry point for every agent you'll ever run.</p>
+</section>
+
+<!-- 7 · ZENOD -->
+<section class="slide">
+  <div class="kicker">Governor 1 of 6</div>
+  <div class="gov-head">
+    <svg class="medal" viewBox="0 0 90 90"><use href="#em-zenod"/></svg>
+    <h2>Zenod</h2><span class="gov-domain">Memory · the Librarian</span><span class="status live">● live</span>
+  </div>
+  <p class="gov-lore"><b>Zenodotus</b> made Alexandria's scrolls findable forever. Modern job: <b>Karpathy's LLM knowledge-base vision, implemented</b> — a managed wiki living in your GitHub, Obsidian-compatible, that you own outright.</p>
+  <div class="diagram"><svg viewBox="0 0 1000 250" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="16">
+      <rect x="30" y="70" width="170" height="50" class="box" rx="10"/><text x="115" y="101" text-anchor="middle">Any agent</text>
+      <rect x="30" y="135" width="170" height="50" class="box" rx="10"/><text x="115" y="166" text-anchor="middle">Any governor</text>
+    </g>
+    <rect x="300" y="80" width="170" height="90" class="boxacc" rx="12"/>
+    <text x="385" y="118" text-anchor="middle" font-size="20" class="acc">ZENOD</text>
+    <text x="385" y="145" text-anchor="middle" font-size="13" class="mono dim">the only writer</text>
+    <path d="M200 95 L300 110" class="wireteal"/><path d="M200 160 L300 140" class="wireteal"/>
+    <text x="250" y="82" text-anchor="middle" font-size="13" class="mono acc2">ask · store</text>
+    <!-- GitHub repo window mock -->
+    <rect x="560" y="15" width="420" height="222" class="boxteal" rx="12"/>
+    <rect x="560" y="15" width="420" height="38" fill="var(--line)" rx="12"/>
+    <circle cx="582" cy="34" r="5" fill="var(--bad)"/><circle cx="600" cy="34" r="5" fill="var(--accent)"/><circle cx="618" cy="34" r="5" fill="var(--ok)"/>
+    <text x="770" y="40" text-anchor="middle" font-size="14" class="mono">github.com/<tspan class="acc2">you</tspan>/brain</text>
+    <g font-size="14" class="mono">
+      <text x="585" y="80" class="dim">📁 Log/</text><text x="960" y="80" text-anchor="end" class="dim">facts · immutable</text>
+      <text x="585" y="107" class="dim">📁 Areas/ · Projects/</text><text x="960" y="107" text-anchor="end" class="dim">meaning · living</text>
+      <text x="585" y="134" class="dim">📁 Notes/</text><text x="960" y="134" text-anchor="end" class="dim">[[links]] = routing</text>
+      <text x="585" y="161" class="dim">⚙ .brain/config.yml</text><text x="960" y="161" text-anchor="end" class="dim">schema, in code</text>
+      <text x="585" y="195" class="ok">● commit a41f2c9 — store: travel insurance</text>
+      <text x="585" y="218" class="ok">● commit 8c03d17 — distill: Areas/Insurance.md</text>
+    </g>
+    <path d="M470 125 L560 125" class="wireacc"/>
+    <text x="515" y="110" text-anchor="middle" font-size="12" class="mono acc">writes</text>
+  </svg></div>
+  <div class="facts">
+    <div class="fact"><h4>Powers</h4><ul><li>Facts, kept verbatim</li><li>Meaning, distilled</li><li>Answers <span>with citations</span></li></ul></div>
+    <div class="fact"><h4>Privilege</h4><ul><li>Only writer to the vault</li><li>Everyone else asks</li></ul></div>
+    <div class="fact"><h4>Reach</h4><ul><li>Council chat · voice notes</li><li>Any harness via MCP</li></ul></div>
+  </div>
+  <div class="tools-row"><span class="tool">store_memory</span><span class="tool">search_memory</span><span class="tool">get_memory</span><span class="tool">ask_brain</span></div>
+</section>
+
+<!-- 8 · ARCHUS -->
+<section class="slide">
+  <div class="kicker">Governor 2 of 6</div>
+  <div class="gov-head">
+    <svg class="medal" viewBox="0 0 90 90"><use href="#em-archus"/></svg>
+    <h2>Archus</h2><span class="gov-domain">the Plan · the Navigator</span><span class="status live">● live</span>
+  </div>
+  <p class="gov-lore"><b>Nearchus</b> was the admiral Alexander trusted to chart the fleet home. Yours decides what's ready to sail — and in what order.</p>
+  <div class="diagram"><svg viewBox="0 0 1000 210" xmlns="http://www.w3.org/2000/svg">
+    <rect x="30" y="70" width="180" height="70" class="box" rx="11"/>
+    <text x="120" y="100" text-anchor="middle" font-size="16">🎙 "look into the</text>
+    <text x="120" y="122" text-anchor="middle" font-size="16">failing deploy"</text>
+    <rect x="330" y="65" width="180" height="90" class="boxacc" rx="12"/>
+    <text x="420" y="103" text-anchor="middle" font-size="20" class="acc">ARCHUS</text>
+    <text x="420" y="130" text-anchor="middle" font-size="13" class="mono dim">only he enqueues work</text>
+    <path d="M210 105 L330 108" class="wireteal"/>
+    <rect x="620" y="30" width="350" height="160" class="boxteal" rx="12"/>
+    <text x="795" y="62" text-anchor="middle" font-size="17" class="acc2">YOUR GITHUB ISSUES</text>
+    <g font-size="14" class="mono">
+      <rect x="645" y="80" width="95" height="90" class="box" rx="8"/><text x="692" y="112" text-anchor="middle" class="dim">BACKLOG</text><text x="692" y="132" text-anchor="middle" class="dim">▤ ▤ ▤</text>
+      <rect x="752" y="80" width="95" height="90" class="box" rx="8"/><text x="799" y="112" text-anchor="middle" class="dim">READY</text><text x="799" y="132" text-anchor="middle" class="dim">▤ ▤</text>
+      <rect x="859" y="80" width="95" height="90" class="box" rx="8"/><text x="906" y="112" text-anchor="middle" class="acc">EXEC</text><text x="906" y="132" text-anchor="middle" class="acc">▶ ▤</text>
+    </g>
+    <path d="M510 110 L620 110" class="wireacc"/>
+  </svg></div>
+  <div class="facts">
+    <div class="fact"><h4>Powers</h4><ul><li>Voice note → ticket</li><li>Readiness checks</li><li>Blocker counsel</li></ul></div>
+    <div class="fact"><h4>Privilege</h4><ul><li>Only writer to the backlog</li><li>Only he can queue execution</li></ul></div>
+    <div class="fact"><h4>Reach</h4><ul><li>"What's on my plate?"</li><li>Deterministic lanes <span>for agents</span></li></ul></div>
+  </div>
+  <div class="tools-row"><span class="tool">create_issue</span><span class="tool">edit_issue</span><span class="tool">close_issue</span><span class="tool">run_issue</span><span class="tool">ask_archus</span></div>
+</section>
+
+<!-- 9 · EPAMINON -->
+<section class="slide">
+  <div class="kicker">Governor 3 of 6</div>
+  <div class="gov-head">
+    <svg class="medal" viewBox="0 0 90 90"><use href="#em-epaminon"/></svg>
+    <h2>Epaminon</h2><span class="gov-domain">Execution · the Commander</span><span class="status live">● live</span>
+  </div>
+  <p class="gov-lore"><b>Epaminondas</b> broke Sparta with formation, not numbers. Yours doesn't do the work — he <b>hires the harnesses</b> that do.</p>
+  <div class="diagram"><svg viewBox="0 0 1000 220" xmlns="http://www.w3.org/2000/svg">
+    <rect x="60" y="70" width="200" height="90" class="boxacc" rx="12"/>
+    <text x="160" y="108" text-anchor="middle" font-size="20" class="acc">EPAMINON</text>
+    <text x="160" y="135" text-anchor="middle" font-size="13" class="mono dim">runs harnesses · owns nothing</text>
+    <g font-size="17">
+      <rect x="420" y="20" width="180" height="52" class="box" rx="10"/><text x="510" y="52" text-anchor="middle">Codex</text>
+      <rect x="420" y="84" width="180" height="52" class="box" rx="10"/><text x="510" y="116" text-anchor="middle">Claude</text>
+      <rect x="420" y="148" width="180" height="52" class="box" rx="10"/><text x="510" y="180" text-anchor="middle">any harness</text>
+    </g>
+    <path d="M260 95 L420 46" class="wireacc"/><path d="M260 112 L420 110" class="wireacc"/><path d="M260 130 L420 174" class="wireacc"/>
+    <text x="336" y="80" text-anchor="middle" font-size="13" class="mono acc">hires</text>
+    <g font-size="15" class="mono">
+      <rect x="740" y="45" width="220" height="50" class="boxteal" rx="9"/><text x="850" y="76" text-anchor="middle" class="acc2">suite tools: memory · social</text>
+      <rect x="740" y="115" width="220" height="50" class="boxteal" rx="9"/><text x="850" y="146" text-anchor="middle" class="acc2">reports FACTS, not vibes</text>
+    </g>
+    <path d="M600 46 L740 70" class="wire"/><path d="M600 174 L740 140" class="wire"/>
+  </svg></div>
+  <div class="facts">
+    <div class="fact"><h4>Powers</h4><ul><li>Hires Codex, Claude, anyone</li><li>Arms them with suite tools</li><li>Brings back results</li></ul></div>
+    <div class="fact"><h4>Privilege</h4><ul><li>Only he dispatches workers</li><li>Owns no repo <span>by design</span></li></ul></div>
+    <div class="fact"><h4>Reach</h4><ul><li>Dispatched by Archus</li><li>Outward work gates <span>on your word</span></li></ul></div>
+  </div>
+  <div class="tools-row"><span class="tool">run_ephemeral_task</span><span class="tool">run_existing_issue</span><span class="tool">execution_status</span><span class="tool">get_task_result</span></div>
+</section>
+
+<!-- 10 · PHYLAX -->
+<section class="slide">
+  <div class="kicker">Governor 4 of 6</div>
+  <div class="gov-head">
+    <svg class="medal" viewBox="0 0 90 90"><use href="#em-phylax"/></svg>
+    <h2>Phylax</h2><span class="gov-domain">the Door · your Guard</span><span class="status building">◐ v1 live</span>
+  </div>
+  <p class="gov-lore">From Alexander's bodyguard corps — the highest honor at court. <b>Phylax</b> is the guard at the one door between the Council and you.</p>
+  <div class="diagram"><svg viewBox="0 0 1000 220" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="16">
+      <rect x="30" y="30" width="180" height="50" class="box" rx="10"/><text x="120" y="61" text-anchor="middle">Governors</text>
+      <rect x="30" y="95" width="180" height="50" class="box" rx="10"/><text x="120" y="126" text-anchor="middle">Workers</text>
+      <rect x="30" y="160" width="180" height="50" class="box" rx="10"/><text x="120" y="191" text-anchor="middle">Any agent</text>
+    </g>
+    <rect x="390" y="65" width="200" height="90" class="boxacc" rx="12"/>
+    <text x="490" y="103" text-anchor="middle" font-size="20" class="acc">PHYLAX</text>
+    <text x="490" y="130" text-anchor="middle" font-size="13" class="mono dim">dedup · sequence · honesty</text>
+    <path d="M210 55 L390 90" class="wireteal"/><path d="M210 120 L390 110" class="wireteal"/><path d="M210 185 L390 132" class="wireteal"/>
+    <text x="295" y="165" text-anchor="middle" font-size="13" class="mono acc2">has his own MCP —</text>
+    <text x="295" y="185" text-anchor="middle" font-size="13" class="mono acc2">agents can reach YOU</text>
+    <circle cx="820" cy="110" r="50" class="boxteal"/>
+    <text x="820" y="117" text-anchor="middle" font-size="20" class="acc2">YOU</text>
+    <path d="M590 110 L770 110" class="wireacc"/>
+    <text x="680" y="95" text-anchor="middle" font-size="15" class="mono acc">WhatsApp · Telegram</text>
+    <text x="680" y="140" text-anchor="middle" font-size="13" class="mono dim">one voice · never truncated</text>
+  </svg></div>
+  <div class="facts">
+    <div class="fact"><h4>Powers</h4><ul><li>One message, not nine</li><li>Exact states, no hype</li><li>Actionable = never cut</li></ul></div>
+    <div class="fact"><h4>Privilege</h4><ul><li>Only agent allowed <span>to interrupt you</span></li></ul></div>
+    <div class="fact"><h4>The unlock</h4><ul><li>You, reachable by agents</li><li><span>— safely, through the guard</span></li></ul></div>
+  </div>
+  <div class="tools-row"><span class="tool">raise_event</span><span class="tool">ask_phylax</span><span class="tool">whatsapp</span><span class="tool">telegram</span></div>
+</section>
+
+<!-- 11 · CALLISTHENES -->
+<section class="slide">
+  <div class="kicker">Governor 5 of 6</div>
+  <div class="gov-head">
+    <svg class="medal" viewBox="0 0 90 90"><use href="#em-call"/></svg>
+    <h2>Callisthenes</h2><span class="gov-domain">the Word · your Herald</span><span class="status live">● live</span>
+  </div>
+  <p class="gov-lore"><b>Callisthenes of Olynthus</b> told the world Alexander's story. Yours drafts in your voice — and holds the only set of your outbound keys.</p>
+  <div class="diagram"><svg viewBox="0 0 1000 230" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="70" width="220" height="90" class="boxacc" rx="12"/>
+    <text x="150" y="108" text-anchor="middle" font-size="20" class="acc">CALLISTHENES</text>
+    <text x="150" y="135" text-anchor="middle" font-size="13" class="mono dim">your style · your credentials</text>
+    <!-- tweet card -->
+    <rect x="360" y="35" width="380" height="120" class="boxteal" rx="12"/>
+    <circle cx="395" cy="70" r="16" class="box"/>
+    <text x="420" y="66" font-size="15" class="acc2">@you</text>
+    <text x="420" y="86" font-size="14" class="dim">· posted just now</text>
+    <text x="385" y="118" font-size="15">Shipping the Council today. Six governors,</text>
+    <text x="385" y="140" font-size="15">one memory, your keys. 🧵</text>
+    <path d="M260 115 L360 100" class="wireacc"/>
+    <text x="310" y="95" text-anchor="middle" font-size="13" class="mono acc">posts</text>
+    <rect x="790" y="35" width="180" height="36" class="box" rx="8"/><text x="880" y="58" text-anchor="middle" font-size="14" class="mono ok">✓ TWITTER · live</text>
+    <rect x="790" y="81" width="180" height="36" class="box" rx="8"/><text x="880" y="104" text-anchor="middle" font-size="14" class="mono ok">✓ REDDIT · live</text>
+    <rect x="790" y="127" width="180" height="36" class="box" rx="8"/><text x="880" y="150" text-anchor="middle" font-size="14" class="mono ok">✓ EMAIL · live</text>
+    <path d="M740 95 L790 95" class="wire"/>
+    <text x="500" y="205" text-anchor="middle" font-size="15" class="mono acc2">even the other governors publish through him — one voice, always on message</text>
+  </svg></div>
+  <div class="facts">
+    <div class="fact"><h4>Powers</h4><ul><li>Drafts from your brain</li><li>Channel skills: hooks, threads, timing</li><li>Recurring runs <span>— posts while you sleep</span></li></ul></div>
+    <div class="fact"><h4>Privilege</h4><ul><li>Only holder of outbound keys</li><li>Pre-approved ships alone; <span>the rest waits for your word</span></li></ul></div>
+    <div class="fact"><h4>Reach</h4><ul><li>"Draft a thread about the launch"</li><li>Approved content lane <span>from Epaminon</span></li></ul></div>
+  </div>
+  <div class="tools-row"><span class="tool">post_tweet</span><span class="tool">post_reddit</span><span class="tool">send_email</span><span class="tool">ask_outbound</span></div>
+</section>
+
+<!-- 12 · NECTARY -->
+<section class="slide">
+  <div class="kicker">Governor 6 of 6</div>
+  <div class="gov-head">
+    <svg class="medal" viewBox="0 0 90 90"><use href="#em-nectary"/></svg>
+    <h2>Nectary</h2><span class="gov-domain">the Treasury</span><span class="status building">◐ building · landing ready</span>
+  </div>
+  <p class="gov-lore">The <b>nectary</b> is where a flower keeps its nectar — stored energy that funds what the plant does next. Modern job: <b>bountify the backlog</b> — a repo funds its own development.</p>
+  <div class="diagram"><svg viewBox="0 0 1000 200" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="16">
+      <rect x="30" y="60" width="200" height="80" class="box" rx="12"/>
+      <text x="130" y="92" text-anchor="middle">Testable issue</text>
+      <text x="130" y="118" text-anchor="middle" font-size="13" class="mono dim">human or agent completes it</text>
+      <rect x="290" y="55" width="200" height="90" class="boxacc" rx="12"/>
+      <text x="390" y="90" text-anchor="middle" font-size="19" class="acc">NECTARY</text>
+      <text x="390" y="116" text-anchor="middle" font-size="13" class="mono dim">records the cost claim</text>
+      <rect x="550" y="60" width="200" height="80" class="box" rx="12"/>
+      <text x="650" y="92" text-anchor="middle">Capped claim</text>
+      <text x="650" y="118" text-anchor="middle" font-size="13" class="mono dim">tied to a merged PR</text>
+      <rect x="810" y="60" width="170" height="80" class="boxteal" rx="12"/>
+      <text x="895" y="92" text-anchor="middle" class="acc2">Repaid</text>
+      <text x="895" y="118" text-anchor="middle" font-size="13" class="mono dim">from revenue, in queue</text>
+    </g>
+    <path d="M230 100 L290 100" class="wireteal"/><path d="M490 100 L550 100" class="wireacc"/><path d="M750 100 L810 100" class="wireteal"/>
+    <text x="500" y="180" text-anchor="middle" font-size="15" class="mono acc2">no equity · no tokens · if the repo never earns, no one owes anyone anything</text>
+  </svg></div>
+  <div class="facts">
+    <div class="fact"><h4>Powers</h4><ul><li>Issues → auditable, repayable work</li><li>Public repayment queue</li></ul></div>
+    <div class="fact"><h4>Privilege</h4><ul><li>Only he records claims</li><li>Capped at cost — no upside</li></ul></div>
+    <div class="fact"><h4>Status</h4><ul><li>Landing + docs built <span>(local repo)</span></li><li>Protocol in design</li></ul></div>
+  </div>
+</section>
+
+<!-- 13 · Who are you talking to -->
+<section class="slide">
+  <div class="kicker">One door</div>
+  <h2>Who are you talking to?<br><em>The Council.</em></h2>
+  <div class="diagram"><svg viewBox="0 0 1000 260" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="110" cy="130" r="48" class="boxacc"/>
+    <text x="110" y="137" text-anchor="middle" font-size="20" class="acc">YOU</text>
+    <rect x="300" y="80" width="240" height="100" class="boxteal" rx="13"/>
+    <text x="420" y="120" text-anchor="middle" font-size="20" class="acc2">THE COUNCIL</text>
+    <text x="420" y="148" text-anchor="middle" font-size="13" class="mono dim">one conversation · one router</text>
+    <path d="M158 130 L300 130" class="wireacc"/>
+    <text x="228" y="115" text-anchor="middle" font-size="13" class="mono acc">you speak once</text>
+    <g font-size="16">
+      <rect x="680" y="20" width="180" height="42" class="box" rx="9"/><text x="770" y="47" text-anchor="middle" class="acc">Zenod</text>
+      <rect x="680" y="72" width="180" height="42" class="box" rx="9"/><text x="770" y="99" text-anchor="middle" class="acc">Archus</text>
+      <rect x="680" y="124" width="180" height="42" class="box" rx="9"/><text x="770" y="151" text-anchor="middle" class="acc">Epaminon</text>
+      <rect x="680" y="176" width="180" height="42" class="box" rx="9"/><text x="770" y="203" text-anchor="middle" class="acc">Callisthenes</text>
+    </g>
+    <path d="M540 105 L680 41" class="wire"/><path d="M540 120 L680 93" class="wire"/>
+    <path d="M540 140 L680 145" class="wire"/><path d="M540 155 L680 197" class="wire"/>
+    <text x="610" y="80" text-anchor="middle" font-size="13" class="mono dim">it calls on the right governor</text>
+    <path d="M420 180 Q420 240 158 165" class="wireteal"/>
+    <text x="300" y="228" text-anchor="middle" font-size="13" class="mono acc2">Phylax speaks back — the Council's one voice</text>
+  </svg></div>
+  <p class="lede">They're not all listening in a room. The Council is the front door — it routes your words to the governor who owns them, and answers back through the guard. You never route anything yourself.</p>
+</section>
+
+<!-- 14 · Council as MCP server -->
+<section class="slide">
+  <div class="kicker">The powerful idea</div>
+  <h2>The Council is itself an <em>MCP server</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 340" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="17">
+      <rect x="30" y="60" width="190" height="50" class="box" rx="10"/><text x="125" y="91" text-anchor="middle">Claude</text>
+      <rect x="30" y="125" width="190" height="50" class="box" rx="10"/><text x="125" y="156" text-anchor="middle">Codex</text>
+      <rect x="30" y="190" width="190" height="50" class="box" rx="10"/><text x="125" y="221" text-anchor="middle">every future agent</text>
+    </g>
+    <rect x="360" y="40" width="300" height="250" class="boxteal" rx="14"/>
+    <text x="510" y="77" text-anchor="middle" font-size="22" class="acc2">THE COUNCIL</text>
+    <text x="510" y="100" text-anchor="middle" font-size="14" class="mono dim">one endpoint · one token</text>
+    <g font-size="15" class="mono">
+      <rect x="390" y="120" width="240" height="38" class="box" rx="8"/><text x="510" y="144" text-anchor="middle" class="dim">add to your memory</text>
+      <rect x="390" y="168" width="240" height="38" class="box" rx="8"/><text x="510" y="192" text-anchor="middle" class="dim">retrieve from your memory</text>
+      <rect x="390" y="216" width="240" height="38" class="box" rx="8"/><text x="510" y="240" text-anchor="middle" class="dim">escalate to you on WhatsApp</text>
+    </g>
+    <path d="M220 85 L360 130" class="wireteal"/><path d="M220 150 L360 165" class="wireteal"/><path d="M220 215 L360 235" class="wireteal"/>
+    <rect x="760" y="115" width="210} " height="0" fill="none"/>
+    <rect x="760" y="100" width="210" height="130" class="boxacc" rx="13"/>
+    <text x="865" y="140" text-anchor="middle" font-size="18" class="acc">TRAIN ONCE</text>
+    <text x="865" y="170" text-anchor="middle" font-size="14" class="mono dim">applies to every agent</text>
+    <text x="865" y="192" text-anchor="middle" font-size="14" class="mono dim">you'll ever run</text>
+    <path d="M660 165 L760 165" class="wireacc"/>
+  </svg></div>
+  <p class="lede">Any harness you'll ever use can add to your memory, mine it back, and — when it's stuck — reach you on WhatsApp through the guard. Authenticated, trained on you, gated. It never gets the keys; it gets an audience.</p>
+</section>
+
+<!-- 15 · When work breaks -->
+<section class="slide">
+  <div class="kicker">The integration, live</div>
+  <h2>When work breaks, the Council <em>talks it out</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 330" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="16">
+      <rect x="30" y="50" width="185" height="76" class="box" rx="11"/>
+      <text x="122" y="82" text-anchor="middle">Harness breaks</text>
+      <text x="122" y="106" text-anchor="middle" font-size="13" class="mono" fill="var(--bad)">✕ task blocked</text>
+      <rect x="285" y="50" width="185" height="76" class="boxacc" rx="11"/>
+      <text x="377" y="82" text-anchor="middle" class="acc">Epaminon</text>
+      <text x="377" y="106" text-anchor="middle" font-size="13" class="mono dim">catches it · asks around</text>
+      <rect x="540" y="20" width="185" height="76" class="box" rx="11"/>
+      <text x="632" y="52" text-anchor="middle" class="acc">Zenod</text>
+      <text x="632" y="76" text-anchor="middle" font-size="13" class="mono dim">"seen this before?"</text>
+      <rect x="540" y="120" width="185" height="76" class="box" rx="11"/>
+      <text x="632" y="152" text-anchor="middle" class="acc">Phylax</text>
+      <text x="632" y="176" text-anchor="middle" font-size="13" class="mono dim">no answer → escalate</text>
+    </g>
+    <circle cx="880" cy="158" r="46" class="boxteal"/>
+    <text x="880" y="165" text-anchor="middle" font-size="18" class="acc2">YOU</text>
+    <path d="M215 88 L285 88" class="wireacc"/>
+    <path d="M470 74 L540 58" class="wireteal"/>
+    <text x="505" y="52" text-anchor="middle" font-size="12" class="mono acc2">1. ask memory</text>
+    <path d="M470 102 L540 148" class="wireteal"/>
+    <text x="495" y="140" text-anchor="middle" font-size="12" class="mono acc2">2. no luck</text>
+    <path d="M725 158 L834 158" class="wireacc"/>
+    <text x="780" y="143" text-anchor="middle" font-size="13" class="mono acc">3. WhatsApp</text>
+    <path d="M880 204 Q880 280 377 260 Q300 255 340 126" class="wireteal" stroke-dasharray="5 5"/>
+    <text x="600" y="292" text-anchor="middle" font-size="14" class="mono acc2">4. your answer flows back — and gets filed as evidence</text>
+  </svg></div>
+  <ul class="clean" style="margin-top:.4rem">
+    <li><b>Evidence passes hand to hand.</b> Every message carries receipts, so every response is grounded in what actually happened.</li>
+    <li><b>Not just shared memory — a common language.</b> That's the benefit of an integrated suite over ten disconnected tools.</li>
+  </ul>
+</section>
+
+<!-- 16 · GitHub maximalists -->
+<section class="slide">
+  <div class="kicker">Philosophy</div>
+  <h2>The Council are <em>GitHub maximalists</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 250" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="17">
+      <rect x="40" y="40" width="280" height="90" class="box" rx="11"/>
+      <text x="180" y="78" text-anchor="middle" class="acc">Memory</text>
+      <text x="180" y="106" text-anchor="middle" font-size="14" class="mono dim">markdown repo · every fact a commit</text>
+      <rect x="360" y="40" width="280" height="90" class="box" rx="11"/>
+      <text x="500" y="78" text-anchor="middle" class="acc">Backlog</text>
+      <text x="500" y="106" text-anchor="middle" font-size="14" class="mono dim">issues + labels · exec state machine</text>
+      <rect x="680" y="40" width="280" height="90" class="box" rx="11"/>
+      <text x="820" y="78" text-anchor="middle" class="acc">Work</text>
+      <text x="820" y="106" text-anchor="middle" font-size="14" class="mono dim">PRs · branches · reviewable diffs</text>
+    </g>
+    <rect x="250" y="170" width="500" height="56" class="boxacc" rx="11"/>
+    <text x="500" y="205" text-anchor="middle" font-size="19" class="acc">git log = the audit trail of your life's work</text>
+    <path d="M180 130 L380 170" class="wire"/><path d="M500 130 L500 170" class="wire"/><path d="M820 130 L620 170" class="wire"/>
+  </svg></div>
+  <ul class="clean">
+    <li><b>No proprietary database.</b> The substrate is repos you already own. Leave anytime; take everything, with history.</li>
+    <li><b>Human and agent writing always distinguishable.</b> Provenance is first-class; discipline is code, not willpower.</li>
+  </ul>
+</section>
+
+<!-- 17 · Principles -->
+<section class="slide">
+  <div class="kicker">Principles</div>
+  <h2>Five rules the whole suite obeys</h2>
+  <div class="steps">
+    <div class="step"><b>Everybody reads. One writes.</b> <span>Each domain has exactly one gatekeeper with write authority. Agents ask; they never get raw CRUD.</span></div>
+    <div class="step"><b>Discipline as code, not willpower.</b> <span>Schemas, filing rules, and state machines are enforced deterministically — not in prompts.</span></div>
+    <div class="step"><b>You hold the keys.</b> <span>Plain markdown, your git, your server, your API keys. Export with zero loss.</span></div>
+    <div class="step"><b>Auditable to the commit.</b> <span>Every memory, ticket, and send is a commit or labeled event.</span></div>
+    <div class="step"><b>Outward needs your word — or your standing order.</b> <span>Approve live, or pre-approve and let it flow.</span></div>
+  </div>
+</section>
+
+<!-- 17b · Architecture: run it your way -->
+<section class="slide">
+  <div class="kicker">Architecture</div>
+  <h2>Run it your way.<br>The vault stays in <em>your GitHub</em> either way.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 360" xmlns="http://www.w3.org/2000/svg">
+    <!-- self-host column -->
+    <rect x="50" y="40" width="380" height="220" class="boxacc" rx="14"/>
+    <text x="240" y="75" text-anchor="middle" font-size="19" class="acc">SELF-HOST · free forever</text>
+    <text x="240" y="98" text-anchor="middle" font-size="13" class="mono dim">AGPL-3.0 · your VPS or home server</text>
+    <g font-size="14" class="mono">
+      <rect x="80" y="115" width="320" height="38" class="box" rx="8"/><text x="240" y="139" text-anchor="middle" class="dim">docker run — one container per agent</text>
+      <rect x="80" y="161" width="320" height="38" class="box" rx="8"/><text x="240" y="185" text-anchor="middle" class="dim">one /data volume · SQLite · no external DB</text>
+      <rect x="80" y="207" width="320" height="38" class="box" rx="8"/><text x="240" y="231" text-anchor="middle" class="dim">your API keys · settings in the browser</text>
+    </g>
+    <!-- hosted column -->
+    <rect x="570" y="40" width="380" height="220" class="boxteal" rx="14"/>
+    <text x="760" y="75" text-anchor="middle" font-size="19" class="acc2">HOSTED · low monthly fee</text>
+    <text x="760" y="98" text-anchor="middle" font-size="13" class="mono dim">alpha — first 100 users free</text>
+    <g font-size="14" class="mono">
+      <rect x="600" y="115" width="320" height="38" class="box" rx="8"/><text x="760" y="139" text-anchor="middle" class="dim">no server, no docker — sign in and go</text>
+      <rect x="600" y="161" width="320" height="38" class="box" rx="8"/><text x="760" y="185" text-anchor="middle" class="dim">GitHub App connects your vault repo</text>
+      <rect x="600" y="207" width="320" height="38" class="box" rx="8"/><text x="760" y="231" text-anchor="middle" class="dim">we run the Council · you keep the keys</text>
+    </g>
+    <!-- shared vault -->
+    <rect x="350" y="295" width="300" height="55" class="box" rx="11"/>
+    <text x="500" y="322" text-anchor="middle" font-size="16" class="acc">github.com/<tspan class="acc2">you</tspan>/brain</text>
+    <text x="500" y="342" text-anchor="middle" font-size="12" class="mono dim">same vault · export anytime, zero loss</text>
+    <path d="M240 260 L420 295" class="wireacc"/>
+    <path d="M760 260 L580 295" class="wireteal"/>
+  </svg></div>
+  <p class="lede">Leave the hosted service, spin up the container, point it at the same repo — nothing to migrate. The vault never lived with us in the first place.</p>
+</section>
+
+<!-- 18 · Herald scenario -->
+<section class="slide">
+  <div class="kicker">Killer scenario · the one to lead with</div>
+  <h2>A herald that posts every day —<br>and is <em>always on message</em>.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 340" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="105" cy="100" r="42" class="boxacc"/>
+    <text x="105" y="107" text-anchor="middle" font-size="18" class="acc">YOU</text>
+    <rect x="230" y="65" width="200" height="70" class="boxteal" rx="11"/>
+    <text x="330" y="93" text-anchor="middle" font-size="17" class="acc2">THE COUNCIL</text>
+    <text x="330" y="118" text-anchor="middle" font-size="13" class="mono dim">files it with Zenod — your brain</text>
+    <path d="M147 100 L230 100" class="wireacc"/>
+    <text x="188" y="86" text-anchor="middle" font-size="13" class="mono acc">you talk · it learns</text>
+    <rect x="230" y="205" width="200" height="70" class="boxteal" rx="11"/>
+    <text x="330" y="233" text-anchor="middle" font-size="16" class="acc2">Daily run · 09:00</text>
+    <text x="330" y="258" text-anchor="middle" font-size="13" class="mono dim">"draft 10 posts from the vault"</text>
+    <path d="M330 135 L330 205" class="wireteal"/>
+    <rect x="510" y="135" width="220" height="80" class="box" rx="11"/>
+    <text x="620" y="167" text-anchor="middle" font-size="18" class="acc">Callisthenes</text>
+    <text x="620" y="193" text-anchor="middle" font-size="13" class="mono dim">channel skills · your style</text>
+    <path d="M430 240 L510 200" class="wireteal"/>
+    <!-- two gates -->
+    <rect x="790" y="30" width="180" height="60" class="boxacc" rx="11"/>
+    <text x="880" y="55" text-anchor="middle" font-size="15" class="acc">YOUR WORD</text>
+    <text x="880" y="76" text-anchor="middle" font-size="12" class="mono dim">approve · edit · skip</text>
+    <rect x="790" y="110" width="180" height="60" class="boxteal" rx="11"/>
+    <text x="880" y="135" text-anchor="middle" font-size="15" class="acc2">PRE-APPROVED</text>
+    <text x="880" y="156" text-anchor="middle" font-size="12" class="mono dim">standing order → ships alone</text>
+    <path d="M730 155 L790 65" class="wireacc"/><path d="M730 172 L790 140" class="wireteal"/>
+    <rect x="790" y="230" width="180" height="60" class="box" rx="11"/>
+    <text x="880" y="255" text-anchor="middle" font-size="15">Posted</text>
+    <text x="880" y="276" text-anchor="middle" font-size="12" class="mono dim">twitter · reddit · email</text>
+    <path d="M880 90 L880 230" class="wire"/><path d="M880 170 L880 230" class="wireteal"/>
+    <text x="620" y="320" text-anchor="middle" font-size="15" class="mono acc2">10 posts a day, one brain, one voice — in the loop, or out of it: your call</text>
+  </svg></div>
+  <p class="lede">You train the product just by talking to the Council. The herald turns that brain into a publishing operation. <em>The memory is what makes the voice possible.</em></p>
+</section>
+
+<!-- 19 · The real run -->
+<section class="slide">
+  <div class="kicker">Killer demo · as it actually ran</div>
+  <h2>One voice note. Four governors. <em>A merged PR.</em></h2>
+  <div class="diagram"><svg viewBox="0 0 1000 340" xmlns="http://www.w3.org/2000/svg">
+    <g font-size="16">
+      <rect x="20" y="60" width="160" height="80" class="boxteal" rx="11"/>
+      <text x="100" y="93" text-anchor="middle" class="acc2">🎙 Voice note</text>
+      <text x="100" y="118" text-anchor="middle" font-size="12" class="mono dim">to the Council · WhatsApp</text>
+      <rect x="230" y="60" width="160" height="80" class="boxteal" rx="11"/>
+      <text x="310" y="93" text-anchor="middle" class="acc2">Council</text>
+      <text x="310" y="118" text-anchor="middle" font-size="12" class="mono dim">routes the ask</text>
+      <rect x="440" y="60" width="160" height="80" class="box" rx="11"/>
+      <text x="520" y="93" text-anchor="middle" class="acc">Epaminon</text>
+      <text x="520" y="118" text-anchor="middle" font-size="12" class="mono dim">gets the job</text>
+      <rect x="650" y="20" width="150" height="56" class="box" rx="10"/>
+      <text x="725" y="55" text-anchor="middle">Codex</text>
+      <rect x="650" y="124" width="150" height="56" class="box" rx="10"/>
+      <text x="725" y="159" text-anchor="middle">Claude</text>
+      <rect x="860" y="60" width="120" height="80" class="boxacc" rx="11"/>
+      <text x="920" y="93" text-anchor="middle" class="acc">YOU</text>
+      <text x="920" y="118" text-anchor="middle" font-size="12" class="mono dim">approve the PR ✓</text>
+    </g>
+    <path d="M180 100 L230 100" class="wireteal"/><path d="M390 100 L440 100" class="wireteal"/>
+    <path d="M600 85 L650 55" class="wireacc"/><path d="M600 115 L650 145" class="wireacc"/>
+    <text x="625" y="105" text-anchor="middle" font-size="12" class="mono acc">routes work</text>
+    <path d="M800 48 L860 85" class="wire"/><path d="M800 152 L860 115" class="wire"/>
+    <!-- parallel lane -->
+    <g font-size="15">
+      <rect x="330" y="230" width="200" height="70" class="box" rx="11"/>
+      <text x="430" y="259" text-anchor="middle" class="acc">Zenod</text>
+      <text x="430" y="282" text-anchor="middle" font-size="12" class="mono dim">filed it · in parallel</text>
+      <rect x="580" y="230" width="200" height="70" class="box" rx="11"/>
+      <text x="680" y="259" text-anchor="middle" class="acc">Phylax</text>
+      <text x="680" y="282" text-anchor="middle" font-size="12" class="mono dim">notified you right before</text>
+    </g>
+    <path d="M310 140 L410 230" class="wire" stroke-dasharray="5 5"/>
+    <path d="M520 140 L650 230" class="wire" stroke-dasharray="5 5"/>
+    <path d="M780 265 L920 140" class="wireteal" stroke-dasharray="5 5"/>
+    <text x="180" y="285" text-anchor="middle" font-size="13" class="mono acc2">contacted in parallel —</text>
+    <text x="180" y="305" text-anchor="middle" font-size="13" class="mono acc2">not a relay race</text>
+  </svg></div>
+  <p class="lede">This is a trace, not a concept: voice note in, Council routed it, Epaminon ran Codex and Claude, Zenod and Phylax worked in parallel, you approved the PR. You routed nothing.</p>
+</section>
+
+<!-- 20 · Scoreboard -->
+<section class="slide">
+  <div class="kicker">Honest scoreboard</div>
+  <h2>Working today. Coming very soon.</h2>
+  <div class="board">
+    <div class="today">
+      <h3>✓ Live now</h3>
+      <ul>
+        <li><b>Store & ask with citations</b> — evidence → ideas, every fact a commit.</li>
+        <li><b>WhatsApp + voice notes</b> — talk to the Council from your pocket.</li>
+        <li><b>Any harness via MCP</b> — one token, whole memory, escalation to you.</li>
+        <li><b>Voice → job → Codex/Claude → your approved PR</b> — ran for real.</li>
+        <li><b>Posting live</b> — tweets (even from screenshots), Reddit, email.</li>
+        <li><b>Google Drive ingestion</b> — files and voice notes flow into the vault.</li>
+      </ul>
+    </div>
+    <div class="soon">
+      <h3>→ Next</h3>
+      <ul>
+        <li><b>Daily on-message posting runs</b> — the herald on a standing order.</li>
+        <li><b>Execution results auto-filed</b> — every outcome becomes cited memory.</li>
+        <li><b>Full notification authority</b> — Phylax as standalone gatekeeper.</li>
+        <li><b>Nectary launch</b> — bountify the backlog: capped, revenue-repaid claims (landing built, protocol in design).</li>
+        <li><b>Hosted alpha</b> — the Council without a server. First 100 free.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 21 · Positioning: the center -->
+<section class="slide">
+  <div class="kicker">Positioning</div>
+  <h2>The memory is the <em>center</em>.<br>The Council are the first miners.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 400" xmlns="http://www.w3.org/2000/svg">
+    <!-- outer ring: future miners -->
+    <circle cx="500" cy="200" r="185" class="wire" stroke-dasharray="6 7" fill="none"/>
+    <g font-size="14" class="mono dim">
+      <text x="500" y="28" text-anchor="middle">every future agent · the miners to come</text>
+      <text x="152" y="122" text-anchor="middle">harness</text>
+      <text x="848" y="122" text-anchor="middle">harness</text>
+      <text x="152" y="295" text-anchor="middle">agent</text>
+      <text x="848" y="295" text-anchor="middle">agent</text>
+    </g>
+    <!-- middle ring: governors -->
+    <circle cx="500" cy="200" r="118" class="boxteal" fill="none"/>
+    <g font-size="16">
+      <text x="500" y="95" text-anchor="middle" class="acc2">Archus</text>
+      <text x="392" y="152" text-anchor="middle" class="acc2">Epaminon</text>
+      <text x="608" y="152" text-anchor="middle" class="acc2">Phylax</text>
+      <text x="404" y="266" text-anchor="middle" class="acc2">Callisthenes</text>
+      <text x="600" y="266" text-anchor="middle" class="acc2">Nectary</text>
+      <text x="500" y="322" text-anchor="middle" font-size="13" class="mono dim">the Council · gatekeepers for every miner</text>
+    </g>
+    <!-- center -->
+    <circle cx="500" cy="200" r="58" class="boxacc"/>
+    <text x="500" y="196" text-anchor="middle" font-size="19" class="acc">ZENOD</text>
+    <text x="500" y="219" text-anchor="middle" font-size="12" class="mono dim">your memory</text>
+  </svg></div>
+  <p class="lede">Everyone sits on top of the memory. The Council is the proof of concept — the first team of miners, and the gatekeepers for every miner you'll add after them. That's the bigger idea we're after: <em>your memory, mined — on your terms.</em></p>
+</section>
+
+<!-- 22 · Objections -->
+<section class="slide">
+  <div class="kicker">What we say when they ask</div>
+  <h2>The answers, straight</h2>
+  <ul class="clean">
+    <li><b>"Is this a multi-agent framework?"</b> No — it's a product: an open-source, extensible service you self-host. Nothing to assemble, nothing to wire. It runs.</li>
+    <li><b>"Why not Mem0 / Letta / a memory API?"</b> Memory alone is a database. The bet here is the <em>integration</em>: memory + miners + one consistent execution discipline, shipped together — the way Office shipped together. And the vault stays in your git.</li>
+    <li><b>"Too early?"</b> The scoreboard is public: six lanes live today, five more in flight. The vault is plain markdown — betting early costs nothing to exit.</li>
+  </ul>
+</section>
+
+<!-- 23 · Launch -->
+<section class="slide">
+  <div class="kicker">Launch</div>
+  <h2>Ship the story before the product is done</h2>
+  <div class="steps">
+    <div class="step"><b>Week 1 — the thread.</b> <span>Twitter/X: the mining thesis + the daily-herald demo. "My posting agent drafts 10 posts a day from my brain. Here's the architecture."</span></div>
+    <div class="step"><b>Week 1 — Reddit.</b> <span>r/selfhosted + r/LocalLLaMA: lead with ownership — self-host, AGPL, markdown, git audit.</span></div>
+    <div class="step"><b>Week 2 — Show HN.</b> <span>"Show HN: Zenod — a self-hosted librarian your AI agents report to." Council one click deep.</span></div>
+    <div class="step"><b>Ongoing — one governor, one week.</b> <span>Weekly deep-dive per governor — the one-pagers in this deck are the outlines.</span></div>
+  </div>
+</section>
+
+<!-- 24 · Close -->
+<section class="slide">
+  <div class="kicker">The one-liner</div>
+  <h1>Your context is mineable.<br><em>Own the mine.</em></h1>
+  <p class="lede">One memory at the center. Six governors keeping order. Every agent you'll ever hire, mining a context you cultivate and own — plain markdown, your git, your keys.</p>
+  <div style="margin-top:2rem">
+    <span class="pill">zenod.dev</span>
+    <span class="pill">github · AGPL-3.0</span>
+    <span class="pill">alpha — first 100 free</span>
+  </div>
+</section>
+
+</div>
+<div class="nav">
+  <span id="counter">1 / 27</span>
+  <button onclick="go(-1)">←</button>
+  <button onclick="go(1)">→</button>
+</div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];let i=0;
+  function show(n){slides[i].classList.remove('active');i=(n+slides.length)%slides.length;
+    slides[i].classList.add('active');
+    document.getElementById('counter').textContent=(i+1)+' / '+slides.length;
+    document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';}
+  function go(d){show(i+d)}
+  addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(1);
+    if(e.key==='ArrowLeft'||e.key==='PageUp')go(-1);
+    if(e.key==='Home')show(0);if(e.key==='End')show(slides.length-1);});
+  document.getElementById('deck').addEventListener('click',e=>{
+    if(e.target.closest('button')||getSelection().toString())return;go(1);});
+  show(0);
+</script>
+</body>
+</html>

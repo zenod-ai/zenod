@@ -688,42 +688,71 @@ async function runWorker({ opts, manifest, issueNumber }) {
   await updateWorkerStatus(runDir, issueNumber, { status: "starting", startedAt: nowIso() });
   if (opts.githubStatus) syncIssueStatusLabel(manifest.repo, issueNumber, "starting");
 
-  const engine = manifest.options?.engine ?? resolveEngine(opts);
-  const model = manifest.options?.model ?? resolveModel(engine, opts);
-  const effort = manifest.options?.effort ?? resolveEffort(engine, opts);
-  const spawnSpec = buildWorkerSpawn({ engine, worktree: worker.worktree, finalPath, model, thinking: opts.thinking, effort });
+  const primaryEngine = manifest.options?.engine ?? resolveEngine(opts);
 
-  const child = spawn(spawnSpec.bin, spawnSpec.args, {
-    cwd: worker.worktree,
-    stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, ...(spawnSpec.env ?? {}) },
-  });
-  child.stdin.end(readFileSync(promptPath, "utf8"));
-  await updateWorkerStatus(runDir, issueNumber, { pid: child.pid });
-  await watchJsonl({ eventsPath, runDir, issueNumber, child });
+  // Run one attempt on the given engine and gather its outcome. The surrounding
+  // clone/branch/commit/push/PR flow is engine-agnostic, so a quota failure on one
+  // engine can be replayed verbatim on the other (see fallback below).
+  const attempt = async (engine) => {
+    const model = manifest.options?.engine === engine ? (manifest.options?.model ?? resolveModel(engine, opts)) : resolveModel(engine, opts);
+    const effort = manifest.options?.engine === engine ? (manifest.options?.effort ?? resolveEffort(engine, opts)) : resolveEffort(engine, opts);
+    const spawnSpec = buildWorkerSpawn({ engine, worktree: worker.worktree, finalPath, model, thinking: opts.thinking, effort });
 
-  const exitCode = await new Promise((resolveExit) => child.on("close", resolveExit));
-  const filesChanged = changedFiles(worker.worktree);
-  // codex writes the final message to finalPath; claude's final text is in the event
-  // stream's `result` event — extract it and persist to finalPath so the rest of the
-  // flow (handoff excerpt, PR body, blocker detection) is identical for both engines.
-  let finalText = spawnSpec.capturesFinalToFile && existsSync(finalPath) ? readFileSync(finalPath, "utf8") : "";
-  if (!spawnSpec.capturesFinalToFile) {
-    finalText = extractFinalFromEvents(eventsPath);
-    if (finalText.trim()) {
-      try {
-        writeFileSync(finalPath, finalText);
-      } catch {
-        // best-effort; finalText is still used below
+    const child = spawn(spawnSpec.bin, spawnSpec.args, {
+      cwd: worker.worktree,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, ...(spawnSpec.env ?? {}) },
+    });
+    child.stdin.end(readFileSync(promptPath, "utf8"));
+    await updateWorkerStatus(runDir, issueNumber, { pid: child.pid, engine });
+    await watchJsonl({ eventsPath, runDir, issueNumber, child });
+
+    const exitCode = await new Promise((resolveExit) => child.on("close", resolveExit));
+    // codex writes the final message to finalPath; claude's final text is in the event
+    // stream's `result` event — extract it and persist to finalPath so the rest of the
+    // flow (handoff excerpt, PR body, blocker detection) is identical for both engines.
+    let finalText = spawnSpec.capturesFinalToFile && existsSync(finalPath) ? readFileSync(finalPath, "utf8") : "";
+    if (!spawnSpec.capturesFinalToFile) {
+      finalText = extractFinalFromEvents(eventsPath);
+      if (finalText.trim()) {
+        try {
+          writeFileSync(finalPath, finalText);
+        } catch {
+          // best-effort; finalText is still used below
+        }
       }
     }
+    const rawError = exitCode !== 0 && !finalText.trim() ? extractWorkerError(eventsPath) : null;
+    return { engine, exitCode, finalText, rawError };
+  };
+
+  let result = await attempt(primaryEngine);
+
+  // Quota fallback: an engine dying on usage limits is an account problem, not a task
+  // problem. If the other engine's CLI is installed, replay the run there instead of
+  // failing the whole execution. No env var decides this — the error class does.
+  if (result.exitCode !== 0 && isQuotaError(result.rawError) && commandExists(fallbackEngine(result.engine))) {
+    const nextEngine = fallbackEngine(result.engine);
+    await appendFile(
+      eventsPath,
+      `${JSON.stringify({ type: "engine.fallback", from: result.engine, to: nextEngine, reason: String(result.rawError).slice(0, 240), at: nowIso() })}\n`,
+    );
+    await updateWorkerStatus(runDir, issueNumber, {
+      status: "retrying",
+      engineFallback: `${result.engine}→${nextEngine}`,
+      error: classifyWorkerError(result.rawError),
+    });
+    result = await attempt(nextEngine);
   }
+
+  const { exitCode, finalText } = result;
+  const filesChanged = changedFiles(worker.worktree);
   const blocker = detectBlocker(finalText);
   let status = exitCode === 0 ? "complete" : "failed";
   if (blocker) status = "blocked";
   // A failure with no handoff: recover the real cause from the events stream
   // (e.g. "You've hit your usage limit") instead of reporting an empty failure.
-  const workerError = status !== "complete" && !finalText.trim() ? classifyWorkerError(extractWorkerError(eventsPath)) : null;
+  const workerError = status !== "complete" && !finalText.trim() ? classifyWorkerError(result.rawError ?? extractWorkerError(eventsPath)) : null;
 
   await updateWorkerStatus(runDir, issueNumber, {
     status,
@@ -832,16 +861,31 @@ function extractWorkerError(eventsPath) {
   return message;
 }
 
+// Quota/limit failures are the common operational case (an engine account is out of
+// credit). Matched failures trigger the automatic engine fallback in runWorker.
+const QUOTA_LIMIT_RE =
+  /usage limit|quota|rate limit|rate_limit|upgrade to plus|insufficient_quota|too many requests|billing|credit balance|out of credit|\b429\b|\b402\b/i;
+
+function isQuotaError(message) {
+  return Boolean(message) && QUOTA_LIMIT_RE.test(String(message).replace(/\s+/g, " "));
+}
+
 // Turn a raw worker error into a short, actionable reason. Quota/limit failures are
 // the common operational case (the user's Codex account is out of credit), so name
 // them plainly with the retry hint the model already gave.
 function classifyWorkerError(message) {
   if (!message) return null;
   const m = String(message).replace(/\s+/g, " ").trim();
-  if (/usage limit|quota|rate limit|rate_limit|upgrade to plus|insufficient_quota|too many requests|billing|credit balance|out of credit|\b429\b|\b402\b/i.test(m)) {
+  if (QUOTA_LIMIT_RE.test(m)) {
     return `Worker model is out of quota / credit or hit a usage limit — no work was done. Top up or wait, then re-run. Detail: ${m.slice(0, 240)}`;
   }
   return m.slice(0, 400);
+}
+
+// The opposite engine for the quota fallback. Both CLIs implement the same GitHub
+// flow, so a run that died on one engine's quota can be replayed on the other.
+function fallbackEngine(engine) {
+  return engine === "codex" ? "claude" : "codex";
 }
 
 // --- Worker engine selection (codex CLI or Claude Code CLI, same GitHub flow) ---
@@ -1449,6 +1493,8 @@ export {
   branchName,
   extractWorkerError,
   classifyWorkerError,
+  isQuotaError,
+  fallbackEngine,
   finalComment,
   deliverablePaths,
   deliverablesBlock,

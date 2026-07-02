@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Backlog — Final Design</title>
+<style>
+  :root{--bg:#0d0f12;--panel:#14171c;--ink:#e8e6e1;--dim:#a5a19a;
+    --accent:#d4a24e;--accent2:#6ea8a0;--line:#2a2e35;--ok:#7fb069;--bad:#c96a5a}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:var(--bg);color:var(--ink);font-family:Georgia,serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:5vh 5vw}
+  .kicker{font-family:ui-monospace,Menlo,monospace;font-size:.85rem;letter-spacing:.25em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:1rem}
+  h1{font-size:clamp(2rem,4.5vw,3.4rem);font-weight:400;line-height:1.15;margin-bottom:2rem}
+  h1 em{font-style:italic;color:var(--accent)}
+  svg text{font-family:Georgia,serif;fill:var(--ink)}
+  svg .mono{font-family:ui-monospace,Menlo,monospace;letter-spacing:.06em}
+  svg .dim{fill:var(--dim)} svg .acc{fill:var(--accent)} svg .acc2{fill:var(--accent2)} svg .ok{fill:var(--ok)}
+  svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+  svg .boxacc{fill:var(--panel);stroke:var(--accent);stroke-width:2}
+  svg .boxteal{fill:var(--panel);stroke:var(--accent2);stroke-width:2}
+  svg .wireacc{stroke:var(--accent);stroke-width:2.5;fill:none}
+  svg .wireteal{stroke:var(--accent2);stroke-width:2.5;fill:none}
+  svg .wire{stroke:var(--dim);stroke-width:1.8;fill:none}
+  .locks{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.2rem;margin-top:2.2rem}
+  .lock{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.3rem 1.4rem}
+  .lock h3{font-size:1.15rem;color:var(--accent);font-weight:400;margin-bottom:.5rem}
+  .lock p{font-size:1.02rem;color:var(--dim);line-height:1.55}
+  .lock p b{color:var(--ink);font-weight:400}
+  .bottom{margin-top:2.2rem;border-left:3px solid var(--accent);padding:.5rem 0 .5rem 1.3rem;
+    font-size:clamp(1.15rem,2vw,1.45rem);font-style:italic;line-height:1.5;color:var(--ink)}
+  @media(max-width:760px){.locks{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">The backlog · final design · one rule</div>
+  <h1>"Add this to the backlog."<br>There are exactly <em>two backlogs</em>, and one question.</h1>
+
+  <svg viewBox="0 0 1000 470" xmlns="http://www.w3.org/2000/svg">
+    <!-- YOU -->
+    <circle cx="120" cy="230" r="52" class="boxacc"/>
+    <text x="120" y="224" text-anchor="middle" font-size="21" class="acc">YOU</text>
+    <text x="120" y="250" text-anchor="middle" font-size="12" class="mono dim">"open a ticket…"</text>
+
+    <!-- The one question -->
+    <rect x="255" y="170" width="230" height="120" class="box" rx="14"/>
+    <text x="370" y="212" text-anchor="middle" font-size="18">ONE QUESTION</text>
+    <text x="370" y="242" text-anchor="middle" font-size="14" class="mono dim">my LIFE backlog,</text>
+    <text x="370" y="264" text-anchor="middle" font-size="14" class="mono dim">or a REPO?</text>
+    <path d="M172 230 L255 230" class="wire"/>
+
+    <!-- unclear loop -->
+    <path d="M370 170 Q370 90 180 190" class="wire" stroke-dasharray="5 6"/>
+    <text x="290" y="95" text-anchor="middle" font-size="13" class="mono dim">unclear? it asks you. it never guesses.</text>
+
+    <!-- LIFE lane -->
+    <rect x="580" y="60" width="180" height="100" class="boxacc" rx="13"/>
+    <text x="670" y="100" text-anchor="middle" font-size="19" class="acc">ARCHUS</text>
+    <text x="670" y="126" text-anchor="middle" font-size="12" class="mono dim">gatekeeper of ONE repo</text>
+    <text x="670" y="144" text-anchor="middle" font-size="12" class="mono dim">his pen can't write elsewhere</text>
+    <path d="M485 200 L580 115" class="wireacc"/>
+    <text x="520" y="140" text-anchor="middle" font-size="13" class="mono acc">life</text>
+
+    <rect x="810" y="60" width="170" height="100" class="box" rx="13"/>
+    <text x="895" y="98" text-anchor="middle" font-size="15" class="mono">obsidian-brain</text>
+    <text x="895" y="122" text-anchor="middle" font-size="12" class="mono dim">your life's big rocks</text>
+    <text x="895" y="142" text-anchor="middle" font-size="12" class="mono dim">epics only</text>
+    <path d="M760 110 L810 110" class="wireacc"/>
+
+    <!-- REPO lane -->
+    <rect x="580" y="310" width="180" height="100" class="boxteal" rx="13"/>
+    <text x="670" y="350" text-anchor="middle" font-size="19" class="acc2">EPAMINON</text>
+    <text x="670" y="376" text-anchor="middle" font-size="12" class="mono dim">dispatches a harness</text>
+    <text x="670" y="394" text-anchor="middle" font-size="12" class="mono dim">with that repo's keys</text>
+    <path d="M485 260 L580 355" class="wireteal"/>
+    <text x="520" y="330" text-anchor="middle" font-size="13" class="mono acc2">repo</text>
+
+    <rect x="810" y="285" width="170" height="60" class="box" rx="11"/>
+    <text x="895" y="322" text-anchor="middle" font-size="14" class="mono">zenod issues</text>
+    <rect x="810" y="357" width="170" height="60" class="box" rx="11"/>
+    <text x="895" y="394" text-anchor="middle" font-size="14" class="mono">nectary issues · any repo</text>
+    <path d="M760 340 L810 315" class="wireteal"/>
+    <path d="M760 375 L810 387" class="wireteal"/>
+
+    <!-- no third path -->
+    <text x="670" y="245" text-anchor="middle" font-size="15" class="mono" fill="var(--bad)">✕ no third path exists in code</text>
+  </svg>
+
+  <div class="locks">
+    <div class="lock">
+      <h3>Lock 1 · Two doors, period</h3>
+      <p>Life backlog → <b>Archus</b>. Anything else → <b>Epaminon</b>. There is no third write path anywhere in the system. Ambiguity doesn't pick a door — it asks you one question.</p>
+    </div>
+    <div class="lock">
+      <h3>Lock 2 · The pen is chained</h3>
+      <p>Archus's write tool has <b>no repo field</b> — obsidian-brain is a constant in code. He can be confused all day; the confusion has <b>nowhere to land</b>. Epaminon's route requires an explicit repo name, or it must ask.</p>
+    </div>
+    <div class="lock">
+      <h3>Lock 3 · No unverified "done"</h3>
+      <p>Every write is <b>read back from GitHub</b> before anyone says success. Failure says FAILED, with the real error. A daily canary proves the path each morning — through Phylax, not through hope.</p>
+    </div>
+  </div>
+
+  <div class="bottom">
+    Why this is forever: nothing here depends on an AI behaving. The doors are code, the pen is chained by code, the truth is checked by code. The models only ever pick between two safe options — and when they can't, they ask you.
+  </div>
+</div>
+</body>
+</html>
