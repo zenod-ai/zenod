@@ -125,6 +125,8 @@ export type SettingsValues = {
   openai_long_transcription: string | null
   long_transcription_provider: "openrouter" | "openai" | "local" | null
   openrouter_transcription_model: string | null
+  composio_api_key: string | null
+  composio_user_id: string | null
 }
 
 export type DriveStatus = {

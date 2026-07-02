@@ -39,6 +39,11 @@ export const SETTING_KEYS = [
   "telegram_allowed_users",
   "telegram_accept_all",
   "telegram_rich",
+  // Composio (interim Reddit connector, #420). The Console holds the key and pushes
+  // it to Callistheness; the outbound agent reads it in buildOutboundTools. user_id
+  // is the Composio-connected Reddit account to post/read as (defaults via env).
+  "composio_api_key",
+  "composio_user_id",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -61,6 +66,7 @@ const SECRET_KEYS: ReadonlySet<string> = new Set([
   "google_oauth_client_secret",
   "groq_api_key",
   "telegram_bot_token",
+  "composio_api_key",
 ]);
 
 const ENV_SEEDS: Record<SettingKey, string> = {
@@ -89,6 +95,8 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   telegram_allowed_users: "TELEGRAM_ALLOWED_USERS",
   telegram_accept_all: "TELEGRAM_ACCEPT_ALL",
   telegram_rich: "TELEGRAM_RICH",
+  composio_api_key: "COMPOSIO_API_KEY",
+  composio_user_id: "COMPOSIO_USER_ID",
 };
 
 export class Settings {
@@ -138,6 +146,8 @@ export class Settings {
     github_app_installation_id?: string
     github_app_slug?: string
     github_token?: string
+    composio_api_key?: string
+    composio_user_id?: string
   }): void {
     this.store.setSetting("api_token", input.token);
     if (input.admin_password_hash) this.store.setSetting("admin_password_hash", input.admin_password_hash);
@@ -148,6 +158,9 @@ export class Settings {
       if (input[k]) this.store.setSetting(k, input[k]!);
     }
     for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug", "github_token"] as const) {
+      if (input[k]) this.store.setSetting(k, input[k]!);
+    }
+    for (const k of ["composio_api_key", "composio_user_id"] as const) {
       if (input[k]) this.store.setSetting(k, input[k]!);
     }
     this.setRaw("provisioned", "1");

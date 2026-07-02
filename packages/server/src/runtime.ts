@@ -347,8 +347,19 @@ export class Runtime {
     const peerTools = this.buildPeerTools();
     Object.assign(peerTools, this.buildConsoleJourneyTools());
     // Callistheness's private send tools (post_tweet/post_reddit/send_email) ride the
-    // same generic tool slot — its guardian brain wields them and confirms first.
-    if (outbound) Object.assign(peerTools, buildOutboundTools());
+    // same generic tool slot — its guardian brain wields them and confirms first. The
+    // Composio key/user (interim Reddit connector, #420) come from settings when the
+    // Console has pushed them, else the container env (COMPOSIO_* on the compose).
+    if (outbound) {
+      const composioKey = this.settings.get("composio_api_key");
+      const composioUser = this.settings.get("composio_user_id");
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        ...(composioKey ? { COMPOSIO_API_KEY: composioKey } : {}),
+        ...(composioUser ? { COMPOSIO_USER_ID: composioUser } : {}),
+      };
+      Object.assign(peerTools, buildOutboundTools(env));
+    }
     if (this.agent.notifier === true) Object.assign(peerTools, buildNotifierTools());
     const engine = createEngine({
       ...(repo ? { repo } : {}),

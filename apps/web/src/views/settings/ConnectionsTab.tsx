@@ -24,6 +24,7 @@ import { WhatsAppConnect } from "@/components/whatsapp-connect"
 import { TelegramConnect } from "@/components/telegram-connect"
 import { PeerAgents } from "@/components/peer-agents"
 import { GithubConnect } from "@/components/github-connect"
+import { ComposioConnect } from "@/components/composio-connect"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -203,6 +204,7 @@ export function ConnectionsTab() {
       <WhatsAppConnect />
       <TelegramConnect />
       <GoogleDriveConnect />
+      <ComposioConnect />
       <PeerAgents />
 
       <Card>

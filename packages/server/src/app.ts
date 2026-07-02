@@ -616,7 +616,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // Connecting Drive, or changing the quality, is the moment to fetch the
     // (newly) chosen transcription model to the persistent volume.
     if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
-    if (agent.name === "console") await syncGithubCredentialsToRepoAgents();
+    if (agent.name === "console") {
+      await syncGithubCredentialsToRepoAgents();
+      await syncComposioToOutbound();
+    }
     return c.json({ settings: settings.masked(), configured: settings.configured() });
   });
 
@@ -672,6 +675,22 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     if (body.peer_url) settings.setRaw(agent.executor ? "exec_archus_url" : "epaminon_base_url", body.peer_url.trim());
     runtime.invalidate();
     return c.json({ ok: true });
+  });
+
+  // Composio config push (#420). Callistheness (outbound) reaches Reddit via
+  // Composio; the Console holds the key and pushes it here in place (provisioning is
+  // one-shot, so this is the update path — same shape as /api/agent/github).
+  // Authenticated with the AGENT token. Only the outbound agent uses it; on any
+  // other agent it is a no-op so a stray push can't misconfigure it.
+  app.post("/api/agent/composio", async (c) => {
+    if (!agent.outbound) return c.json({ error: `${agent.displayName} does not use Composio.` }, 400);
+    const body = await c.req
+      .json<{ composio_api_key?: string; composio_user_id?: string }>()
+      .catch(() => ({}) as Record<string, string>);
+    if (body.composio_api_key !== undefined) settings.set("composio_api_key", body.composio_api_key);
+    if (body.composio_user_id) settings.set("composio_user_id", body.composio_user_id);
+    runtime.invalidate();
+    return c.json({ ok: true, hasComposioKey: Boolean(settings.get("composio_api_key")) });
   });
 
   // The runner fetches the cross-provisioned lane secret from the Console with its
@@ -1070,6 +1089,33 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     console.warn("[team] GitHub credential startup sync failed:", err);
   });
 
+  // Composio credentials (#420): the Console holds the key/user and pushes them to
+  // the outbound agent (Callistheness), whose buildOutboundTools wires the Reddit
+  // tools from them. Mirrors the GitHub sync — provisioning is one-shot, so this is
+  // how an already-enabled Callistheness picks up a key set later on the Console.
+  const syncComposioToOutbound = async (): Promise<void> => {
+    if (agent.name !== "console") return;
+    const apiKey = settings.get("composio_api_key");
+    const userId = settings.get("composio_user_id");
+    if (!apiKey && !userId) return;
+    const sa = SUITE_AGENTS.find((a) => a.name === "outbound");
+    const token = sa ? settings.agentToken(sa.name) : null;
+    if (!sa || !token) return; // outbound not enabled yet — it'll get them at enable time
+    const payload: Record<string, string> = {};
+    if (apiKey) payload.composio_api_key = apiKey;
+    if (userId) payload.composio_user_id = userId;
+    const res = await fetch(`${sa.internalBaseUrl}/api/agent/composio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }).catch(() => null);
+    if (!res?.ok) console.warn(`[team] Composio credential sync to outbound failed${res ? ` (${res.status})` : ""}`);
+  };
+
+  void syncComposioToOutbound().catch((err: unknown) => {
+    console.warn("[team] Composio credential startup sync failed:", err);
+  });
+
   app.get("/api/team", async (c) => {
     const enabled = new Set(settings.peers().map((p) => p.name));
     const tokens = settings.agentTokens();
@@ -1176,6 +1222,15 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         }
       }
 
+      // Callistheness (outbound) gets the Composio key/user at provision time so its
+      // Reddit tools light up on first enable (#420); harmless if unset.
+      if (sa.name === "outbound") {
+        const ck = settings.get("composio_api_key");
+        const cu = settings.get("composio_user_id");
+        if (ck) provision.composio_api_key = ck;
+        if (cu) provision.composio_user_id = cu;
+      }
+
       // First enable: push provisioning to the (un-provisioned) headless agent.
       const res = await fetch(`${sa.internalBaseUrl}/api/provision`, {
         method: "POST",
@@ -1202,6 +1257,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     settings.setPeers(peers);
     runtime.invalidate();
     await syncGithubCredentialsToRepoAgents([sa.name]);
+    // Re-enable path skips provisioning, so push Composio creds to outbound here too.
+    if (sa.name === "outbound") await syncComposioToOutbound();
     // If this enable completed the Archus+Epaminon pair, light up the execution lane.
     await provisionExecLaneIfReady();
     return c.json({ ok: true });

@@ -100,4 +100,18 @@ describe("headless provisioning", () => {
     expect(runtime.settings.get("github_token")).toBe("ghp_synced");
     expect(runtime.settings.getRaw("github_app_installation_id")).toBe("777");
   });
+
+  it("adopts Composio credentials pushed at provision time and masks the key (#420)", async () => {
+    await app.request("/api/provision", {
+      method: "POST",
+      body: JSON.stringify({ token: "t1", composio_api_key: "ak_secret123", composio_user_id: "jordimr" }),
+    });
+    expect(runtime.settings.get("composio_api_key")).toBe("ak_secret123");
+    expect(runtime.settings.get("composio_user_id")).toBe("jordimr");
+    // The key is a secret (masked for the UI); the user id is plain.
+    const masked = runtime.settings.masked();
+    expect(masked.composio_user_id).toBe("jordimr");
+    expect(masked.composio_api_key).not.toBe("ak_secret123");
+    expect(masked.composio_api_key).toContain("•");
+  });
 });
