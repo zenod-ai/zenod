@@ -39,6 +39,8 @@ import { buildOutboundTools } from "./outboundTools.js";
 import { buildNotifierTools } from "./notifierTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore } from "./usageStore.js";
+import { NotificationStore } from "./notificationStore.js";
+import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
 import { TaskJobStore } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
@@ -169,6 +171,9 @@ export class Runtime {
   readonly journeyStore: JourneyStore;
   readonly journeyMonitor: JourneyMonitor;
   readonly usageStore: UsageStore;
+  readonly notificationStore: NotificationStore;
+  /** The single notification authority — every proactive send funnels here (R2-T1). */
+  readonly notificationBus: NotificationBus;
   /** The executor's queue (Epaminon only) — the state authority for the execution
    *  lane. Null on every other agent. Wired to the protocol seams in executionLane. */
   readonly executionQueue: ExecutionQueue | null;
@@ -239,6 +244,11 @@ export class Runtime {
       }),
     });
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
+    this.notificationStore = new NotificationStore(join(dataDir, "notifications.sqlite"));
+    this.notificationBus = new NotificationBus(
+      (surface, text) => (surface === "telegram" ? this.telegram.notifyOwner(text) : this.whatsapp.notifyOwner(text)),
+      this.notificationStore,
+    );
   }
 
   get workdir(): string {

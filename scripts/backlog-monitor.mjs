@@ -128,16 +128,20 @@ function saveState(s) {
 // `surface` (the ticket's origin chat channel, from its origin: label) routes
 // the ping back to where the work was requested. Omitted/null → the app falls
 // back to WhatsApp, the historical default.
-async function notify(text, surface) {
+async function notify(text, surface, fields = {}) {
   if (!NOTIFY_URL || !NOTIFY_TOKEN) {
     log("NOTIFY (no app configured):", surface ? `[${surface}]` : "", text);
     return;
   }
   try {
+    // Structured event fields (eventType/executionId/runId/targetIssue/severity) let
+    // the Console notification authority dedup/coalesce (R2-T1/T2). Text is still sent
+    // as-is; a plain call with no fields is the legacy manual notification.
+    const body = { text, ...(surface ? { surface } : {}), ...fields };
     const res = await fetch(`${NOTIFY_URL}/api/notify`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${NOTIFY_TOKEN}` },
-      body: JSON.stringify(surface ? { text, surface } : { text }),
+      body: JSON.stringify(body),
     });
     log("notify ->", res.status, surface ? `[${surface}]` : "", text.slice(0, 60));
   } catch (e) {
@@ -570,6 +574,37 @@ function mergeStateLine(manifest) {
   if (manifest && manifest.merged === true) return "merged to main";
   if (manifest && manifest.prUrl) return "PR open — not merged yet";
   return "completed (no PR — filed artifact)";
+}
+
+// PURE (R2-T4): compose a message from content tiers with a no-truncation guarantee
+// for the ACTIONABLE tier. The actionable content (a blocker question, a decision ask)
+// is always included in full; only the lower tiers (summary, then metadata) yield to
+// the channel budget. Guarantees `actionable ⊆ composed` for any input length.
+function composeActionableMessage({ header, actionable, summary, metadata }, budget = 3500) {
+  const act = String(actionable || "").trim();
+  const parts = [];
+  if (header) parts.push(String(header).trim());
+  if (act) parts.push(act);
+  let used = parts.join("\n\n").length;
+  const sum = String(summary || "").trim();
+  if (sum && used + sum.length + 2 <= budget) {
+    parts.push(sum);
+    used += sum.length + 2;
+  }
+  const meta = String(metadata || "").trim();
+  if (meta && used + meta.length + 2 <= budget) parts.push(meta);
+  return parts.filter(Boolean).join("\n\n");
+}
+
+// PURE (R2-T4): compose a blocker notification whose actionable question is NEVER
+// truncated (the old 280-char slice cut questions mid-word). The execution id is
+// demoted to a metadata suffix; the full question always survives.
+function composeBlockerNotification({ executionId, target, question }) {
+  return composeActionableMessage({
+    header: "⛔ Blocked — needs your decision",
+    actionable: question ? String(question).trim() : "(no blocker detail was captured)",
+    metadata: `${target} · ${executionId}`,
+  });
 }
 
 // PURE: compose the terminal execution notification (R1-T6). Carries the issue title,
@@ -1021,11 +1056,16 @@ async function reportDispatched(state) {
     if (ok) {
       d.reportedStatus = status;
       if (o.kind === "blocked") {
-        await notify(`⛔ Execution ${executionId} (${d.target}) — blocked, needs your decision${lastComment ? `:\n${lastComment.slice(0, 280)}` : "."}`, origin);
+        await notify(
+          composeBlockerNotification({ executionId, target: d.target, question: lastComment }),
+          origin,
+          { eventType: "execution.blocked", executionId, targetIssue: d.target, severity: "action" },
+        );
       } else {
         await notify(
           composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest }),
           origin,
+          { eventType: "execution.terminal", executionId, targetIssue: d.target, severity: "info" },
         );
       }
     }
@@ -1674,6 +1714,8 @@ export {
   summarizeHandoff,
   mergeStateLine,
   composeTerminalNotification,
+  composeActionableMessage,
+  composeBlockerNotification,
   shouldReportEarlyLaunchExit,
   earlyLaunchFailureNote,
   launchLogPath,
