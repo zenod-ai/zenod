@@ -31,7 +31,7 @@ import { installationToken, installationTokenForRepo, editGithubIssue, mintExecu
 import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, projectRegistrySection, resolveProject } from "./projectRegistry.js";
-import { backlogRouterSection, loadRepoInference } from "./backlogRouter.js";
+import { backlogRouterSection, LIFE_BACKLOG_REPO, loadRepoInference, routeBacklogRequest } from "./backlogRouter.js";
 import { buildOneOffIssueBody, oneOffIssueTitle } from "./oneOffExecution.js";
 import { ExecutionQueue, type ExecutionTicket } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
@@ -682,6 +682,18 @@ export class Runtime {
         run: async (input) => {
           const args = input as Partial<CreateIssueThenRunInput> & { issue?: CreateIssueThenRunInput["issue"] };
           if (!args.issue?.title) return "ERROR: issue.title is required.";
+          // E-4 (obsidian-brain#231, D2): a life-level epic must NOT enter the code-execution
+          // lane. Deterministically route it to the life backlog before any journey starts.
+          const routeText = [args.issue.title, args.issue.body, args.originalRequest]
+            .filter((v): v is string => typeof v === "string")
+            .join(" ");
+          const decision = routeBacklogRequest(args.issue.repo ? `${args.issue.repo} ${routeText}` : routeText, loadRepoInference());
+          if (decision.kind === "life_backlog" && !args.issue.repo) {
+            return [
+              `Not routed to execution: this reads as an outcome/life-level item, so it belongs in the life backlog (${LIFE_BACKLOG_REPO}), not the code-execution lane.`,
+              "File it with backlog_create (Archus). If you meant to run code, name the target repo and I'll route it through Epaminon.",
+            ].join("\n");
+          }
           const result = await this.createIssueThenRun({
             ...contextFor(args),
             issue: args.issue,
