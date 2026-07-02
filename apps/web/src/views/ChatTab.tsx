@@ -401,7 +401,13 @@ export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
 
     try {
       setVoiceError(null)
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Default input device, but ask the browser to clean it up the way
+      // phone mics do: auto-gain rescues a quiet mic (the main cause of
+      // "couldn't make out any speech"), and noise/echo suppression cut ambient
+      // hiss that Whisper otherwise hallucinates filler from.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { autoGainControl: true, noiseSuppression: true, echoCancellation: true },
+      })
       const mimeType = preferredAudioMimeType()
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
 
