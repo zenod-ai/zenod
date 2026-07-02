@@ -71,32 +71,26 @@ interface ConnectorSpec {
  * the bytes. Either path ends the same way: upload → media id → attach via
  * media.media_ids → post.
  */
-const X_POST_INPUT_SCHEMA = {
-  type: "object",
-  properties: {
-    text: {
-      type: "string",
-      description: "The FINAL post text, exactly as it will appear. Required.",
-    },
-    image_url: {
-      type: "string",
-      description:
-        "OPTIONAL https URL of a single image (jpeg/png/webp/gif) to attach. It is fetched and uploaded to X, then attached to the post. Use this OR image_base64, not both.",
-    },
-    image_base64: {
-      type: "string",
-      description:
-        "OPTIONAL base64-encoded image bytes to attach (alternative to image_url, for callers that already hold the bytes).",
-    },
-    image_media_type: {
-      type: "string",
-      description:
-        "MIME type of the image (e.g. image/png, image/jpeg). Required only with image_base64; inferred from the response when using image_url.",
-    },
-  },
-  required: ["text"],
-  additionalProperties: false,
-} as const;
+// NB: peer-tool inputSchema MUST be a zod schema — aisdk passes it straight into
+// the AI SDK's tool(), which rejects plain JSON-schema literals ("schema is not a
+// function" at brain boot). Same convention as the Reddit and X-read schemas.
+const X_POST_INPUT_SCHEMA = z.object({
+  text: z.string().min(1).describe("The FINAL post text, exactly as it will appear. Required."),
+  image_url: z
+    .string()
+    .optional()
+    .describe(
+      "OPTIONAL https URL of a single image (jpeg/png/webp/gif) to attach. It is fetched and uploaded to X, then attached to the post. Use this OR image_base64, not both.",
+    ),
+  image_base64: z
+    .string()
+    .optional()
+    .describe("OPTIONAL base64-encoded image bytes to attach (alternative to image_url, for callers that already hold the bytes)."),
+  image_media_type: z
+    .string()
+    .optional()
+    .describe("MIME type of the image (e.g. image/png, image/jpeg). Required only with image_base64; inferred from the response when using image_url."),
+});
 
 // x-mcp's one-shot media upload operation (X API v2 `POST /2/media/upload`,
 // operationId `mediaUpload`) and the createPosts media-attach shape. These are

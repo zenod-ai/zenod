@@ -96,14 +96,11 @@ describe("buildOutboundTools", () => {
     expect(reddit.toLowerCase()).toContain("could not reach the reddit connector");
   });
 
-  it("post_tweet advertises a structured inputSchema (text + optional image)", () => {
+  it("post_tweet advertises a structured zod inputSchema (text + optional image)", () => {
     const tools = buildOutboundTools({});
-    const schema = tools.post_tweet.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
-    expect(schema).toBeTruthy();
-    expect(schema.properties).toHaveProperty("text");
-    expect(schema.properties).toHaveProperty("image_url");
-    expect(schema.properties).toHaveProperty("image_base64");
-    expect(schema.required).toEqual(["text"]);
+    // Must be a zod schema — aisdk hands it straight to the AI SDK's tool().
+    const shape = (tools.post_tweet.inputSchema as { shape?: Record<string, unknown> })?.shape;
+    expect(shape && Object.keys(shape).sort()).toEqual(["image_base64", "image_media_type", "image_url", "text"]);
   });
 
   it("post_tweet accepts structured object args and still gates on connection", async () => {
