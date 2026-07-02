@@ -1862,6 +1862,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           },
           (input) => runtime.whatsappStore.recentTranscript(input),
           (query) => runtime.usageStore.timeline(query),
+          (reference) => runtime.fetchExecutionDeliverable(reference),
         )
       : buildMcpServer(
           () => runtime.getEngine(),

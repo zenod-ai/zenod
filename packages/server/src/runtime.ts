@@ -46,6 +46,7 @@ import { ExecutionStore } from "./executionStore.js";
 import { JourneyStore } from "./journeyStore.js";
 import { JourneyMonitor } from "./journeyMonitor.js";
 import { createJourneyAuthorityReconciler } from "./journeyAuthorityReconciler.js";
+import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
@@ -234,6 +235,7 @@ export class Runtime {
           return this.executionQueue.get(reference) ?? this.executionQueue.snapshot().find((ticket) => ticket.target === reference) ?? null;
         },
         readMemoryJob: async (jobId) => this.taskJobQueue.get(jobId),
+        fileExecutionMemory: (input) => this.fileExecutionMemory(input),
       }),
     });
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
@@ -376,6 +378,60 @@ export class Runtime {
       },
     };
     return this.engine;
+  }
+
+  /**
+   * File a completed execution's cited meaning note to Zenod (R1-T2). Resolves the
+   * Zenod peer and calls its async `store_memory`; returns the response as the
+   * evidence ref. A no-op returning null when no Zenod peer is configured (e.g. an
+   * agent without the memory peer) or the call fails — so the reconciler's ingest
+   * guard leaves no artifact and retries on the next pass. Never throws.
+   */
+  private async fileExecutionMemory(input: {
+    executionId: string;
+    content: string;
+    hints: string[];
+  }): Promise<{ evidenceRef?: string } | null> {
+    const zenod = this.settings.peers().find((peer) => peer.name === "zenod");
+    if (!zenod) return null;
+    try {
+      const ref = await callPeerWithArgs(zenod, "store_memory", {
+        content: input.content,
+        verbatim: true,
+        ...(input.hints.length ? { hints: input.hints } : {}),
+      });
+      return { evidenceRef: ref };
+    } catch (err) {
+      console.error(`[exec-ingest] store_memory failed for ${input.executionId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * R1-T3: resolve a reference to a completed execution's deliverable and return the
+   * live file body from GitHub at the run's head commit (unmerged-safe) plus honest
+   * merge state. Resolves the manifest from the journey's execution_record artifacts.
+   */
+  async fetchExecutionDeliverable(reference: string): Promise<{ text: string; structured: Record<string, unknown> }> {
+    const artifacts = this.journeyStore.artifactsByKind("execution_record", 200);
+    const manifest = resolveDeliverableManifest(artifacts, reference);
+    if (!manifest) {
+      const result = { reference, found: false as const, mergeState: "unknown", files: [] };
+      return { text: formatDeliverableResult(result), structured: result as unknown as Record<string, unknown> };
+    }
+    const read = async (repo: string, path: string, ref?: string): Promise<string> => {
+      const q = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+      const repoSeg = encodeURIComponent(repo).replace("%2F", "/");
+      const res = await this.githubJson<{ content?: string; encoding?: string }>(
+        `/repos/${repoSeg}/contents/${path.split("/").map(encodeURIComponent).join("/")}${q}`,
+      );
+      if (res.encoding === "base64" && typeof res.content === "string") {
+        return Buffer.from(res.content, "base64").toString("utf8");
+      }
+      throw new Error("file is not base64-encoded text");
+    };
+    const result = await fetchDeliverableFiles(manifest, read);
+    return { text: formatDeliverableResult(result), structured: result as unknown as Record<string, unknown> };
   }
 
   /**

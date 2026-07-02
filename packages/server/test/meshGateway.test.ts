@@ -140,6 +140,7 @@ describe("Console mesh gateway contract", () => {
       "epaminon.run_ephemeral_task",
       "epaminon.run_existing_issue",
       "execution_status",
+      "fetch_execution_deliverable",
       "get_memory",
       "get_recent_conversation_transcript",
       "get_task_result",
