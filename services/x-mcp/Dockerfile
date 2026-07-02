@@ -9,6 +9,12 @@
 # (X_OAUTH_ACCESS_TOKEN / X_OAUTH_ACCESS_TOKEN_SECRET) when both are set, so the
 # container boots without a browser. Without those env vars it still falls back to
 # the interactive flow (which fails in a container — by design).
+#
+# Relax patch: X's live OpenAPI spec marks response fields as required that the API
+# does not actually return (e.g. MediaUploadResponse requires `meta`), so FastMCP's
+# output validation rejects otherwise-successful calls. relax-response-required.patch
+# strips `required` from response schemas ONLY (inline responses + `*Response`
+# components); request/input schemas are untouched. Applies AFTER the headless patch.
 FROM python:3.12-slim
 
 # Pin to a specific upstream commit. Bump deliberately; never float to a branch.
@@ -29,6 +35,9 @@ RUN git clone https://github.com/xdevplatform/xmcp.git . \
 
 COPY headless-oauth1.patch /tmp/headless-oauth1.patch
 RUN git apply --verbose /tmp/headless-oauth1.patch
+
+COPY relax-response-required.patch /tmp/relax-response-required.patch
+RUN git apply --verbose /tmp/relax-response-required.patch
 
 RUN pip install -r requirements.txt
 
