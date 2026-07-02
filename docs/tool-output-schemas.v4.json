@@ -559,6 +559,36 @@
         { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_issue_list" } } } }
       ]
     },
+    "archus.backlog_create": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_issue_created" } } } }
+      ]
+    },
+    "archus.backlog_edit": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_issue_updated" } } } }
+      ]
+    },
+    "archus.backlog_close": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_issue_closed" } } } }
+      ]
+    },
+    "archus.backlog_comment": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_issue_updated" } } } }
+      ]
+    },
+    "archus.backlog_list": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_issue_list" } } } }
+      ]
+    },
     "archus.request_backlog_action": {
       "allOf": [
         { "$ref": "#/$defs/Envelope" },

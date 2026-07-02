@@ -29,6 +29,11 @@ import {
   V4_EXECUTION_STATUS_SHAPE,
   V4_GET_ISSUE_SHAPE,
   V4_LIST_ISSUES_SHAPE,
+  BACKLOG_CREATE_SHAPE,
+  BACKLOG_EDIT_SHAPE,
+  BACKLOG_CLOSE_SHAPE,
+  BACKLOG_COMMENT_SHAPE,
+  BACKLOG_LIST_SHAPE,
   RUN_ISSUE_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
 } from "./mcpToolSchemas.js";
@@ -73,6 +78,12 @@ export interface BacklogIssueReader {
     updatedSince?: string;
     limit?: number;
   }): Promise<ToolResponse>;
+  // S0-T1 deterministic life-backlog writers (hard-wired repo, read-back verified).
+  createIssue(input: { title: string; body?: string; labels?: string[] }): Promise<ToolResponse>;
+  editIssue(input: { number: number; title?: string; body?: string; addLabels?: string[]; removeLabels?: string[] }): Promise<ToolResponse>;
+  closeIssue(input: { number: number; comment?: string; reason?: "completed" | "not_planned" }): Promise<ToolResponse>;
+  commentIssue(input: { number: number; body: string }): Promise<ToolResponse>;
+  listBacklog(input: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }): Promise<ToolResponse>;
 }
 /** Human-facing text for a finished task_brain job — mirrors the old reply. */
 function formatTaskingReply(result: TaskingReply): string {
@@ -482,6 +493,70 @@ export function buildMcpServer(
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       },
       async (input) => toMcpToolResult("archus.list_issues", await readBacklogIssues.listIssues(input)),
+    );
+
+    // S0-T1: deterministic life-backlog write tools. Repo is hard-wired (no repo
+    // parameter exists), zero LLM sits in the path, and every write is read-back
+    // verified before it is reported done. On failure they return FAILED + the
+    // verbatim error and no success evidence (S0-T6 honesty).
+    server.registerTool(
+      "backlog_create",
+      {
+        title: "Create backlog issue",
+        description:
+          "Deterministic, LLM-free creation of one issue in the life backlog (the configured backlog repo — no other repo is reachable). Returns the qualified owner/repo#N only after a read-back GET confirms the issue exists.",
+        inputSchema: BACKLOG_CREATE_SHAPE,
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      },
+      async (input) => toMcpToolResult("archus.backlog_create", await readBacklogIssues.createIssue(input)),
+    );
+
+    server.registerTool(
+      "backlog_edit",
+      {
+        title: "Edit backlog issue",
+        description:
+          "Deterministic, LLM-free edit of one life-backlog issue by number (title/body/labels). Read-back verified. No repo parameter; only the configured backlog repo is reachable.",
+        inputSchema: BACKLOG_EDIT_SHAPE,
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      },
+      async (input) => toMcpToolResult("archus.backlog_edit", await readBacklogIssues.editIssue(input)),
+    );
+
+    server.registerTool(
+      "backlog_close",
+      {
+        title: "Close backlog issue",
+        description:
+          "Deterministic, LLM-free close of one life-backlog issue by number, with an optional closing comment. Reported closed only after a read-back GET confirms state=closed.",
+        inputSchema: BACKLOG_CLOSE_SHAPE,
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+      },
+      async (input) => toMcpToolResult("archus.backlog_close", await readBacklogIssues.closeIssue(input)),
+    );
+
+    server.registerTool(
+      "backlog_comment",
+      {
+        title: "Comment on backlog issue",
+        description:
+          "Deterministic, LLM-free comment on one life-backlog issue by number. Reported done only after a read-back GET confirms the comment is present.",
+        inputSchema: BACKLOG_COMMENT_SHAPE,
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      },
+      async (input) => toMcpToolResult("archus.backlog_comment", await readBacklogIssues.commentIssue(input)),
+    );
+
+    server.registerTool(
+      "backlog_list",
+      {
+        title: "List backlog issues",
+        description:
+          "Deterministic, LLM-free inventory of the life backlog (the configured backlog repo). Filter by state/labels. No repo parameter.",
+        inputSchema: BACKLOG_LIST_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async (input) => toMcpToolResult("archus.backlog_list", await readBacklogIssues.listBacklog(input)),
     );
   }
 

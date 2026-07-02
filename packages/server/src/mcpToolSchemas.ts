@@ -103,6 +103,43 @@ export const V4_LIST_ISSUES_SHAPE = {
   limit: z.number().int().positive().max(100).optional().describe("Maximum issues to return. Defaults to 20."),
 };
 
+// --- S0-T1: deterministic life-backlog write tools -------------------------
+// These target the ONE configured life-backlog repo (AlfaBlok/obsidian-brain).
+// There is deliberately NO repo parameter on any of them: the destination is a
+// hard-wired constant, so a caller can never redirect a write to another repo
+// (the 2026-07-02 'AlfaBlok/backlog' hallucination becomes structurally
+// impossible). Zero LLM sits in the path; every write is read-back verified.
+export const BACKLOG_CREATE_SHAPE = {
+  title: z.string().min(1).describe("Issue title."),
+  body: z.string().optional().describe("Issue body (Markdown)."),
+  labels: z.array(z.string().min(1)).optional().describe("Labels to apply verbatim. No status label is forced."),
+};
+
+export const BACKLOG_EDIT_SHAPE = {
+  number: z.number().int().positive().describe("Issue number in the life backlog to edit."),
+  title: z.string().min(1).optional().describe("New title, if changing."),
+  body: z.string().optional().describe("New body (Markdown), if changing."),
+  addLabels: z.array(z.string().min(1)).optional().describe("Labels to add."),
+  removeLabels: z.array(z.string().min(1)).optional().describe("Labels to remove."),
+};
+
+export const BACKLOG_CLOSE_SHAPE = {
+  number: z.number().int().positive().describe("Issue number in the life backlog to close."),
+  comment: z.string().min(1).optional().describe("Optional closing comment posted before the state change."),
+  reason: z.enum(["completed", "not_planned"]).optional().describe("Close reason. Defaults to completed."),
+};
+
+export const BACKLOG_COMMENT_SHAPE = {
+  number: z.number().int().positive().describe("Issue number in the life backlog to comment on."),
+  body: z.string().min(1).describe("Comment body (Markdown)."),
+};
+
+export const BACKLOG_LIST_SHAPE = {
+  state: z.enum(["open", "closed", "all"]).optional().describe("GitHub issue state. Defaults to open."),
+  labels: z.array(z.string().min(1)).optional().describe("Labels that returned issues must include."),
+  limit: z.number().int().positive().max(100).optional().describe("Maximum issues to return. Defaults to 20."),
+};
+
 export const REQUEST_BACKLOG_ACTION_SHAPE = {
   message: z
     .string()
