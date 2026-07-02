@@ -25,8 +25,13 @@
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+// Shared engine-quota fallback (W0). The fanout lane already replays a run on the
+// other engine when the primary dies on a usage-limit / 429 / billing error; the
+// ephemeral one-off path reuses the SAME error-class + fallback helpers so the two
+// lanes stay in lockstep (E-2 port).
+import { isQuotaError, fallbackEngine, buildWorkerSpawn, extractWorkerError } from "./fanout-codex.mjs";
 
 const BACKLOG = process.env.ZENOD_BACKLOG_REPO || "AlfaBlok/obsidian-brain";
 const REPO = process.env.ZENOD_REPO || "zenod-ai/zenod"; // default target repo + fan-in repo
@@ -922,71 +927,116 @@ async function sweepStaleEphemeral(state) {
   }
 }
 
+// Is a CLI on PATH? Mirrors fanout-codex's commandExists (not exported there) so the
+// ephemeral fallback only swaps to an engine that is actually installed in the runner.
+function commandExists(cmd) {
+  return spawnSync("sh", ["-lc", `command -v '${String(cmd).replaceAll("'", "'\\''")}'`], { encoding: "utf8" }).status === 0;
+}
+
+// PURE: decide whether an exited ephemeral run should be replayed on the other engine.
+// Same semantics as the fanout lane (W0): the ERROR CLASS decides — a non-zero exit
+// whose events-stream error is a usage-limit / 429 / billing / insufficient_quota
+// failure — and only if the other engine's CLI is installed. Replay AT MOST ONCE:
+// callers pass alreadyFellBack=true on the second attempt to hard-stop the loop.
+function ephemeralFallbackDecision({ exitCode, rawError, engine, alreadyFellBack, hasCommand = commandExists }) {
+  if (alreadyFellBack) return { fallback: false };
+  if (exitCode === 0) return { fallback: false };
+  if (!isQuotaError(rawError)) return { fallback: false };
+  const nextEngine = fallbackEngine(engine);
+  if (!hasCommand(nextEngine)) return { fallback: false };
+  return { fallback: true, nextEngine };
+}
+
 function launchEphemeral(executionId, target, context, state) {
   const existing = state.ephemeral?.[executionId];
   if (existing?.pid && !existing.reportedStatus) return { ok: true, duplicate: true };
   const paths = ephemeralRunPaths(executionId);
   mkdirSync(paths.scratch, { recursive: true });
   writeFileSync(paths.promptPath, ephemeralPrompt(executionId, context));
-  const fd = openSync(paths.eventsPath, "a");
-  const args = [
-    "exec",
-    "--json",
-    "--cd",
-    paths.scratch,
-    "--dangerously-bypass-approvals-and-sandbox",
-    "--output-last-message",
-    paths.finalPath,
-    "-",
-  ];
-  const child = spawn("codex", args, {
-    cwd: paths.scratch,
-    stdio: ["pipe", fd, fd],
-    detached: true,
-    env: process.env,
-  });
-  child.stdin.end(readFileSync(paths.promptPath, "utf8"));
-  child.on("error", (err) => {
-    try {
-      closeSync(fd);
-    } catch {
-      // already closed
-    }
-    const note = `ephemeral runner failed to spawn for ${executionId}: ${err.code || err.message}`;
-    log(note);
-    // Mark reported so the stale-ephemeral sweep won't re-report this run (#stab T2).
-    const s = loadState();
-    if (s.ephemeral?.[executionId]) {
-      s.ephemeral[executionId].reportedStatus = "failed";
-      s.ephemeral[executionId].finishedAt = new Date().toISOString();
-      saveState(s);
-    }
-    void dispatchReport(
-      "/api/exec/blocked",
-      { execution_id: executionId, note },
-      `⛔ Execution ${executionId} (${target}) — failed: ${note}`,
-    );
-  });
-  child.on("exit", (code) => {
-    try {
-      closeSync(fd);
-    } catch {
-      // already closed
-    }
-    void reportEphemeralFinished(executionId, target, code, paths.finalPath);
-  });
-  child.unref();
+  const primaryEngine = String(process.env.ZENOD_WORKER_ENGINE || "codex").toLowerCase() === "claude" ? "claude" : "codex";
+
+  // Run one attempt on the given engine. The prompt + report-back flow is engine-agnostic
+  // (same as fanout), so a quota death on one engine can be replayed verbatim on the other.
+  const attempt = (engine, alreadyFellBack) => {
+    const fd = openSync(paths.eventsPath, "a");
+    // Reuse the fanout lane's spawn builder so both lanes agree on per-engine args.
+    // (codex writes the final message to finalPath; claude's final text is recovered
+    // from the events stream by reportEphemeralFinished's existing finalText handling.)
+    const spec = buildWorkerSpawn({ engine, worktree: paths.scratch, finalPath: paths.finalPath });
+    const child = spawn(spec.bin, spec.args, {
+      cwd: paths.scratch,
+      stdio: ["pipe", fd, fd],
+      detached: true,
+      env: { ...process.env, ...(spec.env ?? {}) },
+    });
+    child.stdin.end(readFileSync(paths.promptPath, "utf8"));
+    child.on("error", (err) => {
+      try {
+        closeSync(fd);
+      } catch {
+        // already closed
+      }
+      const note = `ephemeral runner failed to spawn for ${executionId}: ${err.code || err.message}`;
+      log(note);
+      // Mark reported so the stale-ephemeral sweep won't re-report this run (#stab T2).
+      const s = loadState();
+      if (s.ephemeral?.[executionId]) {
+        s.ephemeral[executionId].reportedStatus = "failed";
+        s.ephemeral[executionId].finishedAt = new Date().toISOString();
+        saveState(s);
+      }
+      void dispatchReport(
+        "/api/exec/blocked",
+        { execution_id: executionId, note },
+        `⛔ Execution ${executionId} (${target}) — failed: ${note}`,
+      );
+    });
+    child.on("exit", (code) => {
+      try {
+        closeSync(fd);
+      } catch {
+        // already closed
+      }
+      // Quota fallback (W0 port): an engine dying on usage limits is an account problem,
+      // not a task problem. If the other engine's CLI is installed, replay once instead
+      // of reporting the whole execution as failed. No env var decides this — the class does.
+      const rawError = code !== 0 ? extractWorkerError(paths.eventsPath) : null;
+      const decision = ephemeralFallbackDecision({ exitCode: code, rawError, engine, alreadyFellBack });
+      if (decision.fallback) {
+        appendFileSync(
+          paths.eventsPath,
+          `${JSON.stringify({ type: "engine.fallback", from: engine, to: decision.nextEngine, reason: String(rawError).slice(0, 240), at: new Date().toISOString() })}\n`,
+        );
+        log(`ephemeral ${executionId}: ${engine} out of quota — replaying on ${decision.nextEngine}`);
+        const replay = attempt(decision.nextEngine, true);
+        const s = loadState();
+        if (s.ephemeral?.[executionId]) {
+          s.ephemeral[executionId].engineFallback = `${engine}→${decision.nextEngine}`;
+          s.ephemeral[executionId].engine = decision.nextEngine;
+          s.ephemeral[executionId].pid = replay.pid ?? null;
+          saveState(s);
+        }
+        return;
+      }
+      void reportEphemeralFinished(executionId, target, code, paths.finalPath);
+    });
+    child.unref();
+    return child;
+  };
+
+  const child = attempt(primaryEngine, false);
   state.ephemeral[executionId] = {
     target,
     promptPath: paths.promptPath,
     finalPath: paths.finalPath,
     eventsPath: paths.eventsPath,
     scratch: paths.scratch,
+    engine: primaryEngine,
     pid: child.pid ?? null,
     launchedAt: new Date().toISOString(),
     reportedStatus: null,
   };
-  log(`launched ephemeral execution ${executionId} scratch=${paths.scratch}`);
+  log(`launched ephemeral execution ${executionId} scratch=${paths.scratch} engine=${primaryEngine}`);
   return { ok: true };
 }
 
@@ -1708,6 +1758,7 @@ export {
   parseEphemeralTarget,
   parseTarget,
   ephemeralFinalState,
+  ephemeralFallbackDecision,
   ephemeralPrompt,
   extractEvidenceClaims,
   tailFile,

@@ -31,6 +31,7 @@ import {
   targetBootstrapLabels,
   parseEphemeralTarget,
   ephemeralFinalState,
+  ephemeralFallbackDecision,
   ephemeralPrompt,
   extractEvidenceClaims,
   tailFile,
@@ -585,4 +586,75 @@ test("early launch failure note includes target and runner log path", () => {
     earlyLaunchFailureNote("zenod-ai/zenod", 296, 1, null, logPath),
     /fanout launcher for zenod-ai\/zenod#296 stopped immediately with exit code 1; see runner log .*296\.log/,
   );
+});
+
+// --- E-2: engine quota fallback ported to the ephemeral spawn path (mirrors W0) ---
+
+// The exact Codex usage-limit error W0 replays (see fanout-codex.test.mjs #92 case).
+const CODEX_QUOTA_ERROR =
+  "You've hit your usage limit. Upgrade to Plus to continue using Codex, or try again at Jul 26th, 2026 7:56 AM.";
+
+test("ephemeralFallbackDecision replays the real Codex quota error on the other engine (W0 port)", () => {
+  const d = ephemeralFallbackDecision({
+    exitCode: 1,
+    rawError: CODEX_QUOTA_ERROR,
+    engine: "codex",
+    alreadyFellBack: false,
+    hasCommand: (c) => c === "claude", // claude CLI is installed
+  });
+  assert.deepEqual(d, { fallback: true, nextEngine: "claude" });
+});
+
+test("ephemeralFallbackDecision swaps claude→codex on a Claude billing failure", () => {
+  const d = ephemeralFallbackDecision({
+    exitCode: 1,
+    rawError: "billing_error: Your credit balance is too low",
+    engine: "claude",
+    alreadyFellBack: false,
+    hasCommand: () => true,
+  });
+  assert.deepEqual(d, { fallback: true, nextEngine: "codex" });
+});
+
+test("ephemeralFallbackDecision does NOT replay when the other engine's CLI is missing", () => {
+  const d = ephemeralFallbackDecision({
+    exitCode: 1,
+    rawError: CODEX_QUOTA_ERROR,
+    engine: "codex",
+    alreadyFellBack: false,
+    hasCommand: () => false, // no other CLI installed
+  });
+  assert.equal(d.fallback, false);
+});
+
+test("ephemeralFallbackDecision replays AT MOST ONCE (hard stop on second attempt)", () => {
+  const d = ephemeralFallbackDecision({
+    exitCode: 1,
+    rawError: CODEX_QUOTA_ERROR,
+    engine: "claude",
+    alreadyFellBack: true, // already swapped once
+    hasCommand: () => true,
+  });
+  assert.equal(d.fallback, false);
+});
+
+test("ephemeralFallbackDecision ignores non-quota failures and clean exits", () => {
+  assert.equal(
+    ephemeralFallbackDecision({ exitCode: 1, rawError: "git push failed: permission denied", engine: "codex", alreadyFellBack: false, hasCommand: () => true }).fallback,
+    false,
+  );
+  assert.equal(
+    ephemeralFallbackDecision({ exitCode: 0, rawError: null, engine: "codex", alreadyFellBack: false, hasCommand: () => true }).fallback,
+    false,
+  );
+});
+
+test("ephemeralFallbackDecision recognizes 429 / insufficient_quota classes (parity with fanout)", () => {
+  for (const err of ["429 Too Many Requests", "insufficient_quota: you exceeded your quota", "rate limit reached, retry later"]) {
+    assert.equal(
+      ephemeralFallbackDecision({ exitCode: 1, rawError: err, engine: "codex", alreadyFellBack: false, hasCommand: () => true }).fallback,
+      true,
+      `expected fallback for: ${err}`,
+    );
+  }
 });
