@@ -162,15 +162,17 @@ describe("createJourneyAuthorityReconciler", () => {
         readExecution: async () => ticket({ state: "needs-review", deliverable }),
         fileExecutionMemory: async ({ executionId, content }) => {
           filed.push({ executionId, content });
-          return { evidenceRef: "Log/2026-07-01.md#^e-exec" };
+          return { jobId: "job-1" };
         },
       });
 
-      // Pass 1: no guard artifact yet → files once and emits the zenod_ingest guard.
+      // Pass 1: no guard artifact yet → starts the filing and emits a PENDING guard
+      // (acceptance is not filing; the ingest sweep finalizes the lifecycle).
       const first = await reconcile({ step, snapshot: store.snapshot(journey.id) });
       expect(filed).toHaveLength(1);
       const guard = (first.status === "completed" ? first.artifacts ?? [] : []).find((a) => a.kind === "zenod_ingest");
       expect(guard).toMatchObject({ artifactKey: "zenod-ingest:exec-1" });
+      expect(guard?.data).toMatchObject({ status: "pending", jobId: "job-1" });
 
       // Persist the guard artifact, then pass 2 must NOT re-file.
       store.addArtifact(journey.id, { stepId: step.id, ...guard! }, 210);
@@ -192,7 +194,7 @@ describe("createJourneyAuthorityReconciler", () => {
         readExecution: async () => ticket({ state: "needs-review", deliverable }),
         fileExecutionMemory: async () => {
           attempts += 1;
-          return attempts === 1 ? null : { evidenceRef: "Log/x.md#^e" };
+          return attempts === 1 ? null : { jobId: "job-2" };
         },
       });
 

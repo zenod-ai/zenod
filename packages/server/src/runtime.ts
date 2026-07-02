@@ -48,7 +48,7 @@ import { ExecutionStore } from "./executionStore.js";
 import { JourneyStore } from "./journeyStore.js";
 import { JourneyMonitor } from "./journeyMonitor.js";
 import { createJourneyAuthorityReconciler } from "./journeyAuthorityReconciler.js";
-import { runExecutionIngestSweep } from "./executionIngestSweep.js";
+import { runExecutionIngestSweep, type MemoryJobStatus } from "./executionIngestSweep.js";
 import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer, callPeerTool, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
@@ -249,8 +249,11 @@ export class Runtime {
           store: this.journeyStore,
           readExecution: (reference) => this.readExecutionAnywhere(reference),
           fileMemory: (input) => this.fileExecutionMemory(input),
+          pollMemoryJob: (jobId) => this.pollExecutionMemoryJob(jobId),
         }).then((r) => {
-          if (r.filed || r.refreshed) console.log(`[exec-ingest] sweep: refreshed=${r.refreshed} filed=${r.filed} skipped=${r.skipped}`);
+          if (r.started || r.filed || r.refreshed || r.gaveUp) {
+            console.log(`[exec-ingest] sweep: refreshed=${r.refreshed} started=${r.started} filed=${r.filed} skipped=${r.skipped} gaveUp=${r.gaveUp}`);
+          }
         }),
     });
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
@@ -438,28 +441,57 @@ export class Runtime {
   }
 
   /**
-   * File a completed execution's cited meaning note to Zenod (R1-T2). Resolves the
-   * Zenod peer and calls its async `store_memory`; returns the response as the
-   * evidence ref. A no-op returning null when no Zenod peer is configured (e.g. an
-   * agent without the memory peer) or the call fails — so the reconciler's ingest
-   * guard leaves no artifact and retries on the next pass. Never throws.
+   * Start the async Zenod filing of a completed execution's cited meaning note
+   * (R1-T2). Returns the filing jobId on acceptance — NOT proof of filing; the ingest
+   * sweep polls the job to completion before finalizing its guard (acceptance-time
+   * guards black-holed during the 2026-07-02 out-of-credits incident). Null when no
+   * Zenod peer is configured or the call fails. Never throws.
    */
   private async fileExecutionMemory(input: {
     executionId: string;
     content: string;
     hints: string[];
-  }): Promise<{ evidenceRef?: string } | null> {
+  }): Promise<{ jobId: string } | null> {
     const zenod = this.settings.peers().find((peer) => peer.name === "zenod");
     if (!zenod) return null;
     try {
-      const ref = await callPeerWithArgs(zenod, "store_memory", {
+      const result = await callPeerTool(zenod, "store_memory", {
         content: input.content,
         verbatim: true,
         ...(input.hints.length ? { hints: input.hints } : {}),
       });
-      return { evidenceRef: ref };
+      const structured = result.structuredContent as { jobId?: string } | undefined;
+      const text = (result.content ?? []).map((c) => (c.type === "text" ? c.text : "")).join(" ");
+      const jobId = structured?.jobId ?? text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0];
+      return jobId ? { jobId } : null;
     } catch (err) {
       console.error(`[exec-ingest] store_memory failed for ${input.executionId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Poll a Zenod filing job (get_task_result over the mesh) for the ingest sweep.
+   * Maps the peer reply to a MemoryJobStatus; an isError reply is a job error (the
+   * message carried through so a gave-up guard records WHY). Null when unreachable.
+   */
+  private async pollExecutionMemoryJob(jobId: string): Promise<MemoryJobStatus | null> {
+    const zenod = this.settings.peers().find((peer) => peer.name === "zenod");
+    if (!zenod) return null;
+    try {
+      const result = await callPeerTool(zenod, "get_task_result", { jobId });
+      const text = (result.content ?? []).map((c) => (c.type === "text" ? c.text : "")).join(" ");
+      if (result.isError) return { status: "error", error: text.slice(0, 500) };
+      const structured = result.structuredContent as
+        | { status?: string; result?: { evidenceRef?: string }; error?: string }
+        | undefined;
+      const status = structured?.status ?? (text.match(/\b(queued|running|done|error|interrupted)\b/i)?.[1] ?? "").toLowerCase();
+      if (status === "done") return { status: "done", ...(structured?.result?.evidenceRef ? { evidenceRef: structured.result.evidenceRef } : {}) };
+      if (status === "error" || status === "interrupted") return { status: status as "error" | "interrupted", error: (structured?.error ?? text).slice(0, 500) };
+      if (status === "queued" || status === "running") return { status: status as "queued" | "running" };
+      return null;
+    } catch (err) {
+      console.error(`[exec-ingest] get_task_result failed for ${jobId}: ${(err as Error).message}`);
       return null;
     }
   }

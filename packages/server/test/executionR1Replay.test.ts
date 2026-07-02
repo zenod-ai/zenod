@@ -71,7 +71,7 @@ describe("R1 replay — #105 legal matrix (ask → run → ingest → recall →
           readExecution: async () => ticket,
           fileExecutionMemory: async ({ content }) => {
             filed.push(content);
-            return { evidenceRef: "Log/2026-07-01.md#^e-105" };
+            return { jobId: "job-105" };
           },
         }),
       });

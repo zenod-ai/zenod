@@ -8,13 +8,14 @@ export interface JourneyAuthorityReaders {
   readIssue?: (target: string) => Promise<ToolResponse>;
   readExecution?: (reference: string) => Promise<ExecutionTicket | null>;
   readMemoryJob?: (jobId: string) => Promise<TaskJob | null> | TaskJob | null;
-  /** File a distilled+cited meaning note to Zenod for a completed execution (R1-T2).
-   *  Returns the evidence ref on success, or null on failure (so ingest retries). */
+  /** Start the async Zenod filing of a distilled+cited meaning note for a completed
+   *  execution (R1-T2). Returns the filing jobId on acceptance (NOT proof of filing —
+   *  the ingest sweep polls the job before finalizing), or null on failure. */
   fileExecutionMemory?: (input: {
     executionId: string;
     content: string;
     hints: string[];
-  }) => Promise<{ evidenceRef?: string } | null>;
+  }) => Promise<{ jobId: string } | null>;
 }
 
 const ZENOD_INGEST_KIND = "zenod_ingest";
@@ -262,13 +263,12 @@ async function reconcileExecutionStep(
       if (packet) {
         const filed = await readers.fileExecutionMemory({ executionId: ticket.executionId, ...packet });
         if (filed) {
+          // A PENDING guard: acceptance is not filing. The ingest sweep polls the job
+          // and finalizes (filed / re-file / gave-up) on later monitor ticks.
           outArtifacts.push({
             kind: ZENOD_INGEST_KIND,
             artifactKey: zenodIngestKey(ticket.executionId),
-            data: {
-              executionId: ticket.executionId,
-              ...(filed.evidenceRef ? { evidenceRef: filed.evidenceRef } : {}),
-            },
+            data: { executionId: ticket.executionId, status: "pending", jobId: filed.jobId, attempts: 1 },
           });
         }
       }
