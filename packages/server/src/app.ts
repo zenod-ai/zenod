@@ -871,7 +871,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "chat_with_outbound",
       arg: "message",
       description:
-        "Post to X (Twitter). Pass what to post in natural language; Callistheness drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. He refuses spam/mass sends.",
+        "Post to X (Twitter), optionally with an image. Pass what to post in natural language; to attach a picture, include its https image URL in the message (e.g. \"...attach this image: https://…\"). Callistheness drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts (uploading + attaching the image if given) and returns the URL. He refuses spam/mass sends.",
     },
     {
       as: "post_reddit",
@@ -886,6 +886,30 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       arg: "message",
       description:
         "Send an email. Give the recipient and what to say; Callistheness drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms.",
+    },
+    // READ tools — flat on the Console surface per the flat-tools doctrine. Reads are
+    // direct/ungated (no confirm gate): Callistheness fetches real X content via his
+    // read-only connector (x-mcp-readonly) and relays it. He never posts on a read.
+    {
+      as: "read_x_post",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Read an X (Twitter) post by its id or URL — Callistheness fetches the real post content and returns it. Read-only; nothing is posted.",
+    },
+    {
+      as: "read_x_mentions",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Read the connected X account's recent mentions — Callistheness returns the real mention content. Read-only; nothing is posted.",
+    },
+    {
+      as: "search_x",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Search recent public X (Twitter) posts — Callistheness returns the matching posts. Read-only; nothing is posted.",
     },
   ];
   const PHYLAX_NOTIFICATION_TOOLS = [

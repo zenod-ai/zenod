@@ -62,7 +62,16 @@ services:
       X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
       X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
       # READ + POST. createPosts is the posting capability; deletePosts lets an
-      # operator undo. Verified operationIds from the pinned X OpenAPI spec.
-      X_API_TOOL_ALLOWLIST: "getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions,createPosts,deletePosts"
+      # operator undo. mediaUpload (X API v2 one-shot POST /2/media/upload) uploads
+      # an image and returns a media id, which post_tweet attaches via
+      # media.media_ids (see packages/server/src/outboundTools.ts). It lives on the
+      # POSTREAD instance ONLY — readonly stays read-only.
+      #
+      # NB on XMCP_REF: x-mcp does NOT vendor the OpenAPI spec — server.py fetches it
+      # LIVE from https://api.x.com/2/openapi.json at startup (load_openapi_spec).
+      # So the media-upload operationId is present regardless of the pinned commit;
+      # bumping XMCP_REF was NOT required to expose it. The allowlist is the gate.
+      # Confirm at boot: the "Loaded N tools" log should list mediaUpload.
+      X_API_TOOL_ALLOWLIST: "getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions,createPosts,deletePosts,mediaUpload"
     networks: [zenod-x-net]
     restart: unless-stopped
