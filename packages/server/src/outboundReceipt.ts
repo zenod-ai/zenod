@@ -175,3 +175,22 @@ export function renderOutboundReceipt(receipt: OutboundReceipt): string {
   if (receipt.id) return `${verb}. Confirmed id: ${receipt.id}`;
   return `${verb}. The connector confirmed the send.`;
 }
+
+/**
+ * I4-R1 — the honest affordance for an approve verb with NO committed send.
+ *
+ * When the user says "approve" / "post now" but the approve carries no concrete final
+ * draft to publish (no committed content reached the send path), the ONLY honest reply
+ * is to tell them how to actually commit the send — never a fabricated "posted" and
+ * never a silent no-op. This is the structural counterpart to renderOutboundReceipt: an
+ * approve either becomes a verified receipt (a real send happened) or this affordance (no
+ * send happened). There is no third shape.
+ */
+export function renderApproveAffordance(channel?: OutboundChannel): string {
+  const where = channel ? ` to ${CHANNEL_LABEL[channel]}` : "";
+  return (
+    `Nothing was sent${where}: there is no committed draft to publish. ` +
+    `Show the user the exact final text and target, and tell them to say "post now" to send it. ` +
+    `Do NOT claim anything was posted or sent.`
+  );
+}

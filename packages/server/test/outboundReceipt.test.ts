@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOutboundReceipt, renderOutboundReceipt, scrubVendorNoise, tweetUrl } from "../src/outboundReceipt.js";
+import { parseOutboundReceipt, renderOutboundReceipt, renderApproveAffordance, scrubVendorNoise, tweetUrl } from "../src/outboundReceipt.js";
 
 describe("parseOutboundReceipt — X (Twitter)", () => {
   it("derives a LIVE url from the connector's real post id (never a placeholder)", () => {
@@ -65,6 +65,21 @@ describe("parseOutboundReceipt — email", () => {
   });
   it("an unrelated blob is NOT accepted as a send", () => {
     expect(parseOutboundReceipt("email", JSON.stringify({ foo: "bar" })).verified).toBe(false);
+  });
+});
+
+describe("renderApproveAffordance (I4-R1)", () => {
+  it("is the honest 'post now' affordance, never a fabricated success", () => {
+    const text = renderApproveAffordance("x");
+    expect(text.toLowerCase()).toContain("no committed draft");
+    expect(text.toLowerCase()).toContain("post now");
+    expect(text.toLowerCase()).toContain("do not claim");
+    expect(text).not.toContain("x.com/");
+    expect(text).not.toMatch(/^Posted/);
+  });
+  it("names the channel when known and stays generic when not", () => {
+    expect(renderApproveAffordance("reddit").toLowerCase()).toContain("reddit");
+    expect(renderApproveAffordance()).toContain("Nothing was sent:");
   });
 });
 
