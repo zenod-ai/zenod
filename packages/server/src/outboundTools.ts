@@ -43,7 +43,59 @@ interface ConnectorSpec {
   argEnv: string;
   defaultArg: string;
   description: string;
+  /**
+   * When set, the brain calls this tool with STRUCTURED args (an object) matching
+   * this JSON Schema instead of a single content string — see aisdk's peer-tool
+   * dispatch. Used by X to accept an optional image alongside the post text.
+   */
+  inputSchema?: unknown;
+  /** True for the X lane: supports uploading one image and attaching its media id. */
+  media?: boolean;
 }
+
+/**
+ * Structured input for the X post lane. `text` is the FINAL post text; an OPTIONAL
+ * image may be supplied as an https URL (fetched server-side) or as base64 bytes.
+ * We pick URL as the primary Console-facing surface (a chat caller has a link far
+ * more often than raw base64); base64 is the fallback for callers that already hold
+ * the bytes. Either path ends the same way: upload → media id → attach via
+ * media.media_ids → post.
+ */
+const X_POST_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    text: {
+      type: "string",
+      description: "The FINAL post text, exactly as it will appear. Required.",
+    },
+    image_url: {
+      type: "string",
+      description:
+        "OPTIONAL https URL of a single image (jpeg/png/webp/gif) to attach. It is fetched and uploaded to X, then attached to the post. Use this OR image_base64, not both.",
+    },
+    image_base64: {
+      type: "string",
+      description:
+        "OPTIONAL base64-encoded image bytes to attach (alternative to image_url, for callers that already hold the bytes).",
+    },
+    image_media_type: {
+      type: "string",
+      description:
+        "MIME type of the image (e.g. image/png, image/jpeg). Required only with image_base64; inferred from the response when using image_url.",
+    },
+  },
+  required: ["text"],
+  additionalProperties: false,
+} as const;
+
+// x-mcp's one-shot media upload operation (X API v2 `POST /2/media/upload`,
+// operationId `mediaUpload`) and the createPosts media-attach shape. These are
+// env-overridable so an operator can retarget without a rebuild, exactly like the
+// post tool/arg. The spec x-mcp loads is fetched LIVE from api.x.com at startup, so
+// these ids do not depend on XMCP_REF — see docker-compose.x-mcp.yml.
+const X_MEDIA_UPLOAD_TOOL_ENV = "OUTBOUND_X_MCP_MEDIA_TOOL";
+const X_MEDIA_UPLOAD_TOOL_DEFAULT = "mediaUpload";
+const X_MEDIA_CATEGORY = "tweet_image";
 
 const CONNECTORS: ConnectorSpec[] = [
   {
@@ -55,8 +107,10 @@ const CONNECTORS: ConnectorSpec[] = [
     defaultTool: "createPosts", // vendored x-mcp's post operation (X "Posts" naming)
     argEnv: "OUTBOUND_X_MCP_ARG",
     defaultArg: "text",
+    inputSchema: X_POST_INPUT_SCHEMA,
+    media: true,
     description:
-      "Publish a post to X (Twitter). Input is the FINAL post text, exactly as it will appear. Only call this AFTER the user has confirmed this exact text — posting is public and cannot be undone. Returns the posted status (with its URL/id) on success.",
+      "Publish a post to X (Twitter). Pass { text } — the FINAL post text, exactly as it will appear — and OPTIONALLY an image to attach via image_url (an https link) or image_base64 (+ image_media_type). When an image is given it is uploaded to X and attached to the post. Only call this AFTER the user has confirmed this exact text (and image) — posting is public and cannot be undone. Returns the posted status (with its URL/id) on success.",
   },
   {
     as: "post_reddit",
@@ -126,6 +180,89 @@ async function callConnector(
   }
 }
 
+/** Pull the uploaded media id out of x-mcp's media-upload result text. */
+export function extractMediaId(text: string): string | undefined {
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const data = (parsed?.data ?? parsed) as Record<string, unknown>;
+    const id = data?.id ?? data?.media_id ?? (parsed as Record<string, unknown>)?.media_id;
+    if (typeof id === "string" && id) return id;
+    if (typeof id === "number") return String(id);
+  } catch {
+    // Not JSON — fall through to a loose scan for a media id-shaped token.
+  }
+  const m = text.match(/"(?:media_id|id)"\s*:\s*"?(\d{1,25})"?/);
+  return m?.[1];
+}
+
+/**
+ * Fetch an image URL and return its base64 bytes + MIME type, so the caller can
+ * hand a link to the X lane and we do the upload. Returns a readable error string
+ * instead of throwing, matching the connector's never-throw contract.
+ */
+async function fetchImageAsBase64(
+  url: string,
+): Promise<{ base64: string; mediaType: string } | { error: string }> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { error: `fetching the image failed (HTTP ${res.status}).` };
+    const mediaType = ((res.headers.get("content-type") || "image/jpeg").split(";")[0] || "image/jpeg").trim();
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length === 0) return { error: "the image URL returned no bytes." };
+    return { base64: bytes.toString("base64"), mediaType };
+  } catch (err) {
+    return { error: `the image URL could not be fetched: ${(err as Error).message}` };
+  }
+}
+
+/**
+ * The X post lane with optional image attach. Upload the image (if any) to get a
+ * media id, then post the text with `media.media_ids` set. On any upload failure we
+ * return a clear error WITHOUT posting — a half-done "posted without the image the
+ * user asked for" is worse than a clean failure the brain can relay.
+ */
+async function publishToX(
+  url: string,
+  token: string | undefined,
+  postTool: string,
+  textArg: string,
+  mediaTool: string,
+  args: Record<string, unknown>,
+  channel: string,
+): Promise<string> {
+  const text = typeof args.text === "string" ? args.text : String(args.input ?? "");
+  if (!text.trim()) return `Nothing to post to ${channel}: the post text was empty.`;
+
+  let mediaId: string | undefined;
+  let base64 = typeof args.image_base64 === "string" ? args.image_base64 : undefined;
+  let mediaType = typeof args.image_media_type === "string" ? args.image_media_type : undefined;
+
+  if (!base64 && typeof args.image_url === "string" && args.image_url.trim()) {
+    const fetched = await fetchImageAsBase64(args.image_url.trim());
+    if ("error" in fetched) return `Could not attach the image to the ${channel} post: ${fetched.error}`;
+    base64 = fetched.base64;
+    mediaType = mediaType || fetched.mediaType;
+  }
+
+  if (base64) {
+    const uploaded = await callConnector(
+      url,
+      token,
+      mediaTool,
+      { media: base64, media_category: X_MEDIA_CATEGORY, ...(mediaType ? { media_type: mediaType } : {}) },
+      `${channel} media upload`,
+    );
+    mediaId = extractMediaId(uploaded);
+    if (!mediaId) {
+      return `Could not attach the image to the ${channel} post — the media upload did not return a media id: ${uploaded}`;
+    }
+  }
+
+  const postArgs: Record<string, unknown> = { [textArg]: text };
+  if (mediaId) postArgs.media = { media_ids: [mediaId] };
+  return callConnector(url, token, postTool, postArgs, channel);
+}
+
 /**
  * Build Callistheness's send tools as PeerTools (the engine's generic
  * server-provided tool slot — the same vehicle the mesh uses). Each takes the
@@ -138,7 +275,8 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
   for (const c of CONNECTORS) {
     tools[c.as] = {
       description: c.description,
-      run: async (input: string) => {
+      ...(c.inputSchema ? { inputSchema: c.inputSchema } : {}),
+      run: async (input: string | Record<string, unknown>) => {
         const url = env[c.urlEnv];
         if (!url) {
           return `${c.channel} is not connected yet — its connector is not configured (set ${c.urlEnv}). Tell the user it isn't set up and do NOT claim anything was sent.`;
@@ -146,7 +284,16 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
         const tool = env[c.toolEnv] || c.defaultTool;
         const arg = env[c.argEnv] || c.defaultArg;
         const token = env[c.tokenEnv];
-        return callConnector(url, token, tool, { [arg]: input }, c.channel);
+        // Structured args arrive as an object (brain, inputSchema path); a plain
+        // string arrives from legacy/string callers. Normalize so both work.
+        const args: Record<string, unknown> =
+          typeof input === "string" ? { [arg]: input, text: input } : input;
+        if (c.media) {
+          const mediaTool = env[X_MEDIA_UPLOAD_TOOL_ENV] || X_MEDIA_UPLOAD_TOOL_DEFAULT;
+          return publishToX(url, token, tool, arg, mediaTool, args, c.channel);
+        }
+        const value = typeof input === "string" ? input : (args[arg] ?? args.input ?? "");
+        return callConnector(url, token, tool, { [arg]: value }, c.channel);
       },
     };
   }

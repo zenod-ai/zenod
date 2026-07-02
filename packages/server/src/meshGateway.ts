@@ -50,6 +50,35 @@ const INTENT_SHAPE = {
 };
 
 /**
+ * X post intent with an OPTIONAL image. `image_url` is the caller-facing way to
+ * attach an image (we pick URL over base64 for the public surface: a chat caller
+ * has a link far more often than raw bytes). It is not sent as a separate arg —
+ * the gateway folds it into the message so Callistheness's brain relays it to its
+ * private post_tweet tool, which fetches + uploads the image and attaches its
+ * media id. See mapArgs on the post_tweet gateway tool.
+ */
+const POST_TWEET_SHAPE = {
+  message: z.string().min(1).describe("What to post to X, in natural language — Callistheness drafts it in the user's voice and confirms before posting."),
+  image_url: z
+    .string()
+    .url()
+    .optional()
+    .describe("OPTIONAL https URL of a single image to attach to the post. It is fetched and uploaded to X, then attached."),
+};
+
+/** Fold an optional image_url into the message and drop it as a separate arg. */
+export function foldImageUrlIntoMessage(args: Record<string, unknown>): Record<string, unknown> {
+  const { image_url, ...rest } = args;
+  if (typeof image_url === "string" && image_url.trim() && typeof rest.message === "string") {
+    return {
+      ...rest,
+      message: `${rest.message}\n\n[Attach this image to the post — when you call post_tweet, pass image_url: ${image_url.trim()}]`,
+    };
+  }
+  return rest;
+}
+
+/**
  * The Console's PUBLIC MCP front door is a straight-through gateway, not a chat.
  *
  * It re-publishes the suite agents' own tools and forwards each call directly to
@@ -272,8 +301,9 @@ const GATEWAY_TOOLS: GatewayTool[] = [
       "The user wants to post the following to X (Twitter). Draft it in their voice and, unless they have already confirmed this exact text in the conversation, show the final post and ASK them to confirm before sending — do not post unconfirmed: ",
     title: "Post to X (Twitter)",
     description:
-      "Tell Callistheness to post to X. Describe (or give) what to post in natural language; Callistheness drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. Refuses spam/mass sends.",
-    inputSchema: INTENT_SHAPE,
+      "Tell Callistheness to post to X, optionally with an image (pass image_url — an https link to a single image). Describe (or give) what to post in natural language; Callistheness drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts (attaching the image if given) and returns the URL. Refuses spam/mass sends.",
+    inputSchema: POST_TWEET_SHAPE,
+    mapArgs: foldImageUrlIntoMessage,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },
   {

@@ -871,7 +871,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       mcp: "chat_with_outbound",
       arg: "message",
       description:
-        "Post to X (Twitter). Pass what to post in natural language; Callistheness drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts and returns the URL. He refuses spam/mass sends.",
+        "Post to X (Twitter), optionally with an image. Pass what to post in natural language; to attach a picture, include its https image URL in the message (e.g. \"...attach this image: https://…\"). Callistheness drafts it in the user's voice, confirms the exact text first (posting is public and irreversible), then posts (uploading + attaching the image if given) and returns the URL. He refuses spam/mass sends.",
     },
     {
       as: "post_reddit",
