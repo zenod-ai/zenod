@@ -38,11 +38,36 @@ import {
   summarizeHandoff,
   mergeStateLine,
   composeTerminalNotification,
+  composeActionableMessage,
+  composeBlockerNotification,
   parseDeliverables,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
   assert.equal(batchKey([52, 41, 7]), "7-41-52");
+});
+
+test("composeBlockerNotification never truncates the actionable question (R2-T4)", () => {
+  const question =
+    "This fan-out worker is not the VPS container: no SSH route to hetzner_vps_1, no bot secrets (TELEGRAM/OPENROUTER/OPENAI/PG/DuckDB path all unset), no docker/Dokploy, and warehouse_read.duckdb is absent. How should the agent be given host access?";
+  const msg = composeBlockerNotification({ executionId: "direct-102", target: "AlfaBlok/idea_scraper#102", question });
+  // The full question survives (the old .slice(0,280) cut it at "(TELEGRA").
+  assert.ok(msg.includes(question), "full blocker question is present");
+  assert.ok(msg.includes("(TELEGRAM/OPENROUTER/OPENAI/PG/DuckDB path all unset)"), "the truncated clause is now intact");
+  assert.ok(msg.includes("direct-102"), "execution id demoted to metadata suffix");
+});
+
+test("composeActionableMessage guarantees actionable ⊆ composed for arbitrary lengths (R2-T4)", () => {
+  for (const n of [1, 50, 300, 2000, 5000]) {
+    const actionable = "Q".repeat(n);
+    const summary = "S".repeat(400);
+    const composed = composeActionableMessage({ header: "H", actionable, summary, metadata: "id-1" }, 3500);
+    assert.ok(composed.includes(actionable), `actionable of length ${n} must be fully present`);
+  }
+  // Lower tiers yield first: a huge actionable pushes the summary out, but never itself.
+  const composed = composeActionableMessage({ header: "H", actionable: "A".repeat(3600), summary: "SUM", metadata: "META" }, 3500);
+  assert.ok(composed.includes("A".repeat(3600)));
+  assert.ok(!composed.includes("SUM"), "summary dropped when actionable exceeds budget");
 });
 
 test("parseDeliverables reads the reportback block and handles none (R1-T4)", () => {

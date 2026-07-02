@@ -150,6 +150,35 @@ describe("NotificationBus coalescing (R2-T2)", () => {
   });
 });
 
+describe("NotificationBus ordering guard (R2-T3)", () => {
+  it("annotates a terminal that follows a blocked, explaining the transition", async () => {
+    await withStore(async (store) => {
+      const sent: string[] = [];
+      let clock = 1000;
+      const bus = new NotificationBus(async (_s, text) => { sent.push(text); return { sent: 1, recipients: ["c"] }; }, store, () => clock);
+      await bus.notify({ eventType: "execution.blocked", text: "⛔ needs host access", targetIssue: "o/r#102", executionId: "e1" });
+      clock += 5000;
+      await bus.notify({ eventType: "execution.terminal", text: "✅ PR #107 ready", targetIssue: "o/r#102", executionId: "e1" });
+      expect(sent).toHaveLength(2);
+      expect(sent[1]).toContain("Previously blocked — now resolved");
+      expect(sent[1]).toContain("✅ PR #107 ready");
+    });
+  });
+
+  it("drops a stale lower-ranked event that arrives after a terminal for the same run", async () => {
+    await withStore(async (store) => {
+      const sent: string[] = [];
+      let clock = 1000;
+      const bus = new NotificationBus(async (_s, text) => { sent.push(text); return { sent: 1, recipients: ["c"] }; }, store, () => clock);
+      await bus.notify({ eventType: "execution.terminal", text: "✅ done", targetIssue: "o/r#5", executionId: "e1" });
+      clock += 5000;
+      const late = await bus.notify({ eventType: "execution.blocked", text: "⛔ late blocked", targetIssue: "o/r#5", executionId: "e2" });
+      expect(sent).toHaveLength(1); // the late blocked is stale → not sent
+      expect(late.status).toBe("suppressed");
+    });
+  });
+});
+
 describe("NotificationStore (R2-T1)", () => {
   it("round-trips a record and finds the latest by dedupe key", async () => {
     await withStore(async (store) => {

@@ -67,6 +67,18 @@ export function isCoalescible(event: NotificationEvent): boolean {
 /** Default coalescing window: repeats of the same fact within 10 minutes collapse. */
 const DEFAULT_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 
+/**
+ * PURE (R2-T3): the state rank of an event type for a run. Ordering flows start →
+ * (blocked | terminal), and `terminal` is final. A higher-ranked state must never be
+ * followed by a lower-ranked one for the same run without being stale.
+ */
+export function eventStateRank(eventType: string): number {
+  if (eventType.endsWith(".terminal") || eventType.endsWith(".done")) return 3;
+  if (eventType.endsWith(".blocked") || eventType.endsWith(".failed")) return 2;
+  if (eventType.endsWith(".start")) return 1;
+  return 0; // untracked (e.g. manual) — never participates in ordering
+}
+
 export class NotificationBus {
   constructor(
     private readonly send: NotificationSender,
@@ -110,16 +122,37 @@ export class NotificationBus {
       }
     }
 
+    // R2-T3: state-machine ordering per (targetIssue, runId). A terminal that follows a
+    // blocked is annotated so it explains the transition (no bare ✅ after ⛔); a lower-
+    // ranked event that arrives AFTER a higher-ranked one for the same run is stale and
+    // suppressed (e.g. a late "blocked" after the run already completed).
+    let outText = composedText;
+    const rank = eventStateRank(event.eventType);
+    if (event.targetIssue && rank > 0) {
+      const prior = this.store.latestSentForGroup(event.targetIssue, event.runId ?? null);
+      const priorRank = prior ? eventStateRank(prior.eventType) : 0;
+      if (prior && priorRank > rank) {
+        this.store.record(
+          { id, eventType: event.eventType, surface, targetIssue: event.targetIssue, executionId: event.executionId, runId: event.runId, severity: event.severity, dedupeKey, composedText, recipients: [], status: "suppressed", suppressedBy: prior.id },
+          now,
+        );
+        return { id, status: "suppressed", sent: 0, recipients: [] };
+      }
+      if (prior && priorRank === 2 && rank === 3) {
+        outText = `↩️ Previously blocked — now resolved.\n${composedText}`;
+      }
+    }
+
     let result: NotificationSendResult = { sent: 0, recipients: [] };
     let status: NotificationStatus = "sent";
     try {
-      result = await this.send(surface, composedText);
+      result = await this.send(surface, outText);
       status = result.sent > 0 ? "sent" : "failed";
     } catch {
       status = "failed";
     }
     this.store.record(
-      { id, eventType: event.eventType, surface, targetIssue: event.targetIssue, executionId: event.executionId, runId: event.runId, severity: event.severity, dedupeKey, composedText, recipients: result.recipients, status },
+      { id, eventType: event.eventType, surface, targetIssue: event.targetIssue, executionId: event.executionId, runId: event.runId, severity: event.severity, dedupeKey, composedText: outText, recipients: result.recipients, status },
       now,
     );
     return { id, status, ...result };

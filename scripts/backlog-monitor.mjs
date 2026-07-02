@@ -576,6 +576,37 @@ function mergeStateLine(manifest) {
   return "completed (no PR — filed artifact)";
 }
 
+// PURE (R2-T4): compose a message from content tiers with a no-truncation guarantee
+// for the ACTIONABLE tier. The actionable content (a blocker question, a decision ask)
+// is always included in full; only the lower tiers (summary, then metadata) yield to
+// the channel budget. Guarantees `actionable ⊆ composed` for any input length.
+function composeActionableMessage({ header, actionable, summary, metadata }, budget = 3500) {
+  const act = String(actionable || "").trim();
+  const parts = [];
+  if (header) parts.push(String(header).trim());
+  if (act) parts.push(act);
+  let used = parts.join("\n\n").length;
+  const sum = String(summary || "").trim();
+  if (sum && used + sum.length + 2 <= budget) {
+    parts.push(sum);
+    used += sum.length + 2;
+  }
+  const meta = String(metadata || "").trim();
+  if (meta && used + meta.length + 2 <= budget) parts.push(meta);
+  return parts.filter(Boolean).join("\n\n");
+}
+
+// PURE (R2-T4): compose a blocker notification whose actionable question is NEVER
+// truncated (the old 280-char slice cut questions mid-word). The execution id is
+// demoted to a metadata suffix; the full question always survives.
+function composeBlockerNotification({ executionId, target, question }) {
+  return composeActionableMessage({
+    header: "⛔ Blocked — needs your decision",
+    actionable: question ? String(question).trim() : "(no blocker detail was captured)",
+    metadata: `${target} · ${executionId}`,
+  });
+}
+
 // PURE: compose the terminal execution notification (R1-T6). Carries the issue title,
 // a handoff summary, the honest merge state, and the link — instead of a bare url.
 // Actionable content (title, summary, state) is prioritized; the executionId is
@@ -1026,7 +1057,7 @@ async function reportDispatched(state) {
       d.reportedStatus = status;
       if (o.kind === "blocked") {
         await notify(
-          `⛔ Execution ${executionId} (${d.target}) — blocked, needs your decision${lastComment ? `:\n${lastComment.slice(0, 280)}` : "."}`,
+          composeBlockerNotification({ executionId, target: d.target, question: lastComment }),
           origin,
           { eventType: "execution.blocked", executionId, targetIssue: d.target, severity: "action" },
         );
@@ -1683,6 +1714,8 @@ export {
   summarizeHandoff,
   mergeStateLine,
   composeTerminalNotification,
+  composeActionableMessage,
+  composeBlockerNotification,
   shouldReportEarlyLaunchExit,
   earlyLaunchFailureNote,
   launchLogPath,

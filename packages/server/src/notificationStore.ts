@@ -143,6 +143,20 @@ export class NotificationStore {
     return row ? rowToRecord(row) : null;
   }
 
+  /** Most recent SENT record for a (targetIssue, runId) group across event types —
+   *  the anchor for the state-machine ordering guard (R2-T3). runId null matches the
+   *  keyless "-" group used when the runner does not supply one. */
+  latestSentForGroup(targetIssue: string, runId: string | null): NotificationRecord | null {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM notifications
+         WHERE status='sent' AND target_issue=? AND COALESCE(run_id,'-')=?
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(targetIssue, runId ?? "-") as Row | undefined;
+    return row ? rowToRecord(row) : null;
+  }
+
   recent(limit = 100): NotificationRecord[] {
     const rows = this.db
       .prepare(`SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?`)
