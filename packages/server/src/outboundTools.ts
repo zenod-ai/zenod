@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { z } from "zod";
 import { VERSION } from "zenod";
 import type { PeerTools } from "zenod";
 
@@ -106,6 +107,7 @@ async function callConnector(
   mcpTool: string,
   args: Record<string, unknown>,
   channel: string,
+  emptyMessage?: string,
 ): Promise<string> {
   const client = new Client({ name: "zenod-outbound-client", version: VERSION }, { capabilities: {} });
   const transport = new StreamableHTTPClientTransport(new URL(url), {
@@ -118,12 +120,123 @@ async function callConnector(
     if ((result as { isError?: boolean })?.isError) {
       return `The ${channel} connector reported an error: ${text || "(no detail)"}`;
     }
-    return text || `Sent to ${channel} (the connector returned no detail).`;
+    return text || (emptyMessage ?? `Sent to ${channel} (the connector returned no detail).`);
   } catch (err) {
     return `Could not reach the ${channel} connector: ${(err as Error).message}`;
   } finally {
     await client.close().catch(() => {});
   }
+}
+
+/**
+ * Callistheness's READ-ONLY X tools, reaching the x-mcp-readonly connector on
+ * `zenod-x-net` (OUTBOUND_X_READ_MCP_URL — e.g. http://x-mcp-readonly:8000/mcp).
+ *
+ * Reads are DIRECT/UNGATED per the flat-tools doctrine: fetching a post, searching
+ * recent posts, or reading mentions/own-timeline is not outward-facing, so there is
+ * no "confirm before send" gate here — the brain calls them freely and relays the
+ * real content. Posting stays on the SEPARATE write endpoint (x-mcp-postread) so a
+ * read connector can never publish. Each tool opens its own short-lived MCP client,
+ * exactly like the send connectors. When the URL is unset the tools report "not
+ * connected yet" and never fabricate posts/mentions.
+ *
+ * Tool → x-mcp operationId (X OpenAPI "Posts" naming): x_get_post→getPostsById,
+ * x_search_posts→searchPostsRecent, x_read_mentions→getUsersMentions,
+ * x_read_timeline→getUsersPosts, x_get_user→getUsersByUsername, x_whoami→getUsersMe.
+ */
+const X_READ_URL_ENV = "OUTBOUND_X_READ_MCP_URL";
+const X_READ_TOKEN_ENV = "OUTBOUND_X_READ_MCP_TOKEN";
+const X_READ_CHANNEL = "X read";
+
+function buildXReadTools(env: NodeJS.ProcessEnv): PeerTools {
+  const url = env[X_READ_URL_ENV];
+  const token = env[X_READ_TOKEN_ENV];
+  const notConnected =
+    `X reads are not connected yet — set ${X_READ_URL_ENV} to the x-mcp-readonly endpoint (e.g. http://x-mcp-readonly:8000/mcp). ` +
+    `Tell the user X read is not configured and do NOT fabricate any posts or mentions.`;
+  const call = (mcpTool: string, args: Record<string, unknown>) =>
+    callConnector(url!, token, mcpTool, args, X_READ_CHANNEL, `The ${X_READ_CHANNEL} connector returned no content.`);
+
+  // Resolve the connected account's numeric id (getUsersMe) so "read my mentions /
+  // my timeline" works in one call — those X operations key on the user id.
+  const resolveMyUserId = async (): Promise<string | null> => {
+    const text = await call("getUsersMe", {});
+    return text.match(/"id"\s*:\s*"?(\d+)"?/)?.[1] ?? null;
+  };
+
+  return {
+    x_get_post: {
+      description:
+        "Read ONE X (Twitter) post by its numeric id and return its real content. Read-only — never posts. Input: { id }.",
+      inputSchema: z.object({ id: z.string().min(1).describe("The post's numeric id, e.g. 2072648470914093087") }),
+      run: async (input) => {
+        if (!url) return notConnected;
+        const id = typeof input === "object" && input !== null ? String((input as { id?: unknown }).id ?? "") : String(input ?? "");
+        if (!id.trim()) return "Provide the numeric post id to read.";
+        return call("getPostsById", { id: id.trim() });
+      },
+    },
+    x_search_posts: {
+      description:
+        "Search RECENT public X (Twitter) posts and return the matches. Read-only. Input: { query } — an X search query string.",
+      inputSchema: z.object({ query: z.string().min(1).describe("X search query, e.g. 'from:someone keyword'") }),
+      run: async (input) => {
+        if (!url) return notConnected;
+        const query = typeof input === "object" && input !== null ? String((input as { query?: unknown }).query ?? "") : String(input ?? "");
+        if (!query.trim()) return "Provide a search query.";
+        return call("searchPostsRecent", { query: query.trim() });
+      },
+    },
+    x_read_mentions: {
+      description:
+        "Read the most RECENT posts that MENTION the connected X account and return their real content. Read-only. Input: optional { id } (numeric user id); defaults to the connected account.",
+      inputSchema: z.object({
+        id: z.string().optional().describe("User id to read mentions for; defaults to the connected account"),
+      }),
+      run: async (input) => {
+        if (!url) return notConnected;
+        const provided = typeof input === "object" && input !== null ? (input as { id?: unknown }).id : undefined;
+        const id = provided ? String(provided) : await resolveMyUserId();
+        if (!id) return "Could not resolve the connected X account id to read mentions (getUsersMe returned no id).";
+        return call("getUsersMentions", { id });
+      },
+    },
+    x_read_timeline: {
+      description:
+        "Read the RECENT posts on an X account's own timeline. Read-only. Input: optional { id } (numeric user id); defaults to the connected account.",
+      inputSchema: z.object({
+        id: z.string().optional().describe("User id whose timeline to read; defaults to the connected account"),
+      }),
+      run: async (input) => {
+        if (!url) return notConnected;
+        const provided = typeof input === "object" && input !== null ? (input as { id?: unknown }).id : undefined;
+        const id = provided ? String(provided) : await resolveMyUserId();
+        if (!id) return "Could not resolve the connected X account id to read the timeline (getUsersMe returned no id).";
+        return call("getUsersPosts", { id });
+      },
+    },
+    x_get_user: {
+      description:
+        "Look up an X (Twitter) user by @username and return their profile (id, name, etc.). Read-only. Input: { username }.",
+      inputSchema: z.object({ username: z.string().min(1).describe("The @username without the leading @") }),
+      run: async (input) => {
+        if (!url) return notConnected;
+        const raw = typeof input === "object" && input !== null ? String((input as { username?: unknown }).username ?? "") : String(input ?? "");
+        const username = raw.trim().replace(/^@/, "");
+        if (!username) return "Provide the @username to look up.";
+        return call("getUsersByUsername", { username });
+      },
+    },
+    x_whoami: {
+      description:
+        "Read the connected X (Twitter) account's own profile (id, username, name). Read-only. No input.",
+      inputSchema: z.object({}),
+      run: async () => {
+        if (!url) return notConnected;
+        return call("getUsersMe", {});
+      },
+    },
+  };
 }
 
 /**
@@ -150,5 +263,8 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
       },
     };
   }
+  // Read-only X tools (fetch post, search, mentions, timeline) reaching x-mcp-readonly.
+  // Reads are ungated — the brain calls them directly and relays real content.
+  Object.assign(tools, buildXReadTools(env));
   return tools;
 }

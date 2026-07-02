@@ -59,6 +59,11 @@ services:
       # X connector — the vendored x-mcp POST instance (FastMCP Streamable HTTP at
       # /mcp, posting via createPosts). Reached over zenod-x-net by container name.
       OUTBOUND_X_MCP_URL: http://x-mcp-postread:8000/mcp
+      # X READ connector — the vendored x-mcp READ-ONLY instance (read operationIds
+      # only; no createPosts). Reached over zenod-x-net by container name. Powers
+      # Callistheness's ungated read tools (x_get_post/x_search_posts/x_read_mentions/
+      # x_read_timeline/x_get_user/x_whoami). (issue #422)
+      OUTBOUND_X_READ_MCP_URL: http://x-mcp-readonly:8000/mcp
       # Reddit + email connectors — FOLLOW-UP (issue #185). Leave unset so the tools
       # report "not connected" rather than faking a send; set them once deployed.
       # OUTBOUND_REDDIT_MCP_URL: http://reddit-mcp:8000/mcp

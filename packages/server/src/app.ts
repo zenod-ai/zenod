@@ -887,6 +887,30 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       description:
         "Send an email. Give the recipient and what to say; Callistheness drafts it in the user's voice, confirms the exact recipient and content first (a sent email cannot be recalled), then sends and confirms.",
     },
+    // READ tools — flat on the Console surface per the flat-tools doctrine. Reads are
+    // direct/ungated (no confirm gate): Callistheness fetches real X content via his
+    // read-only connector (x-mcp-readonly) and relays it. He never posts on a read.
+    {
+      as: "read_x_post",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Read an X (Twitter) post by its id or URL — Callistheness fetches the real post content and returns it. Read-only; nothing is posted.",
+    },
+    {
+      as: "read_x_mentions",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Read the connected X account's recent mentions — Callistheness returns the real mention content. Read-only; nothing is posted.",
+    },
+    {
+      as: "search_x",
+      mcp: "chat_with_outbound",
+      arg: "message",
+      description:
+        "Search recent public X (Twitter) posts — Callistheness returns the matching posts. Read-only; nothing is posted.",
+    },
   ];
   const PHYLAX_NOTIFICATION_TOOLS = [
     {
