@@ -7,6 +7,12 @@ import { z, type ZodRawShape } from "zod";
 
 import { callPeerTool, type PeerConfig } from "./peerClient.js";
 import {
+  LIFE_BACKLOG_REPO,
+  loadRepoInference,
+  nonBacklogRedirect,
+  routeBacklogRequest,
+} from "./backlogRouter.js";
+import {
   formatConversationTranscript,
   transcriptQueryFromToolArgs,
   type ConversationTranscriptReader,
@@ -78,6 +84,58 @@ export function foldImageUrlIntoMessage(args: Record<string, unknown>): Record<s
   return rest;
 }
 
+/** A verbatim MCP tool result (no LLM) — used by the deterministic backlog guard. */
+function deterministicText(text: string): { content: Array<{ type: "text"; text: string }>; structuredContent: Record<string, unknown> } {
+  return { content: [{ type: "text", text }], structuredContent: { deterministic: true, routedBy: "backlogRouter" } };
+}
+
+/** Extract every explicit owner/repo#N target named in the message. */
+function explicitTargets(message: string): string[] {
+  const out: string[] = [];
+  for (const m of message.matchAll(/\b([\w.-]+\/[\w.-]+)#\d+\b/g)) out.push(m[1]!);
+  return out;
+}
+
+/**
+ * E-4 / S0-T5 (#224) PRE-LLM interceptor. Runs the DETERMINISTIC router on a backlog
+ * write BEFORE the request can reach Archus's LLM. Returns a fixed tool result when
+ * the write must be blocked/redirected (the model never sees it), or null to allow
+ * the write through to the life-backlog path.
+ *
+ * Guarantee: a create/edit/close whose target is NOT the life backlog can never reach
+ * Archus's LLM loop as a raw write — enforcement is structural, not persona.
+ */
+export function guardBacklogWrite(
+  message: string,
+  table = loadRepoInference(),
+): ReturnType<typeof deterministicText> | null {
+  const text = String(message || "");
+
+  // 1. An explicit owner/repo#N target that is NOT the life backlog is a foreign-repo
+  //    write — redirect to Epaminon deterministically, whatever the verb (edit/close).
+  const foreign = explicitTargets(text).find((repo) => repo.toLowerCase() !== LIFE_BACKLOG_REPO.toLowerCase());
+  if (foreign) return deterministicText(nonBacklogRedirect(foreign));
+
+  // 2. Otherwise consult the router on the free text.
+  const route = routeBacklogRequest(text, table);
+  switch (route.kind) {
+    case "worker_dispatch":
+      // Non-backlog repo write → fixed redirect + Epaminon handoff; never hits the LLM.
+      return deterministicText(route.redirect);
+    case "code_repo_inferred":
+      // Obvious code repo → this is not Archus's to write; hand to Epaminon deterministically.
+      return deterministicText(nonBacklogRedirect(route.repo));
+    case "needs_repo":
+      // Below the confidence floor → the single deterministic "which repo?" ask.
+      return deterministicText(
+        `Which repo is this for? I curate only the life backlog (${LIFE_BACKLOG_REPO}); code work needs a target repo so I can hand it to Epaminon. Name the repo (owner/repo) and I'll route it.`,
+      );
+    case "life_backlog":
+    default:
+      return null; // allow: this is a life-backlog write.
+  }
+}
+
 /**
  * The Console's PUBLIC MCP front door is a straight-through gateway, not a chat.
  *
@@ -107,6 +165,14 @@ interface GatewayTool {
   intentPrefix?: string;
   /** Optional argument adapter for public semantic aliases that call a chat tool. */
   mapArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
+  /**
+   * E-4 (obsidian-brain#231, same as S0-T5/#224): when set, this write is run through
+   * the DETERMINISTIC backlog router (routeBacklogRequest) BEFORE it can reach the
+   * owning agent's LLM. A write whose inferred target is NOT the life backlog is
+   * rejected/redirected here — the model never gets to improvise a wrong-repo write.
+   * This is the load-bearing enforcement; the persona block is only defense-in-depth.
+   */
+  backlogWriteGuard?: boolean;
   title: string;
   description: string;
   inputSchema: ZodRawShape;
@@ -249,6 +315,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     name: "create_issue",
     owner: "archus",
     peerTool: "chat_with_archus",
+    backlogWriteGuard: true,
     intentPrefix: "Open backlog issue(s) for the following — decide placement and structure per your rules: ",
     title: "Open backlog issue(s)",
     description:
@@ -260,6 +327,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     name: "edit_issue",
     owner: "archus",
     peerTool: "chat_with_archus",
+    backlogWriteGuard: true,
     intentPrefix: "Edit a backlog issue as follows: ",
     title: "Edit a backlog issue",
     description:
@@ -271,6 +339,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     name: "close_issue",
     owner: "archus",
     peerTool: "chat_with_archus",
+    backlogWriteGuard: true,
     intentPrefix: "Close a backlog issue as follows: ",
     title: "Close a backlog issue",
     description:
@@ -656,6 +725,13 @@ export function buildMeshGatewayServer(
       { title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations },
       async (args) => {
         let payload = t.mapArgs ? t.mapArgs((args ?? {}) as Record<string, unknown>) : ((args ?? {}) as Record<string, unknown>);
+        // E-4 PRE-LLM interceptor: a wrong-repo backlog write is rejected/redirected
+        // deterministically BEFORE callPeerTool ever reaches Archus's LLM. This is the
+        // structural enforcement of E4-T2 (not persona). Runs on the RAW message.
+        if (t.backlogWriteGuard && typeof payload.message === "string") {
+          const blocked = guardBacklogWrite(payload.message);
+          if (blocked) return blocked;
+        }
         // Prepend the intent directive so the tool-name signal reaches the brain.
         if (t.intentPrefix && typeof payload.message === "string") {
           payload = { ...payload, message: `${t.intentPrefix}${payload.message}` };
