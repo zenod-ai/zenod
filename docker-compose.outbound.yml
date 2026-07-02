@@ -37,10 +37,14 @@ networks:
   # so Callistheness joins it (external) to reach x-mcp-postread by name for posting.
   zenod-x-net:
     external: true
-  # The reddit-mcp compose (services/reddit-mcp) owns/creates this network; joined
-  # (external) so Callistheness reaches the reddit-mcp write connector by name.
-  zenod-reddit-net:
-    external: true
+  # The reddit-mcp compose (services/reddit-mcp) owns/creates this network. Joining
+  # a MISSING external network fails the whole compose boot, so — exactly like
+  # zenod-x-net above — uncomment this (and the networks entry + Reddit envs below)
+  # only AFTER the reddit-mcp Dokploy service is bound and deployed (operator steps
+  # on issue #420). Until then Callistheness boots without Reddit and post_reddit
+  # reports "not connected".
+  # zenod-reddit-net:
+  #   external: true
 
 volumes:
   zenod-outbound-data:
@@ -54,8 +58,9 @@ services:
     container_name: zenod-outbound
     restart: unless-stopped
     # dokploy-network (so the Console reaches it) + zenod-x-net (so it reaches the
-    # x-mcp POST connector for tweeting) + zenod-reddit-net (the reddit-mcp connector).
-    networks: [dokploy-network, zenod-x-net, zenod-reddit-net]
+    # x-mcp POST connector for tweeting). Add zenod-reddit-net once reddit-mcp is
+    # deployed (see the networks block above).
+    networks: [dokploy-network, zenod-x-net]
     volumes:
       - zenod-outbound-data:/data
     environment:
@@ -75,8 +80,11 @@ services:
       # write instance serving Streamable HTTP at /mcp on port 3000, posting via
       # create_post. Reached over zenod-reddit-net by container name. The token must
       # match reddit-mcp's OAUTH_TOKEN (its REDDIT_MCP_OAUTH_TOKEN secret).
-      OUTBOUND_REDDIT_MCP_URL: http://reddit-mcp:3000/mcp
-      OUTBOUND_REDDIT_MCP_TOKEN: ${REDDIT_MCP_OAUTH_TOKEN}
+      # Uncomment together with the zenod-reddit-net join once reddit-mcp is
+      # deployed (operator steps on issue #420); until then post_reddit reports
+      # "not connected" instead of failing the boot.
+      # OUTBOUND_REDDIT_MCP_URL: http://reddit-mcp:3000/mcp
+      # OUTBOUND_REDDIT_MCP_TOKEN: ${REDDIT_MCP_OAUTH_TOKEN}
       # Email connector — mail-mcp is a FOLLOW-UP (issue #185); leave unset so
       # send_email reports "not connected" rather than faking a send until deployed.
       # OUTBOUND_MAIL_MCP_URL: http://mail-mcp:8000/mcp
