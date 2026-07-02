@@ -1,0 +1,37 @@
+# Tenant zero — live Zenod running the PUBLISHED registry image instead of a
+# local source build. This is the dogfood: we run the exact artifact customers
+# run, so the fleet-roll canary (tenant zero first in the ring) exercises the
+# real image before any paying tenant sees it.
+#
+# Difference from the source-build composes (docker-compose.z2.yml etc.): no
+# `build:` block — the image comes from GHCR, published by .github/workflows/publish.yml.
+# Pin a specific build for rollback with ZENOD_IMAGE_TAG=sha-abc1234; default is
+# :latest (what "roll fleet to :latest" moves everyone to).
+#
+# Deploy (Dokploy): New Compose service from this file → add domain (port 8080)
+# → deploy. Redeploys pull the new :latest; no build step on the box.
+#
+# See docs/HOSTED-PLAN-2026-07-02.md (P0.2, epic #448).
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-tenant-zero-data:
+
+services:
+  zenod:
+    image: ghcr.io/zenod-ai/zenod:${ZENOD_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: zenod-tenant-zero
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-tenant-zero-data:/data
+    environment:
+      AGENT: zenod
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+    expose:
+      - "8080"
