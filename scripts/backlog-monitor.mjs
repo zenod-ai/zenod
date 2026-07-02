@@ -128,16 +128,20 @@ function saveState(s) {
 // `surface` (the ticket's origin chat channel, from its origin: label) routes
 // the ping back to where the work was requested. Omitted/null → the app falls
 // back to WhatsApp, the historical default.
-async function notify(text, surface) {
+async function notify(text, surface, fields = {}) {
   if (!NOTIFY_URL || !NOTIFY_TOKEN) {
     log("NOTIFY (no app configured):", surface ? `[${surface}]` : "", text);
     return;
   }
   try {
+    // Structured event fields (eventType/executionId/runId/targetIssue/severity) let
+    // the Console notification authority dedup/coalesce (R2-T1/T2). Text is still sent
+    // as-is; a plain call with no fields is the legacy manual notification.
+    const body = { text, ...(surface ? { surface } : {}), ...fields };
     const res = await fetch(`${NOTIFY_URL}/api/notify`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${NOTIFY_TOKEN}` },
-      body: JSON.stringify(surface ? { text, surface } : { text }),
+      body: JSON.stringify(body),
     });
     log("notify ->", res.status, surface ? `[${surface}]` : "", text.slice(0, 60));
   } catch (e) {
@@ -1021,11 +1025,16 @@ async function reportDispatched(state) {
     if (ok) {
       d.reportedStatus = status;
       if (o.kind === "blocked") {
-        await notify(`⛔ Execution ${executionId} (${d.target}) — blocked, needs your decision${lastComment ? `:\n${lastComment.slice(0, 280)}` : "."}`, origin);
+        await notify(
+          `⛔ Execution ${executionId} (${d.target}) — blocked, needs your decision${lastComment ? `:\n${lastComment.slice(0, 280)}` : "."}`,
+          origin,
+          { eventType: "execution.blocked", executionId, targetIssue: d.target, severity: "action" },
+        );
       } else {
         await notify(
           composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest }),
           origin,
+          { eventType: "execution.terminal", executionId, targetIssue: d.target, severity: "info" },
         );
       }
     }

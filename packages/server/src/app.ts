@@ -1633,15 +1633,36 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // surface with no proactive channel, e.g. web) falls back to WhatsApp, the
   // historical default. The WhatsApp/Telegram connections stay in the app.
   app.post("/api/notify", async (c) => {
-    const { text, surface } = await c.req
-      .json<{ text?: string; surface?: string }>()
-      .catch(() => ({ text: undefined, surface: undefined }));
-    if (!text?.trim()) return c.json({ error: "text is required" }, 400);
-    const result =
-      surface === "telegram"
-        ? await runtime.telegram.notifyOwner(text)
-        : await runtime.whatsapp.notifyOwner(text);
-    return c.json(result);
+    // Single ingress for proactive sends (R2-T1). Accepts legacy {text, surface} and
+    // the structured event {eventType, targetIssue, executionId, runId, severity,
+    // dedupeKey}; both funnel through the one notification authority, which journals
+    // and sends. Behavior for legacy callers is unchanged.
+    const body = await c.req
+      .json<{
+        text?: string;
+        surface?: string;
+        eventType?: string;
+        targetIssue?: string;
+        executionId?: string;
+        runId?: string;
+        severity?: string;
+        dedupeKey?: string;
+      }>()
+      .catch(() => ({}) as Record<string, unknown>);
+    const text = typeof body.text === "string" ? body.text : "";
+    if (!text.trim()) return c.json({ error: "text is required" }, 400);
+    const severity = body.severity === "action" || body.severity === "error" ? body.severity : "info";
+    const result = await runtime.notificationBus.notify({
+      eventType: typeof body.eventType === "string" && body.eventType ? body.eventType : "manual",
+      text,
+      ...(body.surface ? { surface: String(body.surface) } : {}),
+      ...(body.targetIssue ? { targetIssue: String(body.targetIssue) } : {}),
+      ...(body.executionId ? { executionId: String(body.executionId) } : {}),
+      ...(body.runId ? { runId: String(body.runId) } : {}),
+      severity,
+      ...(body.dedupeKey ? { dedupeKey: String(body.dedupeKey) } : {}),
+    });
+    return c.json({ sent: result.sent, recipients: result.recipients });
   });
 
   app.post("/api/notifications/search", async (c) => {
