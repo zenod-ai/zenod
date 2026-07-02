@@ -310,6 +310,46 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
+  // Callistheness's READ surface. Reading X is not outward-facing, so — per the
+  // flat-tools doctrine — these are direct/ungated: no "confirm before send" gate.
+  // They still route to his brain (chat_with_outbound), which calls his read-only
+  // X connector (x-mcp-readonly) and relays the REAL content. A read never posts.
+  {
+    name: "read_x_post",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "READ-ONLY request: fetch the following X (Twitter) post and return its real content verbatim. Use your x_get_post read tool; do NOT post, reply, or write anything. Post id or URL: ",
+    title: "Read an X post",
+    description:
+      "Read an X (Twitter) post by its id or URL — Callistheness fetches the real post content via his read-only connector and returns it. Read-only; nothing is posted.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: "read_x_mentions",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "READ-ONLY request: read the connected X (Twitter) account's most recent mentions and return their real content. Use your x_read_mentions read tool; do NOT post, reply, or write anything. Scope/notes (optional): ",
+    title: "Read X mentions",
+    description:
+      "Read the connected X account's recent mentions — Callistheness returns the real mention content via his read-only connector. Read-only; nothing is posted.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: "search_x",
+    owner: "outbound",
+    peerTool: "chat_with_outbound",
+    intentPrefix:
+      "READ-ONLY request: search recent public X (Twitter) posts and return the matches. Use your x_search_posts read tool; do NOT post, reply, or write anything. Search query: ",
+    title: "Search X posts",
+    description:
+      "Search recent public X (Twitter) posts — Callistheness returns the matching posts via his read-only connector. Read-only; nothing is posted.",
+    inputSchema: INTENT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
   // Phylax's inward notification surface. Callers report events/facts; Phylax
   // decides whether/how to reach the principal and uses his private
   // deliver_to_principal tool only after composing the final message.
