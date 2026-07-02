@@ -32,7 +32,7 @@ import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, projectRegistrySection, resolveProject } from "./projectRegistry.js";
 import { buildOneOffIssueBody, oneOffIssueTitle } from "./oneOffExecution.js";
-import { ExecutionQueue } from "./executionQueue.js";
+import { ExecutionQueue, type ExecutionTicket } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
 import { buildOutboundTools } from "./outboundTools.js";
@@ -50,7 +50,7 @@ import { JourneyMonitor } from "./journeyMonitor.js";
 import { createJourneyAuthorityReconciler } from "./journeyAuthorityReconciler.js";
 import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
-import { callPeer, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
+import { callPeer, callPeerTool, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
 import { createIssueThenRunJourney, type CreateIssueThenRunInput, type CreateIssueThenRunResult } from "./createIssueRunJourney.js";
 import { createIssuesJourney, type CreateIssuesJourneyInput, type CreateIssuesJourneyResult } from "./parallelIssueJourney.js";
@@ -236,8 +236,14 @@ export class Runtime {
       reconcileStep: createJourneyAuthorityReconciler({
         readIssue: async (target) => this.buildBacklogIssueReader().getIssue({ target }),
         readExecution: async (reference) => {
-          if (!this.executionQueue) return null;
-          return this.executionQueue.get(reference) ?? this.executionQueue.snapshot().find((ticket) => ticket.target === reference) ?? null;
+          if (this.executionQueue) {
+            return this.executionQueue.get(reference) ?? this.executionQueue.snapshot().find((ticket) => ticket.target === reference) ?? null;
+          }
+          // Non-executor agents (the Console — where journeys live) read the execution
+          // authority over the mesh instead of assuming a local queue. Without this the
+          // execution-terminal reconcile branch (and R1-T2 ingest) never runs on the
+          // Console, because readExecution was unconditionally null here.
+          return this.readExecutionFromExecutorPeer(reference);
         },
         readMemoryJob: async (jobId) => this.taskJobQueue.get(jobId),
         fileExecutionMemory: (input) => this.fileExecutionMemory(input),
@@ -391,6 +397,31 @@ export class Runtime {
   }
 
   /**
+   * Read an execution ticket from the executor peer (Epaminon) over the mesh, via its
+   * deterministic `execution_status` tool. Used by non-executor agents — the Console
+   * owns journeys but not the execution queue. Returns null on any failure or miss
+   * (the reconciler then reports "no record", never blocks). Never throws.
+   */
+  private async readExecutionFromExecutorPeer(reference: string): Promise<ExecutionTicket | null> {
+    const epaminon = this.settings.peers().find((peer) => peer.name === "epaminon");
+    if (!epaminon) return null;
+    try {
+      const result = await callPeerTool(epaminon, "execution_status", { message: reference });
+      const structured = result.structuredContent as { tickets?: unknown } | undefined;
+      const tickets = Array.isArray(structured?.tickets) ? (structured.tickets as ExecutionTicket[]) : [];
+      return (
+        tickets.find((t) => t && t.executionId === reference) ??
+        tickets.find((t) => t && t.target === reference) ??
+        (tickets.length === 1 ? tickets[0] : null) ??
+        null
+      );
+    } catch (err) {
+      console.error(`[journey] executor-peer execution read failed for ${reference}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
    * File a completed execution's cited meaning note to Zenod (R1-T2). Resolves the
    * Zenod peer and calls its async `store_memory`; returns the response as the
    * evidence ref. A no-op returning null when no Zenod peer is configured (e.g. an
@@ -424,7 +455,13 @@ export class Runtime {
    */
   async fetchExecutionDeliverable(reference: string): Promise<{ text: string; structured: Record<string, unknown> }> {
     const artifacts = this.journeyStore.artifactsByKind("execution_record", 200);
-    const manifest = resolveDeliverableManifest(artifacts, reference);
+    let manifest = resolveDeliverableManifest(artifacts, reference);
+    if (!manifest) {
+      // Journey artifacts may lag or predate the manifest — the execution authority
+      // (Epaminon's ticket) is the durable source; resolve over the mesh as fallback.
+      const ticket = await this.readExecutionFromExecutorPeer(reference.match(/([^/\s#]+\/[^/\s#]+#\d+)/)?.[1] ?? reference);
+      if (ticket?.deliverable) manifest = ticket.deliverable;
+    }
     if (!manifest) {
       const result = { reference, found: false as const, mergeState: "unknown", files: [] };
       return { text: formatDeliverableResult(result), structured: result as unknown as Record<string, unknown> };

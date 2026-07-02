@@ -150,6 +150,34 @@ describe("NotificationBus coalescing (R2-T2)", () => {
   });
 });
 
+describe("NotificationBus review fixes (dedup evidence-key + ordering window)", () => {
+  it("a re-run producing a NEW PR within the dedup window still sends (evidence-keyed)", async () => {
+    await withStore(async (store) => {
+      const sent: string[] = [];
+      let clock = 1000;
+      const bus = new NotificationBus(async (_s, text) => { sent.push(text); return { sent: 1, recipients: ["c"] }; }, store, () => clock);
+      // Runner-style evidence keys: same issue, two runs, two different PRs, 2 min apart.
+      await bus.notify({ eventType: "execution.terminal", text: "✅ PR 106", targetIssue: "o/r#105", executionId: "e1", dedupeKey: "o/r#105|pr/106|execution.terminal" });
+      clock += 2 * 60 * 1000;
+      await bus.notify({ eventType: "execution.terminal", text: "✅ PR 109", targetIssue: "o/r#105", executionId: "e2", dedupeKey: "o/r#105|pr/109|execution.terminal" });
+      expect(sent).toHaveLength(2); // different evidence → different fact → both send
+    });
+  });
+
+  it("ordering guard ignores a prior terminal outside its window (fresh run not gagged)", async () => {
+    await withStore(async (store) => {
+      const sent: string[] = [];
+      let clock = 1000;
+      const bus = new NotificationBus(async (_s, text) => { sent.push(text); return { sent: 1, recipients: ["c"] }; }, store, () => clock);
+      await bus.notify({ eventType: "execution.terminal", text: "✅ done", targetIssue: "o/r#5", executionId: "e1" });
+      clock += 24 * 60 * 60 * 1000; // a day later, a NEW run on the same issue blocks
+      const blocked = await bus.notify({ eventType: "execution.blocked", text: "⛔ new blocker", targetIssue: "o/r#5", executionId: "e2" });
+      expect(blocked.status).toBe("sent"); // yesterday's terminal is history, not a contradiction
+      expect(sent).toHaveLength(2);
+    });
+  });
+});
+
 describe("NotificationBus ordering guard (R2-T3)", () => {
   it("annotates a terminal that follows a blocked, explaining the transition", async () => {
     await withStore(async (store) => {

@@ -41,20 +41,27 @@ describe("R2 replay — idea_scraper#102 notification storm", () => {
 
       const execs = ["direct-a", "direct-b", "direct-c"];
 
+      // Mirror the runner's real content-aware keys: blocked keys on the question,
+      // terminal keys on the shared PR evidence (all three siblings → same PR #107).
+      const PR = "https://github.com/AlfaBlok/idea_scraper/pull/107";
+      const blockedKey = `${TARGET}|${FULL_QUESTION.slice(0, 120)}|execution.blocked`;
+      const terminalKey = `${TARGET}|${PR}|execution.terminal`;
+
       // 1) Each sibling execution reports blocked with the SAME full question.
       for (const executionId of execs) {
         clock += 1000;
-        await bus.notify({ eventType: "execution.blocked", text: FULL_QUESTION, targetIssue: TARGET, executionId, severity: "action" });
+        await bus.notify({ eventType: "execution.blocked", text: FULL_QUESTION, targetIssue: TARGET, executionId, severity: "action", dedupeKey: blockedKey });
       }
       // 2) Then each sibling reports the PR #107 terminal.
       for (const executionId of execs) {
         clock += 1000;
         await bus.notify({
           eventType: "execution.terminal",
-          text: `✅ Ready for review: ${TARGET}\nState: PR open — NOT merged yet.\nhttps://github.com/AlfaBlok/idea_scraper/pull/107`,
+          text: `✅ Ready for review: ${TARGET}\nState: PR open — NOT merged yet.\n${PR}`,
           targetIssue: TARGET,
           executionId,
           severity: "info",
+          dedupeKey: terminalKey,
         });
       }
 

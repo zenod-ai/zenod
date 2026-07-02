@@ -79,12 +79,17 @@ export function eventStateRank(eventType: string): number {
   return 0; // untracked (e.g. manual) — never participates in ordering
 }
 
+/** Ordering-guard window: state relationships older than this are history, not a
+ *  contradiction — a fresh run on an issue must not be gagged by yesterday's terminal. */
+const DEFAULT_ORDERING_WINDOW_MS = 30 * 60 * 1000;
+
 export class NotificationBus {
   constructor(
     private readonly send: NotificationSender,
     private readonly store: NotificationStore,
     private readonly now: () => number = Date.now,
     private readonly dedupeWindowMs: number = DEFAULT_DEDUPE_WINDOW_MS,
+    private readonly orderingWindowMs: number = DEFAULT_ORDERING_WINDOW_MS,
   ) {}
 
   /**
@@ -129,7 +134,10 @@ export class NotificationBus {
     let outText = composedText;
     const rank = eventStateRank(event.eventType);
     if (event.targetIssue && rank > 0) {
-      const prior = this.store.latestSentForGroup(event.targetIssue, event.runId ?? null);
+      // Only a RECENT prior state participates: outside the window it is history, not
+      // a contradiction — a fresh run must not be gagged by yesterday's terminal.
+      const recent = this.store.latestSentForGroup(event.targetIssue, event.runId ?? null);
+      const prior = recent && now - recent.createdAt <= this.orderingWindowMs ? recent : null;
       const priorRank = prior ? eventStateRank(prior.eventType) : 0;
       if (prior && priorRank > rank) {
         this.store.record(

@@ -1056,16 +1056,22 @@ async function reportDispatched(state) {
     if (ok) {
       d.reportedStatus = status;
       if (o.kind === "blocked") {
+        // Dedupe on the blocker CONTENT: siblings repeating the same question collapse,
+        // a genuinely different blocker on the same issue still gets through.
+        const blockedKey = `${d.target}|${String(lastComment || "").slice(0, 120)}|execution.blocked`;
         await notify(
           composeBlockerNotification({ executionId, target: d.target, question: lastComment }),
           origin,
-          { eventType: "execution.blocked", executionId, targetIssue: d.target, severity: "action" },
+          { eventType: "execution.blocked", executionId, targetIssue: d.target, severity: "action", dedupeKey: blockedKey },
         );
       } else {
+        // Dedupe on the EVIDENCE: siblings announcing the same PR collapse, but a re-run
+        // producing a NEW PR (or a no-PR done, keyed by execution) is a new fact.
+        const terminalKey = `${d.target}|${(manifest && manifest.prUrl) || executionId}|execution.terminal`;
         await notify(
           composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest }),
           origin,
-          { eventType: "execution.terminal", executionId, targetIssue: d.target, severity: "info" },
+          { eventType: "execution.terminal", executionId, targetIssue: d.target, severity: "info", dedupeKey: terminalKey },
         );
       }
     }
