@@ -446,6 +446,12 @@ export async function editGithubIssue(settings: ConnectionSettings, input: EditG
         method: "POST",
         body: JSON.stringify({ body: input.comment }),
       });
+      // E-1 edit-lane receipt: a POST that returns is not proof the comment landed.
+      // Read the comments back and only report it posted once we can see it there.
+      const after = await githubRequest<GithubCommentResponse[]>(settings, `${issuePath}/comments?per_page=100`);
+      if (!after.some((comment) => comment.body === input.comment)) {
+        throw new Error("comment POST returned but the comment was not found on read-back");
+      }
       operations.push("posted comment");
     }
   }

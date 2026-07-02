@@ -517,6 +517,19 @@ describe("reconcileTaskingReply", () => {
     expect(out).toContain("queue or dispatch receipt only proves");
   });
 
+  // E1-T6 / #234: an answer that already OWNS the honesty gap ("I couldn't confirm…")
+  // must NOT get a redundant ⚠️ Correction stacked on top of it.
+  it("does not stack a spurious ⚠️ Correction when the reply already says it couldn't confirm", () => {
+    const reply =
+      "I couldn't confirm the execution status for #303 this turn — the execution_status read came back empty, so I can't tell you whether the run finished.";
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
+  it("does not stack a spurious ⚠️ Correction on an honest 'couldn't read' terminal answer", () => {
+    const reply = "I wasn't able to read whether execution #151 completed, so treat its done/failed state as unknown.";
+    expect(reconcileTaskingReply(reply, [])).toBe(reply);
+  });
+
   it("allows a terminal execution answer backed by live execution_status", () => {
     const reply = "Execution #151 is done for zenod-ai/zenod#303.";
     const actions: RecordedAction[] = [

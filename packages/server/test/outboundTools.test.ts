@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { buildOutboundTools, extractMediaId, normalizeComposioValue } from "../src/outboundTools.js";
+import { describe, expect, it, beforeEach } from "vitest";
+import { buildOutboundTools, extractMediaId, normalizeComposioValue, idempotencyKey, __resetOutboundIdempotency } from "../src/outboundTools.js";
 
 describe("buildOutboundTools", () => {
   it("exposes the send tools plus the read-only X tools the brain wields", () => {
@@ -107,6 +107,15 @@ describe("buildOutboundTools", () => {
     const tools = buildOutboundTools({}); // X not connected
     const res = await tools.post_tweet.run({ text: "hi", image_url: "https://example.com/a.png" });
     expect(res.toLowerCase()).toContain("not connected");
+  });
+});
+
+describe("idempotency (E1-T4)", () => {
+  beforeEach(() => __resetOutboundIdempotency());
+
+  it("keys the same content to the same key regardless of object key order", () => {
+    expect(idempotencyKey("reddit", { a: 1, b: 2 })).toBe(idempotencyKey("reddit", { b: 2, a: 1 }));
+    expect(idempotencyKey("x", "hello")).not.toBe(idempotencyKey("reddit", "hello"));
   });
 });
 

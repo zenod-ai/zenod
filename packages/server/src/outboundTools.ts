@@ -1,8 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { VERSION } from "zenod";
 import type { PeerTools } from "zenod";
+import { parseOutboundReceipt, renderOutboundReceipt, type OutboundChannel } from "./outboundReceipt.js";
 
 /**
  * The Callistheness agent's PRIVATE send tools, wired into its chat brain.
@@ -114,7 +116,7 @@ const CONNECTORS: ConnectorSpec[] = [
     inputSchema: X_POST_INPUT_SCHEMA,
     media: true,
     description:
-      "Publish a post to X (Twitter). Pass { text } — the FINAL post text, exactly as it will appear — and OPTIONALLY an image to attach via image_url (an https link) or image_base64 (+ image_media_type). When an image is given it is uploaded to X and attached to the post. Only call this AFTER the user has confirmed this exact text (and image) — posting is public and cannot be undone. Returns the posted status (with its URL/id) on success.",
+      "Publish a post to X (Twitter). Pass { text } — the FINAL post text, exactly as it will appear — and OPTIONALLY an image to attach via image_url (an https link) or image_base64 (+ image_media_type). When an image is given it is uploaded to X and attached to the post. Only call this AFTER the user has confirmed this exact text (and image) — posting is public and cannot be undone. Returns a VERIFIED receipt: on success a line with the LIVE post URL, on failure a line starting 'FAILED'. Relay that line VERBATIM — never compose your own 'Posted:' text or a URL the receipt did not return.",
   },
   {
     as: "post_reddit",
@@ -166,6 +168,61 @@ const CONNECTORS: ConnectorSpec[] = [
       "Send an email. Input is the FINAL message including recipient, subject, and body, exactly as the user approved them. Only call this AFTER the user has confirmed the exact recipient and content — a sent email cannot be recalled. Returns the send confirmation on success.",
   },
 ];
+
+/** Map a connector's `as` name to the receipt channel it publishes on. */
+const CHANNEL_BY_TOOL: Record<string, OutboundChannel> = {
+  post_tweet: "x",
+  post_reddit: "reddit",
+  send_email: "email",
+};
+
+/**
+ * E1-T4 — idempotent sends. A send request is keyed by its channel + a stable hash of
+ * its content; a repeat within the TTL returns the FIRST receipt instead of publishing
+ * again. This makes a retried tool-call (double-fire, user re-confirm) a no-op rather
+ * than a double-post. In-process (per container) — enough to stop the model
+ * double-firing within a turn/conversation; a durable store is a later concern.
+ */
+const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
+const recentSends = new Map<string, { at: number; receiptText: string }>();
+
+export function idempotencyKey(channel: OutboundChannel, input: string | Record<string, unknown>): string {
+  const canonical = typeof input === "string" ? input : JSON.stringify(input, Object.keys(input as Record<string, unknown>).sort());
+  return `${channel}:${createHash("sha256").update(canonical).digest("hex").slice(0, 32)}`;
+}
+
+function rememberSend(key: string, receiptText: string): void {
+  const now = Date.now();
+  for (const [k, v] of recentSends) if (now - v.at > IDEMPOTENCY_TTL_MS) recentSends.delete(k);
+  recentSends.set(key, { at: now, receiptText });
+}
+
+function priorSend(key: string): string | undefined {
+  const hit = recentSends.get(key);
+  if (!hit) return undefined;
+  if (Date.now() - hit.at > IDEMPOTENCY_TTL_MS) {
+    recentSends.delete(key);
+    return undefined;
+  }
+  return hit.receiptText;
+}
+
+/** Test-only: clear the idempotency cache between cases. */
+export function __resetOutboundIdempotency(): void {
+  recentSends.clear();
+}
+
+/**
+ * Reduce a connector's raw send response to the verified receipt text (the ONLY text
+ * the brain should relay), and record it for idempotency. A FAILED receipt is NOT
+ * cached — a failed send should be retryable.
+ */
+function finalizeSend(channel: OutboundChannel, key: string, raw: string): string {
+  const receipt = parseOutboundReceipt(channel, raw);
+  const text = renderOutboundReceipt(receipt);
+  if (receipt.verified) rememberSend(key, text);
+  return text;
+}
 
 function extractText(result: unknown): string {
   const content = (result as { content?: Array<{ type?: string; text?: string }> })?.content;
@@ -518,6 +575,10 @@ function buildRedditComposioTools(env: NodeJS.ProcessEnv): PeerTools {
         const title = String(o.title ?? "").trim();
         const content = String(o.content ?? "");
         if (!subreddit || !title) return "Provide the target subreddit and the post title.";
+        // E1-T4: idempotent — the same Reddit post within the TTL is not re-submitted.
+        const key = idempotencyKey("reddit", { subreddit, title, content, is_self: o.is_self });
+        const prior = priorSend(key);
+        if (prior) return `${prior}\n(Already sent — this exact content was published moments ago; not re-posting.)`;
         const isSelf = o.is_self !== false;
         // Composio's REDDIT_CREATE_REDDIT_POST marks flair_id REQUIRED even for
         // subreddits with no flair — omitting it fails validation ("missing:
@@ -530,7 +591,8 @@ function buildRedditComposioTools(env: NodeJS.ProcessEnv): PeerTools {
         };
         if (isSelf) args.text = content;
         else args.url = content;
-        return call("REDDIT_CREATE_REDDIT_POST", args);
+        const raw = await call("REDDIT_CREATE_REDDIT_POST", args);
+        return finalizeSend("reddit", key, raw);
       },
     },
     search_reddit: {
@@ -597,6 +659,14 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
         if (!url) {
           return `${c.channel} is not connected yet — its connector is not configured (set ${c.urlEnv}). Tell the user it isn't set up and do NOT claim anything was sent.`;
         }
+        const channel = CHANNEL_BY_TOOL[c.as];
+        // E1-T4: a repeat of the exact same send within the TTL returns the first
+        // receipt instead of publishing again.
+        const key = channel ? idempotencyKey(channel, input) : "";
+        if (channel) {
+          const prior = priorSend(key);
+          if (prior) return `${prior}\n(Already sent — this exact content was published moments ago; not re-posting.)`;
+        }
         const tool = env[c.toolEnv] || c.defaultTool;
         const arg = env[c.argEnv] || c.defaultArg;
         const token = env[c.tokenEnv];
@@ -604,15 +674,19 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
         // string arrives from legacy/string callers. Normalize so both work.
         const args: Record<string, unknown> =
           typeof input === "string" ? { [arg]: input, text: input } : input;
+        let raw: string;
         if (c.media) {
           const mediaTool = env[X_MEDIA_UPLOAD_TOOL_ENV] || X_MEDIA_UPLOAD_TOOL_DEFAULT;
-          return publishToX(url, token, tool, arg, mediaTool, args, c.channel);
+          raw = await publishToX(url, token, tool, arg, mediaTool, args, c.channel);
+        } else if (c.buildArgs) {
+          raw = await callConnector(url, token, tool, c.buildArgs(input), c.channel);
+        } else {
+          const value = typeof input === "string" ? input : (args[arg] ?? args.input ?? "");
+          raw = await callConnector(url, token, tool, { [arg]: value }, c.channel);
         }
-        if (c.buildArgs) {
-          return callConnector(url, token, tool, c.buildArgs(input), c.channel);
-        }
-        const value = typeof input === "string" ? input : (args[arg] ?? args.input ?? "");
-        return callConnector(url, token, tool, { [arg]: value }, c.channel);
+        // E1-T1/T3: reduce the raw connector response to a verified receipt; the reply
+        // text is a pure function of it (real URL on success, FAILED + reason on error).
+        return channel ? finalizeSend(channel, key, raw) : raw;
       },
     };
   }
