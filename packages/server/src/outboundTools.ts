@@ -519,10 +519,17 @@ function buildRedditComposioTools(env: NodeJS.ProcessEnv): PeerTools {
         const content = String(o.content ?? "");
         if (!subreddit || !title) return "Provide the target subreddit and the post title.";
         const isSelf = o.is_self !== false;
-        const args: Record<string, unknown> = { subreddit, title, kind: isSelf ? "self" : "link" };
+        // Composio's REDDIT_CREATE_REDDIT_POST marks flair_id REQUIRED even for
+        // subreddits with no flair — omitting it fails validation ("missing:
+        // {'flair_id'}"). Send "" when none is given; verified to post fine on r/test.
+        const args: Record<string, unknown> = {
+          subreddit,
+          title,
+          kind: isSelf ? "self" : "link",
+          flair_id: o.flair_id ? String(o.flair_id) : "",
+        };
         if (isSelf) args.text = content;
         else args.url = content;
-        if (o.flair_id) args.flair_id = o.flair_id;
         return call("REDDIT_CREATE_REDDIT_POST", args);
       },
     },
