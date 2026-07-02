@@ -1,3 +1,4 @@
+import { LIFE_BACKLOG_REPO } from "./backlogRouter.js";
 import type { ExecutionTicket } from "./executionQueue.js";
 import type { JourneySnapshot, JourneyStore } from "./journeyStore.js";
 import { callPeerTool, type PeerConfig, type PeerToolResult } from "./peerClient.js";
@@ -34,6 +35,17 @@ export interface CreateIssueThenRunResult {
 }
 
 export type JourneyPeerToolCaller = (peer: PeerConfig, tool: string, args: Record<string, unknown>) => Promise<PeerToolResult>;
+
+/**
+ * E-4 worker-route (obsidian-brain#231): is this issue-create aimed at a repo OTHER than
+ * the life backlog? Archus writes ONLY the life backlog (there is no GitHub App to
+ * install — M1 is dead). Any other repo's issue MUST be created by an Epaminon worker
+ * using the runner's own `gh` auth on the VPS, NEVER via the Console/Archus App token.
+ */
+export function isForeignRepo(repo: string | undefined): boolean {
+  const r = String(repo || "").trim().toLowerCase();
+  return r.length > 0 && r !== LIFE_BACKLOG_REPO.toLowerCase();
+}
 
 const REPO_REF_RE = /\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\b/;
 
@@ -200,6 +212,24 @@ export async function createIssueThenRunJourney(input: {
     return blockedResult(input.store, journey.id, reason);
   }
 
+  // E-4 worker-route (obsidian-brain#231, same standing rule as S0-T5/#224): a create
+  // aimed at ANY repo other than the life backlog is NOT Archus's to write via the
+  // (dead) Console App token. Deterministically hand it to an Epaminon worker that
+  // creates the issue in the target repo under the runner's own `gh` auth and runs it,
+  // then propagate the REAL created-issue URL as the receipt. The repo was already
+  // decided upstream (routeBacklogRequest); no LLM chooses it here.
+  if (isForeignRepo(issue.repo)) {
+    return dispatchForeignRepoWorker({
+      store: input.store,
+      journeyId: journey.id,
+      epaminon: input.epaminon,
+      callTool,
+      now,
+      request,
+      issue: { repo: issue.repo!, title: issue.title, body: issue.body! },
+    });
+  }
+
   const createStep = input.store.addStep(
     journey.id,
     {
@@ -309,15 +339,116 @@ export async function createIssueThenRunJourney(input: {
   };
 }
 
+/**
+ * Best-effort receipt for a worker-created issue: prefer the ticket's fully-qualified
+ * `target` (owner/repo#N) and its evidence URL; fall back to the target repo. Never
+ * fabricates a URL — if the worker did not report one, the target ref is the receipt.
+ */
+function receiptFromExecution(repo: string, execution: ExecutionTicket): { target: string; url: string } {
+  const target = /#\d+$/.test(execution.target) ? execution.target : repo;
+  const url = execution.evidenceUrl || execution.deliverable?.prUrl || "";
+  return { target, url };
+}
+
+/**
+ * E-4 worker-route. Create-and-run for a FOREIGN repo goes to Epaminon's
+ * run_ephemeral_task: the runner creates the issue in the target repo using its own
+ * `gh` auth on the VPS and dispatches the run, returning a structured execution
+ * ticket. We NEVER call Archus's create_issue (App token) here. The reply carries the
+ * real created target/URL as a receipt, or FAILED + reason — never a fabricated
+ * success and never the dead "App not installed" error.
+ */
+async function dispatchForeignRepoWorker(input: {
+  store: JourneyStore;
+  journeyId: string;
+  epaminon: PeerConfig;
+  callTool: JourneyPeerToolCaller;
+  now: () => number;
+  request: CreateIssueThenRunInput;
+  issue: { repo: string; title: string; body: string };
+}): Promise<CreateIssueThenRunResult> {
+  const { store, journeyId, epaminon, callTool, now, request, issue } = input;
+  const step = store.addStep(
+    journeyId,
+    {
+      owner: "epaminon",
+      title: "Create + run issue in foreign repo (runner gh auth)",
+      input: {
+        intent: "execution.foreign_repo.create_and_run",
+        repo: issue.repo,
+        title: issue.title,
+        // The worker creates the issue under `gh` auth; Archus's App token is never used.
+        via: "epaminon.run_ephemeral_task",
+        expectedArtifactKinds: ["execution_record"],
+      },
+      idempotencyKey: `journey:${journeyId}:epaminon:foreign_repo_create_and_run`,
+    },
+    now(),
+  );
+
+  store.dispatchStep(step.id, { deadlineAt: now() + 5 * 60_000 }, now());
+  const objective = `${issue.title}\n\n${issue.body}`.trim();
+  const result = await callTool(epaminon, "epaminon.run_ephemeral_task", {
+    objective,
+    repo: issue.repo,
+    ...(request.runInstructions ? { instructions: request.runInstructions } : {}),
+  });
+  if (result.isError) {
+    const reason = peerToolText(result) || "Epaminon run_ephemeral_task failed";
+    store.blockStep(step.id, reason, now());
+    return blockedResult(store, journeyId, `FAILED to dispatch worker for ${issue.repo}: ${reason}`);
+  }
+
+  const execution = executionFromStructured(result);
+  if (!execution) {
+    const reason = "Epaminon run_ephemeral_task did not return a structured execution ticket";
+    store.blockStep(step.id, reason, now());
+    return blockedResult(store, journeyId, `FAILED to dispatch worker for ${issue.repo}: ${reason}`);
+  }
+
+  store.addArtifact(
+    journeyId,
+    {
+      stepId: step.id,
+      kind: "execution_record",
+      artifactKey: `execution:${execution.executionId}`,
+      data: execution as unknown as Record<string, unknown>,
+    },
+    now(),
+  );
+
+  if (execution.state === "blocked" || execution.state === "failed") {
+    const reason = execution.note
+      ? `Epaminon ${execution.state} the foreign-repo run: ${execution.note}`
+      : `Epaminon ${execution.state} the foreign-repo run.`;
+    store.blockStep(step.id, reason, now());
+    return blockedResult(store, journeyId, `FAILED (${issue.repo}): ${reason}`, undefined, execution);
+  }
+
+  store.completeStep(step.id, { execution }, now());
+  store.completeJourneyIfReady(journeyId, now());
+  const receipt = receiptFromExecution(issue.repo, execution);
+  const urlPart = receipt.url ? ` (${receipt.url})` : "";
+  return {
+    journeyId,
+    execution,
+    status: "completed",
+    message: `Dispatched Epaminon worker to create + run the issue in ${issue.repo} under the runner's gh auth — execution ${execution.executionId} (${execution.state}), target ${receipt.target}${urlPart}.`,
+    snapshot: store.snapshot(journeyId)!,
+  };
+}
+
 function blockedResult(
   store: JourneyStore,
   journeyId: string,
   reason: string,
   createdIssue?: CreatedIssueArtifact,
+  execution?: ExecutionTicket,
 ): CreateIssueThenRunResult {
   return {
     journeyId,
     ...(createdIssue ? { createdIssue } : {}),
+    ...(execution ? { execution } : {}),
     status: "blocked",
     message: reason,
     snapshot: store.snapshot(journeyId)!,
