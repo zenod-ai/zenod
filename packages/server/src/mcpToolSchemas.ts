@@ -41,6 +41,15 @@ export const GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE = {
   limit: z.number().int().min(1).max(500).optional().describe("Maximum transcript lines to return. Defaults to 100."),
 };
 
+export const FETCH_EXECUTION_DELIVERABLE_SHAPE = {
+  reference: z
+    .string()
+    .min(1)
+    .describe(
+      "Which execution's deliverable to fetch: an executionId (e.g. 'direct-…'), a fully-qualified work ticket 'owner/repo#N', or a message containing one. Returns the live file body at the run's head commit (works for unmerged/draft PRs) plus the honest merge state.",
+    ),
+};
+
 export const READ_LLM_TIMELINE_SHAPE = {
   windowMinutes: z.number().int().min(1).max(7 * 24 * 60).optional().describe("Lookback window in minutes. Defaults to 120."),
   operation: z.string().optional().describe("Optional case-insensitive substring filter on the operation label, e.g. 'compose', 'classify', 'ask'."),

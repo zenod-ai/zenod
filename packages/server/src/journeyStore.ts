@@ -625,6 +625,14 @@ export class JourneyStore {
     return rows.map(rowToJourney);
   }
 
+  /** Recent artifacts of a given kind across all journeys, newest first (R1-T3). */
+  artifactsByKind(kind: string, limit = 100): JourneyArtifact[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM journey_artifacts WHERE kind=? ORDER BY updated_at DESC LIMIT ?`)
+      .all(kind, limit) as unknown as ArtifactRow[];
+    return rows.map(rowToArtifact);
+  }
+
   close(): void {
     this.db.close();
   }

@@ -22,6 +22,7 @@ import {
   EXECUTION_STATUS_SHAPE,
   GET_MEMORY_SHAPE,
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+  FETCH_EXECUTION_DELIVERABLE_SHAPE,
   READ_LLM_TIMELINE_SHAPE,
   GET_TASK_RESULT_SHAPE,
   REQUEST_BACKLOG_ACTION_SHAPE,
@@ -450,11 +451,15 @@ function installStrictOutputSchemaListOverride(server: McpServer, outputSchemaNa
  * tool forwards its full argument object straight to the owner via callPeerTool
  * and relays the response verbatim.
  */
+/** R1-T3: resolve a reference to a completed execution's deliverable file(s) + honest state. */
+export type DeliverableFetcher = (reference: string) => Promise<{ text: string; structured: Record<string, unknown> }>;
+
 export function buildMeshGatewayServer(
   resolvePeer: (name: string) => PeerConfig | null,
   chatWithConsole?: ConsoleChatRunner,
   readConversationTranscript?: ConversationTranscriptReader,
   readSessionLog?: SessionLogReader,
+  fetchDeliverable?: DeliverableFetcher,
 ): McpServer {
   const server = new McpServer({ name: "zenod-console-gateway", version: VERSION });
   const outputSchemaNames = new Map<string, string>();
@@ -509,6 +514,26 @@ export function buildMeshGatewayServer(
           content: [{ type: "text", text: formatSessionLog(calls, query.windowMinutes) }],
           structuredContent: { calls, count: calls.length, sinceMs: query.sinceMs, windowMinutes: query.windowMinutes },
         };
+      },
+    );
+  }
+  if (fetchDeliverable) {
+    server.registerTool(
+      "fetch_execution_deliverable",
+      {
+        title: "Fetch an execution's deliverable file",
+        description:
+          "Owner: Console. Resolve a completed execution to its deliverable and return the LIVE file body from GitHub at the run's head commit — so it works even for an unmerged or draft PR — plus the honest merge state ('merged to main' vs 'PR open — NOT merged yet'). Accepts an executionId, a fully-qualified 'owner/repo#N', or a message containing one. Use this to answer 'give me the file that ticket produced' with contents, not a guess; if it is unmerged the reply says so.",
+        inputSchema: FETCH_EXECUTION_DELIVERABLE_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async (args) => {
+        const reference = typeof (args as Record<string, unknown>)?.reference === "string" ? String((args as Record<string, unknown>).reference) : "";
+        if (!reference.trim()) {
+          return { content: [{ type: "text", text: "ERROR: reference is required" }], isError: true };
+        }
+        const { text, structured } = await fetchDeliverable(reference.trim());
+        return { content: [{ type: "text", text }], structuredContent: structured };
       },
     );
   }
