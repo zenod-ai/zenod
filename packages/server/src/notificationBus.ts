@@ -55,11 +55,24 @@ function nextId(now: number): string {
   return `ntf-${now}-${counter}`;
 }
 
+/**
+ * PURE (R2-T2): does this event carry a meaningful identity to dedup on? Only events
+ * tied to a target/execution/run (or an explicit key) may coalesce — a plain manual
+ * text notification must NEVER be suppressed by an unrelated earlier manual message.
+ */
+export function isCoalescible(event: NotificationEvent): boolean {
+  return Boolean(event.dedupeKey || event.targetIssue || event.executionId || event.runId);
+}
+
+/** Default coalescing window: repeats of the same fact within 10 minutes collapse. */
+const DEFAULT_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
+
 export class NotificationBus {
   constructor(
     private readonly send: NotificationSender,
     private readonly store: NotificationStore,
     private readonly now: () => number = Date.now,
+    private readonly dedupeWindowMs: number = DEFAULT_DEDUPE_WINDOW_MS,
   ) {}
 
   /**
@@ -80,6 +93,21 @@ export class NotificationBus {
         now,
       );
       return { id, status: "suppressed", sent: 0, recipients: [] };
+    }
+
+    // R2-T2: coalesce. If this fact (same target|run|eventType) was already sent within
+    // the window — including from a SIBLING execution of the same run — suppress this
+    // one and journal it pointing at the record that superseded it. Manual/keyless
+    // notifications are never coalesced.
+    if (isCoalescible(event)) {
+      const prior = this.store.latestSentByDedupeKey(dedupeKey);
+      if (prior && now - prior.createdAt <= this.dedupeWindowMs) {
+        this.store.record(
+          { id, eventType: event.eventType, surface, targetIssue: event.targetIssue, executionId: event.executionId, runId: event.runId, severity: event.severity, dedupeKey, composedText, recipients: [], status: "suppressed", suppressedBy: prior.id },
+          now,
+        );
+        return { id, status: "suppressed", sent: 0, recipients: [] };
+      }
     }
 
     let result: NotificationSendResult = { sent: 0, recipients: [] };

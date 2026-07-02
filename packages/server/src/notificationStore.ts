@@ -134,6 +134,15 @@ export class NotificationStore {
     return row ? rowToRecord(row) : null;
   }
 
+  /** Most recent SENT record for this key — the anchor coalescing suppresses against
+   *  (R2-T2). Ignores prior suppressed rows so a run of siblings collapses to one. */
+  latestSentByDedupeKey(dedupeKey: string): NotificationRecord | null {
+    const row = this.db
+      .prepare(`SELECT * FROM notifications WHERE dedupe_key=? AND status='sent' ORDER BY created_at DESC LIMIT 1`)
+      .get(dedupeKey) as Row | undefined;
+    return row ? rowToRecord(row) : null;
+  }
+
   recent(limit = 100): NotificationRecord[] {
     const rows = this.db
       .prepare(`SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?`)

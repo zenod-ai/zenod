@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { NotificationBus, notificationDedupeKey, type NotificationSender } from "../src/notificationBus.js";
+import { NotificationBus, notificationDedupeKey, isCoalescible, type NotificationSender } from "../src/notificationBus.js";
 import { NotificationStore } from "../src/notificationStore.js";
 
 async function withStore<T>(fn: (store: NotificationStore) => Promise<T>): Promise<T> {
@@ -84,6 +84,68 @@ describe("NotificationBus (R2-T1)", () => {
       expect(sends).toBe(0);
       expect(res.status).toBe("suppressed");
       expect(store.recent()[0].status).toBe("suppressed");
+    });
+  });
+});
+
+describe("NotificationBus coalescing (R2-T2)", () => {
+  it("suppresses a repeat of the same fact within the window, pointing at the sender", async () => {
+    await withStore(async (store) => {
+      let sends = 0;
+      let clock = 1000;
+      const bus = new NotificationBus(async () => { sends += 1; return { sent: 1, recipients: ["c"] }; }, store, () => clock, 10 * 60 * 1000);
+      const a = await bus.notify({ eventType: "execution.terminal", text: "✅", targetIssue: "o/r#5", executionId: "exec-a" });
+      clock += 2000;
+      const b = await bus.notify({ eventType: "execution.terminal", text: "✅", targetIssue: "o/r#5", executionId: "exec-b" });
+      expect(sends).toBe(1);
+      expect(a.status).toBe("sent");
+      expect(b.status).toBe("suppressed");
+      const suppressed = store.recent().find((r) => r.status === "suppressed");
+      expect(suppressed?.suppressedBy).toBe(a.id);
+    });
+  });
+
+  it("sends again once the window has passed", async () => {
+    await withStore(async (store) => {
+      let sends = 0;
+      let clock = 1000;
+      const bus = new NotificationBus(async () => { sends += 1; return { sent: 1, recipients: ["c"] }; }, store, () => clock, 60 * 1000);
+      await bus.notify({ eventType: "execution.blocked", text: "⛔", targetIssue: "o/r#5" });
+      clock += 61 * 1000; // outside the 60s window
+      await bus.notify({ eventType: "execution.blocked", text: "⛔ still", targetIssue: "o/r#5" });
+      expect(sends).toBe(2);
+    });
+  });
+
+  it("never coalesces keyless manual notifications", async () => {
+    await withStore(async (store) => {
+      let sends = 0;
+      const bus = new NotificationBus(async () => { sends += 1; return { sent: 1, recipients: ["c"] }; }, store, () => 1000);
+      await bus.notify({ eventType: "manual", text: "first" });
+      await bus.notify({ eventType: "manual", text: "second" });
+      expect(sends).toBe(2);
+      expect(isCoalescible({ eventType: "manual", text: "x" })).toBe(false);
+    });
+  });
+
+  it("collapses the #102 storm: 3 sibling execs blocked + 3 terminal → 1 blocked + 1 terminal (R2-T2)", async () => {
+    await withStore(async (store) => {
+      const sent: string[] = [];
+      let clock = 1000;
+      const bus = new NotificationBus(async (_s, text) => { sent.push(text); return { sent: 2, recipients: ["a", "b"] }; }, store, () => clock);
+      const execs = ["exec-1", "exec-2", "exec-3"];
+      // Three sibling executions on the SAME issue each report blocked, then terminal.
+      for (const executionId of execs) {
+        clock += 100;
+        await bus.notify({ eventType: "execution.blocked", text: `⛔ ${executionId}`, targetIssue: "AlfaBlok/idea_scraper#102", executionId });
+      }
+      for (const executionId of execs) {
+        clock += 100;
+        await bus.notify({ eventType: "execution.terminal", text: `✅ ${executionId}`, targetIssue: "AlfaBlok/idea_scraper#102", executionId });
+      }
+      // One blocked + one terminal actually sent (recipient fan-out owned centrally).
+      expect(sent).toHaveLength(2);
+      expect(store.recent().filter((r) => r.status === "suppressed")).toHaveLength(4);
     });
   });
 });
