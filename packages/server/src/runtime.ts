@@ -31,6 +31,7 @@ import { installationToken, installationTokenForRepo, editGithubIssue, mintExecu
 import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, projectRegistrySection, resolveProject } from "./projectRegistry.js";
+import { backlogRouterSection, loadRepoInference } from "./backlogRouter.js";
 import { buildOneOffIssueBody, oneOffIssueTitle } from "./oneOffExecution.js";
 import { ExecutionQueue, type ExecutionTicket } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
@@ -368,7 +369,9 @@ export class Runtime {
       // Front-end routing agents get the project registry appended so they resolve the
       // user's informal project names to a concrete repo/path without asking (#stab T4).
       persona: ["zenod", "console", "archus"].includes(this.agent.name)
-        ? `${this.agent.persona}${projectRegistrySection(loadProjectRegistry())}`
+        ? `${this.agent.persona}${projectRegistrySection(loadProjectRegistry())}${
+            ["console", "archus"].includes(this.agent.name) ? backlogRouterSection(loadRepoInference()) : ""
+          }`
         : this.agent.persona,
       ...(repo
         ? {
