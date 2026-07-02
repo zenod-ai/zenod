@@ -5,6 +5,7 @@ describe("buildOutboundTools", () => {
   it("exposes the send tools plus the read-only X tools the brain wields", () => {
     const tools = buildOutboundTools({});
     expect(Object.keys(tools).sort()).toEqual([
+      "approve_send",
       "post_reddit",
       "post_tweet",
       "send_email",
@@ -107,6 +108,66 @@ describe("buildOutboundTools", () => {
     const tools = buildOutboundTools({}); // X not connected
     const res = await tools.post_tweet.run({ text: "hi", image_url: "https://example.com/a.png" });
     expect(res.toLowerCase()).toContain("not connected");
+  });
+});
+
+describe("approve_send (I4-R1) — approve verb resolves to receipt OR honest affordance, no third", () => {
+  beforeEach(() => __resetOutboundIdempotency());
+
+  it("advertises a structured schema and is present on the outbound surface", () => {
+    const tools = buildOutboundTools({});
+    expect(tools.approve_send).toBeDefined();
+    const shape = (tools.approve_send.inputSchema as { shape?: Record<string, unknown> })?.shape;
+    expect(shape && "channel" in shape).toBe(true);
+  });
+
+  it("no committed draft → honest affordance ('post now'), never a fabricated 'posted'", async () => {
+    const tools = buildOutboundTools({}); // even unconnected, an empty approve never fakes a send
+    const res = await tools.approve_send.run({ channel: "x" });
+    expect(res.toLowerCase()).toContain("no committed draft");
+    expect(res.toLowerCase()).toContain("post now");
+    expect(res.toLowerCase()).toContain("do not claim");
+    // It is NOT a success line and carries no fabricated URL.
+    expect(res.toLowerCase()).not.toContain("posted to x");
+    expect(res).not.toContain("x.com/");
+  });
+
+  it("reddit approve missing title/subreddit → affordance, not a partial fake send", async () => {
+    const tools = buildOutboundTools({});
+    const res = await tools.approve_send.run({ channel: "reddit", content: "just a body" });
+    expect(res.toLowerCase()).toContain("no committed draft");
+    expect(res.toLowerCase()).toContain("post now");
+  });
+
+  it("unknown/absent channel → affordance, never a silent no-op", async () => {
+    const tools = buildOutboundTools({});
+    const res = await tools.approve_send.run({ text: "hi there" });
+    expect(res.toLowerCase()).toContain("no committed draft");
+  });
+
+  it("committed X draft routes to the SAME verified-receipt send path (never the affordance, never a fake success)", async () => {
+    // Dead X connector: a committed approve must REACH the connector and reduce to a
+    // FAILED receipt — proving it went through the E-1 send path, not the affordance and
+    // not a fabricated 'Posted:' line.
+    const tools = buildOutboundTools({ OUTBOUND_X_MCP_URL: "http://127.0.0.1:0/mcp" });
+    const res = await tools.approve_send.run({ channel: "x", text: "Ship it: the release is live." });
+    expect(res.toLowerCase()).not.toContain("no committed draft");
+    expect(res).toMatch(/^FAILED to send to X/);
+    expect(res).not.toContain("x.com/"); // no fabricated live URL
+  });
+
+  it("committed reddit draft routes to the send path (reaches the connector, no fake send)", async () => {
+    const tools = buildOutboundTools({ OUTBOUND_REDDIT_MCP_URL: "http://127.0.0.1:0/mcp" });
+    const res = await tools.approve_send.run({ channel: "reddit", subreddit: "test", title: "Hi", content: "body" });
+    expect(res.toLowerCase()).not.toContain("no committed draft");
+    expect(res).toMatch(/^FAILED to send to Reddit/);
+  });
+
+  it("committed approve to an UNCONNECTED channel reports not-connected, never a fake send", async () => {
+    const tools = buildOutboundTools({}); // X not connected
+    const res = await tools.approve_send.run({ channel: "x", text: "hello world" });
+    expect(res.toLowerCase()).toContain("not connected");
+    expect(res.toLowerCase()).toContain("not claim anything was sent");
   });
 });
 

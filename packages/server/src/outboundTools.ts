@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { VERSION } from "zenod";
 import type { PeerTools } from "zenod";
-import { parseOutboundReceipt, renderOutboundReceipt, type OutboundChannel } from "./outboundReceipt.js";
+import { parseOutboundReceipt, renderOutboundReceipt, renderApproveAffordance, type OutboundChannel } from "./outboundReceipt.js";
 
 /**
  * The Callistheness agent's PRIVATE send tools, wired into its chat brain.
@@ -696,5 +696,95 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
   // Reddit via Composio (interim, #420). When configured these OVERRIDE the MCP-based
   // post_reddit above and add the ungated Reddit reads; unset → self-host path stays.
   Object.assign(tools, buildRedditComposioTools(env));
+  // I4-R1: the approve verb, wired to the SAME verified-receipt path as the send tools.
+  Object.assign(tools, buildApproveTool(tools));
   return tools;
+}
+
+/**
+ * I4-R1 — the approve/post-now verb as a STRUCTURAL affordance, not model disposition.
+ *
+ * "approve" / "post now" of a standing outbound draft has exactly TWO possible outcomes,
+ * with no third:
+ *   1. it carries the committed final content (channel + text/fields) → it dispatches to
+ *      the matching send tool ONCE and the reply is that tool's verified receipt (a real
+ *      live URL, from outboundReceipt.ts), OR
+ *   2. there is no committed content to publish → the reply is the honest affordance
+ *      ("say 'post now' to send") from renderApproveAffordance.
+ * Never a fabricated "posted", never a silent no-op. Because approve delegates to the
+ * real send tool, it inherits the E-1 receipt reduction and the E1-T4 idempotency guard
+ * (a double-fire returns the first receipt, not a second post).
+ */
+const APPROVE_CHANNEL_BY_NAME: Record<string, OutboundChannel> = {
+  x: "x",
+  twitter: "x",
+  tweet: "x",
+  reddit: "reddit",
+  email: "email",
+  mail: "email",
+};
+
+function approveChannel(raw: unknown): OutboundChannel | undefined {
+  const key = String(raw ?? "").trim().toLowerCase();
+  return APPROVE_CHANNEL_BY_NAME[key];
+}
+
+/** True when the approve carries real content to publish (not just an empty confirm). */
+function hasCommittedContent(channel: OutboundChannel, o: Record<string, unknown>): boolean {
+  if (channel === "reddit") {
+    return Boolean(String(o.subreddit ?? "").trim() && String(o.title ?? "").trim() && String(o.content ?? "").trim());
+  }
+  // x + email commit on a single final text/body blob.
+  const text = String(o.text ?? o.content ?? o.body ?? o.request ?? "").trim();
+  return text.length > 0;
+}
+
+export function buildApproveTool(tools: PeerTools): PeerTools {
+  return {
+    approve_send: {
+      description:
+        "Commit a STANDING outbound draft: the user has approved it and said to post/send it now. Pass { channel } ('x' | 'reddit' | 'email') and the EXACT final content the user approved — for x/email the final text (as { text } / { body }); for reddit { subreddit, title, content }. This posts EXACTLY ONCE and returns the VERIFIED receipt (a real live URL) — relay that line verbatim. If you have no concrete final draft yet, do NOT call this with empty content: it will return the honest affordance to relay instead (never a fabricated 'posted'). Use this for 'approve' / 'post now' of a draft already shown to the user.",
+      inputSchema: z.object({
+        channel: z.enum(["x", "reddit", "email"]).describe("Which channel the approved draft goes to."),
+        text: z.string().optional().describe("The FINAL approved text/body for x or email, exactly as it will go out."),
+        body: z.string().optional().describe("Alias for text (email body)."),
+        subreddit: z.string().optional().describe("Reddit only: target subreddit without the r/ prefix."),
+        title: z.string().optional().describe("Reddit only: the approved post title."),
+        content: z.string().optional().describe("Reddit only: the approved post body (or URL for a link post)."),
+        is_self: z.boolean().optional().describe("Reddit only: true for a self/text post (default), false for a link."),
+        image_url: z.string().optional().describe("X only: optional https image URL to attach."),
+      }),
+      run: async (input) => {
+        const o: Record<string, unknown> = typeof input === "string" ? { text: input } : (input ?? {});
+        const channel = approveChannel(o.channel);
+        if (!channel) {
+          // No channel resolved → nothing to publish. Honest affordance, never a fake send.
+          return renderApproveAffordance();
+        }
+        if (!hasCommittedContent(channel, o)) {
+          return renderApproveAffordance(channel);
+        }
+        // Delegate to the SAME send tool the brain would call → one send, E-1 receipt,
+        // E1-T4 idempotency. Shape the payload to that tool's expected input.
+        const SEND_TOOL: Record<OutboundChannel, string> = { x: "post_tweet", reddit: "post_reddit", email: "send_email" };
+        const send = tools[SEND_TOOL[channel]];
+        if (!send) return renderApproveAffordance(channel); // send tool absent → affordance, never a fake send
+        if (channel === "x") {
+          const args: Record<string, unknown> = { text: String(o.text ?? o.content ?? o.body ?? "") };
+          if (typeof o.image_url === "string" && o.image_url.trim()) args.image_url = o.image_url.trim();
+          return send.run(args);
+        }
+        if (channel === "reddit") {
+          return send.run({
+            subreddit: o.subreddit,
+            title: o.title,
+            content: o.content,
+            ...(o.is_self !== undefined ? { is_self: o.is_self } : {}),
+          });
+        }
+        // email: the send_email tool takes the final message as a single string/field.
+        return send.run(String(o.text ?? o.body ?? o.content ?? o.request ?? ""));
+      },
+    },
+  };
 }
