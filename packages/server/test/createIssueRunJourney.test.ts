@@ -39,11 +39,11 @@ describe("createIssueThenRunJourney", () => {
         calls.push({ peer: peer.name, tool, args });
         if (peer.name === "archus") {
           return {
-            content: [{ type: "text", text: "Created AlfaBlok/zenod#999: https://github.com/AlfaBlok/zenod/issues/999" }],
+            content: [{ type: "text", text: "Created AlfaBlok/obsidian-brain#999: https://github.com/AlfaBlok/obsidian-brain/issues/999" }],
             structuredContent: {
-              repo: "AlfaBlok/zenod",
+              repo: "AlfaBlok/obsidian-brain",
               issueNumber: 500,
-              issueUrl: "https://github.com/AlfaBlok/zenod/issues/500",
+              issueUrl: "https://github.com/AlfaBlok/obsidian-brain/issues/500",
               labels: ["status:proposed"],
             },
           };
@@ -72,7 +72,7 @@ describe("createIssueThenRunJourney", () => {
           originalRequest: "create a ticket and run it",
           surface: "chat",
           issue: {
-            repo: "AlfaBlok/zenod",
+            repo: "AlfaBlok/obsidian-brain",
             title: "Smoke create then run",
             body: runnableBody,
           },
@@ -82,17 +82,17 @@ describe("createIssueThenRunJourney", () => {
 
       expect(result.status).toBe("completed");
       expect(result.createdIssue).toMatchObject({
-        target: "AlfaBlok/zenod#500",
-        url: "https://github.com/AlfaBlok/zenod/issues/500",
+        target: "AlfaBlok/obsidian-brain#500",
+        url: "https://github.com/AlfaBlok/obsidian-brain/issues/500",
       });
       expect(calls.map((call) => `${call.peer}:${call.tool}`)).toEqual([
         "archus:create_issue",
         "epaminon:epaminon.run_existing_issue",
       ]);
-      expect(calls[1].args.target).toBe("AlfaBlok/zenod#500");
+      expect(calls[1].args.target).toBe("AlfaBlok/obsidian-brain#500");
       expect(result.snapshot.journey.status).toBe("completed");
       expect(result.snapshot.artifacts).toEqual(expect.arrayContaining([
-        expect.objectContaining({ kind: "github_issue", artifactKey: "github:AlfaBlok/zenod#500" }),
+        expect.objectContaining({ kind: "github_issue", artifactKey: "github:AlfaBlok/obsidian-brain#500" }),
         expect.objectContaining({ kind: "execution_record", artifactKey: "execution:direct-test-1" }),
       ]));
     });
@@ -116,7 +116,7 @@ describe("createIssueThenRunJourney", () => {
         callTool,
         request: {
           originalRequest: "create a ticket and run it",
-          issue: { repo: "AlfaBlok/zenod", title: "Won't be created", body: runnableBody },
+          issue: { repo: "AlfaBlok/obsidian-brain", title: "Won't be created", body: runnableBody },
         },
       });
 
@@ -128,30 +128,22 @@ describe("createIssueThenRunJourney", () => {
     });
   });
 
-  it("passes a repo from the original create-and-run request into the Archus create step", async () => {
+  it("routes a foreign-repo create-and-run to the Epaminon worker (gh auth), never Archus create", async () => {
     await withStore(async (store) => {
       const calls: Array<{ peer: string; tool: string; args: Record<string, unknown> }> = [];
       const callTool: JourneyPeerToolCaller = async (peer, tool, args) => {
         calls.push({ peer: peer.name, tool, args });
-        if (peer.name === "archus") {
-          return {
-            content: [{ type: "text", text: "Created zenod-ai/zenod#720" }],
-            structuredContent: {
-              repo: "zenod-ai/zenod",
-              issueNumber: 720,
-              issueUrl: "https://github.com/zenod-ai/zenod/issues/720",
-              labels: ["status:proposed"],
-            },
-          };
-        }
+        // The worker (runner gh auth) mints the issue and returns the ticket carrying
+        // the real created target + evidence URL.
         return {
           content: [{ type: "text", text: "Queued direct-test-720" }],
           structuredContent: {
             ticket: {
               executionId: "direct-test-720",
-              target: args.target,
+              target: "zenod-ai/zenod#720",
               context: "Run it",
               state: "queued",
+              evidenceUrl: "https://github.com/zenod-ai/zenod/issues/720",
               updatedAt: 123,
             },
           },
@@ -166,11 +158,12 @@ describe("createIssueThenRunJourney", () => {
         request: {
           originalRequest: "create a ticket in zenod-ai/zenod and run it",
           issue: {
+            repo: "zenod-ai/zenod",
             title: "Repo inferred create then run",
             body: [
-              "Objective: prove repo inference.",
+              "Objective: prove the worker route.",
               "Scope: no code changes; create and run only this fixture ticket.",
-              "Acceptance criteria: the Archus create call receives zenod-ai/zenod.",
+              "Acceptance criteria: Epaminon receives the foreign repo, not Archus.",
               "Source context: original request names zenod-ai/zenod.",
             ].join("\n"),
             labels: ["status:proposed"],
@@ -179,12 +172,14 @@ describe("createIssueThenRunJourney", () => {
       });
 
       expect(result.status).toBe("completed");
-      expect(calls[0]).toMatchObject({
-        peer: "archus",
-        tool: "create_issue",
-        args: { repo: "zenod-ai/zenod", title: "Repo inferred create then run" },
-      });
-      expect(calls[1].args.target).toBe("zenod-ai/zenod#720");
+      // The App-token path (archus:create_issue) must NEVER be called for a foreign repo.
+      expect(calls.some((c) => c.peer === "archus")).toBe(false);
+      expect(calls.map((c) => `${c.peer}:${c.tool}`)).toEqual(["epaminon:epaminon.run_ephemeral_task"]);
+      expect(calls[0].args).toMatchObject({ repo: "zenod-ai/zenod" });
+      // The created-issue receipt (target + URL) is propagated back.
+      expect(result.execution?.target).toBe("zenod-ai/zenod#720");
+      expect(result.message).toContain("zenod-ai/zenod#720");
+      expect(result.message).toContain("https://github.com/zenod-ai/zenod/issues/720");
     });
   });
 
@@ -193,11 +188,11 @@ describe("createIssueThenRunJourney", () => {
       const callTool: JourneyPeerToolCaller = async (peer) => {
         if (peer.name === "archus") {
           return {
-            content: [{ type: "text", text: "Created AlfaBlok/zenod#501" }],
+            content: [{ type: "text", text: "Created AlfaBlok/obsidian-brain#501" }],
             structuredContent: {
-              repo: "AlfaBlok/zenod",
+              repo: "AlfaBlok/obsidian-brain",
               issueNumber: 501,
-              issueUrl: "https://github.com/AlfaBlok/zenod/issues/501",
+              issueUrl: "https://github.com/AlfaBlok/obsidian-brain/issues/501",
               labels: ["status:proposed"],
             },
           };
@@ -215,16 +210,16 @@ describe("createIssueThenRunJourney", () => {
         callTool,
         request: {
           originalRequest: "create a ticket and run it",
-          issue: { repo: "AlfaBlok/zenod", title: "Create succeeds, run blocks", body: runnableBody },
+          issue: { repo: "AlfaBlok/obsidian-brain", title: "Create succeeds, run blocks", body: runnableBody },
         },
       });
 
       expect(result.status).toBe("blocked");
-      expect(result.createdIssue?.target).toBe("AlfaBlok/zenod#501");
-      expect(result.message).toContain("Created AlfaBlok/zenod#501, but did not run it");
+      expect(result.createdIssue?.target).toBe("AlfaBlok/obsidian-brain#501");
+      expect(result.message).toContain("Created AlfaBlok/obsidian-brain#501, but did not run it");
       expect(result.execution).toBeUndefined();
       expect(result.snapshot.artifacts).toEqual([
-        expect.objectContaining({ kind: "github_issue", artifactKey: "github:AlfaBlok/zenod#501" }),
+        expect.objectContaining({ kind: "github_issue", artifactKey: "github:AlfaBlok/obsidian-brain#501" }),
       ]);
       expect(result.snapshot.steps.map((step) => `${step.owner}:${step.status}`)).toEqual(["archus:completed", "epaminon:blocked"]);
     });
@@ -237,11 +232,11 @@ describe("createIssueThenRunJourney", () => {
         calls.push({ peer: peer.name, tool, args });
         if (peer.name === "archus") {
           return {
-            content: [{ type: "text", text: "Created AlfaBlok/zenod#502" }],
+            content: [{ type: "text", text: "Created AlfaBlok/obsidian-brain#502" }],
             structuredContent: {
-              repo: "AlfaBlok/zenod",
+              repo: "AlfaBlok/obsidian-brain",
               issueNumber: 502,
-              issueUrl: "https://github.com/AlfaBlok/zenod/issues/502",
+              issueUrl: "https://github.com/AlfaBlok/obsidian-brain/issues/502",
               labels: ["status:proposed"],
             },
           };
@@ -267,7 +262,7 @@ describe("createIssueThenRunJourney", () => {
         callTool,
         request: {
           originalRequest: "create this and run it, then notify me only after Epaminon reports terminal or blocked",
-          issue: { repo: "AlfaBlok/zenod", title: "Create run terminal notify", body: runnableBody },
+          issue: { repo: "AlfaBlok/obsidian-brain", title: "Create run terminal notify", body: runnableBody },
           runInstructions: "Do not send a pickup/start notification; terminal notification only.",
         },
       });
@@ -276,7 +271,7 @@ describe("createIssueThenRunJourney", () => {
       expect(calls[1]).toMatchObject({
         peer: "epaminon",
         tool: "epaminon.run_existing_issue",
-        args: { target: "AlfaBlok/zenod#502", notifyOnStart: false },
+        args: { target: "AlfaBlok/obsidian-brain#502", notifyOnStart: false },
       });
     });
   });
@@ -318,22 +313,23 @@ describe("createIssueThenRunJourney", () => {
     });
   });
 
-  it("creates and runs a clear one-off whose body lacks ceremonial sections (the research-VN fix)", async () => {
+  it("routes a clear one-off with a thin body to the foreign-repo worker (research-VN fix + gh auth)", async () => {
     await withStore(async (store) => {
-      const calls: Array<{ peer: string; tool: string }> = [];
+      const calls: Array<{ peer: string; tool: string; args: Record<string, unknown> }> = [];
       const callTool: JourneyPeerToolCaller = async (peer, tool, args) => {
-        calls.push({ peer: peer.name, tool });
-        if (tool === "create_issue") {
-          return {
-            isError: false,
-            content: [{ type: "text", text: "created" }],
-            structuredContent: { repo: "AlfaBlok/idea_scraper", issueNumber: 999, issueUrl: "https://github.com/AlfaBlok/idea_scraper/issues/999", labels: [] },
-          };
-        }
+        calls.push({ peer: peer.name, tool, args });
+        // Foreign repo → the worker mints the issue under gh auth and returns the ticket.
         return {
           isError: false,
           content: [{ type: "text", text: "queued" }],
-          structuredContent: { ticket: { executionId: "999", target: "AlfaBlok/idea_scraper#999", state: "queued" } },
+          structuredContent: {
+            ticket: {
+              executionId: "999",
+              target: "AlfaBlok/idea_scraper#999",
+              state: "queued",
+              evidenceUrl: "https://github.com/AlfaBlok/idea_scraper/issues/999",
+            },
+          },
         };
       };
 
@@ -353,16 +349,46 @@ describe("createIssueThenRunJourney", () => {
       });
 
       expect(result.status).toBe("completed");
-      expect(result.createdIssue?.target).toBe("AlfaBlok/idea_scraper#999");
-      expect(result.execution?.executionId).toBe("999");
-      expect(calls.map((c) => c.tool)).toEqual(["create_issue", "epaminon.run_existing_issue"]);
+      // A thin body no longer dies at the clarify gate AND a foreign repo never hits Archus.
+      expect(calls.some((c) => c.peer === "archus")).toBe(false);
+      expect(calls.map((c) => c.tool)).toEqual(["epaminon.run_ephemeral_task"]);
+      expect(result.execution?.target).toBe("AlfaBlok/idea_scraper#999");
+      expect(result.message).toContain("https://github.com/AlfaBlok/idea_scraper/issues/999");
+    });
+  });
+
+  it("propagates a FAILED worker dispatch (no fabricated success, no dead App-token error)", async () => {
+    await withStore(async (store) => {
+      const calls: Array<{ peer: string; tool: string }> = [];
+      const callTool: JourneyPeerToolCaller = async (peer, tool) => {
+        calls.push({ peer: peer.name, tool });
+        return { isError: true, content: [{ type: "text", text: "runner gh auth unavailable" }] };
+      };
+
+      const result = await createIssueThenRunJourney({
+        store,
+        archus,
+        epaminon,
+        callTool,
+        request: {
+          originalRequest: "create and run in AlfaBlok/nectary",
+          issue: { repo: "AlfaBlok/nectary", title: "Foreign fail", body: runnableBody },
+        },
+      });
+
+      expect(result.status).toBe("blocked");
+      expect(calls.some((c) => c.peer === "archus")).toBe(false);
+      expect(calls.map((c) => c.tool)).toEqual(["epaminon.run_ephemeral_task"]);
+      expect(result.message).toContain("FAILED");
+      expect(result.message).toContain("runner gh auth unavailable");
+      expect(result.message).not.toMatch(/App (not )?installed/i);
     });
   });
 
   it("reports missing runnable fields deterministically", () => {
     expect(
       validateCreateIssueThenRunRequest({
-        originalRequest: "create and run this in AlfaBlok/zenod",
+        originalRequest: "create and run this in AlfaBlok/obsidian-brain",
         issue: {
           title: "Thin ticket",
           body: "Objective: improve the thing.",
