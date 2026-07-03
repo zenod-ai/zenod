@@ -1,0 +1,14 @@
+{
+  "name": "d2-spike-candidate-c-diy",
+  "private": true,
+  "type": "module",
+  "description": "D-2 bake-off candidate C: DIY (AI SDK + DIY durable event-log + injected MCP + hard budget + external authority receipt).",
+  "scripts": {
+    "test": "node --test src/harness.test.mjs",
+    "crash-demo": "node src/crash-recovery-demo.mjs"
+  },
+  "optionalDependencies": {
+    "ai": "^7.0.14",
+    "@ai-sdk/anthropic": "^4.0.7"
+  }
+}
