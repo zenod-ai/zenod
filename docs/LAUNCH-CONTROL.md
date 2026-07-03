@@ -77,6 +77,9 @@ rewrites the state after every review. One document per concern — never a new 
 | 1 | System Stability | 🔴 ACTIVE — iteration 7 | CANONICAL-TESTS board green ×2 consecutive builds |
 | 2 | Hosted Readiness | 🟡 SCOPING | First paying customer live (Jordi = customer #0 doesn't count) |
 
+**⏸ DISPATCH FREEZE (Jordi, 2026-07-03 ~21:45):** no new tickets or dispatches until direction is
+clarified at the Fable table. In-flight runs land; nothing new starts.
+
 **Now (2026-07-03 late):** Epic 1: S-0 ✅ · #486 (S-3) + #493 (S-4/5/6) merged · S-1 re-dispatched
 (`direct-1783107468359`; first run killed by deploy restart — the durable-execution argument making
 itself) · S-2 forensic running (`direct-1783107479331`) · S-8 running (`direct-1783107490565`) ·
