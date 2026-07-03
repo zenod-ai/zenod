@@ -2091,7 +2091,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
                   targetRepo ? `Target repo: ${targetRepo}. Clone and work THIS repo; do not guess or search for a different one.` : "",
                   targetPath ? `Target path within repo: ${targetPath}` : "",
                   match?.deployNote ? `Deploy reality: ${match.deployNote}` : "",
-                  artifactPolicy ? `Artifact policy: ${artifactPolicy}` : "Artifact policy: do not create backlog issues unless explicitly needed.",
+                  artifactPolicy
+                    ? `Artifact policy: ${artifactPolicy}`
+                    : "Artifact policy: do not create backlog issues unless explicitly needed. For code work, open ONE PR against main and do not merge it yourself — the controller enables GitHub auto-merge on green by default; say HOLD-FOR-REVIEW to keep it open for review.",
                 ]
                   .filter(Boolean)
                   .join("\n");

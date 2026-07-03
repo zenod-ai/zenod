@@ -130,7 +130,7 @@ export interface OneOffIssueInput {
 export function buildOneOffIssueBody(input: OneOffIssueInput): string {
   const scope = input.instructions?.trim() || "Complete the objective above; make no unrelated changes.";
   const done =
-    "The objective is achieved. For code work: the change is committed and pushed, with the real commit or PR URL reported as evidence (a bare or invented SHA is not acceptable); if it must go live, redeploy is confirmed or explicitly reported as unconfirmed. For research/ops: the result is reported on this ticket.";
+    "The objective is achieved. For code work: the change is committed and pushed as ONE PR against main, with the real commit or PR URL reported as evidence (a bare or invented SHA is not acceptable) — do NOT merge by hand; the controller enables GitHub auto-merge on the PR by default (it merges once CI is green; request HOLD-FOR-REVIEW to keep it open for review). If it must go live, redeploy is confirmed or explicitly reported as unconfirmed. For research/ops: the result is reported on this ticket.";
   const ctx = [
     input.repo ? `repo: ${input.repo}` : "",
     input.path ? `path: ${input.path}` : "",
