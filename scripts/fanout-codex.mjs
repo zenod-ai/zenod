@@ -781,6 +781,19 @@ async function runWorker({ opts, manifest, issueNumber }) {
     return;
   }
   if (exitCode !== 0) {
+    const rawError = result.rawError ?? extractWorkerError(eventsPath);
+    // #506: quota death with no fallback engine (both CLIs dry) is an ACCOUNT pause, not a
+    // task failure. Report it as an honest paused state with a retry-after time instead of
+    // "⛔ failed". (When a fallback engine IS available the fallback above already fired.)
+    if (isPausedQuota(rawError, result.engine)) {
+      const paused = pauseMessage(issueNumber, rawError);
+      if (opts.githubStatus) {
+        syncIssueStatusLabel(manifest.repo, issueNumber, "blocked");
+        await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "paused", worker.branch, finalText, null, paused), true);
+      }
+      await reportExecutionBlocked(opts, paused);
+      return;
+    }
     const reason = workerError ?? `Codex worker exited with code ${exitCode} and produced no final handoff.`;
     if (opts.githubStatus) {
       syncIssueStatusLabel(manifest.repo, issueNumber, "failed");
@@ -933,6 +946,24 @@ function classifyWorkerError(message) {
 // flow, so a run that died on one engine's quota can be replayed on the other.
 function fallbackEngine(engine) {
   return engine === "codex" ? "claude" : "codex";
+}
+
+// #506: is this a quota death with NOWHERE to fall back to (both engines dry)? When true
+// the run must be reported as PAUSED (an account problem, retry after reset) — NOT failed
+// and NOT "produced nothing verifiable". Pure/deterministic: the error class + engine
+// availability decide, no LLM. `hasCommand` is injectable for tests.
+function isPausedQuota(rawError, engine, hasCommand = commandExists) {
+  return isQuotaError(rawError) && !hasCommand(fallbackEngine(engine));
+}
+
+// #506: honest paused render, e.g.
+//   "⏸️ Execution 104 paused: out of credits — retry after 05:30 UTC"
+// resetsAt is recovered from the captured message when present.
+function pauseMessage(executionId, rawError, { target } = {}) {
+  const at = formatResetsAt(parseResetsAt(rawError));
+  const retry = at ? ` — retry after ${at}` : "";
+  const label = target ? `Execution ${executionId} (${target})` : `Execution ${executionId}`;
+  return `⏸️ ${label} paused: out of credits${retry}`;
 }
 
 // --- Worker engine selection (codex CLI or Claude Code CLI, same GitHub flow) ---
@@ -1602,6 +1633,8 @@ export {
   isQuotaError,
   parseResetsAt,
   formatResetsAt,
+  isPausedQuota,
+  pauseMessage,
   fallbackEngine,
   finalComment,
   deliverablePaths,

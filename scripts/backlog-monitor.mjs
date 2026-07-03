@@ -31,7 +31,7 @@ import { dirname, join } from "node:path";
 // other engine when the primary dies on a usage-limit / 429 / billing error; the
 // ephemeral one-off path reuses the SAME error-class + fallback helpers so the two
 // lanes stay in lockstep (E-2 port).
-import { isQuotaError, fallbackEngine, buildWorkerSpawn, extractWorkerError } from "./fanout-codex.mjs";
+import { isQuotaError, fallbackEngine, buildWorkerSpawn, extractWorkerError, isPausedQuota, pauseMessage } from "./fanout-codex.mjs";
 
 const BACKLOG = process.env.ZENOD_BACKLOG_REPO || "AlfaBlok/obsidian-brain";
 const REPO = process.env.ZENOD_REPO || "zenod-ai/zenod"; // default target repo + fan-in repo
@@ -1106,6 +1106,30 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
   const entry = persisted.ephemeral?.[executionId];
   if (entry?.reportedStatus) return;
   const eventsPath = entry?.eventsPath || ephemeralRunPaths(executionId).eventsPath;
+
+  // #506: quota death with no fallback engine (both CLIs dry) is an ACCOUNT pause, not a
+  // task failure — and must NOT go down the "produced nothing verifiable → failed" path.
+  // Report an honest paused state with a retry-after time. (When a fallback engine IS
+  // available, ephemeralFallbackDecision already replayed on it before we got here.)
+  if (exitCode !== 0) {
+    const quotaError = extractWorkerError(eventsPath);
+    if (isPausedQuota(quotaError, entry?.engine || "claude")) {
+      const paused = pauseMessage(executionId, quotaError, { target });
+      if (!persisted.ephemeral) persisted.ephemeral = {};
+      persisted.ephemeral[executionId] = {
+        ...(entry ?? { target }),
+        reportedStatus: "paused",
+        finishedAt: new Date().toISOString(),
+        exitCode,
+        finalPath,
+        eventsPath,
+        pausedReason: quotaError,
+      };
+      saveState(persisted);
+      await dispatchReport("/api/exec/blocked", { execution_id: executionId, note: paused }, paused);
+      return;
+    }
+  }
 
   // T3 anti-hallucination: a "complete" claim with a commit/PR/issue URL must point at
   // real GitHub objects. Fabricated evidence (a SHA/PR/issue that does not exist) is
