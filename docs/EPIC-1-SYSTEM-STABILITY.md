@@ -89,3 +89,17 @@ epic closed.
 ## Worker/tester append zone (same doc, never a new file)
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
+
+### Receipt · 2026-07-03 · iteration-7 master run (issue hydration)
+Tracking issues minted with verbatim acceptance criteria (S-4/S-5/S-6 pre-existing, linked not duplicated):
+- S-0 · https://github.com/zenod-ai/zenod/issues/487
+- S-1 · https://github.com/zenod-ai/zenod/issues/488
+- S-2 · https://github.com/zenod-ai/zenod/issues/489
+- S-3 · https://github.com/zenod-ai/zenod/issues/490
+- S-4 · https://github.com/zenod-ai/zenod/issues/483 (pre-existing, F-1)
+- S-5 · https://github.com/zenod-ai/zenod/issues/484 (pre-existing, F-2)
+- S-6 · https://github.com/zenod-ai/zenod/issues/485 (pre-existing)
+- S-7 · https://github.com/zenod-ai/zenod/issues/491
+- S-8 · https://github.com/zenod-ai/zenod/issues/492
+Council mirror (AlfaBlok/obsidian-brain): Council/{LAUNCH-CONTROL,EPIC-1-SYSTEM-STABILITY,EPIC-2-HOSTED-READINESS}.md.
+Ticket *execution* (S-0 canary dispatch, S-1 runner code, S-3 re-land, S-7 budgets) requires the zenod codebase + production dispatch — pending runtime/Epaminon executor; not performable from the obsidian-brain sandbox worker.
