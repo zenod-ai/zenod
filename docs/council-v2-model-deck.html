@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Council V2 — Current Model vs New Model</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2d3646;
+    --txt:#e6edf3; --dim:#8b949e; --acc:#58a6ff; --good:#3fb950; --bad:#f85149; --warn:#d29922;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-snap-type:y mandatory}
+  body{background:var(--bg);color:var(--txt);font:16px/1.55 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+  section{min-height:100vh;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:center;padding:56px 8vw;border-bottom:1px solid var(--line)}
+  h1{font-size:2.6rem;line-height:1.15;margin-bottom:14px}
+  h2{font-size:1.9rem;margin-bottom:8px}
+  .kicker{color:var(--acc);text-transform:uppercase;letter-spacing:.14em;font-size:.75rem;margin-bottom:14px}
+  .sub{color:var(--dim);max-width:62ch}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:26px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 22px}
+  .card h3{font-size:1.05rem;margin-bottom:10px}
+  .card ul{list-style:none}
+  .card li{padding:5px 0 5px 22px;position:relative;color:var(--txt);font-size:.93rem}
+  .keep li::before{content:"✓";position:absolute;left:0;color:var(--good)}
+  .kill li::before{content:"✕";position:absolute;left:0;color:var(--bad)}
+  .diagram{margin-top:26px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:26px}
+  .row{display:flex;gap:14px;justify-content:center;align-items:stretch;flex-wrap:wrap}
+  .node{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 16px;text-align:center;font-size:.88rem;min-width:120px}
+  .node b{display:block;font-size:.95rem}
+  .node small{color:var(--dim);font-size:.75rem}
+  .owner{border-color:var(--acc)}
+  .worker{border-style:dashed;border-color:var(--warn)}
+  .hub{border-color:var(--good);background:#12261a}
+  .arrows{ text-align:center;color:var(--dim);font-size:.8rem;padding:8px 0 }
+  .mesharrows{color:var(--bad)}
+  .note{margin-top:16px;color:var(--dim);font-size:.88rem;max-width:70ch}
+  .tag{display:inline-block;border:1px solid var(--line);border-radius:20px;padding:2px 12px;font-size:.75rem;color:var(--dim);margin-right:8px}
+  .flow{display:flex;flex-direction:column;gap:6px;margin-top:22px}
+  .step{display:flex;gap:14px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 18px;font-size:.92rem}
+  .step .n{color:var(--acc);font-weight:700;min-width:22px}
+  .step em{color:var(--dim);font-style:normal;font-size:.82rem}
+  .verdict{border-left:3px solid var(--acc);padding:10px 18px;background:var(--panel);margin-top:18px;font-size:.95rem}
+  .foot{color:var(--dim);font-size:.75rem;margin-top:34px}
+</style>
+</head>
+<body>
+
+<!-- 1 · TITLE -->
+<section>
+  <div class="kicker">Council V2 · July 2026 · Fable → Jordi</div>
+  <h1>Same council, new engine.</h1>
+  <p class="sub">The sub-agent consensus does not change what Zenod <b>is</b> — your memory, your team, one owner
+  per dimension. It changes how work <b>executes</b> underneath: call/return instead of agents chatting.
+  The positioning, the brain, the receipts, and the living document all survive. The plumbing doesn't.</p>
+  <div style="margin-top:22px">
+    <span class="tag">brain: untouched</span><span class="tag">council: reframed, kept</span>
+    <span class="tag">living doc: kept</span><span class="tag">peer chatter: dies</span>
+  </div>
+</section>
+
+<!-- 2 · WHAT STAYS / WHAT DIES -->
+<section>
+  <div class="kicker">The refactor's actual scope</div>
+  <h2>What stays vs what dies</h2>
+  <div class="cols">
+    <div class="card keep">
+      <h3 style="color:var(--good)">KEEP — the product (and the moat)</h3>
+      <ul>
+        <li>The brain: governed memory, evidence, citations — untouched under every option</li>
+        <li>The council as <b>authorities</b>: Zenod only writes the vault, Archus the backlog, Callisthenes the voice, Phylax the door</li>
+        <li>Receipts: no claim without same-turn evidence (stronger than anything frameworks ship)</li>
+        <li>The living iteration document — it's the state artifact, not inter-agent mail</li>
+        <li>Canonical tests C-01…C-20 — they become the acceptance suite for ANY new engine</li>
+        <li>Positioning deck V5: "gatekeepers keep order" IS the new model, already</li>
+      </ul>
+    </div>
+    <div class="card kill">
+      <h3 style="color:var(--bad)">DELETE — the plumbing (now commodity)</h3>
+      <ul>
+        <li>Agents talking to agents to get work done (peer chatter, handovers, lost context)</li>
+        <li>Three front doors to the backlog, silent-ack routers, regex guards</li>
+        <li>Bespoke fan-out scheduling and worker-spawn glue</li>
+        <li>Durability by reconstruction (usage ledger after redeploys)</li>
+        <li>Custom stream/lifecycle plumbing per lane</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">The office analogy holds better than before: it was never five people mailing files to each
+  other — it's one OS running five applications, each with an exclusive lock on its own file type.</p>
+</section>
+
+<!-- 3 · CURRENT MODEL -->
+<section>
+  <div class="kicker">Current model</div>
+  <h2>A mesh of peers — everyone talks, nobody owns the situation</h2>
+  <div class="diagram">
+    <div class="row">
+      <div class="node"><b>Console</b><small>interprets, routes</small></div>
+      <div class="node"><b>Archus</b><small>"decides", 3 front doors</small></div>
+      <div class="node"><b>Epaminon</b><small>dispatches</small></div>
+      <div class="node"><b>Phylax</b><small>notifies</small></div>
+      <div class="node"><b>Callisthenes</b><small>posts</small></div>
+    </div>
+    <div class="arrows mesharrows">⇄ ⇄ ⇄ ⇄ ⇄ ⇄ ⇄ ⇄ ⇄ ⇄ &nbsp; every arrow = a conversation = a chance for two implicit decisions to diverge</div>
+    <div class="row">
+      <div class="node worker"><b>Worker</b><small>opaque, 406 turns…</small></div>
+      <div class="node worker"><b>Worker</b><small>"done" (nothing existed)</small></div>
+      <div class="node worker"><b>Worker</b><small>blocked on regex</small></div>
+    </div>
+  </div>
+  <p class="note">Observed failure modes, all this week: silent no-op acks (create_issue ×2), "done" with no
+  deliverable (banana9), approval blocked by keyword guard ("Tweet approved" ×3), 45-min/406-turn opaque death,
+  green PRs waiting for a human click. These are <b>peer-topology costs</b>, not bad agents.</p>
+</section>
+
+<!-- 4 · NEW MODEL -->
+<section>
+  <div class="kicker">New model</div>
+  <h2>One owner of the situation. Two species of tool.</h2>
+  <div class="diagram">
+    <div class="row"><div class="node hub" style="min-width:300px"><b>THE ORCHESTRATOR — one context owner</b>
+      <small>frames tasks · absorbs results · writes the living doc · talks to you</small></div></div>
+    <div class="arrows">↓ spawns (call/return, hard budgets) &nbsp;&nbsp;&nbsp;&nbsp; ↓ calls (receipt-or-error, single writer)</div>
+    <div class="cols" style="margin-top:0">
+      <div class="card">
+        <h3 style="color:var(--warn)">WORKERS — sub-agents = tools with judgment inside</h3>
+        <ul style="list-style:none">
+          <li>· Born for one task, fresh context, die after</li>
+          <li>· Return a structured summary, never chat sideways</li>
+          <li>· Run in parallel — async execution, sync accountability</li>
+          <li>· Killed at budget: no more 406-turn zombies</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--acc)">OWNERS — governors = authoritative gateways</h3>
+        <ul style="list-style:none">
+          <li>· <b>Zenod</b> — only writer to the vault</li>
+          <li>· <b>Archus</b> — only writer to the backlog (ONE door)</li>
+          <li>· <b>Callisthenes</b> — the only public voice</li>
+          <li>· <b>Phylax</b> — the only door to your attention</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>It is still a council.</b> The council was always the org chart — who owns what — not the
+  network diagram. You still talk to your team; the names, roles and taste survive. What's gone is governors
+  passing work to each other conversationally. The living document is the orchestrator's state — workers'
+  results land in it, and it goes back to the planner each iteration. Document-passing between peers dies;
+  document-as-single-source-of-truth is promoted.</p>
+</section>
+
+<!-- 5 · THE LOOP, CONCRETELY -->
+<section>
+  <div class="kicker">Your question, concretely</div>
+  <h2>The posting loop in the new model</h2>
+  <div class="flow">
+    <div class="step"><span class="n">1</span><span>Voice note lands. <b>Orchestrator</b> frames one task: "propose 5 posts on the memory angle, cite sources." <em>one context owner from here on</em></span></div>
+    <div class="step"><span class="n">2</span><span><b>Sub-agent spawns</b> with Zenod's MCP tools mounted. It reads memory <b>through Zenod</b> — search_memory / get_memory — never raw GitHub, never spoon-fed by the parent. <em>state flows through its owner; that's what the owner is for</em></span></div>
+    <div class="step"><span class="n">3</span><span>Sub-agent returns <b>structured proposals + citations</b>, then dies. <em>this is already how the runner works today — workers mount the console MCP</em></span></div>
+    <div class="step"><span class="n">4</span><span>Orchestrator writes the backlog <b>via Archus</b> (one door, receipt-or-error), ranks the queue.</span></div>
+    <div class="step"><span class="n">5</span><span>Queue drains throttled <b>via Callisthenes</b> — the only voice. Publish receipts land in memory via Zenod.</span></div>
+    <div class="step"><span class="n">6</span><span>Feedback and your nudges → <b>Zenod store</b> → next framing is smarter. <em>the loop learns; the moat compounds</em></span></div>
+  </div>
+  <p class="note">Same loop as the user-journeys deck. Nothing in the product story changes — "one agent at the
+  end of the day" is exactly what the customer always experienced.</p>
+</section>
+
+<!-- 6 · MIGRATION & TIMING -->
+<section>
+  <div class="kicker">Migration · Eve verdict · does stabilization stop?</div>
+  <h2>No boat-burning. The spike IS the new repo.</h2>
+  <div class="verdict"><b>Eve research (#248, delivered):</b> Apache-2.0, genuinely open; lock-in is
+  <b>ergonomic, not architectural</b> — self-host durability proven (steve PoC: Postgres + Docker, zero Vercel
+  infra) <b>but</b> it's v0.19.0, ~3 weeks old, beta, 163 open issues, no production users, and a
+  subagent-failure bug was fixed days ago. Verdict: <b>defer migration; bounded self-host spike; Temporal
+  fallback if the beta fights back.</b></div>
+  <div class="flow">
+    <div class="step"><span class="n">1</span><span><b>Epic 1 keeps draining — do NOT stop.</b> Every stability ticket hardens the KEEP column (owners, receipts, tests), which survives any engine. The canonical suite is the migration insurance. <em>#486 deployed, F-batch + S-1 in flight tonight</em></span></div>
+    <div class="step"><span class="n">2</span><span><b>Spike = greenfield, right-sized.</b> A fresh, tiny eve project (an agent/ directory) that talks to the EXISTING brain and MCP units. Port the ephemeral-executor lane only. Self-host-first, hard budget ceiling, receipts outside eve. Kill criteria: days—not weeks—of beta fighting → stay harness+Temporal.</span></div>
+    <div class="step"><span class="n">3</span><span><b>If green: that repo becomes the hosted product's seed</b> (Epic 2 H-1), lanes migrate one at a time, old engine runs production until the new one earns traffic. You're customer #0 on the new substrate — hosted from day one of the NEW thing, not a big-bang fork of the old one.</span></div>
+  </div>
+  <p class="note">Decision D-3 (greenfield timing & scope) is now on the LAUNCH-CONTROL board. Positioning decks
+  need a light touch, not a rewrite: the "team" story stays; only any implication of peers-chatting goes.</p>
+  <p class="foot">Sources: Projects/Zenod/Multi-Agent Orchestration Landscape (D-2) · Projects/Zenod/Vercel Eve as Execution Substrate (D-2) · docs/LAUNCH-CONTROL.md</p>
+</section>
+
+</body>
+</html>

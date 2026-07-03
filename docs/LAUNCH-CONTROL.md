@@ -51,6 +51,22 @@ rewrites the state after every review. One document per concern — never a new 
   subagents, channels, Agent Runs observability, model-agnostic via AI Gateway; we already run Vercel's
   AI SDK in `packages/core/src/llm/aisdk.ts`), **Temporal**, **Claude Agent SDK**. No orchestrator-SDK
   marriage mid-stabilization; Eve's self-host story to be verified in the spike, not assumed.
+  **Update — Eve research DELIVERED**
+  ([doc](https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Zenod/Vercel%20Eve%20as%20Execution%20Substrate%20(D-2).md),
+  [#248](https://github.com/AlfaBlok/obsidian-brain/issues/248)): Apache-2.0; lock-in ergonomic not
+  architectural; self-host durability proven (steve PoC, zero Vercel infra) but beta-version-fragile;
+  v0.19.0, ~3 weeks old, no production users. **Verdict: defer migration; bounded self-host-first spike
+  (ephemeral-executor lane only, kill criteria → harness+Temporal).**
+- **D-3 Greenfield timing — OPEN (Jordi leaning: yes, as part of the refactor).** Do we start the new
+  engine as a fresh repo/deployment and put Jordi on it as customer #0 from day one? Fable's framing:
+  the D-2 spike IS the greenfield, right-sized — a tiny eve `agent/` project talking to the EXISTING
+  brain and MCP units; if it passes its kill criteria it becomes the hosted product's seed (Epic 2 H-1)
+  and lanes migrate incrementally; no big-bang fork, old engine serves until the new one earns traffic.
+  Decision closes after the spike. Model reframe recorded in
+  [council-v2-model-deck.html](council-v2-model-deck.html): sub-agents = tools with judgment (workers);
+  governors = single-writer authorities (owners); council survives as the org chart; living doc promoted
+  to THE state artifact; peer-to-peer work chatter deleted. Stabilization does NOT stop — Epic 1 hardens
+  the keep-layer and the canonical suite is the acceptance suite for any new engine.
 
 ---
 
