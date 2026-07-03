@@ -1,0 +1,131 @@
+# Tenant suite template — one paying tenant, one isolated stack.
+#
+# Stamps out the whole council (console + zenod + archus + epaminon + phylax +
+# outbound) from the PUBLISHED registry image (see docker-compose.tenant-zero.yml
+# and .github/workflows/publish.yml). This is the unit of tenancy for the hosted
+# plan: the network IS the tenant boundary.
+#
+# ISOLATION MODEL (why this is safe without pooled-multitenancy hardening):
+#   - `tenant-net` is a PRIVATE per-stack network. Every agent joins it and ONLY
+#     it, so a tenant's agents can reach each other by service name but CANNOT see
+#     any other tenant's containers or the shared connectors.
+#   - ONLY the Console also joins `dokploy-network` — the one bridge out, purely so
+#     Traefik can route the public subdomain to it. Nothing else is reachable from
+#     outside the stack. This is the container-per-tenant boundary that lets the
+#     connections platform keep its self-host trust model with ZERO code change
+#     (kills ticket N1). See docs/HOSTED-PLAN-2026-07-02.md (P0.3, epic #448).
+#
+# Compose namespaces volumes and service DNS by PROJECT, so the stable service
+# names below (zenod-console, zenod-zenod, …) never collide across tenants — each
+# resolves only within its own project network. Give each tenant its own Dokploy
+# compose project name (e.g. `tenant-acme`) and its own domain.
+#
+# MANUAL PROVISIONING (concierge mode — P0.3 is deliberately hand-run per customer):
+#   1. New Dokploy Compose service from this file; project name `tenant-<name>`.
+#   2. Set env (Dokploy UI or an .env — see .env.tenant.example):
+#        ZENOD_IMAGE_TAG (default :latest), TENANT_NAME (labels only).
+#   3. Add the domain z-<name>.zenod.dev → service `zenod-console`, port 8080.
+#      Dokploy wires Traefik + TLS.
+#   4. Deploy. In the Console UI: set an admin password + the LLM key (point it at
+#      the metering gateway once P0.4/#452 lands — LLM_BASE_URL/LLM_API_KEY), then
+#      "enable" each agent (they idle un-provisioned until the Console mints + pushes
+#      their tokens). For Phylax's delivery bridge, set PHYLAX_CONSOLE_TOKEN to the
+#      Console's own api_token after it mints (step wired automatically in T8/#456).
+#
+# NOT in this template (later tickets, intentionally): the shared agent-runner /
+# execution lane (T15/#463), and the X/Reddit/email send connectors for outbound
+# (they stay "not connected" until wired). Neither blocks a tenant booting.
+
+networks:
+  # Private per-tenant network — the tenant boundary. Compose creates it; it is
+  # NOT external and NOT shared. Only services listed on it can talk.
+  tenant-net:
+    driver: bridge
+  # Dokploy's attachable overlay — joined ONLY by the Console, for Traefik ingress.
+  dokploy-network:
+    external: true
+
+volumes:
+  console-data:
+  zenod-data:
+  archus-data:
+  epaminon-data:
+  phylax-data:
+  outbound-data:
+
+x-agent-common: &agent-common
+  image: ghcr.io/zenod-ai/zenod:${ZENOD_IMAGE_TAG:-latest}
+  pull_policy: always
+  restart: unless-stopped
+  networks: [tenant-net]
+  environment: &agent-env
+    ZENOD_DATA_DIR: /data
+    PORT: "8080"
+    ZENOD_AWAIT_PROVISION: "1"
+
+services:
+  # The ONLY publicly-routed service. Bridges tenant-net <-> dokploy-network so
+  # Traefik can reach it; owns the vault-less chat/connections/gateways/UI and
+  # mints every sibling agent's token.
+  zenod-console:
+    image: ghcr.io/zenod-ai/zenod:${ZENOD_IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    networks: [tenant-net, dokploy-network]
+    volumes:
+      - console-data:/data
+    environment:
+      AGENT: console
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+    expose:
+      - "8080"
+
+  # The memory/vault agent — the tenant's knowledge. Its own /data volume holds the
+  # cloned vault repo + sqlite state.
+  zenod-zenod:
+    <<: *agent-common
+    volumes:
+      - zenod-data:/data
+    environment:
+      <<: *agent-env
+      AGENT: zenod
+
+  zenod-archus:
+    <<: *agent-common
+    volumes:
+      - archus-data:/data
+    environment:
+      <<: *agent-env
+      AGENT: archus
+
+  zenod-epaminon:
+    <<: *agent-common
+    volumes:
+      - epaminon-data:/data
+    environment:
+      <<: *agent-env
+      AGENT: epaminon
+
+  zenod-phylax:
+    <<: *agent-common
+    volumes:
+      - phylax-data:/data
+    environment:
+      <<: *agent-env
+      AGENT: phylax
+      # The Console's own api_token — fill after the Console mints it (T8/#456
+      # automates this). Until set, Phylax reports its delivery ledger unconfigured
+      # rather than failing to boot.
+      PHYLAX_CONSOLE_URL: http://zenod-console:8080
+      PHYLAX_CONSOLE_TOKEN: ${PHYLAX_CONSOLE_TOKEN:-}
+
+  zenod-outbound:
+    <<: *agent-common
+    volumes:
+      - outbound-data:/data
+    environment:
+      <<: *agent-env
+      AGENT: outbound
+      # Send connectors (X/Reddit/email) are wired per tenant later; unset = the
+      # tool reports "not connected" and never fakes a send.
