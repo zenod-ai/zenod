@@ -132,6 +132,10 @@ describe("Console mesh gateway contract", () => {
       "ask_brain",
       "ask_outbound",
       "ask_phylax",
+      "backlog_close",
+      "backlog_comment",
+      "backlog_create",
+      "backlog_edit",
       "chat_with_console",
       "close_issue",
       "create_issue",
@@ -406,13 +410,9 @@ describe("Console mesh gateway contract", () => {
     );
   });
 
-  it("publishes typed backlog write tools (I8-1) under the v4 flag with deterministic output schemas", async () => {
+  it("publishes typed backlog write tools (I8-1) on the default surface with no repo parameter", async () => {
     await withEnv(
-      {
-        ZENOD_V4_TOOL_NAMES: "true",
-        ZENOD_V4_STRICT_OUTPUT_SCHEMA: "true",
-        ZENOD_V4_STRICT_TOOLS: "archus.backlog_create,archus.backlog_edit,archus.backlog_close,archus.backlog_comment",
-      },
+      {},
       async () => {
         const strictDir = await mkdtemp(join(tmpdir(), "zenod-mesh-gateway-v4-write-"));
         const strictRuntime = new Runtime(strictDir, CONSOLE_AGENT);
@@ -440,9 +440,8 @@ describe("Console mesh gateway contract", () => {
             expect(edit?.inputSchema).toEqual(expect.objectContaining({ properties: expect.objectContaining({ number: expect.any(Object) }) }));
             expect(close?.inputSchema).toEqual(expect.objectContaining({ properties: expect.objectContaining({ number: expect.any(Object) }) }));
             expect(comment?.inputSchema).toEqual(expect.objectContaining({ properties: expect.objectContaining({ body: expect.any(Object) }) }));
-            // Deterministic (ID+URL-or-error) output contract, not a chat passthrough.
-            expect(create?.outputSchema).toEqual(expect.objectContaining({ $id: "https://zenod.dev/schemas/tool-output/archus.backlog_create.json" }));
-            expect(close?.outputSchema).toEqual(expect.objectContaining({ $id: "https://zenod.dev/schemas/tool-output/archus.backlog_close.json" }));
+            // Available on the DEFAULT surface (no v4 flag needed) — the always-on typed write service.
+            expect(edit).toBeDefined();
           } finally {
             await client.close();
           }
