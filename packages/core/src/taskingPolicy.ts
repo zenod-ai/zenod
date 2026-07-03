@@ -659,6 +659,32 @@ function noExecutionNumbers(actions: ReadonlyArray<RecordedAction>): Set<number>
   return nums;
 }
 
+// M-6/#234/R17 — read-path honesty. execution_status itself already refuses to say
+// "no work ran" when a FILTER emptied a non-empty queue: its own result text carries
+// this exact warning (see mcp.ts) telling the caller to broaden the query rather than
+// assert an empty world. The demonstrated gap (R17) is that nothing stopped the model
+// from ignoring that warning and asserting the negative claim anyway ("no work ran
+// this week", "no basis for that"). This is the read-side counterpart to
+// claimsPositiveExecutionForNoExecutionTarget above — that catches a false POSITIVE
+// against a genuinely empty queue; this catches a false NEGATIVE against a queue the
+// tool itself said was non-empty behind the filter.
+const FILTERED_EMPTY_WITH_BROADEN_HINT_RE = /Do NOT tell the user nothing ran[\s\S]*broaden the query/i;
+
+function hasUnbroadenedFilteredEmptyExecutionRead(actions: ReadonlyArray<RecordedAction>): boolean {
+  return actions.some((action) => {
+    if (/^ERROR:/.test(action.result)) return false;
+    if (!executionStatusToolName(action.tool)) return false;
+    return FILTERED_EMPTY_WITH_BROADEN_HINT_RE.test(action.result);
+  });
+}
+
+const CLAIMS_EMPTY_EXECUTION_WORLD_RE =
+  /\bno\s+(?:work|execution|executions?|runs?|tickets?)\s+(?:ran|has\s+run|have\s+run|happened|occurred)\b|\bnothing\s+(?:has\s+)?ran\b|\bno\s+basis\b/i;
+
+function claimsEmptyExecutionWorld(prose: string): boolean {
+  return CLAIMS_EMPTY_EXECUTION_WORLD_RE.test(prose);
+}
+
 const POSITIVE_EXECUTION_RE =
   /\b(?:ran|executed|completed|finished|done|succeeded|opened\s+PR|pull request|files?\s+changed|changed\s+files?|merged|needs-review|awaiting review)\b/i;
 const NEGATIVE_EXECUTION_LINE_RE = /\b(?:no|not|never|without|none|does(?: not|n't)|did(?: not|n't))\b/i;
@@ -764,6 +790,20 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     return [
       `⚠️ Correction — Epaminon's live execution read found no execution ticket for ${fmt(contradictedNoExecution)} this turn.`,
       "Do not treat issue-body comments, child-ticket notes, PR references, or narrative history as proof that this specific issue ran.",
+      "",
+      text,
+    ].join("\n");
+  }
+
+  // M-6/#234/R17 — a filtered-empty execution_status read (the tool's own result says
+  // the queue is non-empty behind the filter and warns not to say nothing ran) must
+  // never be reported as "no work ran" / "nothing ran" / "no basis". The only honest
+  // replies are a grounded broadened answer or an explicit couldn't-get-a-reliable-read
+  // — reconcileTaskingReply can't re-query live, so it forces the latter.
+  if (hasUnbroadenedFilteredEmptyExecutionRead(actions) && claimsEmptyExecutionWorld(prose) && !acknowledgesUnreadExecution(prose)) {
+    return [
+      "⚠️ Correction — I couldn't get a reliable read: the execution-status query was filtered and excluded tickets that exist on the executor, so I cannot say nothing ran.",
+      "Broaden the query (drop the filter, or list all) and answer from that — never assert an empty result set from a filtered-empty read.",
       "",
       text,
     ].join("\n");

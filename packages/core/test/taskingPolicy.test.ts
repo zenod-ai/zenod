@@ -374,6 +374,69 @@ describe("reconcileTaskingReply", () => {
     expect(out).toContain("Do not treat issue-body comments");
   });
 
+  it("M-6/#234/R17: corrects a false 'no work ran' claim against a filtered-empty execution_status read that warned not to say that", () => {
+    const reply = "No work ran this week — nothing to report.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "execution_status",
+        input: { message: "this week" },
+        result:
+          "No execution tickets matched this query, but 4 exist on the executor. Do NOT tell the user nothing ran — the filter excluded them; broaden the query or list all.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("couldn't get a reliable read");
+    expect(out).toContain("Broaden the query");
+  });
+
+  it("M-6/#234/R17: same correction via the Console-facing execution-status tool alias", () => {
+    const reply = "There's no basis for saying anything ran recently.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_read_issue_execution_status",
+        result:
+          "No execution tickets matched this query, but 2 exist on the executor. Do NOT tell the user nothing ran — the filter excluded them; broaden the query or list all.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+  });
+
+  it("M-6: does not correct a genuinely empty queue (no filter hint) reported as no work ran", () => {
+    const reply = "No work ran this week.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "execution_status",
+        result: "No execution tickets exist yet (none have ever been queued on this executor).",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("M-6: does not stack a correction when the reply already admits it couldn't get a reliable read", () => {
+    const reply = "I couldn't confirm execution state this turn — the read looked filtered, so I can't say whether anything ran.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "execution_status",
+        result:
+          "No execution tickets matched this query, but 4 exist on the executor. Do NOT tell the user nothing ran — the filter excluded them; broaden the query or list all.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("M-6: a grounded answer that lists the actual (non-empty) executions is left untouched", () => {
+    const reply = "3 executions are queued or running this week: #109, #112, #118.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "execution_status",
+        result: "Execution 109: exec:running target o/r#108\nExecution 112: exec:queued target o/r#111\nExecution 118: exec:running target o/r#117",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("allows a no-execution answer for the parent while separately naming child execution evidence", () => {
     const reply =
       "No execution is recorded for AlfaBlok/obsidian-brain#107 itself. Related child #108 has execution #109 in needs-review with PR #110.";
