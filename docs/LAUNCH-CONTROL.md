@@ -61,8 +61,11 @@ rewrites the state after every review. One document per concern — never a new 
 | 1 | System Stability | 🔴 ACTIVE — iteration 7 | CANONICAL-TESTS board green ×2 consecutive builds |
 | 2 | Hosted Readiness | 🟡 SCOPING | First paying customer live (Jordi = customer #0 doesn't count) |
 
-**Now:** Epic 1, tickets S-0…S-3 (see epic). Nothing in Epic 2 may consume executor capacity while an
-Epic 1 P0 is open, except D-1 (a conversation, not code).
+**Now:** Epic 1. S-0 ✅ done · S-3 content merged as zenod#486 (deploying, unscored) · S-4/5/6 (F-batch)
+in flight · S-9 auto-merge work live · S-1 dispatched (`direct-1783105328881`) · S-2/S-7/S-8 queued
+behind it. D-2: Eve substrate research running
+([obsidian-brain#248](https://github.com/AlfaBlok/obsidian-brain/issues/248),
+`direct-1783105324065`). Epic 2 still code-frozen until Epic 1 P0s close.
 
 ## Operating protocol
 
@@ -72,7 +75,7 @@ Epic 1 P0 is open, except D-1 (a conversation, not code).
 - Tester: after every deploy touching Console/outbound/execution/memory, run CANONICAL-TESTS, append scoreboard.
 - Cadence: Fable reviews after each scoreboard append; rewrites the board above; flags decisions to Jordi.
 
-## History
+## History (newest last)
 
 - **2026-07-03** · Doc created from Jordi's 17:28 voice note + iteration 2–6 record. Iteration 6 signed
   off fabrication as structurally solved (reply-gate). Canonical board at `4550d11`: 8✅/2🟡/5❌.
@@ -93,3 +96,10 @@ Epic 1 P0 is open, except D-1 (a conversation, not code).
   ARE council lanes; the council needs ONE door with receipt-or-error semantics. Fable's role restated:
   high-level controller only — plans, tickets, tests, decisions; no code, no fixes; manual steps are
   requested from Jordi explicitly.
+- **2026-07-03 · evening.** S-0 canary ✅ within budget — `claude-opus-4-8`/low is fine; the 406-turn
+  death was not model config ("Deliverables: none" render bug sighted a 3rd time → S-9). Parallel lanes:
+  P-batch merged as zenod#486 (S-3 content, deploying, unscored until a board run); F-batch (S-4/5/6) in
+  flight; auto-merge behavior live (C-20). Dispatched: S-1 (zenod#488, `direct-1783105328881`) and the
+  Eve substrate research (obsidian-brain#248, `direct-1783105324065`). D-2 sharpened: for WORK,
+  sub-agents are tools of one owning agent (call/return, results fan back to a single context owner);
+  for STATE, governors are single-writer services. Eve = leading substrate candidate pending #248.
