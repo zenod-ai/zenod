@@ -48,7 +48,7 @@ const EXECUTION_STATUS_REQUEST_RE =
   /(?:^\s*(?:did|was|is|has|have|what(?:'s| is))\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished|status)\b|\b(?:execution|run|runner|queue)\s+status\b|\bstatus\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished)\b)/i;
 const QUALIFIED_ISSUE_REF_RE = /\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+\b/;
 
-function normalizedToolName(tool: string): string {
+export function normalizedToolName(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
