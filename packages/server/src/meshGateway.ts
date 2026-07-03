@@ -34,6 +34,10 @@ import {
   V4_FIND_ISSUE_SHAPE,
   V4_GET_ISSUE_SHAPE,
   V4_LIST_ISSUES_SHAPE,
+  BACKLOG_CREATE_SHAPE,
+  BACKLOG_EDIT_SHAPE,
+  BACKLOG_CLOSE_SHAPE,
+  BACKLOG_COMMENT_SHAPE,
 } from "./mcpToolSchemas.js";
 import { getToolOutputSchema } from "./toolOutput.js";
 
@@ -267,6 +271,55 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     v4OutputSchemaName: "archus.list_issues",
     requiresV4ToolNames: true,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  // I8-1 (one brain): the TYPED write service for the life backlog. These dispatch
+  // straight to Archus's deterministic backlog_* tools (hard-wired repo, read-back
+  // verified, ID+URL-or-error) — NO chat_with_archus LLM in the path. They are the
+  // typed replacement for the conversational create_issue/edit_issue/close_issue
+  // front doors; the LLM lane survives only for ticket-quality drafting, not routing.
+  {
+    name: "backlog_create",
+    owner: "archus",
+    title: "Create backlog issue (typed)",
+    description:
+      "Owner: Archus. Deterministic, LLM-free creation of one issue in the life backlog (the configured backlog repo — no other repo is reachable). Returns the qualified owner/repo#N only after a read-back GET confirms it, or an explicit error. Use this instead of chat when you have a concrete title/body/labels.",
+    inputSchema: BACKLOG_CREATE_SHAPE,
+    v4OutputSchemaName: "archus.backlog_create",
+    requiresV4ToolNames: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "backlog_edit",
+    owner: "archus",
+    title: "Edit backlog issue (typed)",
+    description:
+      "Owner: Archus. Deterministic, LLM-free edit of one life-backlog issue by number (title/body/labels), read-back verified, ID+URL-or-error. No repo parameter.",
+    inputSchema: BACKLOG_EDIT_SHAPE,
+    v4OutputSchemaName: "archus.backlog_edit",
+    requiresV4ToolNames: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "backlog_close",
+    owner: "archus",
+    title: "Close backlog issue (typed)",
+    description:
+      "Owner: Archus. Deterministic, LLM-free close of one life-backlog issue by number, reported closed only after a read-back GET confirms state=closed, or an explicit error.",
+    inputSchema: BACKLOG_CLOSE_SHAPE,
+    v4OutputSchemaName: "archus.backlog_close",
+    requiresV4ToolNames: true,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: "backlog_comment",
+    owner: "archus",
+    title: "Comment on backlog issue (typed)",
+    description:
+      "Owner: Archus. Deterministic, LLM-free comment on one life-backlog issue by number, reported done only after a read-back GET confirms the comment is present, or an explicit error.",
+    inputSchema: BACKLOG_COMMENT_SHAPE,
+    v4OutputSchemaName: "archus.backlog_comment",
+    requiresV4ToolNames: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   // S-8: the redundant `archus.request_backlog_action` write door was REMOVED. Three
   // tools once advertised the same job (create_issue, archus.request_backlog_action,

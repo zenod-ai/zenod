@@ -406,6 +406,55 @@ describe("Console mesh gateway contract", () => {
     );
   });
 
+  it("publishes typed backlog write tools (I8-1) under the v4 flag with deterministic output schemas", async () => {
+    await withEnv(
+      {
+        ZENOD_V4_TOOL_NAMES: "true",
+        ZENOD_V4_STRICT_OUTPUT_SCHEMA: "true",
+        ZENOD_V4_STRICT_TOOLS: "archus.backlog_create,archus.backlog_edit,archus.backlog_close,archus.backlog_comment",
+      },
+      async () => {
+        const strictDir = await mkdtemp(join(tmpdir(), "zenod-mesh-gateway-v4-write-"));
+        const strictRuntime = new Runtime(strictDir, CONSOLE_AGENT);
+        const strictToken = strictRuntime.settings.apiToken();
+        let strictServer: ServerType | undefined;
+        try {
+          strictRuntime.settings.setPeers([{ name: "archus", url: "http://archus.test/mcp", token: "archus-token" }]);
+          const app = createApp(strictRuntime);
+          strictServer = serve({ fetch: app.fetch, port: 0 });
+          const { port } = strictServer.address() as AddressInfo;
+          const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`), {
+            requestInit: { headers: { Authorization: `Bearer ${strictToken}` } },
+          });
+          const client = new Client({ name: "mesh-test-client-v4-write", version: "0.0.0" });
+          await client.connect(transport);
+          try {
+            const { tools } = await client.listTools();
+            const create = tools.find((t) => t.name === "backlog_create");
+            const edit = tools.find((t) => t.name === "backlog_edit");
+            const close = tools.find((t) => t.name === "backlog_close");
+            const comment = tools.find((t) => t.name === "backlog_comment");
+            // Typed service surface: all four present, no repo parameter (hard-wired repo).
+            expect(create?.inputSchema).toEqual(expect.objectContaining({ properties: expect.objectContaining({ title: expect.any(Object) }) }));
+            expect((create?.inputSchema as { properties?: Record<string, unknown> })?.properties).not.toHaveProperty("repo");
+            expect(edit?.inputSchema).toEqual(expect.objectContaining({ properties: expect.objectContaining({ number: expect.any(Object) }) }));
+            expect(close?.inputSchema).toEqual(expect.objectContaining({ properties: expect.objectContaining({ number: expect.any(Object) }) }));
+            expect(comment?.inputSchema).toEqual(expect.objectContaining({ properties: expect.objectContaining({ body: expect.any(Object) }) }));
+            // Deterministic (ID+URL-or-error) output contract, not a chat passthrough.
+            expect(create?.outputSchema).toEqual(expect.objectContaining({ $id: "https://zenod.dev/schemas/tool-output/archus.backlog_create.json" }));
+            expect(close?.outputSchema).toEqual(expect.objectContaining({ $id: "https://zenod.dev/schemas/tool-output/archus.backlog_close.json" }));
+          } finally {
+            await client.close();
+          }
+        } finally {
+          strictServer?.close();
+          strictRuntime.close();
+          await rm(strictDir, { recursive: true, force: true });
+        }
+      },
+    );
+  });
+
   it("routes execution_status to Epaminon's native status tool, not chat", async () => {
     const client = await connectGateway();
     try {
