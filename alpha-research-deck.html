@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Systematic Alpha in Digital Products</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#12161f; --panel2:#171c28; --border:#232a3a;
+    --txt:#e8ecf4; --dim:#8b94a8; --acc:#4fd1a5; --acc2:#7aa2f7; --warn:#e0af68; --red:#f7768e;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;overflow:hidden;height:100vh}
+  .slide{display:none;height:100vh;padding:60px 90px 80px;flex-direction:column;justify-content:flex-start;overflow-y:auto}
+  .slide.active{display:flex;animation:fade .35s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .kicker{color:var(--acc);font-size:13px;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;font-weight:600}
+  h1{font-size:52px;line-height:1.1;font-weight:800;margin-bottom:20px}
+  h2{font-size:36px;font-weight:750;margin-bottom:8px}
+  .sub{color:var(--dim);font-size:19px;line-height:1.55;max-width:900px;margin-bottom:28px}
+  .grid{display:grid;gap:16px;margin-top:8px}
+  .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}.g4{grid-template-columns:repeat(4,1fr)}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 22px}
+  .card h3{font-size:16px;margin-bottom:8px;color:var(--acc)}
+  .card h3.b{color:var(--acc2)} .card h3.w{color:var(--warn)} .card h3.r{color:var(--red)}
+  .card p{font-size:14.5px;color:var(--dim);line-height:1.55}
+  .big{font-size:34px;font-weight:800;color:var(--txt)}
+  .tag{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:3px 12px;font-size:12.5px;color:var(--dim);margin:3px 4px 3px 0}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14.5px}
+  th{text-align:left;color:var(--dim);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:1px;padding:10px 12px;border-bottom:1px solid var(--border)}
+  td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45}
+  td.num{font-variant-numeric:tabular-nums;font-weight:700}
+  .up{color:var(--acc);font-weight:700} .flat{color:var(--dim)} .hot{color:var(--warn);font-weight:700}
+  .nav{position:fixed;bottom:22px;left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:10}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--border);cursor:pointer;transition:.2s}
+  .dot.on{background:var(--acc);transform:scale(1.35)}
+  .pager{position:fixed;bottom:18px;right:28px;color:var(--dim);font-size:13px}
+  .hint{position:fixed;bottom:18px;left:28px;color:var(--dim);font-size:13px;opacity:.7}
+  .center{justify-content:center}
+  .verdict{border-left:4px solid var(--acc);background:var(--panel2);padding:16px 20px;border-radius:0 10px 10px 0;margin-top:22px;font-size:16.5px;line-height:1.6}
+  .verdict b{color:var(--acc)}
+  .verdict.w{border-color:var(--warn)} .verdict.w b{color:var(--warn)}
+  .score{font-size:22px;font-weight:800}
+  .src{color:var(--dim);font-size:11.5px;margin-top:auto;padding-top:18px;opacity:.75}
+  ol.steps{counter-reset:s;list-style:none;margin-top:10px}
+  ol.steps li{counter-increment:s;display:flex;gap:16px;margin-bottom:14px;align-items:flex-start}
+  ol.steps li::before{content:counter(s);min-width:32px;height:32px;border-radius:50%;background:var(--panel2);border:1px solid var(--acc);color:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  ol.steps li div{font-size:15.5px;color:var(--txt);line-height:1.5}
+  ol.steps li div span{color:var(--dim)}
+  @media(max-width:900px){.slide{padding:36px 26px 90px}h1{font-size:34px}h2{font-size:26px}.g2,.g3,.g4{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- 1 · TITLE -->
+<section class="slide center">
+  <div class="kicker">Research · July 2026</div>
+  <h1>Systematic Alpha in<br>Digital Products</h1>
+  <p class="sub">A framework for reading verified marketplace signals, replicating what's working, and choosing where to place your bets — with a focus on AI agents.</p>
+  <div>
+    <span class="tag">TrustMRR · Stripe-verified data</span>
+    <span class="tag">Agent economy</span>
+    <span class="tag">Zenod &amp; Council</span>
+    <span class="tag">Airbnb yield analytics</span>
+  </div>
+</section>
+
+<!-- 2 · THESIS -->
+<section class="slide">
+  <div class="kicker">Thesis</div>
+  <h2>Alpha = information asymmetry.<br>For the first time, revenue is public and verified.</h2>
+  <p class="sub">Historically you guessed what worked from launch posts and vanity metrics. Now platforms like TrustMRR pipe <b style="color:var(--txt)">real Stripe/RevenueCat readings, updated hourly</b> — MRR, MoM growth, marketing channels, tech stack, even asking prices. That's a live order book for micro-software.</p>
+  <div class="grid g3">
+    <div class="card"><h3>Old game</h3><p>Ideate in the dark → build → launch → pray. Signal was noise: upvotes, Twitter hype, unverifiable "MRR screenshots."</p></div>
+    <div class="card"><h3 class="b">New game</h3><p>Read verified revenue + growth rates → identify niches with proven willingness-to-pay → replicate with a differentiated wedge → out-execute on distribution.</p></div>
+    <div class="card"><h3 class="w">Your edge</h3><p>You're strong at dev + infra and can run marketing. The bottleneck is picking right. That's what the signal layer solves.</p></div>
+  </div>
+</section>
+
+<!-- 3 · SIGNAL STACK -->
+<section class="slide">
+  <div class="kicker">The Signal Stack</div>
+  <h2>Where to read performance before you build</h2>
+  <div class="grid g2" style="margin-top:18px">
+    <div class="card"><h3>TrustMRR — primary</h3><p>Stripe/RevenueCat/Superwall-verified MRR + MoM growth, updated hourly. Also exposes <b>marketing channels</b>, <b>tech stack</b>, category pages, a for-sale marketplace with multiples, and a public API. The cleanest demand signal that exists.</p></div>
+    <div class="card"><h3>Acquire.com &amp; Flippa — pricing signal</h3><p>Acquire: 500k+ buyers, 2,000+ closed deals, verified financials. Flippa: SaaS deal volume up ~73% in 2025. Asking multiples tell you which niches buyers value (and which sellers are fleeing).</p></div>
+    <div class="card"><h3>App stores &amp; RevenueCat</h3><p>App Store / Play top-grossing by category, RevenueCat "State of Subscription Apps" benchmarks. Good for consumer/mobile signal (e.g. Poket photobooth, Quran Daily on TrustMRR).</p></div>
+    <div class="card"><h3>Builder feeds — leading indicators</h3><p>Indie Hackers milestones, X build-in-public, TrustMRR feed, Product Hunt. Noisier, but 3–6 months ahead of leaderboards. Watch what repeat winners (Marc Lou, John Rush, Nevo David) ship next.</p></div>
+  </div>
+  <div class="verdict">Rule: <b>never trust one source.</b> Triangulate: verified MRR (TrustMRR) × acquisition multiples (Acquire/Flippa) × momentum (feeds). A niche confirmed by all three is real.</div>
+</section>
+
+<!-- 4 · HOW TO SCREEN -->
+<section class="slide">
+  <div class="kicker">Method</div>
+  <h2>A screening system, not vibes</h2>
+  <ol class="steps" style="margin-top:20px;max-width:960px">
+    <li><div><b>Momentum screen.</b> <span>Sort TrustMRR by MoM growth with MRR ≥ $20k. Sustained double-digit MoM at scale = market pull, not launch spike.</span></div></li>
+    <li><div><b>Cluster detection.</b> <span>One winner is luck; three or more independent products growing in the same niche is a wave. Name the cluster.</span></div></li>
+    <li><div><b>Multiple check.</b> <span>Cross-reference for-sale listings. Low multiples (&lt;2x annual) in a growing niche = churny or operator-dependent — a warning about the business model, not just the seller.</span></div></li>
+    <li><div><b>Moat audit.</b> <span>Why does the incumbent win — distribution, data, or just being first? If it's "first," a better wedge can take share. If it's data/network, don't fight head-on.</span></div></li>
+    <li><div><b>Wedge design.</b> <span>Never clone. Enter with one dimension the leader can't easily copy: a vertical, a workflow, a pricing model, or (best) an autonomy level.</span></div></li>
+    <li><div><b>Distribution-first build.</b> <span>4–8 week MVP, but the marketing engine (SEO/AEO, build-in-public, communities) starts on day 1 — that's the actual product launch.</span></div></li>
+  </ol>
+</section>
+
+<!-- 5 · WHAT THE DATA SAYS -->
+<section class="slide">
+  <div class="kicker">Evidence · TrustMRR leaderboard, July 2026</div>
+  <h2>Where verified money is growing fastest</h2>
+  <table>
+    <tr><th>Product</th><th>What it is</th><th>MRR</th><th>MoM</th><th>Cluster</th></tr>
+    <tr><td><b>Postiz</b></td><td>Agentic social media scheduler (open source)</td><td class="num">$157k</td><td class="num hot">+22%</td><td>Agentic social</td></tr>
+    <tr><td><b>Upscale System</b></td><td>CRM + lead-gen software</td><td class="num">$86k</td><td class="num hot">+43%</td><td>AI sales/outreach</td></tr>
+    <tr><td><b>Vid.AI</b></td><td>Idea → ready-to-post videos</td><td class="num">$79k</td><td class="num hot">+16%</td><td>AI content</td></tr>
+    <tr><td><b>AEO Engine</b></td><td>Network of AI agents for AI-search visibility</td><td class="num">$67k</td><td class="num hot">+13%</td><td>AEO / GEO</td></tr>
+    <tr><td><b>SEOBOT</b></td><td>Autonomous SEO agent</td><td class="num">$54k</td><td class="num hot">+10%</td><td>AEO / GEO</td></tr>
+    <tr><td><b>RankAI</b></td><td>Autonomous Google + ChatGPT traffic</td><td class="num">$47k</td><td class="num hot">+32%</td><td>AEO / GEO</td></tr>
+    <tr><td><b>PolyPick</b></td><td>AI for prediction markets</td><td class="num">$47k</td><td class="num hot">+24%</td><td>AI fintech</td></tr>
+    <tr><td><b>Reddit GEO agency</b></td><td>Reddit/LLM visibility agency for B2B SaaS</td><td class="num">$45k</td><td class="num hot">+8%</td><td>AEO / GEO (service)</td></tr>
+    <tr><td><b>Voice/chat agents SMB</b></td><td>Unnamed — AI voice &amp; chat agents</td><td class="num">$44k</td><td class="num hot">+14%</td><td>Vertical agents</td></tr>
+    <tr><td><b>POST BRIDGE</b></td><td>Cross-platform posting</td><td class="num">$44k</td><td class="num hot">+12%</td><td>Agentic social</td></tr>
+  </table>
+  <div class="src">Source: trustmrr.com leaderboard, Stripe-verified, retrieved 2 Jul 2026. Growth = reported MoM.</div>
+</section>
+
+<!-- 6 · CLUSTERS -->
+<section class="slide">
+  <div class="kicker">Synthesis</div>
+  <h2>Four agent clusters with verified demand</h2>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><h3>1 · AEO / GEO — hottest, still early</h3><p>Getting brands cited by ChatGPT, Perplexity, AI Overviews. Three independent winners (AEO Engine, RankAI, SEOBOT) + a $45k/mo <i>agency</i> at 75% margin. Every company's SEO budget is up for reallocation. Crowding fast — window is 12–18 months.</p></div>
+    <div class="card"><h3>2 · Agentic social media — validated, your lane</h3><p>Postiz ($157k, +22%) proves people pay for agentic posting. But reviews agree: <b>nothing on the market is truly autonomous</b> — they're AI-assisted schedulers. The "memory-fed team that posts for you" layer is still open. This is Zenod/Council.</p></div>
+    <div class="card"><h3>3 · AI outreach &amp; sales</h3><p>PROSP ($128k, LinkedIn AI outreach), Upscale (+43%). Proven high willingness-to-pay because ROI is directly measurable. Very crowded; deliverability/platform-ban risk is the moat test.</p></div>
+    <div class="card"><h3>4 · Vertical / whitelabel agents</h3><p>ChatDash ($38k — whitelabel AI dashboards for agencies), voice agents for SMB ($44k, +14%), whitelabel agent builder for sale at $300k. Sell picks &amp; shovels to the 10,000 new "AI agencies." Boring, sticky, B2B.</p></div>
+  </div>
+</section>
+
+<!-- 7 · WHY AGENTS -->
+<section class="slide">
+  <div class="kicker">Why agents beat apps (for you)</div>
+  <h2>Sell the outcome, not the tool</h2>
+  <div class="grid g3" style="margin-top:16px">
+    <div class="card"><div class="big">$49 → $2k+</div><p style="margin-top:8px">A tool prices like software. An agent prices like headcount: SMB vertical-agent tiers run $500–$2,000/mo; agency-replacement pricing is 30–50% of the manual cost replaced.</p></div>
+    <div class="card"><div class="big">45%</div><p style="margin-top:8px">YoY growth of the AI agents market ($7.6B → ~$10.9B in 2026), with vertical agents the fastest segment (~63% CAGR). a16z: 30–40% of the ~$450B vertical SaaS market reshaped by agents through 2028.</p></div>
+    <div class="card"><div class="big">Moat = memory</div><p style="margin-top:8px">Schedulers are commodities (Postiz is literally open source). An agent that accumulates client-specific memory and learns from feedback gets <b>better with tenure</b> — that's switching cost no scheduler has.</p></div>
+  </div>
+  <div class="verdict">The shift already visible in the data: solo operators running AI-powered "agencies" charge $3k+/mo for outcomes that tools sell for $49/mo. <b>Agents let you capture agency pricing with software margins.</b> That's the trade you want.</div>
+</section>
+
+<!-- 8 · PORTFOLIO -->
+<section class="slide">
+  <div class="kicker">Your portfolio</div>
+  <h2>Two live bets — score them like an investor</h2>
+  <table style="margin-top:14px">
+    <tr><th>Criterion (0–5)</th><th>Airbnb yield analytics</th><th>Zenod / Council (social agent team)</th></tr>
+    <tr><td>Verified demand in market</td><td class="num">4 <span class="flat">— AirDNA charges ~$50k/yr enterprise; high-ticket confirmed</span></td><td class="num">5 <span class="flat">— Postiz $157k MRR +22%; cluster of winners</span></td></tr>
+    <tr><td>Supply-side risk</td><td class="num" style="color:var(--red)">1 <span class="flat">— scraping fragile; Airbnb Partner API effectively closed to new applicants</span></td><td class="num">4 <span class="flat">— X/Reddit APIs cost money &amp; have ToS limits, but manageable</span></td></tr>
+    <tr><td>Legal clarity</td><td class="num" style="color:var(--red)">2 <span class="flat">— public-data scraping largely legal per case law, but grey &amp; contested</span></td><td class="num">4 <span class="flat">— disclosure/authenticity rules; mostly clear</span></td></tr>
+    <tr><td>Time to revenue wedge</td><td class="num">2 <span class="flat">— data pipeline before any customer value</span></td><td class="num">5 <span class="flat">— can sell as productized service from week 1</span></td></tr>
+    <tr><td>Moat over time</td><td class="num">3 <span class="flat">— proprietary data if partner-sourced; else none</span></td><td class="num">4 <span class="flat">— client memory compounds; feedback loop</span></td></tr>
+    <tr><td>Fit with your skills</td><td class="num">4</td><td class="num">5</td></tr>
+    <tr><td><b>Total</b></td><td class="score">16 / 30</td><td class="score" style="color:var(--acc)">27 / 30</td></tr>
+  </table>
+</section>
+
+<!-- 9 · AIRBNB -->
+<section class="slide">
+  <div class="kicker">Bet 1 · Airbnb yield analytics</div>
+  <h2>Real prize, wrong foundation (as scoped)</h2>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>What's true</h3><p>High-ticket demand is proven — AirDNA runs enterprise contracts from ~$50k/yr, and a whole ecosystem (Mashvisor, Airbtics, AirROI, Rabbu, PriceLabs) lives off STR data. Your AI angle (yield agent, not dashboard) is a real wedge.</p></div>
+    <div class="card"><h3 class="r">What kills momentum</h3><p>Supply side: courts have leaned toward public-data scraping being legal, but pipelines are fragile, break on frontend changes, and quality varies wildly. Airbnb's Partner API is effectively closed to unsolicited applicants in 2026. You'd spend months on plumbing before earning $1.</p></div>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><h3 class="w">De-risk path A — buy the data</h3><p>Build on a data API (AirROI, Airbtics, Mashvisor) instead of scraping. Margin compresses but time-to-market collapses; you compete on the AI/agent layer, which is your strength anyway.</p></div>
+    <div class="card"><h3 class="w">De-risk path B — flip the supply side</h3><p>Get data from hosts/PMs directly (channel-manager integrations, host-connected accounts) — the AirDNA partner-data model. Slower, but proprietary and legally clean. Works if you land 2–3 property managers as design partners.</p></div>
+  </div>
+  <div class="verdict w"><b>Verdict: park or de-risk — don't grind.</b> Keep it as the slow, high-ticket bet only if path A or B is viable within ~4 weeks of effort. Do not build a scraper farm.</div>
+</section>
+
+<!-- 10 · ZENOD -->
+<section class="slide">
+  <div class="kicker">Bet 2 · Zenod &amp; Council</div>
+  <h2>The market just validated your thesis</h2>
+  <p class="sub">Every 2026 review of "AI social media agents" reaches the same conclusion: the category is full of <b style="color:var(--txt)">AI-assisted schedulers wearing an agent costume</b> — none are truly autonomous. Meanwhile Postiz grew $20k → $157k MRR in months. Demand is proven; autonomy is the open slot.</p>
+  <div class="grid g3">
+    <div class="card"><h3>Memory system</h3><p>Client feeds a growing knowledge base. This is the moat: posts sourced from <i>their</i> knowledge, not generic AI slop. Value compounds with tenure — churn resistance schedulers can't match.</p></div>
+    <div class="card"><h3>Three-role team</h3><p>Memory curator · posting rhythm operator · feedback analyst. Framing it as a <b>hireable team</b> (not a tool) moves you from $49/mo scheduler pricing to $500–$3k/mo agency-replacement pricing.</p></div>
+    <div class="card"><h3>Feedback loop</h3><p>Audience reactions flow back into memory. Nobody in the category closes this loop today — it's your "gets better every week" demo moment.</p></div>
+  </div>
+  <div class="verdict"><b>Position against Postiz, not beside it:</b> "Postiz schedules your posts. Zenod is the team that knows your company and posts for you." Sell outcomes (rhythm, engagement, share of voice) — never features.</div>
+</section>
+
+<!-- 11 · PLAYBOOK -->
+<section class="slide">
+  <div class="kicker">Recommendation</div>
+  <h2>The 90-day plan</h2>
+  <ol class="steps" style="margin-top:18px;max-width:980px">
+    <li><div><b>Weeks 1–2 — Sell before software.</b> <span>Land 3–5 design partners for Zenod at $300–500/mo as a semi-manual productized service (you + agents behind the curtain). The $45k/mo Reddit GEO agency at 75% margin proves services validate fastest.</span></div></li>
+    <li><div><b>Weeks 3–8 — Automate what you sold.</b> <span>Turn the manual workflow into the three-role agent system. Ship the memory + feedback loop first — it's the differentiator, not the posting.</span></div></li>
+    <li><div><b>Day 1 onward — Build in public.</b> <span>It's self-demonstrating: Zenod runs Zenod's social presence. Add your Stripe to TrustMRR early — verified revenue is itself distribution now (Postiz's playbook: openness as marketing).</span></div></li>
+    <li><div><b>Weeks 4–8 (parallel, capped) — Airbnb de-risk sprint.</b> <span>Test data-API costs and pitch 3 property managers on partner data. Viable → keep as slow high-ticket bet. Not → park it without guilt.</span></div></li>
+    <li><div><b>Ongoing — Systematize the alpha loop.</b> <span>Weekly screen: TrustMRR growth sort + Acquire listings + builder feeds. Keep a watchlist of clusters (AEO/GEO is your best-fit second act — same engine, different channel: Zenod's memory system pointed at AI-search visibility).</span></div></li>
+  </ol>
+</section>
+
+<!-- 12 · CLOSE -->
+<section class="slide center">
+  <div class="kicker">Bottom line</div>
+  <h1 style="font-size:40px">Verified-revenue data killed<br>the "what should I build?" problem.</h1>
+  <p class="sub" style="margin-top:10px">The data says: agents, sold as teams, priced as headcount. Your social-agent bet sits in a cluster with the strongest verified growth on the board — and the autonomy slot is still open. Focus there; de-risk Airbnb on a timer; run the screening loop weekly so the next wave doesn't surprise you.</p>
+  <div style="margin-top:8px">
+    <span class="tag">Zenod: 27/30 — go</span>
+    <span class="tag">Airbnb: 16/30 — de-risk or park</span>
+    <span class="tag">AEO/GEO: watchlist #1</span>
+  </div>
+  <div class="src" style="margin-top:40px">Sources: trustmrr.com (Stripe-verified leaderboard &amp; marketplace) · Acquire.com / Flippa market reports · MarketsandMarkets AI-agents forecast · a16z "AI Eats Vertical SaaS" · AirROI / Mashvisor on STR data &amp; Airbnb API status · Zapier / PostEverywhere / Velocity 2026 agent-tool reviews · Indie Hackers &amp; founder-reported Postiz figures. Compiled 2 Jul 2026.</div>
+</section>
+
+<div class="nav" id="nav"></div>
+<div class="pager" id="pager"></div>
+<div class="hint">← → or click dots</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const nav=document.getElementById('nav'),pager=document.getElementById('pager');
+  let i=0;
+  slides.forEach((_,k)=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>go(k);nav.appendChild(d);});
+  const dots=[...nav.children];
+  function go(k){i=Math.max(0,Math.min(slides.length-1,k));
+    slides.forEach((s,j)=>s.classList.toggle('active',j===i));
+    dots.forEach((d,j)=>d.classList.toggle('on',j===i));
+    pager.textContent=(i+1)+' / '+slides.length;}
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(i+1);
+    if(e.key==='ArrowLeft'||e.key==='PageUp')go(i-1);
+    if(e.key==='Home')go(0); if(e.key==='End')go(slides.length-1);});
+  let tx=null;
+  document.addEventListener('touchstart',e=>tx=e.touches[0].clientX);
+  document.addEventListener('touchend',e=>{if(tx===null)return;const dx=e.changedTouches[0].clientX-tx;if(dx<-50)go(i+1);if(dx>50)go(i-1);tx=null;});
+  go(0);
+</script>
+</body>
+</html>

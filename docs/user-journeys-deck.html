@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zenod Sells Itself — User Journeys &amp; Timeline</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#12161f; --panel2:#171c28; --border:#232a3a;
+    --txt:#e8ecf4; --dim:#8b94a8; --acc:#4fd1a5; --acc2:#7aa2f7; --warn:#e0af68; --red:#f7768e; --purp:#bb9af7;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;overflow:hidden;height:100vh}
+  .slide{display:none;height:100vh;padding:56px 84px 84px;flex-direction:column;overflow-y:auto}
+  .slide.active{display:flex;animation:fade .35s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .kicker{color:var(--acc);font-size:13px;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;font-weight:600}
+  h1{font-size:50px;line-height:1.1;font-weight:800;margin-bottom:18px}
+  h2{font-size:33px;font-weight:750;margin-bottom:6px}
+  .sub{color:var(--dim);font-size:18px;line-height:1.55;max-width:920px;margin-bottom:22px}
+  .grid{display:grid;gap:14px;margin-top:6px}
+  .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
+  .card h3{font-size:15.5px;margin-bottom:7px;color:var(--acc)}
+  .card h3.b{color:var(--acc2)} .card h3.w{color:var(--warn)} .card h3.p{color:var(--purp)}
+  .card p{font-size:14px;color:var(--dim);line-height:1.55}
+  .card p b{color:var(--txt)}
+  .tag{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:3px 12px;font-size:12.5px;color:var(--dim);margin:3px 4px 3px 0}
+  .tag.on{border-color:var(--acc);color:var(--acc)}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+  th{text-align:left;color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:1px;padding:9px 12px;border-bottom:1px solid var(--border)}
+  td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45}
+  td b{color:var(--txt)}
+  .verdict{border-left:4px solid var(--acc);background:var(--panel2);padding:14px 20px;border-radius:0 10px 10px 0;margin-top:20px;font-size:16px;line-height:1.6}
+  .verdict b{color:var(--acc)}
+  .nav{position:fixed;bottom:22px;left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:10}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--border);cursor:pointer;transition:.2s}
+  .dot.on{background:var(--acc);transform:scale(1.35)}
+  .pager{position:fixed;bottom:18px;right:28px;color:var(--dim);font-size:13px}
+  .hint{position:fixed;bottom:18px;left:28px;color:var(--dim);font-size:13px;opacity:.7}
+  .center{justify-content:center}
+  /* journey steps */
+  .journey{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:12px}
+  .journey .jhead{display:flex;align-items:baseline;gap:12px;margin-bottom:8px}
+  .journey .jid{font-weight:800;color:var(--acc);font-size:14px;min-width:34px}
+  .journey .jname{font-weight:700;font-size:16.5px}
+  .journey .jwho{margin-left:auto;color:var(--dim);font-size:12.5px}
+  .flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13.5px;color:var(--dim);line-height:1.7}
+  .flow .s{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--txt)}
+  .flow .a{color:var(--acc);font-weight:700}
+  .enab{font-size:12px;color:var(--dim);margin-top:8px}
+  .enab b{color:var(--acc2);font-weight:600}
+  /* loop diagram */
+  .loop{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin:26px 0}
+  .loop .node{background:var(--panel);border:1.5px solid var(--acc);border-radius:14px;padding:16px 20px;text-align:center;min-width:150px}
+  .loop .node b{display:block;font-size:16px;margin-bottom:4px}
+  .loop .node span{font-size:12.5px;color:var(--dim)}
+  .loop .arr{color:var(--acc);font-size:22px;font-weight:800}
+  /* timeline */
+  .tl{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}
+  .tl .ph{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;border-top:4px solid var(--acc)}
+  .tl .ph.p1{border-top-color:var(--acc2)} .tl .ph.p2{border-top-color:var(--purp)} .tl .ph.p3{border-top-color:var(--warn)}
+  .tl .ph h3{font-size:15px;margin-bottom:2px}
+  .tl .ph .when{color:var(--dim);font-size:12px;margin-bottom:10px}
+  .tl .ph ul{list-style:none}
+  .tl .ph li{font-size:13px;color:var(--dim);line-height:1.5;padding:4px 0;border-bottom:1px dashed var(--border)}
+  .tl .ph li:last-child{border:0}
+  .tl .ph li b{color:var(--txt)}
+  @media(max-width:900px){.slide{padding:36px 24px 90px}h1{font-size:32px}h2{font-size:25px}.g2,.g3,.tl{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- 1 · TITLE -->
+<section class="slide center">
+  <div class="kicker">Zenod &amp; The Council · Product Definition · July 2026</div>
+  <h1>Zenod Sells Itself</h1>
+  <p class="sub">The user journeys we need enabled — from customer #0 (Zenod running Zenod's own presence) to anyone attaching a Council to their repo and talking to it from WhatsApp. Plus the functionality timeline to get there.</p>
+  <div>
+    <span class="tag on">T0 · Dogfood loop</span>
+    <span class="tag">T1 · Bring your own Council</span>
+    <span class="tag">T2 · Ambient team</span>
+    <span class="tag">T3 · Proactive agency</span>
+  </div>
+</section>
+
+<!-- 2 · STRATEGY -->
+<section class="slide">
+  <div class="kicker">Strategy</div>
+  <h2>The product proves itself by selling itself</h2>
+  <p class="sub">Zenod's own X + Reddit presence is run by Zenod. Every post is a live demo; the growth chart is the sales page; the TrustMRR listing is the testimonial. Customer #0 is us — every journey below ships for us first, then gets a login screen.</p>
+  <div class="grid g3">
+    <div class="card"><h3>Why this works</h3><p>The category's winners already proved it: Postiz grew on build-in-public, open source as marketing. Zenod goes one further — <b>the marketing is literally the product executing</b>. Nobody can fake that, and nobody can copy it without having the product.</p></div>
+    <div class="card"><h3 class="b">What it forces</h3><p>Dogfooding forces the exact journeys a customer needs: feed memory, build backlog, queue posts, review on a board, feedback loops in. If a journey is too clunky for us, it's not ready to sell.</p></div>
+    <div class="card"><h3 class="w">What we already have</h3><p>The engine exists: librarian + vault (memory), backlog service on GitHub issues, X/Reddit MCPs (<code>post_tweet</code>, <code>post_reddit</code>, <code>read_x_mentions</code>), and the Council roster. T0 is wiring, not research.</p></div>
+  </div>
+</section>
+
+<!-- 3 · THE LOOP -->
+<section class="slide">
+  <div class="kicker">The Core Loop</div>
+  <h2>One loop, always on</h2>
+  <p class="sub">Everything in the product is this loop, throttled and governed. Every journey either feeds it, steers it, or reads from it.</p>
+  <div class="loop">
+    <div class="node"><b>Memory</b><span>vault fed by you<br>+ feedback</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>Backlog</b><span>post proposals,<br>research, threads</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>Queue</b><span>throttled<br>N posts / hour</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>Publish</b><span>X + Reddit posts<br>&amp; thread replies</span></div>
+    <div class="arr">→</div>
+    <div class="node"><b>Feedback</b><span>board reviews, nudges,<br>audience signal</span></div>
+    <div class="arr" style="width:100%;text-align:center">↩ feedback re-enters memory — the loop learns</div>
+  </div>
+  <div class="verdict">Governance, not autopilot: <b>you orchestrate</b>. Throttles, approval gates, and nudges are first-class product features — they're what make "an agent posts as my company" safe enough to buy.</div>
+</section>
+
+<!-- 4 · T0 JOURNEYS A -->
+<section class="slide">
+  <div class="kicker">T0 · Dogfood — journeys 1–3</div>
+  <h2>Feed it, queue it, review it</h2>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J1</span><span class="jname">Feed the brain</span><span class="jwho">Operator → Zenod (Memory)</span></div>
+    <div class="flow"><span class="s">Drop knowledge: chats, docs, voice notes, decisions</span><span class="a">→</span><span class="s">Librarian files evidence + updates meaning pages</span><span class="a">→</span><span class="s">Provenance kept per claim</span></div>
+    <div class="enab">Enabled by: <b>store_memory / librarian (exists)</b> · gap: evidence-tier retrieval fixes from ROADMAP</div>
+  </div>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J2</span><span class="jname">Build the posting backlog</span><span class="jwho">Archus (Plan) + Callisthenes (Word)</span></div>
+    <div class="flow"><span class="s">Archus mines memory + recent feedback</span><span class="a">→</span><span class="s">Drafts post proposals as backlog items</span><span class="a">→</span><span class="s">Each cites its memory sources</span><span class="a">→</span><span class="s">Ranked into a queue</span></div>
+    <div class="enab">Enabled by: <b>backlog service on GitHub issues (exists)</b> · new: post-type backlog items, ranking by feedback signal</div>
+  </div>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J3</span><span class="jname">Review on the board</span><span class="jwho">Operator → the Council board</span></div>
+    <div class="flow"><span class="s">Queued posts sit on the board</span><span class="a">→</span><span class="s">Approve / edit / comment / kill</span><span class="a">→</span><span class="s">Feedback is stored as memory, not just applied once</span><span class="a">→</span><span class="s">Next drafts already reflect it</span></div>
+    <div class="enab">Enabled by: <b>console UI (exists as chat)</b> · new: board view with per-post feedback → store_memory pipeline</div>
+  </div>
+</section>
+
+<!-- 5 · T0 JOURNEYS B -->
+<section class="slide">
+  <div class="kicker">T0 · Dogfood — journeys 4–6</div>
+  <h2>Publish throttled, respond, steer</h2>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J4</span><span class="jname">Throttled publishing</span><span class="jwho">Callisthenes (Word) + Phylax (Door)</span></div>
+    <div class="flow"><span class="s">Queue drains at N posts/hour (configurable)</span><span class="a">→</span><span class="s">Per-channel pacing (X ≠ Reddit etiquette)</span><span class="a">→</span><span class="s">Every publish logged to memory with permalink</span></div>
+    <div class="enab">Enabled by: <b>post_tweet / post_reddit MCPs (exist)</b> · new: queue runner with rate limiter + posting-windows config</div>
+  </div>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J5</span><span class="jname">Thread response</span><span class="jwho">Callisthenes, gated by Phylax</span></div>
+    <div class="flow"><span class="s">Monitor mentions, replies, relevant threads</span><span class="a">→</span><span class="s">Draft replies grounded in memory</span><span class="a">→</span><span class="s">Low-risk replies auto-send (throttled); sensitive ones held for approval</span><span class="a">→</span><span class="s">Audience signal filed as feedback</span></div>
+    <div class="enab">Enabled by: <b>read_x_mentions / search_x (exist)</b> · new: risk classifier + Reddit thread monitor, reply throttle</div>
+  </div>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J6</span><span class="jname">Nudge mid-flight</span><span class="jwho">Operator, any time</span></div>
+    <div class="flow"><span class="s">"Push the memory angle this week" / "stop mentioning pricing"</span><span class="a">→</span><span class="s">Nudge stored as a standing directive in memory</span><span class="a">→</span><span class="s">Queue re-ranked, drafts revised</span><span class="a">→</span><span class="s">Expires or persists as you choose</span></div>
+    <div class="enab">Enabled by: <b>chat_with_console (exists)</b> · new: directives as first-class memory objects that Archus reads on every planning pass</div>
+  </div>
+</section>
+
+<!-- 6 · T1 JOURNEYS -->
+<section class="slide">
+  <div class="kicker">T1 · Bring your own Council — journeys 7–9</div>
+  <h2>From our loop to anyone's loop</h2>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J7</span><span class="jname">Attach the Council to a repo</span><span class="jwho">New user, first 10 minutes</span></div>
+    <div class="flow"><span class="s">Sign up (hosted) or docker run (self-host)</span><span class="a">→</span><span class="s">Connect a GitHub repo — the brain lives there</span><span class="a">→</span><span class="s">Vault scaffolded with schema v1 commit</span><span class="a">→</span><span class="s">Council online, empty but talking</span></div>
+    <div class="enab">Enabled by: <b>setup wizard + vault scaffolding (exist, self-host)</b> · new: hosted multi-tenant shell, GitHub App OAuth</div>
+  </div>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J8</span><span class="jname">Plug your tools</span><span class="jwho">New user, minutes 10–20</span></div>
+    <div class="flow"><span class="s">Connect X credentials</span><span class="a">→</span><span class="s">Connect Google Drive (documents → memory)</span><span class="a">→</span><span class="s">Connect Composio (long-tail tools)</span><span class="a">→</span><span class="s">Each connection unlocks journeys visibly</span></div>
+    <div class="enab">Enabled by: <b>settings UI pattern (exists)</b> · new: OAuth flows, Composio integration, GDrive ingestion → librarian</div>
+  </div>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J9</span><span class="jname">Talk your knowledge base into existence</span><span class="jwho">User ↔ Council chat</span></div>
+    <div class="flow"><span class="s">Onboarding interview: what do you do, who for, what's your voice</span><span class="a">→</span><span class="s">Answers filed as memory</span><span class="a">→</span><span class="s">First backlog of posts proposed from that memory</span><span class="a">→</span><span class="s">User iterates on the board (J3) — the loop is theirs now</span></div>
+    <div class="enab">Enabled by: <b>chat + librarian (exist)</b> · new: guided onboarding script, "first backlog" generator</div>
+  </div>
+</section>
+
+<!-- 7 · T2/T3 JOURNEYS -->
+<section class="slide">
+  <div class="kicker">T2–T3 · Ambient team — journeys 10–12</div>
+  <h2>The Council in your pocket, then ahead of you</h2>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J10</span><span class="jname">WhatsApp / Telegram channel</span><span class="jwho">Phylax speaks for the Council</span></div>
+    <div class="flow"><span class="s">Connect WhatsApp or Telegram</span><span class="a">→</span><span class="s">Notifications: post published, reply needs approval, feedback spike</span><span class="a">→</span><span class="s">Answer questions, approve, nudge — from your pocket</span><span class="a">→</span><span class="s">Everything you say is memory</span></div>
+    <div class="enab">Enabled by: <b>WHATSAPP-CONNECTOR.md design (exists as doc)</b> · new: connector build, notification policy (Phylax guards attention — batching, quiet hours)</div>
+  </div>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J11</span><span class="jname">Thinking sessions</span><span class="jwho">Scheduled, Council-internal</span></div>
+    <div class="flow"><span class="s">Programmed sessions (daily/weekly)</span><span class="a">→</span><span class="s">Re-validate backlog against current objective</span><span class="a">→</span><span class="s">Review what worked / flopped</span><span class="a">→</span><span class="s">Come to you proactively with proposals, not just outputs</span></div>
+    <div class="enab">Enabled by: <b>scheduled runs + backlog selector (exist)</b> · new: objective object in memory, session playbooks, proposal format</div>
+  </div>
+  <div class="journey">
+    <div class="jhead"><span class="jid">J12</span><span class="jname">The research loop</span><span class="jwho">Epaminon (Execution) + Archus</span></div>
+    <div class="flow"><span class="s">Feedback reveals a gap ("people keep asking about X")</span><span class="a">→</span><span class="s">Research task spawned</span><span class="a">→</span><span class="s">Findings filed as memory with provenance</span><span class="a">→</span><span class="s">New content proposals appear on your board</span><span class="a">→</span><span class="s">Loop never stops</span></div>
+    <div class="enab">Enabled by: <b>epaminon runner + RESEARCH-AGENT-ARCHITECTURE.md (exist)</b> · new: feedback→research trigger policy</div>
+  </div>
+</section>
+
+<!-- 8 · GOVERNORS -->
+<section class="slide">
+  <div class="kicker">Who does what</div>
+  <h2>Journeys mapped to the Council</h2>
+  <table>
+    <tr><th>Governor</th><th>Governs</th><th>Owns journeys</th><th>T0 role</th></tr>
+    <tr><td><b>Zenod</b></td><td>Memory</td><td>J1 · feedback ingestion in J3/J5/J10</td><td>Files everything; the substrate every other journey reads</td></tr>
+    <tr><td><b>Archus</b></td><td>the Plan</td><td>J2 · J6 (re-ranking) · J11</td><td>Mines memory + feedback into the post backlog</td></tr>
+    <tr><td><b>Epaminon</b></td><td>Execution</td><td>J12 · research tasks</td><td>Minimal at T0; grows into the research loop</td></tr>
+    <tr><td><b>Phylax</b></td><td>the Door</td><td>J4 (gates) · J5 (risk) · J10 (notifications)</td><td>Throttles, approval gates, quiet hours — the safety product</td></tr>
+    <tr><td><b>Callisthenes</b></td><td>the Word</td><td>J4 · J5 — everything that leaves</td><td>Drafts and publishes posts &amp; replies, only on your word</td></tr>
+    <tr><td><b>Nectary</b></td><td>the Treasury</td><td>later — funded work, billing</td><td>Dormant at T0; wakes with the hosted product</td></tr>
+  </table>
+  <div class="verdict"><b>You are the seventh seat.</b> The orchestration surface (board + chat + nudges + WhatsApp) is the product's real UI — the governors are the engine behind it.</div>
+</section>
+
+<!-- 9 · TIMELINE -->
+<section class="slide">
+  <div class="kicker">Timeline of user functionality</div>
+  <h2>Ship the loop, then the login, then the pocket</h2>
+  <div class="tl">
+    <div class="ph">
+      <h3>T0 · Zenod sells Zenod</h3>
+      <div class="when">Weeks 0–4 · users: us</div>
+      <ul>
+        <li><b>J1</b> memory feeding (hardened)</li>
+        <li><b>J2</b> post backlog from memory</li>
+        <li><b>J3</b> board with feedback→memory</li>
+        <li><b>J4</b> queue + N/hour throttle</li>
+        <li><b>J5</b> X mentions → replies (gated)</li>
+        <li><b>J6</b> nudges as directives</li>
+        <li>Zenod posting daily, in public</li>
+      </ul>
+    </div>
+    <div class="ph p1">
+      <h3>T1 · Bring your Council</h3>
+      <div class="when">Weeks 5–10 · users: design partners</div>
+      <ul>
+        <li><b>J7</b> attach Council to repo (hosted)</li>
+        <li><b>J8</b> plug X, GDrive, Composio</li>
+        <li><b>J9</b> talk knowledge base into existence</li>
+        <li>Reddit thread monitor (J5 full)</li>
+        <li>3–5 paying design partners $300–500/mo</li>
+        <li>Zenod's Stripe on TrustMRR</li>
+      </ul>
+    </div>
+    <div class="ph p2">
+      <h3>T2 · Ambient team</h3>
+      <div class="when">Weeks 11–16 · users: early adopters</div>
+      <ul>
+        <li><b>J10</b> WhatsApp + Telegram channel</li>
+        <li>Notification policy (Phylax)</li>
+        <li>Approvals &amp; nudges from pocket</li>
+        <li>Self-serve onboarding (no hand-holding)</li>
+        <li>Pricing tiers live</li>
+      </ul>
+    </div>
+    <div class="ph p3">
+      <h3>T3 · Proactive agency</h3>
+      <div class="when">Weeks 17+ · users: scale</div>
+      <ul>
+        <li><b>J11</b> thinking sessions + objectives</li>
+        <li><b>J12</b> feedback→research→proposals loop</li>
+        <li>Council comes to you with suggestions</li>
+        <li>Nectary wakes: billing, funded work</li>
+        <li>Second channel: AEO/GEO content</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 10 · T0 CUT LINE -->
+<section class="slide">
+  <div class="kicker">Scope discipline</div>
+  <h2>What T0 is not</h2>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><h3>In — the loop, minimal</h3><p>Memory → backlog → throttled queue → X/Reddit publish → board feedback → memory. One tenant (us). Config by file/settings UI is fine. Board can be plain — GitHub issues + a thin view is acceptable if feedback flows into memory.</p></div>
+    <div class="card"><h3 class="w">Out — everything ambient</h3><p>No WhatsApp/Telegram, no multi-tenant, no OAuth flows, no Composio, no thinking sessions, no proactive proposals. These are T1–T3 for a reason: each one is only credible <b>after the loop demonstrably works in public</b>.</p></div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3 class="b">The T0 demo that sells</h3><p>A stranger opens Zenod's X profile: daily posts, real replies in threads, visible improvement week over week. Then reads the pinned post: "this account is run by the product." That single artifact is the launch.</p></div>
+    <div class="card"><h3 class="p">The T0 risk to watch</h3><p>Quality, not volume. One AI-slop post in a Reddit thread costs more than ten good posts earn. Phylax's gates and low N are features — start N=1/hour, earn the throttle up.</p></div>
+  </div>
+</section>
+
+<!-- 11 · METRICS -->
+<section class="slide">
+  <div class="kicker">Proof</div>
+  <h2>How we know each phase worked</h2>
+  <table>
+    <tr><th>Phase</th><th>Loop health</th><th>External proof</th><th>Gate to next phase</th></tr>
+    <tr><td><b>T0</b></td><td>Posts/day sustained ≥ 14 days; % drafts approved without edit rising; feedback items filed → reflected in later drafts</td><td>Follower + engagement trend on X/Reddit; zero slop incidents</td><td>We'd honestly pay for this ourselves</td></tr>
+    <tr><td><b>T1</b></td><td>Design partner reaches first published post &lt; 1 day from signup</td><td>3–5 partners paying $300–500/mo; retention past month 2</td><td>Partners renew without being asked</td></tr>
+    <tr><td><b>T2</b></td><td>≥ 50% of approvals happen via WhatsApp/Telegram; notification opt-outs near zero</td><td>Self-serve signups converting; MRR verified on TrustMRR</td><td>Users onboard with zero founder contact</td></tr>
+    <tr><td><b>T3</b></td><td>Proactive proposals accepted &gt; 30%; research loop cited in accepted posts</td><td>Expansion revenue; "my council suggested…" appearing in user language</td><td>—</td></tr>
+  </table>
+  <div class="verdict">The meta-metric: <b>Zenod's own MRR, Stripe-verified, public.</b> The product that sells itself must show its own receipts — that's the whole thesis.</div>
+</section>
+
+<!-- 12 · CLOSE -->
+<section class="slide center">
+  <div class="kicker">Bottom line</div>
+  <h1 style="font-size:38px">Twelve journeys. Four phases.<br>One loop that learns.</h1>
+  <p class="sub" style="margin-top:8px">T0 is six journeys and four weeks of wiring on an engine that already exists. Ship the loop for customer #0, run it in public, and every later phase — logins, pockets, proactivity — is just widening the door to a machine that's already proving itself daily.</p>
+  <div style="margin-top:6px">
+    <span class="tag on">Next action: J2 + J4 — backlog→queue→publish, throttled</span>
+    <span class="tag">Then J3 board feedback → memory</span>
+  </div>
+</section>
+
+<div class="nav" id="nav"></div>
+<div class="pager" id="pager"></div>
+<div class="hint">← → or click dots</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const nav=document.getElementById('nav'),pager=document.getElementById('pager');
+  let i=0;
+  slides.forEach((_,k)=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>go(k);nav.appendChild(d);});
+  const dots=[...nav.children];
+  function go(k){i=Math.max(0,Math.min(slides.length-1,k));
+    slides.forEach((s,j)=>s.classList.toggle('active',j===i));
+    dots.forEach((d,j)=>d.classList.toggle('on',j===i));
+    pager.textContent=(i+1)+' / '+slides.length;}
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(i+1);
+    if(e.key==='ArrowLeft'||e.key==='PageUp')go(i-1);
+    if(e.key==='Home')go(0); if(e.key==='End')go(slides.length-1);});
+  let tx=null;
+  document.addEventListener('touchstart',e=>tx=e.touches[0].clientX);
+  document.addEventListener('touchend',e=>{if(tx===null)return;const dx=e.changedTouches[0].clientX-tx;if(dx<-50)go(i+1);if(dx>50)go(i-1);tx=null;});
+  go(0);
+</script>
+</body>
+</html>
