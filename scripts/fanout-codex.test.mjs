@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, isQuotaError, fallbackEngine, finalComment, deliverablePaths, deliverablesBlock, buildPrCreateArgs, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, isQuotaError, fallbackEngine, finalComment, deliverablePaths, deliverablesBlock, buildPrCreateArgs, prChangedFiles, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
 import { enableAutoMergeForPr, wantsHoldForReview } from "./backlog-monitor.mjs";
 
 test("isQuotaError recognizes the quota/limit error class across both engines (W0)", () => {
@@ -349,4 +349,32 @@ test("C-20: holdForReview signal detected from goal/context (shared with #480)",
   assert.ok(wantsHoldForReview("Do the thing.\nHOLD-FOR-REVIEW please"));
   assert.ok(wantsHoldForReview("context: noAutoMerge"));
   assert.ok(!wantsHoldForReview("Just a normal research goal, no markers here."));
+});
+
+// ── C-20 item 2: deliverables summary lists the PR's real files, never "none" ───────
+
+test("C-20: deliverablePaths passes through already-clean paths (README.md not mangled)", () => {
+  // The old greedy prefix regex ate "REA" out of "README.md"; the porcelain-shaped
+  // prefix strip must leave code-less paths (from `gh pr diff --name-only`) intact.
+  assert.deepEqual(deliverablePaths(["README.md", "docs/a.md", "src/b.ts"]), ["README.md", "docs/a.md", "src/b.ts"]);
+});
+
+test("C-20: deliverables list the PR's real files (never 'none' when files exist)", () => {
+  const runner = () => ({ status: 0, stdout: "docs/a.md\nsrc/b.ts\nREADME.md\n", stderr: "" });
+  const files = prChangedFiles("AlfaBlok/obsidian-brain", "https://github.com/AlfaBlok/obsidian-brain/pull/250", { runner });
+  assert.deepEqual(files, ["docs/a.md", "src/b.ts", "README.md"]);
+  const block = deliverablesBlock(files);
+  assert.ok(block.startsWith("Deliverables:"));
+  assert.ok(block.includes("- docs/a.md") && block.includes("- src/b.ts") && block.includes("- README.md"));
+  assert.ok(!/Deliverables: none/.test(block), "must not say none for a 3-file PR");
+});
+
+test("C-20: deliverables fall back / say 'none' only when there genuinely are no files", () => {
+  // gh failure → [] so caller falls back to the worktree dirty capture (no fabrication)
+  const failRunner = () => ({ status: 1, stdout: "", stderr: "not found" });
+  assert.deepEqual(prChangedFiles("a/b", "https://github.com/a/b/pull/1", { runner: failRunner }), []);
+  // genuinely-empty PR diff → [] → "Deliverables: none"
+  const emptyRunner = () => ({ status: 0, stdout: "\n\n", stderr: "" });
+  assert.deepEqual(prChangedFiles("a/b", "https://github.com/a/b/pull/1", { runner: emptyRunner }), []);
+  assert.equal(deliverablesBlock([]), "Deliverables: none");
 });

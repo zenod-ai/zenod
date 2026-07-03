@@ -1084,11 +1084,37 @@ async function commitPushPr({ opts, manifest, issueNumber, finalText }) {
   // merge lands immediately when there are no required checks). Deterministic — no LLM.
   const autoMerge = enableAutoMergeForPr(prUrl, { hold });
   console.error(`[fanout] auto-merge ${autoMerge.outcome} for #${issueNumber}: ${autoMerge.detail}`);
-  await updateWorkerStatus(runDir, issueNumber, { status: "complete", prUrl, autoMerge: autoMerge.outcome });
+  // Deliverables summary: derive the real changed paths from the PR itself so it never
+  // says "Deliverables: none" for a PR that has committed files (the worker may have
+  // committed, clearing the worktree that `dirty` was read from — the 3-file "none" bug).
+  // Fall back to the dirty capture; only "none" when there genuinely are no files.
+  const prFiles = prChangedFiles(manifest.repo, prUrl);
+  const deliverablesForComment = prFiles.length ? prFiles : deliverables;
+  await updateWorkerStatus(runDir, issueNumber, {
+    status: "complete",
+    prUrl,
+    autoMerge: autoMerge.outcome,
+    filesChanged: deliverablesForComment,
+  });
   if (opts.githubStatus) {
     syncIssueStatusLabel(manifest.repo, issueNumber, "complete", { hasReviewableWork: true });
-    await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete", worker.branch, finalText, prUrl, null, deliverables), true);
+    await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete", worker.branch, finalText, prUrl, null, deliverablesForComment), true);
   }
+}
+
+// CONTROLLER-observed deliverables: the file paths actually in a PR, read from GitHub
+// via `gh pr diff --name-only` (never worker self-report). Returns [] on any failure so
+// callers fall back to the worktree dirty-file capture rather than fabricating paths.
+// `runner` is injectable for tests (defaults to the real `gh` via run()).
+function prChangedFiles(repo, prUrl, { runner } = {}) {
+  if (!prUrl) return [];
+  const exec = runner || ((args) => run("gh", args, { allowFailure: true }));
+  const r = exec(["pr", "diff", prUrl, "--repo", repo, "--name-only"]);
+  if (r.status !== 0) return [];
+  return String(r.stdout || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
 
 // PURE: build the `gh pr create` argv. C-20 — open READY by default (no --draft) so
@@ -1147,11 +1173,15 @@ function blockerComment(runIdValue, branch, blocker) {
 }
 
 // PURE: normalize `git status --short` lines to clean deliverable paths (R1-T4).
-// Handles the XY status prefix and rename arrows ("R old -> new" keeps new).
+// Strips the 2-char XY status code + separating space (the real porcelain format), and
+// resolves rename arrows ("R  old -> new" keeps new). The prefix is only removed when it
+// matches the exact `XY ` shape, so an already-clean path (e.g. from `gh pr diff
+// --name-only`, no leading code) like "README.md" is passed through untouched — the old
+// greedy `^[A-Z]{1,3}` prefix wrongly ate "REA" out of such paths.
 function deliverablePaths(statusLines) {
   const out = [];
   for (const raw of statusLines || []) {
-    let s = String(raw).replace(/^[\sA-Z?!]{1,3}/, "").trim();
+    let s = String(raw).replace(/^[ MADRCU?!]{2} /, "").trim();
     const arrow = s.split(" -> ");
     s = (arrow.length > 1 ? arrow[arrow.length - 1] : s).replace(/^"|"$/g, "").trim();
     if (s) out.push(s);
@@ -1175,7 +1205,7 @@ function finalComment(runIdValue, issueNumber, status, branch, finalText, prUrl 
     "",
     `Status: \`${status}\``,
     `Branch: \`${branch}\``,
-    prUrl ? `Draft PR: ${prUrl}` : "",
+    prUrl ? `PR: ${prUrl}` : "",
     "",
     deliverablesBlock(files),
     "",
@@ -1535,6 +1565,7 @@ export {
   deliverablePaths,
   deliverablesBlock,
   buildPrCreateArgs,
+  prChangedFiles,
   resolveEngine,
   resolveModel,
   resolveEffort,
