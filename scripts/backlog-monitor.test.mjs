@@ -44,6 +44,17 @@ import {
   composeActionableMessage,
   composeBlockerNotification,
   parseDeliverables,
+  formatElapsed,
+  parseHeartbeatObservation,
+  heartbeatStalled,
+  renderHeartbeat,
+  shouldUpdateHeartbeat,
+  heartbeatMilestone,
+  heartbeatIssueRef,
+  HEARTBEAT_INTERVAL_MS,
+  HEARTBEAT_STALL_MS,
+  HEARTBEAT_LONGRUN_MS,
+  HEARTBEAT_MARKER,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
@@ -718,4 +729,106 @@ test("ephemeralFallbackDecision recognizes 429 / insufficient_quota classes (par
       `expected fallback for: ${err}`,
     );
   }
+});
+
+// ---- Live-progress heartbeat (execution-progress campaign) ----
+
+test("formatElapsed renders compact human durations", () => {
+  assert.equal(formatElapsed(38_000), "38s");
+  assert.equal(formatElapsed(42 * 60_000), "42m");
+  assert.equal(formatElapsed(65 * 60_000), "1h05m");
+});
+
+test("parseHeartbeatObservation derives turns + last tool from a codex event stream (controller-observed)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hb-codex-"));
+  const path = join(dir, "events.jsonl");
+  writeFileSync(
+    path,
+    [
+      JSON.stringify({ type: "turn.started", timestamp: "2026-07-03T10:00:00Z" }),
+      JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "npm test" }, timestamp: "2026-07-03T10:00:10Z" }),
+      JSON.stringify({ type: "item.completed", item: { type: "tool_call", name: "edit_file" }, timestamp: "2026-07-03T10:01:00Z" }),
+      // A worker-prose line claiming progress must NOT be treated as a turn/tool signal.
+      JSON.stringify({ type: "item.completed", item: { type: "assistant_message", text: "I'm about 50% done!" }, timestamp: "2026-07-03T10:01:30Z" }),
+      "not json — ignored",
+    ].join("\n") + "\n",
+  );
+  const obs = parseHeartbeatObservation(path, Date.parse("2026-07-03T10:02:00Z"));
+  assert.equal(obs.turns, 1, "one turn.started");
+  assert.equal(obs.toolCalls, 2, "command + tool_call counted, prose not");
+  assert.equal(obs.lastEvent, "assistant_message", "last observed structural event");
+  assert.equal(obs.lastActivityMs, Date.parse("2026-07-03T10:01:30Z"), "last activity from the final parseable line");
+});
+
+test("parseHeartbeatObservation handles claude stream-json turns + tool_use", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hb-claude-"));
+  const path = join(dir, "events.jsonl");
+  writeFileSync(
+    path,
+    [
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "working" }] }, timestamp: "2026-07-03T10:00:00Z" }),
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit" }] }, timestamp: "2026-07-03T10:00:30Z" }),
+    ].join("\n") + "\n",
+  );
+  const obs = parseHeartbeatObservation(path, Date.parse("2026-07-03T10:01:00Z"));
+  assert.equal(obs.turns, 2, "two assistant turns");
+  assert.equal(obs.toolCalls, 1, "one tool_use");
+  assert.equal(obs.lastEvent, "Edit");
+});
+
+test("parseHeartbeatObservation zeroes out for a missing log (degrade-safe)", () => {
+  const obs = parseHeartbeatObservation("/no/such/events.jsonl", 1000);
+  assert.deepEqual(obs, { turns: 0, toolCalls: 0, lastEvent: "", lastActivityMs: null });
+});
+
+test("heartbeatStalled flips only after the threshold, and never on unknown activity", () => {
+  const now = 1_000_000;
+  assert.equal(heartbeatStalled(now - 5 * 60_000, now, 10 * 60_000), false, "5m < 10m threshold");
+  assert.equal(heartbeatStalled(now - 11 * 60_000, now, 10 * 60_000), true, "11m > 10m threshold");
+  assert.equal(heartbeatStalled(null, now, 10 * 60_000), false, "unknown → not stalled (no false alarm)");
+});
+
+test("renderHeartbeat carries controller-observed fields + the edit-in-place marker", () => {
+  const body = renderHeartbeat({ elapsedMs: 42 * 60_000, turns: 187, toolCalls: 40, lastEvent: "edit_file", stalled: false, now: 0 });
+  assert.ok(body.startsWith(HEARTBEAT_MARKER), "hidden marker enables edit-in-place lookup");
+  assert.ok(body.includes("42m elapsed"), "elapsed");
+  assert.ok(body.includes("187 turns"), "turn count");
+  assert.ok(body.includes("last: edit_file"), "last observed tool");
+  assert.ok(body.includes("no terminal yet"), "honest non-terminal state");
+  assert.ok(body.includes("not worker self-report"), "provenance disclaimer");
+});
+
+test("renderHeartbeat flips to a stalled warning when quiet (watchdog reuse)", () => {
+  const body = renderHeartbeat({ elapsedMs: 61 * 60_000, turns: 187, lastEvent: "edit_file", stalled: true, staleMs: 12 * 60_000, now: 0 });
+  assert.ok(body.includes("⚠️ Possibly stalled"), "stalled lead");
+  assert.ok(body.includes("no activity for 12m"), "stale duration");
+});
+
+test("shouldUpdateHeartbeat: first post, interval gate, and immediate state-flip", () => {
+  const now = 10_000_000;
+  assert.equal(shouldUpdateHeartbeat(null, now, false, HEARTBEAT_INTERVAL_MS), true, "first post");
+  assert.equal(shouldUpdateHeartbeat({ lastPostedAt: now - 1000, stalled: false }, now, false, HEARTBEAT_INTERVAL_MS), false, "within interval → skip (no comment spam)");
+  assert.equal(shouldUpdateHeartbeat({ lastPostedAt: now - HEARTBEAT_INTERVAL_MS, stalled: false }, now, false, HEARTBEAT_INTERVAL_MS), true, "interval elapsed → update");
+  assert.equal(shouldUpdateHeartbeat({ lastPostedAt: now - 1000, stalled: false }, now, true, HEARTBEAT_INTERVAL_MS), true, "stalled flip lands immediately");
+});
+
+test("heartbeatMilestone fires start/longrun/stalled once each — never per interval", () => {
+  // start fires first, once
+  assert.equal(heartbeatMilestone({ elapsedMs: 60_000, stalled: false, fired: {} }, HEARTBEAT_LONGRUN_MS), "start");
+  assert.equal(heartbeatMilestone({ elapsedMs: 60_000, stalled: false, fired: { start: "x" } }, HEARTBEAT_LONGRUN_MS), null, "no repeat ping mid-run");
+  // longrun fires once the 30m mark is crossed, after start
+  assert.equal(heartbeatMilestone({ elapsedMs: 31 * 60_000, stalled: false, fired: { start: "x" } }, 30 * 60_000), "longrun");
+  assert.equal(heartbeatMilestone({ elapsedMs: 45 * 60_000, stalled: false, fired: { start: "x", longrun: "x" } }, 30 * 60_000), null, "longrun only once");
+  // stalled takes priority and fires once
+  assert.equal(heartbeatMilestone({ elapsedMs: 45 * 60_000, stalled: true, fired: { start: "x", longrun: "x" } }, 30 * 60_000), "stalled");
+  assert.equal(heartbeatMilestone({ elapsedMs: 45 * 60_000, stalled: true, fired: { start: "x", longrun: "x", stalled: "x" } }, 30 * 60_000), null, "stalled only once");
+});
+
+test("heartbeatIssueRef resolves a dispatched target, an in-context issue URL, else null", () => {
+  assert.deepEqual(heartbeatIssueRef({ target: "zenod-ai/zenod#476" }), { repo: "zenod-ai/zenod", number: 476 });
+  assert.deepEqual(
+    heartbeatIssueRef({ target: "ephemeral:abc-123", context: "see https://github.com/zenod-ai/zenod/issues/512 for scope" }),
+    { repo: "zenod-ai/zenod", number: 512 },
+  );
+  assert.equal(heartbeatIssueRef({ target: "ephemeral:abc-123", context: "no ticket here" }), null, "degrade gracefully — no issue");
 });
