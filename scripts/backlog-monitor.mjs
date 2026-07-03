@@ -66,6 +66,18 @@ const NOTIFY_COOLDOWN_MS = Number(process.env.ZENOD_NOTIFY_COOLDOWN_MS || 12 * 6
 const MERGE_ATTEMPT_HISTORY = Number(process.env.ZENOD_MERGE_ATTEMPT_HISTORY || 200);
 const BRIDGE_MERGE_ATTEMPT_HISTORY = 30;
 const LAUNCH_EARLY_EXIT_MS = Number(process.env.ZENOD_LAUNCH_EARLY_EXIT_MS || 30_000);
+// Live-progress heartbeat (execution-progress campaign). While a run is non-terminal the
+// CONTROLLER (this monitor) posts/edits ONE pinned comment on the run's GitHub issue with
+// CONTROLLER-OBSERVED telemetry only — elapsed, turn count, last event/tool from the
+// streamed events log the monitor already parses. Never worker self-report. Edit-in-place,
+// interval-gated (default 10m). If no NEW worker event for > the stall threshold (default
+// 10m), flip the heartbeat to "possibly stalled" and raise a Tier-2 milestone. Reuses the
+// #477 (M-5) watchdog pattern (age since last activity crosses a threshold → one alert).
+const HEARTBEAT_INTERVAL_MS = Number(process.env.ZENOD_HEARTBEAT_INTERVAL_MS || 10 * 60 * 1000);
+const HEARTBEAT_STALL_MS = Number(process.env.ZENOD_HEARTBEAT_STALL_MS || 10 * 60 * 1000);
+// Tier-2 coarse milestone: one "still running" reminder to Phylax at this elapsed mark.
+const HEARTBEAT_LONGRUN_MS = Number(process.env.ZENOD_HEARTBEAT_LONGRUN_MS || 30 * 60 * 1000);
+const HEARTBEAT_MARKER = "<!-- zenod-exec-heartbeat -->";
 const STATUS_LABEL_PRIORITY = [
   "status:blocked",
   "status:needs-review",
@@ -108,6 +120,9 @@ function normalizeState(state) {
     // HTTP error). Keyed "path|execution_id"; the scan loop re-flushes them so an
     // execution never silently sticks at queued/running with its outcome lost (#stab T2).
     pendingReports: state?.pendingReports ?? {},
+    // Live-progress heartbeat bookkeeping: execution_id -> { commentId, lastPostedAt, stalled,
+    // fired } so the pinned comment is edited in place and each Tier-2 milestone fires once.
+    heartbeats: state?.heartbeats ?? {},
   };
 }
 function parseBooleanSetting(value) {
@@ -1054,6 +1069,261 @@ function ephemeralFallbackDecision({ exitCode, rawError, engine, alreadyFellBack
   return { fallback: true, nextEngine };
 }
 
+// ---- Live-progress heartbeat (execution-progress campaign) ----
+//
+// The controller watches the streamed events log it ALREADY parses (same events.jsonl
+// used by extractWorkerError / extractFinalFromEvents) and derives progress from what it
+// can OBSERVE — turn count, the last tool/event seen, the timestamp of the last activity.
+// A worker LLM claiming "50% done" is the fabrication pattern this whole campaign exists to
+// avoid; none of the fields below come from the worker's prose.
+
+// PURE: format a millisecond duration as a compact human label ("42m", "1h05m", "38s").
+function formatElapsed(ms) {
+  const s = Math.max(0, Math.round(Number(ms || 0) / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h${String(m % 60).padStart(2, "0")}m`;
+}
+
+// PURE: reduce a streamed events log (the JSONL the worker emits, one event per line) to
+// controller-observed telemetry — turn count, the last meaningful event/tool label, and the
+// timestamp of the most recent activity. Handles BOTH engine dialects (codex `item.*` /
+// `turn.*`, claude stream-json `assistant`/`tool_use`/`result`). Never reads the worker's
+// text as a progress claim — only the STRUCTURE of the stream (which tool ran, how many
+// turns) counts. Missing/empty log → zeroed observation.
+function parseHeartbeatObservation(eventsPath, now = Date.now()) {
+  const obs = { turns: 0, toolCalls: 0, lastEvent: "", lastActivityMs: null };
+  let raw;
+  try {
+    raw = readFileSync(eventsPath, "utf8");
+  } catch {
+    return obs;
+  }
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let ev;
+    try {
+      ev = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const type = String(ev?.type || "");
+    // Turn boundaries: codex emits turn.* / item.completed(kind=assistant); claude emits
+    // one `assistant` event per model turn.
+    if (type === "turn.completed" || type === "turn.started" || type === "assistant") obs.turns += 1;
+    // Tool activity + a human label for "last: <tool>".
+    let label = "";
+    if (type === "item.started" || type === "item.completed") {
+      const item = ev.item || {};
+      const kind = String(item.type || item.item_type || "");
+      if (kind.includes("command") || kind.includes("tool") || kind.includes("function")) {
+        obs.toolCalls += 1;
+        label = String(item.name || item.command || item.tool || kind || "").slice(0, 60);
+      } else if (kind) {
+        label = kind.slice(0, 60);
+      }
+    } else if (type === "assistant" && ev.message?.content) {
+      const tool = (ev.message.content || []).find((c) => c && c.type === "tool_use");
+      if (tool) {
+        obs.toolCalls += 1;
+        label = String(tool.name || "").slice(0, 60);
+      }
+    } else if (type === "tool_use" || type === "tool_call") {
+      obs.toolCalls += 1;
+      label = String(ev.name || ev.tool || "").slice(0, 60);
+    } else if (type) {
+      label = type;
+    }
+    if (label) obs.lastEvent = label;
+    // Any parseable line counts as activity (the stream advanced). Prefer an explicit
+    // event timestamp when present; else treat "now" as the observation time.
+    const ts = Date.parse(ev.timestamp || ev.at || ev.ts || "");
+    obs.lastActivityMs = Number.isFinite(ts) ? ts : now;
+  }
+  return obs;
+}
+
+// PURE (watchdog reuse — #477 M-5): has the worker gone quiet? True when the age since the
+// last observed activity crosses the stall threshold. Mirrors detectStuckIngestJobs' "active
+// for > threshold with no progress" decision. Unknown last-activity is treated as NOT stalled
+// (we only alarm on positive evidence of silence, never on missing data).
+function heartbeatStalled(lastActivityMs, now = Date.now(), thresholdMs = HEARTBEAT_STALL_MS) {
+  if (!Number.isFinite(lastActivityMs)) return false;
+  return now - lastActivityMs > thresholdMs;
+}
+
+// PURE: render the pinned heartbeat comment body from controller-observed data ONLY. Carries
+// a hidden marker so the controller can find + edit THIS comment in place instead of spamming
+// a new one each interval. Example:
+//   ⏳ Running — 42m elapsed · 187 turns · last: edit_file · no terminal yet.
+function renderHeartbeat({ elapsedMs, turns, toolCalls, lastEvent, stalled, staleMs, now = Date.now() }) {
+  const parts = [`${formatElapsed(elapsedMs)} elapsed`];
+  if (turns) parts.push(`${turns} turns`);
+  if (toolCalls) parts.push(`${toolCalls} tool calls`);
+  if (lastEvent) parts.push(`last: ${lastEvent}`);
+  const lead = stalled
+    ? `⚠️ Possibly stalled — no activity for ${formatElapsed(staleMs)}`
+    : `⏳ Running — ${parts.join(" · ")} · no terminal yet`;
+  const body = stalled ? `${lead} · ${parts.join(" · ")}.` : `${lead}.`;
+  return `${HEARTBEAT_MARKER}\n${body}\n\n_Controller-observed telemetry (not worker self-report) · updated ${new Date(now).toISOString()}_`;
+}
+
+// PURE: interval gate — should the controller refresh the heartbeat now? True on the first
+// post (no prior stamp), once the interval has elapsed since the last post, or when the
+// stalled-state changed (so the flip to/from "possibly stalled" lands immediately, not at the
+// next tick). Deterministic; caller passes `now`.
+function shouldUpdateHeartbeat(hb, now, stalled, intervalMs = HEARTBEAT_INTERVAL_MS) {
+  if (!hb || !hb.lastPostedAt) return true;
+  if (Boolean(hb.stalled) !== Boolean(stalled)) return true;
+  return now - hb.lastPostedAt >= intervalMs;
+}
+
+// PURE (Tier 2): which coarse milestone, if any, to raise to Phylax this observation — and
+// ONLY these: `start` (once, at first heartbeat), `longrun` (one reminder once elapsed crosses
+// the long-run mark), `stalled` (once when it first goes quiet). Terminal is raised by the
+// existing terminal-notification path, not here. Returns null when no NEW milestone is due —
+// so a heartbeat refresh does NOT fire a ping every interval. `fired` is the set of milestone
+// keys already sent for this run.
+function heartbeatMilestone({ elapsedMs, stalled, fired = {} }, longrunMs = HEARTBEAT_LONGRUN_MS) {
+  if (stalled && !fired.stalled) return "stalled";
+  if (!fired.start) return "start";
+  if (elapsedMs >= longrunMs && !fired.longrun) return "longrun";
+  return null;
+}
+
+// PURE: resolve the GitHub issue the heartbeat should be posted on for a run entry. A
+// dispatched run's target IS "owner/repo#N" (the work ticket). A genuinely-ephemeral run has
+// no linked issue by construction, but the console may embed one in the context (the mint-a-
+// ticket path leaves an issue URL); parse the FIRST github issue URL if present. Returns null
+// when no issue can be determined — the caller then degrades gracefully (log only, no comment)
+// rather than crashing the run.
+function heartbeatIssueRef(entry) {
+  const t = parseTarget(entry?.target);
+  if (t) return { repo: t.repo, number: t.number };
+  const m = String(entry?.context || "").match(/github\.com\/([^/\s]+\/[^/\s]+)\/issues\/(\d+)/i);
+  if (m) return { repo: m[1], number: Number(m[2]) };
+  return null;
+}
+
+// Find an existing pinned heartbeat comment (by our hidden marker) on an issue, so we EDIT it
+// in place instead of posting a new comment every interval. Returns the comment id or null.
+function findHeartbeatComment(repo, issueNumber) {
+  try {
+    const out = gh(["issue", "view", String(issueNumber), "--repo", repo, "--json", "comments"]);
+    const comments = JSON.parse(out).comments || [];
+    const hit = comments.filter((c) => String(c.body || "").includes(HEARTBEAT_MARKER)).pop();
+    if (!hit) return null;
+    // gh returns comment `url` as .../issues/N#issuecomment-<id>; the REST edit needs that id.
+    const idMatch = String(hit.url || "").match(/issuecomment-(\d+)/);
+    return idMatch ? idMatch[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+// Post the heartbeat once, then EDIT that same comment on every subsequent update. Returns the
+// comment id (for reuse) or null on failure — a heartbeat is best-effort telemetry and must
+// never crash or block the run it is reporting on.
+function upsertHeartbeatComment(repo, issueNumber, commentId, body) {
+  try {
+    if (commentId) {
+      gh(["api", "-X", "PATCH", `repos/${repo}/issues/comments/${commentId}`, "-f", `body=${body}`, "--jq", ".id"]);
+      return commentId;
+    }
+    const out = gh(["issue", "comment", String(issueNumber), "--repo", repo, "--body", body]);
+    const m = out.match(/issuecomment-(\d+)/);
+    return m ? m[1] : null;
+  } catch (e) {
+    log(`heartbeat upsert failed for ${repo}#${issueNumber}: ${e.message}`);
+    return null;
+  }
+}
+
+// Raise ONE Tier-2 coarse milestone ping to Phylax via /api/notify. Keyed to the run (one
+// thread, not a firehose) — Phylax owns quiet-hours + dedup. Only start / longrun / stalled
+// flow through here; terminal is raised by the existing terminal path.
+async function raiseHeartbeatMilestone(kind, entry, obs) {
+  const target = entry.target;
+  const executionId = entry.executionId || "";
+  const key = `${target}|${executionId}|heartbeat.${kind}`;
+  const elapsed = formatElapsed(obs.elapsedMs);
+  const text =
+    kind === "start"
+      ? `🤖 Execution started — ${target}. Live progress on its ticket.`
+      : kind === "longrun"
+        ? `⏳ Still running — ${target} · ${elapsed} elapsed · ${obs.turns} turns · no terminal yet.`
+        : `⚠️ Execution may be stalled — ${target} · no activity for ${formatElapsed(obs.staleMs)}.`;
+  const severity = kind === "stalled" ? "action" : "info";
+  await notify(text, entry.origin, {
+    eventType: `execution.heartbeat.${kind}`,
+    executionId,
+    targetIssue: target,
+    severity,
+    dedupeKey: key,
+  });
+}
+
+// Per-scan heartbeat sweep: for every non-terminal run (ephemeral + dispatched) the controller
+// is tracking, observe its events log and refresh the pinned comment on interval / on a state
+// flip, raising the coarse Tier-2 milestones. Effectful but fully degrade-safe: a run with no
+// resolvable issue logs locally and skips the comment; any gh failure is swallowed. Mutates
+// `state.heartbeats` (caller saves).
+function activeHeartbeatRuns(state) {
+  const runs = [];
+  for (const [executionId, e] of Object.entries(state.ephemeral || {})) {
+    if (e && !e.reportedStatus && e.eventsPath) {
+      runs.push({ executionId, target: e.target, origin: e.origin ?? null, eventsPath: e.eventsPath, launchedAt: e.launchedAt, context: e.context });
+    }
+  }
+  for (const [executionId, d] of Object.entries(state.dispatched || {})) {
+    if (d && !d.reportedStatus && d.launchedAt) {
+      // Dispatched (fanout) runs stream into a launch log rather than an events.jsonl; the
+      // comment + milestone telemetry (elapsed/turns-from-log) still applies. The target IS
+      // the issue, so heartbeatIssueRef always resolves.
+      runs.push({ executionId, target: d.target, origin: d.origin ?? null, eventsPath: d.eventsPath || d.launchLogPath, launchedAt: d.launchedAt, context: d.context });
+    }
+  }
+  return runs;
+}
+
+async function sweepHeartbeats(state, now = Date.now()) {
+  if (!state.heartbeats) state.heartbeats = {};
+  for (const run of activeHeartbeatRuns(state)) {
+    const launchedAt = Date.parse(run.launchedAt || "") || now;
+    const elapsedMs = now - launchedAt;
+    const raw = parseHeartbeatObservation(run.eventsPath, now);
+    const stalled = heartbeatStalled(raw.lastActivityMs, now);
+    const staleMs = stalled ? now - raw.lastActivityMs : 0;
+    const hb = state.heartbeats[run.executionId] || (state.heartbeats[run.executionId] = { fired: {} });
+    const ref = heartbeatIssueRef(run);
+    if (shouldUpdateHeartbeat(hb, now, stalled)) {
+      const body = renderHeartbeat({ elapsedMs, turns: raw.turns, toolCalls: raw.toolCalls, lastEvent: raw.lastEvent, stalled, staleMs, now });
+      if (ref) {
+        const commentId = upsertHeartbeatComment(ref.repo, ref.number, hb.commentId || findHeartbeatComment(ref.repo, ref.number), body);
+        if (commentId) hb.commentId = commentId;
+      } else {
+        log(`heartbeat (no issue to post on) ${run.executionId}: ${body.split("\n")[1]}`);
+      }
+      hb.lastPostedAt = now;
+      hb.stalled = stalled;
+    }
+    // Tier 2: coarse milestone pings — start / longrun / stalled only, once each.
+    const milestone = heartbeatMilestone({ elapsedMs, stalled, fired: hb.fired });
+    if (milestone) {
+      await raiseHeartbeatMilestone(milestone, { ...run, executionId: run.executionId }, { elapsedMs, turns: raw.turns, staleMs });
+      hb.fired[milestone] = new Date(now).toISOString();
+    }
+  }
+  // Drop heartbeat state for runs that have gone terminal (freed on the next scan).
+  for (const id of Object.keys(state.heartbeats)) {
+    const stillActive = (state.ephemeral?.[id] && !state.ephemeral[id].reportedStatus) || (state.dispatched?.[id] && !state.dispatched[id].reportedStatus);
+    if (!stillActive) delete state.heartbeats[id];
+  }
+}
+
 function launchEphemeral(executionId, target, context, state) {
   const existing = state.ephemeral?.[executionId];
   if (existing?.pid && !existing.reportedStatus) return { ok: true, duplicate: true };
@@ -1134,6 +1404,8 @@ function launchEphemeral(executionId, target, context, state) {
   const child = attempt(primaryEngine, false);
   state.ephemeral[executionId] = {
     target,
+    executionId, // carried so the heartbeat sweep can key Tier-2 milestones + notify dedup
+    context: String(context || ""), // may embed a linked issue URL for the heartbeat comment
     promptPath: paths.promptPath,
     finalPath: paths.finalPath,
     eventsPath: paths.eventsPath,
@@ -1185,6 +1457,8 @@ function launchDispatched(executionId, target, context, state) {
     repo: t.repo,
     issueN: t.number,
     target,
+    executionId, // for heartbeat milestone keying
+    context: String(context || ""),
     workdir: workdirForRepo(t.repo),
     pid: launch.pid ?? null,
     launchLogPath: launch.logPath,
@@ -1793,6 +2067,10 @@ async function scan(reason) {
     // owns its own persistence (idempotent), so no save follows the sweep.
     const recovery = loadState();
     await flushPendingReports(recovery);
+    // Live-progress heartbeat: refresh the pinned comment + raise coarse Tier-2 milestones for
+    // every non-terminal run BEFORE the stale-ephemeral sweep may report one terminal. Fully
+    // degrade-safe (skips runs with no resolvable issue; swallows gh errors).
+    await sweepHeartbeats(recovery);
     saveState(recovery);
     await sweepStaleEphemeral(recovery);
 
@@ -1901,6 +2179,17 @@ export {
   earlyLaunchFailureNote,
   launchLogPath,
   shouldNotifyOnExecutionStart,
+  formatElapsed,
+  parseHeartbeatObservation,
+  heartbeatStalled,
+  renderHeartbeat,
+  shouldUpdateHeartbeat,
+  heartbeatMilestone,
+  heartbeatIssueRef,
+  HEARTBEAT_INTERVAL_MS,
+  HEARTBEAT_STALL_MS,
+  HEARTBEAT_LONGRUN_MS,
+  HEARTBEAT_MARKER,
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
