@@ -911,7 +911,7 @@ function formatResetsAt(resetsAt) {
 // Quota/limit failures are the common operational case (an engine account is out of
 // credit). Matched failures trigger the automatic engine fallback in runWorker.
 const QUOTA_LIMIT_RE =
-  /usage limit|quota|rate limit|rate_limit|upgrade to plus|insufficient_quota|too many requests|billing|credit balance|out of credit|\b429\b|\b402\b/i;
+  /usage limit|quota|rate limit|rate_limit|rate_limit_event|five_hour|overagedisabledreason|upgrade to plus|insufficient_quota|too many requests|billing|credit balance|out of credit|out_of_credits|\b429\b|\b402\b/i;
 
 function isQuotaError(message) {
   return Boolean(message) && QUOTA_LIMIT_RE.test(String(message).replace(/\s+/g, " "));
