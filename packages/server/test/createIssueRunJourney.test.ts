@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 import {
   createIssueThenRunJourney,
   validateCreateIssueThenRunRequest,
+  renderForeignRepoDispatchMessage,
   type JourneyPeerToolCaller,
 } from "../src/createIssueRunJourney.js";
 import { JourneyStore } from "../src/journeyStore.js";
 import type { PeerConfig } from "../src/peerClient.js";
+import type { ExecutionTicket } from "../src/executionQueue.js";
 
 const archus: PeerConfig = { name: "archus", url: "http://archus.test/mcp", token: "archus-token" };
 const epaminon: PeerConfig = { name: "epaminon", url: "http://epaminon.test/mcp", token: "epaminon-token" };
@@ -176,10 +178,57 @@ describe("createIssueThenRunJourney", () => {
       expect(calls.some((c) => c.peer === "archus")).toBe(false);
       expect(calls.map((c) => `${c.peer}:${c.tool}`)).toEqual(["epaminon:epaminon.run_ephemeral_task"]);
       expect(calls[0].args).toMatchObject({ repo: "zenod-ai/zenod" });
+      // I5-2: the dispatch must UNAMBIGUOUSLY ask the worker to run `gh issue create`
+      // — the generic ephemeral-task default ("do not create ... a GitHub issue unless
+      // explicitly asked") must never silently swallow this route's own intent.
+      expect(String(calls[0].args.objective)).toContain("gh issue create -R zenod-ai/zenod");
+      expect(String(calls[0].args.artifactPolicy)).toContain("gh issue create -R zenod-ai/zenod");
+      expect(String(calls[0].args.artifactPolicy).toLowerCase()).toContain("deliverable");
       // The created-issue receipt (target + URL) is propagated back.
       expect(result.execution?.target).toBe("zenod-ai/zenod#720");
       expect(result.message).toContain("zenod-ai/zenod#720");
       expect(result.message).toContain("https://github.com/zenod-ai/zenod/issues/720");
+    });
+  });
+
+  // I5-3: the worker has not run yet at dispatch time — the ONLY honest claim is that
+  // it was dispatched. "Ticket opened + run dispatched" (the diagnosed optimistic
+  // narration) must never be rendered before a real issue-URL receipt exists.
+  it("says 'dispatched', never 'opened'/'created', when the execution carries no evidence yet (I5-3)", async () => {
+    await withStore(async (store) => {
+      const callTool: JourneyPeerToolCaller = async () => ({
+        content: [{ type: "text", text: "Queued direct-test-pending" }],
+        structuredContent: {
+          ticket: {
+            executionId: "direct-test-pending",
+            target: "ephemeral:direct-test-pending",
+            context: "Run it",
+            state: "running",
+            updatedAt: 123,
+          },
+        },
+      });
+
+      const result = await createIssueThenRunJourney({
+        store,
+        archus,
+        epaminon,
+        callTool,
+        request: {
+          originalRequest: "create a ticket in zenod-ai/zenod and run it",
+          issue: {
+            repo: "zenod-ai/zenod",
+            title: "Not yet opened",
+            body: runnableBody,
+          },
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.message).toContain("Dispatched");
+      expect(result.message.toLowerCase()).not.toContain("opened");
+      expect(result.message.toLowerCase()).not.toContain("created");
+      expect(result.message).toContain("direct-test-pending");
     });
   });
 
@@ -395,5 +444,57 @@ describe("createIssueThenRunJourney", () => {
         },
       }),
     ).toEqual(["scope boundaries", "acceptance criteria or done condition", "source context"]);
+  });
+});
+
+describe("renderForeignRepoDispatchMessage (I5-3)", () => {
+  const baseTicket: ExecutionTicket = {
+    executionId: "exec-1",
+    target: "ephemeral:exec-1",
+    context: "run it",
+    state: "running",
+    updatedAt: 1,
+  };
+
+  it("renders the dispatch-only message with no evidence — never 'opened'/'created'", () => {
+    const text = renderForeignRepoDispatchMessage(baseTicket, "zenod-ai/zenod");
+    expect(text).toBe(
+      "Dispatched Epaminon worker to create + run the issue in zenod-ai/zenod (execution exec-1) — I'll confirm with the ticket link when it lands.",
+    );
+    expect(text.toLowerCase()).not.toContain("opened");
+    expect(text.toLowerCase()).not.toContain("created");
+  });
+
+  it("upgrades to 'Opened' ONLY once a real issue-URL receipt exists (evidenceUrl)", () => {
+    const ticket: ExecutionTicket = {
+      ...baseTicket,
+      target: "zenod-ai/zenod#842",
+      state: "done",
+      evidenceUrl: "https://github.com/zenod-ai/zenod/issues/842",
+    };
+    const text = renderForeignRepoDispatchMessage(ticket, "zenod-ai/zenod");
+    expect(text).toBe("Opened zenod-ai/zenod#842 (https://github.com/zenod-ai/zenod/issues/842) — execution exec-1 (done).");
+  });
+
+  it("upgrades to 'Opened' from a deliverable manifest carrying an issue URL, not just evidenceUrl", () => {
+    const ticket: ExecutionTicket = {
+      ...baseTicket,
+      target: "zenod-ai/zenod#900",
+      state: "needs-review",
+      deliverable: { repo: "zenod-ai/zenod", issue: 900, prUrl: "https://github.com/zenod-ai/zenod/issues/900" },
+    };
+    const text = renderForeignRepoDispatchMessage(ticket, "zenod-ai/zenod");
+    expect(text).toContain("Opened zenod-ai/zenod#900");
+    expect(text).toContain("https://github.com/zenod-ai/zenod/issues/900");
+  });
+
+  it("stays at 'Dispatched' when evidence exists but is NOT an issue URL (e.g. a PR)", () => {
+    const ticket: ExecutionTicket = {
+      ...baseTicket,
+      evidenceUrl: "https://github.com/zenod-ai/zenod/pull/12",
+    };
+    const text = renderForeignRepoDispatchMessage(ticket, "zenod-ai/zenod");
+    expect(text).toContain("Dispatched");
+    expect(text.toLowerCase()).not.toContain("opened");
   });
 });

@@ -350,6 +350,26 @@ function receiptFromExecution(repo: string, execution: ExecutionTicket): { targe
   return { target, url };
 }
 
+const ISSUE_URL_RE = /^https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+$/i;
+
+/**
+ * I5-3 — the dispatch composer's rule: this is I5-1's renderer discipline applied to a
+ * journey message, not just an outbound send. At dispatch time the worker has not run
+ * yet, so the ONLY honest claim is that it was dispatched — never "opened"/"created".
+ * The "opened" claim is rendered ONLY once the execution carries a REAL, verified issue
+ * URL as its evidence/deliverable (I5-2) — never composed ahead of that receipt.
+ */
+export function renderForeignRepoDispatchMessage(execution: ExecutionTicket, repo: string): string {
+  const receipt = receiptFromExecution(repo, execution);
+  if (receipt.url && ISSUE_URL_RE.test(receipt.url)) {
+    return `Opened ${receipt.target} (${receipt.url}) — execution ${execution.executionId} (${execution.state}).`;
+  }
+  return (
+    `Dispatched Epaminon worker to create + run the issue in ${repo} (execution ${execution.executionId}) — ` +
+    `I'll confirm with the ticket link when it lands.`
+  );
+}
+
 /**
  * E-4 worker-route. Create-and-run for a FOREIGN repo goes to Epaminon's
  * run_ephemeral_task: the runner creates the issue in the target repo using its own
@@ -387,10 +407,26 @@ async function dispatchForeignRepoWorker(input: {
   );
 
   store.dispatchStep(step.id, { deadlineAt: now() + 5 * 60_000 }, now());
-  const objective = `${issue.title}\n\n${issue.body}`.trim();
+  // I5-2: the generic ephemeral-task prompt defaults to "do not create ... a GitHub
+  // issue unless the user explicitly asked for that in the context" (backlog-monitor.mjs
+  // ephemeralPrompt) — for THIS route that default actively sabotages the worker-route's
+  // own stated intent (create the issue under the runner's gh auth), so a worker could
+  // dispatch cleanly and finish with no issue ever created. Make the ask and the
+  // artifact policy explicit and unambiguous so the worker actually runs
+  // `gh issue create -R <repo>` first and reports the created issue's URL as evidence.
+  const objective = (
+    `Create a GitHub issue in ${issue.repo} via \`gh issue create -R ${issue.repo}\` under the runner's ` +
+    `existing gh auth — title "${issue.title}", body below — THEN execute exactly that issue.\n\n` +
+    `Issue body:\n${issue.body}`
+  ).trim();
+  const artifactPolicy =
+    `This IS an issue-creation task: run \`gh issue create -R ${issue.repo}\` first (never skip it), ` +
+    `then work the created issue. Report the created issue's URL (https://github.com/${issue.repo}/issues/N) ` +
+    `as the deliverable/evidence, in addition to any commit/PR from the work itself.`;
   const result = await callTool(epaminon, "epaminon.run_ephemeral_task", {
     objective,
     repo: issue.repo,
+    artifactPolicy,
     ...(request.runInstructions ? { instructions: request.runInstructions } : {}),
   });
   if (result.isError) {
@@ -427,13 +463,11 @@ async function dispatchForeignRepoWorker(input: {
 
   store.completeStep(step.id, { execution }, now());
   store.completeJourneyIfReady(journeyId, now());
-  const receipt = receiptFromExecution(issue.repo, execution);
-  const urlPart = receipt.url ? ` (${receipt.url})` : "";
   return {
     journeyId,
     execution,
     status: "completed",
-    message: `Dispatched Epaminon worker to create + run the issue in ${issue.repo} under the runner's gh auth — execution ${execution.executionId} (${execution.state}), target ${receipt.target}${urlPart}.`,
+    message: renderForeignRepoDispatchMessage(execution, issue.repo),
     snapshot: store.snapshot(journeyId)!,
   };
 }

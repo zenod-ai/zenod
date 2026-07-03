@@ -667,7 +667,7 @@ export class Runtime {
     return {
       console_create_issue_then_run: {
         description:
-          "Owner: Console. Durable multi-step workflow for one request that explicitly asks to create/file/open a GitHub issue AND run/start/execute that newly created issue. Use only when the request is runnable: target repo is known and the issue body has objective, scope boundaries, acceptance/done condition, and source context. If any of those are missing, ask one clarification before using this tool. This creates a journey, asks Archus to create the issue, then gives Epaminon the structured created issue artifact. Use this instead of separately calling Archus and Epaminon for create-and-run. If the user asks to notify only after terminal/blocked state, set notifyOnStart=false.",
+          "Owner: Console. Durable multi-step workflow for one request that explicitly asks to create/file/open a GitHub issue AND run/start/execute that newly created issue. Use only when the request is runnable: target repo is known and the issue body has objective, scope boundaries, acceptance/done condition, and source context. If any of those are missing, ask one clarification before using this tool. This creates a journey, asks Archus to create the issue, then gives Epaminon the structured created issue artifact. Use this instead of separately calling Archus and Epaminon for create-and-run. If the user asks to notify only after terminal/blocked state, set notifyOnStart=false. The returned message is ALREADY reduced to only what is verified (a receipt) — relay it verbatim; do NOT compose your own 'creating/opening/dispatching now' narration ahead of it, and never upgrade a dispatch-only result to a done/opened claim yourself.",
         inputSchema: z.object({
           originalRequest: z.string().optional().describe("the user's original request; omit to use the current message"),
           issue: z.object({
@@ -737,7 +737,7 @@ export class Runtime {
       },
       console_run_ephemeral_task: {
         description:
-          "Owner: Console. Durable workflow for one-off execution/research/ops where the user did NOT ask to create a planning ticket first. THIS is the only way to run a one-off: it mints a real execution ticket (a GitHub issue holding the job description) via Archus and has Epaminon run against it, so every run is durable and traceable — there are no issue-less runs. Pass repo/path when the task works a known codebase. Use for any 'just do X' one-off; no separate backlog ticket is created, but the execution ticket always is.",
+          "Owner: Console. Durable workflow for one-off execution/research/ops where the user did NOT ask to create a planning ticket first. THIS is the only way to run a one-off: it mints a real execution ticket (a GitHub issue holding the job description) via Archus and has Epaminon run against it, so every run is durable and traceable — there are no issue-less runs. Pass repo/path when the task works a known codebase. Use for any 'just do X' one-off; no separate backlog ticket is created, but the execution ticket always is. The returned message is ALREADY reduced to only what is verified — relay it verbatim; do NOT compose your own 'running/dispatching/opening now' narration ahead of it.",
         inputSchema: z.object({
           originalRequest: z.string().optional().describe("the user's original request; omit to use the current message"),
           objective: z.string().describe("the one-off objective to execute"),

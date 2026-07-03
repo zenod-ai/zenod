@@ -4,7 +4,13 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { VERSION } from "zenod";
 import type { PeerTools } from "zenod";
-import { parseOutboundReceipt, renderOutboundReceipt, renderApproveAffordance, type OutboundChannel } from "./outboundReceipt.js";
+import {
+  parseOutboundReceipt,
+  renderOutboundReceipt,
+  renderApproveAffordance,
+  renderNothingPendingToApprove,
+  type OutboundChannel,
+} from "./outboundReceipt.js";
 
 /**
  * The Callistheness agent's PRIVATE send tools, wired into its chat brain.
@@ -702,18 +708,22 @@ export function buildOutboundTools(env: NodeJS.ProcessEnv = process.env): PeerTo
 }
 
 /**
- * I4-R1 — the approve/post-now verb as a STRUCTURAL affordance, not model disposition.
- *
- * "approve" / "post now" of a standing outbound draft has exactly TWO possible outcomes,
- * with no third:
+ * I4-R1/I5-1 — the approve/post-now verb as a STRUCTURAL affordance, not model
+ * disposition. A bare "approve"/"yes"/"go" in reply to a standing draft IS a valid
+ * write verb: when the model still has the exact content of the (single) draft it just
+ * showed, it passes that content through here and it posts. approve_send itself has
+ * exactly TWO possible outcomes, with no third:
  *   1. it carries the committed final content (channel + text/fields) → it dispatches to
  *      the matching send tool ONCE and the reply is that tool's verified receipt (a real
  *      live URL, from outboundReceipt.ts), OR
- *   2. there is no committed content to publish → the reply is the honest affordance
- *      ("say 'post now' to send") from renderApproveAffordance.
- * Never a fabricated "posted", never a silent no-op. Because approve delegates to the
- * real send tool, it inherits the E-1 receipt reduction and the E1-T4 idempotency guard
- * (a double-fire returns the first receipt, not a second post).
+ *   2. there is no committed content to publish → an honest block: renderApproveAffordance
+ *      ("say 'post now' to send") when a channel is known but content is missing, or
+ *      renderNothingPendingToApprove ("Nothing pending to approve.") when nothing about a
+ *      standing draft was resolved at all.
+ * Never a fabricated "posted", never a silent no-op, never LLM narration standing in for
+ * either. Because approve delegates to the real send tool, it inherits the E-1 receipt
+ * reduction and the E1-T4 idempotency guard (a double-fire returns the first receipt, not
+ * a second post).
  */
 const APPROVE_CHANNEL_BY_NAME: Record<string, OutboundChannel> = {
   x: "x",
@@ -743,9 +753,9 @@ export function buildApproveTool(tools: PeerTools): PeerTools {
   return {
     approve_send: {
       description:
-        "Commit a STANDING outbound draft: the user has approved it and said to post/send it now. Pass { channel } ('x' | 'reddit' | 'email') and the EXACT final content the user approved — for x/email the final text (as { text } / { body }); for reddit { subreddit, title, content }. This posts EXACTLY ONCE and returns the VERIFIED receipt (a real live URL) — relay that line verbatim. If you have no concrete final draft yet, do NOT call this with empty content: it will return the honest affordance to relay instead (never a fabricated 'posted'). Use this for 'approve' / 'post now' of a draft already shown to the user.",
+        "Commit a STANDING outbound draft: the user has approved it — 'approve', 'yes', 'go', 'post now', 'send it' — about a draft already shown in this conversation. A BARE 'approve'/'yes' with no restated content is a valid write verb: call this with { channel } ('x' | 'reddit' | 'email') and the EXACT final content of the ONE draft you just showed — for x/email the final text (as { text } / { body }); for reddit { subreddit, title, content }. This posts EXACTLY ONCE and returns the VERIFIED receipt (a real live URL) — relay that line verbatim. If you genuinely have no concrete final draft (nothing was shown/pending), call this anyway with no fields: it returns the honest 'Nothing pending to approve.' to relay — never invent a 'posted'/'approved' narration yourself.",
       inputSchema: z.object({
-        channel: z.enum(["x", "reddit", "email"]).describe("Which channel the approved draft goes to."),
+        channel: z.enum(["x", "reddit", "email"]).optional().describe("Which channel the approved draft goes to. Omit ONLY when there is truly no standing draft to resolve."),
         text: z.string().optional().describe("The FINAL approved text/body for x or email, exactly as it will go out."),
         body: z.string().optional().describe("Alias for text (email body)."),
         subreddit: z.string().optional().describe("Reddit only: target subreddit without the r/ prefix."),
@@ -758,8 +768,9 @@ export function buildApproveTool(tools: PeerTools): PeerTools {
         const o: Record<string, unknown> = typeof input === "string" ? { text: input } : (input ?? {});
         const channel = approveChannel(o.channel);
         if (!channel) {
-          // No channel resolved → nothing to publish. Honest affordance, never a fake send.
-          return renderApproveAffordance();
+          // No channel resolved → no standing draft was identified at all. The honest
+          // zero-state block (I5-1), distinct from "channel known, content missing".
+          return renderNothingPendingToApprove();
         }
         if (!hasCommittedContent(channel, o)) {
           return renderApproveAffordance(channel);

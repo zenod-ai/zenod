@@ -139,10 +139,18 @@ describe("approve_send (I4-R1) — approve verb resolves to receipt OR honest af
     expect(res.toLowerCase()).toContain("post now");
   });
 
-  it("unknown/absent channel → affordance, never a silent no-op", async () => {
+  // I5-1: no channel resolved means no standing draft was identified at all — the
+  // distinct "nothing pending" honest block, not the channel-scoped affordance.
+  it("unknown/absent channel → 'Nothing pending to approve.', never a silent no-op", async () => {
     const tools = buildOutboundTools({});
     const res = await tools.approve_send.run({ text: "hi there" });
-    expect(res.toLowerCase()).toContain("no committed draft");
+    expect(res).toBe("Nothing pending to approve.");
+  });
+
+  it("truly bare approve (no fields at all) → 'Nothing pending to approve.'", async () => {
+    const tools = buildOutboundTools({});
+    const res = await tools.approve_send.run({});
+    expect(res).toBe("Nothing pending to approve.");
   });
 
   it("committed X draft routes to the SAME verified-receipt send path (never the affordance, never a fake success)", async () => {

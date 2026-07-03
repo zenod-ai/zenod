@@ -779,9 +779,11 @@ function tailFile(path, maxBytes = 4000) {
   }
 }
 
-// PURE: pull verifiable evidence (GitHub commit/PR URLs) out of a final handoff so a
-// "complete" claim can be checked before it is accepted as done (#stab T3). Returns
-// the distinct commit and PR URLs the worker claims as proof of its work.
+// PURE: pull verifiable evidence (GitHub commit/PR/issue URLs) out of a final handoff
+// so a "complete" claim can be checked before it is accepted as done (#stab T3, I5-2).
+// Returns the distinct commit, PR, and issue URLs the worker claims as proof of its
+// work. Issue URLs are first-class evidence: an issue-creation task has no commit/PR
+// to point at, so without this an issue-creation "complete" always read as unverified.
 function extractEvidenceClaims(finalText) {
   const text = String(finalText || "");
   const commitUrls = [
@@ -790,7 +792,10 @@ function extractEvidenceClaims(finalText) {
   const prUrls = [
     ...new Set((text.match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+/gi) || []).map((u) => u.replace(/[).,]+$/, ""))),
   ];
-  return { commitUrls, prUrls };
+  const issueUrls = [
+    ...new Set((text.match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/gi) || []).map((u) => u.replace(/[).,]+$/, ""))),
+  ];
+  return { commitUrls, prUrls, issueUrls };
 }
 
 // Probe gh without throwing (the strict `gh()` throws on non-zero); returns ok flag.
@@ -803,15 +808,16 @@ function ghProbe(args) {
   }
 }
 
-// Verify claimed commit/PR URLs actually exist on GitHub. Returns the verified and the
-// missing (404) URLs. Network/auth failures are treated as "unconfirmed", NOT missing,
-// so a flaky gh call can never fabricate a false "evidence not found" downgrade.
+// Verify claimed commit/PR/issue URLs actually exist on GitHub. Returns the verified
+// and the missing (404) URLs. Network/auth failures are treated as "unconfirmed", NOT
+// missing, so a flaky gh call can never fabricate a false "evidence not found" downgrade.
 function verifyEvidenceClaims(claims) {
   const verified = [];
   const missing = [];
   const unconfirmed = [];
   const commitRe = /github\.com\/([^/\s]+)\/([^/\s]+)\/commit\/([0-9a-f]{7,40})/i;
   const prRe = /github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/i;
+  const issueRe = /github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/i;
   for (const url of claims.commitUrls) {
     const m = url.match(commitRe);
     if (!m) continue;
@@ -824,6 +830,14 @@ function verifyEvidenceClaims(claims) {
     const m = url.match(prRe);
     if (!m) continue;
     const probe = ghProbe(["api", `repos/${m[1]}/${m[2]}/pulls/${m[3]}`, "--jq", ".number"]);
+    if (probe.ok) verified.push(url);
+    else if (/Not Found|HTTP 404/i.test(probe.err)) missing.push(url);
+    else unconfirmed.push(url);
+  }
+  for (const url of claims.issueUrls ?? []) {
+    const m = url.match(issueRe);
+    if (!m) continue;
+    const probe = ghProbe(["api", `repos/${m[1]}/${m[2]}/issues/${m[3]}`, "--jq", ".number"]);
     if (probe.ok) verified.push(url);
     else if (/Not Found|HTTP 404/i.test(probe.err)) missing.push(url);
     else unconfirmed.push(url);
@@ -848,6 +862,22 @@ function noteFromFinalText(finalText, fallback) {
   return compact ? compact.slice(0, 1000) : fallback;
 }
 
+// PURE (I5-2): does this evidence claim set carry ANY checkable URL — commit, PR, or
+// issue? An issue-creation task has no commit/PR to point at; without issueUrls in this
+// check, every such task fell through to the "nothing checkable" branch even when the
+// issue was really created.
+function hasCheckableEvidence(claims) {
+  return Boolean(claims.commitUrls.length || claims.prUrls.length || (claims.issueUrls ?? []).length);
+}
+
+// PURE (I5-2): pick the ticket's evidence URL from a set of verified claims. A PR
+// supersedes a commit supersedes a bare issue link when several are present, but a
+// bare verified issue URL is real evidence in its own right — it is the deliverable
+// for an issue-creation task, not a downgrade from "unverified".
+function pickEvidenceUrl(verified) {
+  return verified.find((u) => /\/pull\//.test(u)) || verified.find((u) => /\/commit\//.test(u)) || verified[0];
+}
+
 async function reportEphemeralFinished(executionId, target, exitCode, finalPath) {
   const finalText = existsSync(finalPath) ? readFileSync(finalPath, "utf8") : "";
   let stateName = ephemeralFinalState(exitCode, finalText);
@@ -858,22 +888,23 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
   if (entry?.reportedStatus) return;
   const eventsPath = entry?.eventsPath || ephemeralRunPaths(executionId).eventsPath;
 
-  // T3 anti-hallucination: a "complete" claim with a commit/PR URL must point at real
-  // GitHub objects. Fabricated evidence (a SHA/PR that does not exist) is downgraded to
-  // blocked rather than reported as done. Verified URLs become the ticket's evidence.
+  // T3 anti-hallucination: a "complete" claim with a commit/PR/issue URL must point at
+  // real GitHub objects. Fabricated evidence (a SHA/PR/issue that does not exist) is
+  // downgraded to blocked rather than reported as done. Verified URLs become the
+  // ticket's evidence.
   if (stateName === "complete") {
     const claims = extractEvidenceClaims(finalText);
-    if (claims.commitUrls.length || claims.prUrls.length) {
+    if (hasCheckableEvidence(claims)) {
       const { verified, missing } = verifyEvidenceClaims(claims);
       if (missing.length) {
         stateName = "failed";
         note = `claimed evidence not found on GitHub: ${missing.join(", ")} — not accepting as done. ${note}`.slice(0, 1000);
       } else if (verified.length) {
-        evidenceUrl = verified.find((u) => /\/pull\//.test(u)) || verified[0];
+        evidenceUrl = pickEvidenceUrl(verified);
       }
     } else {
       // Complete but nothing checkable — make the unverifiability visible downstream.
-      note = `${note} [evidence: unverified — no commit/PR URL in final summary]`.slice(0, 1000);
+      note = `${note} [evidence: unverified — no commit/PR/issue URL in final summary]`.slice(0, 1000);
     }
   }
 
@@ -1761,6 +1792,9 @@ export {
   ephemeralFallbackDecision,
   ephemeralPrompt,
   extractEvidenceClaims,
+  verifyEvidenceClaims,
+  hasCheckableEvidence,
+  pickEvidenceUrl,
   tailFile,
   isPidAlive,
   flushPendingReports,

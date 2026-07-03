@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseOutboundReceipt, renderOutboundReceipt, renderApproveAffordance, scrubVendorNoise, tweetUrl } from "../src/outboundReceipt.js";
+import {
+  parseOutboundReceipt,
+  renderOutboundReceipt,
+  renderApproveAffordance,
+  renderNothingPendingToApprove,
+  scrubVendorNoise,
+  tweetUrl,
+} from "../src/outboundReceipt.js";
 
 describe("parseOutboundReceipt — X (Twitter)", () => {
   it("derives a LIVE url from the connector's real post id (never a placeholder)", () => {
@@ -80,6 +87,12 @@ describe("renderApproveAffordance (I4-R1)", () => {
   it("names the channel when known and stays generic when not", () => {
     expect(renderApproveAffordance("reddit").toLowerCase()).toContain("reddit");
     expect(renderApproveAffordance()).toContain("Nothing was sent:");
+  });
+});
+
+describe("renderNothingPendingToApprove (I5-1)", () => {
+  it("is the exact honest block for a bare approve with no standing draft at all", () => {
+    expect(renderNothingPendingToApprove()).toBe("Nothing pending to approve.");
   });
 });
 

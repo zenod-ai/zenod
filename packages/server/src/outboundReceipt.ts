@@ -194,3 +194,14 @@ export function renderApproveAffordance(channel?: OutboundChannel): string {
     `Do NOT claim anything was posted or sent.`
   );
 }
+
+/**
+ * I5-1 — the honest reply for a bare "approve"/"yes" with NO standing draft to resolve
+ * at all (no channel, no content — nothing for approve_send to act on). Distinct from
+ * renderApproveAffordance, which is for the case where a channel IS known but the final
+ * content is missing. This is the third shape's replacement for the true zero-state:
+ * never narrate an approval that has nothing behind it, never a silent no-op.
+ */
+export function renderNothingPendingToApprove(): string {
+  return "Nothing pending to approve.";
+}
