@@ -94,4 +94,13 @@ describe("OUTBOUND_AGENT (marketing/outbound comms)", () => {
     expect(persona).toContain("reddit");
     expect(persona).toContain("email");
   });
+
+  // I5-1: a bare "approve"/"yes" of a standing draft must route through approve_send
+  // (a real write verb), never stand in for narration composed by the model itself.
+  it("its persona makes a bare approve/yes a valid write verb, never model narration (I5-1)", () => {
+    const persona = OUTBOUND_AGENT.persona.toLowerCase();
+    expect(persona).toContain("bare 'approve'");
+    expect(persona).toContain("always call approve_send");
+    expect(persona).toContain("nothing pending to approve");
+  });
 });
