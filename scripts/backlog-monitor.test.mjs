@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   batchKey,
+  budgetKillDecision,
   detectIntegrationStatus,
   ephemeralResumeDecision,
   ensureFanInBatch,
@@ -1144,4 +1145,27 @@ test("ephemeralResumeDecision stops resuming once the attempt ceiling is reached
 test("ephemeralResumeDecision resumes on the last allowed attempt", () => {
   const d = ephemeralResumeDecision({ hasTerminal: false, attempts: 2, maxAttempts: 3 });
   assert.equal(d.action, "resume");
+});
+
+// S-7 / C-17: hard per-run budget kill — wall-clock OR turns, whichever trips first.
+test("budgetKillDecision kills a run past the wall-clock ceiling", () => {
+  const d = budgetKillDecision({ elapsedMs: 61 * 60 * 1000, turns: 10, maxMs: 60 * 60 * 1000, maxTurns: 200 });
+  assert.equal(d.kill, true);
+  assert.match(d.reason, /wall-clock budget exceeded/);
+});
+
+test("budgetKillDecision kills a run past the turn ceiling", () => {
+  const d = budgetKillDecision({ elapsedMs: 60000, turns: 201, maxMs: 60 * 60 * 1000, maxTurns: 200 });
+  assert.equal(d.kill, true);
+  assert.match(d.reason, /turn budget exceeded/);
+});
+
+test("budgetKillDecision leaves a run within budget alone", () => {
+  const d = budgetKillDecision({ elapsedMs: 30 * 60 * 1000, turns: 150, maxMs: 60 * 60 * 1000, maxTurns: 200 });
+  assert.equal(d.kill, false);
+});
+
+test("budgetKillDecision: exactly at the ceiling is not yet a breach", () => {
+  const d = budgetKillDecision({ elapsedMs: 60 * 60 * 1000, turns: 200, maxMs: 60 * 60 * 1000, maxTurns: 200 });
+  assert.equal(d.kill, false);
 });

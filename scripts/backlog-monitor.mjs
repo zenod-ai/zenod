@@ -1113,11 +1113,19 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
   if (entry?.reportedStatus) return;
   const eventsPath = entry?.eventsPath || ephemeralRunPaths(executionId).eventsPath;
 
+  // C-17: a run terminated by the budget sweep is an honest budget failure with the
+  // transcript link (the dispatch path appends it), notified as a failure — never the
+  // generic "produced nothing verifiable" path, and never a quota pause.
+  if (entry?.budgetKill) {
+    note = `budget exceeded: ${entry.budgetKill}. Terminated by the run budget (C-17) — nothing verifiable.`;
+    stateName = "failed";
+  }
+
   // #506: quota death with no fallback engine (both CLIs dry) is an ACCOUNT pause, not a
   // task failure — and must NOT go down the "produced nothing verifiable → failed" path.
   // Report an honest paused state with a retry-after time. (When a fallback engine IS
   // available, ephemeralFallbackDecision already replayed on it before we got here.)
-  if (exitCode !== 0) {
+  if (!entry?.budgetKill && exitCode !== 0) {
     const quotaError = extractWorkerError(eventsPath);
     if (isPausedQuota(quotaError, entry?.engine || "claude")) {
       const paused = pauseMessage(executionId, quotaError, { target });
@@ -1243,6 +1251,23 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
 // The attempt count lives on the (durable) monitor state, so the ceiling holds
 // across restarts and a genuinely-broken run can't resume forever.
 const EPHEMERAL_MAX_ATTEMPTS = Number(process.env.ZENOD_EPHEMERAL_MAX_ATTEMPTS || 3);
+
+// S-7 / C-17 — hard per-run budget: a runaway ("zombie") run is TERMINATED, not just
+// warned. Standing rule (Jordi, 2026-07-03): 400+ turns / 30+ min / zero output is
+// intolerable. Defaults: 60 min wall, 200 turns (overridable per env). The ceiling
+// lives OUTSIDE the model loop (in the monitor), so it holds regardless of the worker.
+const EPHEMERAL_BUDGET_MS = Number(process.env.ZENOD_EPHEMERAL_BUDGET_MS || 60 * 60 * 1000);
+const EPHEMERAL_BUDGET_TURNS = Number(process.env.ZENOD_EPHEMERAL_BUDGET_TURNS || 200);
+
+/**
+ * PURE decision (C-17): should a running ephemeral be killed for breaching its budget?
+ * Wall-clock OR turn ceiling — whichever trips first. Returns {kill, reason}.
+ */
+export function budgetKillDecision({ elapsedMs = 0, turns = 0, maxMs = EPHEMERAL_BUDGET_MS, maxTurns = EPHEMERAL_BUDGET_TURNS }) {
+  if (elapsedMs > maxMs) return { kill: true, reason: `wall-clock budget exceeded: ${Math.round(elapsedMs / 60000)}m > ${Math.round(maxMs / 60000)}m` };
+  if (turns > maxTurns) return { kill: true, reason: `turn budget exceeded: ${turns} > ${maxTurns} turns` };
+  return { kill: false };
+}
 
 /** Did the worker reach a real terminal outcome (finished), vs. get killed mid-run? */
 function hasTerminalOutcome(paths) {
@@ -1596,6 +1621,22 @@ async function sweepHeartbeats(state, now = Date.now()) {
     const launchedAt = Date.parse(run.launchedAt || "") || now;
     const elapsedMs = now - launchedAt;
     const raw = parseHeartbeatObservation(run.eventsPath, now);
+    // C-17 budget kill: a live run past its wall-clock/turn ceiling is a zombie —
+    // terminate it (SIGTERM → the worker's exit handler reports it) and flag the run
+    // so reportEphemeralFinished renders an honest "budget exceeded" failure with the
+    // transcript link, notified as a failure. Deterministic; no LLM.
+    const budget = budgetKillDecision({ elapsedMs, turns: raw.turns });
+    if (budget.kill && run.pid && isPidAlive(run.pid) && !run.budgetKill) {
+      run.budgetKill = budget.reason;
+      appendRecord(ephemeralRunPaths(run.executionId).journalPath, { kind: "budget-kill", runId: run.executionId, reason: budget.reason, at: new Date(now).toISOString() });
+      log(`budget kill: ephemeral ${run.executionId} — ${budget.reason} — terminating pid ${run.pid}`);
+      try {
+        process.kill(run.pid, "SIGTERM");
+      } catch {
+        /* already gone; the stale/terminal sweep will report it */
+      }
+      continue; // don't also post a "still running" heartbeat for a run we just killed
+    }
     const stalled = heartbeatStalled(raw.lastActivityMs, now);
     const staleMs = stalled ? now - raw.lastActivityMs : 0;
     const phase = derivePhase(raw.lastEvent);
