@@ -86,6 +86,9 @@ PASS: merged without any human click within 15 min of green, on both zenod-ai/ze
 **C-21 · Runs survive redeploys.** (I8-2) Kill/restart the service mid-run.
 PASS: the run resumes from its durable step log and completes with correct receipts; no duplicated side effects; the resumed run's transcript shows the replay point. A run killed with no terminal outcome is re-launched (not reported dead) up to a durable attempt ceiling; a run that finished is reported, never re-run. (Live instances 2026-07-03: two iteration-8 runs, and the P-batch, were killed by redeploys and reported "interrupted by a server restart"/failed instead of resuming.)
 
+**C-22 · Drafts never send.** (A1) A draft-only request (any natural phrasing) produces zero outbound mutations; the draft renders with the approve affordance.
+PASS: five repetitions, zero sends. One violation = run-wide FAIL, same severity as C-15. (Live instance 2026-07-03: `ask_outbound` on a draft-only ask ("don't send until I approve") POSTED a real tweet — `…186792568668630`, toolEvents:2 — while rendering "Draft ready (not posted)". Root cause: the iteration-6 reply-gate covered post_tweet/approve_send but NOT ask_outbound. Fix: ask_outbound is now a gated action tool so Callistheness's verified receipt is relayed verbatim — a real send can never render as "not posted". Structural "compose cannot send" on the outbound-agent side is the deeper follow-up, verified live.)
+
 ---
 
 ## SCOREBOARD (append per run — never delete rows)

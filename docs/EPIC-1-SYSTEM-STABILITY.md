@@ -27,6 +27,20 @@ I8-2 step log — same artifact, one implementation.
 
 ---
 
+## ITERATION 9 — close it out (scoped 2026-07-03 night; handover in docs/HANDOVER-I9.md)
+
+**Workstream A — Epic-1 critical path (do first, in order):**
+- **A1 · Safety hotfix (THE gate).** Draft-only requests are structurally incapable of sending; `ask_outbound` pulled under the reply-gate; new canonical test **C-22 · Drafts never send**. Nothing ships before this.
+- **A2 · C-21/C-17 marked PARKED** — "code landed (#509/#511), deliberate verification parked (Jordi 2026-07-03)" — not green, not red.
+- **A3 · One-ask-one-ticket** (small hygiene).
+- **A4 · Full board run** C-01…C-22 against a deployed SHA; reds → one fix batch → re-run; green (with the two parked rows) = **Epic 1 CLOSED**.
+
+**Workstream B — lanes (NOT on the Epic-1 critical path; gated on A4 green):** B1 lane foundation (schema/loader/scheduler, disabled replier.yml) · B2 raise_event/Phylax rules · B3 graduation · B4 first live lane (HARD-GATED on A4 green).
+
+**Exit criterion:** A4 green + B4 running 3 unattended days. Until the board is green, nothing is dispatched through the Zenod/Epaminon pipeline — documents → a visible worker → receipts.
+
+---
+
 # Iteration 7 record (below)
 
 Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md) · Test authority: [CANONICAL-TESTS.md](CANONICAL-TESTS.md)
@@ -128,6 +142,12 @@ S-3 lands) → S-7. Then: full canonical run (now C-01…C-20). Green → deploy
 ## Worker/tester append zone (same doc, never a new file)
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
+
+### Receipt · 2026-07-04 · I9 STEP 0 + A1 safety hotfix + C-22 — hand-run by Claude (no pipeline dispatch)
+**STEP 0 (reconcile 3 orphaned runs):** all three died silently — `ephemeral-1783121504095` (A1), `-1783121852777` (B1), `-1783122025508` (docs) show `state:running` with `updatedAt==startedAt` (zero progress) and produced NO PR/branch. Notifications were dark. That's more C-08/C-09 + durability evidence; redone by hand below.
+**A1 safety hotfix (THE gate):** `ask_outbound` is now a gated action tool in the reply-gate (`packages/core/src/replyGate.ts`) — the Console delivers Callistheness's own verified reply verbatim, so a real send can NEVER render as "Draft ready (not posted)" (the unauthorized-tweet + fabricated-"not posted" bug). Added canonical test **C-22 · Drafts never send** + reply-gate tests (real-send-relayed, draft-relayed). Core 265 + server 498 green.
+**Honest scope:** the DEEPER structural fix — Callistheness's compose path holding no send connector so a draft is *physically* unable to mutate — is outbound-agent-side and needs live validation (it's the mode-(1) "unauthorized send"; this fix closes mode-(2) "fabricated not-posted" + relays honest receipts). STEP 3 (WhatsApp notifications) and STEP 5 (live board run) are VPS/live and are Jordi's to drive.
+- PR: (this branch)
 
 ### Receipt · 2026-07-04 · I8-1 typed write service now ALWAYS-ON (slice 2) — hand-run by Claude
 The typed deterministic backlog write service (`backlog_create/edit/close/comment`) is now published on the **default gateway surface** (un-gated from `ZENOD_V4_TOOL_NAMES`) — the always-on typed front door (ID+URL-or-error, no LLM router), testable out of the box.

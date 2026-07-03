@@ -87,4 +87,23 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.isActionTurn).toBe(false);
     expect(out.text).toBe("Nothing has run for that one yet.");
   });
+
+  // A1 / C-22: ask_outbound is a gated action tool — its result (Callistheness's own
+  // verified reply) is delivered verbatim, so the Console can never re-narrate a real
+  // send as "not posted", and a draft is relayed with its approve affordance.
+  it("gates ask_outbound: a real send inside Callistheness is relayed, never re-narrated as 'not posted'", () => {
+    const actions = [action("ask_outbound", "Posted to X. Live URL: https://x.com/i/web/status/700")];
+    const out = applyReplyGate("Draft ready (not posted). Approve to post?", actions);
+    expect(out.isActionTurn).toBe(true);
+    expect(out.text).toBe("Posted to X. Live URL: https://x.com/i/web/status/700");
+    expect(out.intercepted).toBe(true); // the fabricated "not posted" prose was discarded
+  });
+
+  it("gates ask_outbound: a genuine draft is relayed verbatim with its approve affordance", () => {
+    const draft = "Draft: \"Shipping durable executors today.\" — reply 'send' to post it.";
+    const out = applyReplyGate("Here's a tweet you could send whenever you like!", [action("ask_outbound", draft)]);
+    expect(out.isActionTurn).toBe(true);
+    expect(out.text).toBe(draft);
+  });
+
 });
