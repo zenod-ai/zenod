@@ -40,11 +40,17 @@ rewrites the state after every review. One document per concern — never a new 
 
 - **D-1 Hosting shape — DECIDED 2026-07-03 (Jordi): managed single-tenant.** One container per
   customer, the exact image we dogfood. Self-host stays as funnel, not product. Epic 2 unblocked.
-- **D-2 Frameworks — research ticket FILED:**
-  [AlfaBlok/obsidian-brain#244](https://github.com/AlfaBlok/obsidian-brain/issues/244) — what exists for
-  multi-agent orchestration with evidence-based handovers; how you'd build the Zenod mini-loop from
-  scratch today; is the current code salvageable; recommendation with trade-offs. Decision lands here
-  when the research doc is back.
+- **D-2 Frameworks — research DELIVERED**
+  ([doc in the brain](https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Zenod/Multi-Agent%20Orchestration%20Landscape%20(D-2).md),
+  [#244](https://github.com/AlfaBlok/obsidian-brain/issues/244)). Verdict: **salvage, don't restart** —
+  the governed memory + receipt/authority discipline is the moat; coordination plumbing is commodity;
+  the two hard gaps (worker observability, hard budget enforcement) are already tickets S-1/S-7.
+  **Pattern adopted as doctrine, vendor deferred:** orchestrator + isolated sub-agents (call/return,
+  summaries back, no peer-to-peer chatter) for WORK; single-writer owners for STATE. Runtime substrate
+  decision goes to a bounded post-Epic-1 spike — candidates: **Vercel Eve** (durable Workflow sessions,
+  subagents, channels, Agent Runs observability, model-agnostic via AI Gateway; we already run Vercel's
+  AI SDK in `packages/core/src/llm/aisdk.ts`), **Temporal**, **Claude Agent SDK**. No orchestrator-SDK
+  marriage mid-stabilization; Eve's self-host story to be verified in the spike, not assumed.
 
 ---
 

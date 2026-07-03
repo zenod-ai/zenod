@@ -72,6 +72,16 @@ caller; (c) remove keyword/regex gating from routing and guards — semantic int
 loud errors; a target-repo work ticket filed through the front door lands without the caller switching
 tools.
 
+### S-9 · Auto-merge actually fires — no green PR waits for a human click  (P1, added 2026-07-03)
+**Live evidence:** iteration-7's own deliverables (obsidian-brain PRs #246/#247 — docs-only drafts, nothing
+failing) sat in needs-review until Jordi merged by hand, while doctrine says auto-merge on green. The fanout
+summary also rendered "Deliverables: none" for a PR carrying three files.
+**Fix:** (a) fan-in controller marks worker drafts ready once checks pass (or opens non-draft for docs-only
+branches); (b) auto-merge on green enabled for worker PRs in BOTH repos, honoring the existing
+HOLD-FOR-REVIEW escape hatch; (c) deliverable renderer counts PR paths — "none" with files present is a lie.
+**Accept:** **C-20** passes — a replayed docs-only worker PR merges unattended ≤15 min after green, notify
+carries the merged-commit URL, deliverables list the paths.
+
 ### S-7 · Run budgets — kill zombie runs  (P1)
 Per-run budget (default: 60 min wall, 200 turns, overridable per ticket). On breach with zero verified
 artifacts: terminate, render "budget exceeded, nothing verifiable, transcript: <link>", notify as failure.
@@ -82,9 +92,9 @@ artifacts: terminate, render "budget exceeded, nothing verifiable, transcript: <
 
 ## Sequencing
 
-S-0 → S-1 → S-2 (needs S-1's transcripts) → S-3 (one worker) → S-4/S-5/S-6/S-8 (one worker, after S-3
-lands) → S-7. Then: full canonical run (now C-01…C-19). Green → deploy nothing, run again. Green ×2 →
-epic closed.
+S-0 → S-1 → S-2 (needs S-1's transcripts) → S-3 (one worker) → S-4/S-5/S-6/S-8/S-9 (one worker, after
+S-3 lands) → S-7. Then: full canonical run (now C-01…C-20). Green → deploy nothing, run again. Green ×2
+→ epic closed.
 
 ## Worker/tester append zone (same doc, never a new file)
 
