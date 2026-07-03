@@ -127,6 +127,10 @@ function formatExecutionStatus(tickets: ExecutionTicket[]): string {
       parts.push(`updated ${new Date(ticket.updatedAt).toISOString()}`);
       if (ticket.note) parts.push(`note: ${ticket.note}`);
       if (ticket.evidenceUrl) parts.push(`evidence: ${ticket.evidenceUrl}`);
+      // S-1 (b): the recent controller-observed activity trail, human-rendered.
+      if (ticket.recentEvents?.length) parts.push(`recent: ${ticket.recentEvents.join(" › ")}`);
+      // S-1 (a/c): the durable full-transcript link — resolves live and after death.
+      if (ticket.transcriptUrl) parts.push(`transcript: ${ticket.transcriptUrl}`);
       return parts.join(" — ");
     })
     .join("\n");
@@ -220,6 +224,10 @@ function executionStatusEvidence(ticket: ExecutionTicket) {
     state: canonicalExecutionState(ticket.state),
     runnerStatus: ticket.state,
     ...midRun,
+    // S-1 (b): the last-N observed events, live and after terminal.
+    ...(ticket.recentEvents?.length ? { recentEvents: ticket.recentEvents } : {}),
+    // S-1 (a/c): the durable full-transcript link.
+    ...(ticket.transcriptUrl ? { transcriptUrl: ticket.transcriptUrl } : {}),
     ...(blockers.length ? { blockers } : {}),
     ...(resultRefs.length ? { resultRefs } : {}),
     updatedAt: new Date(ticket.updatedAt).toISOString(),

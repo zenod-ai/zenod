@@ -41,6 +41,7 @@ import {
 } from "./drive.js";
 import { buildDriveTools } from "./driveTools.js";
 import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
+import { transcriptPath } from "./executionTranscript.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
@@ -344,16 +345,50 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const bad = execLaneGate(c.req.header("X-Lane-Secret"));
     if (bad) return c.json({ error: bad.error }, bad.status);
     const body = await c.req
-      .json<{ execution_id?: number | string; phase?: string; progress_note?: string }>()
+      .json<{ execution_id?: number | string; phase?: string; progress_note?: string; recent_events?: unknown }>()
       .catch(() => ({}) as Record<string, unknown>);
     const executionId = body.execution_id != null ? String(body.execution_id) : "";
     if (!executionId) return c.json({ error: "execution_id is required" }, 400);
+    const recentEvents = Array.isArray(body.recent_events)
+      ? body.recent_events.map((e) => String(e)).filter(Boolean).slice(-12)
+      : undefined;
     await runtime.executionQueue!.recordProgress({
       executionId,
       ...(body.phase !== undefined ? { phase: String(body.phase) } : {}),
       ...(body.progress_note !== undefined ? { progressNote: String(body.progress_note) } : {}),
+      ...(recentEvents !== undefined ? { recentEvents } : {}),
     });
     return c.json({ ok: true });
+  });
+
+  // S-1 (a) — durable transcript ingest. The runner uploads a run's full events.jsonl
+  // (whole, or a growing tail) keyed by execution id; we persist it to the /data volume
+  // so it survives the runner workdir being wiped and the server being redeployed. The
+  // stored URL is pinned onto the ticket so execution_status + completion notify link it.
+  app.post("/api/exec/transcript", async (c) => {
+    const bad = execLaneGate(c.req.header("X-Lane-Secret"));
+    if (bad) return c.json({ error: bad.error }, bad.status);
+    const body = await c.req
+      .json<{ execution_id?: number | string; content?: string }>()
+      .catch(() => ({}) as Record<string, unknown>);
+    const executionId = body.execution_id != null ? String(body.execution_id) : "";
+    if (!executionId) return c.json({ error: "execution_id is required" }, 400);
+    if (typeof body.content !== "string") return c.json({ error: "content (string) is required" }, 400);
+    runtime.transcriptStore.put(executionId, body.content);
+    const url = `${publicBaseUrl(c)}${transcriptPath(executionId)}`;
+    if (runtime.executionQueue) {
+      await runtime.executionQueue.recordTranscriptUrl({ executionId, transcriptUrl: url });
+    }
+    return c.json({ ok: true, url, bytes: body.content.length });
+  });
+
+  // S-1 (c) — the durable transcript link resolves here, live and after death. Served as
+  // plain text so a browser/curl reads the raw stream. 404 when nothing was uploaded.
+  app.get("/api/exec/transcript/:executionId", (c) => {
+    const executionId = c.req.param("executionId");
+    const content = runtime.transcriptStore.get(executionId);
+    if (content == null) return c.json({ error: "no transcript stored for this execution" }, 404);
+    return c.text(content, 200, { "Content-Type": "text/plain; charset=utf-8" });
   });
 
   // `execution_status` — the human read (Console/chat). Normal agent-token auth (this

@@ -26,6 +26,46 @@ describe("execution lane API", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("stores a run transcript, pins its URL on the ticket, and resolves it back (S-1)", async () => {
+    // A running ticket to attach the transcript to.
+    await runtime.executionQueue!.enqueue({ executionId: "run-42", target: "owner/repo#42", context: "do work" });
+
+    const stream = [
+      JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "npm test" } }),
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit" }] } }),
+    ].join("\n");
+
+    // Reject without the lane secret.
+    const unauth = await app.request("/api/exec/transcript", {
+      method: "POST",
+      body: JSON.stringify({ execution_id: "run-42", content: stream }),
+    });
+    expect(unauth.status).toBe(401);
+
+    const stored = await app.request("/api/exec/transcript", {
+      method: "POST",
+      headers: { "X-Lane-Secret": "lane-secret" },
+      body: JSON.stringify({ execution_id: "run-42", content: stream }),
+    });
+    expect(stored.status).toBe(200);
+    const body = (await stored.json()) as { ok: boolean; url: string; bytes: number };
+    expect(body.ok).toBe(true);
+    expect(body.url).toContain("/api/exec/transcript/run-42");
+    expect(body.bytes).toBe(stream.length);
+
+    // The durable link is pinned on the ticket for execution_status + completion notify.
+    expect(runtime.executionStore.get("run-42")?.transcriptUrl).toBe(body.url);
+
+    // The transcript resolves verbatim (live and after death).
+    const fetched = await app.request("/api/exec/transcript/run-42");
+    expect(fetched.status).toBe(200);
+    expect(await fetched.text()).toBe(stream);
+
+    // A run with no stored transcript is an honest 404, not a silent empty read.
+    const missing = await app.request("/api/exec/transcript/nope");
+    expect(missing.status).toBe(404);
+  });
+
   it("rejects event writes without the cross-provisioned lane secret", async () => {
     const bearerOnly = await app.request("/api/exec/event", {
       method: "POST",

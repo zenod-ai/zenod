@@ -892,6 +892,51 @@ function tailFile(path, maxBytes = 4000) {
   }
 }
 
+// S-1 (a/c): upload a run's full events.jsonl to Epaminon's durable transcript store,
+// keyed by execution id, so the whole stream survives the workdir being wiped + deploys.
+// A very large stream is truncated to its last `maxBytes` with a leading marker (the tail
+// is the diagnostically valuable part). Returns the resolving transcript URL, or "" if the
+// upload could not be delivered (best-effort — never blocks the terminal report).
+async function uploadTranscript(executionId, eventsPath, maxBytes = 2_000_000) {
+  const secret = await ensureLaneSecret();
+  if (!secret) return "";
+  let content;
+  try {
+    const size = statSync(eventsPath).size;
+    if (size <= maxBytes) {
+      content = readFileSync(eventsPath, "utf8");
+    } else {
+      const start = size - maxBytes;
+      const fd = openSync(eventsPath, "r");
+      try {
+        const buf = Buffer.alloc(maxBytes);
+        readSync(fd, buf, 0, maxBytes, start);
+        content = `{"type":"transcript.truncated","droppedBytes":${start},"note":"showing last ${maxBytes} bytes of ${size}"}\n${buf.toString("utf8")}`;
+      } finally {
+        closeSync(fd);
+      }
+    }
+  } catch {
+    return ""; // no stream on disk (e.g. a spawn that never wrote) — nothing to persist
+  }
+  try {
+    const res = await fetch(`${EPAMINON_URL}/api/exec/transcript`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Lane-Secret": secret },
+      body: JSON.stringify({ execution_id: executionId, content }),
+    });
+    if (!res.ok) {
+      log(`transcript upload for ${executionId} HTTP ${res.status}`);
+      return "";
+    }
+    const j = await res.json().catch(() => ({}));
+    return j && j.url ? String(j.url) : "";
+  } catch (e) {
+    log(`transcript upload for ${executionId} failed: ${e.message}`);
+    return "";
+  }
+}
+
 // PURE: pull verifiable evidence (GitHub commit/PR/issue URLs) out of a final handoff
 // so a "complete" claim can be checked before it is accepted as done (#stab T3, I5-2).
 // Returns the distinct commit, PR, and issue URLs the worker claims as proof of its
@@ -1111,6 +1156,12 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
     if (tail) note = `${note}\n--- log tail ---\n${tail}`.slice(0, 1800);
   }
 
+  // S-1 (a/c): persist the whole events.jsonl to durable storage keyed by execution id
+  // BEFORE reporting terminal, so the completion/blocked notification can link the full
+  // transcript — and it resolves after the workdir is wiped. Best-effort; a failed upload
+  // just omits the link (the run still reports its outcome).
+  const transcriptUrl = await uploadTranscript(executionId, eventsPath);
+
   if (!persisted.ephemeral) persisted.ephemeral = {};
   persisted.ephemeral[executionId] = {
     ...(entry ?? { target }),
@@ -1120,20 +1171,23 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
     finalPath,
     eventsPath,
     ...(evidenceUrl ? { evidenceUrl } : {}),
+    ...(transcriptUrl ? { transcriptUrl } : {}),
     ...(autoMergeEvent ? { autoMerge: autoMergeEvent } : {}),
   };
   saveState(persisted);
+
+  const transcriptLine = transcriptUrl ? `\nFull transcript: ${transcriptUrl}` : "";
 
   if (stateName === "complete") {
     // C-07c: a declared-no-deliverable smoke/echo/no-op run reads "completed (no
     // deliverable expected)", never a bare "done" that implies a produced artifact.
     const doneText =
       !evidenceUrl && declaresNoDeliverableExpected(entry?.context)
-        ? `✅ Execution ${executionId} (${target}) — completed (no deliverable expected).`
-        : `✅ Execution ${executionId} (${target}) — done.${evidenceUrl ? ` ${evidenceUrl}` : ""}`;
+        ? `✅ Execution ${executionId} (${target}) — completed (no deliverable expected).${transcriptLine}`
+        : `✅ Execution ${executionId} (${target}) — done.${evidenceUrl ? ` ${evidenceUrl}` : ""}${transcriptLine}`;
     await dispatchReport(
       "/api/exec/outcome",
-      { execution_id: executionId, outward: false, note, ...(evidenceUrl ? { evidence_url: evidenceUrl } : {}) },
+      { execution_id: executionId, outward: false, note: `${note}${transcriptLine}`, ...(evidenceUrl ? { evidence_url: evidenceUrl } : {}) },
       doneText,
     );
     return;
@@ -1142,8 +1196,8 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
   const blockedNote = stateName === "blocked" ? note : `ephemeral worker failed: ${note}`;
   await dispatchReport(
     "/api/exec/blocked",
-    { execution_id: executionId, note: blockedNote },
-    `⛔ Execution ${executionId} (${target}) — ${stateName}: ${blockedNote.slice(0, 240)}`,
+    { execution_id: executionId, note: `${blockedNote}${transcriptLine}` },
+    `⛔ Execution ${executionId} (${target}) — ${stateName}: ${blockedNote.slice(0, 240)}${transcriptLine}`,
   );
 }
 
@@ -1233,7 +1287,7 @@ function phaseSummary({ elapsedMs, phase, turns, lastEvent, lastPartial } = {}) 
 // text as a progress claim — only the STRUCTURE of the stream (which tool ran, how many
 // turns) counts. Missing/empty log → zeroed observation.
 function parseHeartbeatObservation(eventsPath, now = Date.now()) {
-  const obs = { turns: 0, toolCalls: 0, lastEvent: "", lastPartial: "", lastActivityMs: null };
+  const obs = { turns: 0, toolCalls: 0, lastEvent: "", lastPartial: "", lastActivityMs: null, recentEvents: [] };
   let raw;
   try {
     raw = readFileSync(eventsPath, "utf8");
@@ -1284,7 +1338,13 @@ function parseHeartbeatObservation(eventsPath, now = Date.now()) {
     } else if (type) {
       label = type;
     }
-    if (label) obs.lastEvent = label;
+    if (label) {
+      obs.lastEvent = label;
+      // S-1 (b): keep a rolling window of the last few observed event labels so
+      // execution_status can show a real activity trail, not just the single last one.
+      obs.recentEvents.push(label);
+      if (obs.recentEvents.length > 8) obs.recentEvents.shift();
+    }
     // Any parseable line counts as activity (the stream advanced). Prefer an explicit
     // event timestamp when present; else treat "now" as the observation time.
     const ts = Date.parse(ev.timestamp || ev.at || ev.ts || "");
@@ -1470,6 +1530,7 @@ async function sweepHeartbeats(state, now = Date.now()) {
           execution_id: run.executionId,
           phase,
           ...(raw.lastPartial ? { progress_note: raw.lastPartial } : {}),
+          ...(raw.recentEvents?.length ? { recent_events: raw.recentEvents } : {}),
         }).catch(() => {});
       }
     }
