@@ -719,11 +719,16 @@ function manifestEvidenceUrl(manifest) {
 // a handoff summary, the honest merge state, and the link — instead of a bare url.
 // Actionable content (title, summary, state) is prioritized; the executionId is
 // demoted to a suffix. Body budget keeps it readable on a phone.
-function composeTerminalNotification({ executionId, target, outward, title, manifest }, max = 900) {
+function composeTerminalNotification({ executionId, target, outward, title, manifest, context }, max = 900) {
   if (!outward) {
     const t = title ? ` — ${title}` : "";
     if (!hasVerifiableDeliverable(manifest)) {
-      // M-2: nothing checkable behind this "complete" — never render done.
+      // #485 / C-07c: a run whose OWN objective declares no deliverable expected (smoke/
+      // echo/no-op) completing with nothing checkable is SUCCESS — never "failed".
+      if (declaresNoDeliverableExpected(context)) {
+        return `✅ Execution completed (no deliverable expected): ${target}${t}.\n(${executionId})`;
+      }
+      // M-2 / C-07b: nothing checkable behind this "complete" — never render done.
       return `Finished but produced nothing verifiable — treating as failed: no commit, PR, or changed-file evidence for ${target}${t}.\n(${executionId})`;
     }
     // Internal artifact done — short and plain, with the evidence link when there is one.
@@ -997,6 +1002,20 @@ function wantsHoldForReview(context) {
   return HOLD_FOR_REVIEW_RE.test(String(context || ""));
 }
 
+// PURE (#485 / C-07c): does THIS run's own objective/artifact-policy declare that NO
+// deliverable is expected — a smoke / echo / no-op run whose whole point is to return a
+// summary and change nothing? Such a run completing with no commit/PR/issue is SUCCESS,
+// not the C-07b "produced nothing verifiable" failure. Keyed off the run's DECLARED
+// policy (the controller-authored objective/artifactPolicy text), never the worker's
+// output — so a worker cannot dodge the evidence bar by claiming its task was a no-op.
+// A run that WAS supposed to produce a deliverable and didn't carries none of these
+// markers and still renders the honest failed-to-produce message (C-07b unchanged).
+const NO_DELIVERABLE_EXPECTED_RE =
+  /\bNO-DELIVERABLE-EXPECTED\b|no-op smoke|no deliverable expected|return (?:the )?(?:summary|result) only|make no (?:code or file|file or code) changes/i;
+function declaresNoDeliverableExpected(context) {
+  return NO_DELIVERABLE_EXPECTED_RE.test(String(context || ""));
+}
+
 // PURE: pull owner/repo out of a github PR URL so the controller can address `gh pr
 // merge -R <owner/repo>` without depending on the runner's cwd/checkout.
 function repoFromPrUrl(url) {
@@ -1066,6 +1085,13 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
         log(`ephemeral ${executionId} auto-merge: ${merge.outcome} — ${merge.detail}`);
         autoMergeEvent = { url: verifiedPr || null, outcome: merge.outcome, detail: merge.detail };
       }
+    } else if (declaresNoDeliverableExpected(entry?.context)) {
+      // #485 / C-07c: this run's OWN objective/artifact-policy declares no deliverable
+      // expected (smoke/echo/no-op). Completing with nothing checkable is SUCCESS — stays
+      // `complete`, rendered as "completed (no deliverable expected)". Keyed off the
+      // declared policy, never the worker's output, so a real deliverable-bearing task
+      // (C-07b) cannot dodge the evidence bar this way.
+      note = `completed (no deliverable expected): ${note}`.slice(0, 1000);
     } else {
       // M-2/I5-2 — evidence-required "done": a terminal run that claims complete but
       // carries ZERO checkable deliverable (no commit/PR/issue URL anywhere in its
@@ -1099,10 +1125,16 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
   saveState(persisted);
 
   if (stateName === "complete") {
+    // C-07c: a declared-no-deliverable smoke/echo/no-op run reads "completed (no
+    // deliverable expected)", never a bare "done" that implies a produced artifact.
+    const doneText =
+      !evidenceUrl && declaresNoDeliverableExpected(entry?.context)
+        ? `✅ Execution ${executionId} (${target}) — completed (no deliverable expected).`
+        : `✅ Execution ${executionId} (${target}) — done.${evidenceUrl ? ` ${evidenceUrl}` : ""}`;
     await dispatchReport(
       "/api/exec/outcome",
       { execution_id: executionId, outward: false, note, ...(evidenceUrl ? { evidence_url: evidenceUrl } : {}) },
-      `✅ Execution ${executionId} (${target}) — done.${evidenceUrl ? ` ${evidenceUrl}` : ""}`,
+      doneText,
     );
     return;
   }
@@ -1639,9 +1671,11 @@ async function reportDispatched(state) {
         const terminalKey = `${d.target}|${(manifest && manifest.prUrl) || executionId}|execution.terminal`;
         // M-2: evidence-required "done" — a terminal completion with nothing verifiable
         // behind it notifies as a failure (severity: error), never as ordinary info.
-        const verifiable = o.outward || hasVerifiableDeliverable(manifest);
+        // C-07c: a declared-no-deliverable smoke/echo/no-op run completing with nothing
+        // checkable is a success, not an error — don't flag it as a failure notification.
+        const verifiable = o.outward || hasVerifiableDeliverable(manifest) || declaresNoDeliverableExpected(d.context);
         await notify(
-          composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest }),
+          composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest, context: d.context }),
           origin,
           { eventType: "execution.terminal", executionId, targetIssue: d.target, severity: verifiable ? "info" : "error", dedupeKey: terminalKey },
         );
@@ -2309,6 +2343,7 @@ export {
   hasCheckableEvidence,
   pickEvidenceUrl,
   wantsHoldForReview,
+  declaresNoDeliverableExpected,
   repoFromPrUrl,
   enableAutoMergeForPr,
   tailFile,

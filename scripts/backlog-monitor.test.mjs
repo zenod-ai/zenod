@@ -63,6 +63,7 @@ import {
   HEARTBEAT_LONGRUN_MS,
   HEARTBEAT_MARKER,
   wantsHoldForReview,
+  declaresNoDeliverableExpected,
   repoFromPrUrl,
   enableAutoMergeForPr,
 } from "./backlog-monitor.mjs";
@@ -1055,4 +1056,54 @@ test("phaseSummary is a compact phase+elapsed line for the mid-run channel updat
   assert.ok(line.startsWith("testing · 1h05m elapsed"));
   assert.ok(line.includes("90 turns"));
   assert.ok(line.includes("running the suite"));
+});
+
+// ---- #485 / C-07c: declared-no-deliverable smoke runs complete, never fail ----
+
+test("declaresNoDeliverableExpected detects a smoke/no-op policy, not an ordinary task", () => {
+  // the real exec-smoke.mjs policy/instructions
+  assert.equal(declaresNoDeliverableExpected("artifact policy: return summary only"), true);
+  assert.equal(declaresNoDeliverableExpected("This is a no-op smoke test. Return the result only."), true);
+  assert.equal(declaresNoDeliverableExpected("make no code or file changes"), true);
+  assert.equal(declaresNoDeliverableExpected("NO-DELIVERABLE-EXPECTED"), true);
+  // an ordinary deliverable-bearing task carries none of these markers
+  assert.equal(declaresNoDeliverableExpected("Fix the login bug and open a PR against main"), false);
+  assert.equal(declaresNoDeliverableExpected("Create a GitHub issue in o/r and report its URL"), false);
+  assert.equal(declaresNoDeliverableExpected(""), false);
+  assert.equal(declaresNoDeliverableExpected(undefined), false);
+});
+
+test("composeTerminalNotification renders 'completed (no deliverable expected)' for a declared smoke run (C-07c)", () => {
+  const msg = composeTerminalNotification({
+    executionId: "smoke-1",
+    target: "ephemeral:smoke-1",
+    outward: false,
+    manifest: { handoffExcerpt: "ephemeral smoke observed" }, // no PR/commit/issue/paths
+    context: "This is a no-op smoke test. artifact policy: return summary only",
+  });
+  assert.ok(msg.includes("completed (no deliverable expected)"), "smoke run reads completed");
+  assert.ok(!msg.includes("treating as failed"), "never the failed-to-produce message");
+});
+
+test("C-07b unchanged: a deliverable-EXPECTED run with nothing verifiable still fails honestly", () => {
+  const msg = composeTerminalNotification({
+    executionId: "real-1",
+    target: "zenod-ai/zenod#5",
+    outward: false,
+    manifest: { handoffExcerpt: "I finished the work" }, // claims done, no evidence
+    context: "Fix the auth guard and open a PR against main", // NOT a no-op
+  });
+  assert.ok(msg.startsWith("Finished but produced nothing verifiable — treating as failed"));
+});
+
+test("C-07a unchanged: a run WITH a real deliverable still renders done with the URL", () => {
+  const msg = composeTerminalNotification({
+    executionId: "real-2",
+    target: "zenod-ai/zenod#6",
+    outward: false,
+    manifest: { handoffExcerpt: "opened https://github.com/zenod-ai/zenod/issues/6" },
+    context: "return summary only", // even a no-op marker must not suppress a REAL deliverable
+  });
+  assert.ok(msg.startsWith("✅ Execution done"));
+  assert.ok(msg.includes("https://github.com/zenod-ai/zenod/issues/6"));
 });
