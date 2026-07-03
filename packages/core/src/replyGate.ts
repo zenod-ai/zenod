@@ -53,6 +53,13 @@ const ACTION_TOOL_NAMES = new Set(
     "post_reddit",
     "send_email",
     "approve_send",
+    // A1 / C-22 (2026-07-04): ask_outbound routes into Callistheness's OWN loop, which
+    // can post a real tweet. Its result is already Callistheness's verified reply (his
+    // reply-gate ran inside) — a send receipt if he sent, a draft+affordance if he
+    // drafted. Gating it here delivers THAT verbatim, so the Console LLM can never
+    // re-narrate a real send as "Draft ready (not posted)" (the unauthorized-tweet +
+    // fabricated-"not posted" bug: tweet …186792568668630 went out on a draft-only ask).
+    "ask_outbound",
   ].map(normalizedToolName),
 );
 
