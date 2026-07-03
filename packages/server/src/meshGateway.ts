@@ -6,12 +6,7 @@ import { VERSION } from "zenod";
 import { z, type ZodRawShape } from "zod";
 
 import { callPeerTool, type PeerConfig } from "./peerClient.js";
-import {
-  LIFE_BACKLOG_REPO,
-  loadRepoInference,
-  nonBacklogRedirect,
-  routeBacklogRequest,
-} from "./backlogRouter.js";
+import { LIFE_BACKLOG_REPO, nonBacklogRedirect } from "./backlogRouter.js";
 import {
   formatConversationTranscript,
   transcriptQueryFromToolArgs,
@@ -31,7 +26,6 @@ import {
   FETCH_EXECUTION_DELIVERABLE_SHAPE,
   READ_LLM_TIMELINE_SHAPE,
   GET_TASK_RESULT_SHAPE,
-  REQUEST_BACKLOG_ACTION_SHAPE,
   RUN_ISSUE_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
   SEARCH_MEMORY_SHAPE,
@@ -84,9 +78,16 @@ export function foldImageUrlIntoMessage(args: Record<string, unknown>): Record<s
   return rest;
 }
 
-/** A verbatim MCP tool result (no LLM) — used by the deterministic backlog guard. */
-function deterministicText(text: string): { content: Array<{ type: "text"; text: string }>; structuredContent: Record<string, unknown> } {
-  return { content: [{ type: "text", text }], structuredContent: { deterministic: true, routedBy: "backlogRouter" } };
+/**
+ * A blocked backlog write. S-8 (C-18): a write that is NOT filed must NEVER return a
+ * success-shaped ack. The live failure was `create_issue` replying
+ * `{deterministic:true, routedBy:"backlogRouter"}` — an "ok/routed" shape — while
+ * filing nothing, so the caller read it as done. Every non-filing outcome is therefore
+ * an explicit `isError` result whose text names what did NOT happen; no `routedBy` /
+ * `deterministic:true` success ack is ever emitted for a write.
+ */
+function blockedWrite(text: string): { content: Array<{ type: "text"; text: string }>; structuredContent: Record<string, unknown>; isError: true } {
+  return { content: [{ type: "text", text }], structuredContent: { filed: false, reason: text }, isError: true };
 }
 
 /** Extract every explicit owner/repo#N target named in the message. */
@@ -97,43 +98,27 @@ function explicitTargets(message: string): string[] {
 }
 
 /**
- * E-4 / S0-T5 (#224) PRE-LLM interceptor. Runs the DETERMINISTIC router on a backlog
- * write BEFORE the request can reach Archus's LLM. Returns a fixed tool result when
- * the write must be blocked/redirected (the model never sees it), or null to allow
- * the write through to the life-backlog path.
+ * S-8 (C-19) PRE-LLM interceptor — STRUCTURAL, not phrasing-based.
  *
- * Guarantee: a create/edit/close whose target is NOT the life backlog can never reach
- * Archus's LLM loop as a raw write — enforcement is structural, not persona.
+ * This no longer runs a keyword/regex router over the user's phrasing (C-19 bans
+ * string-matching the wording as a control mechanism). It keys ONLY on a STRUCTURED
+ * signal: an explicit `owner/repo#N` target that is not the life backlog. Such a
+ * target is an unambiguous foreign-repo write and is redirected to the Epaminon lane
+ * before it reaches Archus's LLM.
+ *
+ * Everything else — including free-text mentions of other products — is ALLOWED
+ * through to Archus's guardian brain, which routes SEMANTICALLY (central backlog vs
+ * target-repo → Epaminon) and must return a receipt-or-error, never a silent ack.
+ *
+ * Returns a loud `isError` redirect when blocked, or null to allow the write through.
  */
-export function guardBacklogWrite(
-  message: string,
-  table = loadRepoInference(),
-): ReturnType<typeof deterministicText> | null {
+export function guardBacklogWrite(message: string): ReturnType<typeof blockedWrite> | null {
   const text = String(message || "");
-
-  // 1. An explicit owner/repo#N target that is NOT the life backlog is a foreign-repo
-  //    write — redirect to Epaminon deterministically, whatever the verb (edit/close).
+  // Structured foreign target (owner/repo#N that is not the life backlog) → Epaminon
+  // lane. This is a structured reference, not a match on the user's phrasing.
   const foreign = explicitTargets(text).find((repo) => repo.toLowerCase() !== LIFE_BACKLOG_REPO.toLowerCase());
-  if (foreign) return deterministicText(nonBacklogRedirect(foreign));
-
-  // 2. Otherwise consult the router on the free text.
-  const route = routeBacklogRequest(text, table);
-  switch (route.kind) {
-    case "worker_dispatch":
-      // Non-backlog repo write → fixed redirect + Epaminon handoff; never hits the LLM.
-      return deterministicText(route.redirect);
-    case "code_repo_inferred":
-      // Obvious code repo → this is not Archus's to write; hand to Epaminon deterministically.
-      return deterministicText(nonBacklogRedirect(route.repo));
-    case "needs_repo":
-      // Below the confidence floor → the single deterministic "which repo?" ask.
-      return deterministicText(
-        `Which repo is this for? I curate only the life backlog (${LIFE_BACKLOG_REPO}); code work needs a target repo so I can hand it to Epaminon. Name the repo (owner/repo) and I'll route it.`,
-      );
-    case "life_backlog":
-    default:
-      return null; // allow: this is a life-backlog write.
-  }
+  if (foreign) return blockedWrite(nonBacklogRedirect(foreign));
+  return null; // allow: Archus's brain routes this semantically.
 }
 
 /**
@@ -166,11 +151,11 @@ interface GatewayTool {
   /** Optional argument adapter for public semantic aliases that call a chat tool. */
   mapArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
   /**
-   * E-4 (obsidian-brain#231, same as S0-T5/#224): when set, this write is run through
-   * the DETERMINISTIC backlog router (routeBacklogRequest) BEFORE it can reach the
-   * owning agent's LLM. A write whose inferred target is NOT the life backlog is
-   * rejected/redirected here — the model never gets to improvise a wrong-repo write.
-   * This is the load-bearing enforcement; the persona block is only defense-in-depth.
+   * S-8 (C-19): when set, a STRUCTURAL pre-LLM guard runs (guardBacklogWrite). It no
+   * longer keyword/regex-matches the user's phrasing — it only redirects an explicit
+   * `owner/repo#N` target that is not the life backlog to the Epaminon lane. Every
+   * other write is allowed through to the owning agent's brain, which routes it
+   * SEMANTICALLY and must return a receipt-or-error (never a silent ack).
    */
   backlogWriteGuard?: boolean;
   title: string;
@@ -283,18 +268,12 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     requiresV4ToolNames: true,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   },
-  {
-    name: "archus.request_backlog_action",
-    owner: "archus",
-    peerTool: "chat_with_archus",
-    intentPrefix:
-      "Backlog action request. Interpret the user's intent, choose create/update/comment/close, choose the correct repo, avoid duplicates, and return verified issue URLs. Do not run/queue execution from this tool: ",
-    title: "Archus backlog action",
-    description:
-      "Owner: Archus. Semantic GitHub backlog write gateway for create/update/comment/close issue requests. Use this when the user wants the backlog changed but is not asking to run work. Archus decides the repo, structure, labels, and exact private GitHub operation, then returns issue numbers and URLs.",
-    inputSchema: REQUEST_BACKLOG_ACTION_SHAPE,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  },
+  // S-8: the redundant `archus.request_backlog_action` write door was REMOVED. Three
+  // tools once advertised the same job (create_issue, archus.request_backlog_action,
+  // and Archus's own request-backlog handle); the duplicates let a caller tool-hop and
+  // let one lie by omission. There is now ONE advertised backlog-write front door —
+  // create_issue / edit_issue / close_issue below — each a semantic intent to Archus's
+  // brain that returns a receipt-or-error. Use ask_archus for read/judgment.
   {
     name: "archus.run_issue",
     owner: "archus",
@@ -316,10 +295,11 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "archus",
     peerTool: "chat_with_archus",
     backlogWriteGuard: true,
-    intentPrefix: "Open backlog issue(s) for the following — decide placement and structure per your rules: ",
+    intentPrefix:
+      "Open backlog issue(s) for the following. Route semantically: a central-backlog item you file yourself; target-repo work you hand to Epaminon internally via your execution lane — do NOT bounce the caller to another tool. Reply with the qualified ID(s) + URL(s), read-back verified, or an explicit error naming what did NOT get filed. Never reply with a bare ok/routed ack: ",
     title: "Open backlog issue(s)",
     description:
-      "Tell Archus to open issue(s). Describe what you want filed in natural language; Archus decides where it belongs (which repo vs the central backlog), checks for duplicates, applies labels/structure per his guidelines, writes runnable tickets, and returns the qualified IDs (owner/repo#N).",
+      "The ONE front door to open issue(s). Describe what you want filed in natural language; Archus routes it semantically (central backlog he files himself; target-repo work he hands to Epaminon internally), checks for duplicates, applies labels/structure, writes runnable tickets, and returns the qualified IDs (owner/repo#N) with URLs read-back verified — or an explicit error. Never a silent ack.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
@@ -328,7 +308,8 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "archus",
     peerTool: "chat_with_archus",
     backlogWriteGuard: true,
-    intentPrefix: "Edit a backlog issue as follows: ",
+    intentPrefix:
+      "Edit a backlog issue as follows. Reply with the qualified ID + URL (read-back verified) confirming the change, or an explicit error naming what did NOT change — never a bare ok/done ack: ",
     title: "Edit a backlog issue",
     description:
       "Tell Archus to edit an issue — retitle, revise the body, relabel, comment, or change status. Name the issue (owner/repo#N) and what you want changed; Archus applies it within his governance rules (e.g. queue/merge gates) and confirms.",
@@ -340,7 +321,8 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "archus",
     peerTool: "chat_with_archus",
     backlogWriteGuard: true,
-    intentPrefix: "Close a backlog issue as follows: ",
+    intentPrefix:
+      "Close a backlog issue as follows. Reply with the qualified ID + URL (read-back verified) confirming it is closed, or an explicit error naming what did NOT happen — never a bare ok/done ack: ",
     title: "Close a backlog issue",
     description:
       "Tell Archus to close an issue (owner/repo#N), optionally with a closing comment/reason. Archus closes it, updates any parent/tracking ticket, and confirms.",
@@ -725,9 +707,9 @@ export function buildMeshGatewayServer(
       { title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations },
       async (args) => {
         let payload = t.mapArgs ? t.mapArgs((args ?? {}) as Record<string, unknown>) : ((args ?? {}) as Record<string, unknown>);
-        // E-4 PRE-LLM interceptor: a wrong-repo backlog write is rejected/redirected
-        // deterministically BEFORE callPeerTool ever reaches Archus's LLM. This is the
-        // structural enforcement of E4-T2 (not persona). Runs on the RAW message.
+        // S-8 STRUCTURAL pre-LLM guard: only an explicit foreign owner/repo#N target is
+        // redirected to the Epaminon lane before callPeerTool reaches Archus's LLM. No
+        // phrasing keyword/regex matching (C-19). Runs on the RAW message.
         if (t.backlogWriteGuard && typeof payload.message === "string") {
           const blocked = guardBacklogWrite(payload.message);
           if (blocked) return blocked;

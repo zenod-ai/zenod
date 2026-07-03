@@ -127,7 +127,6 @@ describe("Console mesh gateway contract", () => {
 
   it("publishes only the curated semantic suite surface", async () => {
     await expect(listGatewayToolNames()).resolves.toEqual([
-      "archus.request_backlog_action",
       "archus.run_issue",
       "ask_archus",
       "ask_brain",
@@ -427,18 +426,19 @@ describe("Console mesh gateway contract", () => {
     }
   });
 
-  it("routes archus.request_backlog_action to Archus chat with the backlog-action directive", async () => {
+  it("routes the create_issue front door to Archus chat with a semantic receipt-or-error directive", async () => {
     const client = await connectGateway();
     try {
       const result = await client.callTool({
-        name: "archus.request_backlog_action",
+        name: "create_issue",
         arguments: { message: "Create a bug for the Console issue lookup confusion." },
       });
       const text = JSON.stringify(result.content);
       expect(text).toContain("ARCHUS_CHAT");
-      expect(text).toContain("Backlog action request");
+      expect(text).toContain("Route semantically");
+      expect(text).toContain("Epaminon internally");
+      expect(text).toContain("read-back verified");
       expect(text).toContain("Create a bug for the Console issue lookup confusion");
-      expect(text).toContain("Do not run/queue execution");
     } finally {
       await client.close();
     }
