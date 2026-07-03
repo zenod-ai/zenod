@@ -438,6 +438,46 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("P-3: corrects a status summary that calls a task 'unexecuted' when its send is in the transcript's outbound log", () => {
+    const reply =
+      "Task 1: created the issue, done.\nTask 2: send the WhatsApp update to Jordi via Phylax — unexecuted.\nTask 3: still queued.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "get_recent_conversation_transcript",
+        input: { windowMinutes: 240 },
+        result:
+          "[2026-07-03T11:17:00.000Z] outbound Zenod; message=wamid.ABC123; status=sent; chars=42\nHere's your update, Jordi.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("actually sent this turn");
+    expect(out).toContain("2026-07-03T11:17:00.000Z");
+    expect(out).toContain("wamid.ABC123");
+  });
+
+  it("P-3: does not correct when there is no outbound entry in the transcript read", () => {
+    const reply = "Task 2: send the WhatsApp update — unexecuted.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "get_recent_conversation_transcript",
+        result: "No WhatsApp transcript entries matched the requested window/scope.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("P-3: does not fire when the reply never claims a task is unexecuted", () => {
+    const reply = "Task 2: sent the WhatsApp update to Jordi — done.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "get_recent_conversation_transcript",
+        result: "[2026-07-03T11:17:00.000Z] outbound Zenod; message=wamid.ABC123; status=sent; chars=42\nHere's your update, Jordi.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("allows a no-execution answer for the parent while separately naming child execution evidence", () => {
     const reply =
       "No execution is recorded for AlfaBlok/obsidian-brain#107 itself. Related child #108 has execution #109 in needs-review with PR #110.";

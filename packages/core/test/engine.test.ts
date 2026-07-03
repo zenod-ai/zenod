@@ -225,6 +225,22 @@ class FakeLlm implements BrainLlm {
       input.onPeerAction?.("epaminon_read_issue_execution_status", toolInput, result);
       return { text: result, readPaths: [] };
     }
+    if (peerTools && input.question.startsWith("TRANSCRIPTSTATUS:")) {
+      // P-3 — a multi-task status summary that reads the conversation transcript (the
+      // outbound message log) but still narrates one task as "unexecuted" even though
+      // its send is right there in the transcript result.
+      const tool = peerTools.get_recent_conversation_transcript;
+      if (!tool) {
+        throw new Error("missing conversation transcript peer tool");
+      }
+      const toolInput = { windowMinutes: 240 };
+      const result = await tool.run(toolInput);
+      input.onPeerAction?.("get_recent_conversation_transcript", toolInput, result);
+      return {
+        text: "Task 1: created the issue, done.\nTask 2: send the WhatsApp update to Jordi via Phylax — unexecuted.\nTask 3: still queued.",
+        readPaths: [],
+      };
+    }
     await tools.searchVault(input.question);
     const note = await tools.readNote("Areas/Insurance.md");
     const text = `You have travel insurance with Axa. (${note.length} chars read)`;
@@ -757,6 +773,30 @@ describe("BrainEngine", () => {
     expect(reply.text).toContain("No execution tickets found");
     expect(reply.text).not.toContain("Correction");
     expect(reply.text).not.toContain("couldn't confirm execution state");
+  });
+
+  it("P-3: corrects a multi-task status summary that calls a sent task 'unexecuted' using the outbound transcript log", async () => {
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      peerTools: {
+        get_recent_conversation_transcript: {
+          description: "Read recent WhatsApp transcript.",
+          async run() {
+            return "[2026-07-03T11:17:00.000Z] outbound Zenod; message=wamid.ABC123; status=sent; chars=42\nHere's your update, Jordi.";
+          },
+        },
+      },
+    });
+
+    const reply = await e.handleTasking({ text: "TRANSCRIPTSTATUS: status of my 3 tasks", surface: "web", conversationKey: "p3" });
+
+    expect(reply.text).toMatch(/^⚠️ Correction/);
+    expect(reply.text).toContain("actually sent this turn");
+    expect(reply.text).toContain("2026-07-03T11:17:00.000Z");
+    expect(reply.text).toContain("wamid.ABC123");
   });
 
   it("handleTasking records digest actions with the selftest surface conversation key", async () => {
