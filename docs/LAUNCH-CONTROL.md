@@ -77,11 +77,16 @@ rewrites the state after every review. One document per concern — never a new 
 | 1 | System Stability | 🔴 ACTIVE — iteration 7 | CANONICAL-TESTS board green ×2 consecutive builds |
 | 2 | Hosted Readiness | 🟡 SCOPING | First paying customer live (Jordi = customer #0 doesn't count) |
 
-**Now:** Epic 1. S-0 ✅ done · S-3 content merged as zenod#486 (deploying, unscored) · S-4/5/6 (F-batch)
-in flight · S-9 auto-merge work live · S-1 dispatched (`direct-1783105328881`) · S-2/S-7/S-8 queued
-behind it. D-2: Eve substrate research running
-([obsidian-brain#248](https://github.com/AlfaBlok/obsidian-brain/issues/248),
-`direct-1783105324065`). Epic 2 still code-frozen until Epic 1 P0s close.
+**Now (2026-07-03 late):** Epic 1: S-0 ✅ · #486 (S-3) + #493 (S-4/5/6) merged · S-1 re-dispatched
+(`direct-1783107468359`; first run killed by deploy restart — the durable-execution argument making
+itself) · S-2 forensic running (`direct-1783107479331`) · S-8 running (`direct-1783107490565`) ·
+S-9 partially live (auto-merge), renderer half unverified · S-7 held until S-1 lands (same code area) ·
+**Test phase: canonical board run C-01…C-20 dispatched** (`ephemeral-1783107516255`; tester is a
+separate worker — Fable only audits). D-2: **bake-off spike running**
+([obsidian-brain#250](https://github.com/AlfaBlok/obsidian-brain/issues/250),
+`direct-1783107501717`): Eve vs **Flue** (withastro/flue — Apache-2.0, harness-first, runtime-agnostic,
+skills/AGENTS.md-native, MCP + WhatsApp channel ecosystem, but experimental + Node sessions in-memory
+by default) vs **DIY** (AI SDK + standalone Workflow SDK + our runner). Winner closes D-2.
 
 ## Operating protocol
 
