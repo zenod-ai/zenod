@@ -387,10 +387,26 @@ async function dispatchForeignRepoWorker(input: {
   );
 
   store.dispatchStep(step.id, { deadlineAt: now() + 5 * 60_000 }, now());
-  const objective = `${issue.title}\n\n${issue.body}`.trim();
+  // I5-2: the generic ephemeral-task prompt defaults to "do not create ... a GitHub
+  // issue unless the user explicitly asked for that in the context" (backlog-monitor.mjs
+  // ephemeralPrompt) — for THIS route that default actively sabotages the worker-route's
+  // own stated intent (create the issue under the runner's gh auth), so a worker could
+  // dispatch cleanly and finish with no issue ever created. Make the ask and the
+  // artifact policy explicit and unambiguous so the worker actually runs
+  // `gh issue create -R <repo>` first and reports the created issue's URL as evidence.
+  const objective = (
+    `Create a GitHub issue in ${issue.repo} via \`gh issue create -R ${issue.repo}\` under the runner's ` +
+    `existing gh auth — title "${issue.title}", body below — THEN execute exactly that issue.\n\n` +
+    `Issue body:\n${issue.body}`
+  ).trim();
+  const artifactPolicy =
+    `This IS an issue-creation task: run \`gh issue create -R ${issue.repo}\` first (never skip it), ` +
+    `then work the created issue. Report the created issue's URL (https://github.com/${issue.repo}/issues/N) ` +
+    `as the deliverable/evidence, in addition to any commit/PR from the work itself.`;
   const result = await callTool(epaminon, "epaminon.run_ephemeral_task", {
     objective,
     repo: issue.repo,
+    artifactPolicy,
     ...(request.runInstructions ? { instructions: request.runInstructions } : {}),
   });
   if (result.isError) {

@@ -176,6 +176,12 @@ describe("createIssueThenRunJourney", () => {
       expect(calls.some((c) => c.peer === "archus")).toBe(false);
       expect(calls.map((c) => `${c.peer}:${c.tool}`)).toEqual(["epaminon:epaminon.run_ephemeral_task"]);
       expect(calls[0].args).toMatchObject({ repo: "zenod-ai/zenod" });
+      // I5-2: the dispatch must UNAMBIGUOUSLY ask the worker to run `gh issue create`
+      // — the generic ephemeral-task default ("do not create ... a GitHub issue unless
+      // explicitly asked") must never silently swallow this route's own intent.
+      expect(String(calls[0].args.objective)).toContain("gh issue create -R zenod-ai/zenod");
+      expect(String(calls[0].args.artifactPolicy)).toContain("gh issue create -R zenod-ai/zenod");
+      expect(String(calls[0].args.artifactPolicy).toLowerCase()).toContain("deliverable");
       // The created-issue receipt (target + URL) is propagated back.
       expect(result.execution?.target).toBe("zenod-ai/zenod#720");
       expect(result.message).toContain("zenod-ai/zenod#720");

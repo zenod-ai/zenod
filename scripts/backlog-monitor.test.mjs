@@ -34,6 +34,8 @@ import {
   ephemeralFallbackDecision,
   ephemeralPrompt,
   extractEvidenceClaims,
+  hasCheckableEvidence,
+  pickEvidenceUrl,
   tailFile,
   isPidAlive,
   summarizeHandoff,
@@ -561,6 +563,39 @@ test("extractEvidenceClaims returns nothing for a bare SHA with no URL (the hall
   const claims = extractEvidenceClaims("Status: complete\nFinal commit SHA: f5726dbccd829b2be37da1d9d806f0335fbc6b37");
   assert.deepEqual(claims.commitUrls, []);
   assert.deepEqual(claims.prUrls, []);
+  assert.deepEqual(claims.issueUrls, []);
+});
+
+// I5-2: iteration-4's E-4 worker dispatched cleanly for an issue-creation task but the
+// evidence contract only recognized commit/PR URLs, so a real created issue still read
+// as "evidence: unverified — no commit/PR URL". An issue URL must be recognized and
+// pass the same claim/verify/deliverable path as a commit or PR.
+test("extractEvidenceClaims pulls a distinct issue URL from a final handoff (I5-2)", () => {
+  const text = [
+    "Status: complete",
+    "Created the issue: https://github.com/zenod-ai/zenod/issues/842",
+    "duplicate https://github.com/zenod-ai/zenod/issues/842",
+  ].join("\n");
+  const claims = extractEvidenceClaims(text);
+  assert.deepEqual(claims.issueUrls, ["https://github.com/zenod-ai/zenod/issues/842"]);
+  assert.deepEqual(claims.commitUrls, []);
+  assert.deepEqual(claims.prUrls, []);
+});
+
+test("hasCheckableEvidence treats a bare issue URL as checkable (I5-2)", () => {
+  assert.equal(hasCheckableEvidence({ commitUrls: [], prUrls: [], issueUrls: ["https://github.com/a/b/issues/1"] }), true);
+  assert.equal(hasCheckableEvidence({ commitUrls: [], prUrls: [], issueUrls: [] }), false);
+});
+
+test("pickEvidenceUrl prefers PR, then commit, then falls back to a bare issue URL (I5-2)", () => {
+  const pr = "https://github.com/a/b/pull/1";
+  const commit = "https://github.com/a/b/commit/abc1234";
+  const issue = "https://github.com/a/b/issues/9";
+  assert.equal(pickEvidenceUrl([issue, commit, pr]), pr);
+  assert.equal(pickEvidenceUrl([issue, commit]), commit);
+  // An issue-creation task has ONLY an issue URL — it must still be reported as the
+  // deliverable, not dropped in favor of nothing.
+  assert.equal(pickEvidenceUrl([issue]), issue);
 });
 
 test("tailFile returns the trailing diagnostic bytes (or empty for a missing file)", () => {
