@@ -628,13 +628,32 @@ function composeBlockerNotification({ executionId, target, question }) {
   });
 }
 
-// PURE (M-2): does a deliverable manifest carry >=1 verifiable artifact — a live PR,
-// a resolved commit, or actual changed file paths? Evidence-required "done": a
-// terminal completion with NONE of these must not render as done — that is the
-// banana9 replay bug (a reported "✅ done" for work whose target never actually
-// exists on GitHub).
+// PURE (M-2, P-2): does a deliverable manifest carry >=1 verifiable artifact — a live
+// PR, a resolved commit, actual changed file paths, or an issue/PR/commit URL the
+// worker's own handoff comment points at? Evidence-required "done": a terminal
+// completion with NONE of these must not render as done — that is the banana9 replay
+// bug (a reported "✅ done" for work whose target never actually exists on GitHub).
+//
+// P-2 — this reuses the SAME extractEvidenceClaims/hasCheckableEvidence text scan the
+// ephemeral-worker lane uses on its finalText (I5-2), applied here to the manifest's
+// handoffExcerpt (the reportback comment reconstructed by deliverableManifest()). The
+// #479 replay: an issue-creation task has no PR/commit/paths, so the old field-only
+// check always missed it even though the created issue's URL was right there in the
+// worker's own summary.
 function hasVerifiableDeliverable(manifest) {
-  return Boolean(manifest && (manifest.prUrl || manifest.headSha || (manifest.paths && manifest.paths.length)));
+  if (!manifest) return false;
+  if (manifest.prUrl || manifest.headSha || (manifest.paths && manifest.paths.length)) return true;
+  return hasCheckableEvidence(extractEvidenceClaims(manifest.handoffExcerpt));
+}
+
+// PURE (P-2): the single evidence URL to show as proof alongside an internal "done" —
+// the manifest's own verified PR link if it has one, else whatever issue/PR/commit URL
+// hasVerifiableDeliverable found in the handoff text (same shared extractor).
+function manifestEvidenceUrl(manifest) {
+  if (!manifest) return "";
+  if (manifest.prUrl) return manifest.prUrl;
+  const claims = extractEvidenceClaims(manifest.handoffExcerpt);
+  return pickEvidenceUrl([...claims.commitUrls, ...claims.prUrls, ...claims.issueUrls]);
 }
 
 // PURE: compose the terminal execution notification (R1-T6). Carries the issue title,
@@ -648,8 +667,9 @@ function composeTerminalNotification({ executionId, target, outward, title, mani
       // M-2: nothing checkable behind this "complete" — never render done.
       return `Finished but produced nothing verifiable — treating as failed: no commit, PR, or changed-file evidence for ${target}${t}.\n(${executionId})`;
     }
-    // Internal artifact done — short and plain.
-    return `✅ Execution done: ${target}${t}\n(${executionId})`;
+    // Internal artifact done — short and plain, with the evidence link when there is one.
+    const evidence = manifestEvidenceUrl(manifest);
+    return `✅ Execution done: ${target}${t}${evidence ? `\n${evidence}` : ""}\n(${executionId})`;
   }
   const head = `✅ Ready for review: ${target}${title ? ` — ${title}` : ""}`;
   const summary = summarizeHandoff(manifest && manifest.handoffExcerpt);
@@ -2173,6 +2193,7 @@ export {
   mergeStateLine,
   composeTerminalNotification,
   hasVerifiableDeliverable,
+  manifestEvidenceUrl,
   composeActionableMessage,
   composeBlockerNotification,
   shouldReportEarlyLaunchExit,
