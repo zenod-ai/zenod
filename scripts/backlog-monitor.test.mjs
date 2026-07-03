@@ -50,6 +50,8 @@ import {
   composeBlockerNotification,
   parseDeliverables,
   formatElapsed,
+  derivePhase,
+  phaseSummary,
   parseHeartbeatObservation,
   heartbeatStalled,
   renderHeartbeat,
@@ -910,7 +912,7 @@ test("parseHeartbeatObservation handles claude stream-json turns + tool_use", ()
 
 test("parseHeartbeatObservation zeroes out for a missing log (degrade-safe)", () => {
   const obs = parseHeartbeatObservation("/no/such/events.jsonl", 1000);
-  assert.deepEqual(obs, { turns: 0, toolCalls: 0, lastEvent: "", lastActivityMs: null });
+  assert.deepEqual(obs, { turns: 0, toolCalls: 0, lastEvent: "", lastPartial: "", lastActivityMs: null });
 });
 
 test("heartbeatStalled flips only after the threshold, and never on unknown activity", () => {
@@ -1002,4 +1004,55 @@ test("composeExecutionStartNotification ALWAYS includes the link when one is res
     worker: "Epaminon",
   });
   assert.ok(ephemeral.includes("https://github.com/zenod-ai/zenod/issues/901"), "ephemeral start ping resolves via tracking issue");
+});
+
+// ---- F-2 (C-09): heartbeat phase/partials + mid-run status ----
+
+test("derivePhase maps the last observed tool to a coarse phase (never worker self-report)", () => {
+  assert.equal(derivePhase("apply_patch"), "editing");
+  assert.equal(derivePhase("str_replace_editor"), "editing");
+  assert.equal(derivePhase("grep"), "exploring");
+  assert.equal(derivePhase("read_file"), "exploring");
+  assert.equal(derivePhase("npm test"), "testing");
+  assert.equal(derivePhase("git commit"), "committing");
+  assert.equal(derivePhase("gh pr create"), "reviewing");
+  assert.equal(derivePhase(""), "starting up");
+  assert.equal(derivePhase("some_unknown_tool"), "working");
+});
+
+test("parseHeartbeatObservation captures a coarse last-partial from assistant/message text", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hb-partial-"));
+  const p = join(dir, "events.jsonl");
+  writeFileSync(
+    p,
+    [
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Refactoring the auth guard now" }] } }),
+      JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "npm test" } }),
+    ].join("\n"),
+  );
+  const obs = parseHeartbeatObservation(p, 1000);
+  assert.equal(obs.lastPartial, "Refactoring the auth guard now");
+  assert.equal(derivePhase(obs.lastEvent), "testing", "phase reflects the LAST observed tool");
+});
+
+test("renderHeartbeat leads with the phase and surfaces the last partial (C-09, not just turns)", () => {
+  const body = renderHeartbeat({
+    elapsedMs: 42 * 60_000,
+    turns: 187,
+    toolCalls: 40,
+    lastEvent: "apply_patch",
+    lastPartial: "wiring the new endpoint",
+    stalled: false,
+    now: 0,
+  });
+  assert.ok(body.includes("editing"), "phase is present, derived from apply_patch");
+  assert.ok(body.includes("wiring the new endpoint"), "last partial is surfaced");
+  assert.ok(body.includes("42m elapsed"));
+});
+
+test("phaseSummary is a compact phase+elapsed line for the mid-run channel update (C-09)", () => {
+  const line = phaseSummary({ elapsedMs: 65 * 60_000, phase: "testing", turns: 90, lastEvent: "npm test", lastPartial: "running the suite" });
+  assert.ok(line.startsWith("testing · 1h05m elapsed"));
+  assert.ok(line.includes("90 turns"));
+  assert.ok(line.includes("running the suite"));
 });

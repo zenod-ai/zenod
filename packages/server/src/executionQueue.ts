@@ -66,6 +66,13 @@ export interface ExecutionTicket {
   notifyOnStart?: boolean;
   /** Deliverable manifest, set once the run reports a terminal/parked outcome (R1-T1). */
   deliverable?: DeliverableManifest;
+  /** Epoch ms the ticket entered `running` — the basis for mid-run elapsed (F-2 / C-09). */
+  startedAt?: number;
+  /** Coarse controller-OBSERVED phase (exploring/editing/testing/…), pushed by the
+   *  heartbeat sweep; never a worker self-report. Surfaced by execution_status (F-2). */
+  phase?: string;
+  /** Short controller-observed partial (the last thing the worker said), for mid-run status. */
+  progressNote?: string;
   updatedAt: number;
 }
 
@@ -159,6 +166,9 @@ export class ExecutionQueue {
     }
     ticket.state = to;
     ticket.updatedAt = this.opts.now();
+    // F-2 / C-09: stamp when the run actually began executing, so execution_status can
+    // report mid-run elapsed deterministically (not "updated at", which moves on every edge).
+    if (to === "running" && !ticket.startedAt) ticket.startedAt = ticket.updatedAt;
     await this.persist(ticket);
   }
 
@@ -235,6 +245,21 @@ export class ExecutionQueue {
       ...(t.deliverable ? { deliverable: t.deliverable } : {}),
     });
     await this.pump();
+  }
+
+  /**
+   * F-2 / C-09: record a mid-run progress observation (coarse phase + last partial) the
+   * controller derived from the streamed events. NOT a state edge — it never transitions the
+   * ticket, only annotates a RUNNING one so execution_status can answer "where is it now?"
+   * with elapsed + phase. Ignored for any non-running ticket (a terminal run has its outcome).
+   */
+  async recordProgress(input: { executionId: string; phase?: string; progressNote?: string }): Promise<void> {
+    const t = this.tickets.get(input.executionId);
+    if (!t || t.state !== "running") return;
+    if (input.phase !== undefined) t.phase = input.phase;
+    if (input.progressNote !== undefined) t.progressNote = input.progressNote;
+    t.updatedAt = this.opts.now();
+    await this.persist(t);
   }
 
   /** The worker hit a blocker Epaminon could not auto-resolve. Parks at `blocked`, frees the slot. */

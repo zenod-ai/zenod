@@ -700,6 +700,25 @@ describe("Epaminon MCP execution status", () => {
     await client.close();
   });
 
+  it("execution_status returns elapsed + phase mid-run (F-2 / C-09)", async () => {
+    // Annotate the running ticket with a controller-observed phase/partial.
+    await runtime.executionQueue!.recordProgress({ executionId: "104", phase: "editing", progressNote: "wiring the endpoint" });
+    const client = await connect();
+    try {
+      const result = await client.callTool({ name: "execution_status", arguments: { message: "AlfaBlok/obsidian-brain#103" } });
+      const text = JSON.stringify(result.content);
+      expect(text).toMatch(/elapsed/);
+      expect(text).toContain("editing");
+      expect(text).toContain("wiring the endpoint");
+      // The structured ticket carries the mid-run phase + startedAt too.
+      const ticket = (result.structuredContent as { tickets: Array<{ phase?: string; startedAt?: number }> }).tickets[0];
+      expect(ticket.phase).toBe("editing");
+      expect(typeof ticket.startedAt).toBe("number");
+    } finally {
+      await client.close();
+    }
+  });
+
   it("normalizes human execution_status filters without substring false positives", async () => {
     const client = await connect();
     try {

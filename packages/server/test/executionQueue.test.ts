@@ -349,3 +349,34 @@ describe("ExecutionQueue — deliverable manifest (R1-T1)", () => {
     }
   });
 });
+
+describe("ExecutionQueue — mid-run progress (F-2 / C-09)", () => {
+  it("stamps startedAt when a ticket enters running", async () => {
+    const h = harness({ concurrency: 1 });
+    await h.q.enqueue(tk("a"));
+    const started = h.q.get("a")!.startedAt;
+    expect(typeof started).toBe("number");
+    expect(h.q.get("a")!.state).toBe("running");
+  });
+
+  it("recordProgress annotates a RUNNING ticket with phase + partial (no state edge)", async () => {
+    const h = harness({ concurrency: 1 });
+    await h.q.enqueue(tk("a"));
+    await h.q.recordProgress({ executionId: "a", phase: "editing", progressNote: "wiring the endpoint" });
+    const t = h.q.get("a")!;
+    expect(t.state).toBe("running"); // never transitioned
+    expect(t.phase).toBe("editing");
+    expect(t.progressNote).toBe("wiring the endpoint");
+    // no report edge was emitted for a progress annotation
+    expect(h.states()).toEqual(["a:running"]);
+  });
+
+  it("recordProgress is ignored once the ticket is terminal", async () => {
+    const h = harness({ concurrency: 1 });
+    await h.q.enqueue(tk("a"));
+    await h.q.reportOutcome({ executionId: "a", outward: false, evidenceUrl: "note://a" });
+    expect(h.q.get("a")!.state).toBe("done");
+    await h.q.recordProgress({ executionId: "a", phase: "editing" });
+    expect(h.q.get("a")!.phase).toBeUndefined();
+  });
+});

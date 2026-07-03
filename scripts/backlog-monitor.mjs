@@ -1166,6 +1166,34 @@ function formatElapsed(ms) {
   return `${h}h${String(m % 60).padStart(2, "0")}m`;
 }
 
+// PURE (F-2 / C-09): derive a COARSE phase label from the last controller-observed tool/
+// event — never from the worker's own prose. The last tool the stream actually ran maps to
+// a plain-English phase (exploring / editing / testing / committing / reviewing / working).
+// This is structure, not self-report: a worker cannot fake it by claiming "50% done".
+function derivePhase(lastEvent) {
+  const e = String(lastEvent || "").toLowerCase();
+  if (!e) return "starting up";
+  if (/\bpr\b|pull|merge|review/.test(e)) return "reviewing";
+  if (/commit|push|git/.test(e)) return "committing";
+  if (/test|check|lint|build|npm|node --test|pytest|vitest|ci\b/.test(e)) return "testing";
+  if (/edit|write|apply_patch|patch|create_file|update_file|str_replace/.test(e)) return "editing";
+  if (/read|grep|search|find|ls\b|cat\b|glob|explore|view/.test(e)) return "exploring";
+  if (/shell|command|bash|exec|run/.test(e)) return "running commands";
+  return "working";
+}
+
+// PURE (F-2 / C-09): one compact human line describing where a run is right now —
+// "editing · 42m elapsed · 187 turns · last: apply_patch". Built from controller-observed
+// telemetry only. Reused by the channel-facing longrun ping and execution_status.
+function phaseSummary({ elapsedMs, phase, turns, lastEvent, lastPartial } = {}) {
+  const parts = [phase || "working", `${formatElapsed(elapsedMs)} elapsed`];
+  if (turns) parts.push(`${turns} turns`);
+  if (lastEvent) parts.push(`last: ${lastEvent}`);
+  let line = parts.join(" · ");
+  if (lastPartial) line += `\n"${lastPartial}"`;
+  return line;
+}
+
 // PURE: reduce a streamed events log (the JSONL the worker emits, one event per line) to
 // controller-observed telemetry — turn count, the last meaningful event/tool label, and the
 // timestamp of the most recent activity. Handles BOTH engine dialects (codex `item.*` /
@@ -1173,7 +1201,7 @@ function formatElapsed(ms) {
 // text as a progress claim — only the STRUCTURE of the stream (which tool ran, how many
 // turns) counts. Missing/empty log → zeroed observation.
 function parseHeartbeatObservation(eventsPath, now = Date.now()) {
-  const obs = { turns: 0, toolCalls: 0, lastEvent: "", lastActivityMs: null };
+  const obs = { turns: 0, toolCalls: 0, lastEvent: "", lastPartial: "", lastActivityMs: null };
   let raw;
   try {
     raw = readFileSync(eventsPath, "utf8");
@@ -1210,6 +1238,14 @@ function parseHeartbeatObservation(eventsPath, now = Date.now()) {
         obs.toolCalls += 1;
         label = String(tool.name || "").slice(0, 60);
       }
+      // Coarse "last partial": the most recent assistant text — a controller-observed
+      // snippet of what the worker last said, NOT a self-reported percentage. Kept short.
+      const text = (ev.message.content || []).find((c) => c && c.type === "text" && c.text);
+      if (text) obs.lastPartial = String(text.text).replace(/\s+/g, " ").trim().slice(0, 140);
+    } else if (type === "item.completed" && ev.item?.type && String(ev.item.type).includes("message")) {
+      // codex reasoning/message items carry the worker's prose in item.text/content.
+      const t = String(ev.item.text || ev.item.content || "").replace(/\s+/g, " ").trim();
+      if (t) obs.lastPartial = t.slice(0, 140);
     } else if (type === "tool_use" || type === "tool_call") {
       obs.toolCalls += 1;
       label = String(ev.name || ev.tool || "").slice(0, 60);
@@ -1238,15 +1274,19 @@ function heartbeatStalled(lastActivityMs, now = Date.now(), thresholdMs = HEARTB
 // a hidden marker so the controller can find + edit THIS comment in place instead of spamming
 // a new one each interval. Example:
 //   ⏳ Running — 42m elapsed · 187 turns · last: edit_file · no terminal yet.
-function renderHeartbeat({ elapsedMs, turns, toolCalls, lastEvent, stalled, staleMs, now = Date.now() }) {
-  const parts = [`${formatElapsed(elapsedMs)} elapsed`];
+function renderHeartbeat({ elapsedMs, turns, toolCalls, lastEvent, lastPartial, phase, stalled, staleMs, now = Date.now() }) {
+  const ph = phase || derivePhase(lastEvent);
+  // F-2 / C-09: lead with the coarse PHASE, not just the turn count.
+  const parts = [ph, `${formatElapsed(elapsedMs)} elapsed`];
   if (turns) parts.push(`${turns} turns`);
   if (toolCalls) parts.push(`${toolCalls} tool calls`);
   if (lastEvent) parts.push(`last: ${lastEvent}`);
   const lead = stalled
     ? `⚠️ Possibly stalled — no activity for ${formatElapsed(staleMs)}`
     : `⏳ Running — ${parts.join(" · ")} · no terminal yet`;
-  const body = stalled ? `${lead} · ${parts.join(" · ")}.` : `${lead}.`;
+  let body = stalled ? `${lead} · ${parts.join(" · ")}.` : `${lead}.`;
+  // Surface the last controller-observed partial (what the worker last said) when present.
+  if (lastPartial) body += `\nLast: "${lastPartial}"`;
   return `${HEARTBEAT_MARKER}\n${body}\n\n_Controller-observed telemetry (not worker self-report) · updated ${new Date(now).toISOString()}_`;
 }
 
@@ -1328,14 +1368,14 @@ async function raiseHeartbeatMilestone(kind, entry, obs) {
   const target = entry.target;
   const executionId = entry.executionId || "";
   const key = `${target}|${executionId}|heartbeat.${kind}`;
-  const elapsed = formatElapsed(obs.elapsedMs);
   // C-08: the start milestone ping must resolve too — carry the ticket/tracking-issue link.
   const startLink = resolvingLinkForRun({ target, context: entry.context });
   const text =
     kind === "start"
       ? `🤖 Execution started — ${target}.${startLink ? `\n${startLink}` : " Live progress on its ticket."}`
       : kind === "longrun"
-        ? `⏳ Still running — ${target} · ${elapsed} elapsed · ${obs.turns} turns · no terminal yet.`
+        ? // F-2 / C-09: the mid-run channel update carries PHASE + last partial, not just turns.
+          `⏳ Still running — ${target}\n${phaseSummary({ elapsedMs: obs.elapsedMs, phase: obs.phase, turns: obs.turns, lastEvent: obs.lastEvent, lastPartial: obs.lastPartial })}${startLink ? `\n${startLink}` : ""}`
         : `⚠️ Execution may be stalled — ${target} · no activity for ${formatElapsed(obs.staleMs)}.`;
   const severity = kind === "stalled" ? "action" : "info";
   await notify(text, entry.origin, {
@@ -1378,10 +1418,11 @@ async function sweepHeartbeats(state, now = Date.now()) {
     const raw = parseHeartbeatObservation(run.eventsPath, now);
     const stalled = heartbeatStalled(raw.lastActivityMs, now);
     const staleMs = stalled ? now - raw.lastActivityMs : 0;
+    const phase = derivePhase(raw.lastEvent);
     const hb = state.heartbeats[run.executionId] || (state.heartbeats[run.executionId] = { fired: {} });
     const ref = heartbeatIssueRef(run);
     if (shouldUpdateHeartbeat(hb, now, stalled)) {
-      const body = renderHeartbeat({ elapsedMs, turns: raw.turns, toolCalls: raw.toolCalls, lastEvent: raw.lastEvent, stalled, staleMs, now });
+      const body = renderHeartbeat({ elapsedMs, turns: raw.turns, toolCalls: raw.toolCalls, lastEvent: raw.lastEvent, lastPartial: raw.lastPartial, phase, stalled, staleMs, now });
       if (ref) {
         const commentId = upsertHeartbeatComment(ref.repo, ref.number, hb.commentId || findHeartbeatComment(ref.repo, ref.number), body);
         if (commentId) hb.commentId = commentId;
@@ -1390,11 +1431,20 @@ async function sweepHeartbeats(state, now = Date.now()) {
       }
       hb.lastPostedAt = now;
       hb.stalled = stalled;
+      // F-2 / C-09: push the observed phase/partial onto the executor queue so
+      // execution_status returns elapsed + phase mid-run (best-effort; never blocks).
+      if (run.origin !== undefined || run.target) {
+        void reportToEpaminon("/api/exec/progress", {
+          execution_id: run.executionId,
+          phase,
+          ...(raw.lastPartial ? { progress_note: raw.lastPartial } : {}),
+        }).catch(() => {});
+      }
     }
     // Tier 2: coarse milestone pings — start / longrun / stalled only, once each.
     const milestone = heartbeatMilestone({ elapsedMs, stalled, fired: hb.fired });
     if (milestone) {
-      await raiseHeartbeatMilestone(milestone, { ...run, executionId: run.executionId }, { elapsedMs, turns: raw.turns, staleMs });
+      await raiseHeartbeatMilestone(milestone, { ...run, executionId: run.executionId }, { elapsedMs, turns: raw.turns, staleMs, phase, lastEvent: raw.lastEvent, lastPartial: raw.lastPartial });
       hb.fired[milestone] = new Date(now).toISOString();
     }
   }
@@ -2280,6 +2330,8 @@ export {
   launchLogPath,
   shouldNotifyOnExecutionStart,
   formatElapsed,
+  derivePhase,
+  phaseSummary,
   parseHeartbeatObservation,
   heartbeatStalled,
   renderHeartbeat,

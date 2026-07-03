@@ -20,6 +20,9 @@ interface Row {
   final_content: string | null;
   outward: number | null;
   deliverable: string | null;
+  started_at: number | null;
+  phase: string | null;
+  progress_note: string | null;
   updated_at: number;
 }
 
@@ -45,6 +48,9 @@ function rowToTicket(row: Row): ExecutionTicket {
     ...(row.final_content ? { finalContent: row.final_content } : {}),
     ...(row.outward === null ? {} : { outward: row.outward === 1 }),
     ...(deliverable ? { deliverable } : {}),
+    ...(row.started_at != null ? { startedAt: row.started_at } : {}),
+    ...(row.phase ? { phase: row.phase } : {}),
+    ...(row.progress_note ? { progressNote: row.progress_note } : {}),
     updatedAt: row.updated_at,
   };
 }
@@ -66,6 +72,9 @@ export class ExecutionStore {
         final_content TEXT,
         outward INTEGER,
         deliverable TEXT,
+        started_at INTEGER,
+        phase TEXT,
+        progress_note TEXT,
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS execution_tickets_state ON execution_tickets(state, updated_at);
@@ -75,6 +84,17 @@ export class ExecutionStore {
     const cols = this.db.prepare(`PRAGMA table_info(execution_tickets)`).all() as unknown as Array<{ name: string }>;
     if (!cols.some((c) => c.name === "deliverable")) {
       this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN deliverable TEXT`);
+    }
+    // Migration (F-2 / C-09): mid-run telemetry columns — started_at (elapsed basis) +
+    // the controller-observed coarse phase/partial. Additive, guard-idempotent.
+    if (!cols.some((c) => c.name === "started_at")) {
+      this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN started_at INTEGER`);
+    }
+    if (!cols.some((c) => c.name === "phase")) {
+      this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN phase TEXT`);
+    }
+    if (!cols.some((c) => c.name === "progress_note")) {
+      this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN progress_note TEXT`);
     }
     // A restart means any in-process runner callback was lost. Preserve the row
     // visibly as blocked instead of pretending it is still running.
@@ -94,8 +114,8 @@ export class ExecutionStore {
       .prepare(
         `INSERT INTO execution_tickets (
            execution_id, target, context, state, evidence_url, note,
-           final_content, outward, deliverable, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           final_content, outward, deliverable, started_at, phase, progress_note, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(execution_id) DO UPDATE SET
            target=excluded.target,
            context=excluded.context,
@@ -105,6 +125,9 @@ export class ExecutionStore {
            final_content=excluded.final_content,
            outward=excluded.outward,
            deliverable=excluded.deliverable,
+           started_at=excluded.started_at,
+           phase=excluded.phase,
+           progress_note=excluded.progress_note,
            updated_at=excluded.updated_at`,
       )
       .run(
@@ -117,6 +140,9 @@ export class ExecutionStore {
         ticket.finalContent ?? null,
         ticket.outward === undefined ? null : ticket.outward ? 1 : 0,
         ticket.deliverable ? JSON.stringify(ticket.deliverable) : null,
+        ticket.startedAt ?? null,
+        ticket.phase ?? null,
+        ticket.progressNote ?? null,
         ticket.updatedAt,
       );
   }
