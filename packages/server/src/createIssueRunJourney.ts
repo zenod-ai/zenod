@@ -1,6 +1,7 @@
 import { LIFE_BACKLOG_REPO } from "./backlogRouter.js";
 import type { ExecutionTicket } from "./executionQueue.js";
 import type { JourneySnapshot, JourneyStore } from "./journeyStore.js";
+import { buildForeignIssueCreateObjective } from "./oneOffExecution.js";
 import { callPeerTool, type PeerConfig, type PeerToolResult } from "./peerClient.js";
 
 export interface CreateIssueThenRunInput {
@@ -414,15 +415,11 @@ async function dispatchForeignRepoWorker(input: {
   // dispatch cleanly and finish with no issue ever created. Make the ask and the
   // artifact policy explicit and unambiguous so the worker actually runs
   // `gh issue create -R <repo>` first and reports the created issue's URL as evidence.
-  const objective = (
-    `Create a GitHub issue in ${issue.repo} via \`gh issue create -R ${issue.repo}\` under the runner's ` +
-    `existing gh auth — title "${issue.title}", body below — THEN execute exactly that issue.\n\n` +
-    `Issue body:\n${issue.body}`
-  ).trim();
-  const artifactPolicy =
-    `This IS an issue-creation task: run \`gh issue create -R ${issue.repo}\` first (never skip it), ` +
-    `then work the created issue. Report the created issue's URL (https://github.com/${issue.repo}/issues/N) ` +
-    `as the deliverable/evidence, in addition to any commit/PR from the work itself.`;
+  const { objective, artifactPolicy } = buildForeignIssueCreateObjective({
+    repo: issue.repo,
+    title: issue.title,
+    body: issue.body,
+  });
   const result = await callTool(epaminon, "epaminon.run_ephemeral_task", {
     objective,
     repo: issue.repo,

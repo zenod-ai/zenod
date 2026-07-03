@@ -32,7 +32,7 @@ import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, projectRegistrySection, resolveProject } from "./projectRegistry.js";
 import { backlogRouterSection, LIFE_BACKLOG_REPO, loadRepoInference, routeBacklogRequest } from "./backlogRouter.js";
-import { buildOneOffIssueBody, oneOffIssueTitle } from "./oneOffExecution.js";
+import { buildOneOffIssueBody, extractIssueCreateSubject, isIssueCreateIntent, oneOffIssueTitle } from "./oneOffExecution.js";
 import { ExecutionQueue, type ExecutionTicket } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
@@ -1748,13 +1748,19 @@ export class Runtime {
     const repo =
       input.repo || match?.repo || this.settings.getRaw("backlog_repo") || this.settings.get("vault_repo") || "";
     const path = input.path || match?.path;
+    // M-3 — when the objective itself is an issue/ticket-creation ask ("create issue
+    // banana9 in the Zenod repo"), the title must be the actual subject ("banana9"),
+    // not the whole verbatim instruction — otherwise the created issue's title reads
+    // as the meta-instruction that asked for it.
+    const requestText = [input.originalRequest, input.objective, input.instructions].filter(Boolean).join(" ");
+    const titleSource = isIssueCreateIntent(requestText) ? extractIssueCreateSubject(input.objective) : input.objective;
     const result = await this.createIssueThenRun({
       originalRequest: input.originalRequest,
       conversationId: input.conversationId ?? null,
       surface: input.surface ?? "console",
       issue: {
         ...(repo ? { repo } : {}),
-        title: oneOffIssueTitle(input.objective),
+        title: oneOffIssueTitle(titleSource),
         body: buildOneOffIssueBody({
           objective: input.objective,
           ...(input.instructions ? { instructions: input.instructions } : {}),
