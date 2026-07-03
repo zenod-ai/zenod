@@ -292,6 +292,37 @@ function materializeExec(central) {
   return m ? Number(m[1]) : null;
 }
 
+// F-1 (C-08): mint a lightweight tracking issue for an ISSUE-LESS ephemeral run so its
+// start ping has a resolving home and the heartbeat can pin to the same issue. Aligns
+// with the standing "no issue-less executions" principle: a one-off gets a real ticket
+// the moment it starts, not only if it happens to create one. Best-effort — if the
+// create fails (auth/network) we return null and the caller falls back to no-link rather
+// than blocking the run. Repo defaults to REPO; overridable via ZENOD_TRACKING_REPO.
+function mintTrackingIssue(executionId, context, repo = process.env.ZENOD_TRACKING_REPO || REPO) {
+  const summary = String(context || "").trim().replace(/\s+/g, " ").slice(0, 72) || "one-off execution";
+  const body = [
+    `_Tracking issue for one-off execution \`${executionId}\` — minted at start so the run is traceable from its first notification (C-08)._`,
+    "",
+    "Context:",
+    "",
+    String(context || "(no context provided)").slice(0, 4000),
+  ].join("\n");
+  try {
+    ensureLabel(repo, "owner:agent");
+    ensureLabel(repo, "status:running");
+    const out = gh([
+      "issue", "create", "--repo", repo,
+      "--title", `[exec ${executionId}] ${summary}`,
+      "--body", body, "--label", "owner:agent,status:running",
+    ]);
+    const m = out.match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/);
+    return m ? m[0] : null;
+  } catch (e) {
+    log(`tracking-issue mint failed for ${executionId}: ${e.message}`);
+    return null;
+  }
+}
+
 // Synchronous spawnability probe for the fanout launcher. Only spawn-level errors
 // (ENOENT/EACCES) populate probe.error; a nonzero exit does not. We check this ONCE
 // per scan before materializing any exec issue, so a broken launcher never crashes the
@@ -535,6 +566,34 @@ function parseEphemeralTarget(target) {
   return m ? { executionId: m[1] } : null;
 }
 
+// PURE (F-1 / C-08): the resolving GitHub URL for a dispatched target "owner/repo#N".
+// A dispatched run's target IS a real work ticket, so its start ping already has a home.
+function issueUrlFromTarget(target) {
+  const t = parseTarget(target);
+  return t ? `https://github.com/${t.repo}/issues/${t.number}` : null;
+}
+
+// PURE (F-1 / C-08): the resolving link a start notification must carry — the target
+// issue URL for a dispatched run, else the first github issue URL embedded in the run
+// context (the mint-a-ticket path leaves one there). Returns null only for a genuinely
+// issue-less ephemeral that has not yet been given a tracking issue — the caller then
+// mints one so EVERY start ping resolves (the "no issue-less executions" principle).
+function resolvingLinkForRun({ target, context } = {}) {
+  const fromTarget = issueUrlFromTarget(target);
+  if (fromTarget) return fromTarget;
+  const m = String(context || "").match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/i);
+  return m ? m[0].replace(/[).,]+$/, "") : null;
+}
+
+// PURE (F-1 / C-08): compose the "execution started" notification. It ALWAYS carries a
+// resolving link to the ticket/run it executes against — a dispatched run's work ticket
+// or the freshly-minted tracking issue for an issue-less ephemeral. A start ping with no
+// link is the C-08 gap: a run that cannot be traced from its very first notification.
+function composeExecutionStartNotification({ executionId, target, link, worker = workerLabel() } = {}) {
+  const head = `🤖 ${worker} working on execution ${executionId} — ${target}`;
+  return link ? `${head}\n${link}` : head;
+}
+
 function ephemeralRunPaths(executionId) {
   const root = join(dirname(STATE_PATH), "ephemeral", safePathPart(executionId));
   return {
@@ -660,11 +719,16 @@ function manifestEvidenceUrl(manifest) {
 // a handoff summary, the honest merge state, and the link — instead of a bare url.
 // Actionable content (title, summary, state) is prioritized; the executionId is
 // demoted to a suffix. Body budget keeps it readable on a phone.
-function composeTerminalNotification({ executionId, target, outward, title, manifest }, max = 900) {
+function composeTerminalNotification({ executionId, target, outward, title, manifest, context }, max = 900) {
   if (!outward) {
     const t = title ? ` — ${title}` : "";
     if (!hasVerifiableDeliverable(manifest)) {
-      // M-2: nothing checkable behind this "complete" — never render done.
+      // #485 / C-07c: a run whose OWN objective declares no deliverable expected (smoke/
+      // echo/no-op) completing with nothing checkable is SUCCESS — never "failed".
+      if (declaresNoDeliverableExpected(context)) {
+        return `✅ Execution completed (no deliverable expected): ${target}${t}.\n(${executionId})`;
+      }
+      // M-2 / C-07b: nothing checkable behind this "complete" — never render done.
       return `Finished but produced nothing verifiable — treating as failed: no commit, PR, or changed-file evidence for ${target}${t}.\n(${executionId})`;
     }
     // Internal artifact done — short and plain, with the evidence link when there is one.
@@ -938,6 +1002,20 @@ function wantsHoldForReview(context) {
   return HOLD_FOR_REVIEW_RE.test(String(context || ""));
 }
 
+// PURE (#485 / C-07c): does THIS run's own objective/artifact-policy declare that NO
+// deliverable is expected — a smoke / echo / no-op run whose whole point is to return a
+// summary and change nothing? Such a run completing with no commit/PR/issue is SUCCESS,
+// not the C-07b "produced nothing verifiable" failure. Keyed off the run's DECLARED
+// policy (the controller-authored objective/artifactPolicy text), never the worker's
+// output — so a worker cannot dodge the evidence bar by claiming its task was a no-op.
+// A run that WAS supposed to produce a deliverable and didn't carries none of these
+// markers and still renders the honest failed-to-produce message (C-07b unchanged).
+const NO_DELIVERABLE_EXPECTED_RE =
+  /\bNO-DELIVERABLE-EXPECTED\b|no-op smoke|no deliverable expected|return (?:the )?(?:summary|result) only|make no (?:code or file|file or code) changes/i;
+function declaresNoDeliverableExpected(context) {
+  return NO_DELIVERABLE_EXPECTED_RE.test(String(context || ""));
+}
+
 // PURE: pull owner/repo out of a github PR URL so the controller can address `gh pr
 // merge -R <owner/repo>` without depending on the runner's cwd/checkout.
 function repoFromPrUrl(url) {
@@ -1007,6 +1085,13 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
         log(`ephemeral ${executionId} auto-merge: ${merge.outcome} — ${merge.detail}`);
         autoMergeEvent = { url: verifiedPr || null, outcome: merge.outcome, detail: merge.detail };
       }
+    } else if (declaresNoDeliverableExpected(entry?.context)) {
+      // #485 / C-07c: this run's OWN objective/artifact-policy declares no deliverable
+      // expected (smoke/echo/no-op). Completing with nothing checkable is SUCCESS — stays
+      // `complete`, rendered as "completed (no deliverable expected)". Keyed off the
+      // declared policy, never the worker's output, so a real deliverable-bearing task
+      // (C-07b) cannot dodge the evidence bar this way.
+      note = `completed (no deliverable expected): ${note}`.slice(0, 1000);
     } else {
       // M-2/I5-2 — evidence-required "done": a terminal run that claims complete but
       // carries ZERO checkable deliverable (no commit/PR/issue URL anywhere in its
@@ -1040,10 +1125,16 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
   saveState(persisted);
 
   if (stateName === "complete") {
+    // C-07c: a declared-no-deliverable smoke/echo/no-op run reads "completed (no
+    // deliverable expected)", never a bare "done" that implies a produced artifact.
+    const doneText =
+      !evidenceUrl && declaresNoDeliverableExpected(entry?.context)
+        ? `✅ Execution ${executionId} (${target}) — completed (no deliverable expected).`
+        : `✅ Execution ${executionId} (${target}) — done.${evidenceUrl ? ` ${evidenceUrl}` : ""}`;
     await dispatchReport(
       "/api/exec/outcome",
       { execution_id: executionId, outward: false, note, ...(evidenceUrl ? { evidence_url: evidenceUrl } : {}) },
-      `✅ Execution ${executionId} (${target}) — done.${evidenceUrl ? ` ${evidenceUrl}` : ""}`,
+      doneText,
     );
     return;
   }
@@ -1107,6 +1198,34 @@ function formatElapsed(ms) {
   return `${h}h${String(m % 60).padStart(2, "0")}m`;
 }
 
+// PURE (F-2 / C-09): derive a COARSE phase label from the last controller-observed tool/
+// event — never from the worker's own prose. The last tool the stream actually ran maps to
+// a plain-English phase (exploring / editing / testing / committing / reviewing / working).
+// This is structure, not self-report: a worker cannot fake it by claiming "50% done".
+function derivePhase(lastEvent) {
+  const e = String(lastEvent || "").toLowerCase();
+  if (!e) return "starting up";
+  if (/\bpr\b|pull|merge|review/.test(e)) return "reviewing";
+  if (/commit|push|git/.test(e)) return "committing";
+  if (/test|check|lint|build|npm|node --test|pytest|vitest|ci\b/.test(e)) return "testing";
+  if (/edit|write|apply_patch|patch|create_file|update_file|str_replace/.test(e)) return "editing";
+  if (/read|grep|search|find|ls\b|cat\b|glob|explore|view/.test(e)) return "exploring";
+  if (/shell|command|bash|exec|run/.test(e)) return "running commands";
+  return "working";
+}
+
+// PURE (F-2 / C-09): one compact human line describing where a run is right now —
+// "editing · 42m elapsed · 187 turns · last: apply_patch". Built from controller-observed
+// telemetry only. Reused by the channel-facing longrun ping and execution_status.
+function phaseSummary({ elapsedMs, phase, turns, lastEvent, lastPartial } = {}) {
+  const parts = [phase || "working", `${formatElapsed(elapsedMs)} elapsed`];
+  if (turns) parts.push(`${turns} turns`);
+  if (lastEvent) parts.push(`last: ${lastEvent}`);
+  let line = parts.join(" · ");
+  if (lastPartial) line += `\n"${lastPartial}"`;
+  return line;
+}
+
 // PURE: reduce a streamed events log (the JSONL the worker emits, one event per line) to
 // controller-observed telemetry — turn count, the last meaningful event/tool label, and the
 // timestamp of the most recent activity. Handles BOTH engine dialects (codex `item.*` /
@@ -1114,7 +1233,7 @@ function formatElapsed(ms) {
 // text as a progress claim — only the STRUCTURE of the stream (which tool ran, how many
 // turns) counts. Missing/empty log → zeroed observation.
 function parseHeartbeatObservation(eventsPath, now = Date.now()) {
-  const obs = { turns: 0, toolCalls: 0, lastEvent: "", lastActivityMs: null };
+  const obs = { turns: 0, toolCalls: 0, lastEvent: "", lastPartial: "", lastActivityMs: null };
   let raw;
   try {
     raw = readFileSync(eventsPath, "utf8");
@@ -1151,6 +1270,14 @@ function parseHeartbeatObservation(eventsPath, now = Date.now()) {
         obs.toolCalls += 1;
         label = String(tool.name || "").slice(0, 60);
       }
+      // Coarse "last partial": the most recent assistant text — a controller-observed
+      // snippet of what the worker last said, NOT a self-reported percentage. Kept short.
+      const text = (ev.message.content || []).find((c) => c && c.type === "text" && c.text);
+      if (text) obs.lastPartial = String(text.text).replace(/\s+/g, " ").trim().slice(0, 140);
+    } else if (type === "item.completed" && ev.item?.type && String(ev.item.type).includes("message")) {
+      // codex reasoning/message items carry the worker's prose in item.text/content.
+      const t = String(ev.item.text || ev.item.content || "").replace(/\s+/g, " ").trim();
+      if (t) obs.lastPartial = t.slice(0, 140);
     } else if (type === "tool_use" || type === "tool_call") {
       obs.toolCalls += 1;
       label = String(ev.name || ev.tool || "").slice(0, 60);
@@ -1179,15 +1306,19 @@ function heartbeatStalled(lastActivityMs, now = Date.now(), thresholdMs = HEARTB
 // a hidden marker so the controller can find + edit THIS comment in place instead of spamming
 // a new one each interval. Example:
 //   ⏳ Running — 42m elapsed · 187 turns · last: edit_file · no terminal yet.
-function renderHeartbeat({ elapsedMs, turns, toolCalls, lastEvent, stalled, staleMs, now = Date.now() }) {
-  const parts = [`${formatElapsed(elapsedMs)} elapsed`];
+function renderHeartbeat({ elapsedMs, turns, toolCalls, lastEvent, lastPartial, phase, stalled, staleMs, now = Date.now() }) {
+  const ph = phase || derivePhase(lastEvent);
+  // F-2 / C-09: lead with the coarse PHASE, not just the turn count.
+  const parts = [ph, `${formatElapsed(elapsedMs)} elapsed`];
   if (turns) parts.push(`${turns} turns`);
   if (toolCalls) parts.push(`${toolCalls} tool calls`);
   if (lastEvent) parts.push(`last: ${lastEvent}`);
   const lead = stalled
     ? `⚠️ Possibly stalled — no activity for ${formatElapsed(staleMs)}`
     : `⏳ Running — ${parts.join(" · ")} · no terminal yet`;
-  const body = stalled ? `${lead} · ${parts.join(" · ")}.` : `${lead}.`;
+  let body = stalled ? `${lead} · ${parts.join(" · ")}.` : `${lead}.`;
+  // Surface the last controller-observed partial (what the worker last said) when present.
+  if (lastPartial) body += `\nLast: "${lastPartial}"`;
   return `${HEARTBEAT_MARKER}\n${body}\n\n_Controller-observed telemetry (not worker self-report) · updated ${new Date(now).toISOString()}_`;
 }
 
@@ -1269,12 +1400,14 @@ async function raiseHeartbeatMilestone(kind, entry, obs) {
   const target = entry.target;
   const executionId = entry.executionId || "";
   const key = `${target}|${executionId}|heartbeat.${kind}`;
-  const elapsed = formatElapsed(obs.elapsedMs);
+  // C-08: the start milestone ping must resolve too — carry the ticket/tracking-issue link.
+  const startLink = resolvingLinkForRun({ target, context: entry.context });
   const text =
     kind === "start"
-      ? `🤖 Execution started — ${target}. Live progress on its ticket.`
+      ? `🤖 Execution started — ${target}.${startLink ? `\n${startLink}` : " Live progress on its ticket."}`
       : kind === "longrun"
-        ? `⏳ Still running — ${target} · ${elapsed} elapsed · ${obs.turns} turns · no terminal yet.`
+        ? // F-2 / C-09: the mid-run channel update carries PHASE + last partial, not just turns.
+          `⏳ Still running — ${target}\n${phaseSummary({ elapsedMs: obs.elapsedMs, phase: obs.phase, turns: obs.turns, lastEvent: obs.lastEvent, lastPartial: obs.lastPartial })}${startLink ? `\n${startLink}` : ""}`
         : `⚠️ Execution may be stalled — ${target} · no activity for ${formatElapsed(obs.staleMs)}.`;
   const severity = kind === "stalled" ? "action" : "info";
   await notify(text, entry.origin, {
@@ -1317,10 +1450,11 @@ async function sweepHeartbeats(state, now = Date.now()) {
     const raw = parseHeartbeatObservation(run.eventsPath, now);
     const stalled = heartbeatStalled(raw.lastActivityMs, now);
     const staleMs = stalled ? now - raw.lastActivityMs : 0;
+    const phase = derivePhase(raw.lastEvent);
     const hb = state.heartbeats[run.executionId] || (state.heartbeats[run.executionId] = { fired: {} });
     const ref = heartbeatIssueRef(run);
     if (shouldUpdateHeartbeat(hb, now, stalled)) {
-      const body = renderHeartbeat({ elapsedMs, turns: raw.turns, toolCalls: raw.toolCalls, lastEvent: raw.lastEvent, stalled, staleMs, now });
+      const body = renderHeartbeat({ elapsedMs, turns: raw.turns, toolCalls: raw.toolCalls, lastEvent: raw.lastEvent, lastPartial: raw.lastPartial, phase, stalled, staleMs, now });
       if (ref) {
         const commentId = upsertHeartbeatComment(ref.repo, ref.number, hb.commentId || findHeartbeatComment(ref.repo, ref.number), body);
         if (commentId) hb.commentId = commentId;
@@ -1329,11 +1463,20 @@ async function sweepHeartbeats(state, now = Date.now()) {
       }
       hb.lastPostedAt = now;
       hb.stalled = stalled;
+      // F-2 / C-09: push the observed phase/partial onto the executor queue so
+      // execution_status returns elapsed + phase mid-run (best-effort; never blocks).
+      if (run.origin !== undefined || run.target) {
+        void reportToEpaminon("/api/exec/progress", {
+          execution_id: run.executionId,
+          phase,
+          ...(raw.lastPartial ? { progress_note: raw.lastPartial } : {}),
+        }).catch(() => {});
+      }
     }
     // Tier 2: coarse milestone pings — start / longrun / stalled only, once each.
     const milestone = heartbeatMilestone({ elapsedMs, stalled, fired: hb.fired });
     if (milestone) {
-      await raiseHeartbeatMilestone(milestone, { ...run, executionId: run.executionId }, { elapsedMs, turns: raw.turns, staleMs });
+      await raiseHeartbeatMilestone(milestone, { ...run, executionId: run.executionId }, { elapsedMs, turns: raw.turns, staleMs, phase, lastEvent: raw.lastEvent, lastPartial: raw.lastPartial });
       hb.fired[milestone] = new Date(now).toISOString();
     }
   }
@@ -1528,9 +1671,11 @@ async function reportDispatched(state) {
         const terminalKey = `${d.target}|${(manifest && manifest.prUrl) || executionId}|execution.terminal`;
         // M-2: evidence-required "done" — a terminal completion with nothing verifiable
         // behind it notifies as a failure (severity: error), never as ordinary info.
-        const verifiable = o.outward || hasVerifiableDeliverable(manifest);
+        // C-07c: a declared-no-deliverable smoke/echo/no-op run completing with nothing
+        // checkable is a success, not an error — don't flag it as a failure notification.
+        const verifiable = o.outward || hasVerifiableDeliverable(manifest) || declaresNoDeliverableExpected(d.context);
         await notify(
-          composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest }),
+          composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest, context: d.context }),
           origin,
           { eventType: "execution.terminal", executionId, targetIssue: d.target, severity: verifiable ? "info" : "error", dedupeKey: terminalKey },
         );
@@ -2116,11 +2261,26 @@ async function handleRun(req, res) {
     const executionId = body.execution_id != null ? String(body.execution_id) : "";
     if (!executionId || !body.target) return void res.writeHead(400).end("execution_id and target required\n");
     const state = loadState();
-    const result = launchDispatched(executionId, String(body.target), String(body.context || ""), state);
+    const target = String(body.target);
+    const context = String(body.context || "");
+    const result = launchDispatched(executionId, target, context, state);
     if (!result.ok) {
       await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: result.note });
     } else if (shouldNotifyOnExecutionStart(body)) {
-      await notify(`🤖 ${workerLabel()} working on execution ${executionId} — ${String(body.target)}`);
+      // C-08: EVERY start notification must carry a resolving link to the ticket/run it
+      // executes against. A dispatched run's target is already a work ticket; an issue-less
+      // ephemeral has no home yet, so mint a lightweight tracking issue and pin both the
+      // start ping AND the heartbeat (via the ephemeral entry's context) to it.
+      let link = resolvingLinkForRun({ target, context });
+      if (!link) {
+        const trackingUrl = mintTrackingIssue(executionId, context);
+        if (trackingUrl) {
+          link = trackingUrl;
+          const eph = state.ephemeral?.[executionId];
+          if (eph) eph.context = `${eph.context || ""}\nTracking issue: ${trackingUrl}`.trim();
+        }
+      }
+      await notify(composeExecutionStartNotification({ executionId, target, link }));
     }
     saveState(state);
     res.writeHead(result.ok ? 202 : 422).end(result.ok ? "launched\n" : "could not launch\n");
@@ -2172,6 +2332,9 @@ export {
   targetBootstrapLabels,
   parseEphemeralTarget,
   parseTarget,
+  issueUrlFromTarget,
+  resolvingLinkForRun,
+  composeExecutionStartNotification,
   ephemeralFinalState,
   ephemeralFallbackDecision,
   ephemeralPrompt,
@@ -2180,6 +2343,7 @@ export {
   hasCheckableEvidence,
   pickEvidenceUrl,
   wantsHoldForReview,
+  declaresNoDeliverableExpected,
   repoFromPrUrl,
   enableAutoMergeForPr,
   tailFile,
@@ -2201,6 +2365,8 @@ export {
   launchLogPath,
   shouldNotifyOnExecutionStart,
   formatElapsed,
+  derivePhase,
+  phaseSummary,
   parseHeartbeatObservation,
   heartbeatStalled,
   renderHeartbeat,

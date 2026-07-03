@@ -803,6 +803,18 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "runnerStatus": {
             "type": "string"
           },
+          "elapsed": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "lastPartial": {
+            "type": "string"
+          },
           "blockers": {
             "type": "array"
           },
@@ -4529,6 +4541,18 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "runnerStatus": {
             "type": "string"
           },
+          "elapsed": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "lastPartial": {
+            "type": "string"
+          },
           "blockers": {
             "type": "array"
           },
@@ -5936,6 +5960,18 @@ export const TOOL_OUTPUT_SCHEMAS = (
             ]
           },
           "runnerStatus": {
+            "type": "string"
+          },
+          "elapsed": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "lastPartial": {
             "type": "string"
           },
           "blockers": {

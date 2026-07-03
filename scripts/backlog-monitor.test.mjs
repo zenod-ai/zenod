@@ -30,6 +30,9 @@ import {
   launchLogPath,
   targetBootstrapLabels,
   parseEphemeralTarget,
+  issueUrlFromTarget,
+  resolvingLinkForRun,
+  composeExecutionStartNotification,
   ephemeralFinalState,
   ephemeralFallbackDecision,
   ephemeralPrompt,
@@ -47,6 +50,8 @@ import {
   composeBlockerNotification,
   parseDeliverables,
   formatElapsed,
+  derivePhase,
+  phaseSummary,
   parseHeartbeatObservation,
   heartbeatStalled,
   renderHeartbeat,
@@ -58,6 +63,7 @@ import {
   HEARTBEAT_LONGRUN_MS,
   HEARTBEAT_MARKER,
   wantsHoldForReview,
+  declaresNoDeliverableExpected,
   repoFromPrUrl,
   enableAutoMergeForPr,
 } from "./backlog-monitor.mjs";
@@ -907,7 +913,7 @@ test("parseHeartbeatObservation handles claude stream-json turns + tool_use", ()
 
 test("parseHeartbeatObservation zeroes out for a missing log (degrade-safe)", () => {
   const obs = parseHeartbeatObservation("/no/such/events.jsonl", 1000);
-  assert.deepEqual(obs, { turns: 0, toolCalls: 0, lastEvent: "", lastActivityMs: null });
+  assert.deepEqual(obs, { turns: 0, toolCalls: 0, lastEvent: "", lastPartial: "", lastActivityMs: null });
 });
 
 test("heartbeatStalled flips only after the threshold, and never on unknown activity", () => {
@@ -960,4 +966,144 @@ test("heartbeatIssueRef resolves a dispatched target, an in-context issue URL, e
     { repo: "zenod-ai/zenod", number: 512 },
   );
   assert.equal(heartbeatIssueRef({ target: "ephemeral:abc-123", context: "no ticket here" }), null, "degrade gracefully — no issue");
+});
+
+// ---- F-1 (C-08): every start notification carries a resolving link ----
+
+test("issueUrlFromTarget resolves a dispatched target to its issue URL, null for ephemeral", () => {
+  assert.equal(issueUrlFromTarget("zenod-ai/zenod#476"), "https://github.com/zenod-ai/zenod/issues/476");
+  assert.equal(issueUrlFromTarget("ephemeral:abc-123"), null);
+  assert.equal(issueUrlFromTarget(""), null);
+});
+
+test("resolvingLinkForRun prefers the target ticket, else an in-context issue URL, else null", () => {
+  // dispatched run — the target IS the link
+  assert.equal(resolvingLinkForRun({ target: "owner/repo#7" }), "https://github.com/owner/repo/issues/7");
+  // issue-less ephemeral whose context embeds a tracking issue URL
+  assert.equal(
+    resolvingLinkForRun({ target: "ephemeral:xyz", context: "Tracking issue: https://github.com/zenod-ai/zenod/issues/900." }),
+    "https://github.com/zenod-ai/zenod/issues/900",
+  );
+  // genuinely issue-less ephemeral — caller must mint one
+  assert.equal(resolvingLinkForRun({ target: "ephemeral:xyz", context: "just do the thing" }), null);
+});
+
+test("composeExecutionStartNotification ALWAYS includes the link when one is resolvable (C-08)", () => {
+  const dispatched = composeExecutionStartNotification({
+    executionId: "e-1",
+    target: "owner/repo#7",
+    link: resolvingLinkForRun({ target: "owner/repo#7" }),
+    worker: "Epaminon",
+  });
+  assert.ok(dispatched.includes("https://github.com/owner/repo/issues/7"), "dispatched start ping resolves");
+
+  // issue-less ephemeral: once a tracking issue is minted the ping resolves too
+  const ephemeral = composeExecutionStartNotification({
+    executionId: "e-2",
+    target: "ephemeral:xyz",
+    link: "https://github.com/zenod-ai/zenod/issues/901",
+    worker: "Epaminon",
+  });
+  assert.ok(ephemeral.includes("https://github.com/zenod-ai/zenod/issues/901"), "ephemeral start ping resolves via tracking issue");
+});
+
+// ---- F-2 (C-09): heartbeat phase/partials + mid-run status ----
+
+test("derivePhase maps the last observed tool to a coarse phase (never worker self-report)", () => {
+  assert.equal(derivePhase("apply_patch"), "editing");
+  assert.equal(derivePhase("str_replace_editor"), "editing");
+  assert.equal(derivePhase("grep"), "exploring");
+  assert.equal(derivePhase("read_file"), "exploring");
+  assert.equal(derivePhase("npm test"), "testing");
+  assert.equal(derivePhase("git commit"), "committing");
+  assert.equal(derivePhase("gh pr create"), "reviewing");
+  assert.equal(derivePhase(""), "starting up");
+  assert.equal(derivePhase("some_unknown_tool"), "working");
+});
+
+test("parseHeartbeatObservation captures a coarse last-partial from assistant/message text", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hb-partial-"));
+  const p = join(dir, "events.jsonl");
+  writeFileSync(
+    p,
+    [
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Refactoring the auth guard now" }] } }),
+      JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "npm test" } }),
+    ].join("\n"),
+  );
+  const obs = parseHeartbeatObservation(p, 1000);
+  assert.equal(obs.lastPartial, "Refactoring the auth guard now");
+  assert.equal(derivePhase(obs.lastEvent), "testing", "phase reflects the LAST observed tool");
+});
+
+test("renderHeartbeat leads with the phase and surfaces the last partial (C-09, not just turns)", () => {
+  const body = renderHeartbeat({
+    elapsedMs: 42 * 60_000,
+    turns: 187,
+    toolCalls: 40,
+    lastEvent: "apply_patch",
+    lastPartial: "wiring the new endpoint",
+    stalled: false,
+    now: 0,
+  });
+  assert.ok(body.includes("editing"), "phase is present, derived from apply_patch");
+  assert.ok(body.includes("wiring the new endpoint"), "last partial is surfaced");
+  assert.ok(body.includes("42m elapsed"));
+});
+
+test("phaseSummary is a compact phase+elapsed line for the mid-run channel update (C-09)", () => {
+  const line = phaseSummary({ elapsedMs: 65 * 60_000, phase: "testing", turns: 90, lastEvent: "npm test", lastPartial: "running the suite" });
+  assert.ok(line.startsWith("testing · 1h05m elapsed"));
+  assert.ok(line.includes("90 turns"));
+  assert.ok(line.includes("running the suite"));
+});
+
+// ---- #485 / C-07c: declared-no-deliverable smoke runs complete, never fail ----
+
+test("declaresNoDeliverableExpected detects a smoke/no-op policy, not an ordinary task", () => {
+  // the real exec-smoke.mjs policy/instructions
+  assert.equal(declaresNoDeliverableExpected("artifact policy: return summary only"), true);
+  assert.equal(declaresNoDeliverableExpected("This is a no-op smoke test. Return the result only."), true);
+  assert.equal(declaresNoDeliverableExpected("make no code or file changes"), true);
+  assert.equal(declaresNoDeliverableExpected("NO-DELIVERABLE-EXPECTED"), true);
+  // an ordinary deliverable-bearing task carries none of these markers
+  assert.equal(declaresNoDeliverableExpected("Fix the login bug and open a PR against main"), false);
+  assert.equal(declaresNoDeliverableExpected("Create a GitHub issue in o/r and report its URL"), false);
+  assert.equal(declaresNoDeliverableExpected(""), false);
+  assert.equal(declaresNoDeliverableExpected(undefined), false);
+});
+
+test("composeTerminalNotification renders 'completed (no deliverable expected)' for a declared smoke run (C-07c)", () => {
+  const msg = composeTerminalNotification({
+    executionId: "smoke-1",
+    target: "ephemeral:smoke-1",
+    outward: false,
+    manifest: { handoffExcerpt: "ephemeral smoke observed" }, // no PR/commit/issue/paths
+    context: "This is a no-op smoke test. artifact policy: return summary only",
+  });
+  assert.ok(msg.includes("completed (no deliverable expected)"), "smoke run reads completed");
+  assert.ok(!msg.includes("treating as failed"), "never the failed-to-produce message");
+});
+
+test("C-07b unchanged: a deliverable-EXPECTED run with nothing verifiable still fails honestly", () => {
+  const msg = composeTerminalNotification({
+    executionId: "real-1",
+    target: "zenod-ai/zenod#5",
+    outward: false,
+    manifest: { handoffExcerpt: "I finished the work" }, // claims done, no evidence
+    context: "Fix the auth guard and open a PR against main", // NOT a no-op
+  });
+  assert.ok(msg.startsWith("Finished but produced nothing verifiable — treating as failed"));
+});
+
+test("C-07a unchanged: a run WITH a real deliverable still renders done with the URL", () => {
+  const msg = composeTerminalNotification({
+    executionId: "real-2",
+    target: "zenod-ai/zenod#6",
+    outward: false,
+    manifest: { handoffExcerpt: "opened https://github.com/zenod-ai/zenod/issues/6" },
+    context: "return summary only", // even a no-op marker must not suppress a REAL deliverable
+  });
+  assert.ok(msg.startsWith("✅ Execution done"));
+  assert.ok(msg.includes("https://github.com/zenod-ai/zenod/issues/6"));
 });

@@ -337,6 +337,25 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({ ok: true });
   });
 
+  // F-2 / C-09: mid-run progress annotation (coarse phase + last partial the controller
+  // OBSERVED from the streamed events) — NOT a state edge. Lets execution_status answer
+  // "where is it now?" with elapsed + phase while a run is still running.
+  app.post("/api/exec/progress", async (c) => {
+    const bad = execLaneGate(c.req.header("X-Lane-Secret"));
+    if (bad) return c.json({ error: bad.error }, bad.status);
+    const body = await c.req
+      .json<{ execution_id?: number | string; phase?: string; progress_note?: string }>()
+      .catch(() => ({}) as Record<string, unknown>);
+    const executionId = body.execution_id != null ? String(body.execution_id) : "";
+    if (!executionId) return c.json({ error: "execution_id is required" }, 400);
+    await runtime.executionQueue!.recordProgress({
+      executionId,
+      ...(body.phase !== undefined ? { phase: String(body.phase) } : {}),
+      ...(body.progress_note !== undefined ? { progressNote: String(body.progress_note) } : {}),
+    });
+    return c.json({ ok: true });
+  });
+
   // `execution_status` — the human read (Console/chat). Normal agent-token auth (this
   // path is NOT under /api/exec/, so it does not bypass auth). Returns the live queue.
   app.get("/api/executions", async (c) => {

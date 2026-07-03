@@ -181,6 +181,10 @@
         "workIssue": { "type": "string" },
         "state": { "enum": ["queued", "running", "needs_review", "blocked", "done", "failed"] },
         "runnerStatus": { "type": "string" },
+        "elapsed": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "phase": { "type": "string" },
+        "lastPartial": { "type": "string" },
         "blockers": { "type": "array" },
         "resultRefs": { "type": "array" },
         "updatedAt": { "type": "string" }

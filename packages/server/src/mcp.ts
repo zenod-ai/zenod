@@ -117,13 +117,29 @@ function formatExecutionStatus(tickets: ExecutionTicket[]): string {
         `#${ticket.executionId}`,
         ticket.target,
         ticket.state,
-        `updated ${new Date(ticket.updatedAt).toISOString()}`,
       ];
+      // F-2 / C-09: a RUNNING ticket reports mid-run elapsed + coarse phase, not just state.
+      if (ticket.state === "running") {
+        parts.push(`elapsed ${formatExecElapsed(ticket)}`);
+        if (ticket.phase) parts.push(`phase: ${ticket.phase}`);
+        if (ticket.progressNote) parts.push(`last: ${ticket.progressNote}`);
+      }
+      parts.push(`updated ${new Date(ticket.updatedAt).toISOString()}`);
       if (ticket.note) parts.push(`note: ${ticket.note}`);
       if (ticket.evidenceUrl) parts.push(`evidence: ${ticket.evidenceUrl}`);
       return parts.join(" — ");
     })
     .join("\n");
+}
+
+/** PURE (F-2 / C-09): compact mid-run elapsed for a running ticket from its startedAt. */
+function formatExecElapsed(ticket: ExecutionTicket, now = Date.now()): string {
+  const started = ticket.startedAt ?? ticket.updatedAt;
+  const s = Math.max(0, Math.round((now - started) / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
 }
 
 function filterExecutionTickets(tickets: ExecutionTicket[], message?: string): ExecutionTicket[] {
@@ -188,11 +204,22 @@ function filterExecutionTicketsV4(
 function executionStatusEvidence(ticket: ExecutionTicket) {
   const blockers = ticket.state === "blocked" && ticket.note ? [ticket.note] : [];
   const resultRefs = ticket.evidenceUrl ? [ticket.evidenceUrl] : [];
+  // F-2 / C-09: a running ticket returns mid-run elapsed + coarse phase, not just state.
+  const midRun =
+    ticket.state === "running"
+      ? {
+          elapsed: formatExecElapsed(ticket),
+          ...(ticket.startedAt ? { startedAt: new Date(ticket.startedAt).toISOString() } : {}),
+          ...(ticket.phase ? { phase: ticket.phase } : {}),
+          ...(ticket.progressNote ? { lastPartial: ticket.progressNote } : {}),
+        }
+      : {};
   return evidence("execution_status", {
     executionId: ticket.executionId,
     workIssue: ticket.target,
     state: canonicalExecutionState(ticket.state),
     runnerStatus: ticket.state,
+    ...midRun,
     ...(blockers.length ? { blockers } : {}),
     ...(resultRefs.length ? { resultRefs } : {}),
     updatedAt: new Date(ticket.updatedAt).toISOString(),
