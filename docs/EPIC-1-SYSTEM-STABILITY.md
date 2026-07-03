@@ -59,6 +59,19 @@ ephemeral included.
 ### S-6 · Smoke runs aren't failures  (#485)  (P1)
 **Accept:** **C-07c** — declared-no-deliverable runs render "completed (no deliverable expected)".
 
+### S-8 · One front door — backlog writes are receipt-or-error, no silent routers  (P0, added 2026-07-03)
+**Live evidence (Fable's own session):** the `create_issue` MCP tool acked `{"deterministic":true,
+"routedBy":"backlogRouter"}` twice and filed NOTHING — Archus read-back confirmed neither ticket
+existed. The working lane was `archus_request_backlog_action`. Three tools advertise the same job;
+one lies by omission, and the caller has to tool-hop to get one ticket filed.
+**Fix:** (a) every backlog-write lane returns qualified ID + URL (read-back verified) or an explicit
+error — fire-and-forget acks abolished; (b) ONE advertised front door that routes semantically:
+central backlog → Archus, target-repo work → handed to Epaminon internally, never bounced back to the
+caller; (c) remove keyword/regex gating from routing and guards — semantic intent + approval state only.
+**Accept:** **C-18** and **C-19** pass; replaying Fable's two `create_issue` calls yields real URLs or
+loud errors; a target-repo work ticket filed through the front door lands without the caller switching
+tools.
+
 ### S-7 · Run budgets — kill zombie runs  (P1)
 Per-run budget (default: 60 min wall, 200 turns, overridable per ticket). On breach with zero verified
 artifacts: terminate, render "budget exceeded, nothing verifiable, transcript: <link>", notify as failure.
@@ -69,8 +82,9 @@ artifacts: terminate, render "budget exceeded, nothing verifiable, transcript: <
 
 ## Sequencing
 
-S-0 → S-1 → S-2 (needs S-1's transcripts) → S-3 (one worker) → S-4/S-5/S-6 (one worker, after S-3 lands)
-→ S-7. Then: full canonical run. Green → deploy nothing, run again. Green ×2 → epic closed.
+S-0 → S-1 → S-2 (needs S-1's transcripts) → S-3 (one worker) → S-4/S-5/S-6/S-8 (one worker, after S-3
+lands) → S-7. Then: full canonical run (now C-01…C-19). Green → deploy nothing, run again. Green ×2 →
+epic closed.
 
 ## Worker/tester append zone (same doc, never a new file)
 

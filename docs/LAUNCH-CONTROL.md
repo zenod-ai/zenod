@@ -28,7 +28,9 @@ rewrites the state after every review. One document per concern — never a new 
    vendor noise stay in operator logs. Council-internal detail stays at the council table.
 6. **Deterministic plumbing over vibes.** Auto-merge on green CI. Approval is state (a standing token),
    not vocabulary. Runs have budgets; a run that produces nothing verifiable fails loudly and early.
-7. **Where documents live: the brain.** Council documents (this one, the epics, decisions) belong in a
+7. **No magic words.** Routing, guards, and approvals are semantic or stateful — never regex/keyword
+   matches on the user's phrasing. If intent is unclear, ask once, honestly. (Hard rule, Jordi 2026-07-03.)
+8. **Where documents live: the brain.** Council documents (this one, the epics, decisions) belong in a
    `Council/` folder in the memory vault (AlfaBlok/obsidian-brain) — one consistent home, minable over
    time. Docs hold ideas and plans; some lines mint GitHub tickets; tickets always link back to their
    doc. Working copies sit in zenod/docs while Fable lacks direct vault hands; every iteration close
@@ -78,3 +80,10 @@ Epic 1 P0 is open, except D-1 (a conversation, not code).
   Fable→Epaminon pattern (one dispatch, worker owns the whole backlog with sub-agents). Live finding
   while filing: the `create_issue` MCP tool silently no-ops (router acks, nothing lands) — the explicit
   `archus_request_backlog_action` gateway works; silent-ack bug noted for the epic's scope.
+- **2026-07-03 · Dogfood findings promoted straight to tests** (Jordi's standing rule: unexpected
+  behavior → test list, immediately). Silent-ack backlog writes → **C-18** + ticket **S-8**; magic-word
+  gating banned → **C-19** + doctrine point 7. Diagnosis of "why is filing one ticket complex": three
+  overlapping front doors, one of which acks without delivering — no council bypass happened, all lanes
+  ARE council lanes; the council needs ONE door with receipt-or-error semantics. Fable's role restated:
+  high-level controller only — plans, tickets, tests, decisions; no code, no fixes; manual steps are
+  requested from Jordi explicitly.
