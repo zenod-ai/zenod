@@ -1,11 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import {
   coerceEditIssueLabelsForUserRequest,
+  isAffirmativeApproval,
+  NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
   peerMutationGuardFailure,
   reconcileTaskingReply,
   summarizeActionsForReply,
   type RecordedAction,
 } from "../src/taskingPolicy.js";
+import { __resetApprovalTokens } from "../src/approvalTokens.js";
 
 const created = (n: number, repo = "AlfaBlok/obsidian-brain"): RecordedAction => ({
   tool: "createIssue",
@@ -715,6 +718,74 @@ describe("peerMutationGuardFailure", () => {
 
     expect(failure).toContain("running requires an exact work issue");
     expect(failure).toContain("create-and-run");
+  });
+
+  describe("M-1 — stateful approval token for outbound sends", () => {
+    beforeEach(() => __resetApprovalTokens());
+
+    it("still blocks a bare 'approved' with no conversation context (unchanged, no context passed)", () => {
+      expect(peerMutationGuardFailure("post_tweet", "approved")).toContain("require an explicit write/run/send instruction");
+    });
+
+    it("issuing a block on a real draft registers a token that a later affirmative on the SAME draft resolves", () => {
+      const args = { text: "Hello world" };
+      const blocked = peerMutationGuardFailure("post_tweet", "Here's the tweet I drafted: Hello world", {
+        conversationId: "c1",
+        args,
+      });
+      expect(blocked).toBe("Blocked post_tweet: mutating peer tools require an explicit write/run/send instruction from the user's current message.");
+
+      const resolved = peerMutationGuardFailure("post_tweet", "Tweet approved", { conversationId: "c1", args });
+      expect(resolved).toBeNull();
+    });
+
+    it("a token is one-time use — a second affirmative after consumption has nothing pending", () => {
+      const args = { text: "Hello world" };
+      peerMutationGuardFailure("post_tweet", "Here's the tweet I drafted: Hello world", { conversationId: "c2", args });
+      expect(peerMutationGuardFailure("post_tweet", "approved", { conversationId: "c2", args })).toBeNull();
+      expect(peerMutationGuardFailure("post_tweet", "approved", { conversationId: "c2", args })).toBe(
+        NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
+      );
+    });
+
+    it("a bare affirmative with no standing draft resolves to the nothing-pending sentinel, never a silent allow", () => {
+      expect(peerMutationGuardFailure("post_tweet", "approved", { conversationId: "c3", args: {} })).toBe(
+        NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
+      );
+    });
+
+    it("an affirmative for a different tool than the standing token still has nothing pending", () => {
+      const args = { text: "Hello world" };
+      peerMutationGuardFailure("post_tweet", "Here's the tweet I drafted: Hello world", { conversationId: "c4", args });
+      expect(peerMutationGuardFailure("post_reddit", "approved", { conversationId: "c4", args })).toBe(
+        NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
+      );
+    });
+
+    it("an explicit write verb never needs a token", () => {
+      expect(peerMutationGuardFailure("post_tweet", "Post this tweet: Hello world", { conversationId: "c5", args: { text: "Hello world" } })).toBeNull();
+    });
+
+    it("a negated reply never reads as an explicit verb OR an affirmative", () => {
+      expect(peerMutationGuardFailure("send_email", "don't send it")).toContain("require an explicit write/run/send instruction");
+      expect(isAffirmativeApproval("don't send it")).toBe(false);
+      expect(isAffirmativeApproval("no, cancel that")).toBe(false);
+    });
+  });
+});
+
+describe("isAffirmativeApproval", () => {
+  it("matches short natural-language affirmatives", () => {
+    expect(isAffirmativeApproval("approved")).toBe(true);
+    expect(isAffirmativeApproval("Tweet approved")).toBe(true);
+    expect(isAffirmativeApproval("yes")).toBe(true);
+    expect(isAffirmativeApproval("send it")).toBe(true);
+    expect(isAffirmativeApproval("go ahead")).toBe(true);
+  });
+
+  it("does not match full sentences or unrelated content", () => {
+    expect(isAffirmativeApproval("What is the status of issue 108?")).toBe(false);
+    expect(isAffirmativeApproval("Please create a new issue for the login bug")).toBe(false);
   });
 });
 

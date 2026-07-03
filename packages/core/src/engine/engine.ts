@@ -1288,6 +1288,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const result = await llm.answer(
       {
         question: message,
+        conversationId: cid,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
@@ -1340,6 +1341,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const result = await llm.answer(
       {
         question,
+        conversationId: cid,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         onPeerAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
