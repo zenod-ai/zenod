@@ -781,6 +781,19 @@ async function runWorker({ opts, manifest, issueNumber }) {
     return;
   }
   if (exitCode !== 0) {
+    const rawError = result.rawError ?? extractWorkerError(eventsPath);
+    // #506: quota death with no fallback engine (both CLIs dry) is an ACCOUNT pause, not a
+    // task failure. Report it as an honest paused state with a retry-after time instead of
+    // "⛔ failed". (When a fallback engine IS available the fallback above already fired.)
+    if (isPausedQuota(rawError, result.engine)) {
+      const paused = pauseMessage(issueNumber, rawError);
+      if (opts.githubStatus) {
+        syncIssueStatusLabel(manifest.repo, issueNumber, "blocked");
+        await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "paused", worker.branch, finalText, null, paused), true);
+      }
+      await reportExecutionBlocked(opts, paused);
+      return;
+    }
     const reason = workerError ?? `Codex worker exited with code ${exitCode} and produced no final handoff.`;
     if (opts.githubStatus) {
       syncIssueStatusLabel(manifest.repo, issueNumber, "failed");
@@ -864,14 +877,54 @@ function extractWorkerError(eventsPath) {
     else if (ev?.type === "turn.failed" && ev.error?.message) message = String(ev.error.message); // codex
     else if (ev?.type === "system" && ev.error) message = `${ev.error}${ev.error_status ? ` (${ev.error_status})` : ""}`; // claude api_retry/billing
     else if (ev?.type === "result" && ev.is_error) message = String(ev.error || ev.result || "worker reported is_error"); // claude error result
+    else if (ev?.type === "rate_limit_event") {
+      // #506: the Claude account hitting its 5-hour / overage cap surfaces ONLY as a
+      // rate_limit_event with status:"rejected" — no error/turn.failed/result carries it,
+      // so a pure quota rejection would otherwise yield a null rawError and skip the whole
+      // quota fallback. Capture it as a first-class failure cause.
+      const info = ev.rate_limit_info || {};
+      if (info.status === "rejected" || info.overageStatus === "rejected") {
+        message = rateLimitEventMessage(info);
+      }
+    }
   }
   return message;
+}
+
+// #506: build a stable, isQuotaError-matchable message from a rejected rate_limit_event,
+// e.g. "rate_limit_event rejected: five_hour out_of_credits resetsAt=1783114200". The
+// resetsAt epoch is preserved verbatim so the paused render can format a retry time.
+function rateLimitEventMessage(info = {}) {
+  const parts = ["rate_limit_event rejected:"];
+  if (info.rateLimitType) parts.push(String(info.rateLimitType));
+  if (info.overageDisabledReason) parts.push(String(info.overageDisabledReason));
+  else if (info.overageStatus) parts.push(`overageStatus=${info.overageStatus}`);
+  if (info.resetsAt != null) parts.push(`resetsAt=${info.resetsAt}`);
+  return parts.join(" ");
+}
+
+// #506: pull the resetsAt epoch (seconds) back out of a captured quota message so the
+// paused notification can show an honest "retry after HH:MM". Returns null if absent.
+function parseResetsAt(message) {
+  const m = String(message || "").match(/resetsAt=(\d+)/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// #506: format a resetsAt epoch (seconds or ms) as a short "HH:MM UTC" retry hint.
+function formatResetsAt(resetsAt) {
+  if (!resetsAt) return null;
+  const ms = resetsAt < 1e12 ? resetsAt * 1000 : resetsAt;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
 }
 
 // Quota/limit failures are the common operational case (an engine account is out of
 // credit). Matched failures trigger the automatic engine fallback in runWorker.
 const QUOTA_LIMIT_RE =
-  /usage limit|quota|rate limit|rate_limit|upgrade to plus|insufficient_quota|too many requests|billing|credit balance|out of credit|\b429\b|\b402\b/i;
+  /usage limit|quota|rate limit|rate_limit|rate_limit_event|five_hour|overagedisabledreason|upgrade to plus|insufficient_quota|too many requests|billing|credit balance|out of credit|out_of_credits|\b429\b|\b402\b/i;
 
 function isQuotaError(message) {
   return Boolean(message) && QUOTA_LIMIT_RE.test(String(message).replace(/\s+/g, " "));
@@ -893,6 +946,24 @@ function classifyWorkerError(message) {
 // flow, so a run that died on one engine's quota can be replayed on the other.
 function fallbackEngine(engine) {
   return engine === "codex" ? "claude" : "codex";
+}
+
+// #506: is this a quota death with NOWHERE to fall back to (both engines dry)? When true
+// the run must be reported as PAUSED (an account problem, retry after reset) — NOT failed
+// and NOT "produced nothing verifiable". Pure/deterministic: the error class + engine
+// availability decide, no LLM. `hasCommand` is injectable for tests.
+function isPausedQuota(rawError, engine, hasCommand = commandExists) {
+  return isQuotaError(rawError) && !hasCommand(fallbackEngine(engine));
+}
+
+// #506: honest paused render, e.g.
+//   "⏸️ Execution 104 paused: out of credits — retry after 05:30 UTC"
+// resetsAt is recovered from the captured message when present.
+function pauseMessage(executionId, rawError, { target } = {}) {
+  const at = formatResetsAt(parseResetsAt(rawError));
+  const retry = at ? ` — retry after ${at}` : "";
+  const label = target ? `Execution ${executionId} (${target})` : `Execution ${executionId}`;
+  return `⏸️ ${label} paused: out of credits${retry}`;
 }
 
 // --- Worker engine selection (codex CLI or Claude Code CLI, same GitHub flow) ---
@@ -1560,6 +1631,10 @@ export {
   extractWorkerError,
   classifyWorkerError,
   isQuotaError,
+  parseResetsAt,
+  formatResetsAt,
+  isPausedQuota,
+  pauseMessage,
   fallbackEngine,
   finalComment,
   deliverablePaths,

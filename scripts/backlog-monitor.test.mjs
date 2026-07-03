@@ -866,6 +866,15 @@ test("ephemeralFallbackDecision recognizes 429 / insufficient_quota classes (par
   }
 });
 
+test("#506: ephemeralFallbackDecision replays an out-of-credits rate_limit death on the other engine", () => {
+  // The captured form of the exact 5-hour-cap rate_limit_event that died exit 1.
+  const err = "rate_limit_event rejected: five_hour out_of_credits resetsAt=1783114200";
+  const d = ephemeralFallbackDecision({ exitCode: 1, rawError: err, engine: "claude", alreadyFellBack: false, hasCommand: (c) => c === "codex" });
+  assert.deepEqual(d, { fallback: true, nextEngine: "codex" });
+  // both engines dry → no fallback (the paused-not-die path takes over in reportEphemeralFinished)
+  assert.equal(ephemeralFallbackDecision({ exitCode: 1, rawError: err, engine: "claude", alreadyFellBack: false, hasCommand: () => false }).fallback, false);
+});
+
 // ---- Live-progress heartbeat (execution-progress campaign) ----
 
 test("formatElapsed renders compact human durations", () => {

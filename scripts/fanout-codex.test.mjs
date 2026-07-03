@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, isQuotaError, fallbackEngine, finalComment, deliverablePaths, deliverablesBlock, buildPrCreateArgs, prChangedFiles, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, isQuotaError, parseResetsAt, formatResetsAt, isPausedQuota, pauseMessage, fallbackEngine, finalComment, deliverablePaths, deliverablesBlock, buildPrCreateArgs, prChangedFiles, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
 import { enableAutoMergeForPr, wantsHoldForReview } from "./backlog-monitor.mjs";
 
 test("isQuotaError recognizes the quota/limit error class across both engines (W0)", () => {
@@ -130,6 +130,61 @@ test("extractWorkerError recovers the real cause from the events stream (the #92
   assert.match(extractWorkerError(p), /usage limit/);
   rmSync(dir, { recursive: true, force: true });
   assert.equal(extractWorkerError(join(dir, "missing.jsonl")), null);
+});
+
+// ── #506: out-of-credits rate_limit_event capture + pause (5-hour cap replay) ──────────
+// The exact stream line that killed the worker exit 1 on 2026-07-02:
+const OUT_OF_CREDITS_EVENT =
+  '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"out_of_credits","resetsAt":1783114200}}';
+
+test("#506: extractWorkerError captures a rejected rate_limit_event (was null → skipped fallback)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rate-limit-"));
+  const p = join(dir, "events.jsonl");
+  writeFileSync(p, [
+    '{"type":"system","subtype":"init","model":"claude-opus-4-8"}',
+    OUT_OF_CREDITS_EVENT,
+    "",
+  ].join("\n"));
+  const err = extractWorkerError(p);
+  assert.ok(err, "a pure rate_limit rejection must NOT yield null");
+  assert.match(err, /rate_limit_event rejected/);
+  assert.match(err, /five_hour/);
+  assert.match(err, /out_of_credits/);
+  assert.match(err, /resetsAt=1783114200/);
+  assert.ok(isQuotaError(err), "the captured message must classify as a quota error");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("#506: isQuotaError matches the underscore out_of_credits / rate_limit_event tokens", () => {
+  assert.ok(isQuotaError("rate_limit_event rejected: five_hour out_of_credits resetsAt=1783114200"));
+  assert.ok(isQuotaError("out_of_credits")); // underscore form the old regex missed
+  assert.ok(isQuotaError("five_hour"));
+  assert.ok(isQuotaError("overageDisabledReason: out_of_credits"));
+});
+
+test("#506: parseResetsAt / formatResetsAt recover a retry-after time from the message", () => {
+  assert.equal(parseResetsAt("rate_limit_event rejected: five_hour out_of_credits resetsAt=1783114200"), 1783114200);
+  assert.equal(parseResetsAt("no timestamp here"), null);
+  assert.equal(formatResetsAt(1783114200), "21:30 UTC"); // 2026-07-03T21:30:00Z
+  assert.equal(formatResetsAt(null), null);
+});
+
+test("#506: fallback FIRES when the other engine exists (capture unblocks the W0/E-2 path)", () => {
+  const err = "rate_limit_event rejected: five_hour out_of_credits resetsAt=1783114200";
+  // both dry → paused, not failed; other engine present → NOT paused (fallback fires)
+  assert.equal(isPausedQuota(err, "claude", () => false), true, "both engines dry → paused");
+  assert.equal(isPausedQuota(err, "claude", (c) => c === "codex"), false, "fallback engine present → fall back, don't pause");
+});
+
+test("#506: pauseMessage renders an honest ⏸️ paused state with retry-after, never ⛔ failed", () => {
+  const err = "rate_limit_event rejected: five_hour out_of_credits resetsAt=1783114200";
+  const msg = pauseMessage("104", err, { target: "zenod-ai/zenod#506" });
+  assert.match(msg, /⏸️/);
+  assert.match(msg, /paused: out of credits/);
+  assert.match(msg, /retry after 21:30 UTC/);
+  assert.doesNotMatch(msg, /⛔|failed|produced nothing verifiable/);
+  // no resetsAt → still paused, just without the retry clause
+  assert.match(pauseMessage("104", "out_of_credits"), /paused: out of credits/);
 });
 
 test("classifyWorkerError names a quota failure plainly and actionably", () => {
