@@ -350,6 +350,26 @@ function receiptFromExecution(repo: string, execution: ExecutionTicket): { targe
   return { target, url };
 }
 
+const ISSUE_URL_RE = /^https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+$/i;
+
+/**
+ * I5-3 — the dispatch composer's rule: this is I5-1's renderer discipline applied to a
+ * journey message, not just an outbound send. At dispatch time the worker has not run
+ * yet, so the ONLY honest claim is that it was dispatched — never "opened"/"created".
+ * The "opened" claim is rendered ONLY once the execution carries a REAL, verified issue
+ * URL as its evidence/deliverable (I5-2) — never composed ahead of that receipt.
+ */
+export function renderForeignRepoDispatchMessage(execution: ExecutionTicket, repo: string): string {
+  const receipt = receiptFromExecution(repo, execution);
+  if (receipt.url && ISSUE_URL_RE.test(receipt.url)) {
+    return `Opened ${receipt.target} (${receipt.url}) — execution ${execution.executionId} (${execution.state}).`;
+  }
+  return (
+    `Dispatched Epaminon worker to create + run the issue in ${repo} (execution ${execution.executionId}) — ` +
+    `I'll confirm with the ticket link when it lands.`
+  );
+}
+
 /**
  * E-4 worker-route. Create-and-run for a FOREIGN repo goes to Epaminon's
  * run_ephemeral_task: the runner creates the issue in the target repo using its own
@@ -443,13 +463,11 @@ async function dispatchForeignRepoWorker(input: {
 
   store.completeStep(step.id, { execution }, now());
   store.completeJourneyIfReady(journeyId, now());
-  const receipt = receiptFromExecution(issue.repo, execution);
-  const urlPart = receipt.url ? ` (${receipt.url})` : "";
   return {
     journeyId,
     execution,
     status: "completed",
-    message: `Dispatched Epaminon worker to create + run the issue in ${issue.repo} under the runner's gh auth — execution ${execution.executionId} (${execution.state}), target ${receipt.target}${urlPart}.`,
+    message: renderForeignRepoDispatchMessage(execution, issue.repo),
     snapshot: store.snapshot(journeyId)!,
   };
 }
