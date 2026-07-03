@@ -70,7 +70,9 @@ export {
   STATUS_MERGED,
   normalizeCreateIssueLabels,
   normalizeLabelIssueLabels,
+  normalizedToolName,
 } from "./taskingPolicy.js";
+export { applyReplyGate, isActionTool, type ReplyGateInterceptedEvent, type ReplyGateOutcome } from "./replyGate.js";
 export { SqliteStateStore } from "./state/sqlite.js";
 export {
   AiSdkBrainLlm,

@@ -38,6 +38,7 @@ import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerToo
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
+import { applyReplyGate } from "../replyGate.js";
 
 const LONG_MESSAGE_DIGEST_CHARS = 1_200;
 const ZENOD_DIGEST_TOOL = "zenod_digest_message";
@@ -1220,19 +1221,32 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
-  // The model can finish a turn with no closing text — most often when it
-  // exhausts its step budget mid-tool-call (generateText then returns ""). An
-  // empty reply is silently dropped by the WhatsApp gateway and looks like Zeno
-  // ignoring the user, so always produce *something*: the real tool results if
-  // any ran, otherwise an honest retry notice.
+  // Iteration-6 — the reply gate. On an ACTION turn (this turn invoked a side-effect
+  // tool — a send, an issue write, an execution dispatch/approval, or a resolved standing
+  // draft approval) the delivered text is EXCLUSIVELY the concatenation of those tools'
+  // own receipt text, discarding the model's free text for that turn outright. This is a
+  // hard runtime interception, not prose policing: earlier iterations reconciled/corrected
+  // the model's claims after the fact (reconcileTaskingReply below) and told the persona to
+  // "relay verbatim", but nothing structurally stopped the model from writing something
+  // else — a static string scan can't constrain runtime generation. See replyGate.ts.
   //
-  // Then reconcile the drafted reply against the tools that actually ran this
-  // turn (reconcileTaskingReply is grounding-aware — it only corrects fabricated
-  // mutations, leaving genuine results and read-only summaries untouched, which
-  // is why the older blunt "Created issue #N" guard was removed). Without this
-  // the model could narrate a successful create that 404'd — e.g. "All five
-  // tickets placed in zenod/zenod #1..#5" when the repo doesn't resolve.
+  // Non-action turns are untouched: the model can finish a turn with no closing text —
+  // most often when it exhausts its step budget mid-tool-call (generateText then returns
+  // ""). An empty reply is silently dropped by the WhatsApp gateway and looks like Zeno
+  // ignoring the user, so always produce *something*: the real tool results if any ran,
+  // otherwise an honest retry notice. Then reconcile the drafted reply against the tools
+  // that actually ran this turn (reconcileTaskingReply is grounding-aware — it only
+  // corrects fabricated mutations, leaving genuine results and read-only summaries
+  // untouched). Without this the model could narrate a successful create that 404'd —
+  // e.g. "All five tickets placed in zenod/zenod #1..#5" when the repo doesn't resolve.
   function finalizeReply(rawText: string, actions: TaskingAction[]): string {
+    const gate = applyReplyGate(rawText, actions, (event) => {
+      console.warn(
+        `[reply-gate] intercepted on action turn (${event.tools.join(", ")}) — discarded model text, delivered the receipt instead. discarded=${JSON.stringify(event.discardedText)}`,
+      );
+    });
+    if (gate.isActionTurn) return gate.text;
+
     const drafted = rawText.trim()
       ? rawText
       : summarizeActionsForReply(actions)
