@@ -80,6 +80,18 @@ rewrites the state after every review. One document per concern — never a new 
 **⏸ DISPATCH FREEZE (Jordi, 2026-07-03 ~21:45):** no new tickets or dispatches until direction is
 clarified at the Fable table. In-flight runs land; nothing new starts.
 
+**D-2 CLOSED (2026-07-03 night, Fable recommendation pending Jordi's confirmation): Path A.**
+Bake-off cancelled by Jordi (right call — over-scoped; judgment over existing evidence sufficed).
+Decision: fix the topology IN PLACE — iteration 8 = collapse council peer lanes into typed
+receipt-or-error gateways (S-8/PR #499 is the first half), one reasoning brain (Console), governor
+LLM judgment only where taste is the product (filing/drafting/ticket-writing), and adopt
+`@workflow/world-postgres` (standalone open-source Workflow SDK, steve-proven) under the executor
+lane for durability. No framework adoption now: today's forensic showed the 406-turn death was a
+receipt false-negative, not an engine failure, and every observed red except durability has a merged
+fix. **Eve is deferred, not rejected:** revisit at eve 1.0/GA as the candidate tenant image for
+Epic 2, with CANONICAL-TESTS as the acceptance bar. steve = reference implementation, not fork base.
+Rationale in full: Fable table, 2026-07-03 night session.
+
 **Now (2026-07-03 late):** Epic 1: S-0 ✅ · #486 (S-3) + #493 (S-4/5/6) merged · S-1 re-dispatched
 (`direct-1783107468359`; first run killed by deploy restart — the durable-execution argument making
 itself) · S-2 forensic running (`direct-1783107479331`) · S-8 running (`direct-1783107490565`) ·
