@@ -129,6 +129,13 @@ S-3 lands) → S-7. Then: full canonical run (now C-01…C-20). Green → deploy
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
 
+### Receipt · 2026-07-04 · I8-1 typed write front door (slice 1) — hand-run by Claude
+The Console mesh gateway now publishes the TYPED, deterministic backlog write service (`backlog_create/edit/close/comment`) that dispatches straight to Archus's read-back-verified tools (ID+URL-or-error), **no `chat_with_archus` LLM in the write path** — the typed replacement for the conversational `create_issue`/`edit_issue`/`close_issue` front doors.
+- `packages/server/src/meshGateway.ts`: 4 new v4 typed write tools (behind `ZENOD_V4_TOOL_NAMES`, so inert until enabled → safe to land). Maps I8-1 → C-18/C-19.
+- Contract test in `meshGateway.test.ts`: asserts they publish with deterministic output schemas + no `repo` parameter. Server suite 498 green.
+- Deferred (honest, slice 2): once the typed path is proven live, DELETE the conversational `create_issue`/`edit_issue`/`close_issue` → chat lanes; broaden "typed service" to Epaminon/Phylax/Callisthenes.
+- PR: (this branch)
+
 ### Receipt · 2026-07-04 · I8-2 durable executor (core slice) — hand-run by Claude, not dispatched
 The runner's ephemeral lane now RESUMES a run killed mid-flight (redeploy) instead of reporting it dead.
 - Grafted the D-2 spike's durability modules into the runner: `scripts/lib/durable.mjs` (replay/journal primitive), `budget.mjs`, `receipt.mjs`.
