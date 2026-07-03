@@ -102,5 +102,43 @@ Reconciled with the 06-16 ticket list: T1–T3 (resolvePrincipal/TenantContext/S
 ## 7. Open questions (small, none blocking Phase 0)
 
 1. **Vault ownership at signup**: their GitHub from day 1 (stronger story, more onboarding friction) vs platform-held repo with export (frictionless, "your data is one click from leaving"). Recommend platform-held for Agency tier, own-GitHub for Console tier.
-2. **Gateway choice**: LiteLLM proxy (self-hosted, free, per-key budgets) vs OpenRouter provisioned keys (zero ops, they take ~5%). Recommend starting OpenRouter-provisioned (you already run on OpenRouter), swap to LiteLLM when margin matters.
+2. **Gateway choice**: LiteLLM proxy (self-hosted, free, per-key budgets) vs OpenRouter provisioned keys (zero ops, they take ~5%). Recommend starting OpenRouter-provisioned (you already run on OpenRouter), swap to LiteLLM when margin matters. **Shipped v0**: `scripts/gateway/openrouter-key.mjs` (P0.4/#452) — per-tenant budget-capped provisioned keys.
 3. **Control-plane repo**: `zenod-ai/cloud` private — contains only provisioner, billing, gateway config, tenant template. Confirm this doesn't offend the one-repo instinct: the *product* stays one public repo; this is infrastructure, like your Dokploy config already is.
+
+## 8. Public/private boundary — the rule that keeps it ONE codebase
+
+The fear: hosting forces us to maintain "two shapes" (a self-host shape and a hosted shape) in one repo. It does not — *if* we hold one line.
+
+**The line.** The public tenant image only ever gains **additive, dormant hooks**; it never *forks behavior* and never *gates a feature off* for self-host. All hosted orchestration lives in a **separate private control plane** (`zenod-ai/cloud`) that drives those hooks from outside and never touches engine code.
+
+| Public tenant image (`zenod-ai/zenod`) | Private control plane (`zenod-ai/cloud`) |
+|---|---|
+| Engine + tools + channels + UI (unchanged) | Provisioner (Stripe → Dokploy), billing, tenant registry |
+| Optional hooks: `LLM_BASE_URL`/`LLM_API_KEY`, credit API URL | LLM gateway keys (`openrouter-key.mjs` runs here) |
+| Channel adapters with an **injectable transport** (see §9) | The wa-router service (reuses the public adapter, adds routing) |
+
+**Litmus test — a hosted need may enter the public image ONLY if it is:**
+1. **env-selected** (off by default),
+2. **inert/safe when unset** (self-host with zero hosted env is fully functional), and
+3. **useful-or-harmless to self-host** (a generic capability, not a hosted wart).
+
+If a change can't meet all three, it belongs in the private control plane, not the image.
+
+**Enforce it, don't trust it.** A discipline erodes over a year of PRs. Corral hosted hooks in a clearly-named module and add a CI check that boots the image with **no hosted env** and asserts full self-host function. That turns "one shape" from a promise into a test.
+
+## 9. Channel transport seam (WhatsApp, and any channel)
+
+Decision from the 07-03 discussion (supersedes the shared-socket framing in the P0.5 doc; self-host WhatsApp is unchanged).
+
+**How subscribers reach the council on WhatsApp:** one **service number we control** (not the subscriber's own "me", not Cloud API). A single central **wa-router** holds one Baileys socket and a `senderJID → tenant` map (from the signup registry); it relays each subscriber's messages to their tenant and replies back out the one socket. This solves the identity objection (subscribers talk to a dedicated bot number) and avoids Cloud API cost.
+
+**Why this is one shape, not two:** refactor each channel adapter to split **transport** (receive/send) from **pipeline** (transcribe → `handleTasking` → receipt). Then transport is injectable:
+- self-host wires the **socket transport** (Baileys in-container — today's behavior);
+- hosted wires the **relay transport** (inbound at token-gated `POST /api/whatsapp/inbound`; outbound via an injected `send()` that posts to the router). No socket in the tenant container.
+
+The router itself **imports the same public Baileys adapter** (e.g. `AGENT=wa-router`), so the fragile, ban-prone socket code lives **once**, in public, dogfooded by every self-host user daily. The private part is just a lookup table + HTTP fan-out.
+
+**Known costs (build it eyes-open — see #474):**
+- **The seam is fatter than text.** WhatsApp media is encrypted and only fetchable through the authenticated socket, so the relay contract is `{text, media-bytes, receipts, presence}`, not a string — the router downloads media and ships bytes; typing/read-receipts proxy back through it. This is the fiddly part.
+- **Shared failure domain + ban risk.** One unofficial-API number auto-replying to many strangers is a textbook ban pattern, and a ban takes *all* tenants down at once. Treat Baileys-router as a **deliberate MVP with a scale cliff**: past some volume you migrate to Cloud API. The routing layer is reusable then; the media/receipt transport is not — so it's a partial rebuild, knowingly accepted.
+- **Sequencing.** This is **P1**, after the money path (Telegram + Console + Stripe #449 + provisioner #456). It does not gate the concierge launch.
