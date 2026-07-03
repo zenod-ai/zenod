@@ -284,8 +284,6 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     description:
       "Owner: Archus. Deterministic, LLM-free creation of one issue in the life backlog (the configured backlog repo — no other repo is reachable). Returns the qualified owner/repo#N only after a read-back GET confirms it, or an explicit error. Use this instead of chat when you have a concrete title/body/labels.",
     inputSchema: BACKLOG_CREATE_SHAPE,
-    v4OutputSchemaName: "archus.backlog_create",
-    requiresV4ToolNames: true,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   {
@@ -295,8 +293,6 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     description:
       "Owner: Archus. Deterministic, LLM-free edit of one life-backlog issue by number (title/body/labels), read-back verified, ID+URL-or-error. No repo parameter.",
     inputSchema: BACKLOG_EDIT_SHAPE,
-    v4OutputSchemaName: "archus.backlog_edit",
-    requiresV4ToolNames: true,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   {
@@ -306,8 +302,6 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     description:
       "Owner: Archus. Deterministic, LLM-free close of one life-backlog issue by number, reported closed only after a read-back GET confirms state=closed, or an explicit error.",
     inputSchema: BACKLOG_CLOSE_SHAPE,
-    v4OutputSchemaName: "archus.backlog_close",
-    requiresV4ToolNames: true,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   },
   {
@@ -317,8 +311,6 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     description:
       "Owner: Archus. Deterministic, LLM-free comment on one life-backlog issue by number, reported done only after a read-back GET confirms the comment is present, or an explicit error.",
     inputSchema: BACKLOG_COMMENT_SHAPE,
-    v4OutputSchemaName: "archus.backlog_comment",
-    requiresV4ToolNames: true,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   // S-8: the redundant `archus.request_backlog_action` write door was REMOVED. Three

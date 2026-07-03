@@ -129,6 +129,11 @@ S-3 lands) → S-7. Then: full canonical run (now C-01…C-20). Green → deploy
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
 
+### Receipt · 2026-07-04 · I8-1 typed write service now ALWAYS-ON (slice 2) — hand-run by Claude
+The typed deterministic backlog write service (`backlog_create/edit/close/comment`) is now published on the **default gateway surface** (un-gated from `ZENOD_V4_TOOL_NAMES`) — the always-on typed front door (ID+URL-or-error, no LLM router), testable out of the box.
+- `packages/server/src/meshGateway.ts`: removed the v4 gating from the four typed write tools; contract tests updated (curated surface now includes them; no repo parameter). Server suite 498 green.
+- **Honest scope — the last consolidation is NOT done and should not be done blind:** fully deleting the conversational `create_issue`/`edit_issue`/`close_issue` lanes is entangled — `create_issue` is Archus's peer tool that the create-and-run (`createIssueRunJourney`) and `parallelIssueJourney` flows call directly, and the gateway lane also carries the E-4 foreign-repo→Epaminon redirect. Removing it requires rerouting those journeys through the typed tools + Epaminon, which needs LIVE validation (the Console+Archus running). Per I8-1's own text the LLM survives as a bounded drafting sub-call (ticket quality) — so keeping `ask_archus`/`create_issue` for NL drafting while the typed tools own structured writes is aligned, not a gap. Recommended: validate the typed path live, then do the journey rerouting + lane removal as a scoped follow-up.
+
 ### Receipt · 2026-07-04 · C-17 budget kill (S-7) — hand-run by Claude
 Hard per-run budget now TERMINATES a zombie ephemeral instead of letting it run forever.
 - `scripts/backlog-monitor.mjs`: pure `budgetKillDecision` (wall-clock OR turns, defaults 60m/200 turns, env-overridable) wired into `sweepHeartbeats` — a live run past ceiling is SIGTERM'd + journalled; `reportEphemeralFinished` renders an honest "budget exceeded … nothing verifiable" failure (not the generic path, not a quota pause) with the transcript link. Implements **C-17** (S-7).
