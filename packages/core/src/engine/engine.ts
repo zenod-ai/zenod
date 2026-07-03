@@ -37,8 +37,16 @@ import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
-import { normalizeCreateIssueLabels, normalizeLabelIssueLabels, reconcileTaskingReply, summarizeActionsForReply } from "../taskingPolicy.js";
+import {
+  isAffirmativeApproval,
+  normalizeCreateIssueLabels,
+  normalizeLabelIssueLabels,
+  NOTHING_PENDING_TO_APPROVE_TEXT,
+  reconcileTaskingReply,
+  summarizeActionsForReply,
+} from "../taskingPolicy.js";
 import { applyReplyGate } from "../replyGate.js";
+import { hasAnyLiveApprovalToken } from "../approvalTokens.js";
 
 const LONG_MESSAGE_DIGEST_CHARS = 1_200;
 const ZENOD_DIGEST_TOOL = "zenod_digest_message";
@@ -1247,13 +1255,24 @@ export function createEngine(options: EngineOptions): BrainEngine {
   // corrects fabricated mutations, leaving genuine results and read-only summaries
   // untouched). Without this the model could narrate a successful create that 404'd —
   // e.g. "All five tickets placed in zenod/zenod #1..#5" when the repo doesn't resolve.
-  function finalizeReply(rawText: string, actions: TaskingAction[]): string {
+  function finalizeReply(rawText: string, actions: TaskingAction[], userMessage: string, cid: string): string {
     const gate = applyReplyGate(rawText, actions, (event) => {
       console.warn(
         `[reply-gate] intercepted on action turn (${event.tools.join(", ")}) — discarded model text, delivered the receipt instead. discarded=${JSON.stringify(event.discardedText)}`,
       );
     });
     if (gate.isActionTurn) return gate.text;
+
+    // P-1 — a bare affirmative ("approved", "yes") that resolved NOTHING this turn (no
+    // tool ran at all, so the reply gate above never engaged) must never fall through to
+    // the model's own free-form prose ("Understood. What would you like to do next?").
+    // Approval is state, not vocabulary (approvalTokens.ts): with no tool invoked and no
+    // live standing-draft token for this conversation, the only honest reply is the same
+    // deterministic zero-state the token guard itself renders for a resolved bare
+    // affirmative.
+    if (actions.length === 0 && isAffirmativeApproval(userMessage) && !hasAnyLiveApprovalToken(cid)) {
+      return NOTHING_PENDING_TO_APPROVE_TEXT;
+    }
 
     const drafted = rawText.trim()
       ? rawText
@@ -1308,7 +1327,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       options.driveTools,
       options.peerTools,
     );
-    const text = finalizeReply(result.text, actions);
+    const text = finalizeReply(result.text, actions, message, cid);
     await state.appendMessage(cid, "assistant", text, surface);
 
     return {
@@ -1359,7 +1378,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       options.driveTools,
       options.peerTools,
     );
-    const text = finalizeReply(result.text, actions);
+    const text = finalizeReply(result.text, actions, input.text, cid);
     await state.appendMessage(cid, "assistant", text, input.surface);
     return { text, actions };
   }

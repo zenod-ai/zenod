@@ -195,6 +195,40 @@ describe("M-1 — stateful approval token, friendly block template, retry-stop",
     expect(calls).toHaveLength(0);
   });
 
+  it("P-1: a draft composed via ask_outbound, then approved via a direct post_tweet call, posts exactly once", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const calls: unknown[] = [];
+    const cid = "conv-outbound-compose";
+    const peer = {
+      ask_outbound: {
+        description: "Ask Callistheness to draft outbound comms.",
+        run: async () => 'Here\'s the tweet: "Hello world" — reply "approve" to post it.',
+      },
+      ...postTweetPeer(calls),
+    };
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+
+    // Turn 1: the model asks Callistheness to draft — never gated, never blocked, but
+    // it registers a standing compose-approval since Console has no exact final text.
+    await llm.answer(
+      { question: "draft a tweet about the launch", conversationId: cid, vaultBriefing: "brief", conversation: [] },
+      readTools,
+      undefined,
+      undefined,
+      peer,
+    );
+    await captured.config.tools.ask_outbound.execute({ input: "draft a tweet about the launch" });
+
+    // Turn 2: "Tweet approved" — the model calls post_tweet DIRECTLY (not ask_outbound
+    // again). No token was ever registered for post_tweet specifically, but the
+    // outbound-compose token resolves it.
+    await llm.answer({ question: "Tweet approved", conversationId: cid, vaultBriefing: "brief", conversation: [] }, readTools, undefined, undefined, peer);
+    const posted = await captured.config.tools.post_tweet.execute({ text: "Hello world" });
+
+    expect(posted).toBe("Posted to X. Live URL: https://x.com/i/web/status/42");
+    expect(calls).toHaveLength(1);
+  });
+
   it("an explicit write verb still posts directly with no token needed (unchanged baseline behavior)", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const calls: unknown[] = [];

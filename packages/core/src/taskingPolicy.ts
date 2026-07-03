@@ -1,4 +1,9 @@
-import { consumeApprovalToken, hasValidApprovalToken, registerApprovalToken } from "./approvalTokens.js";
+import {
+  consumeApprovalToken,
+  hasValidApprovalToken,
+  registerApprovalToken,
+  registerOutboundComposeApprovalToken,
+} from "./approvalTokens.js";
 
 export const OWNER_AGENT = "owner:agent";
 export const STATUS_PROPOSED = "status:proposed";
@@ -176,6 +181,9 @@ function hasSubstantiveDraftContent(args: Record<string, unknown> | undefined): 
  */
 export const NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL = "__nothing_pending_to_approve__";
 
+/** The single canonical zero-state reply text — shared so it can never drift between the guard, the reply-gate fallback, and the outbound receipt renderer. */
+export const NOTHING_PENDING_TO_APPROVE_TEXT = "Nothing pending to approve.";
+
 export interface PeerMutationGuardContext {
   /** Conversation this call belongs to — required for the standing-draft token to apply. */
   conversationId?: string | undefined;
@@ -222,6 +230,27 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
   }
 
   return `Blocked ${tool}: mutating peer tools require an explicit write/run/send instruction from the user's current message.`;
+}
+
+/**
+ * P-1 — ask_outbound composes a draft through Callistheness (the outbound peer) but
+ * never sends, so it is not a peer-mutation tool and peerMutationGuardFailure never
+ * runs for it: no token was ever registered, and a later "Tweet approved" that resolves
+ * to a direct post_tweet/post_reddit/send_email call found nothing pending — the token
+ * and the standing draft lived in different places. Any substantive ask_outbound call
+ * now registers a standing compose-approval on the SAME conversation-scoped store the
+ * direct-ask path uses, so a following natural-language affirmative for ANY outbound
+ * send tool resolves it (see approvalTokens.ts's anyOutboundSend).
+ */
+export function registerOutboundComposeApproval(
+  conversationId: string | undefined,
+  tool: string,
+  args: Record<string, unknown> | undefined,
+): void {
+  if (!conversationId) return;
+  if (normalizedToolName(tool) !== "askoutbound") return;
+  if (!hasSubstantiveDraftContent(args)) return;
+  registerOutboundComposeApprovalToken(conversationId);
 }
 
 export function coerceEditIssueLabelsForUserRequest(

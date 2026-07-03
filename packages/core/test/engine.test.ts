@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
+import { __resetApprovalTokens } from "../src/approvalTokens.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
 import type { TokenCostMeasurement } from "../src/types.js";
@@ -1190,6 +1191,14 @@ describe("BrainEngine", () => {
     expect(res.actions.map((action) => action.tool)).toEqual(["approveMerge"]);
     expect(res.actions[0]?.input.issueNumbers).toEqual([44]);
     expect(calls).toEqual(["approveMerge:zenod-ai/fixture:44"]);
+  });
+
+  it("P-1: a bare affirmative that resolves nothing this turn renders the deterministic zero-state, never the model's own prose", async () => {
+    __resetApprovalTokens();
+    const res = await engine().handleTasking({ text: "approved", surface: "web", conversationKey: "fresh" });
+
+    expect(res.actions).toEqual([]);
+    expect(res.text).toBe("Nothing pending to approve.");
   });
 
   it("chat persists the conversation window and can trigger a store", async () => {
