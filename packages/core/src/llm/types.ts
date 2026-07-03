@@ -96,6 +96,13 @@ export interface ChatToolEvent {
 
 export interface AnswerInput {
   question: string;
+  /**
+   * Stable id for the conversation this question belongs to (engine.ts's
+   * conversationId(surface, key)). Scopes the M-1 standing-draft approval token —
+   * without it a peer-mutation guard block cannot register/resolve a token, so it
+   * falls back to the ordinary explicit-verb-only rule.
+   */
+  conversationId?: string;
   /** AGENTS.md + folder index context for the system prompt. */
   vaultBriefing: string;
   /** Prior conversation turns (chat mode); empty for one-shot ask. */

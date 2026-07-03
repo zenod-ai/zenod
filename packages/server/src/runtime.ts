@@ -32,7 +32,8 @@ import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, projectRegistrySection, resolveProject } from "./projectRegistry.js";
 import { backlogRouterSection, LIFE_BACKLOG_REPO, loadRepoInference, routeBacklogRequest } from "./backlogRouter.js";
-import { buildOneOffIssueBody, oneOffIssueTitle } from "./oneOffExecution.js";
+import { buildOneOffIssueBody, extractIssueCreateSubject, isIssueCreateIntent, oneOffIssueTitle } from "./oneOffExecution.js";
+import { formatFilingReceipt } from "./filingReceipt.js";
 import { ExecutionQueue, type ExecutionTicket } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
@@ -50,6 +51,7 @@ import { JourneyStore } from "./journeyStore.js";
 import { JourneyMonitor } from "./journeyMonitor.js";
 import { createJourneyAuthorityReconciler } from "./journeyAuthorityReconciler.js";
 import { runExecutionIngestSweep, type MemoryJobStatus } from "./executionIngestSweep.js";
+import { detectStuckIngestJobs, formatStuckIngestAlert, STUCK_INGEST_THRESHOLD_MS } from "./ingestWatchdog.js";
 import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer, callPeerTool, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
@@ -172,6 +174,8 @@ export class Runtime {
   readonly executionStore: ExecutionStore;
   readonly journeyStore: JourneyStore;
   readonly journeyMonitor: JourneyMonitor;
+  /** M-5 — ingest job ids already alerted-on this process's lifetime, so the stuck-job watchdog fires once per episode, not every sweep tick. */
+  private stuckIngestAlerted = new Set<string>();
   readonly usageStore: UsageStore;
   readonly notificationStore: NotificationStore;
   /** The single notification authority — every proactive send funnels here (R2-T1). */
@@ -245,17 +249,23 @@ export class Runtime {
       // at DISPATCH, so the step reconciler never sees the terminal edge. This sweep
       // re-reads recorded executions from the authority each tick and files the cited
       // Zenod note once per executionId (guarded by a zenod_ingest artifact).
-      onSweep: () =>
-        runExecutionIngestSweep({
-          store: this.journeyStore,
-          readExecution: (reference) => this.readExecutionAnywhere(reference),
-          fileMemory: (input) => this.fileExecutionMemory(input),
-          pollMemoryJob: (jobId) => this.pollExecutionMemoryJob(jobId),
-        }).then((r) => {
-          if (r.started || r.filed || r.refreshed || r.gaveUp) {
-            console.log(`[exec-ingest] sweep: refreshed=${r.refreshed} started=${r.started} filed=${r.filed} skipped=${r.skipped} gaveUp=${r.gaveUp}`);
-          }
-        }),
+      onSweep: async () => {
+        await Promise.all([
+          runExecutionIngestSweep({
+            store: this.journeyStore,
+            readExecution: (reference) => this.readExecutionAnywhere(reference),
+            fileMemory: (input) => this.fileExecutionMemory(input),
+            pollMemoryJob: (jobId) => this.pollExecutionMemoryJob(jobId),
+          }).then((r) => {
+            if (r.started || r.filed || r.refreshed || r.gaveUp) {
+              console.log(`[exec-ingest] sweep: refreshed=${r.refreshed} started=${r.started} filed=${r.filed} skipped=${r.skipped} gaveUp=${r.gaveUp}`);
+            }
+          }),
+          // M-5 — stuck-job watchdog: an ingest job >10min without terminal state
+          // gets one Phylax operator alert (never a false "done"/silence).
+          this.sweepStuckIngestJobs(),
+        ]);
+      },
     });
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
     this.notificationStore = new NotificationStore(join(dataDir, "notifications.sqlite"));
@@ -387,6 +397,16 @@ export class Runtime {
       ...(vaultless && !githubBacked ? {} : { taskingTools: this.buildTaskingTools() }),
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
+      // M-5 — a background filing that lands gets a real completion receipt through
+      // the normal notification path (the Phylax pipe), not just a console.info.
+      onFilingComplete: (result) => {
+        void this.notificationBus.notify({
+          eventType: "filing.receipt",
+          text: formatFilingReceipt(result),
+          severity: "info",
+          dedupeKey: `filing:${result.commitSha}`,
+        });
+      },
     });
     this.engine = {
       ...engine,
@@ -507,6 +527,26 @@ export class Runtime {
     } catch (err) {
       console.error(`[exec-ingest] get_task_result failed for ${jobId}: ${(err as Error).message}`);
       return null;
+    }
+  }
+
+  /**
+   * M-5 — an ingest job stuck active (queued/downloading/transcribing/filing) for
+   * over 10 minutes gets ONE Phylax operator alert through the normal notification
+   * path, not silence and not a false "done". Runs on the same tick as the
+   * execution-ingest sweep (JourneyMonitor's onSweep).
+   */
+  private async sweepStuckIngestJobs(): Promise<void> {
+    const stale = this.ingestStore.staleActive(Date.now(), STUCK_INGEST_THRESHOLD_MS);
+    const { alerts, alertedIds } = detectStuckIngestJobs(stale, this.stuckIngestAlerted, Date.now());
+    this.stuckIngestAlerted = alertedIds;
+    for (const alert of alerts) {
+      await this.notificationBus.notify({
+        eventType: "ingest.stuck",
+        text: formatStuckIngestAlert(alert),
+        severity: "error",
+        dedupeKey: `ingest-stuck:${alert.jobId}`,
+      });
     }
   }
 
@@ -1748,13 +1788,19 @@ export class Runtime {
     const repo =
       input.repo || match?.repo || this.settings.getRaw("backlog_repo") || this.settings.get("vault_repo") || "";
     const path = input.path || match?.path;
+    // M-3 — when the objective itself is an issue/ticket-creation ask ("create issue
+    // banana9 in the Zenod repo"), the title must be the actual subject ("banana9"),
+    // not the whole verbatim instruction — otherwise the created issue's title reads
+    // as the meta-instruction that asked for it.
+    const requestText = [input.originalRequest, input.objective, input.instructions].filter(Boolean).join(" ");
+    const titleSource = isIssueCreateIntent(requestText) ? extractIssueCreateSubject(input.objective) : input.objective;
     const result = await this.createIssueThenRun({
       originalRequest: input.originalRequest,
       conversationId: input.conversationId ?? null,
       surface: input.surface ?? "console",
       issue: {
         ...(repo ? { repo } : {}),
-        title: oneOffIssueTitle(input.objective),
+        title: oneOffIssueTitle(titleSource),
         body: buildOneOffIssueBody({
           objective: input.objective,
           ...(input.instructions ? { instructions: input.instructions } : {}),

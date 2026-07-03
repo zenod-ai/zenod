@@ -205,6 +205,18 @@ export class IngestStore {
     return rows.map(rowToJob);
   }
 
+  /** M-5 — active (non-terminal) jobs created before `now - thresholdMs`: the stuck-job watchdog's input. */
+  staleActive(now: number, thresholdMs: number): IngestJob[] {
+    const cutoff = now - thresholdMs;
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM ingest_jobs WHERE status IN (${ACTIVE_STATES.map(() => "?").join(",")}) AND created_at < ?
+         ORDER BY created_at ASC`,
+      )
+      .all(...ACTIVE_STATES, cutoff) as unknown as Row[];
+    return rows.map(rowToJob);
+  }
+
   cachedPayload(id: string): CachedIngestPayload | null {
     const row = this.db
       .prepare(`SELECT cached_body, cached_provider, cached_source_link FROM ingest_jobs WHERE id=?`)

@@ -126,7 +126,19 @@ test("composeTerminalNotification carries title, summary, honest state, link (R1
   assert.ok(msg.includes("direct-123"), "keeps execution id as suffix");
 });
 
-test("composeTerminalNotification stays plain for internal (non-outward) done (R1-T6)", () => {
+test("composeTerminalNotification stays plain for internal (non-outward) done with a real deliverable (R1-T6)", () => {
+  const msg = composeTerminalNotification({
+    executionId: "direct-9",
+    target: "o/r#7",
+    outward: false,
+    title: "Filed note",
+    manifest: { repo: "o/r", issue: 7, paths: ["Areas/Note.md"] },
+  });
+  assert.ok(msg.startsWith("✅ Execution done: o/r#7"));
+  assert.ok(msg.includes("Filed note"));
+});
+
+test("composeTerminalNotification refuses to render done with nothing verifiable behind it (M-2, the banana9 bug)", () => {
   const msg = composeTerminalNotification({
     executionId: "direct-9",
     target: "o/r#7",
@@ -134,8 +146,22 @@ test("composeTerminalNotification stays plain for internal (non-outward) done (R
     title: "Filed note",
     manifest: null,
   });
-  assert.ok(msg.startsWith("✅ Execution done: o/r#7"));
-  assert.ok(msg.includes("Filed note"));
+  assert.ok(!msg.includes("✅"), "never renders the done checkmark with no evidence");
+  assert.ok(msg.startsWith("Finished but produced nothing verifiable — treating as failed"));
+  assert.ok(msg.includes("o/r#7"));
+  assert.ok(msg.includes("direct-9"));
+});
+
+test("composeTerminalNotification refuses done for a manifest with only repo/issue pointers, no paths/PR/commit (M-2)", () => {
+  const msg = composeTerminalNotification({
+    executionId: "direct-10",
+    target: "o/r#8",
+    outward: false,
+    title: undefined,
+    manifest: { repo: "o/r", issue: 8, handoffExcerpt: "Created the issue as requested." },
+  });
+  assert.ok(!msg.includes("✅"));
+  assert.ok(msg.startsWith("Finished but produced nothing verifiable — treating as failed"));
 });
 
 test("pickup notification labels the worker by engine (default Claude) with issue title and repo", () => {

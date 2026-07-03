@@ -612,14 +612,27 @@ function composeBlockerNotification({ executionId, target, question }) {
   });
 }
 
+// PURE (M-2): does a deliverable manifest carry >=1 verifiable artifact — a live PR,
+// a resolved commit, or actual changed file paths? Evidence-required "done": a
+// terminal completion with NONE of these must not render as done — that is the
+// banana9 replay bug (a reported "✅ done" for work whose target never actually
+// exists on GitHub).
+function hasVerifiableDeliverable(manifest) {
+  return Boolean(manifest && (manifest.prUrl || manifest.headSha || (manifest.paths && manifest.paths.length)));
+}
+
 // PURE: compose the terminal execution notification (R1-T6). Carries the issue title,
 // a handoff summary, the honest merge state, and the link — instead of a bare url.
 // Actionable content (title, summary, state) is prioritized; the executionId is
 // demoted to a suffix. Body budget keeps it readable on a phone.
 function composeTerminalNotification({ executionId, target, outward, title, manifest }, max = 900) {
   if (!outward) {
-    // Internal artifact done — short and plain.
     const t = title ? ` — ${title}` : "";
+    if (!hasVerifiableDeliverable(manifest)) {
+      // M-2: nothing checkable behind this "complete" — never render done.
+      return `Finished but produced nothing verifiable — treating as failed: no commit, PR, or changed-file evidence for ${target}${t}.\n(${executionId})`;
+    }
+    // Internal artifact done — short and plain.
     return `✅ Execution done: ${target}${t}\n(${executionId})`;
   }
   const head = `✅ Ready for review: ${target}${title ? ` — ${title}` : ""}`;
@@ -903,8 +916,13 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
         evidenceUrl = pickEvidenceUrl(verified);
       }
     } else {
-      // Complete but nothing checkable — make the unverifiability visible downstream.
-      note = `${note} [evidence: unverified — no commit/PR/issue URL in final summary]`.slice(0, 1000);
+      // M-2/I5-2 — evidence-required "done": a terminal run that claims complete but
+      // carries ZERO checkable deliverable (no commit/PR/issue URL anywhere in its
+      // final summary) must not render as done — "✅ done" with nothing behind it is
+      // the exact banana9 replay bug (a reported success with no issue that exists).
+      // Downgrade to failed and notify as a failure, same as a verified-missing claim.
+      stateName = "failed";
+      note = `Finished but produced nothing verifiable — treating as failed: no commit/PR/issue URL in the final summary. ${note}`.slice(0, 1000);
     }
   }
 
@@ -1149,10 +1167,13 @@ async function reportDispatched(state) {
         // Dedupe on the EVIDENCE: siblings announcing the same PR collapse, but a re-run
         // producing a NEW PR (or a no-PR done, keyed by execution) is a new fact.
         const terminalKey = `${d.target}|${(manifest && manifest.prUrl) || executionId}|execution.terminal`;
+        // M-2: evidence-required "done" — a terminal completion with nothing verifiable
+        // behind it notifies as a failure (severity: error), never as ordinary info.
+        const verifiable = o.outward || hasVerifiableDeliverable(manifest);
         await notify(
           composeTerminalNotification({ executionId, target: d.target, outward: o.outward, title, manifest }),
           origin,
-          { eventType: "execution.terminal", executionId, targetIssue: d.target, severity: "info", dedupeKey: terminalKey },
+          { eventType: "execution.terminal", executionId, targetIssue: d.target, severity: verifiable ? "info" : "error", dedupeKey: terminalKey },
         );
       }
     }
@@ -1805,6 +1826,7 @@ export {
   summarizeHandoff,
   mergeStateLine,
   composeTerminalNotification,
+  hasVerifiableDeliverable,
   composeActionableMessage,
   composeBlockerNotification,
   shouldReportEarlyLaunchExit,

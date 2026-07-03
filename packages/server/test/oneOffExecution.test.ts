@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { buildOneOffIssueBody, oneOffIssueTitle } from "../src/oneOffExecution.js";
+import {
+  buildForeignIssueCreateObjective,
+  buildOneOffIssueBody,
+  extractCommentSubject,
+  extractIssueCreateSubject,
+  isAlreadyForcedIssueCreateObjective,
+  isIssueCreateIntent,
+  oneOffIssueTitle,
+  wantsIssueComment,
+} from "../src/oneOffExecution.js";
 import { ensureRunnableBody, validateCreateIssueThenRunRequest } from "../src/createIssueRunJourney.js";
 
 describe("oneOffIssueTitle", () => {
@@ -70,5 +79,65 @@ describe("ensureRunnableBody (clarify-gate fix)", () => {
 
   it("still blocks a genuinely empty request (preserves ask-first)", () => {
     expect(ensureRunnableBody({ title: "   ", body: "  " })).toBe("");
+  });
+});
+
+describe("M-3 — issue-create intent routing", () => {
+  it("isIssueCreateIntent detects create/open/file phrasing for an issue/ticket/bug", () => {
+    expect(isIssueCreateIntent("create issue banana9 in the Zenod repo")).toBe(true);
+    expect(isIssueCreateIntent("open a ticket for the login bug")).toBe(true);
+    expect(isIssueCreateIntent("file a bug about the crash")).toBe(true);
+    expect(isIssueCreateIntent("what's the status of issue 108?")).toBe(false);
+    expect(isIssueCreateIntent("run the tests")).toBe(false);
+  });
+
+  it("wantsIssueComment detects a follow-up comment ask", () => {
+    expect(wantsIssueComment("create issue banana9 + comment banana8")).toBe(true);
+    expect(wantsIssueComment("create issue banana9 in the Zenod repo")).toBe(false);
+  });
+
+  it("buildForeignIssueCreateObjective forces gh issue create -R <repo> and reports the URL as evidence", () => {
+    const { objective, artifactPolicy } = buildForeignIssueCreateObjective({
+      repo: "zenod-ai/zenod",
+      title: "banana9",
+      body: "Objective: file the banana9 ticket.",
+    });
+    expect(objective).toContain("gh issue create -R zenod-ai/zenod");
+    expect(objective).toContain('title "banana9"');
+    expect(artifactPolicy).toContain("gh issue create -R zenod-ai/zenod");
+    expect(artifactPolicy.toLowerCase()).toContain("deliverable");
+  });
+
+  it("buildForeignIssueCreateObjective folds in a requested comment", () => {
+    const { objective, artifactPolicy } = buildForeignIssueCreateObjective({
+      repo: "zenod-ai/zenod",
+      title: "banana9",
+      body: "Objective: file the banana9 ticket.",
+      postComment: "banana8",
+    });
+    expect(objective).toContain("gh issue comment -R zenod-ai/zenod");
+    expect(objective).toContain("banana8");
+    expect(artifactPolicy).toContain("post the requested comment");
+  });
+
+  it("extractIssueCreateSubject pulls the real title out of the natural-language ask", () => {
+    expect(extractIssueCreateSubject("create issue banana9 in the Zenod repo")).toBe("banana9");
+    expect(extractIssueCreateSubject("create issue banana9")).toBe("banana9");
+    expect(extractIssueCreateSubject("open a ticket for the login crash")).toBe("for the login crash");
+    expect(extractIssueCreateSubject("create issue banana9 + comment banana8")).toBe("banana9");
+    // Unrecognized phrasing falls back to the original text rather than an empty title.
+    expect(extractIssueCreateSubject("please look into the flaky test")).toBe("please look into the flaky test");
+  });
+
+  it("extractCommentSubject pulls the comment text after the word 'comment'", () => {
+    expect(extractCommentSubject("create issue banana9 + comment banana8")).toBe("banana8");
+    expect(extractCommentSubject("create issue banana9 in the Zenod repo")).toBeUndefined();
+  });
+
+  it("isAlreadyForcedIssueCreateObjective recognizes its own marker and nothing else", () => {
+    const { artifactPolicy } = buildForeignIssueCreateObjective({ repo: "o/r", title: "t", body: "b" });
+    expect(isAlreadyForcedIssueCreateObjective(artifactPolicy)).toBe(true);
+    expect(isAlreadyForcedIssueCreateObjective(undefined)).toBe(false);
+    expect(isAlreadyForcedIssueCreateObjective("do not create backlog issues unless explicitly needed")).toBe(false);
   });
 });

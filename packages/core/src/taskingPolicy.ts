@@ -1,3 +1,5 @@
+import { consumeApprovalToken, hasValidApprovalToken, registerApprovalToken } from "./approvalTokens.js";
+
 export const OWNER_AGENT = "owner:agent";
 export const STATUS_PROPOSED = "status:proposed";
 export const STATUS_QUEUED = "status:queued";
@@ -81,6 +83,24 @@ function hasAnyArchusWriteIntent(request: string): boolean {
   );
 }
 
+// A negation anywhere near a verb ("don't send it", "no, cancel that post") must
+// never read as an explicit instruction to mutate, even though the bare verb
+// ("send", "post") appears in the message. Shared by hasExplicitMutationIntent's
+// outbound-send checks and isAffirmativeApproval below.
+const NEGATION_RE = /\b(?:no|not|don'?t|won'?t|never|cancel|stop|abort|nvm|nevermind|hold on|wait)\b/i;
+
+/** True when `verbs` (a global regex) matches somewhere in `request` with no negation word in the ~20 chars before it. */
+function hasUnnegatedVerb(request: string, verbs: RegExp): boolean {
+  for (const m of request.matchAll(verbs)) {
+    const lead = request.slice(Math.max(0, m.index! - 20), m.index);
+    if (!NEGATION_RE.test(lead)) return true;
+  }
+  return false;
+}
+
+const POST_VERB_RE = /\b(?:post|publish|send)\b/gi;
+const EMAIL_VERB_RE = /\b(?:send|email|mail)\b/gi;
+
 function hasExplicitMutationIntent(tool: string, request: string): boolean {
   const normalized = normalizedToolName(tool);
   if (normalized === "askarchus") return false;
@@ -113,15 +133,54 @@ function hasExplicitMutationIntent(tool: string, request: string): boolean {
     );
   }
   if (normalized === "posttweet" || normalized === "postreddit") {
-    return /\b(post|publish|send)\b/i.test(request);
+    return hasUnnegatedVerb(request, POST_VERB_RE);
   }
   if (normalized === "sendemail") {
-    return /\b(send|email|mail)\b/i.test(request);
+    return hasUnnegatedVerb(request, EMAIL_VERB_RE);
   }
   if (normalized === "delivertoprincipal" || normalized === "raiseevent") {
     return /\b(notify|alert|send|raise|tell\s+Jordi)\b/i.test(request);
   }
   return false;
+}
+
+// M-1 — outbound sends accept a standing-draft approval token in place of an
+// explicit write verb (see approvalTokens.ts). Scoped to the outbound send tools
+// only: these are the tools whose result text is delivered to the user VERBATIM
+// (replyGate.ts's ACTION_TOOL_NAMES), so a blocked call here either renders as a
+// friendly draft-approval prompt or resolves to a real send — never a raw error.
+const OUTBOUND_SEND_TOOL_NAMES = new Set(["posttweet", "postreddit", "sendemail"]);
+
+const AFFIRMATIVE_APPROVAL_RE =
+  /^\s*(?:[\w'-]+\s+){0,3}?(?:approved?|confirmed?|go\s*ahead|do\s+it|send\s+it|post\s+it|ship\s+it|yes|yep|yeah|ok(?:ay)?|sounds?\s+good|looks?\s+good)[.!]*\s*$/i;
+
+/** True for a short natural-language affirmative ("approved", "Tweet approved", "send it") — never a full sentence, never a negation. */
+export function isAffirmativeApproval(userRequest: string): boolean {
+  const trimmed = userRequest.trim();
+  if (NEGATION_RE.test(trimmed)) return false;
+  return AFFIRMATIVE_APPROVAL_RE.test(trimmed);
+}
+
+/** True when a call to an outbound send tool carries an actual draft (not an empty/bare call). */
+function hasSubstantiveDraftContent(args: Record<string, unknown> | undefined): boolean {
+  if (!args) return false;
+  return Object.values(args).some((value) => typeof value === "string" && value.trim().length > 0);
+}
+
+/**
+ * peerMutationGuardFailure's sentinel result for "an affirmative resolved no standing
+ * draft" (no token, or a token for different content/tool). The caller renders this as
+ * the honest zero-state ("Nothing pending to approve.") rather than the generic block —
+ * distinct from the ordinary "no explicit verb" block, which doubles as issuing a new
+ * draft-approval prompt (registers a token) when the call carries real content.
+ */
+export const NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL = "__nothing_pending_to_approve__";
+
+export interface PeerMutationGuardContext {
+  /** Conversation this call belongs to — required for the standing-draft token to apply. */
+  conversationId?: string | undefined;
+  /** The tool-call arguments this attempt carries (the draft content, for outbound sends). */
+  args?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -130,7 +189,7 @@ function hasExplicitMutationIntent(tool: string, request: string): boolean {
  * it reaches the peer. Prose reconciliation can correct claims, but it cannot
  * undo a closed issue or sent message.
  */
-export function peerMutationGuardFailure(tool: string, userRequest: string): string | null {
+export function peerMutationGuardFailure(tool: string, userRequest: string, context?: PeerMutationGuardContext): string | null {
   if (!isPeerMutationTool(tool)) return null;
   const normalized = normalizedToolName(tool);
   if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest) && !READ_ONLY_REQUEST_RE.test(userRequest)) {
@@ -144,10 +203,25 @@ export function peerMutationGuardFailure(tool: string, userRequest: string): str
   if (READ_ONLY_REQUEST_RE.test(userRequest) && !explicitMutation) {
     return `Blocked ${tool}: the user's current request is read-only/status-oriented, so mutating peer tools are not allowed this turn.`;
   }
-  if (!explicitMutation) {
-    return `Blocked ${tool}: mutating peer tools require an explicit write/run/send instruction from the user's current message.`;
+  if (explicitMutation) return null;
+
+  if (OUTBOUND_SEND_TOOL_NAMES.has(normalized) && context?.conversationId) {
+    const { conversationId, args } = context;
+    if (isAffirmativeApproval(userRequest)) {
+      if (hasValidApprovalToken(conversationId, normalized, args)) {
+        consumeApprovalToken(conversationId);
+        return null;
+      }
+      return NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL;
+    }
+    if (hasSubstantiveDraftContent(args)) {
+      // Issuing this block IS the draft-approval prompt — register the token so a
+      // later affirmative on this exact draft resolves without needing a write verb.
+      registerApprovalToken(conversationId, normalized, args);
+    }
   }
-  return null;
+
+  return `Blocked ${tool}: mutating peer tools require an explicit write/run/send instruction from the user's current message.`;
 }
 
 export function coerceEditIssueLabelsForUserRequest(
@@ -585,6 +659,32 @@ function noExecutionNumbers(actions: ReadonlyArray<RecordedAction>): Set<number>
   return nums;
 }
 
+// M-6/#234/R17 — read-path honesty. execution_status itself already refuses to say
+// "no work ran" when a FILTER emptied a non-empty queue: its own result text carries
+// this exact warning (see mcp.ts) telling the caller to broaden the query rather than
+// assert an empty world. The demonstrated gap (R17) is that nothing stopped the model
+// from ignoring that warning and asserting the negative claim anyway ("no work ran
+// this week", "no basis for that"). This is the read-side counterpart to
+// claimsPositiveExecutionForNoExecutionTarget above — that catches a false POSITIVE
+// against a genuinely empty queue; this catches a false NEGATIVE against a queue the
+// tool itself said was non-empty behind the filter.
+const FILTERED_EMPTY_WITH_BROADEN_HINT_RE = /Do NOT tell the user nothing ran[\s\S]*broaden the query/i;
+
+function hasUnbroadenedFilteredEmptyExecutionRead(actions: ReadonlyArray<RecordedAction>): boolean {
+  return actions.some((action) => {
+    if (/^ERROR:/.test(action.result)) return false;
+    if (!executionStatusToolName(action.tool)) return false;
+    return FILTERED_EMPTY_WITH_BROADEN_HINT_RE.test(action.result);
+  });
+}
+
+const CLAIMS_EMPTY_EXECUTION_WORLD_RE =
+  /\bno\s+(?:work|execution|executions?|runs?|tickets?)\s+(?:ran|has\s+run|have\s+run|happened|occurred)\b|\bnothing\s+(?:has\s+)?ran\b|\bno\s+basis\b/i;
+
+function claimsEmptyExecutionWorld(prose: string): boolean {
+  return CLAIMS_EMPTY_EXECUTION_WORLD_RE.test(prose);
+}
+
 const POSITIVE_EXECUTION_RE =
   /\b(?:ran|executed|completed|finished|done|succeeded|opened\s+PR|pull request|files?\s+changed|changed\s+files?|merged|needs-review|awaiting review)\b/i;
 const NEGATIVE_EXECUTION_LINE_RE = /\b(?:no|not|never|without|none|does(?: not|n't)|did(?: not|n't))\b/i;
@@ -690,6 +790,20 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     return [
       `⚠️ Correction — Epaminon's live execution read found no execution ticket for ${fmt(contradictedNoExecution)} this turn.`,
       "Do not treat issue-body comments, child-ticket notes, PR references, or narrative history as proof that this specific issue ran.",
+      "",
+      text,
+    ].join("\n");
+  }
+
+  // M-6/#234/R17 — a filtered-empty execution_status read (the tool's own result says
+  // the queue is non-empty behind the filter and warns not to say nothing ran) must
+  // never be reported as "no work ran" / "nothing ran" / "no basis". The only honest
+  // replies are a grounded broadened answer or an explicit couldn't-get-a-reliable-read
+  // — reconcileTaskingReply can't re-query live, so it forces the latter.
+  if (hasUnbroadenedFilteredEmptyExecutionRead(actions) && claimsEmptyExecutionWorld(prose) && !acknowledgesUnreadExecution(prose)) {
+    return [
+      "⚠️ Correction — I couldn't get a reliable read: the execution-status query was filtered and excluded tickets that exist on the executor, so I cannot say nothing ran.",
+      "Broaden the query (drop the filter, or list all) and answer from that — never assert an empty result set from a filtered-empty read.",
       "",
       text,
     ].join("\n");

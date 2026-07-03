@@ -47,6 +47,15 @@ import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } 
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
 import { type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, resolveProject } from "./projectRegistry.js";
+import {
+  buildForeignIssueCreateObjective,
+  extractCommentSubject,
+  extractIssueCreateSubject,
+  isAlreadyForcedIssueCreateObjective,
+  isIssueCreateIntent,
+  oneOffIssueTitle,
+  wantsIssueComment,
+} from "./oneOffExecution.js";
 import { driveArchiveUnavailableReason } from "./voiceArchive.js";
 import { validateStepCallback, type StepCallbackResult } from "./journeyContracts.js";
 import type { DeliverableManifest } from "./executionQueue.js";
@@ -2036,6 +2045,45 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
                 const match = resolveProject(loadProjectRegistry(), repo || objective);
                 const targetRepo = repo || match?.repo;
                 const targetPath = path || match?.path;
+
+                // M-3 — issue/ticket-creation intent on a known code repo must dispatch the
+                // dedicated issue-create worker flow, never the generic ephemeral prompt
+                // (whose own default is "do not create a GitHub issue unless explicitly
+                // asked"). This chokepoint is reached by every ephemeral dispatch — the
+                // Console journey layer (dispatchForeignRepoWorker) already pre-forces this
+                // same objective, signaled by the marker in its artifactPolicy, so this only
+                // fires for a request that reached here directly, without going through that
+                // journey.
+                const requestText = [objective, instructions].filter(Boolean).join(" ");
+                if (targetRepo && isIssueCreateIntent(requestText) && !isAlreadyForcedIssueCreateObjective(artifactPolicy)) {
+                  const title = oneOffIssueTitle(extractIssueCreateSubject(objective));
+                  const body = [
+                    `Objective: ${objective.trim()}`,
+                    instructions ? `Instructions: ${instructions.trim()}` : "",
+                    match?.deployNote ? `Deploy reality: ${match.deployNote}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n");
+                  const postComment = wantsIssueComment(requestText)
+                    ? extractCommentSubject(requestText) || instructions || objective
+                    : undefined;
+                  const forced = buildForeignIssueCreateObjective({
+                    repo: targetRepo,
+                    title,
+                    body,
+                    ...(postComment ? { postComment } : {}),
+                  });
+                  const context = [
+                    forced.objective,
+                    targetPath ? `Target path within repo: ${targetPath}` : "",
+                    `Artifact policy: ${forced.artifactPolicy}`,
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n");
+                  await runtime.executionQueue!.enqueue({ executionId, target: `ephemeral:${executionId}`, context });
+                  return runtime.executionQueue!.get(executionId)!;
+                }
+
                 const context = [
                   "Ephemeral one-off execution requested.",
                   `Objective: ${objective}`,

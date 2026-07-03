@@ -2,7 +2,12 @@ import { generateObject, generateText, stepCountIs, streamText, tool, type Model
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
-import { coerceEditIssueLabelsForUserRequest, peerMutationGuardFailure } from "../taskingPolicy.js";
+import {
+  coerceEditIssueLabelsForUserRequest,
+  NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
+  normalizedToolName,
+  peerMutationGuardFailure,
+} from "../taskingPolicy.js";
 import type {
   AnswerInput,
   AnswerResult,
@@ -818,6 +823,17 @@ export class AiSdkBrainLlm implements BrainLlm {
     // returns its answer. The model sees them as ordinary tools.
     const peerEntries = Object.entries(peerTools ?? {});
     const sameTurnPeerMutations = new Map<string, Promise<string>>();
+    // M-1 — retry-stop: the FIRST Blocked result from an outbound send tool ends the
+    // turn. Without this, the model retries the same blocked call (or tries another
+    // send tool) for its remaining step budget, and replyGate.ts's renderActionTurnReply
+    // joins every one of those results into the delivered text — the "tripled error
+    // bubble". Once set, later attempts this turn short-circuit to the SAME rendered
+    // text without recording a second action, and prepareStep (below) stops the model
+    // from spending another step on tools at all.
+    let blockedOutboundTurn: { tool: string; text: string } | null = null;
+    const OUTBOUND_SEND_TOOL_NAMES = new Set(["posttweet", "postreddit", "sendemail"]);
+    const friendlyDraftBlock = () => "Draft's ready — reply \"send\" or \"approve\" to post it.";
+    const NOTHING_PENDING_TEXT = "Nothing pending to approve.";
     const repoRefFromPeerArgs = (args: Record<string, unknown>): string | null => {
       const values: string[] = [];
       for (const key of ["repo", "target", "message", "input", "objective", "instructions", "originalRequest"] as const) {
@@ -878,8 +894,28 @@ export class AiSdkBrainLlm implements BrainLlm {
           inputSchema: (peer.inputSchema ?? z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") })) as never,
           execute: async (peerInput) => {
             const args = (peerInput ?? {}) as Record<string, unknown>;
-            const guardFailure = peerMutationGuardFailure(name, input.question);
+            const normalized = normalizedToolName(name);
+            const isOutboundSend = OUTBOUND_SEND_TOOL_NAMES.has(normalized);
+
+            if (isOutboundSend && blockedOutboundTurn) {
+              // Retry-stop: already blocked once this turn — never re-attempt, never
+              // record a second (duplicate) action.
+              return blockedOutboundTurn.text;
+            }
+
+            const guardFailure = peerMutationGuardFailure(name, input.question, { conversationId: input.conversationId, args });
             if (guardFailure) {
+              if (isOutboundSend) {
+                // M-1 friendly block template: the raw "ERROR: Blocked …" string is an
+                // action-turn tool result, so replyGate.ts would otherwise deliver it to
+                // the user verbatim. Render the honest human affordance instead; the raw
+                // detail goes to the operator log only.
+                console.warn(`[peer-guard] blocked ${name}: ${guardFailure}`);
+                const text = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL ? NOTHING_PENDING_TEXT : friendlyDraftBlock();
+                blockedOutboundTurn = { tool: name, text };
+                input.onPeerAction?.(name, args, text);
+                return text;
+              }
               const result = `ERROR: ${guardFailure}`;
               input.onPeerAction?.(name, args, result);
               return result;
@@ -944,8 +980,10 @@ export class AiSdkBrainLlm implements BrainLlm {
       // Hard guarantee against the empty-reply failure: on the final step,
       // disable tools so the model is forced to produce text from what it has.
       // It can plan around this because the budget is in its system prompt.
+      // M-1 retry-stop: once an outbound send got blocked this turn, also force the
+      // NEXT step to text-only — the model must not spend another round retrying it.
       prepareStep: ({ stepNumber }: { stepNumber: number }) =>
-        stepNumber >= this.maxSteps - 1 ? { toolChoice: "none" as const } : {},
+        stepNumber >= this.maxSteps - 1 || blockedOutboundTurn ? { toolChoice: "none" as const } : {},
       tools: {
         ...taskToolSet,
         ...driveToolSet,

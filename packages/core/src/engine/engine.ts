@@ -250,6 +250,13 @@ export interface EngineOptions {
    * tokenizers may differ, but the briefing share is measured consistently.
    */
   onTokenCost?: (measurement: TokenCostMeasurement) => void;
+  /**
+   * M-5 — fired when a background captureNote filing actually lands (the commit is
+   * real, not just queued). The engine only console.info's this today; the server
+   * wires it to the normal notification path so a background filing gets a real
+   * completion receipt instead of a silent log line.
+   */
+  onFilingComplete?: (result: StoreResult) => void;
 }
 
 // One retry, not two: attempt 0 composes, attempt 1 re-composes with the lint
@@ -711,13 +718,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
           },
           "background",
         )
-          .then((result) =>
+          .then((result) => {
             console.info(
               `[librarian] background filing complete: ${result.evidenceRef}` +
                 (result.pagesTouched.length ? ` → ${result.pagesTouched.join(", ")}` : " → (inbox)") +
                 ` @ ${result.commitSha}`,
-            ),
-          )
+            );
+            options.onFilingComplete?.(result);
+          })
           .catch((err) => console.error(`[librarian] background filing failed: ${(err as Error).message}`));
         recordAction(
           "capture",
@@ -1288,6 +1296,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const result = await llm.answer(
       {
         question: message,
+        conversationId: cid,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
@@ -1340,6 +1349,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const result = await llm.answer(
       {
         question,
+        conversationId: cid,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         onPeerAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
