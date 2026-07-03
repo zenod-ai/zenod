@@ -292,6 +292,37 @@ function materializeExec(central) {
   return m ? Number(m[1]) : null;
 }
 
+// F-1 (C-08): mint a lightweight tracking issue for an ISSUE-LESS ephemeral run so its
+// start ping has a resolving home and the heartbeat can pin to the same issue. Aligns
+// with the standing "no issue-less executions" principle: a one-off gets a real ticket
+// the moment it starts, not only if it happens to create one. Best-effort — if the
+// create fails (auth/network) we return null and the caller falls back to no-link rather
+// than blocking the run. Repo defaults to REPO; overridable via ZENOD_TRACKING_REPO.
+function mintTrackingIssue(executionId, context, repo = process.env.ZENOD_TRACKING_REPO || REPO) {
+  const summary = String(context || "").trim().replace(/\s+/g, " ").slice(0, 72) || "one-off execution";
+  const body = [
+    `_Tracking issue for one-off execution \`${executionId}\` — minted at start so the run is traceable from its first notification (C-08)._`,
+    "",
+    "Context:",
+    "",
+    String(context || "(no context provided)").slice(0, 4000),
+  ].join("\n");
+  try {
+    ensureLabel(repo, "owner:agent");
+    ensureLabel(repo, "status:running");
+    const out = gh([
+      "issue", "create", "--repo", repo,
+      "--title", `[exec ${executionId}] ${summary}`,
+      "--body", body, "--label", "owner:agent,status:running",
+    ]);
+    const m = out.match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/);
+    return m ? m[0] : null;
+  } catch (e) {
+    log(`tracking-issue mint failed for ${executionId}: ${e.message}`);
+    return null;
+  }
+}
+
 // Synchronous spawnability probe for the fanout launcher. Only spawn-level errors
 // (ENOENT/EACCES) populate probe.error; a nonzero exit does not. We check this ONCE
 // per scan before materializing any exec issue, so a broken launcher never crashes the
@@ -533,6 +564,34 @@ function parseTarget(target) {
 function parseEphemeralTarget(target) {
   const m = String(target || "").match(/^ephemeral:([A-Za-z0-9_.:-]+)$/);
   return m ? { executionId: m[1] } : null;
+}
+
+// PURE (F-1 / C-08): the resolving GitHub URL for a dispatched target "owner/repo#N".
+// A dispatched run's target IS a real work ticket, so its start ping already has a home.
+function issueUrlFromTarget(target) {
+  const t = parseTarget(target);
+  return t ? `https://github.com/${t.repo}/issues/${t.number}` : null;
+}
+
+// PURE (F-1 / C-08): the resolving link a start notification must carry — the target
+// issue URL for a dispatched run, else the first github issue URL embedded in the run
+// context (the mint-a-ticket path leaves one there). Returns null only for a genuinely
+// issue-less ephemeral that has not yet been given a tracking issue — the caller then
+// mints one so EVERY start ping resolves (the "no issue-less executions" principle).
+function resolvingLinkForRun({ target, context } = {}) {
+  const fromTarget = issueUrlFromTarget(target);
+  if (fromTarget) return fromTarget;
+  const m = String(context || "").match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/i);
+  return m ? m[0].replace(/[).,]+$/, "") : null;
+}
+
+// PURE (F-1 / C-08): compose the "execution started" notification. It ALWAYS carries a
+// resolving link to the ticket/run it executes against — a dispatched run's work ticket
+// or the freshly-minted tracking issue for an issue-less ephemeral. A start ping with no
+// link is the C-08 gap: a run that cannot be traced from its very first notification.
+function composeExecutionStartNotification({ executionId, target, link, worker = workerLabel() } = {}) {
+  const head = `🤖 ${worker} working on execution ${executionId} — ${target}`;
+  return link ? `${head}\n${link}` : head;
 }
 
 function ephemeralRunPaths(executionId) {
@@ -1270,9 +1329,11 @@ async function raiseHeartbeatMilestone(kind, entry, obs) {
   const executionId = entry.executionId || "";
   const key = `${target}|${executionId}|heartbeat.${kind}`;
   const elapsed = formatElapsed(obs.elapsedMs);
+  // C-08: the start milestone ping must resolve too — carry the ticket/tracking-issue link.
+  const startLink = resolvingLinkForRun({ target, context: entry.context });
   const text =
     kind === "start"
-      ? `🤖 Execution started — ${target}. Live progress on its ticket.`
+      ? `🤖 Execution started — ${target}.${startLink ? `\n${startLink}` : " Live progress on its ticket."}`
       : kind === "longrun"
         ? `⏳ Still running — ${target} · ${elapsed} elapsed · ${obs.turns} turns · no terminal yet.`
         : `⚠️ Execution may be stalled — ${target} · no activity for ${formatElapsed(obs.staleMs)}.`;
@@ -2116,11 +2177,26 @@ async function handleRun(req, res) {
     const executionId = body.execution_id != null ? String(body.execution_id) : "";
     if (!executionId || !body.target) return void res.writeHead(400).end("execution_id and target required\n");
     const state = loadState();
-    const result = launchDispatched(executionId, String(body.target), String(body.context || ""), state);
+    const target = String(body.target);
+    const context = String(body.context || "");
+    const result = launchDispatched(executionId, target, context, state);
     if (!result.ok) {
       await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: result.note });
     } else if (shouldNotifyOnExecutionStart(body)) {
-      await notify(`🤖 ${workerLabel()} working on execution ${executionId} — ${String(body.target)}`);
+      // C-08: EVERY start notification must carry a resolving link to the ticket/run it
+      // executes against. A dispatched run's target is already a work ticket; an issue-less
+      // ephemeral has no home yet, so mint a lightweight tracking issue and pin both the
+      // start ping AND the heartbeat (via the ephemeral entry's context) to it.
+      let link = resolvingLinkForRun({ target, context });
+      if (!link) {
+        const trackingUrl = mintTrackingIssue(executionId, context);
+        if (trackingUrl) {
+          link = trackingUrl;
+          const eph = state.ephemeral?.[executionId];
+          if (eph) eph.context = `${eph.context || ""}\nTracking issue: ${trackingUrl}`.trim();
+        }
+      }
+      await notify(composeExecutionStartNotification({ executionId, target, link }));
     }
     saveState(state);
     res.writeHead(result.ok ? 202 : 422).end(result.ok ? "launched\n" : "could not launch\n");
@@ -2172,6 +2248,9 @@ export {
   targetBootstrapLabels,
   parseEphemeralTarget,
   parseTarget,
+  issueUrlFromTarget,
+  resolvingLinkForRun,
+  composeExecutionStartNotification,
   ephemeralFinalState,
   ephemeralFallbackDecision,
   ephemeralPrompt,

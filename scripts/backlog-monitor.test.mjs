@@ -30,6 +30,9 @@ import {
   launchLogPath,
   targetBootstrapLabels,
   parseEphemeralTarget,
+  issueUrlFromTarget,
+  resolvingLinkForRun,
+  composeExecutionStartNotification,
   ephemeralFinalState,
   ephemeralFallbackDecision,
   ephemeralPrompt,
@@ -960,4 +963,43 @@ test("heartbeatIssueRef resolves a dispatched target, an in-context issue URL, e
     { repo: "zenod-ai/zenod", number: 512 },
   );
   assert.equal(heartbeatIssueRef({ target: "ephemeral:abc-123", context: "no ticket here" }), null, "degrade gracefully — no issue");
+});
+
+// ---- F-1 (C-08): every start notification carries a resolving link ----
+
+test("issueUrlFromTarget resolves a dispatched target to its issue URL, null for ephemeral", () => {
+  assert.equal(issueUrlFromTarget("zenod-ai/zenod#476"), "https://github.com/zenod-ai/zenod/issues/476");
+  assert.equal(issueUrlFromTarget("ephemeral:abc-123"), null);
+  assert.equal(issueUrlFromTarget(""), null);
+});
+
+test("resolvingLinkForRun prefers the target ticket, else an in-context issue URL, else null", () => {
+  // dispatched run — the target IS the link
+  assert.equal(resolvingLinkForRun({ target: "owner/repo#7" }), "https://github.com/owner/repo/issues/7");
+  // issue-less ephemeral whose context embeds a tracking issue URL
+  assert.equal(
+    resolvingLinkForRun({ target: "ephemeral:xyz", context: "Tracking issue: https://github.com/zenod-ai/zenod/issues/900." }),
+    "https://github.com/zenod-ai/zenod/issues/900",
+  );
+  // genuinely issue-less ephemeral — caller must mint one
+  assert.equal(resolvingLinkForRun({ target: "ephemeral:xyz", context: "just do the thing" }), null);
+});
+
+test("composeExecutionStartNotification ALWAYS includes the link when one is resolvable (C-08)", () => {
+  const dispatched = composeExecutionStartNotification({
+    executionId: "e-1",
+    target: "owner/repo#7",
+    link: resolvingLinkForRun({ target: "owner/repo#7" }),
+    worker: "Epaminon",
+  });
+  assert.ok(dispatched.includes("https://github.com/owner/repo/issues/7"), "dispatched start ping resolves");
+
+  // issue-less ephemeral: once a tracking issue is minted the ping resolves too
+  const ephemeral = composeExecutionStartNotification({
+    executionId: "e-2",
+    target: "ephemeral:xyz",
+    link: "https://github.com/zenod-ai/zenod/issues/901",
+    worker: "Epaminon",
+  });
+  assert.ok(ephemeral.includes("https://github.com/zenod-ai/zenod/issues/901"), "ephemeral start ping resolves via tracking issue");
 });
