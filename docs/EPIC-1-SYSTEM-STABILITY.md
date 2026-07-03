@@ -129,6 +129,14 @@ S-3 lands) → S-7. Then: full canonical run (now C-01…C-20). Green → deploy
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
 
+### Receipt · 2026-07-04 · I8-2 durable executor (core slice) — hand-run by Claude, not dispatched
+The runner's ephemeral lane now RESUMES a run killed mid-flight (redeploy) instead of reporting it dead.
+- Grafted the D-2 spike's durability modules into the runner: `scripts/lib/durable.mjs` (replay/journal primitive), `budget.mjs`, `receipt.mjs`.
+- `scripts/backlog-monitor.mjs`: `sweepStaleEphemeral` now uses a pure `ephemeralResumeDecision` — no terminal outcome + under the durable attempt ceiling → re-launch (resume); terminal or ceiling reached → report. Durable per-run `journal.jsonl` + `attempts` on the (persistent) monitor state hold the ceiling across restarts. Implements **C-21**, maps to **I8-2 / C-17**; I8-3 transcript folds into the same journal.
+- Tests: `scripts/lib/durable.test.mjs` (replay-after-crash) + `ephemeralResumeDecision` cases in `backlog-monitor.test.mjs`; full script suite 147 green.
+- Deferred (honest): the live C-21 kill/restart proof is VPS-side (needs a runner deploy); `budget.mjs` hard-terminate wiring (C-17) and the full I8-1 "typed services" refactor are follow-ups.
+- PR: (this branch, HOLD-FOR-REVIEW — deploy freeze in effect; merge deliberately as the single unfreeze deploy)
+
 ### Receipt · 2026-07-03 · iteration-7 master run (issue hydration)
 Tracking issues minted with verbatim acceptance criteria (S-4/S-5/S-6 pre-existing, linked not duplicated):
 - S-0 · https://github.com/zenod-ai/zenod/issues/487

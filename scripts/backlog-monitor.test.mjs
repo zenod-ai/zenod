@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   batchKey,
   detectIntegrationStatus,
+  ephemeralResumeDecision,
   ensureFanInBatch,
   integrationPrompt,
   mergeApprovalForIssue,
@@ -1120,4 +1121,27 @@ test("C-07a unchanged: a run WITH a real deliverable still renders done with the
   });
   assert.ok(msg.startsWith("✅ Execution done"));
   assert.ok(msg.includes("https://github.com/zenod-ai/zenod/issues/6"));
+});
+
+// I8-2 (C-21): durable resume decision — a run killed mid-flight by a redeploy is
+// resumed, not reported dead; a run that finished is reported; the ceiling holds.
+test("ephemeralResumeDecision resumes a run with no terminal outcome under the ceiling", () => {
+  const d = ephemeralResumeDecision({ hasTerminal: false, attempts: 1, maxAttempts: 3 });
+  assert.equal(d.action, "resume");
+});
+
+test("ephemeralResumeDecision reports (does not resume) a run that reached a terminal outcome", () => {
+  const d = ephemeralResumeDecision({ hasTerminal: true, attempts: 1, maxAttempts: 3 });
+  assert.equal(d.action, "report");
+});
+
+test("ephemeralResumeDecision stops resuming once the attempt ceiling is reached", () => {
+  const d = ephemeralResumeDecision({ hasTerminal: false, attempts: 3, maxAttempts: 3 });
+  assert.equal(d.action, "report");
+  assert.match(d.reason, /giving up/);
+});
+
+test("ephemeralResumeDecision resumes on the last allowed attempt", () => {
+  const d = ephemeralResumeDecision({ hasTerminal: false, attempts: 2, maxAttempts: 3 });
+  assert.equal(d.action, "resume");
 });

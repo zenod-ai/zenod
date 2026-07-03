@@ -32,6 +32,9 @@ import { dirname, join } from "node:path";
 // ephemeral one-off path reuses the SAME error-class + fallback helpers so the two
 // lanes stay in lockstep (E-2 port).
 import { isQuotaError, fallbackEngine, buildWorkerSpawn, extractWorkerError, isPausedQuota, pauseMessage } from "./fanout-codex.mjs";
+// I8-2 durable executor: the ~60-LOC replay/journal primitive grafted from the
+// D-2 spike (spikes/d2-execution-substrate/candidate-c-diy/src/durable.mjs).
+import { appendRecord } from "./lib/durable.mjs";
 
 const BACKLOG = process.env.ZENOD_BACKLOG_REPO || "AlfaBlok/obsidian-brain";
 const REPO = process.env.ZENOD_REPO || "zenod-ai/zenod"; // default target repo + fan-in repo
@@ -602,6 +605,9 @@ function ephemeralRunPaths(executionId) {
     promptPath: join(root, "prompt.md"),
     finalPath: join(root, "final.md"),
     eventsPath: join(root, "events.jsonl"),
+    // I8-2/I8-3: durable per-run step/attempt journal (survives redeploys on the
+    // runner's persistent volume) — the resume record + the folded-in step log.
+    journalPath: join(root, "journal.jsonl"),
   };
 }
 
@@ -1229,12 +1235,70 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
 // child, etc.): the PID is gone but no outcome was ever reported. Without this they stay
 // at running/queued forever with no trace (#stab T2). reportEphemeralFinished is idempotent
 // (guards on reportedStatus), so re-reporting an already-reported run is a no-op.
+// I8-2 (durable executor / C-21): a run whose worker vanished with NO terminal
+// outcome was almost always killed by a redeploy, not by finishing. Rather than
+// reporting it dead (the pre-I8-2 "interrupted by a server restart" behavior),
+// resume it — re-launch the worker — up to a durable attempt ceiling. A worker
+// that DID finish (final.md / terminal event present) is reported, not resumed.
+// The attempt count lives on the (durable) monitor state, so the ceiling holds
+// across restarts and a genuinely-broken run can't resume forever.
+const EPHEMERAL_MAX_ATTEMPTS = Number(process.env.ZENOD_EPHEMERAL_MAX_ATTEMPTS || 3);
+
+/** Did the worker reach a real terminal outcome (finished), vs. get killed mid-run? */
+function hasTerminalOutcome(paths) {
+  try {
+    if (existsSync(paths.finalPath) && readFileSync(paths.finalPath, "utf8").trim()) return true;
+  } catch {
+    /* unreadable → treat as no terminal */
+  }
+  try {
+    if (existsSync(paths.eventsPath)) {
+      for (const line of readFileSync(paths.eventsPath, "utf8").split("\n")) {
+        const t = line.trim();
+        if (!t) continue;
+        let ev;
+        try {
+          ev = JSON.parse(t);
+        } catch {
+          continue;
+        }
+        if (ev?.type === "result") return true; // claude/codex terminal result event
+      }
+    }
+  } catch {
+    /* unreadable → treat as no terminal */
+  }
+  return false;
+}
+
+/**
+ * PURE decision (C-21): given whether the worker finished and how many attempts a
+ * run has already had, decide to RESUME (re-launch) or REPORT (give up / deliver).
+ * - terminal outcome present  → report (the worker finished; the exit callback was lost)
+ * - no terminal + under ceiling → resume (a redeploy killed it; run it again)
+ * - no terminal + at ceiling   → report failed (don't resume forever)
+ */
+export function ephemeralResumeDecision({ hasTerminal, attempts, maxAttempts = EPHEMERAL_MAX_ATTEMPTS }) {
+  if (hasTerminal) return { action: "report", reason: "worker reached a terminal outcome" };
+  if ((attempts ?? 1) < maxAttempts) return { action: "resume", reason: `no terminal outcome; resuming (attempt ${(attempts ?? 1) + 1}/${maxAttempts})` };
+  return { action: "report", reason: `no terminal outcome after ${attempts ?? 1} attempt(s); giving up` };
+}
+
 async function sweepStaleEphemeral(state) {
   for (const [executionId, e] of Object.entries(state.ephemeral || {})) {
     if (!e || e.reportedStatus || !e.pid) continue;
     if (isPidAlive(e.pid)) continue;
-    log(`sweep: ephemeral ${executionId} pid ${e.pid} is gone with no outcome — reporting`);
-    await reportEphemeralFinished(executionId, e.target, e.exitCode ?? 1, e.finalPath || ephemeralRunPaths(executionId).finalPath);
+    const paths = ephemeralRunPaths(executionId);
+    const decision = ephemeralResumeDecision({ hasTerminal: hasTerminalOutcome(paths), attempts: e.attempts ?? 1 });
+    if (decision.action === "resume") {
+      log(`sweep: ephemeral ${executionId} pid ${e.pid} gone, ${decision.reason} — durable resume`);
+      appendRecord(paths.journalPath, { kind: "resume", runId: executionId, from: "server-restart", attempt: (e.attempts ?? 1) + 1, at: new Date().toISOString() });
+      e.pid = null; // clear the dead pid so launchEphemeral's duplicate guard lets the resume through
+      launchEphemeral(executionId, e.target, e.context ?? "", state);
+      continue;
+    }
+    log(`sweep: ephemeral ${executionId} pid ${e.pid} is gone with no outcome — reporting (${decision.reason})`);
+    await reportEphemeralFinished(executionId, e.target, e.exitCode ?? 1, e.finalPath || paths.finalPath);
   }
 }
 
@@ -1578,6 +1642,9 @@ function launchEphemeral(executionId, target, context, state) {
   const paths = ephemeralRunPaths(executionId);
   mkdirSync(paths.scratch, { recursive: true });
   writeFileSync(paths.promptPath, ephemeralPrompt(executionId, context));
+  // I8-2/I8-3: durable step-log record for this launch attempt (fsync'd), so the
+  // run's history survives a redeploy and the resume path can see it.
+  appendRecord(paths.journalPath, { kind: "launch", runId: executionId, attempt: (existing?.attempts ?? 0) + 1, at: new Date().toISOString() });
   const primaryEngine = String(process.env.ZENOD_WORKER_ENGINE || "codex").toLowerCase() === "claude" ? "claude" : "codex";
 
   // Run one attempt on the given engine. The prompt + report-back flow is engine-agnostic
@@ -1662,6 +1729,10 @@ function launchEphemeral(executionId, target, context, state) {
     pid: child.pid ?? null,
     launchedAt: new Date().toISOString(),
     reportedStatus: null,
+    // I8-2 (C-21): durable attempt count — survives on the monitor state so the
+    // resume ceiling in sweepStaleEphemeral holds across redeploys. A resume
+    // re-enters launchEphemeral, so increment from any prior entry.
+    attempts: (existing?.attempts ?? 0) + 1,
     // "Merge by default": remember at launch whether THIS task opted out of auto-merge,
     // so the deterministic finalization path (reportEphemeralFinished) can honor the
     // opt-out without re-reading the (LLM-authored) worker output. No signal = ON.

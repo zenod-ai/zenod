@@ -83,6 +83,9 @@ PASS: paraphrased, naturally-worded instructions ("go ahead and file that", "Twe
 **C-20 · Green PRs merge themselves.** A worker PR (code or docs-only, draft included) whose checks are green.
 PASS: merged without any human click within 15 min of green, on both zenod-ai/zenod and AlfaBlok/obsidian-brain; completion notify carries the merged-commit URL; the deliverable summary lists the PR's paths — never "Deliverables: none" when files exist. (Live instance 2026-07-03: iteration-7's own PRs #246/#247 sat in needs-review as docs-only drafts until Jordi hand-merged; fanout summary said "none" for a 3-file PR.)
 
+**C-21 · Runs survive redeploys.** (I8-2) Kill/restart the service mid-run.
+PASS: the run resumes from its durable step log and completes with correct receipts; no duplicated side effects; the resumed run's transcript shows the replay point. A run killed with no terminal outcome is re-launched (not reported dead) up to a durable attempt ceiling; a run that finished is reported, never re-run. (Live instances 2026-07-03: two iteration-8 runs, and the P-batch, were killed by redeploys and reported "interrupted by a server restart"/failed instead of resuming.)
+
 ---
 
 ## SCOREBOARD (append per run — never delete rows)
