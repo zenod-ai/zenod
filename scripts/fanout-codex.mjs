@@ -222,7 +222,7 @@ function resolveGoal(opts, issues) {
   return [
     `GOAL: Drain agent-owned GitHub issues ${issueText} into isolated branches and draft-ready implementation results.`,
     "",
-    "Success means every runnable issue has either a tested local branch / draft PR candidate or a structured blocked report with a concrete human decision request. Do not merge to main. Preserve visibility into each subagent's state throughout the run.",
+    "Success means every runnable issue has either a tested local branch / PR candidate or a structured blocked report with a concrete human decision request. Workers must not merge to main by hand; the controller opens the PR and enables GitHub auto-merge on it by default (merges once CI is green; HOLD-FOR-REVIEW opts out). Preserve visibility into each subagent's state throughout the run.",
   ].join("\n");
 }
 

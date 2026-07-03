@@ -550,6 +550,7 @@ function ephemeralPrompt(executionId, context) {
     "- If complete, include a concise summary of what was done and any evidence/pointers.",
     "- Evidence must be REAL and verifiable. If you committed/pushed, include the FULL commit URL (https://github.com/<owner>/<repo>/commit/<sha>) or PR URL — a bare SHA without a URL is NOT accepted as evidence, and a fabricated SHA will be rejected. Never invent a commit, test result, or CI status.",
     "- Deploy honesty: pushing to a branch is NOT the same as the change being live. If the change must redeploy to take effect, confirm the running service actually picked up the new commit before saying it is live. If you cannot confirm the redeploy, say `pushed but deploy unconfirmed` and do not tell the user they can test it live yet.",
+    "- Merge policy: open ONE PR against main and STOP — do NOT merge it yourself. The controller enables GitHub auto-merge on your PR automatically (it merges once CI is green; never if CI is red). If the context says HOLD-FOR-REVIEW, the controller will leave the PR open for a human instead. Either way, you must never run `gh pr merge` by hand.",
   ].join("\n");
 }
 
@@ -891,11 +892,58 @@ function pickEvidenceUrl(verified) {
   return verified.find((u) => /\/pull\//.test(u)) || verified.find((u) => /\/commit\//.test(u)) || verified[0];
 }
 
+// PURE: "merge by default" opt-out detector. An execution's resulting PR gets GitHub
+// auto-merge enabled by the CONTROLLER (deterministic, never the worker's LLM). A task
+// can suppress that only via an EXPLICIT signal in its context/objective — the marker
+// `HOLD-FOR-REVIEW` (case-insensitive) or a `noAutoMerge`/`hold` flag folded into the
+// context text. No signal = auto-merge ON. This is intentionally strict: only an
+// unambiguous marker holds a PR open; ambiguous prose does not.
+const HOLD_FOR_REVIEW_RE = /\b(HOLD-FOR-REVIEW|noAutoMerge|no-auto-merge)\b/i;
+function wantsHoldForReview(context) {
+  return HOLD_FOR_REVIEW_RE.test(String(context || ""));
+}
+
+// PURE: pull owner/repo out of a github PR URL so the controller can address `gh pr
+// merge -R <owner/repo>` without depending on the runner's cwd/checkout.
+function repoFromPrUrl(url) {
+  const m = String(url || "").match(/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/\d+/i);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+// CONTROLLER enforcement of "merge by default": enable GitHub auto-merge (merge when the
+// branch-protected `ci` check is green; never on red) on a verified PR via
+// `gh pr merge <pr> -R <repo> --auto --squash`. This is deterministic — no LLM decides
+// whether to merge. It never does an immediate/unconditional merge, so the CI gate always
+// holds. Returns an observable outcome: `enabled` | `already-merged` | `held` |
+// `no-pr` | `failed`, plus a human detail string for logging.
+//   - held: the task opted out (HOLD-FOR-REVIEW / noAutoMerge) — skip, leave PR open.
+//   - no-pr: no verifiable PR URL — skip (do NOT guess a PR to merge).
+// `runner` is injectable for tests (defaults to the real `gh` via spawnSync).
+function enableAutoMergeForPr(prUrl, { hold = false, runner } = {}) {
+  const exec =
+    runner ||
+    ((args) => {
+      const r = spawnSync("gh", args, { encoding: "utf8" });
+      return { status: r.status, stdout: r.stdout || "", stderr: r.stderr || "" };
+    });
+  if (hold) return { outcome: "held", detail: "task requested HOLD-FOR-REVIEW — auto-merge not enabled" };
+  const repo = repoFromPrUrl(prUrl);
+  if (!prUrl || !repo) return { outcome: "no-pr", detail: "no verifiable PR; auto-merge skipped" };
+  const r = exec(["pr", "merge", prUrl, "-R", repo, "--auto", "--squash"]);
+  if (r.status === 0) return { outcome: "enabled", detail: `auto-merge enabled on ${prUrl}` };
+  const err = `${r.stdout}\n${r.stderr}`;
+  if (/already merged|not mergeable: the merge commit|Pull request is already merged/i.test(err)) {
+    return { outcome: "already-merged", detail: `${prUrl} already merged` };
+  }
+  return { outcome: "failed", detail: `gh pr merge failed for ${prUrl}: ${err.trim().slice(0, 500)}` };
+}
+
 async function reportEphemeralFinished(executionId, target, exitCode, finalPath) {
   const finalText = existsSync(finalPath) ? readFileSync(finalPath, "utf8") : "";
   let stateName = ephemeralFinalState(exitCode, finalText);
   let note = noteFromFinalText(finalText, `ephemeral worker exited with code ${exitCode ?? "unknown"}`);
   let evidenceUrl = "";
+  let autoMergeEvent = null;
   const persisted = loadState();
   const entry = persisted.ephemeral?.[executionId];
   if (entry?.reportedStatus) return;
@@ -914,6 +962,15 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
         note = `claimed evidence not found on GitHub: ${missing.join(", ")} — not accepting as done. ${note}`.slice(0, 1000);
       } else if (verified.length) {
         evidenceUrl = pickEvidenceUrl(verified);
+        // "Merge by default" (controller-enforced): the resulting PR gets GitHub
+        // auto-merge enabled automatically so it merges once `ci` is green — UNLESS the
+        // task opted out (HOLD-FOR-REVIEW / noAutoMerge, captured at launch). Keyed off a
+        // VERIFIED PR URL only; if none is verifiable we skip and log rather than guess.
+        // Deterministic: no LLM decides whether to merge.
+        const verifiedPr = verified.find((u) => /\/pull\//.test(u)) || "";
+        const merge = enableAutoMergeForPr(verifiedPr, { hold: entry?.holdForReview === true });
+        log(`ephemeral ${executionId} auto-merge: ${merge.outcome} — ${merge.detail}`);
+        autoMergeEvent = { url: verifiedPr || null, outcome: merge.outcome, detail: merge.detail };
       }
     } else {
       // M-2/I5-2 — evidence-required "done": a terminal run that claims complete but
@@ -943,6 +1000,7 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
     finalPath,
     eventsPath,
     ...(evidenceUrl ? { evidenceUrl } : {}),
+    ...(autoMergeEvent ? { autoMerge: autoMergeEvent } : {}),
   };
   saveState(persisted);
 
@@ -1084,8 +1142,15 @@ function launchEphemeral(executionId, target, context, state) {
     pid: child.pid ?? null,
     launchedAt: new Date().toISOString(),
     reportedStatus: null,
+    // "Merge by default": remember at launch whether THIS task opted out of auto-merge,
+    // so the deterministic finalization path (reportEphemeralFinished) can honor the
+    // opt-out without re-reading the (LLM-authored) worker output. No signal = ON.
+    holdForReview: wantsHoldForReview(context),
   };
-  log(`launched ephemeral execution ${executionId} scratch=${paths.scratch} engine=${primaryEngine}`);
+  log(
+    `launched ephemeral execution ${executionId} scratch=${paths.scratch} engine=${primaryEngine}` +
+      (wantsHoldForReview(context) ? " hold-for-review=on" : ""),
+  );
   return { ok: true };
 }
 
@@ -1816,6 +1881,9 @@ export {
   verifyEvidenceClaims,
   hasCheckableEvidence,
   pickEvidenceUrl,
+  wantsHoldForReview,
+  repoFromPrUrl,
+  enableAutoMergeForPr,
   tailFile,
   isPidAlive,
   flushPendingReports,
