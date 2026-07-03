@@ -6,6 +6,12 @@ import { dirname, join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 
+// Reuse the CONTROLLER auto-merge helpers shipped for the ephemeral/one-off lane
+// (#480, C-20). The fan-out lane is a second PR-opening site and must enforce the
+// same "merge by default on green, honor HOLD-FOR-REVIEW" policy — deterministically,
+// controller-side, never the worker's LLM. Don't duplicate the logic; share it.
+import { enableAutoMergeForPr, wantsHoldForReview } from "./backlog-monitor.mjs";
+
 const STATUSES = new Set([
   "queued",
   "starting",
@@ -93,7 +99,8 @@ Start options:
   --model <model>           Model override. Default per engine (claude: claude-opus-4-8).
   --effort <level>          Claude reasoning effort: low|medium|high|xhigh|max. Default: low.
   --thinking <effort>       Optional Codex reasoning effort if supported by installed CLI.
-  --draft-pr                Push branches and open draft PRs.
+  --draft-pr                Push branches and open PRs (ready + auto-merge on green;
+                            HOLD-FOR-REVIEW in the goal/context keeps them draft).
   --github-status           Comment start/final/blocker status on GitHub issues.
   --execution-id <id>       Optional Epaminon execution id to report worker blockers against.
   --execution-context <txt> Optional hydrated execution context from Archus/Epaminon.
@@ -1047,37 +1054,88 @@ async function commitPushPr({ opts, manifest, issueNumber, finalText }) {
       finalText || "(no final handoff captured)",
     ].join("\n"),
   );
-  const pr = run("gh", [
-    "pr",
-    "create",
-    "--repo",
-    manifest.repo,
-    "--base",
-    manifest.base,
-    "--head",
-    worker.branch,
-    "--title",
-    `Fix #${issueNumber}: ${worker.title}`,
-    "--body-file",
+  // C-20: open the PR READY by default so GitHub auto-merge can land it on green
+  // (a draft can never merge — that's what stranded #246/#247/#249). Only when the
+  // controller opted into HOLD-FOR-REVIEW do we open a draft and skip auto-merge.
+  const hold = manifest.options?.holdForReview === true;
+  const prArgs = buildPrCreateArgs({
+    repo: manifest.repo,
+    base: manifest.base,
+    branch: worker.branch,
+    title: `Fix #${issueNumber}: ${worker.title}`,
     bodyPath,
-    "--draft",
-  ], { cwd, allowFailure: true });
+    hold,
+  });
+  const pr = run("gh", prArgs, { cwd, allowFailure: true });
   const prUrl = (pr.stdout + pr.stderr).match(/https:\/\/github\.com\/\S+\/pull\/\d+/)?.[0] ?? null;
   if (!prUrl) {
     await controllerBlocked({
       opts,
       manifest,
       issueNumber,
-      reason: `draft PR creation failed: ${(pr.stderr || pr.stdout || "no PR URL returned").trim().slice(0, 800)}`,
+      reason: `PR creation failed: ${(pr.stderr || pr.stdout || "no PR URL returned").trim().slice(0, 800)}`,
       finalText,
     });
     return;
   }
-  await updateWorkerStatus(runDir, issueNumber, { status: "complete", prUrl });
+  // CONTROLLER enforces merge-by-default: enable GitHub auto-merge (merges on green,
+  // never on red). Works on both zenod-ai/zenod (branch-protected) and
+  // AlfaBlok/obsidian-brain (may have no protection — `--auto` still applies, or the
+  // merge lands immediately when there are no required checks). Deterministic — no LLM.
+  const autoMerge = enableAutoMergeForPr(prUrl, { hold });
+  console.error(`[fanout] auto-merge ${autoMerge.outcome} for #${issueNumber}: ${autoMerge.detail}`);
+  // Deliverables summary: derive the real changed paths from the PR itself so it never
+  // says "Deliverables: none" for a PR that has committed files (the worker may have
+  // committed, clearing the worktree that `dirty` was read from — the 3-file "none" bug).
+  // Fall back to the dirty capture; only "none" when there genuinely are no files.
+  const prFiles = prChangedFiles(manifest.repo, prUrl);
+  const deliverablesForComment = prFiles.length ? prFiles : deliverables;
+  await updateWorkerStatus(runDir, issueNumber, {
+    status: "complete",
+    prUrl,
+    autoMerge: autoMerge.outcome,
+    filesChanged: deliverablesForComment,
+  });
   if (opts.githubStatus) {
     syncIssueStatusLabel(manifest.repo, issueNumber, "complete", { hasReviewableWork: true });
-    await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete", worker.branch, finalText, prUrl, null, deliverables), true);
+    await commentIssue(manifest.repo, issueNumber, finalComment(manifest.runId, issueNumber, "complete", worker.branch, finalText, prUrl, null, deliverablesForComment), true);
   }
+}
+
+// CONTROLLER-observed deliverables: the file paths actually in a PR, read from GitHub
+// via `gh pr diff --name-only` (never worker self-report). Returns [] on any failure so
+// callers fall back to the worktree dirty-file capture rather than fabricating paths.
+// `runner` is injectable for tests (defaults to the real `gh` via run()).
+function prChangedFiles(repo, prUrl, { runner } = {}) {
+  if (!prUrl) return [];
+  const exec = runner || ((args) => run("gh", args, { allowFailure: true }));
+  const r = exec(["pr", "diff", prUrl, "--repo", repo, "--name-only"]);
+  if (r.status !== 0) return [];
+  return String(r.stdout || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+// PURE: build the `gh pr create` argv. C-20 — open READY by default (no --draft) so
+// auto-merge can land the PR on green; only a HOLD-FOR-REVIEW opt-out adds --draft.
+function buildPrCreateArgs({ repo, base, branch, title, bodyPath, hold = false }) {
+  const args = [
+    "pr",
+    "create",
+    "--repo",
+    repo,
+    "--base",
+    base,
+    "--head",
+    branch,
+    "--title",
+    title,
+    "--body-file",
+    bodyPath,
+  ];
+  if (hold) args.push("--draft");
+  return args;
 }
 
 async function controllerBlocked({ opts, manifest, issueNumber, reason, finalText }) {
@@ -1115,11 +1173,15 @@ function blockerComment(runIdValue, branch, blocker) {
 }
 
 // PURE: normalize `git status --short` lines to clean deliverable paths (R1-T4).
-// Handles the XY status prefix and rename arrows ("R old -> new" keeps new).
+// Strips the 2-char XY status code + separating space (the real porcelain format), and
+// resolves rename arrows ("R  old -> new" keeps new). The prefix is only removed when it
+// matches the exact `XY ` shape, so an already-clean path (e.g. from `gh pr diff
+// --name-only`, no leading code) like "README.md" is passed through untouched — the old
+// greedy `^[A-Z]{1,3}` prefix wrongly ate "REA" out of such paths.
 function deliverablePaths(statusLines) {
   const out = [];
   for (const raw of statusLines || []) {
-    let s = String(raw).replace(/^[\sA-Z?!]{1,3}/, "").trim();
+    let s = String(raw).replace(/^[ MADRCU?!]{2} /, "").trim();
     const arrow = s.split(" -> ");
     s = (arrow.length > 1 ? arrow[arrow.length - 1] : s).replace(/^"|"$/g, "").trim();
     if (s) out.push(s);
@@ -1143,7 +1205,7 @@ function finalComment(runIdValue, issueNumber, status, branch, finalText, prUrl 
     "",
     `Status: \`${status}\``,
     `Branch: \`${branch}\``,
-    prUrl ? `Draft PR: ${prUrl}` : "",
+    prUrl ? `PR: ${prUrl}` : "",
     "",
     deliverablesBlock(files),
     "",
@@ -1194,6 +1256,10 @@ async function start(opts) {
       goalSupplied: Boolean(opts.goal || opts.goalFile),
       execLane,
       executionId: executionId || null,
+      // CONTROLLER opt-out for merge-by-default (C-20): a HOLD-FOR-REVIEW / noAutoMerge
+      // marker anywhere in the goal or execution context leaves fan-out PRs as drafts
+      // with no auto-merge. Same deterministic signal as the ephemeral lane (#480).
+      holdForReview: wantsHoldForReview(`${goal}\n${executionContext}`),
       engine,
       model: model ?? null,
       effort: effort ?? null,
@@ -1498,6 +1564,8 @@ export {
   finalComment,
   deliverablePaths,
   deliverablesBlock,
+  buildPrCreateArgs,
+  prChangedFiles,
   resolveEngine,
   resolveModel,
   resolveEffort,

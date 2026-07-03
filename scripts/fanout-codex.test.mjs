@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, isQuotaError, fallbackEngine, finalComment, deliverablePaths, deliverablesBlock, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+import { issueStatusLabelFor, detectBlocker, clarityCheck, executionBlockedRequest, remoteMatchesRepo, resetBaseCheckout, branchName, extractWorkerError, classifyWorkerError, isQuotaError, fallbackEngine, finalComment, deliverablePaths, deliverablesBlock, buildPrCreateArgs, prChangedFiles, resolveEngine, resolveModel, resolveEffort, buildWorkerSpawn, extractFinalFromEvents } from "./fanout-codex.mjs";
+import { enableAutoMergeForPr, wantsHoldForReview } from "./backlog-monitor.mjs";
 
 test("isQuotaError recognizes the quota/limit error class across both engines (W0)", () => {
   // The exact codex error that killed executions on 2026-07-02:
@@ -308,4 +309,72 @@ test("resetBaseCheckout heals dirty stale runner cache checkout", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ── C-20: fan-out PRs open ready + auto-merge on green, honor HOLD opt-out ──────────
+
+test("C-20: fan-out PR opens READY (no --draft) by default so auto-merge can land it", () => {
+  const args = buildPrCreateArgs({ repo: "AlfaBlok/obsidian-brain", base: "main", branch: "b", title: "t", bodyPath: "/p" });
+  assert.ok(!args.includes("--draft"), "default PR must NOT be a draft (a draft can never auto-merge — the #246/#247/#249 bug)");
+});
+
+test("C-20: HOLD-FOR-REVIEW opt-out opens the PR as a draft", () => {
+  const args = buildPrCreateArgs({ repo: "zenod-ai/zenod", base: "main", branch: "b", title: "t", bodyPath: "/p", hold: true });
+  assert.ok(args.includes("--draft"), "hold-for-review must keep the PR a draft");
+});
+
+test("C-20: controller enables auto-merge on a ready PR (both repos)", () => {
+  for (const url of [
+    "https://github.com/zenod-ai/zenod/pull/9",
+    "https://github.com/AlfaBlok/obsidian-brain/pull/250",
+  ]) {
+    const calls = [];
+    const runner = (a) => { calls.push(a); return { status: 0, stdout: "", stderr: "" }; };
+    const r = enableAutoMergeForPr(url, { hold: false, runner });
+    assert.equal(r.outcome, "enabled");
+    assert.deepEqual(calls[0].slice(0, 2), ["pr", "merge"]);
+    assert.ok(calls[0].includes("--auto") && calls[0].includes("--squash"));
+  }
+});
+
+test("C-20: HOLD opt-out never enables auto-merge and makes no gh call", () => {
+  const calls = [];
+  const runner = (a) => { calls.push(a); return { status: 0, stdout: "", stderr: "" }; };
+  const r = enableAutoMergeForPr("https://github.com/zenod-ai/zenod/pull/9", { hold: true, runner });
+  assert.equal(r.outcome, "held");
+  assert.equal(calls.length, 0, "held PR must not call gh pr merge");
+});
+
+test("C-20: holdForReview signal detected from goal/context (shared with #480)", () => {
+  assert.ok(wantsHoldForReview("Do the thing.\nHOLD-FOR-REVIEW please"));
+  assert.ok(wantsHoldForReview("context: noAutoMerge"));
+  assert.ok(!wantsHoldForReview("Just a normal research goal, no markers here."));
+});
+
+// ── C-20 item 2: deliverables summary lists the PR's real files, never "none" ───────
+
+test("C-20: deliverablePaths passes through already-clean paths (README.md not mangled)", () => {
+  // The old greedy prefix regex ate "REA" out of "README.md"; the porcelain-shaped
+  // prefix strip must leave code-less paths (from `gh pr diff --name-only`) intact.
+  assert.deepEqual(deliverablePaths(["README.md", "docs/a.md", "src/b.ts"]), ["README.md", "docs/a.md", "src/b.ts"]);
+});
+
+test("C-20: deliverables list the PR's real files (never 'none' when files exist)", () => {
+  const runner = () => ({ status: 0, stdout: "docs/a.md\nsrc/b.ts\nREADME.md\n", stderr: "" });
+  const files = prChangedFiles("AlfaBlok/obsidian-brain", "https://github.com/AlfaBlok/obsidian-brain/pull/250", { runner });
+  assert.deepEqual(files, ["docs/a.md", "src/b.ts", "README.md"]);
+  const block = deliverablesBlock(files);
+  assert.ok(block.startsWith("Deliverables:"));
+  assert.ok(block.includes("- docs/a.md") && block.includes("- src/b.ts") && block.includes("- README.md"));
+  assert.ok(!/Deliverables: none/.test(block), "must not say none for a 3-file PR");
+});
+
+test("C-20: deliverables fall back / say 'none' only when there genuinely are no files", () => {
+  // gh failure → [] so caller falls back to the worktree dirty capture (no fabrication)
+  const failRunner = () => ({ status: 1, stdout: "", stderr: "not found" });
+  assert.deepEqual(prChangedFiles("a/b", "https://github.com/a/b/pull/1", { runner: failRunner }), []);
+  // genuinely-empty PR diff → [] → "Deliverables: none"
+  const emptyRunner = () => ({ status: 0, stdout: "\n\n", stderr: "" });
+  assert.deepEqual(prChangedFiles("a/b", "https://github.com/a/b/pull/1", { runner: emptyRunner }), []);
+  assert.equal(deliverablesBlock([]), "Deliverables: none");
 });
