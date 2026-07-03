@@ -8,7 +8,7 @@ import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 
 /**
- * Audio transcription. Two engines:
+ * Audio transcription. Three engines:
  *
  * 1. Groq cloud STT (whisper-large-v3-turbo) — used when GROQ_API_KEY is set.
  *    ~200x realtime, so an hour of audio takes seconds instead of pinning the
@@ -16,8 +16,12 @@ import { setTimeout as sleep } from "node:timers/promises";
  *    (what Groq resamples to anyway) to stay under the 25 MB free-tier upload
  *    cap; anything still larger is split into segments and stitched back.
  *
- * 2. Local whisper.cpp — the default and the fallback when Groq is missing,
- *    rate-limited, or down. No cloud, no API key, no per-minute cost: the same
+ * 2. OpenRouter cloud STT — the paid fallback for long notes and for Groq
+ *    failures/quota exhaustion when an OpenRouter key is configured.
+ *
+ * 3. Local whisper.cpp — the default and the final fallback when cloud
+ *    providers are missing, rate-limited, out of credits, or down. No cloud,
+ *    no API key, no per-minute cost: the same
  *    ffmpeg → 16 kHz mono WAV → whisper-cli flow as our standalone
  *    local_whisper service, run in-process. The model is downloaded once to
  *    the persistent /data volume so it survives redeploys.
@@ -153,6 +157,7 @@ const GROQ_MAX_RETRY_ATTEMPTS = 3;
 const GROQ_MAX_RETRY_AFTER_SECONDS = 180;
 // Canonical ggml model host — same source local_whisper's download script uses.
 const MODEL_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
+const TEST_FAKE_FAIL_PROVIDERS = "ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS";
 
 export function isAudioMimeType(mimeType: string): boolean {
   return mimeType.startsWith("audio/") || mimeType.startsWith("video/");
@@ -334,6 +339,27 @@ function runCapture(command: string, args: string[], opts: { signal?: AbortSigna
 function parseWhisperProgress(line: string): number | null {
   const m = /progress\s*=\s*(\d+)\s*%/.exec(line);
   return m ? Number(m[1]) : null;
+}
+
+function shouldTryOpenRouterFallback(
+  isLongAudio: boolean,
+  longProvider: "openrouter" | "openai" | "local",
+  openrouterApiKey: string | null | undefined,
+): boolean {
+  // Long-note provider selection is still respected. For short notes, Groq is
+  // the fast first choice, and OpenRouter is the paid cloud fallback before the
+  // final local whisper.cpp fallback.
+  return Boolean(openrouterApiKey && (longProvider === "openrouter" || !isLongAudio));
+}
+
+function fakeFailedProviders(): Set<string> {
+  if (process.env.NODE_ENV !== "test" && !process.env.VITEST) return new Set();
+  return new Set(
+    (process.env[TEST_FAKE_FAIL_PROVIDERS] ?? "")
+      .split(",")
+      .map((provider) => provider.trim().toLowerCase())
+      .filter(Boolean),
+  );
 }
 
 /** POST one audio file to Groq's OpenAI-compatible transcription endpoint. */
@@ -664,15 +690,19 @@ async function runTranscription(
   const isLongAudio = durationSeconds !== null && durationSeconds !== undefined && durationSeconds > LONG_AUDIO_SECONDS;
   if (fakeTranscript) {
     onProgress?.(100);
+    const failed = fakeFailedProviders();
+    const canTryOpenRouter = shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey);
     const provider =
-      isLongAudio && longProvider === "openrouter" && openrouterApiKey
+      isLongAudio && longProvider === "openrouter" && openrouterApiKey && !failed.has("openrouter")
         ? `openrouter ${openrouterModel}`
-        : isLongAudio && longProvider === "openai" && openaiApiKey
+        : isLongAudio && longProvider === "openai" && openaiApiKey && !failed.has("openai")
         ? `openai ${OPENAI_STT_MODEL}`
         : isLongAudio
           ? `whisper.cpp ${modelName}`
-          : groqApiKey
+          : groqApiKey && !failed.has("groq")
             ? `groq ${GROQ_STT_MODEL}`
+            : canTryOpenRouter && !failed.has("openrouter")
+              ? `openrouter ${openrouterModel}`
             : `whisper.cpp ${modelName}`;
     return {
       success: true,
@@ -702,7 +732,7 @@ async function runTranscription(
       return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
     } catch (err) {
       if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
-      if (longProvider === "openrouter" && openrouterApiKey) {
+      if (openrouterApiKey && shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey)) {
         const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
         if (result.success || signal?.aborted) return result;
         console.warn(`[transcribe] openrouter fallback failed, falling back to whisper.cpp: ${result.error}`);

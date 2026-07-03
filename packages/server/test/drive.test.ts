@@ -135,13 +135,18 @@ describe("drive client", () => {
 });
 
 describe("transcription envelope", () => {
+  afterEach(() => {
+    delete process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS;
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+    vi.unstubAllGlobals();
+  });
+
   it("fails cleanly when the local model is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("missing model", { status: 500 })));
     const result = await transcribeAudio(Buffer.from("x"), "a.m4a");
     expect(result.success).toBe(false);
     expect(result.provider).toBe("whisper.cpp");
     expect(result.error).toMatch(/model unavailable/);
-    vi.unstubAllGlobals();
   });
 
   it("transcribes through the local provider", async () => {
@@ -212,6 +217,44 @@ describe("transcription envelope", () => {
       transcript: "remember to renew the travel insurance",
       provider: "groq whisper-large-v3-turbo",
     });
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  });
+
+  it("falls back from failed Groq to OpenRouter before local whisper", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS = "groq";
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", {
+      groqApiKey: "gsk_test",
+      openrouterApiKey: "sk-or-test",
+      openrouterModel: "openai/whisper-large-v3",
+      longTranscriptionProvider: "local",
+      durationSeconds: 120,
+    });
+    expect(result).toEqual({
+      success: true,
+      transcript: "remember to renew the travel insurance",
+      provider: "openrouter openai/whisper-large-v3",
+    });
+    delete process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS;
+    delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  });
+
+  it("falls back from failed OpenRouter to local whisper", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember to renew the travel insurance";
+    process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS = "openrouter";
+    const result = await transcribeAudio(Buffer.from("x"), "a.m4a", {
+      groqApiKey: "gsk_test",
+      openrouterApiKey: "sk-or-test",
+      openrouterModel: "openai/whisper-large-v3",
+      longTranscriptionProvider: "openrouter",
+      durationSeconds: 301,
+    });
+    expect(result).toEqual({
+      success: true,
+      transcript: "remember to renew the travel insurance",
+      provider: "whisper.cpp large-v3-turbo",
+    });
+    delete process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS;
     delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
   });
 
