@@ -129,6 +129,13 @@ S-3 lands) → S-7. Then: full canonical run (now C-01…C-20). Green → deploy
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
 
+### Receipt · 2026-07-04 · C-17 budget kill (S-7) — hand-run by Claude
+Hard per-run budget now TERMINATES a zombie ephemeral instead of letting it run forever.
+- `scripts/backlog-monitor.mjs`: pure `budgetKillDecision` (wall-clock OR turns, defaults 60m/200 turns, env-overridable) wired into `sweepHeartbeats` — a live run past ceiling is SIGTERM'd + journalled; `reportEphemeralFinished` renders an honest "budget exceeded … nothing verifiable" failure (not the generic path, not a quota pause) with the transcript link. Implements **C-17** (S-7).
+- Tests: `budgetKillDecision` cases in `backlog-monitor.test.mjs`; full script suite 151 green.
+- Deferred (honest): live kill proof is VPS-side (forced zombie run post-deploy).
+- PR: (this branch)
+
 ### Receipt · 2026-07-04 · I8-1 typed write front door (slice 1) — hand-run by Claude
 The Console mesh gateway now publishes the TYPED, deterministic backlog write service (`backlog_create/edit/close/comment`) that dispatches straight to Archus's read-back-verified tools (ID+URL-or-error), **no `chat_with_archus` LLM in the write path** — the typed replacement for the conversational `create_issue`/`edit_issue`/`close_issue` front doors.
 - `packages/server/src/meshGateway.ts`: 4 new v4 typed write tools (behind `ZENOD_V4_TOOL_NAMES`, so inert until enabled → safe to land). Maps I8-1 → C-18/C-19.
