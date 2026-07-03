@@ -55,10 +55,90 @@ import {
   HEARTBEAT_STALL_MS,
   HEARTBEAT_LONGRUN_MS,
   HEARTBEAT_MARKER,
+  wantsHoldForReview,
+  repoFromPrUrl,
+  enableAutoMergeForPr,
 } from "./backlog-monitor.mjs";
 
 test("fan-in batch keys are deterministic by issue number", () => {
   assert.equal(batchKey([52, 41, 7]), "7-41-52");
+});
+
+// --- "Merge by default" for one-off executions (controller-enforced) ---
+
+test("merge-by-default: a normal task with a verified PR gets `gh pr merge --auto --squash`", () => {
+  const calls = [];
+  const runner = (args) => {
+    calls.push(args);
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  const r = enableAutoMergeForPr("https://github.com/AlfaBlok/zenod/pull/7", { hold: false, runner });
+  assert.equal(r.outcome, "enabled");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], [
+    "pr",
+    "merge",
+    "https://github.com/AlfaBlok/zenod/pull/7",
+    "-R",
+    "AlfaBlok/zenod",
+    "--auto",
+    "--squash",
+  ]);
+});
+
+test("opt-out: HOLD-FOR-REVIEW suppresses auto-merge and makes no gh call", () => {
+  const calls = [];
+  const runner = (args) => {
+    calls.push(args);
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  const r = enableAutoMergeForPr("https://github.com/AlfaBlok/zenod/pull/7", { hold: true, runner });
+  assert.equal(r.outcome, "held");
+  assert.equal(calls.length, 0, "no gh pr merge is issued when the task opted out");
+});
+
+test("no-verifiable-PR: auto-merge is skipped and logged, never guessed", () => {
+  const calls = [];
+  const runner = (args) => {
+    calls.push(args);
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  const r = enableAutoMergeForPr("", { hold: false, runner });
+  assert.equal(r.outcome, "no-pr");
+  assert.match(r.detail, /no verifiable PR; auto-merge skipped/);
+  assert.equal(calls.length, 0);
+  // a non-PR URL (e.g. a bare commit link) is also not a mergeable PR
+  const r2 = enableAutoMergeForPr("https://github.com/AlfaBlok/zenod/commit/abc1234", { runner });
+  assert.equal(r2.outcome, "no-pr");
+  assert.equal(calls.length, 0);
+});
+
+test("already-merged PR is reported, not failed", () => {
+  const runner = () => ({ status: 1, stdout: "", stderr: "Pull request is already merged" });
+  const r = enableAutoMergeForPr("https://github.com/AlfaBlok/zenod/pull/7", { runner });
+  assert.equal(r.outcome, "already-merged");
+});
+
+test("gh failure surfaces as a failed outcome with detail", () => {
+  const runner = () => ({ status: 1, stdout: "", stderr: "auto-merge is not allowed for this repository" });
+  const r = enableAutoMergeForPr("https://github.com/AlfaBlok/zenod/pull/7", { runner });
+  assert.equal(r.outcome, "failed");
+  assert.match(r.detail, /auto-merge is not allowed/);
+});
+
+test("wantsHoldForReview detects explicit opt-out markers only", () => {
+  assert.equal(wantsHoldForReview("Artifact policy: HOLD-FOR-REVIEW keep it open"), true);
+  assert.equal(wantsHoldForReview("please set noAutoMerge on this one"), true);
+  assert.equal(wantsHoldForReview("no-auto-merge"), true);
+  assert.equal(wantsHoldForReview("Just open one PR against main"), false);
+  assert.equal(wantsHoldForReview(""), false);
+  assert.equal(wantsHoldForReview(undefined), false);
+});
+
+test("repoFromPrUrl extracts owner/repo from a PR URL", () => {
+  assert.equal(repoFromPrUrl("https://github.com/AlfaBlok/idea_scraper/pull/106"), "AlfaBlok/idea_scraper");
+  assert.equal(repoFromPrUrl("https://github.com/a/b/issues/1"), null);
+  assert.equal(repoFromPrUrl(""), null);
 });
 
 test("composeBlockerNotification never truncates the actionable question (R2-T4)", () => {
