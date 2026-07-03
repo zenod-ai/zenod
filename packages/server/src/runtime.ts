@@ -47,6 +47,7 @@ import { IngestQueue } from "./ingestQueue.js";
 import { TaskJobStore } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
 import { ExecutionStore } from "./executionStore.js";
+import { TranscriptStore } from "./transcriptStore.js";
 import { JourneyStore } from "./journeyStore.js";
 import { JourneyMonitor } from "./journeyMonitor.js";
 import { createJourneyAuthorityReconciler } from "./journeyAuthorityReconciler.js";
@@ -172,6 +173,8 @@ export class Runtime {
   readonly taskJobStore: TaskJobStore;
   readonly taskJobQueue: TaskJobQueue;
   readonly executionStore: ExecutionStore;
+  /** S-1 (a) — durable, deploy-surviving copy of each run's full events.jsonl. */
+  readonly transcriptStore: TranscriptStore;
   readonly journeyStore: JourneyStore;
   readonly journeyMonitor: JourneyMonitor;
   /** M-5 — ingest job ids already alerted-on this process's lifetime, so the stuck-job watchdog fires once per episode, not every sweep tick. */
@@ -235,6 +238,9 @@ export class Runtime {
     this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"));
     this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine());
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
+    // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
+    // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
+    this.transcriptStore = new TranscriptStore(join(dataDir, "transcripts"));
     // The executor (Epaminon) owns an execution queue; no other agent does.
     this.executionQueue = agent.executor === true ? buildExecutionQueue(this.settings, this.executionStore) : null;
     this.journeyStore = new JourneyStore(join(dataDir, "journeys.sqlite"));

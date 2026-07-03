@@ -73,6 +73,11 @@ export interface ExecutionTicket {
   phase?: string;
   /** Short controller-observed partial (the last thing the worker said), for mid-run status. */
   progressNote?: string;
+  /** S-1 (b): the last N controller-observed events, human-rendered (tool/turn labels),
+   *  so execution_status shows a real activity trail mid-run — never a worker self-report. */
+  recentEvents?: string[];
+  /** S-1 (a/c): durable path the full events.jsonl transcript resolves at, once uploaded. */
+  transcriptUrl?: string;
   updatedAt: number;
 }
 
@@ -253,11 +258,33 @@ export class ExecutionQueue {
    * ticket, only annotates a RUNNING one so execution_status can answer "where is it now?"
    * with elapsed + phase. Ignored for any non-running ticket (a terminal run has its outcome).
    */
-  async recordProgress(input: { executionId: string; phase?: string; progressNote?: string }): Promise<void> {
+  async recordProgress(input: {
+    executionId: string;
+    phase?: string;
+    progressNote?: string;
+    recentEvents?: string[];
+    transcriptUrl?: string;
+  }): Promise<void> {
     const t = this.tickets.get(input.executionId);
     if (!t || t.state !== "running") return;
     if (input.phase !== undefined) t.phase = input.phase;
     if (input.progressNote !== undefined) t.progressNote = input.progressNote;
+    if (input.recentEvents !== undefined) t.recentEvents = input.recentEvents;
+    if (input.transcriptUrl !== undefined) t.transcriptUrl = input.transcriptUrl;
+    t.updatedAt = this.opts.now();
+    await this.persist(t);
+  }
+
+  /**
+   * S-1 (a/c): pin the durable transcript URL onto a ticket regardless of its state — a
+   * terminal run's transcript is uploaded AFTER it left `running`, and the link must still
+   * attach so the completion notification and later reads resolve it. Persist-only; never a
+   * state edge. No-op for an unknown ticket.
+   */
+  async recordTranscriptUrl(input: { executionId: string; transcriptUrl: string }): Promise<void> {
+    const t = this.tickets.get(input.executionId);
+    if (!t) return;
+    t.transcriptUrl = input.transcriptUrl;
     t.updatedAt = this.opts.now();
     await this.persist(t);
   }

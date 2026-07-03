@@ -892,6 +892,11 @@ test("parseHeartbeatObservation derives turns + last tool from a codex event str
   assert.equal(obs.turns, 1, "one turn.started");
   assert.equal(obs.toolCalls, 2, "command + tool_call counted, prose not");
   assert.equal(obs.lastEvent, "assistant_message", "last observed structural event");
+  assert.deepEqual(
+    obs.recentEvents,
+    ["turn.started", "npm test", "edit_file", "assistant_message"],
+    "rolling trail of the last observed event labels (S-1)",
+  );
   assert.equal(obs.lastActivityMs, Date.parse("2026-07-03T10:01:30Z"), "last activity from the final parseable line");
 });
 
@@ -913,7 +918,7 @@ test("parseHeartbeatObservation handles claude stream-json turns + tool_use", ()
 
 test("parseHeartbeatObservation zeroes out for a missing log (degrade-safe)", () => {
   const obs = parseHeartbeatObservation("/no/such/events.jsonl", 1000);
-  assert.deepEqual(obs, { turns: 0, toolCalls: 0, lastEvent: "", lastPartial: "", lastActivityMs: null });
+  assert.deepEqual(obs, { turns: 0, toolCalls: 0, lastEvent: "", lastPartial: "", lastActivityMs: null, recentEvents: [] });
 });
 
 test("heartbeatStalled flips only after the threshold, and never on unknown activity", () => {

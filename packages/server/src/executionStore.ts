@@ -23,7 +23,19 @@ interface Row {
   started_at: number | null;
   phase: string | null;
   progress_note: string | null;
+  recent_events: string | null;
+  transcript_url: string | null;
   updated_at: number;
+}
+
+function parseRecentEvents(raw: string | null): string[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.map((e) => String(e)) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function parseDeliverable(raw: string | null): DeliverableManifest | undefined {
@@ -51,6 +63,8 @@ function rowToTicket(row: Row): ExecutionTicket {
     ...(row.started_at != null ? { startedAt: row.started_at } : {}),
     ...(row.phase ? { phase: row.phase } : {}),
     ...(row.progress_note ? { progressNote: row.progress_note } : {}),
+    ...(parseRecentEvents(row.recent_events) ? { recentEvents: parseRecentEvents(row.recent_events) } : {}),
+    ...(row.transcript_url ? { transcriptUrl: row.transcript_url } : {}),
     updatedAt: row.updated_at,
   };
 }
@@ -75,6 +89,8 @@ export class ExecutionStore {
         started_at INTEGER,
         phase TEXT,
         progress_note TEXT,
+        recent_events TEXT,
+        transcript_url TEXT,
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS execution_tickets_state ON execution_tickets(state, updated_at);
@@ -96,6 +112,13 @@ export class ExecutionStore {
     if (!cols.some((c) => c.name === "progress_note")) {
       this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN progress_note TEXT`);
     }
+    // Migration (S-1): the last-N observed events (JSON array) + the durable transcript URL.
+    if (!cols.some((c) => c.name === "recent_events")) {
+      this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN recent_events TEXT`);
+    }
+    if (!cols.some((c) => c.name === "transcript_url")) {
+      this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN transcript_url TEXT`);
+    }
     // A restart means any in-process runner callback was lost. Preserve the row
     // visibly as blocked instead of pretending it is still running.
     this.db
@@ -114,8 +137,9 @@ export class ExecutionStore {
       .prepare(
         `INSERT INTO execution_tickets (
            execution_id, target, context, state, evidence_url, note,
-           final_content, outward, deliverable, started_at, phase, progress_note, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           final_content, outward, deliverable, started_at, phase, progress_note,
+           recent_events, transcript_url, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(execution_id) DO UPDATE SET
            target=excluded.target,
            context=excluded.context,
@@ -128,6 +152,8 @@ export class ExecutionStore {
            started_at=excluded.started_at,
            phase=excluded.phase,
            progress_note=excluded.progress_note,
+           recent_events=excluded.recent_events,
+           transcript_url=excluded.transcript_url,
            updated_at=excluded.updated_at`,
       )
       .run(
@@ -143,6 +169,8 @@ export class ExecutionStore {
         ticket.startedAt ?? null,
         ticket.phase ?? null,
         ticket.progressNote ?? null,
+        ticket.recentEvents ? JSON.stringify(ticket.recentEvents) : null,
+        ticket.transcriptUrl ?? null,
         ticket.updatedAt,
       );
   }
