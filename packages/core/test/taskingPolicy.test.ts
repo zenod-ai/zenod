@@ -5,6 +5,7 @@ import {
   NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
   peerMutationGuardFailure,
   reconcileTaskingReply,
+  registerOutboundComposeApproval,
   summarizeActionsForReply,
   type RecordedAction,
 } from "../src/taskingPolicy.js";
@@ -437,6 +438,46 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("P-3: corrects a status summary that calls a task 'unexecuted' when its send is in the transcript's outbound log", () => {
+    const reply =
+      "Task 1: created the issue, done.\nTask 2: send the WhatsApp update to Jordi via Phylax — unexecuted.\nTask 3: still queued.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "get_recent_conversation_transcript",
+        input: { windowMinutes: 240 },
+        result:
+          "[2026-07-03T11:17:00.000Z] outbound Zenod; message=wamid.ABC123; status=sent; chars=42\nHere's your update, Jordi.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("actually sent this turn");
+    expect(out).toContain("2026-07-03T11:17:00.000Z");
+    expect(out).toContain("wamid.ABC123");
+  });
+
+  it("P-3: does not correct when there is no outbound entry in the transcript read", () => {
+    const reply = "Task 2: send the WhatsApp update — unexecuted.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "get_recent_conversation_transcript",
+        result: "No WhatsApp transcript entries matched the requested window/scope.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("P-3: does not fire when the reply never claims a task is unexecuted", () => {
+    const reply = "Task 2: sent the WhatsApp update to Jordi — done.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "get_recent_conversation_transcript",
+        result: "[2026-07-03T11:17:00.000Z] outbound Zenod; message=wamid.ABC123; status=sent; chars=42\nHere's your update, Jordi.",
+      },
+    ];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
   it("allows a no-execution answer for the parent while separately naming child execution evidence", () => {
     const reply =
       "No execution is recorded for AlfaBlok/obsidian-brain#107 itself. Related child #108 has execution #109 in needs-review with PR #110.";
@@ -833,6 +874,42 @@ describe("peerMutationGuardFailure", () => {
       expect(peerMutationGuardFailure("send_email", "don't send it")).toContain("require an explicit write/run/send instruction");
       expect(isAffirmativeApproval("don't send it")).toBe(false);
       expect(isAffirmativeApproval("no, cancel that")).toBe(false);
+    });
+  });
+
+  describe("P-1 — ask_outbound composer registers a standing approval too", () => {
+    beforeEach(() => __resetApprovalTokens());
+
+    it("a substantive ask_outbound call registers a token that a later affirmative to a DIFFERENT outbound send tool resolves", () => {
+      registerOutboundComposeApproval("c6", "ask_outbound", { input: "draft a tweet about the launch" });
+      expect(peerMutationGuardFailure("post_tweet", "Tweet approved", { conversationId: "c6", args: { text: "We shipped it!" } })).toBeNull();
+    });
+
+    it("resolves post_reddit and send_email too — the composer path is channel-agnostic", () => {
+      registerOutboundComposeApproval("c7", "ask_outbound", { input: "draft a reddit post" });
+      expect(peerMutationGuardFailure("post_reddit", "approved", { conversationId: "c7", args: { subreddit: "test", title: "t", content: "c" } })).toBeNull();
+    });
+
+    it("a bare/empty ask_outbound call registers nothing", () => {
+      registerOutboundComposeApproval("c8", "ask_outbound", { input: "" });
+      expect(peerMutationGuardFailure("post_tweet", "approved", { conversationId: "c8", args: { text: "Hello" } })).toBe(
+        NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
+      );
+    });
+
+    it("only applies to ask_outbound — an unrelated tool name never registers", () => {
+      registerOutboundComposeApproval("c9", "post_tweet", { text: "Hello world" });
+      expect(peerMutationGuardFailure("post_tweet", "approved", { conversationId: "c9", args: { text: "Hello world" } })).toBe(
+        NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
+      );
+    });
+
+    it("is one-time use, same as a direct-ask token", () => {
+      registerOutboundComposeApproval("c10", "ask_outbound", { input: "draft a tweet" });
+      expect(peerMutationGuardFailure("post_tweet", "approved", { conversationId: "c10", args: { text: "Hello" } })).toBeNull();
+      expect(peerMutationGuardFailure("post_tweet", "approved", { conversationId: "c10", args: { text: "Hello" } })).toBe(
+        NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
+      );
     });
   });
 });

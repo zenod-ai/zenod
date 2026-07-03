@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
+import { __resetApprovalTokens } from "../src/approvalTokens.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
 import type { TokenCostMeasurement } from "../src/types.js";
@@ -223,6 +224,22 @@ class FakeLlm implements BrainLlm {
       const result = await tool.run(toolInput);
       input.onPeerAction?.("epaminon_read_issue_execution_status", toolInput, result);
       return { text: result, readPaths: [] };
+    }
+    if (peerTools && input.question.startsWith("TRANSCRIPTSTATUS:")) {
+      // P-3 — a multi-task status summary that reads the conversation transcript (the
+      // outbound message log) but still narrates one task as "unexecuted" even though
+      // its send is right there in the transcript result.
+      const tool = peerTools.get_recent_conversation_transcript;
+      if (!tool) {
+        throw new Error("missing conversation transcript peer tool");
+      }
+      const toolInput = { windowMinutes: 240 };
+      const result = await tool.run(toolInput);
+      input.onPeerAction?.("get_recent_conversation_transcript", toolInput, result);
+      return {
+        text: "Task 1: created the issue, done.\nTask 2: send the WhatsApp update to Jordi via Phylax — unexecuted.\nTask 3: still queued.",
+        readPaths: [],
+      };
     }
     await tools.searchVault(input.question);
     const note = await tools.readNote("Areas/Insurance.md");
@@ -758,6 +775,30 @@ describe("BrainEngine", () => {
     expect(reply.text).not.toContain("couldn't confirm execution state");
   });
 
+  it("P-3: corrects a multi-task status summary that calls a sent task 'unexecuted' using the outbound transcript log", async () => {
+    const e = createEngine({
+      repo,
+      llm,
+      state,
+      location: { repo: "zenod-ai/fixture" },
+      peerTools: {
+        get_recent_conversation_transcript: {
+          description: "Read recent WhatsApp transcript.",
+          async run() {
+            return "[2026-07-03T11:17:00.000Z] outbound Zenod; message=wamid.ABC123; status=sent; chars=42\nHere's your update, Jordi.";
+          },
+        },
+      },
+    });
+
+    const reply = await e.handleTasking({ text: "TRANSCRIPTSTATUS: status of my 3 tasks", surface: "web", conversationKey: "p3" });
+
+    expect(reply.text).toMatch(/^⚠️ Correction/);
+    expect(reply.text).toContain("actually sent this turn");
+    expect(reply.text).toContain("2026-07-03T11:17:00.000Z");
+    expect(reply.text).toContain("wamid.ABC123");
+  });
+
   it("handleTasking records digest actions with the selftest surface conversation key", async () => {
     const reply = await engine().handleTasking({
       text: "BACKLOG: Launch blocker: question for agent orchestration ownership.",
@@ -1190,6 +1231,14 @@ describe("BrainEngine", () => {
     expect(res.actions.map((action) => action.tool)).toEqual(["approveMerge"]);
     expect(res.actions[0]?.input.issueNumbers).toEqual([44]);
     expect(calls).toEqual(["approveMerge:zenod-ai/fixture:44"]);
+  });
+
+  it("P-1: a bare affirmative that resolves nothing this turn renders the deterministic zero-state, never the model's own prose", async () => {
+    __resetApprovalTokens();
+    const res = await engine().handleTasking({ text: "approved", surface: "web", conversationKey: "fresh" });
+
+    expect(res.actions).toEqual([]);
+    expect(res.text).toBe("Nothing pending to approve.");
   });
 
   it("chat persists the conversation window and can trigger a store", async () => {

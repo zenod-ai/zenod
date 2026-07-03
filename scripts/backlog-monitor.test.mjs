@@ -41,6 +41,8 @@ import {
   summarizeHandoff,
   mergeStateLine,
   composeTerminalNotification,
+  hasVerifiableDeliverable,
+  manifestEvidenceUrl,
   composeActionableMessage,
   composeBlockerNotification,
   parseDeliverables,
@@ -250,6 +252,53 @@ test("composeTerminalNotification refuses done for a manifest with only repo/iss
     outward: false,
     title: undefined,
     manifest: { repo: "o/r", issue: 8, handoffExcerpt: "Created the issue as requested." },
+  });
+  assert.ok(!msg.includes("✅"));
+  assert.ok(msg.startsWith("Finished but produced nothing verifiable — treating as failed"));
+});
+
+// P-2 — the #479 replay: the M-2 completion verifier (hasVerifiableDeliverable) had its
+// own evidence check, separate from the I5-2 deliverable parser (extractEvidenceClaims/
+// hasCheckableEvidence) that already recognized issue URLs — so a genuinely created
+// issue's URL sitting right in the worker's handoff comment still rendered as failed.
+// Both now share the same extractor.
+test("hasVerifiableDeliverable recognizes an issue URL in the handoff text, not just prUrl/headSha/paths (P-2, the #479 replay)", () => {
+  const manifest = {
+    repo: "zenod-ai/zenod",
+    issue: 480,
+    handoffExcerpt:
+      "Status: complete\n\nCreated the issue banana9 with a comment banana8 as requested.\n\n" +
+      "Created issue: https://github.com/zenod-ai/zenod/issues/479",
+  };
+  assert.equal(hasVerifiableDeliverable(manifest), true);
+  assert.equal(manifestEvidenceUrl(manifest), "https://github.com/zenod-ai/zenod/issues/479");
+});
+
+test("composeTerminalNotification renders done WITH the issue URL as evidence (P-2, the #479 replay)", () => {
+  const msg = composeTerminalNotification({
+    executionId: "direct-479",
+    target: "zenod-ai/zenod#480",
+    outward: false,
+    title: undefined,
+    manifest: {
+      repo: "zenod-ai/zenod",
+      issue: 480,
+      handoffExcerpt:
+        "Status: complete\n\nCreated the issue banana9 with a comment banana8 as requested.\n\n" +
+        "Created issue: https://github.com/zenod-ai/zenod/issues/479",
+    },
+  });
+  assert.ok(msg.startsWith("✅ Execution done"));
+  assert.ok(msg.includes("https://github.com/zenod-ai/zenod/issues/479"), "shows the created issue URL as evidence");
+});
+
+test("a run with genuinely no deliverable still renders the honest failed-to-produce message (P-2 regression guard)", () => {
+  const msg = composeTerminalNotification({
+    executionId: "direct-481",
+    target: "zenod-ai/zenod#481",
+    outward: false,
+    title: undefined,
+    manifest: { repo: "zenod-ai/zenod", issue: 481, handoffExcerpt: "Status: complete\n\nLooked into it but there was nothing to do." },
   });
   assert.ok(!msg.includes("✅"));
   assert.ok(msg.startsWith("Finished but produced nothing verifiable — treating as failed"));

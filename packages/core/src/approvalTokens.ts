@@ -24,6 +24,14 @@ export interface ApprovalToken {
   tool: string;
   draftHash: string;
   expiresAt: number;
+  /**
+   * P-1 — a token registered from the outbound-COMPOSE path (ask_outbound) rather than
+   * a blocked direct send. Console never sees the exact final text Callistheness drafts
+   * there (Callistheness holds it), so there is no tool+content hash to match against
+   * later. Such a token resolves against ANY outbound send tool's affirmative in this
+   * conversation instead of a specific tool/content match.
+   */
+  anyOutboundSend?: boolean;
 }
 
 const TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -46,6 +54,15 @@ export function registerApprovalToken(conversationId: string, tool: string, cont
   tokensByConversation.set(conversationId, { tool, draftHash: draftHash(content), expiresAt: Date.now() + TOKEN_TTL_MS });
 }
 
+/**
+ * P-1 — register a standing approval for a draft composed through the ask_outbound
+ * path, where Console has no exact final-content hash to key on (see anyOutboundSend
+ * above). One-time, per-conversation, same TTL as a direct-ask token.
+ */
+export function registerOutboundComposeApprovalToken(conversationId: string): void {
+  tokensByConversation.set(conversationId, { tool: "", draftHash: "", expiresAt: Date.now() + TOKEN_TTL_MS, anyOutboundSend: true });
+}
+
 function liveToken(conversationId: string): ApprovalToken | undefined {
   const token = tokensByConversation.get(conversationId);
   if (!token) return undefined;
@@ -59,12 +76,19 @@ function liveToken(conversationId: string): ApprovalToken | undefined {
 /** True when a non-expired token exists for this exact tool + draft content. */
 export function hasValidApprovalToken(conversationId: string, tool: string, content: unknown): boolean {
   const token = liveToken(conversationId);
-  return Boolean(token && token.tool === tool && token.draftHash === draftHash(content));
+  if (!token) return false;
+  if (token.anyOutboundSend) return true;
+  return token.tool === tool && token.draftHash === draftHash(content);
 }
 
 /** One-time use: delete the token once it resolves a mutation. */
 export function consumeApprovalToken(conversationId: string): void {
   tokensByConversation.delete(conversationId);
+}
+
+/** True when ANY non-expired token (either shape) stands for this conversation. */
+export function hasAnyLiveApprovalToken(conversationId: string): boolean {
+  return Boolean(liveToken(conversationId));
 }
 
 /** Test-only: reset all tokens between cases. */

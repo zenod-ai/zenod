@@ -5,8 +5,10 @@ import { z } from "zod";
 import {
   coerceEditIssueLabelsForUserRequest,
   NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
+  NOTHING_PENDING_TO_APPROVE_TEXT,
   normalizedToolName,
   peerMutationGuardFailure,
+  registerOutboundComposeApproval,
 } from "../taskingPolicy.js";
 import type {
   AnswerInput,
@@ -833,7 +835,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     let blockedOutboundTurn: { tool: string; text: string } | null = null;
     const OUTBOUND_SEND_TOOL_NAMES = new Set(["posttweet", "postreddit", "sendemail"]);
     const friendlyDraftBlock = () => "Draft's ready — reply \"send\" or \"approve\" to post it.";
-    const NOTHING_PENDING_TEXT = "Nothing pending to approve.";
+    const NOTHING_PENDING_TEXT = NOTHING_PENDING_TO_APPROVE_TEXT;
     const repoRefFromPeerArgs = (args: Record<string, unknown>): string | null => {
       const values: string[] = [];
       for (const key of ["repo", "target", "message", "input", "objective", "instructions", "originalRequest"] as const) {
@@ -926,6 +928,11 @@ export class AiSdkBrainLlm implements BrainLlm {
               input.onPeerAction?.(name, args, result);
               return result;
             }
+            // P-1 — ask_outbound composes a draft through Callistheness but never sends,
+            // so it never reaches peerMutationGuardFailure's registration above. Register
+            // the same standing-approval state here so a later "Tweet approved" resolved
+            // via a direct post_tweet/post_reddit/send_email call finds it.
+            registerOutboundComposeApproval(input.conversationId, name, args);
             const dedupeKey = peerMutationDedupeKey(name, args);
             const existing = dedupeKey ? sameTurnPeerMutations.get(dedupeKey) : undefined;
             if (existing) return existing;

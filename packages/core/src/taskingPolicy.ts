@@ -1,4 +1,9 @@
-import { consumeApprovalToken, hasValidApprovalToken, registerApprovalToken } from "./approvalTokens.js";
+import {
+  consumeApprovalToken,
+  hasValidApprovalToken,
+  registerApprovalToken,
+  registerOutboundComposeApprovalToken,
+} from "./approvalTokens.js";
 
 export const OWNER_AGENT = "owner:agent";
 export const STATUS_PROPOSED = "status:proposed";
@@ -176,6 +181,9 @@ function hasSubstantiveDraftContent(args: Record<string, unknown> | undefined): 
  */
 export const NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL = "__nothing_pending_to_approve__";
 
+/** The single canonical zero-state reply text — shared so it can never drift between the guard, the reply-gate fallback, and the outbound receipt renderer. */
+export const NOTHING_PENDING_TO_APPROVE_TEXT = "Nothing pending to approve.";
+
 export interface PeerMutationGuardContext {
   /** Conversation this call belongs to — required for the standing-draft token to apply. */
   conversationId?: string | undefined;
@@ -222,6 +230,27 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
   }
 
   return `Blocked ${tool}: mutating peer tools require an explicit write/run/send instruction from the user's current message.`;
+}
+
+/**
+ * P-1 — ask_outbound composes a draft through Callistheness (the outbound peer) but
+ * never sends, so it is not a peer-mutation tool and peerMutationGuardFailure never
+ * runs for it: no token was ever registered, and a later "Tweet approved" that resolves
+ * to a direct post_tweet/post_reddit/send_email call found nothing pending — the token
+ * and the standing draft lived in different places. Any substantive ask_outbound call
+ * now registers a standing compose-approval on the SAME conversation-scoped store the
+ * direct-ask path uses, so a following natural-language affirmative for ANY outbound
+ * send tool resolves it (see approvalTokens.ts's anyOutboundSend).
+ */
+export function registerOutboundComposeApproval(
+  conversationId: string | undefined,
+  tool: string,
+  args: Record<string, unknown> | undefined,
+): void {
+  if (!conversationId) return;
+  if (normalizedToolName(tool) !== "askoutbound") return;
+  if (!hasSubstantiveDraftContent(args)) return;
+  registerOutboundComposeApprovalToken(conversationId);
 }
 
 export function coerceEditIssueLabelsForUserRequest(
@@ -685,6 +714,43 @@ function claimsEmptyExecutionWorld(prose: string): boolean {
   return CLAIMS_EMPTY_EXECUTION_WORLD_RE.test(prose);
 }
 
+// P-3 — the status composer must count its own sends. execution_status only knows
+// about execution TICKETS; a task that was a direct outbound send (a Phylax/WhatsApp
+// message, a tweet) has no ticket at all, so a status summary that only grounds on
+// execution_status treats it as unaccounted-for and reports "unexecuted" even though
+// the send is right there in the conversation transcript's outbound log (this turn's
+// get_recent_conversation_transcript read). Same receipt principle as M-6 applied to
+// outbound sends: a read must consult every authoritative source before asserting a
+// negative — the transcript log is as authoritative for "was it sent" as execution_status
+// is for "did it run".
+const OUTBOUND_TRANSCRIPT_LINE_RE = /^\[([^\]]+)\]\s+outbound\b[^\n]*$/im;
+const NEGATIVE_TASK_EXECUTION_RE =
+  /\b(?:un-?executed|not\s+executed|did(?:n['’]?t| not)\s+(?:run|execute|happen|send|go\s+out)|has(?:n['’]?t| not)\s+(?:run|executed|happened|been\s+sent|sent)|was(?:n['’]?t| not)\s+(?:sent|executed|completed|done|delivered))\b/i;
+
+function claimsUnexecutedTask(prose: string): boolean {
+  return NEGATIVE_TASK_EXECUTION_RE.test(prose);
+}
+
+interface OutboundSendEvidence {
+  at: string;
+  messageId?: string;
+}
+
+function outboundSendEvidence(actions: ReadonlyArray<RecordedAction>): OutboundSendEvidence[] {
+  const evidence: OutboundSendEvidence[] = [];
+  for (const action of actions) {
+    if (/^ERROR:/.test(action.result)) continue;
+    if (normalizedToolName(action.tool) !== "getrecentconversationtranscript") continue;
+    for (const line of action.result.split("\n")) {
+      const match = OUTBOUND_TRANSCRIPT_LINE_RE.exec(line.trim());
+      if (!match) continue;
+      const idMatch = /message=([^\s;]+)/.exec(line);
+      evidence.push({ at: match[1]!, ...(idMatch ? { messageId: idMatch[1]! } : {}) });
+    }
+  }
+  return evidence;
+}
+
 const POSITIVE_EXECUTION_RE =
   /\b(?:ran|executed|completed|finished|done|succeeded|opened\s+PR|pull request|files?\s+changed|changed\s+files?|merged|needs-review|awaiting review)\b/i;
 const NEGATIVE_EXECUTION_LINE_RE = /\b(?:no|not|never|without|none|does(?: not|n't)|did(?: not|n't))\b/i;
@@ -804,6 +870,21 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     return [
       "⚠️ Correction — I couldn't get a reliable read: the execution-status query was filtered and excluded tickets that exist on the executor, so I cannot say nothing ran.",
       "Broaden the query (drop the filter, or list all) and answer from that — never assert an empty result set from a filtered-empty read.",
+      "",
+      text,
+    ].join("\n");
+  }
+
+  // P-3 — a task's outbound send already sits in this turn's conversation-transcript
+  // read (the authoritative outbound message log), yet the reply still calls some task
+  // "unexecuted"/"not sent"/"didn't run". The log is real evidence a status summary
+  // must consult, same as execution_status is for a ticket — never assert a negative
+  // against a source that already shows the positive.
+  const outboundEvidence = outboundSendEvidence(actions);
+  if (outboundEvidence.length > 0 && claimsUnexecutedTask(prose)) {
+    return [
+      "⚠️ Correction — the outbound message log shows this was actually sent this turn; do not report it as unexecuted.",
+      ...outboundEvidence.map((e) => `Sent at ${e.at}${e.messageId ? ` (message ${e.messageId})` : ""}.`),
       "",
       text,
     ].join("\n");
