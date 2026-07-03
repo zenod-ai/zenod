@@ -91,6 +91,17 @@ receipt false-negative, not an engine failure, and every observed red except dur
 fix. **Eve is deferred, not rejected:** revisit at eve 1.0/GA as the candidate tenant image for
 Epic 2, with CANONICAL-TESTS as the acceptance bar. steve = reference implementation, not fork base.
 Rationale in full: Fable table, 2026-07-03 night session.
+**CONFIRMED by the bake-off spike** (zenod#500 / PR #501, merged):
+[spikes/d2-execution-substrate/COMPARISON.md](../spikes/d2-execution-substrate/COMPARISON.md) —
+candidate C (AI SDK + durable SDK + our runner) passed all 6 acceptance tests (~208 LOC substrate;
+durable-replay primitive ~40 LOC; real cross-process crash-resume; budget kill; receipts outside the
+framework). Eve/Flue: DNF, infra-gated + empirically confirmed version fragility (Eve durability dep
+requires a hand-pinned beta line; Flue 0.2.6, no shipped off-Cloudflare durable store). Standing order:
+re-run the identical harness vs Eve at 1.0/GA and vs Flue when an off-Cloudflare store ships; promote
+only on a clean 6/6 with less ops risk than C. Spike modules (durable/budget/receipt) = reference
+implementations for iteration 8's executor graft. Meta-finding for S-8's family: the deliverable
+landed on zenod#500/PR#501 while the master ticket obsidian-brain#250 carried no link — cross-repo
+receipt linking is a gap.
 
 **Now (2026-07-03 late):** Epic 1: S-0 ✅ · #486 (S-3) + #493 (S-4/5/6) merged · S-1 re-dispatched
 (`direct-1783107468359`; first run killed by deploy restart — the durable-execution argument making
