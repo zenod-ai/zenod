@@ -864,8 +864,48 @@ function extractWorkerError(eventsPath) {
     else if (ev?.type === "turn.failed" && ev.error?.message) message = String(ev.error.message); // codex
     else if (ev?.type === "system" && ev.error) message = `${ev.error}${ev.error_status ? ` (${ev.error_status})` : ""}`; // claude api_retry/billing
     else if (ev?.type === "result" && ev.is_error) message = String(ev.error || ev.result || "worker reported is_error"); // claude error result
+    else if (ev?.type === "rate_limit_event") {
+      // #506: the Claude account hitting its 5-hour / overage cap surfaces ONLY as a
+      // rate_limit_event with status:"rejected" — no error/turn.failed/result carries it,
+      // so a pure quota rejection would otherwise yield a null rawError and skip the whole
+      // quota fallback. Capture it as a first-class failure cause.
+      const info = ev.rate_limit_info || {};
+      if (info.status === "rejected" || info.overageStatus === "rejected") {
+        message = rateLimitEventMessage(info);
+      }
+    }
   }
   return message;
+}
+
+// #506: build a stable, isQuotaError-matchable message from a rejected rate_limit_event,
+// e.g. "rate_limit_event rejected: five_hour out_of_credits resetsAt=1783114200". The
+// resetsAt epoch is preserved verbatim so the paused render can format a retry time.
+function rateLimitEventMessage(info = {}) {
+  const parts = ["rate_limit_event rejected:"];
+  if (info.rateLimitType) parts.push(String(info.rateLimitType));
+  if (info.overageDisabledReason) parts.push(String(info.overageDisabledReason));
+  else if (info.overageStatus) parts.push(`overageStatus=${info.overageStatus}`);
+  if (info.resetsAt != null) parts.push(`resetsAt=${info.resetsAt}`);
+  return parts.join(" ");
+}
+
+// #506: pull the resetsAt epoch (seconds) back out of a captured quota message so the
+// paused notification can show an honest "retry after HH:MM". Returns null if absent.
+function parseResetsAt(message) {
+  const m = String(message || "").match(/resetsAt=(\d+)/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// #506: format a resetsAt epoch (seconds or ms) as a short "HH:MM UTC" retry hint.
+function formatResetsAt(resetsAt) {
+  if (!resetsAt) return null;
+  const ms = resetsAt < 1e12 ? resetsAt * 1000 : resetsAt;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
 }
 
 // Quota/limit failures are the common operational case (an engine account is out of
@@ -1560,6 +1600,8 @@ export {
   extractWorkerError,
   classifyWorkerError,
   isQuotaError,
+  parseResetsAt,
+  formatResetsAt,
   fallbackEngine,
   finalComment,
   deliverablePaths,
