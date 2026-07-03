@@ -113,3 +113,46 @@ Tracking issues minted with verbatim acceptance criteria (S-4/S-5/S-6 pre-existi
 - S-8 · https://github.com/zenod-ai/zenod/issues/492
 Council mirror (AlfaBlok/obsidian-brain): Council/{LAUNCH-CONTROL,EPIC-1-SYSTEM-STABILITY,EPIC-2-HOSTED-READINESS}.md.
 Ticket *execution* (S-0 canary dispatch, S-1 runner code, S-3 re-land, S-7 budgets) requires the zenod codebase + production dispatch — pending runtime/Epaminon executor; not performable from the obsidian-brain sandbox worker.
+
+### S-2 Verdict · 2026-07-03 · Forensic: why did the P-batch worker "die"?
+
+**Verdict: FALSE NEGATIVE — all three runs delivered; the verifier mislabeled every one.** The P-batch
+worker did not die producing nothing. It opened a real, now-**merged** PR whose URL was in its final summary.
+Both "sibling failures" also completed with real, verifiable deliverables. The "45 min / 406 turns / produced
+nothing verifiable" verdict was the completion verifier's error, not the executor's.
+
+Evidence read directly from the surviving runner transcripts under
+`.fanout/ephemeral/<id>/events.jsonl` (+ `prompt.md`), cross-checked against live GitHub state.
+
+**1 · `ephemeral-1783087427475-e9692fcd` (the P-1/P-2/P-3 batch) — FALSE NEGATIVE.**
+Transcript is 1448 events over 3 resume segments (186 turns, ~37.8 min summed; the run paused twice on
+sub-agent `task-notification` and resumed). The final `result` event is verbatim:
+> `Status: complete` … **PR:** https://github.com/zenod-ai/zenod/pull/486 — P-1 (`9d8af29`), P-2 (`562d6f4`), P-3 (`f0cd0bd`).
+
+The transcript shows the worker actually running `git push -u origin m-batch-final-polish` and
+`gh pr create … --head m-batch-final-polish`, whose tool_result returned `https://github.com/zenod-ai/zenod/pull/486`.
+Live GitHub confirms: **PR #486 is MERGED** (2026-07-03T18:49:06Z), branch `m-batch-final-polish`, exactly
+three commits matching P-1/P-2/P-3. The URL was present in the worker's own final answer. Real work existed;
+the summary carried the URL; the verifier still scored it "nothing verifiable." Textbook false negative.
+
+**2 · `ephemeral-1783085737906-b0b21cb9` (the #479 issue-filing run) — FALSE NEGATIVE.** Final `result`:
+`Status: complete`, created execution ticket **#478**, filed bug **#479** ("WhatsApp gateway drops voice notes
+longer than 5 minutes"), reported evidence as a comment. Both issues exist live (OPEN). This is the *exact*
+run P-2 was written to fix: the M-2 verifier had already false-negatived it because an issue URL sat in the
+handoff text, not in a structured `prUrl`/`headSha` field.
+
+**3 · `ephemeral-1783089239412-dc654b90` (`sweep-e2` probe) — MISCLASSIFIED, not a delivery failure.** 7
+events, 2 turns, 6.6 s. Final `result`: `Status: complete` — `echo "sweep-e2"` ran, engine=claude, "No repo
+work was performed, per instructions." A declared-no-deliverable smoke run counted as a failure — the S-6 /
+C-07c gap, not lost work.
+
+**Root cause (named):** *not* lost context / tool auth / prompt. It is a **verifier evidence-parsing gap on
+the fan-out/dispatched completion lane.** The completion verdict judged deliverables from the run manifest's
+structured fields only; a PR/issue URL living in the worker's free-text final summary was invisible to it, so
+"finished" collapsed to "produced nothing verifiable." P-2 (`562d6f4`, in the very PR this run produced)
+already unifies the parser for the M-2 tool composer — but the forensic proves the fan-out completion verdict
+that mislabeled run #1 needs the same shared parser applied to the worker's final summary, plus a regression
+test replaying this run's summary. **Fix ticket minted: S-2a → https://github.com/zenod-ai/zenod/issues/496.**
+
+Excerpts and live-state checks in this verdict are reproducible from the paths above; no production code was
+changed by this forensic (read-only per scope).
