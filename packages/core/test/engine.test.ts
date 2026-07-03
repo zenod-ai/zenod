@@ -946,6 +946,24 @@ describe("BrainEngine", () => {
     expect((await engine().lint()).errors).toEqual([]);
   });
 
+  it("M-5: fires onFilingComplete with the real StoreResult once the background filing lands", async () => {
+    const filed: unknown[] = [];
+    const e = createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" }, onFilingComplete: (result) => filed.push(result) });
+
+    await e.handleTasking({
+      text: "CAPTURE: I just got home insurance with Axa, policy ends March 2028",
+      surface: "whatsapp",
+      conversationKey: "cap-onfilingcomplete",
+    });
+
+    await vi.waitFor(() => expect(filed).toHaveLength(1), { timeout: 5000, interval: 50 });
+    expect(filed[0]).toMatchObject({
+      pagesTouched: expect.arrayContaining([expect.any(String)]),
+      commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
+      evidenceRef: expect.stringMatching(/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]{6}$/),
+    });
+  });
+
   it("never returns an empty WhatsApp reply — falls back to the real tool results", async () => {
     const e = createEngine({
       repo,
