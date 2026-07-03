@@ -77,7 +77,7 @@ The "someone who isn't us installs it in 15 minutes" milestone: install docs, ve
 
 ### M3 — Hosted Zenod (separate repo)
 
-Multi-tenant shell, GitHub App, Stripe, provisioning, platform-key metering. Built on the engine this repo ships; tracked elsewhere.
+Multi-tenant shell, GitHub App, Stripe, provisioning, platform-key metering. Built on the engine this repo ships; tracked elsewhere. Target design: [HOSTED-MULTI-TENANT-SPIKE.md](HOSTED-MULTI-TENANT-SPIKE.md).
 
 ### Deferred / v2+
 
