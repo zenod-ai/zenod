@@ -1,4 +1,33 @@
-# EPIC 1 · SYSTEM STABILITY — iteration 7
+# EPIC 1 · SYSTEM STABILITY — iterations 7–8
+
+## ITERATION 8 — the refactor (scoped 2026-07-03 night; D-2 closed as DIY/candidate C)
+
+Three changes, in order. Everything else is out of scope.
+
+**I8-1 · One brain.** Only the Console reasons about routing. Archus/Epaminon/Phylax/Callisthenes
+become typed services: every call returns ID+URL (read-back verified) or an explicit error. Delete the
+conversational peer/routing lanes and the overlapping front doors; governor LLMs survive only where
+taste is the product (Zenod filing, Callisthenes drafting, Archus ticket quality — invoked as bounded
+sub-calls, never as routers). S-8 / PR #499 is the first half; this finishes it.
+*Why: every 2026-07-03 coordination failure (silent acks, rewritten dispatch context, blocked natural
+approvals, cryptic handovers) happened in peer lanes; zero happened inside workers.*
+
+**I8-2 · Durable executor.** Graft the spike's modules (spikes/d2-execution-substrate/candidate-c-diy:
+`durable.mjs` ~40 LOC replay primitive, `budget.mjs`, `receipt.mjs`) under the ephemeral + fanout
+lanes: every run is a replayable step log — a redeploy resumes the run instead of killing it; budget
+breach terminates hard; success cannot render without evidence.
+*Why: durability is the ONE framework pillar we lack (we already own sandbox, sub-agents, channels,
+receipts). Redeploys killed two in-flight runs today. This is what we take from the framework world —
+nothing else.*
+
+**I8-3 · Transcripts fold in.** S-1 (worker output readable live + post-mortem) is absorbed into the
+I8-2 step log — same artifact, one implementation.
+
+**Exit: CANONICAL-TESTS C-01…C-20 green ×2 consecutive builds. Epic 1 closes. All capacity → Epic 2.**
+
+---
+
+# Iteration 7 record (below)
 
 Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md) · Test authority: [CANONICAL-TESTS.md](CANONICAL-TESTS.md)
 **Exit criterion: the canonical board green on two consecutive builds. Then this epic closes and we stop.**
