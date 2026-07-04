@@ -41,10 +41,16 @@ FROM node:22-alpine
 RUN apk add --no-cache git ripgrep ffmpeg libstdc++ libgomp
 COPY --from=whisper /opt/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
 WORKDIR /app
+# Baked in at build time (--build-arg GIT_SHA=$(git rev-parse HEAD)) so /api/health
+# can report exactly which commit is running — deploy verification otherwise has
+# no way to distinguish two builds (#532). Defaults to "unknown" for builds that
+# don't pass it (e.g. a plain `docker build .` with no build-arg).
+ARG GIT_SHA=unknown
 ENV NODE_ENV=production \
     PORT=8080 \
     ZENOD_DATA_DIR=/data \
-    ZENOD_WEB_DIST=/app/apps/web/dist
+    ZENOD_WEB_DIST=/app/apps/web/dist \
+    GIT_SHA=${GIT_SHA}
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json

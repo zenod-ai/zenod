@@ -30,6 +30,17 @@ describe("server API", () => {
     const body = await res.json();
     expect(body.status).toBe("ok");
     expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(body.sha).toBe("unknown");
+  });
+
+  it("GET /api/health reports the build's GIT_SHA when set", async () => {
+    process.env.GIT_SHA = "abc1234";
+    try {
+      const body = await (await app.request("/api/health")).json();
+      expect(body.sha).toBe("abc1234");
+    } finally {
+      delete process.env.GIT_SHA;
+    }
   });
 
   it("requires auth for /api/settings and /mcp", async () => {

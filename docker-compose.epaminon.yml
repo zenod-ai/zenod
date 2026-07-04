@@ -27,6 +27,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     image: zenod-epaminon:dokploy
     container_name: zenod-epaminon
     restart: unless-stopped

@@ -131,7 +131,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   // --- public ---
 
-  app.get("/api/health", (c) => c.json({ status: "ok", name: agent.name, version: VERSION }));
+  app.get("/api/health", (c) =>
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: process.env.GIT_SHA ?? "unknown" }),
+  );
 
   // Agent identity for the UI shell (title/subtitle) so the same UI renders
   // per-agent without a rebuild. See docs/SUITE-SCAFFOLD.md.

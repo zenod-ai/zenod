@@ -26,6 +26,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     image: zenod-archus:dokploy
     container_name: zenod-archus
     restart: unless-stopped
