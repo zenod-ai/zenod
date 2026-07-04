@@ -568,3 +568,24 @@ unilaterally. The Console council responds without it; wiring the brain's vault 
 
 `tenant-testco` remains UP as staging (admin pw `testco-staging-2026`, OpenRouter key stored in-console).
 Security: the provisioning key was pasted in chat → **rotate it**; keep tenant keys scoped.
+
+### 2026-07-04 · [tester] — Iteration 1 verification (first activation, fresh evidence)
+
+Fresh test-card runs (card 4242, TEST mode); no worker receipts reused.
+
+| Ticket | Verdict | Fresh receipt |
+|--------|---------|---------------|
+| I1-1 · money path end-to-end | ✅ PASS | Fresh Starter checkout `cs_test_a1dcmXS2…` → `paid`; event `evt_1TpWOd…` **pending_webhooks:0**, email `tester-starter@example.com`; `/success.html`→200. (All 3 tier checkouts below likewise pending_webhooks:0.) |
+| I1-2 · pricing page + linked legal | ✅ PASS | zenod.dev `#pricing` renders 3 tiers ($29/$79/$499) in the live bundle `assets/index-HDeXJ2De.js`; clicked Starter "Get started" → reached `checkout.stripe.com`; `/legal/{terms,privacy,data-handling}.html` all **200**, DRAFT banner present, linked from the pricing surface. |
+| I1-3 · legal content | ✅ PASS | `data-handling.html` carries the customer-owns-the-vault story ("customer owns the vault repo", "clone your vault"). |
+| I1-4 · tenant live + responds | ✅ PASS | `https://z-testco.zenod.dev/`→**200** over TLS (Google/CF cert valid). Fresh chat msg "what is 17 plus 25? reply with just the number" → **"42"** (correct, live LLM). Did NOT touch Keys & models. |
+| I1-7 · three-tier subscription | ✅ PASS | **Starter** `cs_test_a1dcmXS2…` mode:subscription `price_1TpV2b…` **$29/mo** tier=starter; **Pro** `cs_test_a1Eppeg…` `price_1TpV2c…` **$79/mo** tier=pro (`evt_1TpWRZ…` pending_webhooks:0, `tester-pro@…`); **Agency** `cs_test_a1WNots…` `price_1TpV2d…` **$499/mo** tier=agency (`evt_1TpWQ8…` pending_webhooks:0, `tester-agency@…`). Every completed event carries the tier + the tester email. |
+
+**Coverage caveat (honest):** the provisioning-queue **file** (`/data/provisioning-queue.jsonl`) was not read directly — Dokploy exposes no REST log/exec and the tester has no container access. "Queue entry carries the tier/email" is established by each completed webhook event showing **pending_webhooks:0** (endpoint returned 2xx) + the session/event `metadata.tier` + `customer_email`; the handler enqueues synchronously before the 2xx. A future in-tenant ops read endpoint would let a tester see the file directly.
+
+**Summary to planner (5 lines):**
+1. All five Iteration-1 tickets PASS on fresh evidence — the headline chain is real: paid checkout → tenant → responding council over TLS.
+2. All three subscription tiers charge the right monthly price in mode:subscription and carry the tier through to the webhook; Starter and Agency were run for the first time here.
+3. testco's council answered a fresh arithmetic question correctly ("42") on the $50-capped OpenRouter key — settings untouched.
+4. One coverage gap, not a failure: no direct read of the queue file (no container access); delivery + metadata prove the write. Consider a token-gated queue-tail ops endpoint.
+5. No reds. I leave the ✅ marks in the Iteration 1 table for your close sweep (states are the planner's to set); this entry is the evidence.
