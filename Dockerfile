@@ -2,6 +2,16 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
+# #532/#548 FP4 — capture the real commit SHA at build time so /api/health can report
+# exactly which commit is running. Dokploy source-builds have no reliable way to pass a
+# GIT_SHA build-arg (the compose default resolves to "unknown"), so we derive it from the
+# checked-out .git (now included in the build context) and bake it into a file the runtime
+# reads. A plain `docker build` with no .git falls back to "unknown".
+RUN apk add --no-cache git
+COPY .git ./.git
+RUN git rev-parse HEAD > /app/.gitsha 2>/dev/null || echo "unknown" > /app/.gitsha
+RUN rm -rf ./.git
+
 COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY packages/server/package.json packages/server/
@@ -52,6 +62,7 @@ ENV NODE_ENV=production \
     ZENOD_WEB_DIST=/app/apps/web/dist \
     GIT_SHA=${GIT_SHA}
 
+COPY --from=build /app/.gitsha ./.gitsha
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json
 COPY --from=build /app/packages/core/dist ./packages/core/dist

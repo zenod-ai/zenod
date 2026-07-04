@@ -832,6 +832,61 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  // FP4 · #548 — the W1-3 STEP-1 live-fire reds, as fixtures. The gate now classifies by
+  // the toolKinds registry (not a name-allowlist), covers ALL ungrounded banner paths
+  // (create-fabrication + unproven-mutation + execution-state hedges), and the read tools
+  // are recorded in actions (ledger completeness) so a read-only turn is never mistaken
+  // for an empty-actions hallucination.
+  describe("FP4 · #548 structural gate — STEP-1 retest fixtures", () => {
+    it("retest-01 root cause: create-fabrication banner is suppressed when the backlog was read via archus_list_github_issues", () => {
+      const reply = "This week you opened #473 and #486, filed #498 and #499. Priorities: merge the open stability PRs.";
+      const actions: RecordedAction[] = [
+        { tool: "epaminon_read_issue_execution_status", result: "executions touched several tickets" },
+        { tool: "get_recent_conversation_transcript", result: "recent turns discussed the stability PRs" },
+        { tool: "archus_list_github_issues", result: "20 open issues in the backlog" },
+      ];
+      const out = reconcileTaskingReply(reply, actions);
+      expect(out).toBe(reply);
+      expect(out).not.toContain("⚠️ Correction");
+    });
+
+    it("retest-05 root cause: the execution-state HEDGE is suppressed on a read-only summary turn", () => {
+      const reply = "Today you pushed a research spike, completed the reply-gate work, and closed out two tickets.";
+      const actions: RecordedAction[] = [{ tool: "get_recent_conversation_transcript", result: "today's activity summary" }];
+      const out = reconcileTaskingReply(reply, actions);
+      expect(out).toBe(reply);
+      expect(out).not.toContain("⚠️ Correction");
+      expect(out).not.toContain("could not confirm");
+    });
+
+    it("ledger completeness: a search_chats-only recap (now recorded) draws no banner", () => {
+      const reply = "Earlier we discussed #601 and #602; you also created #588 last week.";
+      const actions: RecordedAction[] = [{ tool: "search_chats", result: "conversation hits about the tickets" }];
+      expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+    });
+
+    it("genuine-fabrication STILL caught #1: #58 claim with NO tool at all (empty actions)", () => {
+      const out = reconcileTaskingReply("Done. Created #58: https://github.com/AlfaBlok/obsidian-brain/issues/58", []);
+      expect(out).toMatch(/^⚠️ Correction/);
+      expect(out).toContain("no GitHub issue was created");
+    });
+
+    it("genuine-fabrication STILL caught #2: a create tool ran and failed", () => {
+      const out = reconcileTaskingReply("Created issue #58: https://github.com/AlfaBlok/obsidian-brain/issues/58", [
+        { tool: "createIssue", result: "ERROR: GitHub returned 403: forbidden" },
+      ]);
+      expect(out).toContain("no GitHub issue was created");
+      expect(out).toContain("The create step failed");
+    });
+
+    it("execution-state hedge STILL fires when a mutation WAS attempted (queue failed, model claims done)", () => {
+      const reply = "Queued and done — #108 completed successfully.";
+      const actions: RecordedAction[] = [{ tool: "queue_execution", result: "ERROR: target not runnable" }];
+      const out = reconcileTaskingReply(reply, actions);
+      expect(out).toContain("⚠️ Correction");
+    });
+  });
+
   // #548 · C-23 hard route — SUPERSEDES the old expectation here. A fabricated create on a
   // read-only (query-only) turn is NO LONGER corrected: it is structurally identical to the
   // C-11 leak and suppressing it is what fixes #548. The pure-hallucination catch (empty

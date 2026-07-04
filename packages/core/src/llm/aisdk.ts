@@ -1004,7 +1004,11 @@ export class AiSdkBrainLlm implements BrainLlm {
                 description:
                   "Search the vault. Call this first for any question about the user's knowledge — returns ranked paths with snippets. Covers meaning pages, Log/ evidence files (verbatim transcripts, source links), and _attachments/ artifact filenames. If the first query misses, retry with different terms before giving up.",
                 inputSchema: z.object({ query: z.string() }),
-                execute: ({ query }) => tools.searchVault!(query),
+                execute: async ({ query }) => {
+                  const result = await tools.searchVault!(query);
+                  input.onReadAction?.("search_vault", { query }, result);
+                  return result;
+                },
               }),
               read_note: tool({
                 description:
@@ -1012,13 +1016,19 @@ export class AiSdkBrainLlm implements BrainLlm {
                 inputSchema: z.object({ path: z.string() }),
                 execute: async ({ path }) => {
                   readPaths.add(path);
-                  return tools.readNote!(path);
+                  const result = await tools.readNote!(path);
+                  input.onReadAction?.("read_note", { path }, result);
+                  return result;
                 },
               }),
               list_pages: tool({
                 description: "List all meaning pages with their titles, tags, and summaries.",
                 inputSchema: z.object({}),
-                execute: () => tools.listPages!(),
+                execute: async () => {
+                  const result = await tools.listPages!();
+                  input.onReadAction?.("list_pages", {}, result);
+                  return result;
+                },
               }),
             }
           : {}),
@@ -1026,7 +1036,11 @@ export class AiSdkBrainLlm implements BrainLlm {
           description:
             "Search your past conversations with the user across ALL channels (WhatsApp, web, CLI, MCP) — not just the current thread. Returns matching messages grouped by conversation, with channel and timestamp. Use this when the user refers to something said earlier ('the issue we discussed', 'we were speaking about…', 'what did I say yesterday'), especially when it may have happened on a different channel. This is conversation history, distinct from search_vault (durable notes); reach for both when either could hold the answer.",
           inputSchema: z.object({ query: z.string() }),
-          execute: ({ query }) => tools.searchChats(query),
+          execute: async ({ query }) => {
+            const result = await tools.searchChats(query);
+            input.onReadAction?.("search_chats", { query }, result);
+            return result;
+          },
         }),
       },
     };
