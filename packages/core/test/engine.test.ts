@@ -241,6 +241,15 @@ class FakeLlm implements BrainLlm {
         readPaths: [],
       };
     }
+    if (input.question.startsWith("READRECAP:")) {
+      // FP4 · #548 ledger invariant — a read tool (search_chats) runs and reports its
+      // result via onReadAction exactly as aisdk now does. The engine must record it in
+      // the actions array reconcile receives; the model then enumerates existing issue
+      // numbers as a recap. If the read were NOT recorded, reconcile would see empty
+      // actions and slap a spurious "no GitHub issue was created" banner on the recap.
+      input.onReadAction?.("search_chats", { query: "recent work" }, "conversation hits about the tickets");
+      return { text: "Earlier we discussed #601 and #602; you also opened #588 last week.", readPaths: [] };
+    }
     await tools.searchVault(input.question);
     const note = await tools.readNote("Areas/Insurance.md");
     const text = `You have travel insurance with Axa. (${note.length} chars read)`;
@@ -773,6 +782,13 @@ describe("BrainEngine", () => {
     expect(reply.text).toContain("No execution tickets found");
     expect(reply.text).not.toContain("Correction");
     expect(reply.text).not.toContain("couldn't confirm execution state");
+  });
+
+  it("FP4 · #548 ledger invariant: a read-tool (search_chats) result is recorded in actions, so a recap draws no spurious banner", async () => {
+    const reply = await engine().chat("READRECAP: what did I work on", "web");
+    expect(reply.text).toContain("#601");
+    expect(reply.text).not.toContain("⚠️ Correction");
+    expect(reply.text).not.toContain("no GitHub issue was created");
   });
 
   it("P-3: corrects a multi-task status summary that calls a sent task 'unexecuted' using the outbound transcript log", async () => {

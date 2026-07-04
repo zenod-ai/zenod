@@ -4,6 +4,7 @@ import {
   registerApprovalToken,
   registerOutboundComposeApprovalToken,
 } from "./approvalTokens.js";
+import { toolKind } from "./toolKinds.js";
 
 export const OWNER_AGENT = "owner:agent";
 export const STATUS_PROPOSED = "status:proposed";
@@ -393,22 +394,6 @@ function provenNumbers(actions: ReadonlyArray<RecordedAction>): Set<number> {
 function isCreateReceiptTool(tool: string): boolean {
   const normalized = tool.toLowerCase().replace(/[^a-z0-9]/g, "");
   return normalized === "createissue" || normalized === "openissue" || normalized === "archusrequestbacklogaction";
-}
-
-// #548 · C-23 hard route — is this action a retrospective/status READ (no side effect)?
-// The gate suppresses create/mutate correction banners only when EVERY action this turn is
-// a recognized read: an unknown or ambiguous tool defaults to NON-read, so a genuine
-// fabrication is still corrected (never hide a false claim — the C-15 direction is the
-// dangerous one to get wrong). Enumerated deliberately narrow: the retrospective reads a
-// "what did I work on" turn uses, plus generic read/search/get/list/query/fetch verbs.
-function isReadOnlyTaskingTool(tool: string): boolean {
-  const n = normalizedToolName(tool);
-  return (
-    /^(?:read|search|get|list|query|fetch)/.test(n) ||
-    n === "epaminonreadissueexecutionstatus" ||
-    n === "executionstatus" ||
-    n === "archussearchgithubissues"
-  );
 }
 
 function normalizedCreateReceipt(action: RecordedAction): string | null {
@@ -892,7 +877,20 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // to "ignore the details below". The composer-layer grounding leaked this twice (summary
   // numbers sourced from the briefing, not the turn's tool text, read as fabricated
   // creates); this is the structural gate that supersedes it.
-  const suppressMutationCorrection = actions.length > 0 && actions.every((a) => isReadOnlyTaskingTool(a.tool));
+  // FP4 · #548 — THE single correction-banner gate. An ungrounded composer correction may
+  // render only when THIS turn attempted a mutation (a mutate-kind tool ran, per the
+  // toolKinds registry) OR no tool ran at all (a pure prose hallucination — the #58 case,
+  // decided by the prose-claim checks below). When every tool this turn was a READ, the
+  // reply is a grounded read/summary and NO ungrounded correction may fire on it. Registry-
+  // driven, not a name-regex allowlist: an unknown kind fails safe to `mutate`, so an
+  // unclassified tool can never hide a real fabrication (C-15). Supersedes the deleted
+  // isReadOnlyTaskingTool. This gate governs the UNGROUNDED corrections (create-fabrication,
+  // unproven-mutation, and the execution-state HEDGES). It deliberately does NOT gate the
+  // grounded-CONTRADICTION banners below (a live read that positively contradicts a claim,
+  // the outbound-send log, a blocked/running journey) — those fire on positive evidence,
+  // which C-23 permits, and gating them would regress C-06/P-3.
+  const mutationAttempted = actions.some((a) => toolKind(a.tool) === "mutate");
+  const bannerPermitted = actions.length === 0 || mutationAttempted;
   const executionReceipts = executionWriteReceipts(actions);
   const notFoundReceipts = issueNotFoundReceipts(actions);
   const readReceipts = issueReadReceipts(actions);
@@ -956,7 +954,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
     ].join("\n");
   }
 
-  if (claimsTerminalExecutionState(prose) && !hasTerminalExecutionGrounding(actions) && !acknowledgesUnreadExecution(prose)) {
+  if (bannerPermitted && claimsTerminalExecutionState(prose) && !hasTerminalExecutionGrounding(actions) && !acknowledgesUnreadExecution(prose)) {
     return [
       "⚠️ Correction — I could not confirm a terminal execution state this turn, so do not rely on any claim below that execution is complete/done/failed.",
       "A queue or dispatch receipt only proves the run was queued/dispatched. Terminal claims need a live execution_status result showing done or failed.",
@@ -1008,7 +1006,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // Execution state is not ordinary backlog state. A reply like "No, #108/#109
   // were not created or queued" must be grounded in Epaminon's live execution
   // read, not stale chat memory or an Archus paraphrase.
-  if (claimsExecutionState(prose) && !executionGrounded && !isSameTurnCreateWithoutExecutionReceipt(prose, presented, createdNums) && !acknowledgesUnreadExecution(prose)) {
+  if (bannerPermitted && claimsExecutionState(prose) && !executionGrounded && !isSameTurnCreateWithoutExecutionReceipt(prose, presented, createdNums) && !acknowledgesUnreadExecution(prose)) {
     const nums = [...presented];
     const lines = [
       `⚠️ Correction — I couldn't confirm execution state${nums.length ? ` for ${fmt(nums)}` : ""} this turn, so don't rely on the run/pickup claim below.`,
@@ -1060,7 +1058,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const groundedThisTurn = new Set<number>([...proven, ...actions.flatMap((a) => [...issueNumbersIn(a.result ?? "")])]);
   const unprovenPresented = [...presented].filter((n) => !groundedThisTurn.has(n));
   const fabricatedCreation = presented.size === 0 || unprovenPresented.length > 0;
-  if (claimsCreation && createdNums.size === 0 && fabricatedCreation && !suppressMutationCorrection) {
+  if (claimsCreation && createdNums.size === 0 && fabricatedCreation && bannerPermitted) {
     const lines = [
       unprovenPresented.length > 0
         ? `⚠️ Correction — no GitHub issue was created. ${fmt(unprovenPresented)} ${unprovenPresented.length > 1 ? "were" : "was"} not filed by this request (ignore the issue details below).`
@@ -1099,7 +1097,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const unproven = [...numbersClaimedAdjacent(prose, mutationVerbsToPolice)].filter(
     (n) => !proven.has(n) && !(executionGrounded && noExecNums.has(n) && NEGATIVE_QUEUE_RE.test(prose)),
   );
-  if (unproven.length > 0 && !suppressMutationCorrection) {
+  if (unproven.length > 0 && bannerPermitted) {
     return `⚠️ Correction — I couldn't confirm ${fmt(unproven)} against the backlog this turn, so don't rely on ${unproven.length > 1 ? "those references" : "that reference"}.\n\n${text}`;
   }
 

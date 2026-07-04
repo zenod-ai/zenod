@@ -1,4 +1,5 @@
 import { access } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
@@ -60,6 +61,21 @@ import {
 import { driveArchiveUnavailableReason } from "./voiceArchive.js";
 import { validateStepCallback, type StepCallbackResult } from "./journeyContracts.js";
 import type { DeliverableManifest } from "./executionQueue.js";
+
+// #532/#548 — the running commit SHA for /api/health. Prefer an explicit GIT_SHA env
+// (GHCR/CI builds pass it); otherwise fall back to the `.gitsha` file the Docker build
+// bakes from the checked-out .git (the Dokploy source-build path).
+function resolvedGitSha(): string {
+  const env = process.env.GIT_SHA?.trim();
+  if (env && env !== "unknown") return env;
+  try {
+    const fromFile = readFileSync("/app/.gitsha", "utf8").trim();
+    if (fromFile) return fromFile;
+  } catch {
+    // no baked file (dev/test) — fall through
+  }
+  return env || "unknown";
+}
 
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
@@ -132,7 +148,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // --- public ---
 
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: agent.name, version: VERSION, sha: process.env.GIT_SHA ?? "unknown" }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
   );
 
   // Agent identity for the UI shell (title/subtitle) so the same UI renders

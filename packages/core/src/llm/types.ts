@@ -123,6 +123,14 @@ export interface AnswerInput {
    * so the UUID returned by z2's async tools can be extracted for job polling.
    */
   onPeerAction?: (tool: string, input: Record<string, unknown>, result: string) => void;
+  /**
+   * FP4 · #548 ledger completeness — every READ tool invocation (vault/conversation
+   * search, read_note, list_pages, search_chats) is delivered here so the engine records
+   * it in the actions array reconcile receives. Without this, a read-only turn (e.g. a
+   * search_chats-only recap) reached reconcile with EMPTY actions and its ungrounded
+   * correction gate mistook the turn for a pure prose hallucination.
+   */
+  onReadAction?: (tool: string, input: Record<string, unknown>, result: string) => void;
 }
 
 /**
