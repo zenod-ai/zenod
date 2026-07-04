@@ -175,3 +175,40 @@ for the Dokploy env (the MCP connection isn't a pasteable key, and is live anywa
 steps are in `docs/DOKPLOY-DEPLOY.md`. Give me DNS + a test key and I'll complete the bind and the
 end-to-end test-card run (H-2 acceptance).
 
+
+### 2026-07-04 (later 2) · Worker — H-2 checkout backend DEPLOYED & webhook path verified in prod
+
+Supersedes the earlier "H-2 blocked" note. Backend-location resolved (Jordi): the private control plane
+**https://github.com/zenod-ai/cloud** now runs live.
+
+**Stripe (TEST mode).** MCP OAuth is stuck in live mode and can't be toggled agent-side, so I used the
+`sk_test_` Jordi provided directly against the Stripe API (all `livemode:false`):
+- Product `prod_Uoxp3KgS0igmY4` · Price `price_1TpJuD76yJ3p1J6XdbRcgX0l` (**$50 USD PLACEHOLDER** — D-5
+  amount still undecided) · Webhook endpoint `we_1TpJty76yJ3p1J6XcqVHTufI`.
+- ⚠️ A full non-restricted `sk_test_` was pasted in chat → should be rotated; use restricted next.
+- Two stray live products from mode confusion (`prod_UoxLPb2fISfz5L`, `prod_UoxgUvhuyNQc5w`) archived/inert.
+
+**Dokploy service created entirely via API** (compose `zenod-cloud`, composeId `17QoMFRgvmZ0Y2n19DINT`,
+project zenod / prod env). Private-repo clone solved with a token-embedded custom-git URL (deploy keys are
+disabled org-wide; Dokploy's GitHub App is only on the personal account). Env set via API — **note:
+`compose.update` with `env` now returns 200 and persists** (the old 403/1010 limitation is gone on this
+Dokploy version; memory [[zenod-dokploy-env-not-via-api]] updated). Domain `cloud.zenod.dev` → service
+`webhook:4242` (letsencrypt). Deploy status `done`.
+
+**Verified in production:**
+- `GET https://cloud.zenod.dev/healthz` → `{"ok":true}` HTTP 200.
+- `POST /create-checkout-session` → real `cs_test_…` + valid `checkout.stripe.com` URL (secret key + price
+  reachable through the deployed service).
+- Webhook path (signed with the real `whsec_`): **valid signature → HTTP 200 `{"received":true}`**
+  (verified + provisioning task enqueued to `/data/provisioning-queue.jsonl`, which the handler writes
+  synchronously before responding); **tampered signature → HTTP 400** (verification genuinely enforced).
+
+**Not yet done / flags:**
+1. **Real test-card checkout** (the literal H-2 acceptance) not run — Chrome extension was disconnected.
+   Needs a browser pass (reconnect Chrome, or Jordi pays the checkout URL with `4242 4242 4242 4242`).
+2. **⚠️ `cloud.zenod.dev` is behind Cloudflare's proxy** (WAF returned 1010 to a non-browser UA). Stripe's
+   real webhook deliveries could be blocked. Recommend setting the record to **DNS-only** (grey cloud) to
+   match the other zenod services (app.zenod.dev is DNS-only) before trusting live delivery.
+3. **$50 price is a placeholder** — needs the decided D-5 bundle amount/currency.
+4. Legal pages (H-11 PR #523) not yet linked from checkout (checkout has no customer-facing page yet;
+   the pricing page on apps/site is the remaining front-end piece).
