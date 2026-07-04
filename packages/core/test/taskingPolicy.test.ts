@@ -799,10 +799,22 @@ describe("peerMutationGuardFailure", () => {
     expect(failure).toContain("read-only/status-oriented");
   });
 
-  it("blocks mutating peer tools when the user did not ask for a write", () => {
+  // #256 · C-19 — a "need context" request is read-only INTENT, so it's still blocked,
+  // but for the honest reason (read-only), not for lacking a magic write verb. The
+  // verb-regex keyword gate is gone (doctrine rule 7); backlog writes are no longer
+  // blocked merely for missing "write/run/send".
+  it("blocks a read-only 'need context' lookup for its read-only intent, not a missing keyword", () => {
     const failure = peerMutationGuardFailure("close_issue", "I need context on issue 108.");
 
-    expect(failure).toContain("require an explicit write/run/send instruction");
+    expect(failure).toContain("read-only/status-oriented");
+  });
+
+  it("no longer keyword-blocks a natural-language backlog write that lacks a canonical verb (C-19)", () => {
+    // "jot a note on #253" is plain mutation intent with no write/run/send verb — the
+    // exact board specimen that used to bounce. It must now pass the guard (null).
+    expect(peerMutationGuardFailure("edit_issue", "jot a note on #253: rebased on main, CI green")).toBeNull();
+    expect(peerMutationGuardFailure("archus_request_backlog_action", "jot a note on #253")).toBeNull();
+    expect(peerMutationGuardFailure("close_issue", "wrap up #121, we shipped it")).toBeNull();
   });
 
   it("allows explicit backlog writes", () => {
