@@ -319,3 +319,13 @@ Jordi sent 2 voice notes + a few texts during active use. What he saw (Drive rec
 **Process finding:** deploying repeatedly during active WhatsApp use is itself a soak anti-pattern — batch deploys / use quiet windows during the soak. (Now-fast builds shrink each restart window, but the real fix is not churning during use.)
 
 **Recommendation:** do NOT reset the soak clock (honest behavior + self-inflicted churn, not a system-honesty failure); track #580/#581 + the quiet-window-deploy discipline.
+
+### 2026-07-05 · FABLE RULING — soak diagnostic accepted
+- Clock STANDS (announced failures, operator-side deploy churn; C-15/C-23
+  held under fire). Standing rule adopted: ONE consolidated deploy window
+  per day during the soak.
+- #580 PROMOTED to final closure gate + C-27 minted: "Acknowledged writes
+  are never lost" — a queued filing survives restarts, resumed/retried to
+  completion with receipt. Gate list now FROZEN.
+- #581 rides the same PR as polish (hedge only 'not terminal yet'; never
+  disclaim a confirmed dispatch). Whisper resolution accepted (#579).
