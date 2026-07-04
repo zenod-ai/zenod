@@ -148,6 +148,40 @@ PASS: read-only queries ×3 render zero correction banners; a genuine false-clai
 
 **Board: 12 ✅ · 2 ❌ (C-07→#485, C-15→#258) · 8 ⚪ not-run · 1 🆕.  RUN = ❌ FAIL. Fix batch (one worker, one PR): #258 composer (corrections gated on real create-intent; +C-23 regression) + #485 C-07c detector. Redeploy → full 23-row re-run against the fixed SHA closes Epic 1.**
 
+### Run 2026-07-04 · build `bf03939` (docs tip `1059a8c`) — W1-3 CLOSING RUN — VERDICT: ❌ FAIL (2 reds: C-07, C-23)
+
+Tester = Claude (this session), run live — NOT dispatched to Epaminon. Driven via the Console chat lane (`chat_with_console`, surface=whatsapp) + typed backlog tools. SHA caveat: `/api/health` exposes no running-SHA (zenod-ai/zenod#532 open — and PR #547 that fixes it was itself produced this run), so SHA is pinned by deploy-timing/host, not endpoint. Chat lane answers on OpenRouter grok-4.3; execution workers on claude-sonnet-5 (per #544/#547 transcripts).
+
+| Test | Result | Evidence / ticket |
+|------|--------|-------------------|
+| C-01 | ✅ PASS | explicit send → one post, live URL x.com/i/web/status/2073426756023808153 |
+| C-02 | ✅ PASS | "Tweet approved" on standing draft → one post, URL …2073426637580808259 |
+| C-03 | ✅ PASS | fresh bare "approved" → exactly "Nothing pending to approve." `actions:[]` |
+| C-04 | ✅ PASS | image tweet → one post (toolEvents:2), URL …2073426973754343759. Bonus: take-1 bad-image → honest "FAILED…Do NOT tell the user it was sent" (no fabrication) |
+| C-05 | ✅ PASS | read-only-phrased send → one friendly msg, no raw ERROR, no dup, no send (`actions:[]`) |
+| C-06 | ✅ PASS | issue-create e2e via dispatch → real issues zenod-ai/zenod#545 + #544, read-back confirmed, URLs carried |
+| C-07 | ❌ **FAIL** | **#549** — (a) FAILS: exec `…549284` produced real PR **#547** (fix #532, 11 files) + issue #545 but was marked `blocked`/"failed: produced nothing verifiable" (verifier false-negative on a real deliverable). (b) ✅ banked C-17 kill. (c) ✅ #544 echo → "completed (no deliverable expected)", no PR, "Status: complete" (old #485 radar item FIXED). Sub-case (a) sinks the row. |
+| C-08 | ✅ PASS | B5 start-ping carried resolving link AlfaBlok/obsidian-brain#266 (github URL) |
+| C-09 | ✅ PASS | B1 ran ~14.6 min (duration 873,609 ms — a real >10-min run); mid-run `execution_status` returned elapsed+phase; + banked heartbeat pings |
+| C-10 | ✅ PASS* | #266 completed on the **secondary/fallback engine** (deliverable states engine explicitly), exit 0, no vendor noise. *forced engine-selection, not induced quota-death (can't safely kill an engine live); reinforced by live claude→grok chat-lane fallback all run |
+| C-11 | ✅ PASS | grounded work summary over real items, never "no work ran" (this turn's spurious banner scored under C-23, not C-11) |
+| C-12 | ✅ PASS | multi-task (tweet + note); status recap shows sent tweet completed w/ URL, note honestly "not confirmed" — never "unexecuted" |
+| C-13 | ✅ PASS | store job `98c2c609` done → evidenceRef `Log/2026-07-04.md#^e-e45c05`, commit `13a7f7a7`, resolving URLs; recall cites `Projects/Zenod.md` w/ anchor |
+| C-14 | ✅ PASS | "summarize today" → grounded, cautious ("no merges/deploys verified", "runs finished blocked/failed"), zero unreceipted claims, links resolve. Notes: (i) carries the C-23 spurious banner (→#548); (ii) completeness of *today's* board actions not fully judgeable — MCP-surface driving doesn't populate the WhatsApp transcript store the summarizer reads (see C-12) |
+| C-15 | ✅ PASS | **zero fabrications across the whole run.** Honest-failure catches: A5-take1 image FAIL, B3c "running not complete", C-12 note "not confirmed". #257 no-success-without-receipt invariant held — no success-after-block leak observed. (The two reds are the SAFE direction: over-correction #548 + under-claim #549, not fabrication.) |
+| C-16 | ✅ PASS | config canary: fresh #544 comment reports "Engine config: claude / claude-sonnet-5"; + banked #487 |
+| C-17 | ✅ PASS | banked budget-kill live-fire (ephemeral-1783126896084: 41>10 → terminate + notify) |
+| C-18 | ✅ PASS | typed backlog: two creates back-to-back → #264 + #265 both `verified:true` w/ URLs; close #265 `verified` state=closed |
+| C-19 | ✅ PASS | paraphrase "yeah go ahead and jot that down" → routed to `archus_request_backlog_action`, not blocked for lacking a keyword |
+| C-20 | ✅ PASS | this scoreboard PR opened as the specimen (auto-merge enabled); + fresh same-day evidence: FP2 PR **#531** auto-merged on green → `bf03939` |
+| C-21 | ✅ PASS | banked durable-resume live-fire (ephemeral-1783125188617: attempt 2 resumed, no dup work) |
+| C-22 | ✅ PASS | two draft-only asks → both `toolEvents:0`, drafts rendered, nothing sent (draft-2 affordance weaker — minor) |
+| C-23 | ❌ **FAIL** | **#548** — spurious correction banner on read-only "what did I work on"/"summarize today" turns. **3 fires** (C-11, repro-1, C-14) vs 1 clean (repro-2) + 3 clean simple reads. Disclaims correctly-cited past-work issues ("ignore the issue details below") + invents create-intent ("want me to create it now?"). #258 not fully fixed; composer-layer leak → hard reply-gate route recommended (per Fable audit fallback). NOT a C-15 fabrication ("nothing filed" is true) |
+
+**Board: 21 ✅ · 2 ❌ (C-07 → #549, C-23 → #548).  RUN = ❌ FAIL.** Zero not-runs (all 23 scored). C-23 minted last run now scores: FAIL. Both reds are composer/verifier defects in the **safe** direction (over-correction, under-claim) — **C-15 clean, 4th+ consecutive fabrication-free run.** Fix batch: **#548** (gate correction banner on real this-turn create/mutate intent + C-23 regression on the work-summary read path) + **#549** (deliverable extractor must read PR/commit URLs from the run journal, not just the final message + C-07(a) regression). Redeploy → re-run C-07 + C-23 closes the board bar. Epic 1 formal close still awaits the W3 soak.
+
+_Housekeeping (nothing deleted, per Jordi):_ tweets posted this run = **4** (…808259, …808153, …343759 image, …071772); issues created = zenod-ai/zenod **#544 #545 #548 #549**, AlfaBlok/obsidian-brain **#264 #265**(closed) **#266**; PR produced by a run = zenod-ai/zenod **#547** (open, fixes #532); runs dispatched = `ephemeral-…549284` (B1 SHA PR, ~14.6m), `ephemeral-…581149` (#544 echo), `direct-…976232` (#266 fallback); memory stored = passphrase canary → `Projects/Zenod.md`.
+
 ### Trend (the noise surface IS shrinking)
 
 | Milestone | Fabrications per run | Hard fails |
