@@ -143,6 +143,9 @@ S-3 lands) → S-7. Then: full canonical run (now C-01…C-20). Green → deploy
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
 
+### Diagnosis · 2026-07-04 · STEP 3 — "notifications dark" root cause: the RUNNER is wedged, not WhatsApp/Phylax
+Traced from the Console (read-only MCP): chat replies send fine (WhatsApp socket + Console healthy); a fresh smoke ephemeral (`ephemeral-1783123639609-c072ffe9`) sat at `state:running` with `updatedAt==startedAt` (zero progress); `ask_phylax` read its notification ledger = **zero inbound events in 90 min** (not quiet-hours, not dedup — events never reach Phylax). Conclusion: the runner container isn't processing dispatched work → no `/api/notify` calls → no notifications; same wedge as the dead `fanout-20260703T195222Z` run and the 3 silently-dead I9 runs. Fix = restart/redeploy the runner (this docs commit triggers the autodeploy). The durable executor (#509) makes future wedges self-heal via resume.
+
 ### Receipt · 2026-07-04 · I9 STEP 0 + A1 safety hotfix + C-22 — hand-run by Claude (no pipeline dispatch)
 **STEP 0 (reconcile 3 orphaned runs):** all three died silently — `ephemeral-1783121504095` (A1), `-1783121852777` (B1), `-1783122025508` (docs) show `state:running` with `updatedAt==startedAt` (zero progress) and produced NO PR/branch. Notifications were dark. That's more C-08/C-09 + durability evidence; redone by hand below.
 **A1 safety hotfix (THE gate):** `ask_outbound` is now a gated action tool in the reply-gate (`packages/core/src/replyGate.ts`) — the Console delivers Callistheness's own verified reply verbatim, so a real send can NEVER render as "Draft ready (not posted)" (the unauthorized-tweet + fabricated-"not posted" bug). Added canonical test **C-22 · Drafts never send** + reply-gate tests (real-send-relayed, draft-relayed). Core 265 + server 498 green.
