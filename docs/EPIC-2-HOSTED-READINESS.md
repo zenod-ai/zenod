@@ -71,3 +71,72 @@ connectors. Anything that competes with Epic 1 for workers.
 ## Worker/tester append zone (same doc, never a new file)
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
+
+### 2026-07-04 · Worker (Product-Fable lane) — H-1 receipt verify · H-11 drafts · H-2 blocked
+
+**Doc-state note (read first).** My handover brief sequenced work against a "Week 1 → Stripe
+checkout" section plus H-11 and decisions D-4/D-5. Those live in `docs/HANDOVER-EPIC2.md` (untracked)
+— they have **not yet been folded into this epic doc**, which still carries the H-1..H-6 / D-1-only
+scoping. So this doc currently lags its own handover. Flagging for the planner to rewrite the state
+sections (that's Product-Fable's pending first move per HANDOVER-EPIC2 line 149-152). My references
+below trace to HANDOVER-EPIC2 and HOSTED-PLAN-2026-07-02 accordingly.
+
+**H-1 · P0.2 (CI → ghcr) — ✅ PASS, landed and live.**
+- Workflow: [`.github/workflows/publish.yml`](.github/workflows/publish.yml) — builds runtime stage on
+  every push to `main`, pushes `ghcr.io/zenod-ai/zenod:latest` + `:sha-<short>`. Committed in
+  `2ac7425` ("P0.2: publish runtime image to GHCR + tenant-zero registry compose (#470)").
+- **Not just present — actually pushing.** Latest run `28691857903` (push of `e0a330f`, 2026-07-04
+  02:15Z) = success; logs show `#38 pushing manifest for ghcr.io/zenod-ai/zenod:latest@sha256:8dbb5d0c…`
+  and `…:sha-e0a330f@sha256:8dbb5d0c795e731603e5f7446a53dcfb08b0efa5021e3cdd804bc3ac8039d298 done`.
+  Run URL: https://github.com/zenod-ai/zenod/actions/runs/28691857903 . Every recent push to main shows
+  the same green "Publish image" run.
+- Tenant-zero registry compose (the "run from registry, not source build" half of P0.2):
+  [`docker-compose.tenant-zero.yml`](docker-compose.tenant-zero.yml) — no `build:` block, pulls
+  `ghcr.io/zenod-ai/zenod:${ZENOD_IMAGE_TAG:-latest}`, `pull_policy: always`.
+- (Could not list the ghcr package versions via API — token lacks `read:packages` — but the push step
+  logs are conclusive proof the tags were written.)
+
+**H-1 · P0.3 (parameterized tenant compose template) — ✅ PASS, landed.**
+- [`docker-compose.tenant.yml`](docker-compose.tenant.yml) — full suite (console+zenod+archus+epaminon
+  +phylax+outbound) on a private `tenant-net`; only Console bridges `dokploy-network` for Traefik.
+  Parameterized via env: `ZENOD_IMAGE_TAG`, `TENANT_NAME`, `PHYLAX_CONSOLE_TOKEN`. Committed in
+  `89d376e` ("P0.3: parameterized tenant suite template (#471)").
+- Env contract documented: [`.env.tenant.example`](.env.tenant.example) (incl. commented
+  `LLM_BASE_URL`/`LLM_API_KEY` reserved for the P0.4 gateway).
+- Litmus (§8 HOSTED-PLAN): hooks are env-selected and inert when unset — self-host composes
+  (`docker-compose.z2.yml` etc.) still build from source unchanged. Passes.
+- **Verdict: both P0.2 and P0.3 are DONE. H-2/H-3 are not blocked by missing provisioning primitives.**
+
+**H-11 · Legal minimum — DRAFT pages authored (deliverable ready, not deployed).**
+- Three self-contained DRAFT pages, `noindex`, prominent DRAFT banner, story = "customer owns the vault
+  repo": [`apps/site/public/legal/terms.html`](apps/site/public/legal/terms.html),
+  [`privacy.html`](apps/site/public/legal/privacy.html),
+  [`data-handling.html`](apps/site/public/legal/data-handling.html). Cross-linked.
+- Held on a branch + **HOLD PR** (not merged) so DRAFT legal text does NOT auto-deploy to the live
+  marketing site before counsel review. PR URL appended once opened (see below).
+- Not yet "linked from checkout" (H-2 acceptance) because checkout does not exist yet — wiring the
+  footer link is a one-line follow-up once H-2 lands.
+
+**H-2 · Checkout — BLOCKED, stopped per protocol (did not improvise).**
+Two hard blockers, both needing Jordi:
+1. **Stripe keys/account access.** No Stripe code exists in the repo (confirmed: zero `stripe` refs
+   outside agent worktrees). Even Stripe *test* mode needs a test secret key, and creating the
+   product/price (the "ONE prepaid credit bundle" plan, D-5) needs dashboard access. Per brief: stop and
+   ask for keys.
+2. **Backend location decision (architectural, not mine to improvise).** `apps/site` is a **static
+   nginx site** ([`apps/site/Dockerfile`](apps/site/Dockerfile) → `nginx:alpine`, no server). Stripe
+   Checkout Session creation (needs the secret key) **and** the webhook receiver (`checkout.session
+   .completed` → provisioning-queue entry) require a server-side endpoint that does not exist. HOSTED-PLAN
+   §2/§8 puts billing + provisioner in the **private `zenod-ai/cloud` control plane** — which is not this
+   repo and may not exist yet. Need Jordi's call on WHERE the checkout backend + webhook live before I
+   build: (a) a serverless function alongside the site, (b) a route in the private control-plane repo,
+   or (c) a minimal endpoint in an existing service. The §8 litmus applies to whichever touches the
+   public image.
+3. **(Minor) D-5 plan specifics not yet numbered** — bundle size/price for the "ONE plan" aren't recorded
+   as a DECIDED value in this doc; HOSTED-PLAN §3 sketches Console ~$99–200/mo + starter credit bundle.
+   Needs a decided figure for the pricing page.
+
+What I did NOT do (deliberately): build a pricing page with a guessed price wired to a non-existent
+checkout backend. Unblock items 1–2 and I can deliver the pricing page + test-mode Checkout + webhook
+stub → provisioning-queue entry in one pass.
+
