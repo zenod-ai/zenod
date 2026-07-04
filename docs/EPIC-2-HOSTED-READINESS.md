@@ -613,7 +613,7 @@ provisioning.** Tickets (planner; acceptance + test criteria):
 |----|--------|-------|---------------------|------------------------|
 | I2-1 | H-3 phase 1: GitHub connect flow (vault + issues) — the Enable-Zenod path made self-serve | ⚪ ready | A non-technical user completes Team→Enable Zenod→GitHub OAuth→vault pick unaided in <20 min; secrets stored per-tenant, never in the vault | Fresh tenant (or reset testco): tester follows the UI only, no docs, times it; Zenod shows "on"; a memory store→ask round-trip works against the connected vault |
 | I2-2 | Zero-touch model setup: provisioner mints the tier-capped gateway key and injects it at provision time (maps `OPENROUTER_API_KEY` into `docker-compose.tenant.yml`, §8-safe) | ✅ worker-verified (later 14) | Fresh provision → council responds with NO manual key entry; key cap matches the paid tier ($10/$50/$350) | Provision a throwaway tenant from a queued task; chat responds; gateway `list` shows the tenant key with the tier's cap; teardown |
-| I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | ⚪ ready | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
+| I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | ✅ worker-verified (later 15) | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
 | I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | ✅ worker-verified (later 14) | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
 | I2-5 | Live-mode prep checklist (gated on Jordi: counsel pass on H-11 drafts, live restricted keys, caps→live prices) | 🔴 gated on Jordi | Checklist in doc with owner per item; live cutover NOT executed without Jordi's explicit go | Checklist review only |
 | I2-6 | I1-5 carried: R-1 (MeterProvider seam) handed to stability track | 🔴 with Jordi (3rd carry) | Stability-track ticket link in this doc | Link resolves |
@@ -650,3 +650,37 @@ build (H-8), website polish (H-9), metering build (H-7 — blocked on R-1), Trus
   `u8EwwHmyykYv1qbv2sPmP`) stays up as staging.
 
 **Remaining Iteration 2:** I2-3 (queue-tail endpoint) and I2-1 (H-3 GitHub connect — headline) next.
+
+### 2026-07-04 (later 15) · [worker] — I2-3 done (queue-tail); I2-1 (H-3) scoped — plan below
+
+**I2-3 · Token-gated queue tail — done + verified.** `zenod-ai/cloud` webhook service: `GET /queue/tail?n=N`
+Bearer-authed against `QUEUE_READ_TOKEN` (unset → 503; never open). Verified in prod: no/wrong token →
+**401**; correct token → **200** returning the real last-N tasks with **tier + email**
+(`starter/tester-starter@`, `agency/tester-agency@`, `pro/tester-pro@`, …). Closes the tester's coverage
+caveat — the queue file is now readable without container access. Token set in Dokploy env (held out of
+receipts; given to Jordi/tester in chat). (Deploy note: the webhook compose's clone URL uses an embedded
+`gh` token that can go stale — refresh it if new commits stop deploying.)
+
+**I2-1 · H-3 GitHub connect flow — SCOPED (build is a dedicated session).**
+- *What exists:* the Connections platform is already built (Console **Connections** tab; GitHub/Drive/X).
+  The **Enable-Zenod** dialog already gates on it ("Connect GitHub in the Connections tab first, then pick
+  the vault repo"). So H-3 is **wiring an existing flow into a self-serve path**, not building OAuth from
+  scratch. Per-tenant network isolation means the connections trust model needs no hardening (HOSTED-PLAN §2).
+- *The gap to close (acceptance: non-technical user, UI-only, <20 min):*
+  1. **GitHub connect** — confirm the public GitHub App install flow works from a fresh tenant's Connections
+     tab (per-repo install; single-account case, which already works per HOSTED-PLAN §6). Verify the OAuth
+     callback returns to `z-<tenant>.zenod.dev`.
+  2. **Vault pick** — after connect, the Enable-Zenod dialog lists the tenant's repos; pick one (or the
+     platform-held `<tenant>-brain`); Zenod clones + runs the schema-v1 migration on first use.
+  3. **Round-trip** — a `remember this: …` store → `ask` retrieval against the connected vault.
+  4. **Secrets per-tenant, never in the vault** — confirm the GitHub token/installation is stored in the
+     tenant's own state, not written to the vault repo.
+- *Unknowns to check first (spike, ~½ session):* does the deployed GitHub App's callback URL allowlist
+  cover arbitrary `z-*.zenod.dev` wildcards? Is the App install per-tenant or shared? Where does the
+  Console store the per-tenant GitHub credential? These decide whether H-3 is a wiring task or needs an
+  App-config change (Jordi may need to edit the GitHub App settings).
+- *Recommendation:* dedicate the next session to I2-1 — spike the three unknowns, then build. Testable on a
+  fresh reset of testco (which now provisions zero-touch, so a clean tenant is one command away).
+
+**Iteration 2 status after this turn:** I2-2 ✅ · I2-3 ✅ · I2-4 ✅ (worker-verified) · I2-1 scoped (next) ·
+I2-5 gated on Jordi · I2-6 (R-1 carry) still with Jordi.
