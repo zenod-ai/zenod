@@ -1,10 +1,34 @@
 # EPIC 2 · HOSTED PRODUCT READINESS
 
+Owner: **Product-Fable** (planner, since 2026-07-04 per [HANDOVER-EPIC2.md](HANDOVER-EPIC2.md)) ·
 Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md) · Positioning: launch deck V5 · Journeys: user-journeys deck (T1, J7–J9)
 **Exit criterion: a stranger pays money and gets a working Council attached to their repo. Jordi is customer #0 and doesn't count.**
 
-Status: 🟡 SCOPING. **Gated by Epic 1** — no executor capacity until stability P0s close. The only work
-allowed now is the D-1 decision and this document.
+Status: 🟢 ITERATION 1 RUNNING (opened 2026-07-04). D-4/D-5 DECIDED · D-6 (pricing) OPEN ·
+checkout money-path proven in TEST mode · provisioning blocked on B-1 (GHCR pull). See Iteration 1 table.
+
+## Operating protocol — THE DISCIPLINE (Jordi, 2026-07-04; binding on all roles)
+
+**This document is the state. Not chat, not PR descriptions, not memory.** If it isn't in this doc, it
+didn't happen. Three roles, one document:
+
+- **Planner (Product-Fable):** writes tickets WITH acceptance criteria and test criteria into the
+  iteration table; is the only role that updates ticket STATES in the table; reviews the tester's
+  summary; writes the iteration-close entry; opens the next iteration. Accountable to Jordi for the doc
+  staying coherent and aimed at the exit criterion — flags drift instead of letting it ride.
+- **Worker:** picks tickets from the iteration table; reports per ticket in the append zone —
+  `accomplished` / `not accomplished` / `blocked` with same-turn receipts (URL/SHA/timing). A worker
+  never self-certifies acceptance; that is the tester's job. Blockers are filed HERE, not in chat.
+- **Tester:** independently verifies each worker-reported ticket against its TEST criteria (fresh
+  evidence — never reuse the worker's); appends a per-ticket ✅/❌ scoreboard plus a short summary
+  addressed to the planner.
+
+**Rules:** append, never delete (narrative is append-only; only the planner edits table states) · every
+entry is dated and role-tagged `[planner]/[worker]/[tester]` and names its ticket IDs · every claim
+carries a receipt · an iteration closes only on the tester's summary + the planner's close entry ·
+**git discipline:** the doc is canonical at `origin/main`; every session starts by reading it from
+origin/main and lands doc changes via an isolated worktree + auto-merge PR — never a bare local edit in
+the shared working tree (that is how this doc's planner state was lost once already, 2026-07-04).
 
 ---
 
@@ -27,6 +51,98 @@ later, create no legacy now.
 
 **DECIDED 2026-07-03 (Jordi): A — managed single-tenant.** Same image we dogfood, one container per
 customer. Self-host stays as funnel (C), B deferred until revenue proves it.
+
+## D-4 · Hosted channel topology — DECIDED 2026-07-04 (Jordi): option A at launch
+
+Ground truth: [WHATSAPP-SHARED-NUMBER-P0.5.md](WHATSAPP-SHARED-NUMBER-P0.5.md) (#453). Options were
+(A) per-tenant pairing — tenant scans a QR, their own WhatsApp links to their tenant container, council
+answers in their own chat; zero new code, ToS-gray but blast radius = one tenant. (B) shared service
+number + central wa-router — best onboarding ("text this number"), but shared ban blast radius fights
+D-1's isolation model, weeks of risky code. (C) WhatsApp Business API via BSP — compliant, per-message
+fees, template constraints on business-initiated messages, weeks of integration.
+
+**DECIDED: A at launch.** Jordi: "they're gonna put their QR code and it's just gonna go through their
+me contact… I accept option A." Web console + Telegram remain the zero-friction channels alongside.
+**B and C both parked** (Jordi leans B down the line — a service number customers text, feasible since
+the tenant registry knows number→tenant — "but maybe we don't need that pain"). Revisit trigger: ~10
+tenants or first customer who won't accept the ToS-gray zone. R-2 (transport split) parked with them.
+
+## D-5 · The meter — DECIDED 2026-07-04 (Jordi): prepaid credits · gateway is truth
+
+A `MeterProvider` seam in the model-call path: self-host default = no-op (unlimited; local ledger only —
+`usage.sqlite` per-call tokens+cost already exists, surfaced via `read_llm_timeline`). Hosted = credit
+meter: check credit before dispatch → decrement on receipt → soft-warn at threshold (Phylax tells the
+customer, never silent) → block NEW work at zero (in-flight lands) → Stripe top-up credits balance.
+Same image, config-flag difference; passes HOSTED-PLAN §8 litmus (env-selected, inert unset).
+
+**DECIDED (Jordi):** (1) **prepaid credits** — bounded liability, matches H-7 acceptance; (2) **the LLM
+gateway balance is the source of truth** — hard enforcement OUTSIDE the tenant container via per-tenant
+budget-capped virtual key (v0 shipped: `scripts/gateway/openrouter-key.mjs`, P0.4/#452); the in-image
+`MeterProvider` mirrors it for warnings and honest messaging. Existing primitives: `usage.sqlite` ledger ·
+`parseRunBudget` per-run budgets · gateway v0. Metering = ledger + gate + billing sync, not new machinery.
+
+## D-6 · Pricing & billing shape — DECIDED 2026-07-04 (Jordi), concept level
+
+**DECIDED: subscription with a monthly usage credit.** Jordi: "we should sell a subscription, which
+gives you a certain usage credit… you get a monthly credit to burn if you're subscribed." **Three
+tiers with three consumption caps: $29/mo · $79/mo · $499/mo** — numbers to be finessed, concept locked.
+Mechanics: tier's included credit = the tenant's monthly gateway budget (D-5: gateway is truth); credit
+exhausted → soft-warn → block new work → top-up or wait for renewal. Checkout switches from the one-time
+$50 placeholder (`mode:payment`) to `mode:subscription` with three prices.
+
+**Still to finesse (planner proposes, Jordi approves):** included-credit amount per tier — sized from
+REAL burn data (tenant-zero's `usage.sqlite` monthly model spend), not guessed; tier naming/positioning;
+whether top-ups land at launch or post-launch. Planner note on record: the $29 entry tier prices near
+tool-competitors (Postiz $49) rather than agency-replacement ($300–1k, alpha deck) — accepted as a
+funnel tier; the $499 tier carries the team-you-hired story.
+
+## Engine requirements → stability track (Jordi carries; we never dispatch into their lane)
+
+- **R-1 · `MeterProvider` seam** in the model-call path: interface + no-op default + config-flag
+  activation; CI check that the image boots with zero hosted env fully functional (§8). Needed by H-7.
+  Status: with Jordi to hand over.
+- **R-2 · Channel transport/pipeline split** (P0.5 scope item 3). Parked until D-4's B/C triggers.
+
+## Epic backlog beyond the original H-1..H-6 (added 2026-07-04, sequenced to first dollar)
+
+| # | P | Ticket | Acceptance |
+|---|---|--------|------------|
+| H-7 | P1 | Metering/credit build (D-5; needs R-1) | Tenant with $5 credit runs to $0 → warned → blocked → tops up → resumes, all receipted |
+| H-8 | P1 | Tenant channel build (D-4 option A stamped out per tenant) | A tenant's WhatsApp reaches THEIR council on OUR infra, isolated from other tenants |
+| H-9 | P1 | Website: positioning V5 → zenod.dev marketing + docs + pricing | A stranger understands and can pay without talking to Jordi |
+| H-10 | P1 | Ops minimum: tenant backup (vault = their git repo; volume snapshot for sqlite), incident contact, support inbox | Written runbook, tested restore |
+| H-11 | P0 | Legal minimum: ToS, privacy, data-handling | Lawyer-sane pages linked from checkout |
+
+## ITERATION 1 (opened 2026-07-04) — goal: the money path, end to end
+
+**Iteration goal:** a paid checkout on zenod.dev turns into a running tenant Council with no code edits —
+TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. This is H-2 + H-1 + H-11.
+
+| ID | Ticket | State | Acceptance criteria | Test criteria (tester) |
+|----|--------|-------|---------------------|------------------------|
+| I1-1 | H-2 money path (backend + webhook + checkout) | 🟡 worker-reported PASS (test mode) — awaiting tester | Card completes checkout in prod; payment visible in Stripe; provisioning task created with customer details | Run a FRESH checkout with test card; confirm the Stripe event shows `pending_webhooks: 0`; confirm a NEW line in `provisioning-queue.jsonl` carrying that session's customer email; `/success.html` → 200 |
+| I1-2 | H-2 front end: pricing page live + linked legal | 🟡 worker-reported live (#527) — awaiting tester | Pricing section on zenod.dev; "Get started" reaches Stripe checkout; legal pages linked | zenod.dev `#pricing` renders; click-through reaches `checkout.stripe.com`; `/legal/terms.html` + `privacy.html` + `data-handling.html` all 200 AND reachable from the pricing/checkout surface; DRAFT banner present |
+| I1-3 | H-11 legal drafts | 🟡 live as DRAFT — counsel review pending (Jordi) | Lawyer-sane pages linked from checkout | Covered by I1-2; content sanity: customer-owns-the-vault story present in data-handling |
+| I1-4 | H-1 provisioner: paid task → running tenant | 🔴 BLOCKED on B-1 (receipts: worker entry "later 6") | Fresh tenant end-to-end <30 min, no code edits | After worker's live run: `z-testco.zenod.dev` console loads over TLS; council responds in web chat; total time receipted <30 min; teardown documented |
+| I1-5 | R-1 handoff to stability track | ⚪ with Jordi | R-1 accepted as a stability-track ticket | Ticket link recorded in this doc |
+| I1-6 | D-6 pricing decision | ✅ DECIDED 2026-07-04 (concept: subscription + monthly credit, tiers 29/79/499) | Shape + tiers recorded as DECIDED above | Doc record matches Jordi's words |
+| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | ⚪ ready for worker | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
+
+### Blocker register
+
+- **B-1 · GHCR image pull 403** — **FLIP DONE (Jordi, 2026-07-04): package set to Public** (the org-level
+  packages policy had to be opened first; the actual flip lives on the package's own settings page, not
+  repo or org settings). Worker verifies anonymous pull + redeploys `tenant-testco` as first step; B-1
+  closes on that receipt. Original blocker (receipts in worker entry "later 6"): the
+  `ghcr.io/zenod-ai/zenod` package is PRIVATE; packages don't inherit repo visibility; anonymous pull
+  → 403; visibility flip attempted by Jordi didn't take after retries. **Planner decision: the package
+  goes PUBLIC** — it is the delivery artifact of an AGPL open-source product; the self-host funnel and
+  every tenant stack depend on it. Jordi: flip at PACKAGE level (GitHub → zenod-ai → Packages → `zenod`
+  → Package settings → Change visibility → Public); if it silently no-ops, check Org → Settings →
+  Packages allows public packages. Fallback ONLY if org policy can't allow public: `read:packages` PAT
+  as a Dokploy registry credential (temporary; revisit).
+- **B-2 · Security cleanup:** a full non-restricted `sk_test_` was pasted in chat → Jordi rotates it;
+  restricted-scope keys only from now on.
 
 ## Tickets (high level — refined into acceptance-criteria form once D-1 is decided and Epic 1 exits P0)
 
@@ -275,8 +391,20 @@ Once public, no re-provision needed: redeploy compose `Xo_6cPQAlEBTMvBtBu0gU` an
 
 **H-1 acceptance: NOT passed** (no tenant came up). Timing not meaningful until unblocked.
 
+### 2026-07-04 (later 7) · [planner] — Doc rebuilt as canonical state · Iteration 1 opened · discipline binding
 
-### 2026-07-04 (later 7) · Worker — I1-7 (D-6) three-tier subscription: BUILT + verified
+The planner state layer (protocol, D-4/D-5 decision records, iteration table) was lost once to the
+shared-working-tree incident before being committed — rebuilt now on top of all worker appends
+(preserved verbatim through "later 6"), with the git-discipline rule added to the protocol so it can't
+recur. The Iteration 1 table is the single source of ticket state from this point. Open with Jordi:
+D-6 (pricing/billing shape — planner flagged the one-time-vs-subscription drift: current checkout
+produces zero MRR) and B-1 (GHCR public flip — planner decision recorded in the blocker register).
+Worker's next dispatch: push this branch, then I1-4 live provision the moment B-1 clears, and I1-7
+(3-tier subscription build). Tester role activates this iteration — test criteria are in the table.
+**Same-day addendum:** D-6 DECIDED at the table (subscription + monthly credit, $29/$79/$499 caps to
+finesse) — section updated, I1-7 minted.
+
+### 2026-07-04 (later 8) · [worker] — I1-7 (D-6) three-tier subscription: BUILT + verified
 
 Three monthly subscription tiers replace the one-time $50 bundle (D-6). Stripe **TEST mode** throughout.
 
