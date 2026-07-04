@@ -764,3 +764,33 @@ current size), rotation+prune in place. Test: numbers reproducible from `docker 
 **Iteration 2 remaining:** I2-1 spike (dispatch ready) · I2-2 finish (gated B-6) · I2-5 (gated Jordi) ·
 I2-6 = carry R-1 + R-3 + R-4 to stability (with Jordi, 4th carry on R-1) · I2-8 disk audit (NOT gated —
 runs regardless of B-6).
+
+### 2026-07-04 (later 20) · [worker] — B-6 NOT closed: secret-store slots hold placeholders; I2-7 documented
+
+**I2-7 · Operator secret store — structure DONE, documented.** The Keychain slots exist and are now
+documented in `zenod-ai/cloud` PROVISIONING.md ("Operator secret store"): service `alpha9-dokploy-api-key`
+and `alpha9-openrouter-provisioning-key`, account `jordi`, with read commands + a validity check block.
+
+**B-6 · Provisioning credentials — STILL OPEN.** Both Keychain values are **placeholders, not real keys**:
+- Both entries read as the literal string `<345345-…234>` (angle-bracket dummy).
+- Dokploy: panel is up (root→200; the earlier 502 was a transient CF blip), but the key → **401 ×3**
+  (x-api-key and Bearer both), because the value is the placeholder.
+- OpenRouter: value does **not** start with `sk-or-v1-` (it's the same placeholder) → `openrouter-key.mjs
+  list` → 401 "Missing Authentication header".
+- **Needs Jordi:** put the REAL values into the two slots — Dokploy API key (Dokploy panel → Settings →
+  API/CLI) and an OpenRouter **provisioning** key (`sk-or-v1-…`, from openrouter.ai/settings/provisioning-keys).
+  Validity check in PROVISIONING.md must pass before a worker proceeds. (Did not solicit the keys in chat.)
+
+**Blocked and skipped (all need the two keys):**
+- **I2-2 finish** (`--tier starter` throwaway provision, cap=$10, teardown) — needs Dokploy + OpenRouter.
+- **I2-8 measurement** (`docker system df -v`, `du`) — needs the Dokploy API (or VPS SSH, which I lack).
+- **testco re-provision** — needs Dokploy + OpenRouter.
+
+Existing tenants are healthy and unaffected (z-testco.zenod.dev→200/TLS, cloud.zenod.dev/healthz→200) —
+the outage was only the transient CF 502, and the container fleet runs independently of the Dokploy panel.
+
+**Also this session:** I2-1 (H-3) spike was in progress before this dispatch — key finding worth keeping:
+the GitHub connect flow already exists as a **per-tenant GitHub App *manifest* flow** (`/api/github/app/
+start|callback|setup`), callback built from the tenant's own domain (`x-forwarded-host`), credential
+stored in the tenant's settings sqlite (per-tenant, never in the vault; wiped on full re-provision but
+survives image rolls). Full I2-1 build plan pending a resumed spike.
