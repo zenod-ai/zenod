@@ -617,8 +617,16 @@ function acknowledgesRunningEphemeral(prose: string): boolean {
  * symptom. When the model has said it couldn't verify/read, leave its text alone.
  */
 function acknowledgesUnreadExecution(prose: string): boolean {
-  return /\b(?:couldn['’]?t|could not|can['’]?t|cannot|was(?:n['’]?t| not) able to|unable to)\s+(?:confirm|verify|read|check|tell|determine|access)\b/i.test(
-    prose,
+  return (
+    /\b(?:couldn['’]?t|could not|can['’]?t|cannot|was(?:n['’]?t| not) able to|unable to)\s+(?:confirm|verify|read|check|tell|determine|access)\b/i.test(
+      prose,
+    ) ||
+    // #581 — honest "the dispatch happened but I can't read terminal status yet" phrasings.
+    // When the reply already owns that status is pending, a hedge would just double-hedge a
+    // confirmed dispatch.
+    /\bno\s+(?:read|status(?:\s+read)?)\s+(?:available|yet)\b|\bstatus\s+(?:is\s+)?(?:pending|not\s+(?:yet\s+)?available)\b|\bnot\s+(?:yet\s+)?confirmed\b|\bawaiting\s+(?:the\s+)?(?:status|read|execution)\b/i.test(
+      prose,
+    )
   );
 }
 
@@ -670,10 +678,19 @@ function hasExecutionGrounding(actions: ReadonlyArray<RecordedAction>): boolean 
       tool === "executionstatus" ||
       tool === "epaminonreadissueexecutionstatus" ||
       tool === "epaminonrunexistingissue" ||
+      tool === "epaminonrunephemeraltask" ||
+      tool === "consolerunephemeraltask" ||
       tool === "consolecreateissuethenrun" ||
+      tool === "consolecreateissuesthenrun" ||
+      tool === "runephemeraltask" ||
       tool === "approveexecution"
     ) return true;
-    return /\b(exec:(?:queued|running|needs-review|approved|blocked|done)|Minted execution ticket|Execution \d+|Epaminon)\b/i.test(
+    // #581 — a CONFIRMED DISPATCH grounds the run/pickup claim (a dispatch receipt is real
+    // evidence the run was queued/dispatched). Recognizes the create-and-run / ephemeral
+    // dispatch receipts ("dispatched execution direct-…", "Dispatched Epaminon worker …
+    // (execution …)") so the hedge never DISCLAIMS a real dispatch — it may still hedge an
+    // ungrounded TERMINAL claim (done/failed) via hasTerminalExecutionGrounding.
+    return /\b(exec:(?:queued|running|needs-review|approved|blocked|done)|Minted execution ticket|Execution \d+|Epaminon|dispatched execution|execution\s+(?:direct|ephemeral)-|Dispatched\b[\s\S]{0,60}\bexecution\b|run_ephemeral_task)\b/i.test(
       action.result,
     );
   });

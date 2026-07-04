@@ -568,6 +568,42 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  // #581 — the soak case: two voice-note tasks filed + dispatched; the reply honestly says
+  // status isn't readable yet. The hedge must NOT disclaim the confirmed dispatch ("don't
+  // rely on the run/pickup claim"); at most it hedges "not terminal yet".
+  it("#581: does not disclaim a confirmed dispatch that honestly says status is pending", () => {
+    const reply =
+      "Two fresh execution tickets filed inside AlfaBlok/obsidian-brain (#267 and #268) and dispatched. No read available yet for status.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_run_ephemeral_task",
+        input: { target: "AlfaBlok/obsidian-brain#267" },
+        result: "Dispatched Epaminon worker (execution direct-1783202646831-f0afe3d6) for AlfaBlok/obsidian-brain#267 — running.",
+      },
+      {
+        tool: "epaminon_run_ephemeral_task",
+        input: { target: "AlfaBlok/obsidian-brain#268" },
+        result: "Dispatched Epaminon worker (execution direct-1783202646949-1f59bbcf) for AlfaBlok/obsidian-brain#268 — running.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).not.toContain("don't rely on the run/pickup claim");
+    expect(out).not.toContain("⚠️ Correction");
+  });
+
+  it("#581: a TERMINAL claim (done/complete) with no live status is STILL hedged even with a dispatch receipt", () => {
+    const reply = "Execution #267 completed successfully — the run is done.";
+    const actions: RecordedAction[] = [
+      {
+        tool: "epaminon_run_ephemeral_task",
+        input: { target: "AlfaBlok/obsidian-brain#267" },
+        result: "Dispatched Epaminon worker (execution direct-1783202646831-f0afe3d6) for AlfaBlok/obsidian-brain#267 — running.",
+      },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toContain("could not confirm a terminal execution state");
+  });
+
   it("corrects a successful-looking answer when a Console journey blocked", () => {
     const reply = "ephemeral smoke sentinel-1782246200 observed";
     const actions: RecordedAction[] = [

@@ -24,6 +24,12 @@ export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupt
 /** Non-terminal state a boot-time restart should surface as interrupted. */
 const IN_FLIGHT_STATE = "running" as const;
 
+// C-27 / #580 — "acknowledged writes are never lost". A `store` job (vault filing +
+// add_memory) that a restart interrupts is RE-QUEUED on boot so the worker resumes/retries
+// it to completion with the normal receipt — bounded so a job that keeps crashing the
+// server eventually fails honestly instead of looping forever.
+const MAX_STORE_RESUME_ATTEMPTS = 3;
+
 export interface TaskJobInput {
   /** task: the instruction sent through the shared tasking loop. */
   text?: string;
@@ -50,6 +56,8 @@ export interface TaskJob {
   status: TaskJobStatus;
   result: TaskJobResult | null;
   error: string | null;
+  /** How many times a boot-time restart resumed this job (C-27). */
+  attempts: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -61,6 +69,7 @@ interface Row {
   status: string;
   result_json: string | null;
   error: string | null;
+  attempts: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -73,6 +82,7 @@ function rowToJob(row: Row): TaskJob {
     status: row.status as TaskJobStatus,
     result: row.result_json ? (JSON.parse(row.result_json) as TaskJobResult) : null,
     error: row.error,
+    attempts: row.attempts ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -103,11 +113,32 @@ export class TaskJobStore {
       );
       CREATE INDEX IF NOT EXISTS task_jobs_status ON task_jobs(status, created_at);
     `);
-    // A restart killed any in-flight loop — surface those jobs as interrupted
-    // (not stuck "running") so the caller's poll resolves instead of hanging.
+    // C-27 migration: the resume-attempt counter (older DBs won't have it).
+    try {
+      this.db.exec(`ALTER TABLE task_jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`);
+    } catch {
+      // column already exists
+    }
+    // C-27 / #580 — a restart killed any in-flight loop. WRITE jobs (kind 'store' — vault
+    // filing + add_memory) must never be lost: RE-QUEUE them so the worker resumes/retries
+    // to completion with the normal receipt, bounded by MAX_STORE_RESUME_ATTEMPTS.
     this.db
       .prepare(
-        `UPDATE task_jobs SET status='interrupted', error='interrupted by a server restart', updated_at=?
+        `UPDATE task_jobs SET status='queued', attempts=attempts+1, updated_at=?
+         WHERE status=? AND kind='store' AND attempts < ?`,
+      )
+      .run(now(), IN_FLIGHT_STATE, MAX_STORE_RESUME_ATTEMPTS);
+    // Everything else still in-flight (non-write jobs — their durability lives in the
+    // executor; and 'store' jobs that already exhausted their retries) is surfaced as
+    // interrupted so the caller's poll resolves instead of hanging.
+    this.db
+      .prepare(
+        `UPDATE task_jobs
+           SET status='interrupted',
+               error=CASE WHEN kind='store'
+                          THEN 'interrupted by a server restart (gave up after ' || attempts || ' retries)'
+                          ELSE 'interrupted by a server restart' END,
+               updated_at=?
          WHERE status=?`,
       )
       .run(now(), IN_FLIGHT_STATE);
