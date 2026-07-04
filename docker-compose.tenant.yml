@@ -62,6 +62,12 @@ x-agent-common: &agent-common
     ZENOD_DATA_DIR: /data
     PORT: "8080"
     ZENOD_AWAIT_PROVISION: "1"
+    # Zero-touch model setup (I2-2): the provisioner injects a tier-capped OpenRouter
+    # key + provider at create-time so the council responds with no manual Model step.
+    # §8-safe: unset → empty → self-host keeps its defaults (provider=anthropic, key
+    # entered in the UI). These seed the settings store on first boot (ENV_SEEDS).
+    ZENOD_PROVIDER: ${ZENOD_PROVIDER:-}
+    OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
 
 services:
   # The ONLY publicly-routed service. Bridges tenant-net <-> dokploy-network so
@@ -78,6 +84,9 @@ services:
       AGENT: console
       ZENOD_DATA_DIR: /data
       PORT: "8080"
+      # Zero-touch model setup (I2-2, §8-safe — see &agent-env note).
+      ZENOD_PROVIDER: ${ZENOD_PROVIDER:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     expose:
       - "8080"
 
