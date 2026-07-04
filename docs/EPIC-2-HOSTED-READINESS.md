@@ -124,7 +124,7 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 | I1-1 | H-2 money path (backend + webhook + checkout) | 🟡 worker-reported PASS (test mode) — awaiting tester | Card completes checkout in prod; payment visible in Stripe; provisioning task created with customer details | Run a FRESH checkout with test card; confirm the Stripe event shows `pending_webhooks: 0`; confirm a NEW line in `provisioning-queue.jsonl` carrying that session's customer email; `/success.html` → 200 |
 | I1-2 | H-2 front end: pricing page live + linked legal | 🟡 worker-reported live (#527) — awaiting tester | Pricing section on zenod.dev; "Get started" reaches Stripe checkout; legal pages linked | zenod.dev `#pricing` renders; click-through reaches `checkout.stripe.com`; `/legal/terms.html` + `privacy.html` + `data-handling.html` all 200 AND reachable from the pricing/checkout surface; DRAFT banner present |
 | I1-3 | H-11 legal drafts | 🟡 live as DRAFT — counsel review pending (Jordi) | Lawyer-sane pages linked from checkout | Covered by I1-2; content sanity: customer-owns-the-vault story present in data-handling |
-| I1-4 | H-1 provisioner: paid task → running tenant | 🟡 PROVISION PASS, chat pending creds (worker "later 9") | Fresh tenant end-to-end <30 min, no code edits | After worker's live run: `z-testco.zenod.dev` console loads over TLS; council responds in web chat; total time receipted <30 min; teardown documented |
+| I1-4 | H-1 provisioner: paid task → running tenant | ✅ PASS — council responds (worker "later 11") | Fresh tenant end-to-end <30 min, no code edits | After worker's live run: `z-testco.zenod.dev` console loads over TLS; council responds in web chat; total time receipted <30 min; teardown documented |
 | I1-5 | R-1 handoff to stability track | ⚪ with Jordi | R-1 accepted as a stability-track ticket | Ticket link recorded in this doc |
 | I1-6 | D-6 pricing decision | ✅ DECIDED 2026-07-04 (concept: subscription + monthly credit, tiers 29/79/499) | Shape + tiers recorded as DECIDED above | Doc record matches Jordi's words |
 | I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | 🟡 worker-reported DONE ("later 8") — awaiting tester | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
@@ -144,7 +144,7 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
   as a Dokploy registry credential (temporary; revisit).
 - **B-2 · Security cleanup:** a full non-restricted `sk_test_` was pasted in chat → Jordi rotates it;
   restricted-scope keys only from now on.
-- **B-3 · Tenant onboarding needs credentials to reach a responding council** — a fresh tenant's Model step needs an LLM key and the Vault step a GitHub token/repo (H-3 / P0.4). Blocks I1-4's "council responds in web chat" sub-criterion.
+- **B-3 · Tenant onboarding — ✅ CLOSED 2026-07-04 (worker).** Jordi provided the OpenRouter provisioning key; minted `zenod-tenant:testco` ($50 cap), wired via Console Keys & models (provider=OpenRouter, key TESTED "key accepted"), created vault `zenod-ai/testco-brain` (schema v1). **Council RESPONDS** at z-testco.zenod.dev ("The testco council is responding."). Original: Tenant onboarding needs credentials to reach a responding council — a fresh tenant's Model step needs an LLM key and the Vault step a GitHub token/repo (H-3 / P0.4). Blocks I1-4's "council responds in web chat" sub-criterion.
   **Planner resolution (2026-07-04): use D-5's own mechanism, not a hand-pasted key.** (1) LLM: worker
   mints a budget-capped provisioned key via the P0.4 gateway script (`scripts/gateway/openrouter-key.mjs`,
   #452) with a **$50 cap = Pro tier** — testco exercises the exact hosted product shape and becomes the
@@ -544,3 +544,27 @@ finish onboarding → I1-4 closing receipt (council responds at https://z-testco
 
 `tenant-testco` remains up as staging (console loads over TLS; admin pw set). I1-4 stays 🟡 (provision
 PASS; chat pending this credential).
+
+### 2026-07-04 (later 11) · [worker] — I1-4 CLOSED: council responds at z-testco.zenod.dev (B-3 closed)
+
+Jordi provided `OPENROUTER_PROVISIONING_KEY`. B-3 fully closed:
+- **LLM key:** minted `zenod-tenant:testco` via `scripts/gateway/openrouter-key.mjs` — **$50 cap** (Pro
+  tier), hash `f7dcd810…`. Gateway `list` shows `testco spent $0.00 / $50` — the D-5 cap is live (first
+  proof of gateway-is-truth enforcement on a real tenant).
+- **Wiring — finding:** the plan's `LLM_BASE_URL`/`LLM_API_KEY` env hooks **do not exist in the engine
+  yet** (no code reads them; the tenant compose doesn't map them). The real mechanism is the Console
+  **Keys & models** setting (`openrouter_api_key`, env fallback `OPENROUTER_API_KEY`, `settings.ts`). Set
+  provider=OpenRouter + pasted the key; **Test → "key accepted"**; saved. (If env-wiring is wanted, it's a
+  small product task: map `OPENROUTER_API_KEY` in `docker-compose.tenant.yml` — dormant-when-unset, §8-safe.)
+- **Vault:** created platform-held private `zenod-ai/testco-brain` with a **schema v1 scaffold**
+  (`.brain/config.yml` — schema_version 1, tag vocab, confidence_threshold 0.7 — + top-level
+  Inbox/Log/Projects/Areas/Notes/Archive/_attachments/_templates + README/AGENTS).
+- **Council responds (I1-4 closing receipt):** in the Console web chat I asked for a one-sentence
+  confirmation; reply: **"The testco council is responding."** (DeepSeek V3 via the $50 OpenRouter key).
+
+**Out of scope (H-3, per planner):** connecting the Zenod *memory brain* to `testco-brain` needs the
+GitHub Connections OAuth flow (the Enable-Zenod dialog requires it) — an OAuth grant I don't do
+unilaterally. The Console council responds without it; wiring the brain's vault is H-3.
+
+`tenant-testco` remains UP as staging (admin pw `testco-staging-2026`, OpenRouter key stored in-console).
+Security: the provisioning key was pasted in chat → **rotate it**; keep tenant keys scoped.
