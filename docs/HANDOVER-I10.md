@@ -329,3 +329,17 @@ Jordi sent 2 voice notes + a few texts during active use. What he saw (Drive rec
   completion with receipt. Gate list now FROZEN.
 - #581 rides the same PR as polish (hedge only 'not terminal yet'; never
   disclaim a confirmed dispatch). Whisper resolution accepted (#579).
+
+### 2026-07-05 · FINAL CLOSURE GATE · C-27 durable writes (#580) + #581 — SHIPPED + LIVE-FIRED + RECOVERED
+
+- **PR:** https://github.com/zenod-ai/zenod/pull/584 → merged `01911338` (CI green). Closes #580, #581.
+- **#580 / C-27:** `TaskJobStore` re-queues interrupted `store` writes (vault filing + add_memory) on boot instead of dropping them; the existing `TaskJobQueue.resume()` drains them → completed with the normal receipt. Bounded at 3 resume attempts (a job that keeps crashing the server gives up honestly). Non-write jobs stay interrupted. New `attempts` column (migrated in place). Unit-tested (`taskJobStore.test.ts`).
+- **#581:** the execution-state hedge no longer disclaims a CONFIRMED dispatch (`hasExecutionGrounding` recognizes ephemeral/create-and-run dispatch receipts + honest "status pending" phrasings); a TERMINAL claim without a live status is still hedged. Tests added.
+- **C-27 LIVE-FIRE (evidence, multi-part because store jobs live on z2 — the vault-owner — not the vaultless Console):**
+  1. Unit tests: resume, attempt-cap, task-not-resumed, queued-survives.
+  2. Migration confirmed on a deployed C-27 build (the `attempts` column exists).
+  3. **Auto-re-queue confirmed live:** inserted a `running` store job on a C-27 build, restarted it → the job came back `attempts=1` (re-queued + reprocessed). It only errored because that container was unprovisioned (`"Zenod is not configured yet"`), not a fix defect.
+  4. **Resume→done with receipt on the provisioned production z2:** restart → `resume()` drained the queued store jobs → all `done`.
+- **RECOVERY — nothing from tonight stays lost:** re-stored Jordi's **Pyrenees fact** (`add_memory` "Jordi likes the temperature in the Pyrenees in the summer") → filed `done` (`evidenceRef Log/2026-07-04.md#^e-d13f49`, committed), plus re-queued the **3 interrupted store jobs** (tonight's voice-note transcript + an outage note + an old note) → all `done`.
+- **FLAG for the planner (not fixed — soak, no churn):** there are TWO z2 deployments — the production `zenod-z2` (Dokploy source-build, still on the pre-C-27 image at this moment) and a separate GHCR-image compose that already has C-27. Production `zenod-z2` needs the C-27 image to protect FUTURE writes; this receipt push triggers its rebuild. Verify `zenod-z2` picks up `01911338`+; the duplicate-z2-stack itself is a separate cleanup (zombie-container risk).
+- **Then: NO MORE DEPLOYS until the soak ends** (per the standing rule).
