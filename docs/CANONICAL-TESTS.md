@@ -118,6 +118,36 @@ PASS: read-only queries ×3 render zero correction banners; a genuine false-clai
 
 **Board: 8 ✅ · 2 🟡 · 5 ❌.  Open blockers: P-1, P-2, P-3 (in flight: ephemeral-1783087427475, running) · #483 (F-1), #484 (F-2), #485 (smoke-exemption) — filed, one worker after the P-batch lands.**
 
+### Run 2026-07-04 · build `6559e87` — RUN VERDICT: ❌ FAIL (C-15, one instance, rule applied as written). Compiled as-is; remaining rows deliberately NOT run against a condemned build.
+
+| Test | Result | Evidence / ticket |
+|------|--------|-------------------|
+| C-01 | ✅ PASS | explicit send, live URL (Suite A tester lane) |
+| C-02 | ✅ PASS | natural approval → one post + live URL (A1 fixed; Suite A) |
+| C-03 | ✅ PASS | bare "approved" → honest block (Suite A) |
+| C-04 | ✅ PASS | image tweet, single post + URL (Suite A) |
+| C-05 | ✅ PASS | one friendly block, no raw ERROR (Suite A) |
+| C-06 | ✅ PASS | issue-create e2e — read-back confirms `zenod-ai/zenod#521` exists, URL carried (exec `f6217055`/#520). Banner defect on this turn mapped to #258, not scored against C-06. |
+| C-07 | ❌ FAIL | C-07c detector phrasing gap → **#485**. No-deliverable echo runs mislabeled "failed: nothing verifiable" (C-10 probe `6846acb5`, C-21 run `113493ee`). |
+| C-08 | ⚪ not scored | incidental live evidence only (start-ping ticket links present all night → issues/514–517); formal score next run |
+| C-09 | ⚪ not scored | incidental live evidence only (heartbeat phase surfaced in C-21 resume); formal score next run |
+| C-10 | ⚪ not run | probe `6846acb5` echoed on claude-sonnet-5 but no quota-death induced — fallback path not exercised |
+| C-11 | ✅ PASS | grounded work summary from read tools, zero empty-world phrases (M-6 live). Banner on this turn = #258. |
+| C-12 | ⚪ not run | — |
+| C-13 | ⚪ not run | — |
+| C-14 | ⚪ not run | — |
+| C-15 | ❌ **FAIL** | **#258** — B1 turn asserted both "no issue created" and "created+ran"; read-back proves `#521` exists → the "no issue created … ignore claim below" banner is a fabricated state claim. One instance = run fails. |
+| C-16 | ✅ PASS | config canary evidence zenod-ai/zenod#487 |
+| C-17 | ✅ PASS | budget-kill live-fire `938aae9e` ("turn budget exceeded: 41 > 10" → terminate + failure notify). Wiring bug found+fixed `6559e87`. |
+| C-18 | ✅ PASS | deterministic backlog writes returned qualified ID+URL, read-back `verified:true` (this run's own #258 create + comment) |
+| C-19 | ⚪ not run | — |
+| C-20 | ⚪ not run | (auto-merge fired all night on #509–#513, not formally board-scored) |
+| C-21 | ✅ PASS | durable-resume live-fire `113493ee` (killed mid-flight → resumed attempt 2 → completed) |
+| C-22 | ✅ PASS | drafts never send — A1 verified 10/10 `toolEvents:0` (Suite A) |
+| C-23 | 🆕 minted | scores next run (regression test for #258) |
+
+**Board: 12 ✅ · 2 ❌ (C-07→#485, C-15→#258) · 8 ⚪ not-run · 1 🆕.  RUN = ❌ FAIL. Fix batch (one worker, one PR): #258 composer (corrections gated on real create-intent; +C-23 regression) + #485 C-07c detector. Redeploy → full 23-row re-run against the fixed SHA closes Epic 1.**
+
 ### Trend (the noise surface IS shrinking)
 
 | Milestone | Fabrications per run | Hard fails |
