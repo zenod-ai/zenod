@@ -243,3 +243,15 @@ is ready for the fixer/Jordi to append+commit. Everything else (the live re-test
 - Real comment on **AlfaBlok/obsidian-brain#253** (jot-a-note re-test, `toolEvents:2`).
 - Real comment on **zenod-ai/zenod#544** (C-07a deliverable, `…#issuecomment-4883293843`).
 - No tweets posted this session.
+
+### 2026-07-04 · SOAK FINDING #1 · C-26 — images are filed, not interrogated
+
+**Soak finding #1 — ticket + fix, clock NOT reset (no dishonesty).** UX defect only: a shared screenshot's described contents were decomposed into intake ask-buckets and their internal states rendered on the user surface (WhatsApp msg `3B47B8FFC632840E853D`, ~20:04 — "Asks 1–4 and 8: searched, pending direct research (no durable tracking requested). Ask 5: missing exact target/scope for Epaminon delegation…"). No false world-state claim was made, so the W3 soak clock (started 17:56:29Z) is **NOT reset**.
+
+- **Ticket:** https://github.com/zenod-ai/zenod/issues/565 (filed before fixing, per contract rule 3).
+- **PR:** https://github.com/zenod-ai/zenod/pull/566 → squash merge **`cb08c01`** on `main` at 2026-07-04T18:22:26Z (CI `ci` green). Closes #565.
+- **Part 1 · provenance:** new `embeddedContext` flag on `TaskingInput`; the Console skips intake ask-decomposition for image-derived text (`shouldDecomposeIntake`). The WhatsApp image path sets it + a receipt-steering context note — captionless image → file + archive + one human line + optional offer; a real instruction in the caption still executes.
+- **Part 2 · surface language:** `intakeAsksContextNote` hardened (doctrine rule 5) — the decomposition is an internal reasoning aid only; internal bucket/ledger/state language never renders; the reply is plain words + links.
+- **C-26 minted** in `docs/CANONICAL-TESTS.md`; regression tests in `intakeAsks.test.ts` (both parts). Full core+server+scripts+`tsc` green.
+- **Deploy:** `cb08c01` is the auto-deploy target; live-SHA confirmation via `/api/health.sha` (now real per #532) pending the Dokploy rebuild — recorded below.
+- **Spot-check:** C-23 ×2 reads (drivable via `/api/test/chat`) pending the deploy. **C-26 captionless-image spot-check cannot be driven from `/api/test/chat`** (text-only; the image path is WhatsApp-gateway-only, needs vision+download) — it's covered by the unit tests here and will be exercised by Jordi's real WhatsApp image use during the soak.
