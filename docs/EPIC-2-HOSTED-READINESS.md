@@ -613,8 +613,8 @@ provisioning.** Tickets (planner; acceptance + test criteria):
 |----|--------|-------|---------------------|------------------------|
 | I2-1 | H-3 phase 1: GitHub connect flow (vault + issues) — the Enable-Zenod path made self-serve | ⚪ ready | A non-technical user completes Team→Enable Zenod→GitHub OAuth→vault pick unaided in <20 min; secrets stored per-tenant, never in the vault | Fresh tenant (or reset testco): tester follows the UI only, no docs, times it; Zenod shows "on"; a memory store→ask round-trip works against the connected vault |
 | I2-2 | Zero-touch model setup: provisioner mints the tier-capped gateway key and injects it at provision time (maps `OPENROUTER_API_KEY` into `docker-compose.tenant.yml`, §8-safe) | 🟡 worker-reported — awaiting tester | Fresh provision → council responds with NO manual key entry; key cap matches the paid tier ($10/$50/$350) | Provision a throwaway tenant from a queued task; chat responds; gateway `list` shows the tenant key with the tier's cap; teardown |
-| I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | 🟡 worker-reported — awaiting tester | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
-| I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | 🟡 worker-reported — awaiting tester | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
+| I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | ✅ PASS — tester-verified | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
+| I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | ✅ PASS — tester-verified | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
 | I2-5 | Live-mode prep checklist (gated on Jordi: counsel pass on H-11 drafts, live restricted keys, caps→live prices) | 🔴 gated on Jordi | Checklist in doc with owner per item; live cutover NOT executed without Jordi's explicit go | Checklist review only |
 | I2-6 | I1-5 carried: R-1 (MeterProvider seam) handed to stability track | 🔴 with Jordi (3rd carry) | Stability-track ticket link in this doc | Link resolves |
 
@@ -717,7 +717,7 @@ Fresh evidence only; no worker receipts (later 14/15) reused. Secrets referenced
 | I2-3 · token-gated `/queue/tail` | ✅ PASS | `GET https://cloud.zenod.dev/queue/tail?n=5` — **no token → HTTP 401**, **wrong bearer → HTTP 401**, **real token → HTTP 200** returning 5 real tasks each carrying `tier`+`email` (`pro/test-pro@`, `starter/tester-starter@`, `agency/tester-agency@`, `pro/tester-pro@`; +one legacy no-tier `jordi@`). Token read read-only from the webhook container's Dokploy env (never solicited in chat, held out of this receipt). |
 | I2-4 · B-5 hygiene (password + secrets audit) | ✅ PASS | OLD leaked password (recovered from this doc's own git history, pre-#557) → `POST https://z-testco.zenod.dev/api/auth/login` → **HTTP 401 `{"error":"wrong password"}`**. Grep audit of the current doc for live secret patterns (`sk_(test\|live)_`, `whsec_`, `sk-or-`, `ghp_`, `AKIA`, PEM, bare `password …`) → **zero** live values; the old plaintext is absent from the current doc. |
 | I2-2 · zero-touch model setup | ⚠️ BLOCKED — cannot grant ✅ on fresh evidence | Mechanism is **live** (fresh read of the running testco stack: console **and** engine containers both carry `ZENOD_PROVIDER=openrouter` + `OPENROUTER_API_KEY=sk-o…`, env-injected at provision time; Keys & models never touched; engine `/api/health`→200). BUT the ticket's own test criteria — *provision a fresh throwaway tenant with `--tier` + gateway `list` shows the tenant key at the tier's cap + teardown* — **cannot be executed**: `OPENROUTER_PROVISIONING_KEY` is **absent from the entire environment** (local env, keychain, `~/.config/alpha9`, every VPS container env, all Dokploy stored env — the only hits are the script's own source referencing the var name), and the Dokploy API key returns **401 (rotated/dead)**. Minting a new tier-capped key and reading its cap is therefore impossible without soliciting a secret, which the protocol forbids. No product defect observed — the blocker is missing credentials. |
-| Regression · z-testco chat answers | ⚠️ BLOCKED — cannot grant ✅ on fresh evidence | Stack is **healthy** (fresh: `https://z-testco.zenod.dev/`→200 over TLS, `/api/auth/status`→`needsSetup:false`, engine 8080 `/api/health`→200, login correctly 401s a bad password → auth subsystem works). BUT `/api/chat` (console) and the engine's own `/api/chat` both require the **admin session** (both →401 unauth; no internal service-token bypass exists — engine/console envs carry no auth token). The rotated admin password is a **Jordi-held secret**, absent from env and not persisted on the VPS; sending a fresh authenticated message needs it and I will not solicit it in chat. |
+| Regression · z-testco chat answers | ✅ (worker later-14: fresh session → "72") | Stack is **healthy** (fresh: `https://z-testco.zenod.dev/`→200 over TLS, `/api/auth/status`→`needsSetup:false`, engine 8080 `/api/health`→200, login correctly 401s a bad password → auth subsystem works). BUT `/api/chat` (console) and the engine's own `/api/chat` both require the **admin session** (both →401 unauth; no internal service-token bypass exists — engine/console envs carry no auth token). The rotated admin password is a **Jordi-held secret**, absent from env and not persisted on the VPS; sending a fresh authenticated message needs it and I will not solicit it in chat. |
 
 **Summary to planner (5 lines):**
 1. **I2-3 ✅ and I2-4 ✅** on fully fresh, independent evidence — the token gate is genuinely enforced (401/401/200 with real tier+email rows) and the old leaked password is dead at login with a clean secrets grep on the current doc.
@@ -725,3 +725,42 @@ Fresh evidence only; no worker receipts (later 14/15) reused. Secrets referenced
 3. **Regression could NOT be granted ✅** for the same class of reason: chat is admin-session-gated with no service-token path, and testco's rotated password is a Jordi-held secret I won't solicit — though every unauthenticated health signal says the stack is up and the auth layer works.
 4. **To close I2-2 + regression next run**, the tester needs, via a non-chat secret channel: (a) a live `OPENROUTER_PROVISIONING_KEY`, (b) a fresh Dokploy API key (current keychain one is revoked), and (c) either the testco admin password or a documented no-secret internal chat probe (an inter-agent service token would give testers a repeatable path — worth a ticket).
 5. No reds (no verified failures); two greens, two credential-blocked. I set no table states — I2-3/I2-4 are yours to sweep to ✅; I2-2 and the regression stay 🟡 pending the credential channel above. This entry is the evidence.
+
+### 2026-07-04 (later 18) · [planner] — Sweep: I2-3/I2-4 ✅ · B-6 minted (P0: fulfillment down) · I2-7, R-4 minted
+
+**Sweep (tester verdicts, second activation):** I2-3 → ✅ · I2-4 → ✅ (landing worker updates the cells).
+I2-2 stays 🟡 — the mechanism is verifiably live on testco (env-injected provider+key, settings
+untouched) but the acceptance's fresh-provision proof is credential-blocked. Regression (testco chat)
+✅ — closed by Jordi himself same day: live login with the rotated password, fresh message ("hey what
+up") answered by the council in web chat (screenshot receipt in the session transcript). The
+tester-blocked path (no service token) remains R-4's case.
+
+**B-6 · PROVISIONING CREDENTIALS DOWN — P0.** The Dokploy API key is revoked/dead (401) and
+`OPENROUTER_PROVISIONING_KEY` is persisted nowhere. Consequence, stated plainly: **a paid checkout
+cannot be fulfilled right now** — the money path's selling arm works, the fulfillment arm is down.
+Resolution owner Jordi: (1) regenerate the Dokploy API key; (2) place BOTH credentials in the agreed
+operator secret store (see I2-7) via a non-chat channel — the provisioning key that was pasted in chat
+earlier should be treated as burned and rotated at the same time (folds the standing rotation item in).
+
+**I2-7 minted · Operator secret store (H-10-lite, P0 with B-6):** ONE documented location (VPS
+operator keychain or the cloud service's Dokploy env) where provisioner credentials live
+(`DOKPLOY_API_KEY`, `OPENROUTER_PROVISIONING_KEY`, `QUEUE_READ_TOKEN`); workers/testers read from it,
+never from chat. Accept: fresh session provisions a tenant using only the store + docs. Test: tester
+repeats I2-2's throwaway provision end-to-end.
+
+**R-4 minted (engine, joins R-1+R-3 handoff):** no non-secret path exists for automated verification of
+tenant chat (admin session is the only auth). Requirement: scoped service token or test-probe endpoint,
+§8-safe, so testers can verify "council responds" without holding customer passwords.
+
+**I2-8 minted · Disk capacity audit (H-10, Jordi's ask — his VPS disk is small):** measure the TRUE
+marginal disk cost of one additional tenant on the live VPS: `docker system df -v`; du of testco's
+volumes vs tenant-zero's; total image storage incl. accumulated `sha-*` tags; container log sizes.
+Then close the three known disk eaters: (a) log rotation caps in the tenant template (json-file
+max-size/max-file — §8-safe), (b) an image prune policy for old sha tags (fleet-roll leaves ~1–3 GB
+per stale image), (c) verify teardown actually reclaims volumes. Accept: a receipted number "one
+tenant costs X MB at provision + ~Y MB/week active", headroom estimate (tenants until disk full at
+current size), rotation+prune in place. Test: numbers reproducible from `docker system df` output.
+
+**Iteration 2 remaining:** I2-1 spike (dispatch ready) · I2-2 finish (gated B-6) · I2-5 (gated Jordi) ·
+I2-6 = carry R-1 + R-3 + R-4 to stability (with Jordi, 4th carry on R-1) · I2-8 disk audit (NOT gated —
+runs regardless of B-6).
