@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Herald — Promo V2</title>
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#14171c; --ink:#e8e6e1; --dim:#a5a19a;
+    --accent:#d4a24e; --accent2:#6ea8a0; --line:#2a2e35; --bad:#c96a5a; --ok:#7fb069;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden}
+  .deck{height:100vh;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    justify-content:center;padding:5vh 7vw;overflow-y:auto}
+  .slide.active{display:flex}
+  .kicker{font-family:ui-monospace,Menlo,monospace;font-size:.9rem;
+    letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin-bottom:1.2rem}
+  h1{font-size:clamp(2.4rem,5.6vw,4.2rem);font-weight:400;line-height:1.14;margin-bottom:1.4rem}
+  h2{font-size:clamp(1.9rem,4.2vw,3rem);font-weight:400;line-height:1.16;margin-bottom:1.1rem}
+  h1 em,h2 em,p em{font-style:italic;color:var(--accent)}
+  p.lede{font-size:clamp(1.2rem,2vw,1.5rem);color:var(--dim);line-height:1.55;max-width:60ch}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:1rem;align-items:stretch}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.5rem 1.7rem}
+  .card h3{font-size:1.3rem;color:var(--accent);font-weight:400;margin-bottom:.6rem}
+  .card p{font-size:1.12rem;color:var(--dim);line-height:1.55}
+  .card.teal h3{color:var(--accent2)}
+  .card.bad{border-color:#4a3230}
+  .card.bad h3{color:var(--bad)}
+  ul.clean{list-style:none;margin-top:.6rem}
+  ul.clean li{padding:.5rem 0;color:var(--dim);font-size:clamp(1.1rem,1.8vw,1.35rem);line-height:1.5}
+  ul.clean li b{color:var(--ink);font-weight:400}
+  ul.clean li::before{content:"—";color:var(--accent);margin-right:.7rem}
+  .pill{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;
+    letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);
+    border-radius:999px;padding:.3rem .9rem;color:var(--accent2);margin:0 .4rem .5rem 0}
+  blockquote{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;
+    font-size:clamp(1.35rem,2.5vw,1.8rem);font-style:italic;line-height:1.45;margin:1.2rem 0;max-width:56ch}
+  .nav{position:fixed;bottom:1.2rem;right:1.6rem;font-family:ui-monospace,Menlo,monospace;
+    font-size:.85rem;color:var(--dim);z-index:10}
+  .nav button{background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;
+    padding:.35rem .8rem;cursor:pointer;font-family:inherit;margin-left:.4rem;font-size:.85rem}
+  .nav button:hover{color:var(--ink);border-color:var(--dim)}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);z-index:10;transition:width .25s}
+  .diagram{width:100%;max-width:980px;margin:.5rem auto 0}
+  .diagram svg{width:100%;height:auto;display:block}
+  svg text{font-family:Georgia,serif;fill:var(--ink)}
+  svg .mono{font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em}
+  svg .dim{fill:var(--dim)} svg .acc{fill:var(--accent)} svg .acc2{fill:var(--accent2)}
+  svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+  svg .boxacc{fill:var(--panel);stroke:var(--accent);stroke-width:1.5}
+  svg .boxteal{fill:var(--panel);stroke:var(--accent2);stroke-width:1.5}
+  svg .wire{stroke:var(--dim);stroke-width:1.5;fill:none}
+  svg .wireacc{stroke:var(--accent);stroke-width:2;fill:none}
+  svg .wireteal{stroke:var(--accent2);stroke-width:2.2;fill:none}
+  .sketchnote{position:fixed;top:.9rem;left:1.4rem;font-family:ui-monospace,Menlo,monospace;
+    font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);z-index:10;
+    border:1px dashed var(--line);border-radius:6px;padding:.3rem .7rem}
+  /* chat vignettes */
+  .chat{max-width:820px;margin:.6rem 0 0}
+  .msg{display:flex;flex-direction:column;margin:.55rem 0;max-width:88%}
+  .msg .who{font-family:ui-monospace,Menlo,monospace;font-size:.68rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:.25rem}
+  .msg .bubble{border:1px solid var(--line);border-radius:12px;padding:.75rem 1.05rem;
+    font-size:clamp(1rem,1.6vw,1.18rem);line-height:1.5;color:var(--ink);background:var(--panel)}
+  .msg.you{align-self:flex-end;align-items:flex-end}
+  .msg.you .bubble{border-color:var(--accent2)}
+  .msg.her .bubble{border-color:var(--accent)}
+  .msg .bubble i{color:var(--dim)}
+  .msg .bubble .att{font-family:ui-monospace,Menlo,monospace;font-size:.85rem;color:var(--accent2)}
+  .capnote{font-size:clamp(1.05rem,1.7vw,1.3rem);color:var(--dim);font-style:italic;margin-top:1rem;max-width:60ch}
+  .capnote b{color:var(--accent);font-weight:400;font-style:normal}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="sketchnote">promo v2 · working name · numbers illustrative · nothing publishes before the gates</div>
+<div class="progress" id="bar"></div>
+<div class="deck" id="deck">
+
+<!-- 1 · HERO — the whole sentence, up front -->
+<section class="slide active">
+  <div class="kicker">herald · your project's public voice · runs nonstop in the cloud</div>
+  <h1>He posts every day<br>and learns from every reply.<br><em>And all the knowledge is yours.</em></h1>
+  <p class="lede">Meet Herald — one guy for your project's public presence.
+  You talk to him like a person. He runs the practice.</p>
+</section>
+
+<!-- 2 · PROBLEM — simplified -->
+<section class="slide">
+  <div class="kicker">the job nobody holds</div>
+  <h2>The rhythm is the hard part.</h2>
+  <p class="lede">A presence only compounds if it's daily, on message, and answered.
+  That's a discipline — and you're busy building the actual thing.</p>
+  <blockquote>What if the guy holding the rhythm wasn't you?</blockquote>
+</section>
+
+<!-- 3 · THE SHAPE — memory with a practice -->
+<section class="slide">
+  <div class="kicker">what herald actually is</div>
+  <h2>A memory, with a <em>practice</em> on top.</h2>
+  <div class="cols">
+    <div class="card teal">
+      <h3>The memory</h3>
+      <p>A living body of knowledge about your project — everything you've told him,
+      everything he's learned. It grows every day. It's the asset.</p>
+    </div>
+    <div class="card">
+      <h3>The practice</h3>
+      <p>A rhythm of actions he runs on that memory — propose, publish, listen, learn.
+      Daily, without being asked. It's the discipline.</p>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:1.3rem">Understand these two and you understand the whole
+  product. The next slides do exactly that.</p>
+</section>
+
+<!-- 4 · THE MEMORY -->
+<section class="slide">
+  <div class="kicker">part one</div>
+  <h2>The memory: <em>alive, and yours.</em></h2>
+  <div class="cols">
+    <div>
+      <ul class="clean">
+        <li><b>You feed it anything, anytime.</b> Slide decks. Documents. A half-hour voice note.
+        A screenshot of three posts whose style you like. A stray idea at midnight.</li>
+        <li><b>He ingests, then digests.</b> Raw material is kept as evidence; meaning gets
+        distilled on top. Two layers: what was said, and what it means.</li>
+        <li><b>You're not prompting.</b> You're enriching a context that compounds — every
+        addition makes everything after it smarter.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Where it lives</h3>
+      <p>A GitHub repo, in your account. Plain text you can open and read. You control it,
+      you can edit it, other tools can mine it — and if you ever leave, it leaves with you.</p>
+      <div style="margin-top:.9rem"><span class="pill">your repo</span><span class="pill">plain text</span><span class="pill">mineable by anything</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 · THE PRACTICE -->
+<section class="slide">
+  <div class="kicker">part two</div>
+  <h2>The practice: a sequence,<br>not a task.</h2>
+  <p class="lede">A practice is a standing sequence he runs — every day, or whenever you trigger it:</p>
+  <div class="diagram"><svg viewBox="0 0 980 130" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="35" width="150" height="58" rx="10" class="boxteal"/>
+    <text x="85" y="60" text-anchor="middle" font-size="15">Mine the memory</text>
+    <text x="85" y="80" text-anchor="middle" class="dim" font-size="12">what's worth saying?</text>
+    <rect x="215" y="35" width="140" height="58" rx="10" class="box"/>
+    <text x="285" y="60" text-anchor="middle" font-size="15">Propose</text>
+    <text x="285" y="80" text-anchor="middle" class="dim" font-size="12">you react</text>
+    <rect x="410" y="35" width="140" height="58" rx="10" class="box"/>
+    <text x="480" y="60" text-anchor="middle" font-size="15">Publish</text>
+    <text x="480" y="80" text-anchor="middle" class="dim" font-size="12">approved, paced</text>
+    <rect x="605" y="35" width="140" height="58" rx="10" class="box"/>
+    <text x="675" y="60" text-anchor="middle" font-size="15">Listen</text>
+    <text x="675" y="80" text-anchor="middle" class="dim" font-size="12">replies · reach · silence</text>
+    <rect x="800" y="35" width="170" height="58" rx="10" class="boxacc"/>
+    <text x="885" y="60" text-anchor="middle" font-size="15">Integrate</text>
+    <text x="885" y="80" text-anchor="middle" class="dim" font-size="12">lessons → memory</text>
+    <path class="wire" d="M160 64 L207 64" marker-end="url(#d1)"/>
+    <path class="wire" d="M355 64 L402 64" marker-end="url(#d1)"/>
+    <path class="wire" d="M550 64 L597 64" marker-end="url(#d1)"/>
+    <path class="wire" d="M745 64 L792 64" marker-end="url(#d1)"/>
+    <path class="wireacc" d="M885 93 C885 125 85 125 85 93" marker-end="url(#a1)"/>
+    <defs>
+      <marker id="d1" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#a5a19a"/></marker>
+      <marker id="a1" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#d4a24e"/></marker>
+    </defs>
+  </svg></div>
+  <p class="lede" style="margin-top:1rem">The last step is the whole trick: results flow
+  <em>back into the memory</em>. The practice doesn't just produce posts — it produces knowledge.</p>
+</section>
+
+<!-- 6 · CONNECTED — the operating rhythm -->
+<section class="slide">
+  <div class="kicker">memory × practice</div>
+  <h2>Connect the two and you get<br><em>an operating rhythm.</em></h2>
+  <p class="lede">You stop giving tasks. You start giving sequences. The memory feeds the
+  practice; the practice feeds the memory. Around one goal — yours.</p>
+  <div class="diagram"><svg viewBox="0 0 980 440" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="540" cy="220" r="86" class="boxacc"/>
+    <text x="540" y="202" text-anchor="middle" class="mono acc" font-size="13">YOUR GOAL</text>
+    <text x="540" y="226" text-anchor="middle" font-size="16">the memory</text>
+    <text x="540" y="247" text-anchor="middle" class="dim" font-size="12">everything he knows</text>
+    <circle cx="540" cy="220" r="162" fill="none" stroke="#2a2e35" stroke-width="1" stroke-dasharray="4 6"/>
+    <rect x="468" y="14" width="144" height="50" rx="10" class="box"/>
+    <text x="540" y="36" text-anchor="middle" font-size="15">He posts</text>
+    <text x="540" y="54" text-anchor="middle" class="dim" font-size="12">the next experiment</text>
+    <rect x="740" y="195" width="164" height="50" rx="10" class="box"/>
+    <text x="822" y="217" text-anchor="middle" font-size="15">World responds</text>
+    <text x="822" y="235" text-anchor="middle" class="dim" font-size="12">replies · reach · silence</text>
+    <rect x="468" y="376" width="144" height="50" rx="10" class="box"/>
+    <text x="540" y="398" text-anchor="middle" font-size="15">He learns</text>
+    <text x="540" y="416" text-anchor="middle" class="dim" font-size="12">lessons, filed</text>
+    <path class="wireteal" d="M618 55 A162 162 0 0 1 697 122" marker-end="url(#t2)"/>
+    <path class="wireteal" d="M697 318 A162 162 0 0 1 618 385" marker-end="url(#t2)"/>
+    <path class="wireteal" d="M462 385 A162 162 0 0 1 383 318" marker-end="url(#t2)"/>
+    <path class="wireacc" d="M383 122 A162 162 0 0 1 462 55" marker-end="url(#a2)"/>
+    <text x="352" y="70" text-anchor="end" class="acc" font-size="15" font-style="italic">from the memory,</text>
+    <text x="352" y="90" text-anchor="end" class="acc" font-size="15" font-style="italic">he proposes the next one</text>
+    <path class="wire" d="M540 374 L540 308" marker-end="url(#d2)"/>
+    <rect x="20" y="150" width="216" height="140" rx="10" class="boxteal"/>
+    <text x="128" y="176" text-anchor="middle" class="mono acc2" font-size="13">YOU FEED IT</text>
+    <text x="128" y="200" text-anchor="middle" class="dim" font-size="13">the goal · the themes</text>
+    <text x="128" y="219" text-anchor="middle" class="dim" font-size="13">examples you admire</text>
+    <text x="128" y="238" text-anchor="middle" class="dim" font-size="13">decks · docs · voice notes</text>
+    <text x="128" y="257" text-anchor="middle" class="dim" font-size="13">screenshots · stray ideas</text>
+    <text x="128" y="278" text-anchor="middle" class="dim" font-size="12" font-style="italic">ongoing — it's alive</text>
+    <path class="wireteal" d="M236 220 L446 220" marker-end="url(#t2)"/>
+    <defs>
+      <marker id="t2" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#6ea8a0"/></marker>
+      <marker id="a2" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#d4a24e"/></marker>
+      <marker id="d2" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#a5a19a"/></marker>
+    </defs>
+  </svg></div>
+</section>
+
+<!-- 7 · DAY 0 — the negotiated briefing -->
+<section class="slide">
+  <div class="kicker">day zero · how it starts</div>
+  <h2>First, you two agree on <em>the briefing.</em></h2>
+  <div class="chat">
+    <div class="msg you"><div class="who">you</div><div class="bubble">
+      <span class="att">📎 pitch-deck.pdf · roadmap.pdf · brand-notes.pdf</span><br>
+      <span class="att">🎙 voice note · 31:47</span> — <i>"here's where the project is, who it's
+      for, and what I want this quarter…"</i></div></div>
+    <div class="msg her"><div class="who">herald</div><div class="bubble">
+      Here's my briefing, v1 — the state of affairs, the goal, and what I'll do every week.
+      Two things I'm not sure about: is the audience developers or founders? And is pricing
+      on the table publicly, or off?</div></div>
+    <div class="msg you"><div class="who">you</div><div class="bubble">Founders. Pricing off, for now.</div></div>
+    <div class="msg her"><div class="who">herald</div><div class="bubble">Briefing v2. Approve, and I start tomorrow.</div></div>
+    <div class="msg you"><div class="who">you</div><div class="bubble">✓ Approved.</div></div>
+  </div>
+  <p class="capnote"><b>He doesn't start on vibes.</b> He negotiates a briefing with you — a goal
+  and a contract — and iterates it until you approve. That document is the first page of the memory.</p>
+</section>
+
+<!-- 8 · EVERY MORNING — proposals -->
+<section class="slide">
+  <div class="kicker">every morning · the ritual</div>
+  <h2>Ten proposals. <em>You react.</em></h2>
+  <div class="chat">
+    <div class="msg her"><div class="who">herald · 9:00</div><div class="bubble">
+      Morning — ten proposals from what you've fed me. #3 comes from Tuesday's voice note,
+      #7 riffs on the roadmap slide, #9 has an image I made for it.</div></div>
+    <div class="msg you"><div class="who">you</div><div class="bubble">✓ 1, 3 and 9. The rest:
+      less hype, more of the memory angle. Give me five more.</div></div>
+    <div class="msg her"><div class="who">herald</div><div class="bubble">Five more, sharper.
+      And your comment is filed — tomorrow's ten start from it.</div></div>
+  </div>
+  <p class="capnote"><b>You're not writing. You're reacting</b> — and every reaction becomes
+  memory. Week by week, more of his proposals ship untouched.</p>
+</section>
+
+<!-- 9 · ALL DAY — the loop closes -->
+<section class="slide">
+  <div class="kicker">all day · the loop closes</div>
+  <h2>Posted. Answered. <em>Learned.</em></h2>
+  <ul class="clean">
+    <li><b>Approved posts go out</b>, paced through the day — never a burst, never silence.</li>
+    <li><b>He works the threads</b> — replies in your project's voice, grounded in what it
+    actually knows.</li>
+    <li><b>He files what the audience taught him</b> — what got replies, what got questions,
+    what got nothing.</li>
+    <li><b>Tomorrow's ten proposals are born already knowing it.</b> That's the loop. It never
+    stops compounding.</li>
+  </ul>
+  <p class="capnote">And you can watch it: his scorecard shows proposals approved untouched
+  climbing week over week <b>(31% → 84%)</b>, and progress against the goal in the briefing.</p>
+</section>
+
+<!-- 10 · OWNERSHIP — reinforced -->
+<section class="slide">
+  <div class="kicker">the asset</div>
+  <h2>Fire him — the memory stays.<br>Rehire him — <em>he remembers.</em></h2>
+  <p class="lede">Everything he builds for you — voice, positioning, every lesson the audience
+  ever taught him — is plain files in your repo. No agency, no employee, no tool has ever
+  offered you that.</p>
+  <div style="margin-top:1.2rem">
+    <span class="pill">built on zenod · open source</span>
+    <span class="pill">your repo · plain text</span>
+    <span class="pill">leave anytime · lose nothing</span>
+  </div>
+</section>
+
+<!-- 11 · MARKET — two-sided, late -->
+<section class="slide">
+  <div class="kicker">versus everything else</div>
+  <h2>The category is crowded.<br><em>The loop is empty.</em></h2>
+  <div class="cols">
+    <div class="card bad">
+      <h3>Most of the market</h3>
+      <p>Scheduling tools with an AI button. You write, they queue, it posts. Nothing reads the
+      replies. Nothing remembers. Every week starts from zero.</p>
+    </div>
+    <div class="card">
+      <h3>Herald</h3>
+      <p>You talk; he runs the whole practice — proposes, publishes, listens, learns. The longer
+      he works for you, the harder he is to replace.</p>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:1.3rem">People already pay well in this category.
+  Nobody in it closes the loop. <em>That's the opening.</em></p>
+</section>
+
+<!-- 12 · CLOSE -->
+<section class="slide">
+  <div class="kicker">herald · early access</div>
+  <h1 style="font-size:clamp(2rem,4.4vw,3.3rem)">He posts every day and learns from every reply.
+  He gets better every week. <em>And all the knowledge is yours.</em></h1>
+  <p class="lede">Connect your project's accounts. Negotiate the briefing. He takes it from
+  there — nonstop, in the cloud, nothing to install.</p>
+  <div style="margin-top:1.6rem">
+    <span class="pill">early access — first cohort limited</span>
+    <span class="pill">one price, no tiers · [pricing tbd]</span>
+    <span class="pill">runs on zenod · open source</span>
+  </div>
+</section>
+
+</div>
+<div class="nav"><span id="count">1 / 12</span>
+  <button onclick="go(-1)">←</button><button onclick="go(1)">→</button></div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];let i=0;
+  function show(n){slides[i].classList.remove('active');i=(n+slides.length)%slides.length;
+    slides[i].classList.add('active');
+    document.getElementById('count').textContent=(i+1)+' / '+slides.length;
+    document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';}
+  function go(d){show(i+d)}
+  addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')go(1);if(e.key==='ArrowLeft')go(-1)});
+  show(0);
+</script>
+</body>
+</html>
