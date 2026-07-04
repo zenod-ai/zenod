@@ -275,3 +275,56 @@ Once public, no re-provision needed: redeploy compose `Xo_6cPQAlEBTMvBtBu0gU` an
 
 **H-1 acceptance: NOT passed** (no tenant came up). Timing not meaningful until unblocked.
 
+
+### 2026-07-04 (later 7) · Worker — I1-7 (D-6) three-tier subscription: BUILT + verified
+
+Three monthly subscription tiers replace the one-time $50 bundle (D-6). Stripe **TEST mode** throughout.
+
+**Stripe (TEST):** three subscription products/prices, monthly recurring —
+`price_1TpV2b…` Starter $29 · `price_1TpV2c…` Pro $79 · `price_1TpV2d…` Agency $499 (each `livemode:false`).
+
+**Backend (`zenod-ai/cloud`, deployed):** `/buy?tier=` + `/create-checkout-session` now `mode:subscription`
+for one of three env-configured prices (PRICE_STARTER/PRO/AGENCY); tier rides session + subscription
+metadata; webhook writes `tier` into the provisioning-queue task. Commits `e7f1582` (+ compose env fix so
+the container actually receives the three vars).
+
+**Front end:** three-tier pricing page — **PR #538 (HOLD)**. Cards Starter/Pro(featured)/Agency with each
+tier's included-credit cap; "Get started" → `/buy?tier=`; legal links kept. Verified in-browser.
+
+**Verified:**
+- All three tiers: `/buy?tier=X` → `mode:subscription` session, correct $29/$79/$499 monthly price + `metadata.tier`.
+- **Live end-to-end (Pro, real test card):** session `complete`/`paid` → subscription `sub_1TpVEm76yJ3p1J6XOVLsN3IF`
+  **active**, `$79/month`, `metadata.tier=pro`; event `evt_1TpVEq…` **`pending_webhooks:0`** (endpoint 2xx)
+  with `session.metadata.tier=pro` → tier task enqueued. (Tester still to run Starter + Agency subscribes.)
+
+---
+
+#### Credit-cap proposal per tier — from REAL burn (for planner review; numbers NOT invented)
+
+**Source:** `read_llm_timeline` (the durable `/data/usage.sqlite` ledger). **296 real provider-billed calls
+over 122.9 h (~5.1 days) = $6.8812 total.** Dominated by `x-ai/grok-4.3` ($6.869, 287 calls);
+`gemini-3.1-flash-lite` $0.012. ≈ 58 calls/day, ≈ $0.023/call.
+**Monthly extrapolation:** $6.8812 × (730 h ÷ 122.9 h) ≈ **$40.9 / month** at current dogfood intensity.
+
+| Tier | Price/mo | Proposed included credit/mo | ≈ × baseline ($41) | Gross margin before infra |
+|------|----------|------------------------------|--------------------|---------------------------|
+| Starter | $29 | **$10** | 0.25× | $19 |
+| Pro | $79 | **$50** | ~1.2× | $29 |
+| Agency | $499 | **$350** | ~8.5× | $149 |
+
+**Rationale:** Pro's $50 credit comfortably covers a fully-active single council (the observed ~$41 burn)
+with headroom → the "it just works" tier. Starter is a funnel tier (light chat/memory) that upgrades on
+cap-hit. Agency is sized for heavy interactive **+ fan-out execution** (Epaminon Codex runs), the
+"team you hired." All tiers clear infra (HOSTED-PLAN §3: ~€5/mo/tenant) + Stripe fees.
+
+**Caveats the planner must weigh before locking:**
+1. The ledger read is **one agent's** `usage.sqlite` (the primary/Console surface), not the full 6-agent
+   suite — real per-tenant burn is **higher**. Treat baseline as a floor.
+2. **Fan-out execution is spiky and absent from this 5-day window** — the Agency tier especially needs
+   validation against an execution-heavy period before the $350 cap is trusted.
+3. 5-day sample; usage varies. Re-measure over a fuller month.
+4. Top-up mechanics (when a tenant burns its cap mid-month) are unspecified — decide launch vs post-launch.
+
+**Acceptance (I1-7, worker side): MET** — three subscription prices live (test), pricing page built,
+checkout completes per tier with the tier carried into the queue, and this proposal is filed from real
+data. Live mode gated on planner-approved caps + live keys.
