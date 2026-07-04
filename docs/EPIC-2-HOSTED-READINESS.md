@@ -131,14 +131,14 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 
 ### Blocker register
 
-- **B-8 · 🔴 OPEN — Dokploy deploy pipeline unreliable (recurring).** `compose.deploy` and the refreshToken
+- **B-8 · 🔴 STILL OPEN (fresh receipts 2026-07-05).** Blocks deploying I3-1 to prod: pushed `zenod-ai/cloud@69069ab` + set OAuth env (compose.update→200), but `compose.deploy`→200 and refreshToken→301 both leave status stale-`done` with NO rebuild (`/auth/github` still 404 in prod). Same on the testco compose. Not fighting it further this session per dispatch. **Needs Jordi:** redeploy `zenod-cloud` (compose `17QoMFRgvmZ0Y2n19DINT`) + `tenant-testco` from the Dokploy UI, or fix the deploy worker. Original: `compose.deploy` and the refreshToken
   endpoint return 200/400 but the compose stays `idle`/stale-`done` and the container isn't (re)created —
   seen provisioning tw1 (eventually self-recovered) and now blocking I3-4 (testco's console container is
   *gone*, not stopped; 5/6 siblings up, pipeline won't recreate it). Not disk (B-7 corrected: 39G free).
   **Needs Jordi:** redeploy the stuck composes from the Dokploy UI and/or check the Dokploy deploy worker
   health. Workaround for staging: re-provision a *fresh* testco when the pipeline is healthy (its 2GB
   history isn't essential).
-- **B-9 · 🔴 OPEN (Jordi, org-admin) — I3-1 needs a GitHub OAuth App registered.** Exact steps: github.com
+- **B-9 · ✅ CLOSED 2026-07-05 (worker).** OAuth App registered; creds in Keychain (`alpha9-github-oauth-client-id`/`-secret`). Validated: authorize URL → 302 → GitHub login/consent (a bad id would error). Original ask: Exact steps: github.com
   → org **zenod-ai** → Settings → Developer settings → **OAuth Apps** → New OAuth App · Name `Zenod Cloud
   sign-in` · Homepage `https://zenod.dev` · **Authorization callback URL `https://cloud.zenod.dev/auth/github/callback`**
   · generate a client secret · put `GITHUB_OAUTH_CLIENT_ID` + `GITHUB_OAUTH_CLIENT_SECRET` in the Keychain
@@ -929,3 +929,34 @@ copy for an unaided <20-min connect. Best built + tested against a live tenant (
 **Honest status:** Step 0 done. I3-4 blocked on infra (B-8). I3-1/I3-2 are a dedicated build session gated
 on B-9 (Jordi registers the OAuth App) and B-8 (deploy pipeline). Did NOT walk any customer journey (binding
 rule). No secrets in doc.
+
+### 2026-07-05 (later 24) · [worker] — B-9 closed; I3-1 account layer BUILT + verified (to consent); prod deploy blocked (B-8); I3-2 deferred
+
+**B-9 ✅ CLOSED.** GitHub OAuth App validated (authorize URL → 302 → GitHub consent).
+
+**I3-1 · account layer — BUILT + verified up to GitHub's consent screen** (per the acceptance; the first
+full grant is Jordi's Stranger Run). In `zenod-ai/cloud@69069ab` (typechecks clean):
+- `identity.ts` — pluggable `IdentityProvider` (GitHub now, Google-ready) + signed `state` (HMAC, binds
+  the OAuth round-trip to the checkout `session_id`, tamper-rejected).
+- `accounts.ts` — file-backed account store keyed by `session_id`: Stripe email ↔ GitHub identity ↔
+  tenant (+ `console_url`/`console_password` fields for the R-5 reveal).
+- `server.ts` routes: `/success.html` gains **"Claim your workspace with GitHub"** (bound to
+  `session_id`, NOT email-matching) → `/claim` → `/auth/github` → `/auth/github/callback` (links identity,
+  reveals console URL + password ONCE when the tenant is ready). Inert when `GITHUB_OAUTH_*` unset (§8).
+- **Verified locally** (deploy-independent): success→claim button ✓; `/auth/github`→302 to GitHub
+  authorize with `read:user user:email` + signed state ✓; tampered-state callback→400 ✓; healthz 200 ✓.
+- **R-5 remaining piece (flagged):** the reveal shows a `console_password` IF the provisioner records one;
+  wiring `provision-tenant.mjs` to generate+record it, and the engine accepting a pre-set admin password
+  (env), is the follow-up. Today the reveal falls back to "set your password on first visit."
+
+**Prod deploy — 🔴 blocked by B-8.** Code pushed + OAuth env set on the compose, but the deploy won't
+rebuild (`/auth/github` still 404 in prod). Not fought further per dispatch.
+
+**I3-2 · vault-connect polish — deferred.** Needs a live tenant to build+test against (blocked by B-8) and
+is engine-UI work; next session once B-8 clears.
+
+**Stranger Run — NOT yet startable.** It needs I3-1 live in prod (B-8) + I3-2. Once B-8 clears and
+`zenod-cloud` redeploys, the start is **https://zenod.dev/#pricing** (persona: "you're a stranger with a
+GitHub account and a test card `4242 4242 4242 4242`"): buy a tier → Stripe checkout → success →
+**Claim your workspace with GitHub**. I3-2 makes the in-console vault connect unaided. Did NOT walk the
+journey (binding rule). No secrets in doc.
