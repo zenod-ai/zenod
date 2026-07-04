@@ -612,11 +612,41 @@ provisioning.** Tickets (planner; acceptance + test criteria):
 | ID | Ticket | State | Acceptance criteria | Test criteria (tester) |
 |----|--------|-------|---------------------|------------------------|
 | I2-1 | H-3 phase 1: GitHub connect flow (vault + issues) — the Enable-Zenod path made self-serve | ⚪ ready | A non-technical user completes Team→Enable Zenod→GitHub OAuth→vault pick unaided in <20 min; secrets stored per-tenant, never in the vault | Fresh tenant (or reset testco): tester follows the UI only, no docs, times it; Zenod shows "on"; a memory store→ask round-trip works against the connected vault |
-| I2-2 | Zero-touch model setup: provisioner mints the tier-capped gateway key and injects it at provision time (maps `OPENROUTER_API_KEY` into `docker-compose.tenant.yml`, §8-safe) | ⚪ ready | Fresh provision → council responds with NO manual key entry; key cap matches the paid tier ($10/$50/$350) | Provision a throwaway tenant from a queued task; chat responds; gateway `list` shows the tenant key with the tier's cap; teardown |
+| I2-2 | Zero-touch model setup: provisioner mints the tier-capped gateway key and injects it at provision time (maps `OPENROUTER_API_KEY` into `docker-compose.tenant.yml`, §8-safe) | ✅ worker-verified (later 14) | Fresh provision → council responds with NO manual key entry; key cap matches the paid tier ($10/$50/$350) | Provision a throwaway tenant from a queued task; chat responds; gateway `list` shows the tenant key with the tier's cap; teardown |
 | I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | ⚪ ready | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
-| I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | ⚪ ready | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
+| I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | ✅ worker-verified (later 14) | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
 | I2-5 | Live-mode prep checklist (gated on Jordi: counsel pass on H-11 drafts, live restricted keys, caps→live prices) | 🔴 gated on Jordi | Checklist in doc with owner per item; live cutover NOT executed without Jordi's explicit go | Checklist review only |
 | I2-6 | I1-5 carried: R-1 (MeterProvider seam) handed to stability track | 🔴 with Jordi (3rd carry) | Stability-track ticket link in this doc | Link resolves |
 
 Out of scope for Iteration 2 (parked, don't drift): X/outbound connect (H-3 phase 2), WhatsApp channel
 build (H-8), website polish (H-9), metering build (H-7 — blocked on R-1), TrustMRR (needs live mode).
+
+### 2026-07-04 (later 14) · [worker] — I2-4 (B-5 hygiene) + I2-2 (zero-touch model) DONE
+
+**I2-4 · B-5 hygiene — done.**
+- **Secret scrub:** removed the leaked admin password (2×) from the doc (#557); full-secret regex over the
+  doc + all merged/open PR bodies now finds **zero** live secret values. Protocol addendum honored:
+  receipts reference secrets by hash/name only.
+- **Stripe webhook secret rotated:** created a new endpoint `we_1TpWfY…` (new signing secret, wired to
+  Dokploy env + redeployed), **deleted** the old endpoint `we_1TpJty…` → the leaked `whsec_` is dead.
+- **Console admin password rotated:** the engine has **no change-password endpoint** (`/api/auth/setup`
+  403s once set) — finding; in-place rotation isn't possible. Rotated by re-provisioning testco onto a
+  fresh volume; the old leaked password now returns **HTTP 401** at `/api/auth/login`. New password held
+  **out of receipts** (given to Jordi in chat).
+- Standing (Jordi's): rotate the pasted `sk_test_` (B-2) and the OpenRouter provisioning key.
+
+**I2-2 · Zero-touch model setup — done + verified.**
+- **Public image (§8-safe):** `docker-compose.tenant.yml` now maps `ZENOD_PROVIDER` + `OPENROUTER_API_KEY`
+  into console + all siblings (dormant when unset → self-host unchanged; seeds the settings store on
+  boot). PR #558 (merged).
+- **Provisioner (`zenod-ai/cloud`):** `--tier starter|pro|agency` → cap $10/$50/$350; mints
+  `zenod-tenant:<name>` and injects the key + provider at provision time; key value never logged.
+- **Bug found + fixed:** Dokploy `compose.create` silently **drops** the `env` field (env only persists
+  via `compose.update`). The first re-provision produced a tenant with null env → provider defaulted to
+  anthropic → "not configured". Fixed the provisioner to set env in the `compose.update` step.
+- **Verified end to end:** clean re-provision `testco --tier pro` → env persisted (`ZENOD_PROVIDER=openrouter`
+  + key present); fresh console; **zero-touch chat "what is 8×9?" → "72"** with **Keys & models never
+  touched**; gateway `list` shows `testco $0.00 / $50` (cap = Pro tier). testco (compose
+  `u8EwwHmyykYv1qbv2sPmP`) stays up as staging.
+
+**Remaining Iteration 2:** I2-3 (queue-tail endpoint) and I2-1 (H-3 GitHub connect — headline) next.
