@@ -123,14 +123,14 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 | I1-1 | H-2 money path (backend + webhook + checkout) | 🟡 worker-reported PASS (test mode) — awaiting tester | Card completes checkout in prod; payment visible in Stripe; provisioning task created with customer details | Run a FRESH checkout with test card; confirm the Stripe event shows `pending_webhooks: 0`; confirm a NEW line in `provisioning-queue.jsonl` carrying that session's customer email; `/success.html` → 200 |
 | I1-2 | H-2 front end: pricing page live + linked legal | 🟡 worker-reported live (#527) — awaiting tester | Pricing section on zenod.dev; "Get started" reaches Stripe checkout; legal pages linked | zenod.dev `#pricing` renders; click-through reaches `checkout.stripe.com`; `/legal/terms.html` + `privacy.html` + `data-handling.html` all 200 AND reachable from the pricing/checkout surface; DRAFT banner present |
 | I1-3 | H-11 legal drafts | 🟡 live as DRAFT — counsel review pending (Jordi) | Lawyer-sane pages linked from checkout | Covered by I1-2; content sanity: customer-owns-the-vault story present in data-handling |
-| I1-4 | H-1 provisioner: paid task → running tenant | 🔴 BLOCKED on B-1 (receipts: worker entry "later 6") | Fresh tenant end-to-end <30 min, no code edits | After worker's live run: `z-testco.zenod.dev` console loads over TLS; council responds in web chat; total time receipted <30 min; teardown documented |
+| I1-4 | H-1 provisioner: paid task → running tenant | 🟡 PROVISION PASS, chat pending creds (worker "later 9") | Fresh tenant end-to-end <30 min, no code edits | After worker's live run: `z-testco.zenod.dev` console loads over TLS; council responds in web chat; total time receipted <30 min; teardown documented |
 | I1-5 | R-1 handoff to stability track | ⚪ with Jordi | R-1 accepted as a stability-track ticket | Ticket link recorded in this doc |
 | I1-6 | D-6 pricing decision | ✅ DECIDED 2026-07-04 (concept: subscription + monthly credit, tiers 29/79/499) | Shape + tiers recorded as DECIDED above | Doc record matches Jordi's words |
-| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | ⚪ ready for worker | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
+| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | ✅ BUILT + verified (worker "later 8"), awaiting tester | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
 
 ### Blocker register
 
-- **B-1 · GHCR image pull 403** — **FLIP DONE (Jordi, 2026-07-04): package set to Public** (the org-level
+- **B-1 · GHCR image pull 403 — ✅ CLOSED 2026-07-04 (worker).** Anonymous pull of `ghcr.io/zenod-ai/zenod:latest` now returns **HTTP 200** (was 403); `tenant-testco` (`Xo_6cPQAlEBTMvBtBu0gU`) redeployed — image pulled, 6-container stack up, console live over TLS. History: **FLIP DONE (Jordi, 2026-07-04): package set to Public** (the org-level
   packages policy had to be opened first; the actual flip lives on the package's own settings page, not
   repo or org settings). Worker verifies anonymous pull + redeploys `tenant-testco` as first step; B-1
   closes on that receipt. Original blocker (receipts in worker entry "later 6"): the
@@ -143,6 +143,7 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
   as a Dokploy registry credential (temporary; revisit).
 - **B-2 · Security cleanup:** a full non-restricted `sk_test_` was pasted in chat → Jordi rotates it;
   restricted-scope keys only from now on.
+- **B-3 · Tenant onboarding needs credentials to reach a responding council** — a fresh tenant's Model step needs an LLM key and the Vault step a GitHub token/repo (H-3 / P0.4). Blocks I1-4's "council responds in web chat" sub-criterion. Needs Jordi: an LLM key (+ vault) for `tenant-testco`, or he finishes onboarding on the staging tenant.
 
 ## Tickets (high level — refined into acceptance-criteria form once D-1 is decided and Epic 1 exits P0)
 
@@ -456,3 +457,35 @@ cap-hit. Agency is sized for heavy interactive **+ fan-out execution** (Epaminon
 **Acceptance (I1-7, worker side): MET** — three subscription prices live (test), pricing page built,
 checkout completes per tier with the tier carried into the queue, and this proposal is filed from real
 data. Live mode gated on planner-approved caps + live keys.
+
+### 2026-07-04 (later 9) · [worker] — I1-4 live tenant provision (B-1 closed); provision PASS, chat pending creds
+
+**B-1 closed.** Anonymous `ghcr.io/zenod-ai/zenod:latest` pull → **HTTP 200** (was 403). Package is public.
+
+**Live provision (redeploy after B-1 clear).** Dokploy compose `tenant-testco` (`Xo_6cPQAlEBTMvBtBu0gU`)
+redeployed 15:21:26Z → `done` 15:22:00Z (**~34 s**: image pulled + 6-container council stack started). No
+re-provision needed — the compose created earlier by `provision-tenant.mjs` just needed the pullable image.
+
+**Verified:**
+- DNS `z-testco.zenod.dev` resolves (wildcard); **`https://z-testco.zenod.dev/` → HTTP 200**, `<title>Zenod</title>`,
+  SPA bundle `index-B9ex42br.js`; TLS valid (CF edge / Google Trust Services). Console loads over TLS. ✅
+- The console serves a **working fresh-tenant onboarding wizard** (Password → Vault → Model → Connect) —
+  proves the app is fully functional, not a static 200. Set the admin password (step 1 ✅, pw held for
+  teardown). Step 2 (Vault) requires a GitHub token + repo; step 3 (Model) requires an LLM key.
+- **Timing:** provision command → console reachable over TLS is **~1–2 min**, well inside the <30-min
+  acceptance. (Total elapsed incl. B-1 wait not counted — B-1 was an external blocker.)
+
+**Acceptance status — split:**
+- ✅ *Fresh tenant provisioned end-to-end, no code edits, <30 min; console loads over TLS.*
+- ⛔ *"Council responds in web chat"* — **BLOCKED on per-tenant credentials**: onboarding needs a GitHub
+  vault (App install or fine-grained PAT + repo, H-3) **and** an LLM key (Model step; P0.4 gateway not
+  wired, so the tenant's own key for now). I did not fabricate these for a test tenant. **Needs Jordi:**
+  an LLM key (+ vault) to finish onboarding, or he completes it on the staging tenant himself. → blocker register B-3.
+
+**Staging:** `tenant-testco` left **UP** as staging per dispatch. Admin password set (`testco-staging-2026`).
+
+**Teardown (documented; NOT executed — kept as staging):**
+- Suspend: `compose.stop` (Dokploy API) or Stop in the UI — stops the stack, keeps volumes.
+- Delete: export the tenant's vault repo to the customer (theirs), then delete the compose
+  (`Xo_6cPQAlEBTMvBtBu0gU`) + its named volumes (console/zenod/archus/epaminon/phylax/outbound-data), and
+  remove the `z-testco.zenod.dev` domain. Runbook: `zenod-ai/cloud` docs/PROVISIONING.md (Suspend/delete).
