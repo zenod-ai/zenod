@@ -131,6 +131,22 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 
 ### Blocker register
 
+- **B-8 · 🔴 OPEN — Dokploy deploy pipeline unreliable (recurring).** `compose.deploy` and the refreshToken
+  endpoint return 200/400 but the compose stays `idle`/stale-`done` and the container isn't (re)created —
+  seen provisioning tw1 (eventually self-recovered) and now blocking I3-4 (testco's console container is
+  *gone*, not stopped; 5/6 siblings up, pipeline won't recreate it). Not disk (B-7 corrected: 39G free).
+  **Needs Jordi:** redeploy the stuck composes from the Dokploy UI and/or check the Dokploy deploy worker
+  health. Workaround for staging: re-provision a *fresh* testco when the pipeline is healthy (its 2GB
+  history isn't essential).
+- **B-9 · 🔴 OPEN (Jordi, org-admin) — I3-1 needs a GitHub OAuth App registered.** Exact steps: github.com
+  → org **zenod-ai** → Settings → Developer settings → **OAuth Apps** → New OAuth App · Name `Zenod Cloud
+  sign-in` · Homepage `https://zenod.dev` · **Authorization callback URL `https://cloud.zenod.dev/auth/github/callback`**
+  · generate a client secret · put `GITHUB_OAUTH_CLIENT_ID` + `GITHUB_OAUTH_CLIENT_SECRET` in the Keychain
+  (services `alpha9-github-oauth-client-id` / `-secret`, acct `jordi`), mirroring the other provisioner
+  secrets. This is ONE control-plane OAuth App for *identity* (fixed callback) — distinct from the
+  per-tenant GitHub *App* for vault access (that's I3-2). Worker will not improvise these credentials.
+
+
 - **B-6 · Provisioner secrets · ✅ CLOSED 2026-07-04 (worker).** Dokploy + OpenRouter provisioning keys
   live in the macOS Keychain (`alpha9-dokploy-api-key` / `alpha9-openrouter-provisioning-key`, acct
   `jordi`); documented in `zenod-ai/cloud` PROVISIONING.md (I2-7). Verified in use: `project.all` → HTTP
@@ -884,3 +900,32 @@ behalf — every walk-through is his, every stumble becomes a ticket.
 | I3-4 | testco revival (small): restart the stopped console container for staging continuity | ⚪ ready | z-testco chat reachable again | 200 + fresh message answered |
 | I3-5 | Carried: I2-5 counsel pass on legal drafts | 🔴 with Jordi | gates live mode | — |
 | I3-6 | Carried: R-handoff to stability — now R-1 (meter seam), R-3 (password change), R-4 (service token), R-5 (SSO token trust) | 🔴 with Jordi (5th carry on R-1) | Stability-track ticket links in this doc | Links resolve |
+
+### 2026-07-05 (later 23) · [worker] — I3 Step 0 landed; I3-4 blocked (deploy pipeline); I3-1/I3-2 plan + OAuth-app blocker filed
+
+**Step 0 ✅** — planner branch `planner/i2-vault-review` (a82ac2d) landed (PR #576): Iteration 2 CLOSED,
+Iteration 3 (Stranger Run) opened, cells swept. Lossless (doc was a superset of main).
+
+**I3-4 · testco console revival — 🔴 BLOCKED (B-8).** Found testco's console container is *gone* (its
+compose `u8Ew…` shows `done`, 5/6 agent containers Up ~3h, but no console → z-testco 404). `docker start`
+found nothing to start; Dokploy `compose.deploy`+refreshToken won't recreate it (stale `done`); a manual
+`docker compose up` was declined (risk of wrong project namespace / losing the console volume identity /
+missing the injected key). → B-8. **Cleaned up:** an accidental duplicate testco compose (`nq_UAo…`,
+created when a re-provision raced the existing one) + its extra `$50` key (`d9b9d001…`) were deleted/disabled.
+
+**I3-1 · account layer — 🔴 gated on B-9 (OAuth App = Jordi).** Scope (net-new in `zenod-ai/cloud`; today
+it's only the webhook service): a small identity service — `GET /auth/github` → GitHub OAuth →
+`/auth/github/callback`; a pluggable `IdentityProvider` interface (GitHub now, Google later); an account
+record linking `stripe_customer/email ↔ github_identity ↔ tenant` (SQLite alongside the queue); the
+success page gains **"Claim your workspace with GitHub"** as a **claim-link bound to the checkout
+`session_id`** (NOT email-matching); on claim, reveal the provisioner-generated console password once
+(R-5 bridge). Reuses the engine's existing `oauth.ts`/`oauthStore.ts` patterns. **Blocked at step 1** by
+B-9 (no OAuth client id/secret). Build plan above is ready to execute the moment B-9 clears.
+
+**I3-2 · vault-connect polish — ⏸ depends on I3-1 + a healthy pipeline.** Per the I2-1 spike: the
+Enable-Zenod → per-tenant GitHub App **manifest** flow, auto-attach the platform vault where possible, UI
+copy for an unaided <20-min connect. Best built + tested against a live tenant (needs B-8 cleared).
+
+**Honest status:** Step 0 done. I3-4 blocked on infra (B-8). I3-1/I3-2 are a dedicated build session gated
+on B-9 (Jordi registers the OAuth App) and B-8 (deploy pipeline). Did NOT walk any customer journey (binding
+rule). No secrets in doc.
