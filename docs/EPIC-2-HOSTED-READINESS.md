@@ -131,6 +131,20 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 
 ### Blocker register
 
+- **B-6 · Provisioner secrets · ✅ CLOSED 2026-07-04 (worker).** Dokploy + OpenRouter provisioning keys
+  live in the macOS Keychain (`alpha9-dokploy-api-key` / `alpha9-openrouter-provisioning-key`, acct
+  `jordi`); documented in `zenod-ai/cloud` PROVISIONING.md (I2-7). Verified in use: `project.all` → HTTP
+  200 (6 projects); `openrouter-key.mjs list` → keys. Store proven.
+- **B-7 · 🔴 OPEN — VPS incident: tenant stacks DOWN, deploys stuck (likely disk-full, cf. #570).**
+  `z-testco` console → **404** (responded earlier this session), `z-tw1` deploy stuck **idle / 0
+  deployments** (compose.deploy → 200 but never runs), while `cloud.zenod.dev/healthz` (tiny single
+  container) → 200. Pattern = VPS-level resource exhaustion; disk-full is the prime suspect given the
+  I2-8 concern + the #570 history. **Worker has no SSH and Dokploy exposes no disk endpoint** (`server.all`
+  → [], `settings.getServerMetrics` → 404), so cannot confirm/clear. **Needs Jordi (VPS shell):**
+  `df -h` + `docker system df -v` + `docker system prune` / clear runaway logs; then re-trigger the
+  stuck tenant deploys. Blocks I2-2 live chat, I2-8 measurement, and the testco re-provision.
+
+
 - **B-1 · GHCR image pull 403 — ✅ CLOSED 2026-07-04 (worker).** Anonymous pull of `ghcr.io/zenod-ai/zenod:latest` now returns **HTTP 200** (was 403); `tenant-testco` (`Xo_6cPQAlEBTMvBtBu0gU`) redeployed — image pulled, 6-container stack up, console live over TLS. History: **FLIP DONE (Jordi, 2026-07-04): package set to Public** (the org-level
   packages policy had to be opened first; the actual flip lives on the package's own settings page, not
   repo or org settings). Worker verifies anonymous pull + redeploys `tenant-testco` as first step; B-1
@@ -764,3 +778,24 @@ current size), rotation+prune in place. Test: numbers reproducible from `docker 
 **Iteration 2 remaining:** I2-1 spike (dispatch ready) · I2-2 finish (gated B-6) · I2-5 (gated Jordi) ·
 I2-6 = carry R-1 + R-3 + R-4 to stability (with Jordi, 4th carry on R-1) · I2-8 disk audit (NOT gated —
 runs regardless of B-6).
+
+### 2026-07-04 (later 16) · [worker] — B-6 CLOSED; I2-2 $10 cap proven; VPS incident (B-7) blocks the rest
+
+**B-6 ✅ CLOSED.** Both provisioner secrets read from the Keychain and verified: Dokploy `project.all` →
+HTTP 200 (6 projects); `openrouter-key.mjs list` → keys. I2-7 store (Keychain service names + read
+commands) already documented in cloud PROVISIONING.md; now proven in use.
+
+**I2-2 — partial PASS.** Zero-touch provisioner works up to deploy: `provision-tenant.mjs --name tw1
+--tier starter` minted `zenod-tenant:tw1` and injected `OPENROUTER_API_KEY`+`ZENOD_PROVIDER` at
+create-time (no manual Model step). **Gateway confirms the $10 starter cap:** `list` → `tw1 $0.00 / $10`
+(vs `testco $50`). Tenant compose maps both vars (§8-safe, dormant when unset). **NOT verified: the
+council actually responding** — tw1's deploy is stuck (see B-7); can't reach the console.
+
+**I2-8 — BLOCKED.** Needs VPS shell (`docker system df -v`, `du`). No SSH grant; Dokploy has no disk API.
+The current incident (B-7) is itself strong evidence the disk is the binding constraint.
+
+**Not done (blocked by B-7):** tw1 zero-touch chat verification, tw1 teardown + reclaimed-disk receipt,
+testco re-provision + fresh password. `tenant-tw1` (compose `VomNyTjtsW551862bNm95`) left in place for the
+retry once the VPS is healthy; its $10 key (`zenod-tenant:tw1`) is minted but idle.
+
+**Stopped per protocol** (infra failure → file + stop; don't churn during an incident). No secrets in doc.
