@@ -739,6 +739,20 @@ async function runTranscription(
       }
       console.warn(`[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`);
     }
+  } else if (openrouterApiKey) {
+    // Short audio, no Groq key, but an OpenRouter key is configured: use OpenRouter STT
+    // directly. Previously this case fell through to local whisper.cpp — which is no
+    // longer shipped in the image — so a voice note errored "whisper-cli is not installed"
+    // even though a working cloud key existed. (The fake-transcript path already reported
+    // "openrouter" here; the real path now matches it.)
+    const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
+    if (result.success || signal?.aborted) return result;
+    console.warn(`[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`);
+  } else if (openaiApiKey) {
+    // Same, for a short-audio-only OpenAI key.
+    const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
+    if (result.success || signal?.aborted) return result;
+    console.warn(`[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`);
   }
 
   let model: string;
