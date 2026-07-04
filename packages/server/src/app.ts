@@ -61,6 +61,7 @@ import {
 import { driveArchiveUnavailableReason } from "./voiceArchive.js";
 import { validateStepCallback, type StepCallbackResult } from "./journeyContracts.js";
 import type { DeliverableManifest } from "./executionQueue.js";
+import { creditHeadroomDecision } from "./sessionLog.js";
 
 // #532/#548 — the running commit SHA for /api/health. Prefer an explicit GIT_SHA env
 // (GHCR/CI builds pass it); otherwise fall back to the `.gitsha` file the Docker build
@@ -1595,6 +1596,25 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       today: runtime.usageStore.summary(now - day),
       last7d: runtime.usageStore.summary(now - 7 * day),
     });
+  });
+
+  // C-25 · W2-3 (#570) — credit-headroom projection the host watchdog polls. Ledger-driven
+  // (last-hour burn) vs a configured daily budget (ZENOD_CREDIT_BUDGET_USD_PER_DAY);
+  // level "warn" once projected daily spend hits ZENOD_CREDIT_WARN_FRACTION (default 0.8).
+  app.get("/api/usage/headroom", (c) => {
+    const windowMinutes = 60;
+    const windowSpendUsd = runtime.usageStore.summary(Date.now() - windowMinutes * 60 * 1000).costUsd;
+    const budgetEnv = Number(process.env.ZENOD_CREDIT_BUDGET_USD_PER_DAY);
+    const budgetUsdPerDay = Number.isFinite(budgetEnv) && budgetEnv > 0 ? budgetEnv : null;
+    const warnEnv = Number(process.env.ZENOD_CREDIT_WARN_FRACTION);
+    return c.json(
+      creditHeadroomDecision({
+        windowSpendUsd,
+        windowMinutes,
+        budgetUsdPerDay,
+        ...(Number.isFinite(warnEnv) && warnEnv > 0 ? { warnFraction: warnEnv } : {}),
+      }),
+    );
   });
 
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));

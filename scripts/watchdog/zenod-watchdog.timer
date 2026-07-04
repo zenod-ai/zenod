@@ -1,0 +1,11 @@
+[Unit]
+Description=Run zenod-watchdog every 2 minutes (Epic-1 C-24)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
