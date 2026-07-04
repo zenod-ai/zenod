@@ -70,3 +70,12 @@ HANDOVER-I9.md, unchanged).
 ## APPEND ZONE (dated receipts; URLs mandatory; keep current before handing back)
 
 <!-- receipts below this line -->
+
+### 2026-07-04 · W1-1 · FP2 (#256 + #257) — one PR
+
+- **PR:** https://github.com/zenod-ai/zenod/pull/531 (`fix/fp2-256-257-c19-c15`), auto-merge on green enabled. Code commit `5443c25`; this doc lands via the same PR (`d3e1d8c`, rebased onto `3dbdae8`).
+- **#256 · C-19:** `peerMutationGuardFailure` (packages/core/src/taskingPolicy.ts) — deleted the verb-regex keyword gate for the four backlog-write peer tools; "jot a note on #253" now passes (doctrine rule 7). Outbound sends stay approval-gated, execution dispatch keeps its block. `READ_ONLY_REQUEST_RE` widened so a "need context" ask blocks for read-only INTENT, not a missing keyword.
+- **#257 · C-15:** `reconcileTaskingReply` — new non-create-write ground-truth banner: a blocked/failed edit/comment/close whose prose claims "Note added" (even number-less) is corrected; a genuine edit receipt is untouched. Invariant: no success text renders without a real receipt object, any mutating lane.
+- **Tests:** `taskingPolicy.test.ts` (C-19: jot-a-note passes, need-context blocks read-only) + `console-replay.test.ts` (C-15: blocked edit → banner, landed edit → no banner). Green: full core+server workspaces, `scripts/*.test.mjs` (152), `tsc` clean.
+- **W1-2 (deploy + live verify + deployed SHA):** pending merge → auto-deploy. Recorded below once confirmed on the host.
+- **Not done (correctly out of scope):** W1-3 closing run, W2, W3 — await separate go orders per THE CONTRACT.
