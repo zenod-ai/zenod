@@ -725,3 +725,38 @@ Fresh evidence only; no worker receipts (later 14/15) reused. Secrets referenced
 3. **Regression could NOT be granted ✅** for the same class of reason: chat is admin-session-gated with no service-token path, and testco's rotated password is a Jordi-held secret I won't solicit — though every unauthenticated health signal says the stack is up and the auth layer works.
 4. **To close I2-2 + regression next run**, the tester needs, via a non-chat secret channel: (a) a live `OPENROUTER_PROVISIONING_KEY`, (b) a fresh Dokploy API key (current keychain one is revoked), and (c) either the testco admin password or a documented no-secret internal chat probe (an inter-agent service token would give testers a repeatable path — worth a ticket).
 5. No reds (no verified failures); two greens, two credential-blocked. I set no table states — I2-3/I2-4 are yours to sweep to ✅; I2-2 and the regression stay 🟡 pending the credential channel above. This entry is the evidence.
+
+### 2026-07-04 (later 19) · [worker] — planner sweep landed; I2-8 code done; B-6 confirmed OPEN → step 3 skipped
+
+**Step 0 — done.** Landed planner `i2-sweep` (#567): I2-3 ✅, I2-4 ✅, regression ✅ (worker later-14
+fresh session → "72").
+
+**B-6 · Provisioning credentials — CONFIRMED DOWN this session (P0, still open).**
+- **Dokploy API key: DEAD.** Worked earlier this turn (I re-provisioned testco + deployed the queue-tail
+  endpoint with it), then went **401** mid-session — now `project.all`→401 ×3. Rotated/revoked underneath us.
+- **`OPENROUTER_PROVISIONING_KEY`: absent** from every store — env, macOS Keychain (only entry is
+  `alpha9-dokploy-api-key`), `~/.config/alpha9/` (only `dokploy.env`).
+- Per dispatch step 2: not both fresh in the secret store → **filed B-6 open, SKIPPED step 3** (the I2-2
+  `--tier starter` throwaway provision + testco re-provision — both need Dokploy + OpenRouter, both down).
+  I did not solicit secrets in chat.
+- **To unblock (I2-7 secret store):** place a fresh Dokploy API key (Keychain `alpha9-dokploy-api-key`,
+  account `jordi` — the existing slot) **and** a fresh `OPENROUTER_PROVISIONING_KEY` (add a Keychain
+  entry; wire `dokploy-env` or a sibling `alpha9-secrets` loader to export it). Then a worker/tester
+  reads both from the store, never chat.
+
+**I2-8 · Disk audit — code fixes DONE; measurement BLOCKED on B-6.**
+- ✅ **Log-rotation caps** in `docker-compose.tenant.yml` (json-file 10m×3, console + all siblings, §8-safe)
+  — PR #568. `docker compose config` validates. Ceiling ≈ 180 MB/tenant of logs (was unbounded).
+- ✅ **Image-prune policy** + **teardown-reclaims-volumes** documented (`zenod-ai/cloud` PROVISIONING.md,
+  "Disk hygiene"). Teardown already uses `deleteVolumes:true`; verified earlier this turn (delete→200,
+  re-provision started clean).
+- ⛔ **Measurement** (`docker system df -v`, `du` of volumes, image storage, log sizes) needs **VPS shell
+  or a live Dokploy key** — both unavailable (no SSH; Dokploy 401). Blocked on B-6. The "X MB at provision
+  + Y MB/week + headroom" number gets filled once B-6 clears (operator pastes `docker system df -v`).
+  *Structural estimate (unverified):* all 6 agents share ONE image (~single image on disk, not ×6) + 6
+  small writable layers + 6 volumes; logs now capped at ~180 MB. So marginal per-tenant disk ≈ volumes +
+  log ceiling, NOT another full image — pending real numbers.
+
+**Iteration 2 status:** I2-2 mechanism live but ✅ credential-blocked (B-6) · I2-3 ✅ · I2-4 ✅ · I2-8 code
+done, measurement blocked (B-6) · I2-1 spike ready · I2-5/I2-6 with Jordi. **Critical path = B-6** (put
+both creds in the secret store) — it unblocks I2-2 finish, I2-8 measurement, and any further provisioning.
