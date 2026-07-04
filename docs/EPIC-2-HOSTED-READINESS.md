@@ -725,3 +725,42 @@ Fresh evidence only; no worker receipts (later 14/15) reused. Secrets referenced
 3. **Regression could NOT be granted ✅** for the same class of reason: chat is admin-session-gated with no service-token path, and testco's rotated password is a Jordi-held secret I won't solicit — though every unauthenticated health signal says the stack is up and the auth layer works.
 4. **To close I2-2 + regression next run**, the tester needs, via a non-chat secret channel: (a) a live `OPENROUTER_PROVISIONING_KEY`, (b) a fresh Dokploy API key (current keychain one is revoked), and (c) either the testco admin password or a documented no-secret internal chat probe (an inter-agent service token would give testers a repeatable path — worth a ticket).
 5. No reds (no verified failures); two greens, two credential-blocked. I set no table states — I2-3/I2-4 are yours to sweep to ✅; I2-2 and the regression stay 🟡 pending the credential channel above. This entry is the evidence.
+
+### 2026-07-04 (later 18) · [planner] — Sweep: I2-3/I2-4 ✅ · B-6 minted (P0: fulfillment down) · I2-7, R-4 minted
+
+**Sweep (tester verdicts, second activation):** I2-3 → ✅ · I2-4 → ✅ (landing worker updates the cells).
+I2-2 stays 🟡 — the mechanism is verifiably live on testco (env-injected provider+key, settings
+untouched) but the acceptance's fresh-provision proof is credential-blocked. Regression (testco chat)
+✅ — closed by Jordi himself same day: live login with the rotated password, fresh message ("hey what
+up") answered by the council in web chat (screenshot receipt in the session transcript). The
+tester-blocked path (no service token) remains R-4's case.
+
+**B-6 · PROVISIONING CREDENTIALS DOWN — P0.** The Dokploy API key is revoked/dead (401) and
+`OPENROUTER_PROVISIONING_KEY` is persisted nowhere. Consequence, stated plainly: **a paid checkout
+cannot be fulfilled right now** — the money path's selling arm works, the fulfillment arm is down.
+Resolution owner Jordi: (1) regenerate the Dokploy API key; (2) place BOTH credentials in the agreed
+operator secret store (see I2-7) via a non-chat channel — the provisioning key that was pasted in chat
+earlier should be treated as burned and rotated at the same time (folds the standing rotation item in).
+
+**I2-7 minted · Operator secret store (H-10-lite, P0 with B-6):** ONE documented location (VPS
+operator keychain or the cloud service's Dokploy env) where provisioner credentials live
+(`DOKPLOY_API_KEY`, `OPENROUTER_PROVISIONING_KEY`, `QUEUE_READ_TOKEN`); workers/testers read from it,
+never from chat. Accept: fresh session provisions a tenant using only the store + docs. Test: tester
+repeats I2-2's throwaway provision end-to-end.
+
+**R-4 minted (engine, joins R-1+R-3 handoff):** no non-secret path exists for automated verification of
+tenant chat (admin session is the only auth). Requirement: scoped service token or test-probe endpoint,
+§8-safe, so testers can verify "council responds" without holding customer passwords.
+
+**I2-8 minted · Disk capacity audit (H-10, Jordi's ask — his VPS disk is small):** measure the TRUE
+marginal disk cost of one additional tenant on the live VPS: `docker system df -v`; du of testco's
+volumes vs tenant-zero's; total image storage incl. accumulated `sha-*` tags; container log sizes.
+Then close the three known disk eaters: (a) log rotation caps in the tenant template (json-file
+max-size/max-file — §8-safe), (b) an image prune policy for old sha tags (fleet-roll leaves ~1–3 GB
+per stale image), (c) verify teardown actually reclaims volumes. Accept: a receipted number "one
+tenant costs X MB at provision + ~Y MB/week active", headroom estimate (tenants until disk full at
+current size), rotation+prune in place. Test: numbers reproducible from `docker system df` output.
+
+**Iteration 2 remaining:** I2-1 spike (dispatch ready) · I2-2 finish (gated B-6) · I2-5 (gated Jordi) ·
+I2-6 = carry R-1 + R-3 + R-4 to stability (with Jordi, 4th carry on R-1) · I2-8 disk audit (NOT gated —
+runs regardless of B-6).
