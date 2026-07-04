@@ -55,10 +55,28 @@ customer #0. Until then: drafts only.
 
 ## SD decisions
 
-**SD-1 · The hero line — OPEN (with Jordi, 2026-07-04).** V5 leads "It's your memory and your
-team." The product became loops. The question is what the first sentence a stranger reads now
-promises. Options framed in E0-1 below; Jordi's taste decides. Everything downstream (V6 hero
-plate, site hero, announcement lede) inherits this.
+**SD-0 · Story architecture: is the social operation Zenod, or its own name? — OPEN (Jordi,
+2026-07-04, voice).** Jordi's frame: memory at the center (the context), loops around it as the
+next big idea — confirmed. But the posting operation raised the real question: is it Zenod itself,
+or "an entire new product that uses Zenod under the cover" (white-label: roles + loops pre-designed,
+sold as an operation)? Three candidate architectures:
+- **(A) One product, flagship loop.** Zenod is the product; the posting operation is the flagship
+  lane. One brand; dogfood proof accrues to the main name; landing page must sell substrate AND
+  outcome at once.
+- **(B) Two layers, two names.** Zenod = substrate (memory + council, open source). The social
+  operation = a separately named product "powered by Zenod," sold as an outcome at agency pricing.
+  Crisp message per audience; two brands to feed; platformizes before first dollar.
+- **(C) One name, named operations.** Zenod ships "operations" — pre-designed bundles of roles +
+  loops (the Presence operation; the Project council). One brand, but the buyable thing is a named
+  configuration with its own page and outcome pricing. White-label becomes a later enterprise
+  motion, not a launch brand split.
+Cross-track tension to resolve inside this decision: Epic-2's settled launch SKU is the
+**three-role project council** (EPIC-2 doc, Jordi 2026-07-03) while this track's inherited flagship
+loop is the **public-presence operation** (decision 5). Both real; the story must pick which one a
+stranger meets first.
+
+**SD-1 · The hero line — PARKED pending SD-0.** Four candidates drafted in E0-1 below; whichever
+story architecture SD-0 picks, the hero line inherits it.
 
 ---
 
@@ -134,6 +152,15 @@ the team that knows your company and posts for you — and shows you the receipt
   deck, alpha-research deck, vault canon incl. 2026-07-03 Architecture Canon, EPIC-2 doc for D-4/D-5
   consistency).
 - This doc created. E0-1 drafted (above). SD-1 put to Jordi as the single taste question.
+### 2026-07-04 · [planner/Story-Fable] SD-1 parked; SD-0 opened from Jordi's steer
+- Jordi (voice, via SD-1 prompt): memory at the center + loops around it confirmed as the two
+  pillars; wants checkpoints-and-steering over polished outcomes; raised the real question — is the
+  social operation Zenod or a new name ("white label Zenod, build an agent loop on top … it becomes
+  an operation")? Minted as SD-0 (three architectures framed above). SD-1 parked behind it.
+- Flagged cross-track tension inside SD-0: Epic-2 launch SKU (project council) vs Epic-0 flagship
+  loop (public presence) — which does a stranger meet first.
+
+### 2026-07-04 · [planner/Story-Fable] Git-risk receipt
 - ⚠ Commits are LOCAL (sandbox cannot push) — and the risk is LIVE, not theoretical: between this
   track's first two commits, another session ran `git reset --hard origin/main` (reflog HEAD@{1})
   and wiped them from the branch; recovered via cherry-pick as `6e7be22` + `67c85c5`, doc at
