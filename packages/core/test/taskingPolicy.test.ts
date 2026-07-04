@@ -712,12 +712,32 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, [backlog])).toBe(reply);
   });
 
-  it("still flags a fabricated creation when the cited number is not backed by any tool", () => {
+  it("still flags a fabricated creation with NO tool backing it at all (the #58 bug, empty actions)", () => {
+    // The hard route (#548/C-23) keeps the pure-hallucination catch: no tool ran, so a
+    // "just created #58" claim is corrected.
     const reply = "Done — just created issue #58 for you. https://github.com/AlfaBlok/obsidian-brain/issues/58";
-    const out = reconcileTaskingReply(reply, [{ tool: "queryBacklog", result: "Open issues: 1\n#42 Something else — https://github.com/AlfaBlok/obsidian-brain/issues/42" }]);
+    const out = reconcileTaskingReply(reply, []);
     expect(out).toContain("no GitHub issue was created");
     expect(out).toContain("#58");
-    expect(out).not.toContain("#42");
+  });
+
+  // #548 · C-23 hard route — DELIBERATE trade-off (flagged for Fable's audit): a fabricated
+  // "just created #58" on a turn whose ONLY tool was a READ (queryBacklog) is NO LONGER
+  // banner-corrected. It is structurally indistinguishable from the C-11 production leak (a
+  // read-summary naming ungrounded-in-tool-text but real past-work numbers), and suppressing
+  // the read-turn banner is what fixes #548. The pure-hallucination catch (empty actions,
+  // above) and the mutation-attempted catch (a create tool ran + failed, below) both remain.
+  it("C-23 hard route: does NOT correct a create-claim on a read-only (query-only) turn", () => {
+    const reply = "Done — just created issue #58 for you. https://github.com/AlfaBlok/obsidian-brain/issues/58";
+    const out = reconcileTaskingReply(reply, [{ tool: "queryBacklog", result: "Open issues: 1\n#42 Something else — https://github.com/AlfaBlok/obsidian-brain/issues/42" }]);
+    expect(out).toBe(reply);
+  });
+
+  it("C-23 hard route: the genuine-fabrication catch STILL fires when a create tool ran and failed", () => {
+    const reply = "Created issue #58: https://github.com/AlfaBlok/obsidian-brain/issues/58";
+    const out = reconcileTaskingReply(reply, [{ tool: "createIssue", result: "ERROR: GitHub returned 403: forbidden" }]);
+    expect(out).toContain("no GitHub issue was created");
+    expect(out).toContain("The create step failed: GitHub returned 403: forbidden");
   });
 
   it("does not correct a capabilities description that names verbs and example numbers", () => {
@@ -772,20 +792,62 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  // #548 · C-23 · W1-3 tester's three read-path repros — the ACTUAL production leak: the
+  // enumerated issue numbers do NOT appear in the read tool's result text (they came from
+  // the briefing / conversation window), so composer-layer grounding could not see them and
+  // fired a spurious "nothing was filed, ignore the details below" banner over a correct
+  // answer. The hard route (a read tool ran, no mutation attempted → never a create banner)
+  // fixes all three, grounded or not.
+  const READ_PATH_REPROS: Array<{ name: string; reply: string; tool: string }> = [
+    {
+      name: "C-11 query — 'what did I work on this week? priorities?'",
+      reply:
+        "This week you opened #473 and #486, filed #498 and #499, and worked on #249 and #260. Priorities: merge the open stability PRs.",
+      tool: "epaminon_read_issue_execution_status",
+    },
+    {
+      name: "'give me a rundown of everything I worked on this week'",
+      reply: "Rundown: you opened #260, #249, #241; filed #486, #473; and landed #498, #499 in review.",
+      tool: "epaminon_read_issue_execution_status",
+    },
+    {
+      name: "'summarize what I did today'",
+      reply: "Today you created #601 and #602 and closed #588.",
+      tool: "get_recent_conversation_transcript",
+    },
+  ];
+  it.each(READ_PATH_REPROS)("C-23 hard route: read-path repro draws NO banner — $name", ({ reply, tool }) => {
+    // The tool result deliberately does NOT echo the issue numbers (the leak's shape).
+    const actions: RecordedAction[] = [{ tool, result: "recent work summary requested; see conversation context" }];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).toBe(reply);
+    expect(out).not.toContain("⚠️ Correction");
+    expect(out).not.toContain("ignore the issue details below");
+    expect(out).not.toContain("want me to create it now");
+  });
+
   it("C-23: a pure read answer with no mutation claim is untouched", () => {
     const reply = "This week you shipped the durable executor and the reply gate. Nothing else pending.";
     const actions: RecordedAction[] = [{ tool: "search_memory", result: "hits: durable executor, reply gate" }];
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
-  it("C-23: a genuine fabricated creation (ungrounded number) is STILL corrected", () => {
-    const out = reconcileTaskingReply("Done — just created issue #58 for you.", [
-      { tool: "queryBacklog", result: "Open: #42 Something else" },
-    ]);
+  // #548 · C-23 hard route — SUPERSEDES the old expectation here. A fabricated create on a
+  // read-only (query-only) turn is NO LONGER corrected: it is structurally identical to the
+  // C-11 leak and suppressing it is what fixes #548. The pure-hallucination catch (empty
+  // actions) and the mutation-attempted catch (a create tool ran) both still fire — see the
+  // paired tests above. Genuine fabrication with NO tool backing is still corrected below.
+  it("C-23 hard route: a create-claim on a read-only (query-only) turn is NOT corrected", () => {
+    const reply = "Done — just created issue #58 for you.";
+    const out = reconcileTaskingReply(reply, [{ tool: "queryBacklog", result: "Open: #42 Something else" }]);
+    expect(out).toBe(reply);
+  });
+
+  it("C-23 hard route: a fabricated creation with NO tool at all is STILL corrected", () => {
+    const out = reconcileTaskingReply("Done — just created issue #58 for you.", []);
     expect(out).toMatch(/^⚠️ Correction/);
     expect(out).toContain("no GitHub issue was created");
     expect(out).toContain("#58");
-    expect(out).not.toContain("#42");
   });
 });
 

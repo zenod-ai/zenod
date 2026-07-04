@@ -395,6 +395,22 @@ function isCreateReceiptTool(tool: string): boolean {
   return normalized === "createissue" || normalized === "openissue" || normalized === "archusrequestbacklogaction";
 }
 
+// #548 · C-23 hard route — is this action a retrospective/status READ (no side effect)?
+// The gate suppresses create/mutate correction banners only when EVERY action this turn is
+// a recognized read: an unknown or ambiguous tool defaults to NON-read, so a genuine
+// fabrication is still corrected (never hide a false claim — the C-15 direction is the
+// dangerous one to get wrong). Enumerated deliberately narrow: the retrospective reads a
+// "what did I work on" turn uses, plus generic read/search/get/list/query/fetch verbs.
+function isReadOnlyTaskingTool(tool: string): boolean {
+  const n = normalizedToolName(tool);
+  return (
+    /^(?:read|search|get|list|query|fetch)/.test(n) ||
+    n === "epaminonreadissueexecutionstatus" ||
+    n === "executionstatus" ||
+    n === "archussearchgithubissues"
+  );
+}
+
 function normalizedCreateReceipt(action: RecordedAction): string | null {
   if (!isCreateReceiptTool(action.tool)) return null;
   if (/^ERROR:/.test(action.result)) return null;
@@ -867,6 +883,16 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const proven = provenNumbers(actions);
   const receipts = createReceipts(actions);
   const writeReceipts = issueWriteReceipts(actions);
+  // #548 · C-23 hard route — "corrections only correct". A create/mutate correction banner
+  // may render only when THIS turn actually attempted a mutation, or when NO tool ran at
+  // all (a pure prose hallucination — the WhatsApp #58 bug, empty actions). When a READ
+  // tool ran and no mutation was attempted, the reply is a grounded read/summary answer:
+  // enumerated issue numbers ("what did I work on this week → #473, #486…") are
+  // retrospective, NOT this-turn creates, so the banner must NEVER fire and tell the user
+  // to "ignore the details below". The composer-layer grounding leaked this twice (summary
+  // numbers sourced from the briefing, not the turn's tool text, read as fabricated
+  // creates); this is the structural gate that supersedes it.
+  const suppressMutationCorrection = actions.length > 0 && actions.every((a) => isReadOnlyTaskingTool(a.tool));
   const executionReceipts = executionWriteReceipts(actions);
   const notFoundReceipts = issueNotFoundReceipts(actions);
   const readReceipts = issueReadReceipts(actions);
@@ -1034,7 +1060,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const groundedThisTurn = new Set<number>([...proven, ...actions.flatMap((a) => [...issueNumbersIn(a.result ?? "")])]);
   const unprovenPresented = [...presented].filter((n) => !groundedThisTurn.has(n));
   const fabricatedCreation = presented.size === 0 || unprovenPresented.length > 0;
-  if (claimsCreation && createdNums.size === 0 && fabricatedCreation) {
+  if (claimsCreation && createdNums.size === 0 && fabricatedCreation && !suppressMutationCorrection) {
     const lines = [
       unprovenPresented.length > 0
         ? `⚠️ Correction — no GitHub issue was created. ${fmt(unprovenPresented)} ${unprovenPresented.length > 1 ? "were" : "was"} not filed by this request (ignore the issue details below).`
@@ -1073,7 +1099,7 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   const unproven = [...numbersClaimedAdjacent(prose, mutationVerbsToPolice)].filter(
     (n) => !proven.has(n) && !(executionGrounded && noExecNums.has(n) && NEGATIVE_QUEUE_RE.test(prose)),
   );
-  if (unproven.length > 0) {
+  if (unproven.length > 0 && !suppressMutationCorrection) {
     return `⚠️ Correction — I couldn't confirm ${fmt(unproven)} against the backlog this turn, so don't rely on ${unproven.length > 1 ? "those references" : "that reference"}.\n\n${text}`;
   }
 
