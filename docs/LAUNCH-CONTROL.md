@@ -103,16 +103,17 @@ implementations for iteration 8's executor graft. Meta-finding for S-8's family:
 landed on zenod#500/PR#501 while the master ticket obsidian-brain#250 carried no link — cross-repo
 receipt linking is a gap.
 
-**Now (2026-07-04 ~02:45):** Epic 1 at the one-yard line. I8 engine merged AND live-fire-proven on the
-real VPS: **C-21 durable resume PASS** (runner restarted mid-run → journal `attempt:2 "resuming"`, no
-duplicated work) · **C-17 budget kill PASS** (runaway terminated at 41>10 turns, honest ⛔ + transcript
-link — and the live-fire caught a wiring bug 155 green unit tests missed: `activeHeartbeatRuns` dropped
-pid/budget; fixed `6559e87` + regression test) · A1 draft-safety gate verified 10/10 · WhatsApp
-root-caused (Dockerfile missing `COPY scripts/lib/` → monitor crash-loop) and restored · per-run budget
-override (`parseRunBudget`) landed as the B1 lane mechanism. Deployed SHA for the board: **`6559e87`**.
-**Remaining to close Epic 1: the full C-01…C-22 board as a FRESH pass** (steps 5–6 of
-[HANDOVER-I9.md](HANDOVER-I9.md); radar: #403 stale runner volume, C-07c detector phrasing). No parked
-rows — closing at 100/100 per Jordi. Then Part 2: lanes (B1–B4), first live lane gated on board green.
+**Now (2026-07-04, post-board):** **Board run @`6559e87` scored: ❌ FAIL (C-15) — and that verdict is
+the system working.** 12 ✅ (all of Suite A incl. C-02 natural approval + C-22 drafts-never-send ·
+C-06 · C-11 · C-16/17/18/21/22) · 2 ❌ both mapped (**C-15 → #258**: read-back proved zenod#521 exists,
+so the "no issue created — ignore claim below" banner was a fabricated state claim; **C-07 → #485**:
+C-07c detector gap, caught firing on two real runs) · 8 ⚪ honestly not-run · C-23 🆕 minted
+(corrections-only-correct, the #258 regression). Scoreboard committed append-only (`e9ceba1`).
+**Next: the fix batch — one worker, one PR: #258 (composer: corrections gated on real create-intent,
+never "ignore true content") + #485 (no-deliverable exemption by intent, not exact marker) → redeploy →
+the REAL run: all 23 rows vs the fixed SHA. That run closes Epic 1.** Suite-A stability and the banked
+live-fires make it cheap. Then Part 2: lanes. — Meanwhile Product-Fable is live on the Epic-2 track
+(Stripe MCP tested, zenod-ai/cloud control-plane repo created, `4b8dd00`).
 
 ## Operating protocol
 

@@ -30,7 +30,25 @@ until Epic 1 is closed — you are the worker.
 - **Deployed SHA is now `6559e87`** (supersedes `8c44d89` — the C-17 wiring fix). This is the SHA the board (STEP 5) should record.
 - **STEPS 5–6 (the board + close) are a FRESH pass** (Jordi's call): 22 live-fire tests posting real content, deserving a session not carrying this context. C-21 and C-17 banked tonight → the board is pure verification, no new code expected. Board radar: #403 (stale runner volume checkout at `e89eb17`) and the C-07c detector phrasing gap.
 
-## PART 1 — Epic 1 to 100/100. No parked rows; everything scored for real.
+## ⏭ NEXT — the fix batch, then the closing run (added post-board, 2026-07-04)
+
+Board @`6559e87` scored ❌ FAIL (C-15) — scoreboard `e9ceba1`. Two mapped tickets, one worker, one PR:
+
+**FB-1 · #258 — the composer fix.** `reconcileTaskingReply`: correction banners fire ONLY when the turn
+had real create-intent AND the reply would otherwise contain a false claim about this turn's actions.
+Never on read-only turns; a correction may never instruct the user to ignore true content. Both
+specimens in the ticket (C-11 spurious-but-true; B1 fabricated-false, read-back zenod#521). C-23 is the
+standing regression — implement its 3× read-only + 1× genuine-correction acceptance as tests.
+
+**FB-2 · #485 — the C-07c detector.** Declared-no-deliverable runs exempt by INTENT (semantic), not
+exact marker phrasing — two live mislabels as evidence (probe `6846acb5`, resume run `113493ee`).
+Render "completed (no deliverable expected)", never "failed".
+
+Then: **deploy + record SHA → the closing run: ALL 23 rows (C-01…C-23), no not-runs this time** — the
+ops rows (C-20 self-merge specimen, C-08/09/10 live, C-12/13/14/19) included. 23/23 green (C-15 clean
+across the whole run) = **EPIC 1 CLOSED**. Update LAUNCH-CONTROL board + history; then PART 2.
+
+## PART 1 — Epic 1 to 100/100. No parked rows; everything scored for real. *(executed — see receipts above; superseded by ⏭ NEXT)*
 
 **1 · Reconcile two orphaned runs** (no heartbeat since dispatch): `ephemeral-1783121852777` (B1 lane
 foundation) · `ephemeral-1783122025508` (ITERATION 9 doc section). `gh pr list -R zenod-ai/zenod` +
