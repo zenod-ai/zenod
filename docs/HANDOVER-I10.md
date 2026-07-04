@@ -274,3 +274,16 @@ While verifying the C-26 deploy I found the **entire VPS stack returning Cloudfl
   Epic-1 CLOSURE GATES. Epic 1 closes on clean soak AND live-fired C-24.
 - Worker's self-correction on #570 commended — receipts culture applied
   to oneself.
+
+### 2026-07-04 · CLOSURE GATES · C-24 watchdog + C-25 credit headroom — SHIPPED + LIVE-FIRED
+
+- **PR:** https://github.com/zenod-ai/zenod/pull/572 → merged (CI green). Refs #570; closes W2-1/W2-3.
+- **C-24 · self-outage reporting (`scripts/watchdog/`):** a HOST-LEVEL watchdog (systemd timer, NOT a container — survives the exact failure it watches). Checks every 2 min: dead docker daemon / dead stack, container crash-loop (>N restarts/window), disk headroom (warn 80% / page 90%), dead public endpoints. Two-tier alert: Phylax `/api/notify` (→ WhatsApp) while the Console is up; out-of-band webhook fallback for the dead-stack case. Docker log rotation (the #570 disk-fill guardrail) — found ALREADY in place on the host (`daemon.json`: `max-size 50m`, `max-file 3`, data-root on the new 98 G volume) by the operator who fixed #570, so `install.sh` correctly left it; the watchdog adds the missing *monitoring/alerting* layer.
+- **INSTALLED on the host** (`/opt/zenod-watchdog` + `zenod-watchdog.timer` enabled/active; `/etc/zenod-watchdog.env`). First run: "all healthy".
+- **LIVE-FIRE ✅ (both paths delivered to Jordi's WhatsApp via Phylax):**
+  - Crash-loop: seeded a real 6-restart delta on `zenod-console` (>5) → `ALERT[page/crashloop-zenod-console]` → **`delivery=phylax`** at 21:08:51Z.
+  - Disk-page: page-threshold 10 vs real 22% → `ALERT[page/disk] Disk / at 22% (≥10%)` → **`delivery=phylax`** at 21:09:57Z.
+  - (Both used isolated `/tmp` state dirs — the production timer's state was untouched; it runs with normal thresholds 80/90.)
+- **C-25 · credit headroom (W2-3):** `creditHeadroomDecision` (ledger burn-rate projection vs `ZENOD_CREDIT_BUDGET_USD_PER_DAY`, warn at a configurable fraction, default 0.8) → `/api/usage/headroom`; the watchdog polls it and pages warn-level. Unconfigured by default → no false alarms. Unit-tested. Honest limit: a projection, not a real balance (no provider balance feed yet). Endpoint goes live with this deploy.
+- **Tests:** `watchdog-logic.test.sh` (thresholds + crash-loop delta), `creditHeadroom.test.ts`; C-24 + C-25 rows in `docs/CANONICAL-TESTS.md`. Full core+server+scripts+`tsc` green.
+- **Epic-1 closure status:** the C-24 closure gate is **live-fired PASS**. Epic 1 now closes on: clean W3 soak AND (met) live-fired C-24. Deploy of `/api/usage/headroom` + the C-23 ×2 ride recorded below.
