@@ -134,4 +134,8 @@ the team that knows your company and posts for you — and shows you the receipt
   deck, alpha-research deck, vault canon incl. 2026-07-03 Architecture Canon, EPIC-2 doc for D-4/D-5
   consistency).
 - This doc created. E0-1 drafted (above). SD-1 put to Jordi as the single taste question.
-- ⚠ Commits are LOCAL (sandbox cannot push) — Jordi: `git push origin main` when convenient.
+- ⚠ Commits are LOCAL (sandbox cannot push) — and the risk is LIVE, not theoretical: between this
+  track's first two commits, another session ran `git reset --hard origin/main` (reflog HEAD@{1})
+  and wiped them from the branch; recovered via cherry-pick as `6e7be22` + `67c85c5`, doc at
+  `e9ad820` (this entry's own commit follows it). **Jordi: `git push origin main` ASAP** — until pushed, every local commit on
+  this shared working copy can be silently reset away by any other session syncing to origin.
