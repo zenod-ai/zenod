@@ -4,8 +4,9 @@ Owner: **Product-Fable** (planner, since 2026-07-04 per [HANDOVER-EPIC2.md](HAND
 Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md) · Positioning: launch deck V5 · Journeys: user-journeys deck (T1, J7–J9)
 **Exit criterion: a stranger pays money and gets a working Council attached to their repo. Jordi is customer #0 and doesn't count.**
 
-Status: 🟢 ITERATION 1 RUNNING (opened 2026-07-04). D-4/D-5 DECIDED · D-6 (pricing) OPEN ·
-checkout money-path proven in TEST mode · provisioning blocked on B-1 (GHCR pull). See Iteration 1 table.
+Status: 🟢 ITERATION 1 — VERIFICATION PHASE (2026-07-04). All decisions D-1/D-4/D-5/D-6 DECIDED ·
+3-tier subscription checkout live (TEST) · tenant provision proven at ~1–2 min · remaining: tester pass
+(dispatched), B-3 (tenant creds → council responds), R-1 handoff (Jordi). See Iteration 1 table.
 
 ## Operating protocol — THE DISCIPLINE (Jordi, 2026-07-04; binding on all roles)
 
@@ -126,7 +127,7 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 | I1-4 | H-1 provisioner: paid task → running tenant | 🟡 PROVISION PASS, chat pending creds (worker "later 9") | Fresh tenant end-to-end <30 min, no code edits | After worker's live run: `z-testco.zenod.dev` console loads over TLS; council responds in web chat; total time receipted <30 min; teardown documented |
 | I1-5 | R-1 handoff to stability track | ⚪ with Jordi | R-1 accepted as a stability-track ticket | Ticket link recorded in this doc |
 | I1-6 | D-6 pricing decision | ✅ DECIDED 2026-07-04 (concept: subscription + monthly credit, tiers 29/79/499) | Shape + tiers recorded as DECIDED above | Doc record matches Jordi's words |
-| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | ✅ BUILT + verified (worker "later 8"), awaiting tester | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
+| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | 🟡 worker-reported DONE ("later 8") — awaiting tester | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
 
 ### Blocker register
 
@@ -143,7 +144,15 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
   as a Dokploy registry credential (temporary; revisit).
 - **B-2 · Security cleanup:** a full non-restricted `sk_test_` was pasted in chat → Jordi rotates it;
   restricted-scope keys only from now on.
-- **B-3 · Tenant onboarding needs credentials to reach a responding council** — a fresh tenant's Model step needs an LLM key and the Vault step a GitHub token/repo (H-3 / P0.4). Blocks I1-4's "council responds in web chat" sub-criterion. Needs Jordi: an LLM key (+ vault) for `tenant-testco`, or he finishes onboarding on the staging tenant.
+- **B-3 · Tenant onboarding needs credentials to reach a responding council** — a fresh tenant's Model step needs an LLM key and the Vault step a GitHub token/repo (H-3 / P0.4). Blocks I1-4's "council responds in web chat" sub-criterion.
+  **Planner resolution (2026-07-04): use D-5's own mechanism, not a hand-pasted key.** (1) LLM: worker
+  mints a budget-capped provisioned key via the P0.4 gateway script (`scripts/gateway/openrouter-key.mjs`,
+  #452) with a **$50 cap = Pro tier** — testco exercises the exact hosted product shape and becomes the
+  first live proof of D-5's gateway-is-truth enforcement. Wire it into testco's env via the dormant
+  `LLM_BASE_URL`/`LLM_API_KEY` hooks (`.env.tenant.example` contract). Only-if-missing ask to Jordi: the
+  OpenRouter provisioning credential the script needs. (2) Vault: platform-held private staging repo
+  (`zenod-ai/testco-brain`, schema v1 scaffold) per HOSTED-PLAN §5 day-1 option; the customer-owned
+  GitHub App flow is H-3, not this blocker.
 
 ## Tickets (high level — refined into acceptance-criteria form once D-1 is decided and Epic 1 exits P0)
 
@@ -489,3 +498,26 @@ re-provision needed — the compose created earlier by `provision-tenant.mjs` ju
 - Delete: export the tenant's vault repo to the customer (theirs), then delete the compose
   (`Xo_6cPQAlEBTMvBtBu0gU`) + its named volumes (console/zenod/archus/epaminon/phylax/outbound-data), and
   remove the `z-testco.zenod.dev` domain. Runbook: `zenod-ai/cloud` docs/PROVISIONING.md (Suspend/delete).
+
+### 2026-07-04 (later 10) · [planner] — Iteration 1 review: credit caps APPROVED (launch-draft) · B-3 resolution · tester dispatched
+
+**Credit-cap ruling (I1-7 proposal, "later 8"): APPROVED as launch-draft — $10 / $50 / $350.** Basis:
+worst-case margin is structurally bounded because caps are enforced as gateway key budgets (D-5), so a
+tenant burning its full cap still nets ≈ +$13 (Starter) / +$27 (Pro) / +$129 (Agency) after infra + Stripe
+fees. Conditions before LIVE mode: re-measure against a full month of ledger data plus one
+execution-heavy week (worker caveats 1–3 accepted — the $41 baseline is a single-agent floor, and
+Agency's $350 is unvalidated for fan-out). Top-up mechanics: **post-launch** — at launch, cap-hit blocks
+new work until renewal or a manual support top-up; automated top-ups come with H-7's metering build.
+
+**B-3 resolution recorded in the register:** gateway-minted $50-capped key (Pro shape) + platform-held
+staging vault. This makes testco the first live exercise of D-5's enforcement path — verification value,
+not just unblocking.
+
+**Process note:** the "later 9" worker entry edited the I1-4 and I1-7 state cells. Accurate, accepted
+this once — but the state column is the planner's pen (protocol above); workers report, planner moves
+states, tester grants ✅.
+
+**Dispatched: TESTER (first activation)** — verify I1-1, I1-2, I1-3, I1-7 (all three tiers incl. the
+Starter/Agency subscribes the worker left unrun) + I1-4's console/TLS sub-criteria; fresh evidence only.
+Iteration 1 closes on the tester summary + B-3 receipts (council responds) + R-1 handoff (I1-5, with
+Jordi — the one still-idle ticket).
