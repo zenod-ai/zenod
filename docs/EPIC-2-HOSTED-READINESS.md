@@ -817,3 +817,70 @@ retry once the VPS is healthy; its $10 key (`zenod-tenant:tw1`) is minted but id
 **B-7 corrected** (register): not disk-full; slow deploys + a stopped testco console. Reclaim done.
 
 **Teardown:** tw1 fully removed (key disabled `1406069a…`, compose `VomNyTjtsW551862bNm95` deleted, 6 volumes reclaimed). **testco re-provision DEFERRED:** its console is down (old container gone; a ~2GB data volume lingers — left per "never prune tenant volumes"). Re-provisioning on `:latest` now yields a **Vault-gated** tenant that can't reach chat, so it should wait on the I2-2/I2-1 vault-auto-attach fix. Flagged for planner.
+
+### 2026-07-04 (later 21) · [planner] — Sweep: B-6/B-7 closed, I2-8 ✅ · the Vault gate finding → D-7 framed
+
+**Sweep.** B-6 ✅ closed (both keys verified from the store; I2-7 proven in use). B-7 ✅ closed as
+MISDIAGNOSIS — not disk-full (Docker data-root on a separate 98G volume at ~58%; root at 22%); real
+causes were slow Dokploy deploys + testco's console container separately stopped. Planner owns a share
+of the error: the recovery commands I gave Jordi assumed disk-full without `df` evidence — the worker
+correctly verified before executing. Hygiene banked anyway (~17 GB: build cache 13.25 GB→572 MB, ~2 GB
+stale images). **I2-8 → ✅ measured:** a fresh tenant costs **~2.4 MB at provision** (6 sqlite volumes),
+zero marginal image cost, teardown reclaims fully (tw1: 6 volumes→0, verified). Disk is a non-issue at
+any plausible tenant count; **RAM is the binding constraint** (per HOSTED-PLAN §3). Follow-ups into
+H-10 scope: scheduled `docker builder prune` (cache regrows fast) + a Phylax-style disk/health alert
+(we learned of B-7 from a 404, not a ping). I2-2 stays 🟡: cap + injection proven ($10 gateway-confirmed,
+env injected, no Model step) — the acceptance's "council responds" is now gated by the VAULT step, below.
+
+**The Vault gate (worker finding, "later 20"):** current `:latest` onboarding requires the Vault (GitHub)
+step before Chat. testco only chatted because it ran an older image. So a zero-touch tenant needs the
+vault attached AT PROVISION — which is HOSTED-PLAN §7's open question #1, never decided. Framed as:
+
+**D-7 · Vault ownership at signup — OPEN (Jordi):**
+(a) **Platform-held default (planner rec):** provisioner auto-creates a platform-held private vault repo
+and injects its credential at provision (mirrors the LLM injection — I2-9 build). Customer chats in
+minutes; connecting THEIR GitHub (H-3/I2-1, the existing per-tenant App flow) becomes an optional
+upgrade + one-click export/transfer. Cost: the "customer owns the vault repo" story becomes "your repo,
+exportable/transferable anytime, held by us until you connect GitHub" — legal/data-handling copy needs
+that honesty tweak.
+(b) **GitHub-connect required at onboarding:** the story stays maximal from day 1; cost: every customer
+must complete an OAuth dance before first chat — friction exactly where the aha-moment should be.
+
+### 2026-07-04 (later 22) · [planner] — D-7 & D-8 DECIDED · ITERATION 2 CLOSED · ITERATION 3 opened: THE STRANGER RUN
+
+**D-7 DECIDED (Jordi): option B — the customer brings a GitHub account; we hold NO vaults.** His words:
+"the moment we are storing it, it's a giant fuckup." Consequence accepted: first chat happens AFTER the
+GitHub OAuth — correct for this ICP (the launch SKU attaches to a repo; the customer has GitHub by
+definition). Auto-attach/platform-held vault (the I2-9 idea) is DEAD; the legal/data-handling story
+stays maximal ("your repo, day 1").
+
+**D-8 DECIDED (Jordi): GitHub sign-in at launch; identity layer stays provider-pluggable** so Google
+OAuth can be added later (clean email records; Drive-for-data remains the separate Connections flow).
+One OAuth grant covers identity + vault at launch. Mechanics: control plane owns accounts
+(Stripe email ↔ GitHub identity ↔ tenant registry); tenant claim via post-checkout claim-link, NOT
+email matching (card email ≠ GitHub email is normal).
+
+**R-5 minted (engine, joins the handoff — now R-1+R-3+R-4+R-5, urgency high):** console accepts a
+signed control-plane session token (env-configured verification key; inert unset; self-host keeps
+password auth). Until R-5 lands, interim bridge: post-sign-in, the control plane reveals the
+provisioner-generated console password once (launch-grade per D-1 concierge, replaced by real SSO).
+
+**ITERATION 2 CLOSED.** Finals: I2-1 spike ✅ (flow exists: per-tenant App manifest, tenant-domain
+callback, settings-store credential) · I2-2 ✅ REDEFINED under D-7 (tier-capped mint + env injection
+proven live; "chat" now correctly sits behind the customer's OAuth — no longer this ticket's scope) ·
+I2-3 ✅ · I2-4 ✅ · I2-7 ✅ · I2-8 ✅ · B-1–B-7 all closed · carried into I3: I2-5 (counsel, gates live
+mode) and the R-handoff.
+
+**ITERATION 3 (opened 2026-07-04) — THE STRANGER RUN. Goal: Jordi, playing a stranger, completes the
+full journey himself: test-card checkout → GitHub sign-in → claim tenant → connect vault repo → council
+responds on HIS repo.** BINDING RULE: workers build rails; NOBODY performs the journey on Jordi's
+behalf — every walk-through is his, every stumble becomes a ticket.
+
+| ID | Ticket | State | Acceptance criteria | Test criteria |
+|----|--------|-------|---------------------|----------------|
+| I3-1 | Account layer (control plane): GitHub OAuth sign-in + account record + post-checkout claim-link → lands in YOUR tenant console (interim password-reveal until R-5) | ⚪ ready | Fresh checkout → success page offers "claim with GitHub" → sign-in → account linked to tenant → console reachable without anyone handing credentials in chat | Jordi walks it cold; no worker assistance beyond the docs a stranger would see |
+| I3-2 | Vault connect path polish: Enable-Zenod → per-tenant GitHub App flow → pick/create vault repo → chat unlocked (H-3 phase 1, build plan from the I2-1 spike) | ⚪ ready | Non-technical user completes Vault step unaided <20 min; credential per-tenant, never in vault | Jordi walks it cold, timed |
+| I3-3 | The Stranger Run itself: full journey, repeated until smooth | 🔴 gated on I3-1+I3-2 | Jordi completes checkout→sign-in→claim→connect→council-responds-on-his-repo, unaided; stumbles filed as tickets same-day | The walk IS the test; planner reviews the stumble list |
+| I3-4 | testco revival (small): restart the stopped console container for staging continuity | ⚪ ready | z-testco chat reachable again | 200 + fresh message answered |
+| I3-5 | Carried: I2-5 counsel pass on legal drafts | 🔴 with Jordi | gates live mode | — |
+| I3-6 | Carried: R-handoff to stability — now R-1 (meter seam), R-3 (password change), R-4 (service token), R-5 (SSO token trust) | 🔴 with Jordi (5th carry on R-1) | Stability-track ticket links in this doc | Links resolve |
