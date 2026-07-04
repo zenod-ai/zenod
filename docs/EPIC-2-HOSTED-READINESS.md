@@ -589,3 +589,34 @@ Fresh test-card runs (card 4242, TEST mode); no worker receipts reused.
 3. testco's council answered a fresh arithmetic question correctly ("42") on the $50-capped OpenRouter key — settings untouched.
 4. One coverage gap, not a failure: no direct read of the queue file (no container access); delivery + metadata prove the write. Consider a token-gated queue-tail ops endpoint.
 5. No reds. I leave the ✅ marks in the Iteration 1 table for your close sweep (states are the planner's to set); this entry is the evidence.
+
+### 2026-07-04 (later 13) · [planner] — ITERATION 1 CLOSED (5/5 tester-verified) · Iteration 2 opened
+
+**Close.** Tester scoreboard (first activation): I1-1 ✅ · I1-2 ✅ · I1-3 ✅ · I1-4 ✅ · I1-7 ✅ — all on
+fresh evidence (fresh subscribes on all three tiers incl. first-ever Starter/Agency; fresh chat message
+answered live). I1-6 was ✅ at decision time. I1-5 (R-1 handoff) did NOT move — carried into Iteration 2
+as a standing item with Jordi. Final states: the landing worker updates the Iteration 1 table cells to ✅
+per this entry (planner-authored sweep) and sets the doc Status line to "ITERATION 2 RUNNING".
+**Iteration 1 headline, verified end to end: paid checkout → running tenant → responding council over
+TLS on a capped, metered key.** Tester's coverage caveat accepted (queue file not directly readable) →
+ticket I2-3.
+
+**New blocker B-5 · testco admin password exposure:** the worker's receipts included the staging admin
+password, and this doc lives in a PUBLIC repo. Jordi or worker: change the testco console password;
+verify the doc/PRs carry no other live secrets. **Protocol addendum (binding): receipts NEVER contain
+secrets — passwords, keys, tokens are referenced by hash/name only.**
+
+**ITERATION 2 (opened 2026-07-04) — goal: a stranger can onboard — their tools, their council, zero-touch
+provisioning.** Tickets (planner; acceptance + test criteria):
+
+| ID | Ticket | State | Acceptance criteria | Test criteria (tester) |
+|----|--------|-------|---------------------|------------------------|
+| I2-1 | H-3 phase 1: GitHub connect flow (vault + issues) — the Enable-Zenod path made self-serve | ⚪ ready | A non-technical user completes Team→Enable Zenod→GitHub OAuth→vault pick unaided in <20 min; secrets stored per-tenant, never in the vault | Fresh tenant (or reset testco): tester follows the UI only, no docs, times it; Zenod shows "on"; a memory store→ask round-trip works against the connected vault |
+| I2-2 | Zero-touch model setup: provisioner mints the tier-capped gateway key and injects it at provision time (maps `OPENROUTER_API_KEY` into `docker-compose.tenant.yml`, §8-safe) | ⚪ ready | Fresh provision → council responds with NO manual key entry; key cap matches the paid tier ($10/$50/$350) | Provision a throwaway tenant from a queued task; chat responds; gateway `list` shows the tenant key with the tier's cap; teardown |
+| I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | ⚪ ready | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
+| I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | ⚪ ready | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
+| I2-5 | Live-mode prep checklist (gated on Jordi: counsel pass on H-11 drafts, live restricted keys, caps→live prices) | 🔴 gated on Jordi | Checklist in doc with owner per item; live cutover NOT executed without Jordi's explicit go | Checklist review only |
+| I2-6 | I1-5 carried: R-1 (MeterProvider seam) handed to stability track | 🔴 with Jordi (3rd carry) | Stability-track ticket link in this doc | Link resolves |
+
+Out of scope for Iteration 2 (parked, don't drift): X/outbound connect (H-3 phase 2), WhatsApp channel
+build (H-8), website polish (H-9), metering build (H-7 — blocked on R-1), TrustMRR (needs live mode).
