@@ -929,3 +929,23 @@ copy for an unaided <20-min connect. Best built + tested against a live tenant (
 **Honest status:** Step 0 done. I3-4 blocked on infra (B-8). I3-1/I3-2 are a dedicated build session gated
 on B-9 (Jordi registers the OAuth App) and B-8 (deploy pipeline). Did NOT walk any customer journey (binding
 rule). No secrets in doc.
+
+### 2026-07-04 (later 25) · [planner] — B-8 escalated to a ticket · R-3 scope broadened · I3-1 accepted pending live verify
+
+**Review.** B-9 ✅ closed (consent screen renders). I3-1 accepted at the built+locally-verified bar
+(claim-link with signed session-bound state, tamper → 400, pluggable provider, inert-when-unset —
+clean §8 shape); live verification and the first real grant stay reserved for the Stranger Run.
+I3-2 deferral accepted.
+
+**I3-7 minted · Deploy pipeline reliability (B-8 root cause) — escalated, P0-adjacent.** Three
+occurrences in one day (tw1 idle, tenant-testco stale-done, zenod-cloud stale-done): `compose.deploy`
+returns 200 but no build runs. This pipeline IS fulfillment — H-1's "<30 min" and every future fleet
+roll die if deploys silently stall. Accept: root cause identified and fixed (deploy worker health,
+queue, or API contract), receipted by three consecutive API-triggered deploys that actually rebuild;
+a health check an operator can run lands in the runbook. Jordi's UI-redeploy today is a bridge, not
+the fix.
+
+**R-3 scope broadened → "admin credential lifecycle":** engine must support (a) pre-set admin password
+at provision (env/config, §8-inert), (b) password change, (c) reset story. (a) is R-5's bridge
+dependency — the "reveal password once" claim flow needs a password that exists before first visit.
+R-handoff to stability now: R-1, R-3(a/b/c), R-4, R-5 — with Jordi, unmoved.
