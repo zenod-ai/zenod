@@ -103,3 +103,26 @@ HANDOVER-I9.md, unchanged).
 - **Deploy + verify:** `7cd3250` is the auto-deploy target (Console rebuild for #548 + runner rebuild for #549). Console health-verified live: `https://c1.zenod.dev/api/health` → `{"status":"ok","name":"console"}` at 2026-07-04T16:18:01Z. Same honest limit as W1-2 — no running-SHA endpoint yet (#532 / PR #547 not merged), so SHA-pinning is by deploy-timing, not endpoint.
 - **NOT done (out of scope):** the targeted re-test (C-07 + C-23 only) is a **separate go order** — not run here (tester ≠ fixer). Did not re-run the board.
 - **Recommend next:** run the targeted C-07 + C-23 re-test against `7cd3250`; if both green, the board's two remaining reds are cleared → W1-3 closing bar re-attemptable. Consider merging PR #547 (SHA-on-/api/health) to retire the deploy-verification caveat.
+
+### 2026-07-04 · FABLE AUDIT of W1-1/W1-2 — ACCEPTED, W1-3 authorized
+
+_(Content of PR #551, restored to main by the ops agent: the PR was CLOSED with its head branch already deleted, so it could not be reopened/merged — its diff was applied directly. Docs-only; verbatim.)_
+
+- Receipts verified: PR #531 → `bf03939` (CI green), regression tests present, suites green, #532
+  filed for the discovered observability gap (contract rule 3 followed exactly — this is the pattern).
+- **Audit note on #257's architecture:** the fix enforces the no-success-without-receipt invariant at
+  the COMPOSER layer (ground-truth correction) rather than the render-gate layer specified. Accepted —
+  the acceptance criterion is behavioral and W1-3 live-fires it. Standing fallback: if the closing run
+  shows ANY success-after-block leak, the hard reply-gate route becomes mandatory in the next pass.
+- **W1-3 GO — as a FRESH TESTER session** (this runner is the fixer; tester ≠ fixer). Step 0: credit
+  pre-flight (claude engine headroom vs ~23-row burn; Jordi tops up if thin). SHA caveat per #532:
+  confirm deploy by timing/host, record `bf03939` (+`1059a8c` docs tip).
+
+### 2026-07-04 · FABLE AUDIT — FP3 (#548/#549, PR #555 → 7cd3250) ACCEPTED
+- #548 hard-route trade-off ACCEPTED as doctrine: composer corrections are
+  out of scope on read-only turns (fabricated-create-on-read is structurally
+  indistinguishable from correct recap); residual defense = typed-tool
+  receipts + C-15 board audits + W3 soak watch item.
+- #549 journal-scan accepted: creation-context-only, existence-verified.
+- W1-3 record: closing run @bf03939 scored 21✅/2❌ (C-23→#548, C-07a→#549),
+  C-15 clean 4th consecutive run. Receipts restored via PR #551.
