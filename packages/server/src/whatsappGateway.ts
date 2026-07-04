@@ -274,6 +274,7 @@ export class WhatsAppGateway {
   private qr: string | null = null;
   private lastError: string | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectInFlight = false;
   private readonly waiters = new Set<() => void>();
   private lastUpsertAt: number | null = null;
   private lastUpsertType: string | null = null;
@@ -388,6 +389,16 @@ export class WhatsAppGateway {
   private clearReconnectTimer(): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
+    this.reconnectInFlight = false;
+  }
+
+  /**
+   * One structured (JSON) line per reconnect lifecycle transition, so ops
+   * tooling can grep/parse "[whatsapp][health]" for a machine-readable health
+   * check instead of scraping the free-text console.error/warn reconnect logs.
+   */
+  private logHealthEvent(event: string, extra: Record<string, unknown> = {}): void {
+    console.info("[whatsapp][health]", JSON.stringify({ event, state: this.state, ts: Date.now(), ...extra }));
   }
 
   private notifyStatusChange(): void {
@@ -423,12 +434,17 @@ export class WhatsAppGateway {
     this.lastError = reason;
     this.state = "disconnected";
     this.notifyStatusChange();
+    this.reconnectInFlight = true;
+    this.logHealthEvent("reconnect_scheduled", { reason, delayMs });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
+      this.logHealthEvent("reconnect_attempt");
       void this.start().catch((err: unknown) => {
         this.state = "error";
         this.lastError = err instanceof Error ? err.message : String(err);
+        this.reconnectInFlight = false;
         this.notifyStatusChange();
+        this.logHealthEvent("reconnect_failed", { error: this.lastError });
         console.error("[whatsapp] reconnect failed:", err);
       });
     }, delayMs);
@@ -664,6 +680,7 @@ export class WhatsAppGateway {
       }
 
       if (update.connection === "open") {
+        const wasReconnecting = this.reconnectInFlight;
         this.clearReconnectTimer();
         this.qr = null;
         this.state = "connected";
@@ -671,6 +688,7 @@ export class WhatsAppGateway {
         const linked = socket.user?.id;
         if (linked) this.options.settings.setRaw("whatsapp_linked_jid", linked);
         this.notifyStatusChange();
+        if (wasReconnecting) this.logHealthEvent("reconnect_succeeded");
         void this.refreshAllowedSenderAliases();
       }
 
