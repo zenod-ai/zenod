@@ -189,6 +189,24 @@ the team that knows your company and posts for you — and shows you the receipt
   deck, alpha-research deck, vault canon incl. 2026-07-03 Architecture Canon, EPIC-2 doc for D-4/D-5
   consistency).
 - This doc created. E0-1 drafted (above). SD-1 put to Jordi as the single taste question.
+### 2026-07-04 · [planner/Story-Fable] Promo iterations v0→v2; SD-3 one-agent framing; new journeys minted
+- **SD-3 (decided by Jordi steer, session):** buyer-facing, Herald is ONE agent — one guy, memory +
+  goal + tools + practice. The council/team story stays internal and on the Zenod movement side.
+  Roster/"more guys" and "we test him for lying" cut from the promo (essay survives at E0-4 for the
+  builder audience). Zenod appears by name once, as the open memory engine (SD-0 "incidental"
+  clause amended: visible, not hidden — reversal receipted in chat).
+- Promo sketches committed: v0 `eab360d` (pre-dates SHA note: v0 at `496e922` amended to exclude
+  another session's staged engine files), v1 `eab360d`, **v2 `78484ce`** — memory-first arc:
+  hero carries the full sentence (Jordi), memory/practice as separate concepts, negotiated-briefing
+  + daily-proposals chat vignettes, market slide late, goal-centered orbit.
+- **New product journeys derived from story work (route to Product-Fable / user-journeys):**
+  (a) **Negotiated briefing** — onboarding produces a briefing doc (state of affairs + goal +
+  contract) iterated until human approval; work starts only on approved briefing; briefing = first
+  memory page. (b) **Daily proposals ritual** — scheduled run proposes N posts/day from memory,
+  each citing sources; human reactions (approve/comment/"five more") are filed as memory and shape
+  the next batch. Jordi's pricing signal ($100 feels like a steal → likely underpriced for a
+  "hire") also routed via chat; number is Product-Fable's.
+
 ### 2026-07-04 · [planner/Story-Fable] SD-0 DECIDED — the loop is its own branded service
 - Jordi (voice): sell the loop, pre-configured, one thing, project-centered (project repo memory,
   project accounts); "uses Zenod technology" incidental; service-first; machinery hidden (chat +
