@@ -289,3 +289,33 @@ While verifying the C-26 deploy I found the **entire VPS stack returning Cloudfl
 - **PHONE DELIVERY CONFIRMED (Jordi):** both watchdog test alerts received on WhatsApp — crash-loop 23:08, disk-page 23:09 (local). The C-24 live-fire chain is verified end-to-end **including phone delivery**, not just `delivery=phylax`.
 - **C-23 ×2 ride ✅ (deploy health):** against the live build `d31fede` (the FABLE-RULING commit — chat/reconcile code IDENTICAL to `bccf105`; the closure-gate PR added no chat-path code, only the host watchdog + `/api/usage/headroom`). "What did I work on this week?" → epaminon_read + transcript, clean; "Summarize what I did today." → ask_zenod + transcript + search_memory, clean. Zero spurious banners — FP4 gate + toolKinds registry hold, no regression. The `bccf105` rebuild (watchdog endpoint) was still compiling (whisper.cpp `-j2` + a serialized multi-agent build queue) and is a chat-path no-op; it lands `/api/usage/headroom` when done.
 - **Epic-1 closure status:** the C-24 closure gate is **live-fired PASS to the phone**. Epic 1 now closes on: clean W3 soak AND (met) live-fired C-24.
+
+### 2026-07-05 · BUILD SPEED · stop compiling whisper.cpp (#575 + #578 + #579)
+
+- **Problem:** every Dokploy source-build recompiled whisper.cpp from C++ (~15 min, `-j2` on the RAM-constrained shared box) — for a transcription tier that's never hit (cloud STT is the real path; local whisper-cli was only the final no-cloud-key fallback). A fallback-for-a-fallback costing 15 min/deploy and OOM/disk risk.
+- **#575:** dropped the whisper build stage + `whisper-cli` COPY from the Dockerfile. No public images, no GHCR, no pipeline change — just a deletion. Builds are `npm ci` + `tsc` only now.
+- **#578 (caught by the load-bearing live test):** removing whisper exposed a routing gap — a SHORT voice note with only an OpenRouter key fell through to the now-absent local whisper (`"whisper-cli is not installed"`). Fixed so short audio uses OpenRouter/OpenAI directly. Cloud STT now covers every case with the EXISTING openrouter_api_key.
+- **Ticket:** zenod-ai/zenod#579 (retroactive, per CONTRACT rule 3).
+- **Deploy timing receipt:** #578 merge → live in **6m29s** (`08fa11ea`), vs the ~15–20 min whisper-compile builds. Every deploy is fast now.
+- **Transcription VERIFIED LIVE** on `08fa11ea`: `POST /api/chat/voice/transcribe` returned the correct transcript via `provider: openrouter openai/whisper-large-v3-turbo` (cloud STT, no whisper.cpp). Voice notes work.
+
+### 2026-07-05 · SOAK DIAGNOSTIC (for the planner) — "why the corrections?" (WhatsApp, ~22:00–22:17 UTC)
+
+Jordi sent 2 voice notes + a few texts during active use. What he saw (Drive receipts give the UTC times):
+- 22:00 VN1 → archived to Drive; **vault filing failed "interrupted by a server restart."**
+- 22:01–22:02 VN2 queued → **vault filing failed — server restart** again.
+- 22:04 executions #267/#268 filed + dispatched from the VNs → **⚠️ Correction: "couldn't confirm execution state for #267/#268 … don't rely on the run claim"** — yet 22:05 "Execution started #267" and 22:07 "#267 complete, PR #269" arrived seconds later.
+- 22:16 "what have we been working on lately?" → **clean grounded summary, NO banner** (C-23 holding).
+- 22:17 `add_memory` (Pyrenees fact) → **"Filing failed — server restart."**
+
+**Root cause: deploy-churn restarts, self-inflicted.** The worker (me) pushed ~10 deploys in ~2 hours (whisper fix, closure gates, receipts, routing fix). Each rebuilds + restarts the Console container, and Jordi was actively using WhatsApp through it, so in-flight writes were interrupted.
+
+**What's healthy (not a clock-reset case):** every failure was reported HONESTLY — "interrupted by a server restart" / "Filing failed — retry?" — **zero fabrication (C-15 held)**; the read-summary drew no spurious banner (C-23 held). The ⚠️ banners are the honesty machinery WORKING, not lying.
+
+**Two real gaps surfaced (ticketed):**
+- **#580 — non-execution writes aren't restart-durable.** Executions resume (I8-2/C-21) but vault filing + add_memory just die on restart and are lost. → make them durable/auto-resumed.
+- **#581 — the execution-state hedge over-fires on dispatch-then-async turns.** The #267/#268 dispatch SUCCEEDED, but the turn still rendered "⚠️ don't rely on the run claim" because it couldn't confirm terminal state same-turn. It should hedge only the TERMINAL state when a dispatch receipt exists, not disclaim the confirmed dispatch. **This is the biggest UX driver of "why do we keep getting corrections."**
+
+**Process finding:** deploying repeatedly during active WhatsApp use is itself a soak anti-pattern — batch deploys / use quiet windows during the soak. (Now-fast builds shrink each restart window, but the real fix is not churning during use.)
+
+**Recommendation:** do NOT reset the soak clock (honest behavior + self-inflicted churn, not a system-honesty failure); track #580/#581 + the quiet-window-deploy discipline.
