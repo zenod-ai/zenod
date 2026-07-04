@@ -29,27 +29,18 @@ RUN npm run build
 # drop dev dependencies for the runtime copy
 RUN npm prune --omit=dev
 
-# ---- whisper.cpp (local, in-image transcription) ----
-# Same node:22-alpine base as the runtime so the musl/libstdc++ ABI matches.
-FROM node:22-alpine AS whisper
-RUN apk add --no-cache build-base cmake git
-WORKDIR /opt
-RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
-WORKDIR /opt/whisper.cpp
-# Static ggml/whisper libs linked into one whisper-cli binary; native SIMD
-# (the image is built on the same host it runs on via Dokploy).
-# -j2 (not nproc): the Dokploy build host is RAM-constrained; 4 parallel g++
-# jobs on ggml can OOM-kill the build.
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-      -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF \
- && cmake --build build -j2 --target whisper-cli
-
 # ---- runtime ----
 FROM node:22-alpine
-# ffmpeg normalizes audio to 16 kHz mono WAV; libgomp/libstdc++ are whisper-cli's
-# runtime deps. The whisper model itself downloads once to the /data volume.
+# ffmpeg normalizes audio to 16 kHz mono WAV before cloud STT.
+#
+# NOTE: we intentionally do NOT compile/ship local whisper.cpp. Voice-note
+# transcription runs on cloud STT (Groq → OpenRouter, see transcribe.ts); the local
+# whisper-cli was only the FINAL fallback for when no cloud key is configured — never
+# hit in practice (keys are set), yet it added a ~15-minute in-image C++ compile to
+# EVERY deploy (and OOM/disk risk on the RAM-constrained shared box). Dropping it takes
+# builds from ~15 min to ~2-3 min. The code still supports a local binary if one is ever
+# put on PATH (ZENOD_WHISPER_BINARY) and degrades gracefully (ENOENT-handled) without it.
 RUN apk add --no-cache git ripgrep ffmpeg libstdc++ libgomp
-COPY --from=whisper /opt/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
 WORKDIR /app
 # Baked in at build time (--build-arg GIT_SHA=$(git rev-parse HEAD)) so /api/health
 # can report exactly which commit is running — deploy verification otherwise has
