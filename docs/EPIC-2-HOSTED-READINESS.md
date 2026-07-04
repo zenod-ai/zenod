@@ -4,7 +4,7 @@ Owner: **Product-Fable** (planner, since 2026-07-04 per [HANDOVER-EPIC2.md](HAND
 Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md) · Positioning: launch deck V5 · Journeys: user-journeys deck (T1, J7–J9)
 **Exit criterion: a stranger pays money and gets a working Council attached to their repo. Jordi is customer #0 and doesn't count.**
 
-Status: 🟢 ITERATION 1 — VERIFICATION PHASE (2026-07-04). All decisions D-1/D-4/D-5/D-6 DECIDED ·
+Status: 🟢 ITERATION 2 RUNNING (2026-07-04). All decisions D-1/D-4/D-5/D-6 DECIDED ·
 3-tier subscription checkout live (TEST) · tenant provision proven at ~1–2 min · remaining: tester pass
 (dispatched), B-3 (tenant creds → council responds), R-1 handoff (Jordi). See Iteration 1 table.
 
@@ -121,13 +121,13 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 
 | ID | Ticket | State | Acceptance criteria | Test criteria (tester) |
 |----|--------|-------|---------------------|------------------------|
-| I1-1 | H-2 money path (backend + webhook + checkout) | 🟡 worker-reported PASS (test mode) — awaiting tester | Card completes checkout in prod; payment visible in Stripe; provisioning task created with customer details | Run a FRESH checkout with test card; confirm the Stripe event shows `pending_webhooks: 0`; confirm a NEW line in `provisioning-queue.jsonl` carrying that session's customer email; `/success.html` → 200 |
-| I1-2 | H-2 front end: pricing page live + linked legal | 🟡 worker-reported live (#527) — awaiting tester | Pricing section on zenod.dev; "Get started" reaches Stripe checkout; legal pages linked | zenod.dev `#pricing` renders; click-through reaches `checkout.stripe.com`; `/legal/terms.html` + `privacy.html` + `data-handling.html` all 200 AND reachable from the pricing/checkout surface; DRAFT banner present |
-| I1-3 | H-11 legal drafts | 🟡 live as DRAFT — counsel review pending (Jordi) | Lawyer-sane pages linked from checkout | Covered by I1-2; content sanity: customer-owns-the-vault story present in data-handling |
+| I1-1 | H-2 money path (backend + webhook + checkout) | ✅ PASS — tester-verified (fresh) | Card completes checkout in prod; payment visible in Stripe; provisioning task created with customer details | Run a FRESH checkout with test card; confirm the Stripe event shows `pending_webhooks: 0`; confirm a NEW line in `provisioning-queue.jsonl` carrying that session's customer email; `/success.html` → 200 |
+| I1-2 | H-2 front end: pricing page live + linked legal | ✅ PASS — tester-verified (fresh) | Pricing section on zenod.dev; "Get started" reaches Stripe checkout; legal pages linked | zenod.dev `#pricing` renders; click-through reaches `checkout.stripe.com`; `/legal/terms.html` + `privacy.html` + `data-handling.html` all 200 AND reachable from the pricing/checkout surface; DRAFT banner present |
+| I1-3 | H-11 legal drafts | ✅ PASS — tester-verified (DRAFT, counsel pending) | Lawyer-sane pages linked from checkout | Covered by I1-2; content sanity: customer-owns-the-vault story present in data-handling |
 | I1-4 | H-1 provisioner: paid task → running tenant | ✅ PASS — council responds (worker "later 11") | Fresh tenant end-to-end <30 min, no code edits | After worker's live run: `z-testco.zenod.dev` console loads over TLS; council responds in web chat; total time receipted <30 min; teardown documented |
 | I1-5 | R-1 handoff to stability track | ⚪ with Jordi | R-1 accepted as a stability-track ticket | Ticket link recorded in this doc |
 | I1-6 | D-6 pricing decision | ✅ DECIDED 2026-07-04 (concept: subscription + monthly credit, tiers 29/79/499) | Shape + tiers recorded as DECIDED above | Doc record matches Jordi's words |
-| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | 🟡 worker-reported DONE ("later 8") — awaiting tester | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
+| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | ✅ PASS — tester-verified, all 3 tiers | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
 
 ### Blocker register
 
@@ -492,7 +492,7 @@ re-provision needed — the compose created earlier by `provision-tenant.mjs` ju
   wired, so the tenant's own key for now). I did not fabricate these for a test tenant. **Needs Jordi:**
   an LLM key (+ vault) to finish onboarding, or he completes it on the staging tenant himself. → blocker register B-3.
 
-**Staging:** `tenant-testco` left **UP** as staging per dispatch. Admin password set (`testco-staging-2026`).
+**Staging:** `tenant-testco` left **UP** as staging per dispatch. Admin password set (`‹redacted — rotated per B-5›`).
 
 **Teardown (documented; NOT executed — kept as staging):**
 - Suspend: `compose.stop` (Dokploy API) or Stop in the UI — stops the stack, keeps volumes.
@@ -566,7 +566,7 @@ Jordi provided `OPENROUTER_PROVISIONING_KEY`. B-3 fully closed:
 GitHub Connections OAuth flow (the Enable-Zenod dialog requires it) — an OAuth grant I don't do
 unilaterally. The Console council responds without it; wiring the brain's vault is H-3.
 
-`tenant-testco` remains UP as staging (admin pw `testco-staging-2026`, OpenRouter key stored in-console).
+`tenant-testco` remains UP as staging (admin pw `‹redacted — rotated per B-5›`, OpenRouter key stored in-console).
 Security: the provisioning key was pasted in chat → **rotate it**; keep tenant keys scoped.
 
 ### 2026-07-04 · [tester] — Iteration 1 verification (first activation, fresh evidence)
@@ -589,3 +589,34 @@ Fresh test-card runs (card 4242, TEST mode); no worker receipts reused.
 3. testco's council answered a fresh arithmetic question correctly ("42") on the $50-capped OpenRouter key — settings untouched.
 4. One coverage gap, not a failure: no direct read of the queue file (no container access); delivery + metadata prove the write. Consider a token-gated queue-tail ops endpoint.
 5. No reds. I leave the ✅ marks in the Iteration 1 table for your close sweep (states are the planner's to set); this entry is the evidence.
+
+### 2026-07-04 (later 13) · [planner] — ITERATION 1 CLOSED (5/5 tester-verified) · Iteration 2 opened
+
+**Close.** Tester scoreboard (first activation): I1-1 ✅ · I1-2 ✅ · I1-3 ✅ · I1-4 ✅ · I1-7 ✅ — all on
+fresh evidence (fresh subscribes on all three tiers incl. first-ever Starter/Agency; fresh chat message
+answered live). I1-6 was ✅ at decision time. I1-5 (R-1 handoff) did NOT move — carried into Iteration 2
+as a standing item with Jordi. Final states: the landing worker updates the Iteration 1 table cells to ✅
+per this entry (planner-authored sweep) and sets the doc Status line to "ITERATION 2 RUNNING".
+**Iteration 1 headline, verified end to end: paid checkout → running tenant → responding council over
+TLS on a capped, metered key.** Tester's coverage caveat accepted (queue file not directly readable) →
+ticket I2-3.
+
+**New blocker B-5 · testco admin password exposure:** the worker's receipts included the staging admin
+password, and this doc lives in a PUBLIC repo. Jordi or worker: change the testco console password;
+verify the doc/PRs carry no other live secrets. **Protocol addendum (binding): receipts NEVER contain
+secrets — passwords, keys, tokens are referenced by hash/name only.**
+
+**ITERATION 2 (opened 2026-07-04) — goal: a stranger can onboard — their tools, their council, zero-touch
+provisioning.** Tickets (planner; acceptance + test criteria):
+
+| ID | Ticket | State | Acceptance criteria | Test criteria (tester) |
+|----|--------|-------|---------------------|------------------------|
+| I2-1 | H-3 phase 1: GitHub connect flow (vault + issues) — the Enable-Zenod path made self-serve | ⚪ ready | A non-technical user completes Team→Enable Zenod→GitHub OAuth→vault pick unaided in <20 min; secrets stored per-tenant, never in the vault | Fresh tenant (or reset testco): tester follows the UI only, no docs, times it; Zenod shows "on"; a memory store→ask round-trip works against the connected vault |
+| I2-2 | Zero-touch model setup: provisioner mints the tier-capped gateway key and injects it at provision time (maps `OPENROUTER_API_KEY` into `docker-compose.tenant.yml`, §8-safe) | ⚪ ready | Fresh provision → council responds with NO manual key entry; key cap matches the paid tier ($10/$50/$350) | Provision a throwaway tenant from a queued task; chat responds; gateway `list` shows the tenant key with the tier's cap; teardown |
+| I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | ⚪ ready | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
+| I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | ⚪ ready | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
+| I2-5 | Live-mode prep checklist (gated on Jordi: counsel pass on H-11 drafts, live restricted keys, caps→live prices) | 🔴 gated on Jordi | Checklist in doc with owner per item; live cutover NOT executed without Jordi's explicit go | Checklist review only |
+| I2-6 | I1-5 carried: R-1 (MeterProvider seam) handed to stability track | 🔴 with Jordi (3rd carry) | Stability-track ticket link in this doc | Link resolves |
+
+Out of scope for Iteration 2 (parked, don't drift): X/outbound connect (H-3 phase 2), WhatsApp channel
+build (H-8), website polish (H-9), metering build (H-7 — blocked on R-1), TrustMRR (needs live mode).
