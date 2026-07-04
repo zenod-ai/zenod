@@ -97,6 +97,7 @@ export class NotificationStore {
       );
       CREATE INDEX IF NOT EXISTS notifications_created ON notifications(created_at);
       CREATE INDEX IF NOT EXISTS notifications_dedupe ON notifications(dedupe_key, created_at);
+      CREATE INDEX IF NOT EXISTS notifications_surface_text ON notifications(surface, composed_text, created_at);
     `);
   }
 
@@ -140,6 +141,20 @@ export class NotificationStore {
     const row = this.db
       .prepare(`SELECT * FROM notifications WHERE dedupe_key=? AND status='sent' ORDER BY created_at DESC LIMIT 1`)
       .get(dedupeKey) as Row | undefined;
+    return row ? rowToRecord(row) : null;
+  }
+
+  /** Most recent SENT record with this EXACT text on this surface since `sinceMs` — the
+   *  guard against an identical message landing twice in a short window regardless of
+   *  event type or dedupe key (e.g. a double-fired manual send / digest retry). */
+  latestSentByText(surface: string, composedText: string, sinceMs: number): NotificationRecord | null {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM notifications
+         WHERE surface=? AND composed_text=? AND status='sent' AND created_at>=?
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(surface, composedText, sinceMs) as Row | undefined;
     return row ? rowToRecord(row) : null;
   }
 
