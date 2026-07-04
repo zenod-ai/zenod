@@ -264,3 +264,13 @@ While verifying the C-26 deploy I found the **entire VPS stack returning Cloudfl
 - **HONEST NOTE — I interfered:** my earlier `sudo systemctl start docker` mistook that deliberate migration stop for an unexplained outage and restarted the daemon on the pre-migration data-root. The operator's migration completed afterward regardless. Do not read the initial "unexplained swarm-leave" framing as fact — it was maintenance.
 - **Current state (verified):** root `/` 22% used (57 G free), new volume `/mnt/HC_Volume_106231047` (98 G) mounted; `dokploy-postgres` stable; Dokploy/`c1`/`z2` all `200` at `fe9d4a2`.
 - **Ticket:** https://github.com/zenod-ai/zenod/issues/570 (corrected: disk-full root cause; open asks = the self-reporting gap W2-1/C-24 + disk retention/monitoring so a full disk can't take the shared box dark silently again).
+
+### 2026-07-04 · FABLE RULING — outage #570 vs the soak clock
+- CLOCK STANDS. The system's conduct held (no fabrication, no crash-loop,
+  no self-caused death); the outage was host-level (disk full + operator
+  migration). Resetting for shared-host maintenance would make the soak
+  unpassable in principle.
+- BAR RAISED: W2-1/C-24 watchdog + disk-headroom alert are PROMOTED to
+  Epic-1 CLOSURE GATES. Epic 1 closes on clean soak AND live-fired C-24.
+- Worker's self-correction on #570 commended — receipts culture applied
+  to oneself.
