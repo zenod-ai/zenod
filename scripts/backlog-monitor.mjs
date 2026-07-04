@@ -1622,7 +1622,11 @@ function activeHeartbeatRuns(state) {
   const runs = [];
   for (const [executionId, e] of Object.entries(state.ephemeral || {})) {
     if (e && !e.reportedStatus && e.eventsPath) {
-      runs.push({ executionId, target: e.target, origin: e.origin ?? null, eventsPath: e.eventsPath, launchedAt: e.launchedAt, context: e.context });
+      // pid + per-run budget MUST be carried through: sweepHeartbeats's C-17 budget
+      // kill guards on run.pid and reads run.budgetMs/budgetTurns. Dropping them here
+      // (the original bug) made the budget kill silently un-fireable (caught by the
+      // C-17 live-fire, not the unit test of budgetKillDecision alone).
+      runs.push({ executionId, target: e.target, origin: e.origin ?? null, eventsPath: e.eventsPath, launchedAt: e.launchedAt, context: e.context, pid: e.pid, budgetMs: e.budgetMs, budgetTurns: e.budgetTurns, budgetKill: e.budgetKill });
     }
   }
   for (const [executionId, d] of Object.entries(state.dispatched || {})) {
@@ -1653,6 +1657,11 @@ async function sweepHeartbeats(state, now = Date.now()) {
       ...(run.budgetTurns ? { maxTurns: run.budgetTurns } : {}),
     });
     if (budget.kill && run.pid && isPidAlive(run.pid) && !run.budgetKill) {
+      // Persist budgetKill on the REAL state entry (not the reshaped run copy) so
+      // reportEphemeralFinished — which reloads state on the worker's exit — renders
+      // the honest "budget exceeded … nothing verifiable" failure.
+      const entry = state.ephemeral?.[run.executionId] ?? state.dispatched?.[run.executionId];
+      if (entry) entry.budgetKill = budget.reason;
       run.budgetKill = budget.reason;
       appendRecord(ephemeralRunPaths(run.executionId).journalPath, { kind: "budget-kill", runId: run.executionId, reason: budget.reason, at: new Date(now).toISOString() });
       log(`budget kill: ephemeral ${run.executionId} — ${budget.reason} — terminating pid ${run.pid}`);
@@ -2539,6 +2548,7 @@ function main() {
 
 export {
   activeFanInBatchForIssue,
+  activeHeartbeatRuns,
   batchKey,
   ensureFanInBatch,
   integrationPrompt,

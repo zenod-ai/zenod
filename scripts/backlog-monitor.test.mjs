@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   batchKey,
   budgetKillDecision,
+  activeHeartbeatRuns,
   parseRunBudget,
   detectIntegrationStatus,
   ephemeralResumeDecision,
@@ -1189,4 +1190,27 @@ test("budgetKillDecision honours a per-run override tighter than the env default
   const d = budgetKillDecision({ elapsedMs: 4 * 60 * 1000, turns: 5, maxMs: 3 * 60 * 1000, maxTurns: 10 });
   assert.equal(d.kill, true);
   assert.match(d.reason, /wall-clock budget exceeded/);
+});
+
+// C-17 regression: activeHeartbeatRuns MUST carry pid + per-run budget through, or the
+// budget kill in sweepHeartbeats silently can't fire (the live-fire bug of 2026-07-04).
+test("activeHeartbeatRuns preserves pid and per-run budget on ephemeral runs", () => {
+  const state = {
+    ephemeral: {
+      "e1": {
+        target: "ephemeral:e1",
+        eventsPath: "/tmp/e1/events.jsonl",
+        launchedAt: new Date().toISOString(),
+        context: "budget: 3 min / 10 turns",
+        pid: 853,
+        budgetMs: 180000,
+        budgetTurns: 10,
+      },
+    },
+  };
+  const runs = activeHeartbeatRuns(state);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].pid, 853, "pid must survive — the budget kill guards on run.pid");
+  assert.equal(runs[0].budgetMs, 180000, "per-run budgetMs must survive");
+  assert.equal(runs[0].budgetTurns, 10, "per-run budgetTurns must survive");
 });
