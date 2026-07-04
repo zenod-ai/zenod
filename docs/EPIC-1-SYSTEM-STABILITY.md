@@ -143,6 +143,13 @@ S-3 lands) → S-7. Then: full canonical run (now C-01…C-20). Green → deploy
 
 <!-- executors and testers: add dated entries below this line; deliverable URLs mandatory -->
 
+### Receipt · 2026-07-04 · Fix batch FB-1 (#258) + FB-2 (#485) — hand-run by Claude, one PR
+- **FB-1 · #258 composer:** the ⚠️ Correction "no issue created … ignore details below" banner no longer fires on read-only turns. Root fix = grounding: a number surfaced by ANY tool this turn (reads included) is not a fabricated creation, so a work summary naming existing PRs (#498…) is left alone; a number no tool surfaced (#58) is still corrected. `packages/core/src/taskingPolicy.ts`.
+- **FB-2 · #485 C-07c detector:** `declaresNoDeliverableExpected` broadened to no-deliverable INTENT (smoke/echo/no-op, "no deliverable" however punctuated, summary/report-only, no-repo) — the two live mislabels (C-10 `6846acb5`, C-21 `113493ee`) now exempt; real deliverable tasks unaffected. `scripts/backlog-monitor.mjs`.
+- **C-23 acceptance implemented** as regression tests (3× read-only → no banner incl. the C-11 replay; 1× genuine fabrication still corrected).
+- Suites: core 271 · server 498 · scripts 156, all green.
+- After deploy: the closing board run (all 23 rows against the fixed SHA) can proceed. PR: this branch.
+
 ### Diagnosis · 2026-07-04 · STEP 3 — "notifications dark" root cause: the RUNNER is wedged, not WhatsApp/Phylax
 Traced from the Console (read-only MCP): chat replies send fine (WhatsApp socket + Console healthy); a fresh smoke ephemeral (`ephemeral-1783123639609-c072ffe9`) sat at `state:running` with `updatedAt==startedAt` (zero progress); `ask_phylax` read its notification ledger = **zero inbound events in 90 min** (not quiet-hours, not dedup — events never reach Phylax). Conclusion: the runner container isn't processing dispatched work → no `/api/notify` calls → no notifications; same wedge as the dead `fanout-20260703T195222Z` run and the 3 silently-dead I9 runs. Fix = restart/redeploy the runner (this docs commit triggers the autodeploy). The durable executor (#509) makes future wedges self-heal via resume.
 

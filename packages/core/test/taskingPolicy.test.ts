@@ -750,6 +750,43 @@ describe("reconcileTaskingReply", () => {
 
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
+
+  // FB-1 / #258 / C-23 · Corrections only correct — the C-11 board defect + its acceptance.
+  it("C-23: read-only work summary naming grounded issues draws NO correction banner (C-11 replay)", () => {
+    const reply =
+      "Work this week (from execution_status + transcript):\n" +
+      "- PRs opened / in review: #498 (S-1), #499 (S-8), #501 (D-2).\n" +
+      "Priorities: merge the open stability PRs.";
+    const actions: RecordedAction[] = [
+      { tool: "get_recent_conversation_transcript", result: "recent turns reference PRs #498, #499, #501 opened this week" },
+      { tool: "epaminon_read_issue_execution_status", result: "executions touched #498 #499 #501" },
+    ];
+    const out = reconcileTaskingReply(reply, actions);
+    expect(out).not.toContain("⚠️ Correction");
+    expect(out).not.toContain("ignore the issue details below");
+  });
+
+  it("C-23: read-only recap of existing issues from a backlog query is untouched", () => {
+    const reply = "You have #42 and #43 open from earlier.";
+    const actions: RecordedAction[] = [{ tool: "queryBacklog", result: "Open: #42 Something; #43 Another" }];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("C-23: a pure read answer with no mutation claim is untouched", () => {
+    const reply = "This week you shipped the durable executor and the reply gate. Nothing else pending.";
+    const actions: RecordedAction[] = [{ tool: "search_memory", result: "hits: durable executor, reply gate" }];
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+  });
+
+  it("C-23: a genuine fabricated creation (ungrounded number) is STILL corrected", () => {
+    const out = reconcileTaskingReply("Done — just created issue #58 for you.", [
+      { tool: "queryBacklog", result: "Open: #42 Something else" },
+    ]);
+    expect(out).toMatch(/^⚠️ Correction/);
+    expect(out).toContain("no GitHub issue was created");
+    expect(out).toContain("#58");
+    expect(out).not.toContain("#42");
+  });
 });
 
 describe("peerMutationGuardFailure", () => {

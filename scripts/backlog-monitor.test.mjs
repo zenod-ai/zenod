@@ -1214,3 +1214,13 @@ test("activeHeartbeatRuns preserves pid and per-run budget on ephemeral runs", (
   assert.equal(runs[0].budgetMs, 180000, "per-run budgetMs must survive");
   assert.equal(runs[0].budgetTurns, 10, "per-run budgetTurns must survive");
 });
+
+// FB-2 / #485 (C-07c): declaresNoDeliverableExpected matches no-deliverable INTENT,
+// not one exact phrase — the two live mislabels + smoke, without over-matching real tasks.
+test("declaresNoDeliverableExpected catches the live C-07c mislabels + smoke, spares real deliverable tasks", () => {
+  assert.equal(declaresNoDeliverableExpected("Summary in the final message; no deliverable/PR expected."), true, "C-21 interrupted phrase");
+  assert.equal(declaresNoDeliverableExpected('echo "board-c10-engine" and report which engine. Trivial echo, no repo work.'), true, "C-10 echo probe");
+  assert.equal(declaresNoDeliverableExpected("SMOKE #2 (no deliverable expected): notification retest"), true, "smoke run");
+  assert.equal(declaresNoDeliverableExpected("Open ONE PR against main with the composer fix; make no unrelated changes."), false, "real deliverable task must still be scored on evidence");
+  assert.equal(declaresNoDeliverableExpected("Fix the reconnect bug and open a PR with tests."), false, "real code task");
+});

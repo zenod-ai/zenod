@@ -1061,8 +1061,17 @@ function wantsHoldForReview(context) {
 // output — so a worker cannot dodge the evidence bar by claiming its task was a no-op.
 // A run that WAS supposed to produce a deliverable and didn't carries none of these
 // markers and still renders the honest failed-to-produce message (C-07b unchanged).
+// FB-2 / #485 (C-07c): match no-deliverable INTENT, not one exact phrase. The old
+// marker-only regex mislabeled real no-op runs as "failed: nothing verifiable":
+// the C-10 probe ("Trivial echo … no repo work") and the C-21 summary run ("no
+// deliverable/PR expected" — the "/PR" broke the contiguous "no deliverable expected"
+// match). Broadened to the common ways a controller declares a run produces nothing:
+// smoke/echo/no-op runs, "no deliverable" (however punctuated), summary/report-only,
+// and explicit no-repo/no-code declarations. A run that WAS meant to produce a
+// deliverable carries none of these and still renders the honest failed-to-produce
+// message (C-07b unchanged). Deterministic; reads the controller policy, not worker output.
 const NO_DELIVERABLE_EXPECTED_RE =
-  /\bNO-DELIVERABLE-EXPECTED\b|no-op smoke|no deliverable expected|return (?:the )?(?:summary|result) only|make no (?:code or file|file or code) changes/i;
+  /\bNO-DELIVERABLE-EXPECTED\b|\bno[- ]?op\b|\bsmoke\b|\btrivial echo\b|\becho ["'`]|\bno deliverable\b|no deliverable(?:[ /]\S+)? expected|return (?:the )?(?:summary|result) only|summary in the final message|make no (?:code or file|file or code) changes|\bno repo work\b|\bno code(?:, ?| or )(?:no )?(?:issue|pr|file)/i;
 function declaresNoDeliverableExpected(context) {
   return NO_DELIVERABLE_EXPECTED_RE.test(String(context || ""));
 }

@@ -967,7 +967,14 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
   // number it cites is backed by the query result. Only flag a fabricated
   // creation when a cited number is unbacked by any tool this turn, or when a
   // creation is claimed with no number at all.
-  const unprovenPresented = [...presented].filter((n) => !proven.has(n));
+  // FB-1 / #258 / C-23 — "grounded" = a number surfaced by ANY tool THIS turn (READ
+  // results included), not only create/write receipts. A read-only summary reports
+  // existing issues ("PRs opened this week: #498, #499…") whose numbers came straight
+  // from the read results — those are grounded, NOT a fabricated creation, so no banner
+  // (the C-11 defect: the old code flagged true content and told the user to ignore it).
+  // A number no tool surfaced at all (the #58 bug) stays unproven → still corrected.
+  const groundedThisTurn = new Set<number>([...proven, ...actions.flatMap((a) => [...issueNumbersIn(a.result ?? "")])]);
+  const unprovenPresented = [...presented].filter((n) => !groundedThisTurn.has(n));
   const fabricatedCreation = presented.size === 0 || unprovenPresented.length > 0;
   if (claimsCreation && createdNums.size === 0 && fabricatedCreation) {
     const lines = [
