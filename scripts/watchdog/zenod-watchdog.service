@@ -1,0 +1,12 @@
+[Unit]
+Description=zenod-watchdog — host-level self-outage reporter (Epic-1 C-24)
+# Runs even when Docker is down (that is the whole point) — no docker dependency.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/zenod-watchdog.env
+ExecStart=/opt/zenod-watchdog/zenod-watchdog.sh
+# Never let a watchdog failure cascade; it logs to the journal.
+Nice=10
