@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   batchKey,
   budgetKillDecision,
+  parseRunBudget,
   detectIntegrationStatus,
   ephemeralResumeDecision,
   ensureFanInBatch,
@@ -1168,4 +1169,24 @@ test("budgetKillDecision leaves a run within budget alone", () => {
 test("budgetKillDecision: exactly at the ceiling is not yet a breach", () => {
   const d = budgetKillDecision({ elapsedMs: 60 * 60 * 1000, turns: 200, maxMs: 60 * 60 * 1000, maxTurns: 200 });
   assert.equal(d.kill, false);
+});
+
+// C-17 / B1: per-run budget override parsed from task context; env fallback otherwise.
+test("parseRunBudget reads minutes + turns only when 'budget' is present", () => {
+  assert.deepEqual(parseRunBudget("budget: 3 min / 10 turns"), { maxMs: 180000, maxTurns: 10 });
+  assert.deepEqual(parseRunBudget("run with budget {minutes: 5, turns: 40}"), { maxMs: 300000, maxTurns: 40 });
+  assert.deepEqual(parseRunBudget("budget 2 minutes"), { maxMs: 120000 });
+});
+
+test("parseRunBudget ignores durations when 'budget' is not mentioned (no accidental cap)", () => {
+  assert.deepEqual(parseRunBudget("please wait 5 minutes then do 3 turns of review"), {});
+  assert.deepEqual(parseRunBudget(""), {});
+  assert.deepEqual(parseRunBudget(undefined), {});
+});
+
+test("budgetKillDecision honours a per-run override tighter than the env default", () => {
+  // 4 min elapsed under a 3-min per-run ceiling → kill, even though the 60-min env default wouldn't.
+  const d = budgetKillDecision({ elapsedMs: 4 * 60 * 1000, turns: 5, maxMs: 3 * 60 * 1000, maxTurns: 10 });
+  assert.equal(d.kill, true);
+  assert.match(d.reason, /wall-clock budget exceeded/);
 });

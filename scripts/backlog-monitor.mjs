@@ -1269,6 +1269,27 @@ export function budgetKillDecision({ elapsedMs = 0, turns = 0, maxMs = EPHEMERAL
   return { kill: false };
 }
 
+/**
+ * Per-run budget override (B1 prerequisite, not test scaffolding). A run's task
+ * context may declare its OWN ceiling — this is exactly the mechanism lane files
+ * use (`budget {minutes, turns}`). Parsed here from the context text; falls back
+ * to the env default (EPHEMERAL_BUDGET_MS/TURNS) when absent. Only honoured when
+ * the context mentions "budget" (so an incidental "5 minutes" in a mission body
+ * never silently caps a run). Returns {} when nothing is declared.
+ */
+export function parseRunBudget(context) {
+  const s = String(context || "");
+  if (!/budget/i.test(s)) return {};
+  const out = {};
+  // Both the natural form ("3 min", "10 turns") and the structured lane form
+  // ("minutes: 5", "turns: 40") — number before OR after the unit word.
+  const minutes = s.match(/(\d+)\s*(?:min\b|mins\b|minutes?)/i) || s.match(/minutes?\s*[:=]\s*(\d+)/i);
+  const turns = s.match(/(\d+)\s*turns?\b/i) || s.match(/turns?\s*[:=]\s*(\d+)/i);
+  if (minutes) out.maxMs = Number(minutes[1]) * 60 * 1000;
+  if (turns) out.maxTurns = Number(turns[1]);
+  return out;
+}
+
 /** Did the worker reach a real terminal outcome (finished), vs. get killed mid-run? */
 function hasTerminalOutcome(paths) {
   try {
@@ -1625,7 +1646,12 @@ async function sweepHeartbeats(state, now = Date.now()) {
     // terminate it (SIGTERM → the worker's exit handler reports it) and flag the run
     // so reportEphemeralFinished renders an honest "budget exceeded" failure with the
     // transcript link, notified as a failure. Deterministic; no LLM.
-    const budget = budgetKillDecision({ elapsedMs, turns: raw.turns });
+    const budget = budgetKillDecision({
+      elapsedMs,
+      turns: raw.turns,
+      ...(run.budgetMs ? { maxMs: run.budgetMs } : {}),
+      ...(run.budgetTurns ? { maxTurns: run.budgetTurns } : {}),
+    });
     if (budget.kill && run.pid && isPidAlive(run.pid) && !run.budgetKill) {
       run.budgetKill = budget.reason;
       appendRecord(ephemeralRunPaths(run.executionId).journalPath, { kind: "budget-kill", runId: run.executionId, reason: budget.reason, at: new Date(now).toISOString() });
@@ -1774,6 +1800,10 @@ function launchEphemeral(executionId, target, context, state) {
     // resume ceiling in sweepStaleEphemeral holds across redeploys. A resume
     // re-enters launchEphemeral, so increment from any prior entry.
     attempts: (existing?.attempts ?? 0) + 1,
+    // C-17 / B1: per-run budget ceiling declared in the task context (lane mechanism),
+    // resolved once at launch and preserved across resumes. null → env default.
+    budgetMs: (existing?.budgetMs ?? parseRunBudget(context).maxMs) ?? null,
+    budgetTurns: (existing?.budgetTurns ?? parseRunBudget(context).maxTurns) ?? null,
     // "Merge by default": remember at launch whether THIS task opted out of auto-merge,
     // so the deterministic finalization path (reportEphemeralFinished) can honor the
     // opt-out without re-reading the (LLM-authored) worker output. No signal = ON.

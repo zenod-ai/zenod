@@ -1,74 +1,79 @@
-# HANDOVER — close Epic 1 (I9 Workstream A)
+# HANDOVER — close Epic 1 at 100/100, then light the first lane
 
-For a local Claude Code worker with repo + gh + prod access. Written by Fable, 2026-07-03 ~23:40.
-Context docs: `docs/CANONICAL-TESTS.md` · `docs/I8-TEST-RESULTS.md` · `docs/EPIC-1-SYSTEM-STABILITY.md` ·
-`docs/LAUNCH-CONTROL.md`. Work top to bottom; every step ends with a receipt (URL/SHA) noted in the
-epic doc's append zone. Do not dispatch anything through the Zenod/Epaminon pipeline — that pipeline is
-part of what's being stabilized; you are the worker.
+For a local Claude Code worker with repo + gh + VPS access. Fable, updated 2026-07-04 (post-A1
+verification, post-WhatsApp restore). Context: `docs/CANONICAL-TESTS.md` · `docs/I8-TEST-RESULTS.md` ·
+`docs/EPIC-1-SYSTEM-STABILITY.md` · `docs/LAUNCH-CONTROL.md`. Work top to bottom; every step ends with a
+receipt (URL/SHA) in the epic doc's append zone. Nothing dispatches through the Zenod/Epaminon pipeline
+until Epic 1 is closed — you are the worker.
 
-## STEP 0 · Reconcile three in-flight runs (dispatched ~23:11–23:20, status unknown, notifications dark)
+## ✅ Done (receipts)
 
-| Run | Mission |
-|---|---|
-| `ephemeral-1783121504095` | A1 safety hotfix (ask_outbound / C-22) |
-| `ephemeral-1783121852777` | B1 lane foundation (schema/loader/scheduler, disabled replier.yml) |
-| `ephemeral-1783122025508` | Docs: ITERATION 9 section into the epic doc |
+- **A1 safety gate** merged (`450b456`) and VERIFIED: 10/10 draft-only requests → `toolEvents:0`, zero
+  premature sends (old bug ~50%); approve → real URL; R2 "post now" → real URL. Verdict flipped in
+  `docs/I8-TEST-RESULTS.md`. C-22 chat-lane acceptance met.
+- **WhatsApp notifications RESTORED** (Jordi, Dockerfile fix — channel confirmed working). C-08/C-09/
+  C-12/C-14 are testable again.
+- I8 engine live: durable executor #509 · typed writes #510 (typed `backlog_*` MCP tools live, silent-ack
+  lane retired) · budget kill #511 · auto-merge #495.
+- No tweet housekeeping required (Jordi: keep everything posted).
 
-`gh pr list -R zenod-ai/zenod --state open` (and recent branches). If a run produced a sane PR → adopt
-it: review, merge on green, receipt. If nothing exists ~60 min after its start → treat as dead, do that
-step yourself below, and note the silent death in the epic doc (it's more C-08/C-09 evidence).
+### Part 1 receipts (worker, 2026-07-04 — pen held until Part 1 done)
+- **STEP 1 · orphans reconciled:** `ephemeral-1783121852777` (B1) and `-1783122025508` (docs) both DEAD — no PRs/branches produced (same silent-death signature). Work falls to Part 2.
+- **STEP 2 · deployed SHA `8c44d89`** (runner image built 02:23:08+02:00 — the Dockerfile `COPY scripts/lib/` fix). ⚠️ #403: the runner's *volume* checkout is stale at `e89eb17` — harmless for the monitor (runs the baked image copy) but flag it for the board (a C-06/C-08 receipt could trip on it).
+- **STEP 3 · notifications RESTORED (root-caused, not re-paired):** #509 added `import "./lib/durable.mjs"` but `Dockerfile.agent-runner` never copied `scripts/lib/` → monitor crash-looped `ERR_MODULE_NOT_FOUND` every 5s → dead runner → no `/api/notify`. Fixed in `8c44d89`; verified on host + WhatsApp (start+terminal pings land, with ticket links).
+- **STEP 3 · C-21 durable resume — PASS (live-fire):** dispatched a multi-step run, restarted `zenod-agent-runner` mid-flight. Journal: `{launch attempt:1}` → `{resume from:"server-restart" attempt:2}` → `{launch attempt:2}`; monitor log: *"pid 4030 gone, no terminal outcome; resuming (attempt 2/3) — durable resume"* (vs the OLD orphans in the same log: *"pid gone with no outcome — reporting"*). Worker confirmed: *"resumed cleanly from the existing STEP_LOG.md … without repeating work or duplicating side effects."* (`ephemeral-1783125188617-113493ee`.)
+  - Minor: that run was mislabeled "failed: nothing verifiable" — a **C-07c** detector phrasing gap ("no deliverable/PR expected" didn't trip `declaresNoDeliverableExpected`). Board radar; not a resume failure.
+- **STEP 4 · budget override landed as the B1 mechanism** (per-run `budget {minutes,turns}` from task context → env fallback; `parseRunBudget` in backlog-monitor.mjs). C-17 live-fire result appended after deploy.
 
-## STEP 1 · A1 — the safety hotfix (THE gate; nothing ships before this)
+## PART 1 — Epic 1 to 100/100. No parked rows; everything scored for real.
 
-Bug (see `docs/I8-TEST-RESULTS.md`): `ask_outbound` intermittently POSTS a real tweet on a draft-only
-request, then renders "Draft ready (not posted)". Tweet `…186792568668630` went out unauthorized.
-Root cause: iteration-6 reply-gate covers `post_tweet`/`approve_send` but not `ask_outbound`.
+**1 · Reconcile two orphaned runs** (no heartbeat since dispatch): `ephemeral-1783121852777` (B1 lane
+foundation) · `ephemeral-1783122025508` (ITERATION 9 doc section). `gh pr list -R zenod-ai/zenod` +
+recent branches → adopt sane PRs (review, merge on green); otherwise mark dead in the epic doc and the
+work falls to Part 2. Neither blocks the board.
 
-Fix: (a) audit outbound: why can a draft-intent request execute a send at all — close it structurally
-(draft turns produce ZERO outbound mutations); (b) pull `ask_outbound` (and any outbound-capable lane)
-under the reply-gate — delivered text is always the tool receipt; (c) runtime assertion: if a send
-somehow occurs, rendering "not posted" must be impossible — render the real receipt + operator alert;
-(d) add **C-22** to `docs/CANONICAL-TESTS.md`:
-> **C-22 · Drafts never send.** A draft-only request (any natural phrasing) produces zero outbound
-> mutations; the draft renders with the approve affordance. Five repetitions, zero sends. One violation
-> = run-wide FAIL, same severity as C-15.
+**2 · Deploy** latest `main` (Dokploy, clean fast-forward + rebuild). Record the deployed SHA — a board
+run without a SHA doesn't count (canonical rule 2).
 
-Acceptance: 5× draft requests via mocks/test seams, zero mutations. NO real tweets while testing.
+**3 · C-21 live-fire — runs survive redeploys.** Start a deliberately long ephemeral run (a multi-step
+dummy mission). Mid-run: restart/redeploy the runner container. PASS: the run RESUMES from its durable
+step log and completes with correct receipts, no duplicated side effects, transcript shows the replay
+point. (#509 is the code under test.)
 
-## STEP 2 · The ITERATION 9 section in the epic doc
+**4 · C-17 live-fire — budget kill.** Don't wait 60 minutes: dispatch a non-terminating dummy mission
+with a small budget override (e.g. 3 min / 10 turns). PASS: terminated at the ceiling with the honest
+"budget exceeded, nothing verifiable" message + transcript link, notified as a failure. (#511 under test.)
 
-If run 3's PR landed, verify and skip. Otherwise: copy the "ITERATION 9" section verbatim from the
-context blob of `ephemeral-1783122025508` (visible via execution_status), or reconstruct: Workstream A
-(A1 hotfix gate · A2 C-21/C-17 PARKED "code landed, verification parked" · A3 one-ask-one-ticket small ·
-A4 full board run) + Workstream B (B1 lanes · B2 raise_event/Phylax rules · B3 graduation · B4 first
-live lane, HARD-GATED on A4 green) + exit criterion (A4 green + B4 running 3 unattended days).
+**5 · THE BOARD — full C-01…C-22 live-fire** against the deployed SHA, per `docs/CANONICAL-TESTS.md`
+rules: append-only scoreboard row, receipt per test, every FAIL maps to exactly one ticket, housekeeping
+section listing artifacts (expect ~2 real tweets, 1 real issue, 2 executions). C-16 evidence: zenod#487.
+C-17/C-21: fresh evidence from steps 3–4. C-22: re-verify with 2 fresh drafts (`toolEvents:0`).
 
-## STEP 3 · Restore WhatsApp notifications (required BEFORE the board run)
+**6 · Close or loop.** Reds → one fix batch (from the mapped tickets) → redeploy → re-run the board.
+**All 22 green = EPIC 1 CLOSED, 100/100.** Update `docs/LAUNCH-CONTROL.md`: Epic 1 → ✅ CLOSED in the
+board table; history entry with SHA + scoreboard link. The ×2 confirmation rides the next routine deploy.
 
-Notifications went dark tonight (Jordi receives nothing since ~the I8 deploys). Diagnose the Phylax /
-WhatsApp gateway outbound path — most likely the socket/session died across the evening's repeated
-redeploys. Send a test ping to Jordi; check gateway session state + logs; restore. The board depends on
-this channel (C-08, C-09, C-12, C-14 all read it).
+## PART 2 — Workstream B: the first lane alive (STRICTLY after Part 1 is green)
 
-## STEP 4 · Deploy
+**7 · Land B1 — lane foundation.** If step 1 adopted its PR, verify against spec; else build: `lanes/`
+dir + YAML schema (`enabled`, `trigger` cron, `mission`, `model`, `toolbelt` explicit allowlist,
+`budget {minutes,turns,usd}`, `throttle`, `escalation {ring_council[], notify_direct[]}`), loader with
+validation, deterministic scheduler firing enabled lanes and spawning workers through the durable
+executor with EXACTLY the lane's toolbelt/budget — enforced at the gateway, not by politeness. Example
+`lanes/replier.yml` committed `enabled: false`. Tests: schema validation, scheduler firing, toolbelt
+scoping, budget passthrough. (The per-run budget mechanism — `parseRunBudget` — landed early in STEP 4.)
 
-Merge everything green (including any adopted PRs from step 0). Deploy latest `main` to production
-(Dokploy; verify clean fast-forward checkout + rebuild per `docs/` runbooks). Record the deployed SHA —
-a board run without a build SHA doesn't count (rule 2 of the canonical doc).
+**8 · B2 — escalation wiring:** lane workers → existing `raise_event` (ring the Council) + Phylax
+`notify_direct` rules read from the lane config.
 
-## STEP 5 · THE BOARD — full canonical run C-01…C-22
+**9 · B3 — graduation (minimal):** Council-callable `lane_create`/`lane_edit` that writes + commits a
+lane file and returns the SHA receipt. "Make this a daily thing" = one tool call.
 
-Against the deployed SHA, per the rules in `docs/CANONICAL-TESTS.md` (append-only scoreboard, receipts
-per row, every FAIL maps to exactly one ticket, housekeeping section listing artifacts — expect ~2 real
-tweets + 1 real issue + 2 executions). Mark **C-17 and C-21 as "code landed (#511/#509), deliberate
-verification PARKED (Jordi 2026-07-03)"** — not green, not red. C-16 already has evidence on zenod#487.
+**10 · B4 — go live, customer #0.** Add `lanes/poster.yml` (memory-fed posting, throttled) alongside
+replier. **Jordi personally flips `enabled: true` on ONE lane** — the enable-time Council decision from
+the canon. Then a 3-day unattended soak: zero unauthorized sends, every action receipted, daily digest
+via Phylax. Any unauthorized send = lane off, ticket filed, soak restarts.
 
-## STEP 6 · Close or loop
-
-Reds → one fix batch (tickets from step 5) → redeploy → re-run the board. **Green (with the two parked
-rows) = EPIC 1 CLOSED.** Update `docs/LAUNCH-CONTROL.md`: board table (Epic 1 → ✅ CLOSED), history
-entry with the SHA and scoreboard link. The ×2 confirmation rides the next routine deploy.
-
-— After this document is executed, the only remaining I9 work is Workstream B (lanes), which is NOT on
-the Epic-1 critical path and is gated on this document finishing. Fable audits receipts; nothing else
-gets dispatched through the pipeline until Epic 1 is closed.
+**Exit: board 22/22 green + one lane through a 3-day clean soak = ITERATION 9 COMPLETE.** Epic 1 closed
+at full strength, the architecture alive, and every hour after goes to Epic 2 — the hosted product and
+the first paying customer.
