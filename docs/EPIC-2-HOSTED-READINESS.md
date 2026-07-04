@@ -135,7 +135,13 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
   live in the macOS Keychain (`alpha9-dokploy-api-key` / `alpha9-openrouter-provisioning-key`, acct
   `jordi`); documented in `zenod-ai/cloud` PROVISIONING.md (I2-7). Verified in use: `project.all` → HTTP
   200 (6 projects); `openrouter-key.mjs list` → keys. Store proven.
-- **B-7 · 🔴 OPEN — VPS incident: tenant stacks DOWN, deploys stuck (likely disk-full, cf. #570).**
+- **B-7 · ⚠️ CORRECTED 2026-07-04 (worker, via SSH) — NOT disk-full.** Root `/` = 22% (57G free); Docker
+  data-root is a separate 98G volume `/mnt/HC_Volume_106231047` at **59% (39G free)** — healthy. The 404s
+  were **slow Dokploy deploys** (tw1 sat `idle` then came up `200` on its own) plus testco's console
+  container separately stopped. No disk emergency. Reclaimed hygiene anyway: `docker builder prune` cut
+  Build Cache **13.25GB→572MB** (~15GB). RESIDUAL (real): slow/stuck deploys need a nudge, and we found the
+  outage from a 404 not a ping → **H-10 gets a Phylax-style disk/health alert on the ops box.** Original
+  (disk-full) hypothesis below was WRONG:
   `z-testco` console → **404** (responded earlier this session), `z-tw1` deploy stuck **idle / 0
   deployments** (compose.deploy → 200 but never runs), while `cloud.zenod.dev/healthz` (tiny single
   container) → 200. Pattern = VPS-level resource exhaustion; disk-full is the prime suspect given the
@@ -799,3 +805,15 @@ testco re-provision + fresh password. `tenant-tw1` (compose `VomNyTjtsW551862bNm
 retry once the VPS is healthy; its $10 key (`zenod-tenant:tw1`) is minted but idle.
 
 **Stopped per protocol** (infra failure → file + stop; don't churn during an incident). No secrets in doc.
+
+### 2026-07-04 (later 17) · [worker] — B-6 closed · I2-2 zero-touch model proven (chat gated by Vault) · I2-8 measured · B-7 corrected
+
+**B-6 ✅ CLOSED.** Keychain keys verified in use: Dokploy `project.all`→200 (6 projects); `openrouter-key.mjs list`→keys. I2-7 store documented (cloud PROVISIONING.md).
+
+**I2-2 · zero-touch MODEL setup PROVEN; chat gated by Vault (finding).** `provision-tenant.mjs --name tw1 --tier starter`: minted `zenod-tenant:tw1`, gateway confirms **$10 cap** (`tw1 $0.00/$10` vs `testco $50`). Console container env carries the injection — `ZENOD_PROVIDER=openrouter` + `OPENROUTER_API_KEY=<present>` (docker inspect, value withheld), no manual Model step; tenant compose maps both (§8-safe). **FINDING (for I2-1/planner):** on the current `:latest` image the onboarding wizard **gates Chat behind the Vault (GitHub) step** — tw1 won't advance past Vault, so a tenant can't reach chat with the LLM alone. testco reached chat earlier only because it ran an *older* image. **True zero-touch therefore needs the platform vault auto-attached at provision too** (mirror the LLM injection), or the wizard must allow chat pre-vault. Chat-responds itself was proven on testco (later 11); the new gap is the Vault gate on `:latest`.
+
+**I2-8 · disk measured (real, post-reclaim).** Docker data-root = separate 98G volume, **39G free (59%)**; root `/` 57G free. **One tenant at provision ≈ 2.4 MB** (6 sqlite volumes ×~396K) + **0 marginal image** (shared 14.5GB GHCR base, already pulled). **Teardown reclaims fully** — `compose.delete deleteVolumes:true` took tw1 from 6 volumes→0, containers→0 (verified). Eaters were BUILD-time not per-tenant: Build Cache 13.25GB (reclaimed→572MB) + stale images ~2GB. Active growth: heaviest volumes (tenant-zero, an old heavily-tested console) reached ~2GB — needs a week of telemetry for a real MB/week; #568 log caps bound the runaway path. **Headroom: disk fits thousands of tenants (39G ÷ 2.4MB); the binding constraint is RAM (whisper), not provision-disk.** Recommend a periodic `docker builder prune` (cache regrew 0→13GB in days).
+
+**B-7 corrected** (register): not disk-full; slow deploys + a stopped testco console. Reclaim done.
+
+**Teardown:** tw1 fully removed (key disabled `1406069a…`, compose `VomNyTjtsW551862bNm95` deleted, 6 volumes reclaimed). **testco re-provision DEFERRED:** its console is down (old container gone; a ~2GB data volume lingers — left per "never prune tenant volumes"). Re-provisioning on `:latest` now yields a **Vault-gated** tenant that can't reach chat, so it should wait on the I2-2/I2-1 vault-auto-attach fix. Flagged for planner.
