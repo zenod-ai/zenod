@@ -612,9 +612,9 @@ provisioning.** Tickets (planner; acceptance + test criteria):
 | ID | Ticket | State | Acceptance criteria | Test criteria (tester) |
 |----|--------|-------|---------------------|------------------------|
 | I2-1 | H-3 phase 1: GitHub connect flow (vault + issues) — the Enable-Zenod path made self-serve | ⚪ ready | A non-technical user completes Team→Enable Zenod→GitHub OAuth→vault pick unaided in <20 min; secrets stored per-tenant, never in the vault | Fresh tenant (or reset testco): tester follows the UI only, no docs, times it; Zenod shows "on"; a memory store→ask round-trip works against the connected vault |
-| I2-2 | Zero-touch model setup: provisioner mints the tier-capped gateway key and injects it at provision time (maps `OPENROUTER_API_KEY` into `docker-compose.tenant.yml`, §8-safe) | ✅ worker-verified (later 14) | Fresh provision → council responds with NO manual key entry; key cap matches the paid tier ($10/$50/$350) | Provision a throwaway tenant from a queued task; chat responds; gateway `list` shows the tenant key with the tier's cap; teardown |
-| I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | ✅ worker-verified (later 15) | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
-| I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | ✅ worker-verified (later 14) | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
+| I2-2 | Zero-touch model setup: provisioner mints the tier-capped gateway key and injects it at provision time (maps `OPENROUTER_API_KEY` into `docker-compose.tenant.yml`, §8-safe) | 🟡 worker-reported — awaiting tester | Fresh provision → council responds with NO manual key entry; key cap matches the paid tier ($10/$50/$350) | Provision a throwaway tenant from a queued task; chat responds; gateway `list` shows the tenant key with the tier's cap; teardown |
+| I2-3 | Ops: token-gated provisioning-queue tail endpoint (tester's request) | 🟡 worker-reported — awaiting tester | Tester can read the last N queue entries with a token, no container access | Fresh checkout → entry visible via the endpoint with tier+email |
+| I2-4 | B-5 hygiene: rotate testco admin password; secrets-in-receipts audit | 🟡 worker-reported — awaiting tester | Password changed; audit of doc + merged PRs finds no live secrets; protocol addendum in place | Old password rejected at login; grep audit receipt |
 | I2-5 | Live-mode prep checklist (gated on Jordi: counsel pass on H-11 drafts, live restricted keys, caps→live prices) | 🔴 gated on Jordi | Checklist in doc with owner per item; live cutover NOT executed without Jordi's explicit go | Checklist review only |
 | I2-6 | I1-5 carried: R-1 (MeterProvider seam) handed to stability track | 🔴 with Jordi (3rd carry) | Stability-track ticket link in this doc | Link resolves |
 
@@ -684,3 +684,26 @@ receipts; given to Jordi/tester in chat). (Deploy note: the webhook compose's cl
 
 **Iteration 2 status after this turn:** I2-2 ✅ · I2-3 ✅ · I2-4 ✅ (worker-verified) · I2-1 scoped (next) ·
 I2-5 gated on Jordi · I2-6 (R-1 carry) still with Jordi.
+
+### 2026-07-04 (later 16) · [planner] — I2 mid-iteration review: I2-2/3/4 accepted pending tester · I2-1 plan approved · R-3 minted · protocol amendment
+
+**Review.** I2-2 (zero-touch model: compose hooks #558, tier-capped mint+inject, Dokploy env-persist bug
+found+fixed), I2-3 (token-gated `/queue/tail`, closes the tester's Iteration-1 caveat), I2-4 (secrets
+scrub, webhook secret rotated, password rotated via re-provision) — all worker-reported with receipts;
+**states go to 🟡 awaiting tester; the tester run below grants ✅.** I2-1 (H-3) scoping plan (later 15)
+**approved**: spike the three unknowns (GitHub App callback allowlist for `z-*.zenod.dev`, per-tenant vs
+shared install, per-tenant credential storage) in a dedicated session BEFORE building.
+
+**R-3 minted (engine requirement, add to R-1's handoff):** the console has NO change-password endpoint —
+rotation required a full re-provision. Fine for staging, unacceptable for customers. Requirement: admin
+password change (and reset story) in the console, §8-safe. Jordi carries R-1 + R-3 together.
+
+**Protocol amendment (binding):** a worker MAY move a state cell — but only to
+"🟡 worker-reported — awaiting tester". ✅ is granted exclusively by the planner sweep over tester
+verdicts. (Landing worker: set I2-2 and I2-4 cells to 🟡 accordingly; I2-3 to 🟡 when its receipt lands.)
+
+**Dispatched: TESTER** — verify I2-2 (throwaway tenant per test criteria: provision from a queued task,
+zero-touch chat responds, gateway cap matches tier, teardown), I2-3 (401 without/with-wrong token; real
+entries with tier+email using the token), I2-4 (OLD leaked password → 401; no live secrets in doc via
+grep audit), plus regression: z-testco chat still answers a fresh message. Iteration 2 then continues
+with the I2-1 spike session.
