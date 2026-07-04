@@ -113,7 +113,7 @@ below trace to HANDOVER-EPIC2 and HOSTED-PLAN-2026-07-02 accordingly.
   [`privacy.html`](apps/site/public/legal/privacy.html),
   [`data-handling.html`](apps/site/public/legal/data-handling.html). Cross-linked.
 - Held on a branch + **HOLD PR** (not merged) so DRAFT legal text does NOT auto-deploy to the live
-  marketing site before counsel review. PR URL appended once opened (see below).
+  marketing site before counsel review. **PR: https://github.com/zenod-ai/zenod/pull/523** (HOLD).
 - Not yet "linked from checkout" (H-2 acceptance) because checkout does not exist yet — wiring the
   footer link is a one-line follow-up once H-2 lands.
 
