@@ -232,3 +232,19 @@ Cloudflare WAF in the path. Jordi completed a real test-card checkout (`4242…`
 - Pricing page on `apps/site` (the customer-facing "buy" button) + link the H-11 legal pages (PR #523).
 - Swap the **$50 placeholder** price for the decided D-5 amount.
 - Rotate the `sk_test_` pasted in chat (use a restricted key).
+
+### 2026-07-04 (later 4) · Worker — H-2 front-end: pricing page (PR, HOLD)
+
+Built the customer-facing piece so H-2 is a stranger-usable flow end to end.
+- Added `GET /buy` to the control-plane webhook service (303 → Stripe Checkout; no CORS/JS so a static
+  site can link to it). Verified live: `https://cloud.zenod.dev/buy` → HTTP 303 → checkout.stripe.com.
+- `apps/site`: "Hosted" pricing section (`#pricing`, prepaid credit bundle, $50 PLACEHOLDER) with a
+  "Get started" button → `/buy`, nav "Pricing" link, footer Terms/Privacy/Data links. Bundles the DRAFT
+  legal pages (also #523). Build passes; bundle contains the content. **PR #527 (HOLD** — wired to TEST
+  Stripe + placeholder price; don't merge to live zenod.dev until real price + live keys + fulfillment).
+- ⚠️ No live visual screenshot this session: preview harness errored (`EPERM: uv_cwd`) + Chrome extension
+  disconnected. Functionally verified (build + /buy 303 + legal 200); screenshot pass pending tooling.
+
+**H-2 status:** money path DONE + acceptance-verified (later 3); front-end built and PR'd (HOLD).
+Pre-go-live checklist: real D-5 price · live Stripe keys · rotate the pasted `sk_test_` · provisioning
+fulfillment (H-1) · merge #523 (legal) + #527 (pricing).
