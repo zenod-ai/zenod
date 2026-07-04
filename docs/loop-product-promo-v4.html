@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Herald — Promo V4</title>
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#14171c; --ink:#e8e6e1; --dim:#a5a19a;
+    --accent:#d4a24e; --accent2:#6ea8a0; --line:#2a2e35; --bad:#c96a5a; --ok:#7fb069;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden}
+  .deck{height:100vh;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    justify-content:center;padding:4.5vh 6.5vw;overflow-y:auto}
+  .slide.active{display:flex}
+  .kicker{font-family:ui-monospace,Menlo,monospace;font-size:.9rem;
+    letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin-bottom:1.1rem}
+  h1{font-size:clamp(2.3rem,5.4vw,4rem);font-weight:400;line-height:1.15;margin-bottom:1.3rem}
+  h2{font-size:clamp(1.8rem,4vw,2.8rem);font-weight:400;line-height:1.16;margin-bottom:1rem}
+  h1 em,h2 em,p em{font-style:italic;color:var(--accent)}
+  p.lede{font-size:clamp(1.15rem,1.9vw,1.45rem);color:var(--dim);line-height:1.55;max-width:60ch}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:1.8rem;margin-top:1rem;align-items:stretch}
+  .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.4rem;margin-top:1rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.4rem 1.6rem}
+  .card h3{font-size:1.25rem;color:var(--accent);font-weight:400;margin-bottom:.55rem}
+  .card p{font-size:1.08rem;color:var(--dim);line-height:1.5}
+  .card.teal h3{color:var(--accent2)}
+  .card.green h3{color:var(--ok)}
+  .card.bad{border-color:#4a3230}
+  .card.bad h3{color:var(--bad)}
+  .pill{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.82rem;
+    letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);
+    border-radius:999px;padding:.3rem .85rem;color:var(--accent2);margin:0 .35rem .45rem 0}
+  blockquote{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;
+    font-size:clamp(1.3rem,2.4vw,1.75rem);font-style:italic;line-height:1.45;margin:1.1rem 0;max-width:56ch}
+  .nav{position:fixed;bottom:1.2rem;right:1.6rem;font-family:ui-monospace,Menlo,monospace;
+    font-size:.85rem;color:var(--dim);z-index:10}
+  .nav button{background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;
+    padding:.35rem .8rem;cursor:pointer;font-family:inherit;margin-left:.4rem;font-size:.85rem}
+  .nav button:hover{color:var(--ink);border-color:var(--dim)}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);z-index:10;transition:width .25s}
+  .diagram{width:100%;max-width:1000px;margin:.4rem auto 0}
+  .diagram svg{width:100%;height:auto;display:block}
+  svg text{font-family:Georgia,serif;fill:var(--ink)}
+  svg .mono{font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em}
+  svg .dim{fill:var(--dim)} svg .acc{fill:var(--accent)} svg .acc2{fill:var(--accent2)} svg .okc{fill:var(--ok)}
+  svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+  svg .boxacc{fill:var(--panel);stroke:var(--accent);stroke-width:1.5}
+  svg .boxteal{fill:var(--panel);stroke:var(--accent2);stroke-width:1.5}
+  svg .boxok{fill:var(--panel);stroke:var(--ok);stroke-width:1.5}
+  svg .wire{stroke:var(--dim);stroke-width:1.5;fill:none}
+  svg .wireacc{stroke:var(--accent);stroke-width:2.2;fill:none}
+  svg .wireteal{stroke:var(--accent2);stroke-width:2.2;fill:none}
+  .sketchnote{position:fixed;top:.9rem;left:1.4rem;font-family:ui-monospace,Menlo,monospace;
+    font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);z-index:10;
+    border:1px dashed var(--line);border-radius:6px;padding:.3rem .7rem}
+  .chat{max-width:760px;margin:.5rem 0 0}
+  .msg{display:flex;flex-direction:column;margin:.5rem 0;max-width:90%}
+  .msg .who{font-family:ui-monospace,Menlo,monospace;font-size:.66rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:.22rem}
+  .msg .bubble{border:1px solid var(--line);border-radius:12px;padding:.7rem 1rem;
+    font-size:clamp(.98rem,1.55vw,1.14rem);line-height:1.5;color:var(--ink);background:var(--panel)}
+  .msg.you{align-self:flex-end;align-items:flex-end}
+  .msg.you .bubble{border-color:var(--accent2)}
+  .msg.her .bubble{border-color:var(--accent)}
+  .msg .bubble i{color:var(--dim)}
+  .msg .bubble .att{font-family:ui-monospace,Menlo,monospace;font-size:.84rem;color:var(--accent2)}
+  .capnote{font-size:clamp(1rem,1.65vw,1.25rem);color:var(--dim);font-style:italic;margin-top:.9rem;max-width:62ch}
+  .capnote b{color:var(--accent);font-weight:400;font-style:normal}
+  .brief{background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:1.2rem 1.4rem;
+    font-size:clamp(.95rem,1.5vw,1.1rem);line-height:1.6}
+  .brief .bh{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:.7rem;display:flex;justify-content:space-between}
+  .brief .bh .okt{color:var(--ok)}
+  .brief .row{padding:.4rem 0;border-top:1px solid var(--line);color:var(--dim)}
+  .brief .row b{color:var(--ink);font-weight:400}
+  .brief .row.goal b{color:var(--accent)}
+  .props{display:flex;flex-wrap:wrap;gap:.5rem;margin:.8rem 0 .2rem}
+  .prop{font-family:ui-monospace,Menlo,monospace;font-size:.95rem;border:1px solid var(--line);
+    border-radius:8px;padding:.45rem .7rem;color:var(--dim)}
+  .prop.ok{border-color:var(--ok);color:var(--ok)}
+  .prop.ok::after{content:" ✓"}
+  @media(max-width:760px){.cols,.three{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="sketchnote">promo v4 · working name · numbers illustrative · nothing publishes before the gates</div>
+<div class="progress" id="bar"></div>
+<div class="deck" id="deck">
+
+<!-- 1 · HERO -->
+<section class="slide active">
+  <div class="kicker">herald · your project's public voice · runs nonstop in the cloud</div>
+  <h1>He posts every day, learns from<br>every reply — and makes the<br>next one <em>better</em>.</h1>
+  <p class="lede">And all the knowledge he builds doing it is yours.
+  Meet Herald: one guy for your project's public presence. You talk to him like a person.</p>
+</section>
+
+<!-- 2 · PROBLEM -->
+<section class="slide">
+  <div class="kicker">the job nobody holds</div>
+  <h2>The rhythm is the hard part.</h2>
+  <p class="lede">A presence only compounds if it's daily, on message, and answered.
+  That's a discipline — and you're busy building the actual thing.</p>
+  <blockquote>What if the guy holding the rhythm wasn't you?</blockquote>
+</section>
+
+<!-- 3 · THE THREE THINGS -->
+<section class="slide">
+  <div class="kicker">what herald actually is</div>
+  <h2>A memory. A goal. <em>A practice.</em></h2>
+  <div class="three">
+    <div class="card teal">
+      <h3>The memory</h3>
+      <p>Everything the project knows — what you feed him, what he learns. The facts. It grows daily.</p>
+    </div>
+    <div class="card green">
+      <h3>The goal</h3>
+      <p>What winning means, in numbers you pick. The target everything steers toward.</p>
+    </div>
+    <div class="card">
+      <h3>The practice</h3>
+      <p>The sequence he runs on the memory, every day, to close the gap to the goal.</p>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:1.2rem">You stop giving tasks. You give him a goal and
+  the practices to reach it — <em>and he runs them without being asked.</em></p>
+</section>
+
+<!-- 4 · THE MEMORY, visual -->
+<section class="slide">
+  <div class="kicker">part one</div>
+  <h2>The memory: <em>alive, and yours.</em></h2>
+  <div class="diagram"><svg viewBox="0 0 1000 300" xmlns="http://www.w3.org/2000/svg">
+    <!-- inputs -->
+    <text x="95" y="30" text-anchor="middle" class="mono acc2" font-size="13">YOU FEED IT</text>
+    <rect x="20" y="45" width="150" height="34" rx="8" class="boxteal"/><text x="95" y="67" text-anchor="middle" font-size="14">📄 slide decks</text>
+    <rect x="20" y="87" width="150" height="34" rx="8" class="boxteal"/><text x="95" y="109" text-anchor="middle" font-size="14">🎙 voice notes</text>
+    <rect x="20" y="129" width="150" height="34" rx="8" class="boxteal"/><text x="95" y="151" text-anchor="middle" font-size="14">📷 screenshots</text>
+    <rect x="20" y="171" width="150" height="34" rx="8" class="boxteal"/><text x="95" y="193" text-anchor="middle" font-size="14">💡 stray ideas</text>
+    <rect x="20" y="213" width="150" height="34" rx="8" class="boxteal"/><text x="95" y="235" text-anchor="middle" font-size="14">📎 docs · links</text>
+    <path class="wireteal" d="M175 140 L255 140" marker-end="url(#t3)"/>
+    <!-- ingest / digest -->
+    <rect x="262" y="95" width="170" height="90" rx="10" class="box"/>
+    <text x="347" y="128" text-anchor="middle" font-size="16">He ingests</text>
+    <text x="347" y="150" text-anchor="middle" class="dim" font-size="13">nothing is lost —</text>
+    <text x="347" y="168" text-anchor="middle" class="dim" font-size="13">kept as evidence</text>
+    <path class="wire" d="M437 140 L512 140" marker-end="url(#d3)"/>
+    <rect x="519" y="95" width="170" height="90" rx="10" class="box"/>
+    <text x="604" y="128" text-anchor="middle" font-size="16">He digests</text>
+    <text x="604" y="150" text-anchor="middle" class="dim" font-size="13">meaning distilled,</text>
+    <text x="604" y="168" text-anchor="middle" class="dim" font-size="13">linked to its evidence</text>
+    <path class="wire" d="M694 140 L769 140" marker-end="url(#d3)"/>
+    <!-- the repo, two layers -->
+    <rect x="776" y="60" width="204" height="160" rx="12" class="boxacc"/>
+    <text x="878" y="88" text-anchor="middle" class="mono acc" font-size="12">GITHUB.COM/YOU/MEMORY</text>
+    <rect x="796" y="102" width="164" height="44" rx="7" class="boxok"/>
+    <text x="878" y="129" text-anchor="middle" font-size="14">meaning</text>
+    <rect x="796" y="154" width="164" height="44" rx="7" class="box"/>
+    <text x="878" y="181" text-anchor="middle" class="dim" font-size="14">evidence</text>
+    <text x="878" y="243" text-anchor="middle" class="dim" font-size="13" font-style="italic">plain text · you control it</text>
+    <text x="878" y="262" text-anchor="middle" class="dim" font-size="13" font-style="italic">any tool can mine it</text>
+    <defs>
+      <marker id="t3" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#6ea8a0"/></marker>
+      <marker id="d3" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#a5a19a"/></marker>
+    </defs>
+  </svg></div>
+  <p class="capnote"><b>You're not prompting — you're enriching.</b> Anything, anytime, unstructured.
+  Two layers forever: what was said, and what it means.</p>
+</section>
+
+<!-- 5 · THE WHEEL -->
+<section class="slide">
+  <div class="kicker">part two · the practice</div>
+  <h2>A wheel that turns <em>toward the goal.</em></h2>
+  <div class="diagram"><svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg">
+    <!-- center: goal -->
+    <circle cx="500" cy="240" r="74" class="boxok"/>
+    <text x="500" y="226" text-anchor="middle" class="mono okc" font-size="13">THE GOAL</text>
+    <text x="500" y="248" text-anchor="middle" class="dim" font-size="12">likes · replies · views</text>
+    <text x="500" y="266" text-anchor="middle" class="dim" font-size="12">signups · your numbers</text>
+    <!-- ring: knowledge -->
+    <circle cx="500" cy="240" r="120" fill="none" stroke="#6ea8a0" stroke-width="1.4" stroke-dasharray="2 5"/>
+    <text x="500" y="132" text-anchor="middle" class="mono acc2" font-size="12">THE KNOWLEDGE — everything he's learned so far</text>
+    <!-- orbit stations -->
+    <circle cx="500" cy="240" r="192" fill="none" stroke="#2a2e35" stroke-width="1"/>
+    <rect x="418" y="8" width="164" height="58" rx="10" class="boxacc"/>
+    <text x="500" y="32" text-anchor="middle" font-size="15">Hypothesis</text>
+    <text x="500" y="52" text-anchor="middle" class="dim" font-size="12">what should move the numbers?</text>
+    <rect x="736" y="211" width="150" height="58" rx="10" class="box"/>
+    <text x="811" y="235" text-anchor="middle" font-size="15">Experiment</text>
+    <text x="811" y="255" text-anchor="middle" class="dim" font-size="12">he posts it</text>
+    <rect x="418" y="414" width="164" height="58" rx="10" class="box"/>
+    <text x="500" y="438" text-anchor="middle" font-size="15">Results</text>
+    <text x="500" y="458" text-anchor="middle" class="dim" font-size="12">Δ measured vs the goal</text>
+    <rect x="112" y="211" width="152" height="58" rx="10" class="box"/>
+    <text x="188" y="235" text-anchor="middle" font-size="15">Learnings</text>
+    <text x="188" y="255" text-anchor="middle" class="dim" font-size="12">filed into knowledge</text>
+    <!-- flow arcs clockwise -->
+    <path class="wireteal" d="M590 62 A192 192 0 0 1 686 148" marker-end="url(#t4)"/>
+    <path class="wireteal" d="M686 332 A192 192 0 0 1 590 418" marker-end="url(#t4)"/>
+    <path class="wireteal" d="M410 418 A192 192 0 0 1 314 332" marker-end="url(#t4)"/>
+    <path class="wireacc" d="M314 148 A192 192 0 0 1 410 62" marker-end="url(#a4)"/>
+    <text x="268" y="92" text-anchor="end" class="acc" font-size="14" font-style="italic">smarter</text>
+    <text x="268" y="111" text-anchor="end" class="acc" font-size="14" font-style="italic">hypothesis</text>
+    <defs>
+      <marker id="t4" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#6ea8a0"/></marker>
+      <marker id="a4" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#d4a24e"/></marker>
+    </defs>
+  </svg></div>
+  <p class="capnote"><b>Self-adapting, by construction.</b> Every lap measures the gap between
+  target and result. What moves your numbers gets more of; what doesn't gets dropped.</p>
+</section>
+
+<!-- 6 · DAY ZERO — the briefing, obvious -->
+<section class="slide">
+  <div class="kicker">day zero</div>
+  <h2>First, you two agree on <em>the briefing.</em></h2>
+  <div class="cols" style="grid-template-columns:2fr 3fr">
+    <div class="chat">
+      <div class="msg you"><div class="who">you</div><div class="bubble">
+        <span class="att">📎 3 decks · 🎙 voice note 31:47</span></div></div>
+      <div class="msg her"><div class="who">herald</div><div class="bubble">
+        Here's the briefing. One question — developers, or founders?</div></div>
+      <div class="msg you"><div class="who">you</div><div class="bubble">Founders. ✓ Approved.</div></div>
+    </div>
+    <div class="brief">
+      <div class="bh"><span>THE BRIEFING · BASALT (self-hosted analytics) · v2</span><span class="okt">✓ APPROVED</span></div>
+      <div class="row"><b>Where we are:</b> pre-launch · 40 beta users · no public voice yet</div>
+      <div class="row goal"><b>The goal:</b> 500 waitlist signups by Oct 31</div>
+      <div class="row"><b>Audience:</b> indie founders & privacy-minded devs</div>
+      <div class="row"><b>The angle:</b> <i style="color:var(--accent)">"your metrics shouldn't live on someone else's servers"</i> — every post serves this</div>
+      <div class="row"><b>Themes:</b> build-in-public numbers · data-ownership stories · how-we-built-it · beta-user wins</div>
+      <div class="row"><b>Voice:</b> plain, technical, zero hype</div>
+      <div class="row"><b>The contract:</b> 5 posts/day, paced · replies &lt; 2h · report every Friday</div>
+      <div class="row"><b>Never:</b> flame wars · competitor dunks · pricing talk</div>
+    </div>
+  </div>
+  <p class="capnote"><b>He doesn't start on vibes.</b> A goal, an angle, themes, a contract —
+  iterated until you approve. That document becomes the first page of the memory, and every post
+  he ever writes answers to it.</p>
+</section>
+
+<!-- 7 · EVERY MORNING — the ten -->
+<section class="slide">
+  <div class="kicker">every morning</div>
+  <h2>Ten proposals. <em>You react.</em></h2>
+  <div class="props">
+    <span class="prop ok">1</span><span class="prop">2</span><span class="prop ok">3</span>
+    <span class="prop">4</span><span class="prop">5</span><span class="prop">6</span>
+    <span class="prop">7</span><span class="prop">8</span><span class="prop ok">9</span><span class="prop">10</span>
+    <span class="pill" style="border-color:var(--accent2)">your note: "less hype — more of the memory angle" → filed</span>
+  </div>
+  <div class="chat">
+    <div class="msg her"><div class="who">herald · 9:00</div><div class="bubble">
+      Ten proposals from what you've fed me. #3 is from Tuesday's voice note. #9 comes with an
+      image I made.</div></div>
+    <div class="msg you"><div class="who">you</div><div class="bubble">✓ 1, 3, 9 — and give me five more.</div></div>
+    <div class="msg her"><div class="who">herald</div><div class="bubble">Five more, sharper.
+      Your note is in the memory — tomorrow's ten start from it.</div></div>
+  </div>
+  <p class="capnote"><b>You're not writing. You're reacting</b> — and every reaction becomes memory.</p>
+</section>
+
+<!-- 8 · ALL DAY — timeline -->
+<section class="slide">
+  <div class="kicker">all day</div>
+  <h2>Posted. Answered. <em>Learned.</em></h2>
+  <div class="diagram"><svg viewBox="0 0 1000 240" xmlns="http://www.w3.org/2000/svg">
+    <line x1="40" y1="120" x2="880" y2="120" stroke="#2a2e35" stroke-width="2"/>
+    <path class="wireacc" d="M880 120 L950 120" marker-end="url(#a5)"/>
+    <!-- 9:00 proposals -->
+    <circle cx="90" cy="120" r="7" fill="#d4a24e"/>
+    <text x="90" y="90" text-anchor="middle" class="mono acc" font-size="12">9:00</text>
+    <text x="90" y="160" text-anchor="middle" class="dim" font-size="13">ten proposals</text>
+    <!-- 9:40 you react -->
+    <circle cx="200" cy="120" r="7" fill="#6ea8a0"/>
+    <text x="200" y="90" text-anchor="middle" class="mono acc2" font-size="12">9:40</text>
+    <text x="200" y="160" text-anchor="middle" class="dim" font-size="13">you react ✓✓✓</text>
+    <!-- paced posts -->
+    <circle cx="340" cy="120" r="6" fill="#e8e6e1"/><text x="340" y="90" text-anchor="middle" class="mono dim" font-size="12">12:00</text>
+    <circle cx="480" cy="120" r="6" fill="#e8e6e1"/><text x="480" y="90" text-anchor="middle" class="mono dim" font-size="12">16:00</text>
+    <circle cx="620" cy="120" r="6" fill="#e8e6e1"/><text x="620" y="90" text-anchor="middle" class="mono dim" font-size="12">19:00</text>
+    <text x="480" y="160" text-anchor="middle" class="dim" font-size="13">posts go out, paced — replies answered in between</text>
+    <!-- 22:00 lessons -->
+    <circle cx="790" cy="120" r="7" fill="#d4a24e"/>
+    <text x="790" y="90" text-anchor="middle" class="mono acc" font-size="12">22:00</text>
+    <text x="790" y="160" text-anchor="middle" class="dim" font-size="13">lessons filed</text>
+    <!-- tomorrow -->
+    <text x="950" y="90" text-anchor="middle" class="mono acc" font-size="12">9:00 +1</text>
+    <text x="950" y="160" text-anchor="middle" class="acc" font-size="13" font-style="italic">a sharper ten</text>
+    <defs><marker id="a5" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8" fill="#d4a24e"/></marker></defs>
+  </svg></div>
+  <p class="capnote">His scorecard shows it happening: proposals approved untouched,
+  <b>31% → 84%</b> week over week — and the goal's numbers alongside.</p>
+</section>
+
+<!-- 8b · HE KEEPS YOU POSTED -->
+<section class="slide">
+  <div class="kicker">he keeps you posted</div>
+  <h2>Out of the writing.<br><em>In the loop.</em></h2>
+  <div class="chat">
+    <div class="msg her"><div class="who">herald · 12:02</div><div class="bubble">
+      Sent — the data-ownership post. <span class="att">↗ view</span></div></div>
+    <div class="msg her"><div class="who">herald · 15:40</div><div class="bubble">
+      Heads-up: a thread under yesterday's post is turning sour. Your rules say don't engage —
+      I'm holding. Overrule?</div></div>
+    <div class="msg you"><div class="who">you</div><div class="bubble">Hold.</div></div>
+    <div class="msg her"><div class="who">herald · 18:15</div><div class="bubble">
+      The morning post is at 4× our usual reach. I've queued a follow-up into tomorrow's ten.</div></div>
+    <div class="msg her"><div class="who">herald · friday 17:00</div><div class="bubble">
+      Weekly report: <i>+212 signups · 61% of the way to the goal · 3 lessons filed.</i></div></div>
+  </div>
+  <p class="capnote"><b>You write the rules for when he taps your shoulder</b> — a send, a spike
+  worth riding, a thread going sideways, the Friday report. Never spam. Never silence.</p>
+</section>
+
+<!-- 9 · OWNERSHIP -->
+<section class="slide">
+  <div class="kicker">the asset</div>
+  <h2>The knowledge stays with you.<br><em>Whoever comes next inherits it.</em></h2>
+  <p class="lede">Not just the memory — the learnings. The voice, the positioning, every lesson
+  the audience ever taught him: plain files, in your repo. Fire him and rehire him next year —
+  he remembers. Or hire someone else entirely — <em>they hit the ground running,</em> with all
+  that experience compounding for you.</p>
+  <div style="margin-top:1.2rem">
+    <span class="pill">built on zenod · open source</span>
+    <span class="pill">your repo · plain text</span>
+    <span class="pill">leave anytime · lose nothing</span>
+  </div>
+</section>
+
+<!-- 10 · MARKET -->
+<section class="slide">
+  <div class="kicker">versus everything else</div>
+  <h2>The category is crowded.<br><em>The loop is empty.</em></h2>
+  <div class="cols">
+    <div class="card bad">
+      <h3>Most of the market</h3>
+      <p>Scheduling tools with an AI button. You write, they queue, it posts. Nothing reads the
+      replies. Nothing remembers. Every week starts from zero.</p>
+    </div>
+    <div class="card">
+      <h3>Herald</h3>
+      <p>You talk; he runs the wheel — hypothesis, experiment, results, learnings. The longer he
+      works for you, the harder he is to replace.</p>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:1.2rem">People already pay well in this category.
+  Nobody in it closes the loop. <em>That's the opening.</em></p>
+</section>
+
+<!-- 11 · CLOSE -->
+<section class="slide">
+  <div class="kicker">herald · early access</div>
+  <h1 style="font-size:clamp(2rem,4.3vw,3.2rem)">He posts every day, learns from every reply,
+  and makes the next one better. <em>And all the knowledge is yours.</em></h1>
+  <p class="lede">Connect your project's accounts. Agree on the briefing. He takes it from
+  there — nonstop, in the cloud, nothing to install.</p>
+  <div style="margin-top:1.5rem">
+    <span class="pill">early access — first cohort limited</span>
+    <span class="pill">one price, no tiers · [pricing tbd]</span>
+    <span class="pill">runs on zenod · open source</span>
+  </div>
+</section>
+
+</div>
+<div class="nav"><span id="count">1 / 12</span>
+  <button onclick="go(-1)">←</button><button onclick="go(1)">→</button></div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];let i=0;
+  function show(n){slides[i].classList.remove('active');i=(n+slides.length)%slides.length;
+    slides[i].classList.add('active');
+    document.getElementById('count').textContent=(i+1)+' / '+slides.length;
+    document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';}
+  function go(d){show(i+d)}
+  addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')go(1);if(e.key==='ArrowLeft')go(-1)});
+  show(0);
+</script>
+</body>
+</html>
