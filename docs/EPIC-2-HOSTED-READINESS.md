@@ -140,3 +140,38 @@ What I did NOT do (deliberately): build a pricing page with a guessed price wire
 checkout backend. Unblock items 1–2 and I can deliver the pricing page + test-mode Checkout + webhook
 stub → provisioning-queue entry in one pass.
 
+### 2026-07-04 (later) · Worker — Stripe MCP tested · private control-plane repo created (H-2 backend)
+
+**Stripe MCP — connected & tested (Jordi wired it).** Read + write both work via the connector.
+Smoke test: created product `prod_UoxLPb2fISfz5L`, then archived it (`active:false`, metadata
+`origin=claude-mcp-smoke-test`). Key is **restricted** (no `balance` read, no `delete`) — good — but
+**`livemode:true`**: it is a LIVE key, not test mode. ⚠️ Do not mint dev products/prices/payment links
+against it. **Request: a restricted TEST-mode key for build/dev** (or explicit go-ahead to build against
+live). The archived smoke product can't be deleted with the current key (no delete perm); it's inert.
+
+**Backend-location decision (blocker #2 above) — RESOLVED by Jordi:** separate **private** repo for the
+hosting/control-plane code (webhook + metering + tenant-control UI), beyond the public image. Matches
+HOSTED-PLAN §7 (`zenod-ai/cloud`).
+
+**Created: https://github.com/zenod-ai/cloud (PRIVATE), pushed to `main`.** Seeded with:
+- `services/webhook/` — TypeScript Stripe Checkout + `/webhook` → **durable provisioning queue**
+  (`provisioning-queue.jsonl`), adapted from the **official** `stripe-samples/checkout-one-time-payments`
+  (vendored under `reference/`, MIT). Signature-verified, idempotent, health-checked; **typechecks clean**.
+  One-time payment (`mode:payment`) because D-5 is a prepaid credit bundle, not a subscription.
+- Init docs: [`README`](https://github.com/zenod-ai/cloud/blob/main/README.md),
+  [`docs/ARCHITECTURE.md`](https://github.com/zenod-ai/cloud/blob/main/docs/ARCHITECTURE.md),
+  [`docs/AGENTS.md`](https://github.com/zenod-ai/cloud/blob/main/docs/AGENTS.md) (self-contained standup
+  runbook: local run → create price → test-card checkout → prove queue entry → Dokploy bind → go-live),
+  [`docs/DOKPLOY-DEPLOY.md`](https://github.com/zenod-ai/cloud/blob/main/docs/DOKPLOY-DEPLOY.md),
+  [`docs/LINKS.md`](https://github.com/zenod-ai/cloud/blob/main/docs/LINKS.md) (pointers to every relevant
+  doc). Boundary rule enforced: never touches engine code; drives the public image's dormant hooks from
+  outside (§8 litmus).
+- `Dockerfile` + `docker-compose.cloud.yml` ready for the Dokploy service.
+
+**Dokploy service — NOT created yet (needs 3 inputs, stopped per "ask for keys/DNS"):**
+(1) DNS `cloud.zenod.dev` → the VPS; (2) a restricted **test-mode** `STRIPE_SECRET_KEY` as a raw value
+for the Dokploy env (the MCP connection isn't a pasteable key, and is live anyway); (3) the
+`STRIPE_WEBHOOK_SECRET`, which only exists after the endpoint is registered post-bind. The exact bind
+steps are in `docs/DOKPLOY-DEPLOY.md`. Give me DNS + a test key and I'll complete the bind and the
+end-to-end test-card run (H-2 acceptance).
+
