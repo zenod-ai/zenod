@@ -46,6 +46,13 @@ const HOSTED_URL = `${GITHUB_URL}/issues/new?title=${encodeURIComponent(
   "I'd like to join the waitlist for the hosted Zenod alpha (first 100 users free).\n\nHow I plan to use it: "
 )}`
 
+// Hosted checkout: a top-level link to the control plane's /buy endpoint, which
+// creates a Stripe Checkout Session and 303-redirects. No CORS, no JS needed.
+const CHECKOUT_URL = "https://cloud.zenod.dev/buy"
+const TERMS_URL = "/legal/terms.html"
+const PRIVACY_URL = "/legal/privacy.html"
+const DATA_URL = "/legal/data-handling.html"
+
 const INSTALL_CMD = `git clone ${GITHUB_URL}.git && cd zenod
 docker build -t zenod . && docker run -d -p 8080:8080 -v zenod-data:/data zenod`
 
@@ -233,6 +240,9 @@ export default function App() {
               </a>
               <a href="#self-host" className="transition-colors hover:text-rust">
                 Self-host
+              </a>
+              <a href="#pricing" className="transition-colors hover:text-rust">
+                Pricing
               </a>
               <a
                 href={DOCS_URL}
@@ -552,6 +562,64 @@ export default function App() {
         </section>
 
         {/* ───────────────────────── the name ───────────────────────── */}
+        {/* ───────────────────────── pricing ───────────────────────── */}
+        <section className="border-b border-border px-6 py-20 sm:px-12">
+          <div className="mx-auto max-w-3xl">
+            <div id="pricing" className="mb-10 scroll-mt-24 text-center">
+              <p className="label-caps mb-3 text-rust">Hosted</p>
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+                Don't want to self-host? We'll run it for you.
+              </h2>
+              <p className="mx-auto mt-5 max-w-xl leading-relaxed text-muted-foreground">
+                The same open-source Council, run on our infrastructure — one
+                isolated container that's yours alone. You pay for what your
+                agents actually use, drawn from a prepaid credit balance.
+              </p>
+            </div>
+
+            <div className="mx-auto max-w-md border border-border p-8">
+              <p className="label-caps text-rust">Credit bundle</p>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="font-display text-5xl font-bold tracking-tight">
+                  $50
+                </span>
+                <span className="text-muted-foreground">prepaid credit</span>
+              </div>
+              <ul className="mt-6 space-y-3 text-sm leading-relaxed text-muted-foreground">
+                <li className="flex gap-2.5">
+                  <CheckIcon className="mt-0.5 size-4 shrink-0 text-rust" />
+                  Your own dedicated Council container — isolated, not shared.
+                </li>
+                <li className="flex gap-2.5">
+                  <CheckIcon className="mt-0.5 size-4 shrink-0 text-rust" />
+                  <span>
+                    Your vault lives in{" "}
+                    <em className="text-foreground not-italic">your</em> git repo
+                    — you own it and can take it with you.
+                  </span>
+                </li>
+                <li className="flex gap-2.5">
+                  <CheckIcon className="mt-0.5 size-4 shrink-0 text-rust" />
+                  Usage metered against your balance; top up any time.
+                </li>
+              </ul>
+              <Button asChild size="lg" className="mt-8 w-full rounded-none">
+                <a href={CHECKOUT_URL}>Get started</a>
+              </Button>
+              <p className="label-caps mt-4 text-center text-muted-foreground/70">
+                Secure checkout by Stripe
+              </p>
+            </div>
+
+            <p className="mt-6 text-center text-xs text-muted-foreground/70">
+              By purchasing you agree to our{" "}
+              <a href={TERMS_URL} className="underline hover:text-rust">Terms</a>,{" "}
+              <a href={PRIVACY_URL} className="underline hover:text-rust">Privacy Policy</a>, and{" "}
+              <a href={DATA_URL} className="underline hover:text-rust">Data Handling</a>.
+            </p>
+          </div>
+        </section>
+
         <section className="relative overflow-hidden border-b border-border">
           <div className="grid lg:grid-cols-2">
             <div className="relative min-h-72 border-b border-border lg:border-r lg:border-b-0">
@@ -631,6 +699,15 @@ export default function App() {
                 className="transition-colors hover:text-rust"
               >
                 AGPL-3.0
+              </a>
+              <a href={TERMS_URL} className="transition-colors hover:text-rust">
+                Terms
+              </a>
+              <a href={PRIVACY_URL} className="transition-colors hover:text-rust">
+                Privacy
+              </a>
+              <a href={DATA_URL} className="transition-colors hover:text-rust">
+                Data
               </a>
             </nav>
           </div>
