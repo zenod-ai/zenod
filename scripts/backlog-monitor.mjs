@@ -962,6 +962,40 @@ function extractEvidenceClaims(finalText) {
   return { commitUrls, prUrls, issueUrls };
 }
 
+// #549 / C-07(a): a run's real deliverable (PR/issue/commit URL) is often announced in
+// the run's JOURNAL ("PR created: <url>", "Created the tracking issue: <url>") while the
+// FINAL message is a short caveat with no URL — so scanning only final.md false-negatives
+// a completed run and renders it "produced nothing verifiable". This lifts evidence from
+// the events journal, but ONLY URLs in a CREATION context (adjacent to create/open/push/
+// commit/merge/file), so a PR/issue the worker merely READ is never credited. Callers use
+// it strictly as a fallback (when final.md carries no evidence) and STILL run it through
+// verifyEvidenceClaims, so a journal-sourced URL that 404s is rejected exactly like a
+// final-text claim — no new fabrication surface.
+function extractCreationEvidenceFromJournal(eventsPath) {
+  const empty = { commitUrls: [], prUrls: [], issueUrls: [] };
+  if (!eventsPath || !existsSync(eventsPath)) return empty;
+  let text = "";
+  try {
+    text = readFileSync(eventsPath, "utf8");
+  } catch {
+    return empty;
+  }
+  const commitUrls = new Set();
+  const prUrls = new Set();
+  const issueUrls = new Set();
+  // A creation cue within ~100 chars before a github artifact URL. [\s\S] spans JSON
+  // escaping (events.jsonl) so "PR created:\n<url>" and inline "created <url>" both match.
+  const re =
+    /\b(?:creat\w*|open(?:ed|ing|s)?|push\w*|committ\w*|merg\w*|filed|raised|submitted)\b[\s\S]{0,100}?(https?:\/\/github\.com\/[^\s"')\\]+\/(?:pull\/\d+|issues\/\d+|commit\/[0-9a-f]{7,40}))/gi;
+  for (const m of text.matchAll(re)) {
+    const url = m[1].replace(/[).,]+$/, "");
+    if (/\/pull\/\d+$/i.test(url)) prUrls.add(url);
+    else if (/\/issues\/\d+$/i.test(url)) issueUrls.add(url);
+    else if (/\/commit\/[0-9a-f]{7,40}$/i.test(url)) commitUrls.add(url);
+  }
+  return { commitUrls: [...commitUrls], prUrls: [...prUrls], issueUrls: [...issueUrls] };
+}
+
 // Probe gh without throwing (the strict `gh()` throws on non-zero); returns ok flag.
 function ghProbe(args) {
   try {
@@ -1159,7 +1193,14 @@ async function reportEphemeralFinished(executionId, target, exitCode, finalPath)
   // downgraded to blocked rather than reported as done. Verified URLs become the
   // ticket's evidence.
   if (stateName === "complete") {
-    const claims = extractEvidenceClaims(finalText);
+    let claims = extractEvidenceClaims(finalText);
+    // #549 / C-07(a): the final message carried no checkable URL — fall back to the run's
+    // journal, where a real PR/issue/commit was announced ("PR created: <url>"). Only then,
+    // and only creation-context URLs; verifyEvidenceClaims below still gates on existence.
+    if (!hasCheckableEvidence(claims)) {
+      const journalClaims = extractCreationEvidenceFromJournal(eventsPath);
+      if (hasCheckableEvidence(journalClaims)) claims = journalClaims;
+    }
     if (hasCheckableEvidence(claims)) {
       const { verified, missing } = verifyEvidenceClaims(claims);
       if (missing.length) {
@@ -2585,6 +2626,7 @@ export {
   ephemeralFallbackDecision,
   ephemeralPrompt,
   extractEvidenceClaims,
+  extractCreationEvidenceFromJournal,
   verifyEvidenceClaims,
   hasCheckableEvidence,
   pickEvidenceUrl,

@@ -41,6 +41,7 @@ import {
   ephemeralFallbackDecision,
   ephemeralPrompt,
   extractEvidenceClaims,
+  extractCreationEvidenceFromJournal,
   hasCheckableEvidence,
   pickEvidenceUrl,
   tailFile,
@@ -1124,6 +1125,44 @@ test("C-07a unchanged: a run WITH a real deliverable still renders done with the
   });
   assert.ok(msg.startsWith("✅ Execution done"));
   assert.ok(msg.includes("https://github.com/zenod-ai/zenod/issues/6"));
+});
+
+// #549 · C-07(a): a run that produced a real PR (#547) whose URL lives in the JOURNAL —
+// "PR created: <url>" — but whose FINAL message is a caveat with no URL must still be
+// credited. The journal scanner lifts the creation-context URLs; the final-text scan is
+// empty, so this is exactly the ephemeral fallback the fix adds.
+test("C-07a: extractCreationEvidenceFromJournal lifts a PR/issue announced in the journal when the final message omits it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "c07a-journal-"));
+  const eventsPath = join(dir, "events.jsonl");
+  // Shape mirrors a real events.jsonl: JSON lines whose message text announces the work,
+  // then a final caveat line that carries no URL.
+  writeFileSync(
+    eventsPath,
+    [
+      JSON.stringify({ type: "item", text: "Created the tracking issue: https://github.com/zenod-ai/zenod/issues/545" }),
+      JSON.stringify({ type: "item", text: "PR created: https://github.com/zenod-ai/zenod/pull/547" }),
+      JSON.stringify({ type: "item", text: "I also reviewed https://github.com/zenod-ai/zenod/pull/500 for context" }),
+      JSON.stringify({ type: "item", text: "Note: redeploy not yet confirmed on the host." }),
+    ].join("\n"),
+  );
+
+  // The final message (what the OLD code scanned) has no verifiable URL at all.
+  assert.equal(hasCheckableEvidence(extractEvidenceClaims("Note: redeploy not yet confirmed on the host.")), false);
+
+  const claims = extractCreationEvidenceFromJournal(eventsPath);
+  assert.ok(hasCheckableEvidence(claims), "journal scan finds the real deliverable");
+  assert.deepEqual(claims.prUrls, ["https://github.com/zenod-ai/zenod/pull/547"]);
+  assert.deepEqual(claims.issueUrls, ["https://github.com/zenod-ai/zenod/issues/545"]);
+  // The merely-READ PR (#500, no creation cue) must NOT be credited — no new fabrication surface.
+  assert.ok(!claims.prUrls.includes("https://github.com/zenod-ai/zenod/pull/500"));
+});
+
+test("C-07a: extractCreationEvidenceFromJournal returns empty for a missing/empty journal", () => {
+  assert.deepEqual(extractCreationEvidenceFromJournal("/nonexistent/events.jsonl"), {
+    commitUrls: [],
+    prUrls: [],
+    issueUrls: [],
+  });
 });
 
 // I8-2 (C-21): durable resume decision — a run killed mid-flight by a redeploy is
