@@ -232,3 +232,20 @@ Cloudflare WAF in the path. Jordi completed a real test-card checkout (`4242…`
 - Pricing page on `apps/site` (the customer-facing "buy" button) + link the H-11 legal pages (PR #523).
 - Swap the **$50 placeholder** price for the decided D-5 amount.
 - Rotate the `sk_test_` pasted in chat (use a restricted key).
+
+### 2026-07-04 (later 5) · Worker — merges live + H-1 provisioner (concierge)
+
+**Merged / live:** #525 (receipts) and **#527** (pricing page + DRAFT legal pages). Verified on zenod.dev:
+new pricing section (`#pricing`, "Get started" → live `cloud.zenod.dev/buy` → Stripe) and
+`zenod.dev/legal/terms.html` → 200. #523 CLOSED as superseded by #527. Pricing card visually verified
+in-browser. Still TEST-mode Stripe + $50 placeholder until real price/live keys.
+
+**H-1 provisioning fulfillment (concierge, D-1) — built.** `zenod-ai/cloud`
+[`scripts/provision-tenant.mjs`](https://github.com/zenod-ai/cloud/blob/main/scripts/provision-tenant.mjs)
++ [`docs/PROVISIONING.md`](https://github.com/zenod-ai/cloud/blob/main/docs/PROVISIONING.md): one command
+turns a queued paid checkout into a running tenant stack via the Dokploy API (compose `tenant-<slug>`
+from the public `docker-compose.tenant.yml`, env at create-time, domain `z-<slug>.zenod.dev` →
+`zenod-console:8080`, deploy+poll). Dry-run verified. Concierge remainder (script prints it): Cloudflare
+DNS, admin password + LLM key + agent-enable, reply to customer, mark task provisioned.
+- **Not yet:** live end-to-end provision (6 containers + a DNS record I can't add — wrangler token lacks
+  DNS scope). Acceptance ("<30 min, no code edits") pending one live run with Jordi adding DNS.
