@@ -4,7 +4,7 @@ Owner: **Product-Fable** (planner, since 2026-07-04 per [HANDOVER-EPIC2.md](HAND
 Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md) · Positioning: launch deck V5 · Journeys: user-journeys deck (T1, J7–J9)
 **Exit criterion: a stranger pays money and gets a working Council attached to their repo. Jordi is customer #0 and doesn't count.**
 
-Status: 🟢 ITERATION 1 — VERIFICATION PHASE (2026-07-04). All decisions D-1/D-4/D-5/D-6 DECIDED ·
+Status: 🟢 ITERATION 2 RUNNING (2026-07-04). All decisions D-1/D-4/D-5/D-6 DECIDED ·
 3-tier subscription checkout live (TEST) · tenant provision proven at ~1–2 min · remaining: tester pass
 (dispatched), B-3 (tenant creds → council responds), R-1 handoff (Jordi). See Iteration 1 table.
 
@@ -121,13 +121,13 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 
 | ID | Ticket | State | Acceptance criteria | Test criteria (tester) |
 |----|--------|-------|---------------------|------------------------|
-| I1-1 | H-2 money path (backend + webhook + checkout) | 🟡 worker-reported PASS (test mode) — awaiting tester | Card completes checkout in prod; payment visible in Stripe; provisioning task created with customer details | Run a FRESH checkout with test card; confirm the Stripe event shows `pending_webhooks: 0`; confirm a NEW line in `provisioning-queue.jsonl` carrying that session's customer email; `/success.html` → 200 |
-| I1-2 | H-2 front end: pricing page live + linked legal | 🟡 worker-reported live (#527) — awaiting tester | Pricing section on zenod.dev; "Get started" reaches Stripe checkout; legal pages linked | zenod.dev `#pricing` renders; click-through reaches `checkout.stripe.com`; `/legal/terms.html` + `privacy.html` + `data-handling.html` all 200 AND reachable from the pricing/checkout surface; DRAFT banner present |
-| I1-3 | H-11 legal drafts | 🟡 live as DRAFT — counsel review pending (Jordi) | Lawyer-sane pages linked from checkout | Covered by I1-2; content sanity: customer-owns-the-vault story present in data-handling |
+| I1-1 | H-2 money path (backend + webhook + checkout) | ✅ PASS — tester-verified (fresh) | Card completes checkout in prod; payment visible in Stripe; provisioning task created with customer details | Run a FRESH checkout with test card; confirm the Stripe event shows `pending_webhooks: 0`; confirm a NEW line in `provisioning-queue.jsonl` carrying that session's customer email; `/success.html` → 200 |
+| I1-2 | H-2 front end: pricing page live + linked legal | ✅ PASS — tester-verified (fresh) | Pricing section on zenod.dev; "Get started" reaches Stripe checkout; legal pages linked | zenod.dev `#pricing` renders; click-through reaches `checkout.stripe.com`; `/legal/terms.html` + `privacy.html` + `data-handling.html` all 200 AND reachable from the pricing/checkout surface; DRAFT banner present |
+| I1-3 | H-11 legal drafts | ✅ PASS — tester-verified (DRAFT, counsel pending) | Lawyer-sane pages linked from checkout | Covered by I1-2; content sanity: customer-owns-the-vault story present in data-handling |
 | I1-4 | H-1 provisioner: paid task → running tenant | ✅ PASS — council responds (worker "later 11") | Fresh tenant end-to-end <30 min, no code edits | After worker's live run: `z-testco.zenod.dev` console loads over TLS; council responds in web chat; total time receipted <30 min; teardown documented |
 | I1-5 | R-1 handoff to stability track | ⚪ with Jordi | R-1 accepted as a stability-track ticket | Ticket link recorded in this doc |
 | I1-6 | D-6 pricing decision | ✅ DECIDED 2026-07-04 (concept: subscription + monthly credit, tiers 29/79/499) | Shape + tiers recorded as DECIDED above | Doc record matches Jordi's words |
-| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | 🟡 worker-reported DONE ("later 8") — awaiting tester | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
+| I1-7 | D-6 implementation: 3-tier subscription checkout + pricing page | ✅ PASS — tester-verified, all 3 tiers | Stripe (TEST mode): three subscription prices; pricing page shows three tiers with credit caps; checkout completes for each tier → provisioning task carries the tier; credit-cap proposal per tier derived from tenant-zero `usage.sqlite` real burn, filed for planner review | Fresh test-card subscribe on each tier → Stripe subscription object `mode:subscription` with correct price; queue entry names the tier; pricing page copy matches decided numbers |
 
 ### Blocker register
 
@@ -492,7 +492,7 @@ re-provision needed — the compose created earlier by `provision-tenant.mjs` ju
   wired, so the tenant's own key for now). I did not fabricate these for a test tenant. **Needs Jordi:**
   an LLM key (+ vault) to finish onboarding, or he completes it on the staging tenant himself. → blocker register B-3.
 
-**Staging:** `tenant-testco` left **UP** as staging per dispatch. Admin password set (`testco-staging-2026`).
+**Staging:** `tenant-testco` left **UP** as staging per dispatch. Admin password set (`‹redacted — rotated per B-5›`).
 
 **Teardown (documented; NOT executed — kept as staging):**
 - Suspend: `compose.stop` (Dokploy API) or Stop in the UI — stops the stack, keeps volumes.
@@ -566,7 +566,7 @@ Jordi provided `OPENROUTER_PROVISIONING_KEY`. B-3 fully closed:
 GitHub Connections OAuth flow (the Enable-Zenod dialog requires it) — an OAuth grant I don't do
 unilaterally. The Console council responds without it; wiring the brain's vault is H-3.
 
-`tenant-testco` remains UP as staging (admin pw `testco-staging-2026`, OpenRouter key stored in-console).
+`tenant-testco` remains UP as staging (admin pw `‹redacted — rotated per B-5›`, OpenRouter key stored in-console).
 Security: the provisioning key was pasted in chat → **rotate it**; keep tenant keys scoped.
 
 ### 2026-07-04 · [tester] — Iteration 1 verification (first activation, fresh evidence)
