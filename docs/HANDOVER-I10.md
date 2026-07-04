@@ -143,3 +143,11 @@ _(Content of PR #551, restored to main by the ops agent: the PR was CLOSED with 
 
 **VERDICT: BOARD BAR NOT MET.** C-23 still red @`7cd3250` (#548 reopened). **W3 soak clock does NOT start.** No fixing done this session.
 - **Recommend next:** fix #548 completely (robust read-only determination incl. `archus_*`/peer reads + extend suppression to ALL composer correction banners, or the render-gate route), redeploy, then re-run C-23 (6 read-path sends, zero banners) + a #549-specific C-07a (engineer a journal-has-URL/final-lacks-URL run). Also wire `GIT_SHA` into the Dokploy build so `/api/health.sha` stops reading `"unknown"` (finishes #532).
+
+### 2026-07-04 · FABLE AUDIT — re-test hand-back ACCEPTED; FP4 = structural
+- C-23 RED @7cd3250 confirmed: third leak of the composer-banner family.
+  Heuristic patching is DONE. FP4 is the structural route per the recorded
+  fallback. If FP4 leaks, next step is removal of composer banners on
+  non-mutating turns entirely.
+- C-07a deferral ACCEPTED (no test power on generic runs). #551 restoration
+  + #532 reopen ACCEPTED.
