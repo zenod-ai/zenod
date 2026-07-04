@@ -212,3 +212,23 @@ Dokploy version; memory [[zenod-dokploy-env-not-via-api]] updated). Domain `clou
 3. **$50 price is a placeholder** — needs the decided D-5 bundle amount/currency.
 4. Legal pages (H-11 PR #523) not yet linked from checkout (checkout has no customer-facing page yet;
    the pricing page on apps/site is the remaining front-end piece).
+
+### 2026-07-04 (later 3) · Worker — H-2 ACCEPTANCE PASS (real test-card, full chain in prod)
+
+`cloud.zenod.dev` set to **DNS-only** (Jordi) → origin `49.13.24.121`, Let's Encrypt cert direct, no
+Cloudflare WAF in the path. Jordi completed a real test-card checkout (`4242…`). Verified from Stripe:
+- Session `cs_test_a1Sj9hx0…` → **`payment_status: paid`, `status: complete`**, $50 USD, `jordi@alpha9.io`.
+- Event **`evt_1TpKEh76yJ3p1J6XbzwZSxRZ`** (`checkout.session.completed`) → **`pending_webhooks: 0`** =
+  our origin received it and returned 2xx (the exact path Cloudflare would have blocked — DNS-only fixed
+  it). Handler enqueues the provisioning task synchronously before the 2xx, so the task is written to
+  `/data/provisioning-queue.jsonl`. (Earlier signed-webhook control: valid→200, tampered→400.)
+- **H-2 acceptance met:** real card completes checkout in prod · payment visible in Stripe · provisioning
+  task created with customer details.
+- Fixed the post-redirect 404: webhook service now serves a minimal `/success.html` confirmation
+  (zenod-ai/cloud, deployed; verified 200 live). GitHub push-webhook armed on zenod-ai/cloud (hook
+  649168720) so future pushes auto-deploy.
+
+**Remaining for full H-2 front-end (not blocking the money path, which works):**
+- Pricing page on `apps/site` (the customer-facing "buy" button) + link the H-11 legal pages (PR #523).
+- Swap the **$50 placeholder** price for the decided D-5 amount.
+- Rotate the `sk_test_` pasted in chat (use a restricted key).
