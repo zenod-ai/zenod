@@ -77,5 +77,18 @@ HANDOVER-I9.md, unchanged).
 - **#256 · C-19:** `peerMutationGuardFailure` (packages/core/src/taskingPolicy.ts) — deleted the verb-regex keyword gate for the four backlog-write peer tools; "jot a note on #253" now passes (doctrine rule 7). Outbound sends stay approval-gated, execution dispatch keeps its block. `READ_ONLY_REQUEST_RE` widened so a "need context" ask blocks for read-only INTENT, not a missing keyword.
 - **#257 · C-15:** `reconcileTaskingReply` — new non-create-write ground-truth banner: a blocked/failed edit/comment/close whose prose claims "Note added" (even number-less) is corrected; a genuine edit receipt is untouched. Invariant: no success text renders without a real receipt object, any mutating lane.
 - **Tests:** `taskingPolicy.test.ts` (C-19: jot-a-note passes, need-context blocks read-only) + `console-replay.test.ts` (C-15: blocked edit → banner, landed edit → no banner). Green: full core+server workspaces, `scripts/*.test.mjs` (152), `tsc` clean.
-- **W1-2 (deploy + live verify + deployed SHA):** pending merge → auto-deploy. Recorded below once confirmed on the host.
-- **Not done (correctly out of scope):** W1-3 closing run, W2, W3 — await separate go orders per THE CONTRACT.
+- **Merged:** PR #531 → squash merge `bf03939` on `main` at 2026-07-04T14:36:02Z (CI `ci` green). Both #256 and #257 code + this doc are in the merged tree.
+
+### 2026-07-04 · W1-2 · Deploy + verify
+
+- **Deployed SHA:** `main` = `bf03939` (squash-merge of #531), which is the auto-deploy target (push-to-main → Dokploy autoDeploy, Console + runner rebuild).
+- **Live host verified healthy:** `https://c1.zenod.dev/api/health` and `https://z2.zenod.dev/api/health` → `{"status":"ok","name":"console","version":"0.0.1"}` at 2026-07-04T14:42:48Z. (Note: the canonical Console host is `c1.zenod.dev` — the `app.zenod.dev` in old notes is stale.)
+- **Honest limit — SHA not endpoint-confirmable:** `/api/health` exposes only the static package version, never the git SHA, so I could NOT prove from outside that the *bf03939 image specifically* is the running one (only that a healthy Console is live and the deploy had ~6 min to build before the health check). Filed **zenod-ai/zenod#532** (build-SHA on `/api/health`) so future deploys are verifiable; referenced for W2 operational-immunity.
+- **Behavioral FP2 live-fire deferred to W1-3:** exercising "jot a note on #253" (C-19) and a forced block (C-15) against the deployed SHA via `/api/test/chat` is the closing run's job (tester ≠ fixer; I am the fixer). Not run here.
+- **Credit pre-flight (W2-3):** not performed — W1-3 gating, awaits its go order.
+
+**Hand-back (per CONTRACT rule 5):**
+- **Did:** W1-1 (§W1-1) — #256 + #257 fixed, tested, PR #531 merged `bf03939`. W1-2 (§W1-2) — deploy triggered, Console health-verified live at c1.zenod.dev, SHA recorded with the honest observability caveat.
+- **Didn't (out of scope):** W1-3 closing run, W2, W3 — separate go orders. Behavioral on-host FP2 re-test left for W1-3.
+- **Discovered/filed:** zenod-ai/zenod#532 (no running-SHA endpoint — blocks clean deploy verification; W2 material).
+- **Recommend next:** pre-flight the credit tank (W2-3), then the W1-3 closing run (all 23 rows against `bf03939`), C-15 audited across everything — with the caveat that #532 remains open so SHA-pinning is by-deploy-timing, not by-endpoint, until it lands.
