@@ -151,3 +151,15 @@ _(Content of PR #551, restored to main by the ops agent: the PR was CLOSED with 
   non-mutating turns entirely.
 - C-07a deferral ACCEPTED (no test power on generic runs). #551 restoration
   + #532 reopen ACCEPTED.
+
+### 2026-07-04 · FP4 (#548 structural) — shipped
+
+- **PR:** https://github.com/zenod-ai/zenod/pull/559 → squash merge **`d16fcae`** on `main` at 2026-07-04T17:27:42Z (CI `ci` green — incl. the `docker build --target build` that now exercises the `.git` SHA-capture steps). Closes #548, finishes #532.
+- **The structural route (retires 3 rounds of heuristic patching):**
+  1. **Ledger completeness** — read tools (search_vault/read_note/list_pages/search_chats) now record actions via a new `onReadAction` callback (aisdk → engine). A read-only recap can no longer reach reconcile with empty actions. Invariant test added.
+  2. **Registry classification** — new `packages/core/src/toolKinds.ts` declares every tool's kind (read|mutate) once; `reconcileTaskingReply` consumes `toolKind()`; the `isReadOnlyTaskingTool` name-allowlist is DELETED; unknown→mutate (fail-safe, C-15); coverage test asserts full declaration (kills the `archus_list_github_issues` miss = retest-01).
+  3. **One gate, all paths** — a single `bannerPermitted` gate governs create-fabrication + unproven-mutation + the execution-state HEDGES (retest-05). Grounded-CONTRADICTION banners are deliberately left ungated (positive evidence, C-23-permitted; gating would regress C-06/P-3).
+  4. **Regressions** — both retest reds as fixtures; #58 empty-actions + failed-create still fire.
+  5. **#532 finished** — the Docker build derives the real SHA from the checked-out `.git` (un-`.dockerignore`d, removed in-build so it never reaches the image) → `/app/.gitsha`; `/api/health` reads `GIT_SHA` env else that file. Verified the mechanic in an isolated docker build (baked SHA == HEAD).
+- **Deploy:** `d16fcae` is the auto-deploy target (Console + runner rebuild). **Live-SHA confirmation pending the Dokploy rebuild** (whisper.cpp + npm build takes several min); `/api/health.sha` will flip from `"unknown"` to `d16fcae` once it lands — recorded below.
+- **NOT done (separate tester go order):** the live C-23 re-test (6 sends, zero banners) + the engineered #549-specific C-07a journal-only run. Fixer ≠ tester.
