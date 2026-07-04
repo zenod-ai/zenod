@@ -103,16 +103,16 @@ implementations for iteration 8's executor graft. Meta-finding for S-8's family:
 landed on zenod#500/PR#501 while the master ticket obsidian-brain#250 carried no link — cross-repo
 receipt linking is a gap.
 
-**Now (2026-07-03 late):** Epic 1: S-0 ✅ · #486 (S-3) + #493 (S-4/5/6) merged · S-1 re-dispatched
-(`direct-1783107468359`; first run killed by deploy restart — the durable-execution argument making
-itself) · S-2 forensic running (`direct-1783107479331`) · S-8 running (`direct-1783107490565`) ·
-S-9 partially live (auto-merge), renderer half unverified · S-7 held until S-1 lands (same code area) ·
-**Test phase: canonical board run C-01…C-20 dispatched** (`ephemeral-1783107516255`; tester is a
-separate worker — Fable only audits). D-2: **bake-off spike running**
-([obsidian-brain#250](https://github.com/AlfaBlok/obsidian-brain/issues/250),
-`direct-1783107501717`): Eve vs **Flue** (withastro/flue — Apache-2.0, harness-first, runtime-agnostic,
-skills/AGENTS.md-native, MCP + WhatsApp channel ecosystem, but experimental + Node sessions in-memory
-by default) vs **DIY** (AI SDK + standalone Workflow SDK + our runner). Winner closes D-2.
+**Now (2026-07-04 ~02:45):** Epic 1 at the one-yard line. I8 engine merged AND live-fire-proven on the
+real VPS: **C-21 durable resume PASS** (runner restarted mid-run → journal `attempt:2 "resuming"`, no
+duplicated work) · **C-17 budget kill PASS** (runaway terminated at 41>10 turns, honest ⛔ + transcript
+link — and the live-fire caught a wiring bug 155 green unit tests missed: `activeHeartbeatRuns` dropped
+pid/budget; fixed `6559e87` + regression test) · A1 draft-safety gate verified 10/10 · WhatsApp
+root-caused (Dockerfile missing `COPY scripts/lib/` → monitor crash-loop) and restored · per-run budget
+override (`parseRunBudget`) landed as the B1 lane mechanism. Deployed SHA for the board: **`6559e87`**.
+**Remaining to close Epic 1: the full C-01…C-22 board as a FRESH pass** (steps 5–6 of
+[HANDOVER-I9.md](HANDOVER-I9.md); radar: #403 stale runner volume, C-07c detector phrasing). No parked
+rows — closing at 100/100 per Jordi. Then Part 2: lanes (B1–B4), first live lane gated on board green.
 
 ## Operating protocol
 
@@ -150,3 +150,8 @@ by default) vs **DIY** (AI SDK + standalone Workflow SDK + our runner). Winner c
   Eve substrate research (obsidian-brain#248, `direct-1783105324065`). D-2 sharpened: for WORK,
   sub-agents are tools of one owning agent (call/return, results fan back to a single context owner);
   for STATE, governors are single-writer services. Eve = leading substrate candidate pending #248.
+- **2026-07-04 · The live-fire night.** Handover pattern worked: Fable wrote the doc, Jordi's local
+  worker executed with full receipts. C-21 and C-17 proven against the real VPS (not mocks); C-17's
+  live-fire found and fixed a kill-path wiring bug that unit tests missed — the canonical board's whole
+  argument, demonstrated. Notifications root-caused to a Dockerfile COPY gap (not a WhatsApp session
+  issue). Deployed `6559e87`. Epic 1 closes on the fresh-pass board run.
