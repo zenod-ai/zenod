@@ -24,6 +24,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     image: zenod-console:dokploy
     container_name: zenod-console
     restart: unless-stopped
