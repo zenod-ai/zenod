@@ -153,6 +153,7 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
   OpenRouter provisioning credential the script needs. (2) Vault: platform-held private staging repo
   (`zenod-ai/testco-brain`, schema v1 scaffold) per HOSTED-PLAN §5 day-1 option; the customer-owned
   GitHub App flow is H-3, not this blocker.
+  **⛔ Worker 2026-07-04: BLOCKED — `OPENROUTER_PROVISIONING_KEY` is missing** (not in env, `~/.config/alpha9/`, or Keychain; `openrouter-key.mjs` errors `OPENROUTER_PROVISIONING_KEY is not set`). **Needs Jordi:** create a *provisioning* key (not inference) at https://openrouter.ai/settings/provisioning-keys and provide it. Everything else for B-3 is ready: the moment the key exists I mint `zenod-tenant:testco` ($50 cap), wire `LLM_BASE_URL`/`LLM_API_KEY` into testco's compose env, scaffold `zenod-ai/testco-brain` (schema v1), finish onboarding, and get the council-responds receipt. Stopped per dispatch ("if the credential is missing, file it and stop").
 
 ## Tickets (high level — refined into acceptance-criteria form once D-1 is decided and Epic 1 exits P0)
 
@@ -521,3 +522,25 @@ states, tester grants ✅.
 Starter/Agency subscribes the worker left unrun) + I1-4's console/TLS sub-criteria; fresh evidence only.
 Iteration 1 closes on the tester summary + B-3 receipts (council responds) + R-1 handoff (I1-5, with
 Jordi — the one still-idle ticket).
+
+### 2026-07-04 (later 10) · [worker] — Step 0 planner branch landed; B-3 closure BLOCKED on OpenRouter provisioning key
+
+**Step 0 done.** Planner branch `planner/i1-review` (`0f2feee`) pushed + merged as **#550** (fast-forward
+over main; credit caps approved, B-3 resolution, states refreshed).
+
+**B-3 closure attempted, BLOCKED at the first step.** The planner resolution routes the tenant LLM key
+through D-5's gateway: mint a $50-capped OpenRouter provisioned key via `scripts/gateway/openrouter-key.mjs`.
+That script requires **`OPENROUTER_PROVISIONING_KEY`** — **confirmed MISSING** (not in env,
+`~/.config/alpha9/` (only `dokploy.env`), or macOS Keychain; the script errors
+`OPENROUTER_PROVISIONING_KEY is not set (a provisioning key, not an inference key)`).
+
+Per the dispatch + the register's own "only-if-missing ask to Jordi", I filed it (blocker register, B-3)
+and stopped — did **not** create the vault or touch testco's env, to avoid half-provisioned state.
+
+**Needs Jordi:** create a *provisioning* key at https://openrouter.ai/settings/provisioning-keys and
+provide `OPENROUTER_PROVISIONING_KEY`. Then (unblocked, ~10 min): mint `zenod-tenant:testco` $50 → wire
+`LLM_BASE_URL`/`LLM_API_KEY` into `tenant-testco` env → scaffold `zenod-ai/testco-brain` (schema v1) →
+finish onboarding → I1-4 closing receipt (council responds at https://z-testco.zenod.dev).
+
+`tenant-testco` remains up as staging (console loads over TLS; admin pw set). I1-4 stays 🟡 (provision
+PASS; chat pending this credential).
