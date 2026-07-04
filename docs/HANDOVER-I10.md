@@ -126,3 +126,20 @@ _(Content of PR #551, restored to main by the ops agent: the PR was CLOSED with 
 - #549 journal-scan accepted: creation-context-only, existence-verified.
 - W1-3 record: closing run @bf03939 scored 21✅/2❌ (C-23→#548, C-07a→#549),
   C-15 clean 4th consecutive run. Receipts restored via PR #551.
+
+### 2026-07-04 · STEP 0 (ops) + STEP 1 (targeted re-test @7cd3250) — TESTER
+
+**STEP 0 (ops):**
+- **PR #547 merged** (`41cbab1`) — `/api/health` now returns a `sha` field (fixes #532's endpoint half). Live: `{"status":"ok","name":"console","version":"0.0.1","sha":"unknown"}` — the endpoint SHIPPED but the Dokploy build does not inject `GIT_SHA`, so the value is `"unknown"` (endpoint half done, build-arg half NOT). Its mere presence still confirms the running image is ≥`41cbab1` (⊇ `7cd3250`), so #548/#549 are on the deployed build.
+- **PR #551 could NOT be reopened/merged** — it was CLOSED with its head branch already deleted (GitHub refuses reopen). Its docs-only diff (the "FABLE AUDIT of W1-1/W1-2 — W1-3 authorized" entry) was restored to `main` directly by the ops agent (see the entry above). Its content was the W1-3 *authorization*, not a scoreboard row.
+- Fable FP3-ACCEPTED audit appended verbatim (above).
+
+**STEP 1 · C-23 targeted re-test @`7cd3250` (deployed, via `/api/test/chat`): ❌ RED — 2/6 spurious banners.**
+- Three read-path repros ×2 (fresh conversations). retest-01 ("what did I work on this week") → create-fabrication banner (`⚠️ …no GitHub issue was created… #473,#486,#498,#499… ignore the issue details below`); retest-05 ("summarize today") → execution-state banner (`⚠️ …could not confirm a terminal execution state…`). retest-02/03/04/06 clean.
+- **Root causes (two):** (1) the `isReadOnlyTaskingTool` allowlist misses `archus_list_github_issues` (and peer/agent reads generally) → the create-banner still leaks when the model reads the backlog via them; (2) the read-only gate only covers the create-fabrication banners, NOT the execution-state correction (`claimsExecutionState`) — which also fires spuriously on read-only summaries. The batch-3 enumerate-reads gate is incomplete.
+- **Scored:** #548 REOPENED with the evidence table + root causes → https://github.com/zenod-ai/zenod/issues/548#issuecomment-4883077136. (Fixed nothing — tester ≠ fixer.)
+
+**STEP 1 · C-07a: NOT RUN (deferred, with reason).** A *generic* real-deliverable run writes the PR/issue URL into the FINAL message too, so it passes via the pre-existing final-text path and does NOT exercise #549's journal-fallback (which only triggers when `final.md` lacks the URL). So a live generic dispatch has little power to validate #549 specifically — that fix is covered by the targeted unit fixture (`extractCreationEvidenceFromJournal`, backlog-monitor.test.mjs). Combined with C-23 already red (board bar unmeetable this round) and the real-dispatch/credit cost, deferred to the next re-test where a journal-only-URL fixture can be engineered.
+
+**VERDICT: BOARD BAR NOT MET.** C-23 still red @`7cd3250` (#548 reopened). **W3 soak clock does NOT start.** No fixing done this session.
+- **Recommend next:** fix #548 completely (robust read-only determination incl. `archus_*`/peer reads + extend suppression to ALL composer correction banners, or the render-gate route), redeploy, then re-run C-23 (6 read-path sends, zero banners) + a #549-specific C-07a (engineer a journal-has-URL/final-lacks-URL run). Also wire `GIT_SHA` into the Dokploy build so `/api/health.sha` stops reading `"unknown"` (finishes #532).
