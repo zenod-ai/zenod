@@ -131,6 +131,15 @@ TEST mode acceptable for the chain; live mode gated only on D-6 + live keys. Thi
 
 ### Blocker register
 
+- **B-8 · ⚠️ ROOT-CAUSED 2026-07-05 (I3-7), still needs a real fix (Jordi).** Two faults: (1) the API
+  `compose.deploy` is a no-op — the UI uses `compose.redeploy`; (2) Dokploy rewrites the tracked
+  `docker-compose.cloud.yml` (Traefik labels) → dirty tree → non-forcing `git pull` can't advance →
+  stale rebuilds; and even after `git reset --hard`, redeploy recreated from a **stale image**. A `git
+  push` does NOT reach the control plane. Interim runbook shipped (`zenod-ai/cloud` docs/DOKPLOY-DEPLOY.md:
+  reset --hard + `docker compose build --no-cache` in the Dokploy project + a label/env override). **Real
+  fix:** upgrade/reconfigure Dokploy to force-reset+clean+rebuild. Until then, deploys are manual-only.
+
+
 - **B-8 · 🔴 STILL OPEN (fresh receipts 2026-07-05).** Blocks deploying I3-1 to prod: pushed `zenod-ai/cloud@69069ab` + set OAuth env (compose.update→200), but `compose.deploy`→200 and refreshToken→301 both leave status stale-`done` with NO rebuild (`/auth/github` still 404 in prod). Same on the testco compose. Not fighting it further this session per dispatch. **Needs Jordi:** redeploy `zenod-cloud` (compose `17QoMFRgvmZ0Y2n19DINT`) + `tenant-testco` from the Dokploy UI, or fix the deploy worker. Original: `compose.deploy` and the refreshToken
   endpoint return 200/400 but the compose stays `idle`/stale-`done` and the container isn't (re)created —
   seen provisioning tw1 (eventually self-recovered) and now blocking I3-4 (testco's console container is
@@ -960,3 +969,32 @@ is engine-UI work; next session once B-8 clears.
 GitHub account and a test card `4242 4242 4242 4242`"): buy a tier → Stripe checkout → success →
 **Claim your workspace with GitHub**. I3-2 makes the in-console vault connect unaided. Did NOT walk the
 journey (binding rule). No secrets in doc.
+
+### 2026-07-05 (later 25) · [worker] — Step 0 landed; I3-7 root-caused + I3-1 LIVE (manual recovery); I3-2 deferred
+
+**Step 0 ✅** — planner `planner/i3-b8` landed (PR #583).
+
+**I3-7 · deploy pipeline — ROOT-CAUSED.** `git push` doesn't reach the control plane because: (1) API
+`compose.deploy` is a no-op (UI uses `compose.redeploy`); (2) Dokploy rewrites the tracked compose file
+(Traefik labels) → dirty tree blocks `git pull` → stale rebuilds; redeploy also recreated from a stale
+image. Interim runbook in `zenod-ai/cloud` DOKPLOY-DEPLOY.md. Accept bar ("3 consecutive API rebuilds")
+**NOT met** — the API pipeline is genuinely broken; needs a Dokploy fix (B-8). I got I3-1 out via a
+**manual** rebuild instead (SSH: reset --hard + `docker compose build --no-cache` in Dokploy's project +
+a `docker-compose.override.yml` restoring the Traefik labels + OAuth `.env`).
+
+**I3-1 · account layer — ✅ LIVE + verified on cloud.zenod.dev** (up to consent, per acceptance; the first
+grant is Jordi's Stranger Run): `/success.html` → "Claim your workspace with GitHub" ✓ · `/auth/github`
+→ 302 → github.com/login/oauth/authorize (`client_id=Ov23…`, scope `read:user user:email`, signed state)
+✓ · tampered-state callback → 400 ✓ · `/healthz` 200 ✓. ⚠️ **Fragile:** it's live via a manual override;
+a future Dokploy deploy could revert it until B-8 is fixed.
+- *Mid-fix outage, recovered:* while wiring labels I briefly 404'd cloud.zenod.dev; restored within minutes.
+
+**I3-2 · vault-connect polish — DEFERRED.** Substantial engine-UI work best done against a revived testco
+with a healthy pipeline; next session. testco's console is back up (z-testco 200) but its stack is patched
+similarly.
+
+**Stranger Run — startable for the money+identity path; vault step still rough (I3-2 pending).**
+Start: **https://zenod.dev/#pricing**. Persona: *"you're a stranger with a GitHub account and a test card
+`4242 4242 4242 4242`."* Buy a tier → Stripe checkout → success → **Claim your workspace with GitHub** →
+(consent + first grant is yours). The in-console **vault connect is still the raw flow** until I3-2 lands.
+Did NOT walk the journey (binding rule). No secrets in doc.
