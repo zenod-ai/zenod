@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The DIY Target — Architecture, Locked</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2d3646;
+    --txt:#e6edf3; --dim:#8b949e; --acc:#58a6ff; --good:#3fb950; --bad:#f85149; --warn:#d29922; --pur:#bc8cff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-snap-type:y mandatory}
+  body{background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+  section{min-height:100vh;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:center;padding:48px 7vw;border-bottom:1px solid var(--line)}
+  h1{font-size:2.5rem;line-height:1.15;margin-bottom:12px}
+  h2{font-size:1.8rem;margin-bottom:6px}
+  .kicker{color:var(--acc);text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;margin-bottom:12px}
+  .sub{color:var(--dim);max-width:68ch}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}
+  .cols3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:20px}
+  .node{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 14px;text-align:center;font-size:.85rem}
+  .node b{display:block;font-size:.92rem}
+  .node small{color:var(--dim);font-size:.72rem;display:block}
+  .hub{border-color:var(--good);background:#12261a}
+  .own{border-color:var(--acc)}
+  .wrk{border-style:dashed;border-color:var(--warn)}
+  .mail{border-color:var(--pur)}
+  .row{display:flex;gap:12px;justify-content:center;align-items:stretch;flex-wrap:wrap;margin-top:10px}
+  .arr{text-align:center;color:var(--dim);font-size:.78rem;padding:6px 0}
+  .note{margin-top:14px;color:var(--dim);font-size:.86rem;max-width:74ch}
+  table{border-collapse:collapse;margin-top:18px;width:100%;font-size:.86rem}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:var(--panel);color:var(--acc);font-size:.8rem}
+  td b{color:var(--txt)}
+  .flow{display:flex;flex-direction:column;gap:5px;margin-top:18px}
+  .step{display:flex;gap:12px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-size:.88rem}
+  .step .n{color:var(--acc);font-weight:700;min-width:34px;font-size:.8rem}
+  .step em{color:var(--dim);font-style:normal;font-size:.78rem}
+  .ok{color:var(--good)} .no{color:var(--bad)} .wip{color:var(--warn)}
+  .tag{display:inline-block;border:1px solid var(--line);border-radius:20px;padding:2px 11px;font-size:.73rem;color:var(--dim);margin:4px 6px 0 0}
+</style>
+</head>
+<body>
+
+<!-- 1 · TITLE -->
+<section>
+  <div class="kicker">The DIY target · locked · 2026-07-03 · Fable → Jordi</div>
+  <h1>One brain. Two kinds of tools.<br>One mailbox per conversation.</h1>
+  <p class="sub">This is the whole architecture. Everything reachable stays an MCP server (nothing you built is
+  thrown away). Nobody routes work except the brain. Work survives restarts. That's it — three sentences,
+  and two of them are already true in the repo today.</p>
+  <div style="margin-top:18px">
+    <span class="tag">governors stay MCP servers — unchanged</span>
+    <span class="tag">sub-agents = MCP tools with an LLM inside (your words, correct)</span>
+    <span class="tag">banned: tools calling tools sideways</span>
+    <span class="tag">iteration 8 is building the last two pieces right now</span>
+  </div>
+</section>
+
+<!-- 2 · THE INSIGHT -->
+<section>
+  <div class="kicker">Your question, answered exactly</div>
+  <h2>A sub-agent IS an MCP tool with intelligence in the middle.</h2>
+  <p class="sub">You nailed it. Same contract everywhere: call → (eventually) response + receipt. The response
+  can take seconds or an hour — that changes the plumbing (async, completion event), not the concept.
+  There are just three flavors of the same thing:</p>
+  <div class="cols3">
+    <div class="card">
+      <b style="color:var(--acc)">Deterministic tool</b>
+      <p class="note" style="margin-top:8px">e.g. <code>archus.create_issue</code>.<br>No judgment. Seconds.
+      Returns ID + URL or a loud error. Never a silent ack.</p>
+    </div>
+    <div class="card">
+      <b style="color:var(--warn)">Sub-agent (worker)</b>
+      <p class="note" style="margin-top:8px">e.g. <code>run_task("research posts")</code>.<br>LLM inside. Minutes–hours.
+      Fresh context, budget, durable step log. Returns a structured result + receipts, then dies.</p>
+    </div>
+    <div class="card">
+      <b style="color:var(--pur)">Governor (owner)</b>
+      <p class="note" style="margin-top:8px">e.g. <code>zenod.store_memory</code>.<br>Persistent. Single writer of one
+      state dimension. LLM only where taste is the product (filing, drafting). Serializes writes.</p>
+    </div>
+  </div>
+  <p class="note"><b>The only thing that changes vs today:</b> these tools stop calling each other sideways.
+  No governor routes to another governor. All calls fan out from a brain and all results fan back to it.
+  That single rule is what kills the silent acks, the lost context, the "three front doors."</p>
+</section>
+
+<!-- 3 · TOPOLOGY -->
+<section>
+  <div class="kicker">The topology</div>
+  <h2>How a message becomes work</h2>
+  <div class="card" style="margin-top:16px">
+    <div class="row">
+      <div class="node"><b>WhatsApp</b></div><div class="node"><b>Web chat</b></div>
+      <div class="node"><b>Claude Code / Cowork</b><small>external brains</small></div>
+      <div class="node"><b>Schedules</b><small>cron sessions</small></div>
+    </div>
+    <div class="arr">↓ every input becomes a message in…</div>
+    <div class="row"><div class="node mail" style="min-width:340px"><b>THE MAILBOX — one queue per conversation</b>
+      <small>serialize · coalesce rapid messages · dedupe · durable</small></div></div>
+    <div class="arr">↓ one turn at a time per conversation</div>
+    <div class="row"><div class="node hub" style="min-width:340px"><b>THE BRAIN (Console)</b>
+      <small>owns the conversation's context · writes the living doc · the only router</small></div></div>
+    <div class="arr">↓ calls tools — never the other way round ↓</div>
+    <div class="cols" style="margin-top:4px">
+      <div class="card">
+        <b style="color:var(--acc)">OWNERS (MCP, typed, receipt-or-error)</b>
+        <p class="note" style="margin-top:6px"><code>zenod.*</code> memory · <code>archus.*</code> backlog ·
+        <code>callisthenes.*</code> the only public voice · <code>phylax.*</code> the only door to you</p>
+      </div>
+      <div class="card">
+        <b style="color:var(--warn)">WORKERS (sub-agents on the durable step log)</b>
+        <p class="note" style="margin-top:6px">spawn in parallel · hard budget · crash-resume ·
+        receipts required · completion returns as a mailbox event</p>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>"How does Claude connect to this?"</b> — exactly like it's doing right now: external agents
+  call the governors' MCP tools directly (Fable stored today's decision via <code>zenod.store_memory</code> from
+  Cowork). One-brain is a rule about who ROUTES between owners, not about who may call a tool. Owners
+  serialize their writes, so many brains can safely share them.</p>
+</section>
+
+<!-- 4 · CONCURRENCY -->
+<section>
+  <div class="kicker">"What if I send two messages quickly?"</div>
+  <h2>The mailbox rules</h2>
+  <div class="flow">
+    <div class="step"><span class="n">R1</span><span><b>One conversation = one session = one turn at a time.</b> Your two rapid messages queue up; the brain finishes its turn, then reads BOTH and answers once, with full context. <em>no interleaved half-answers</em></span></div>
+    <div class="step"><span class="n">R2</span><span><b>Different conversations run in parallel.</b> Your WhatsApp thread and a scheduled session don't wait for each other — separate mailboxes, separate brain turns.</span></div>
+    <div class="step"><span class="n">R3</span><span><b>Long work never holds the mailbox.</b> The brain dispatches a worker and ends its turn. The worker's completion (with receipts) arrives later as just another message in the queue. <em>this is why you can keep talking while things run</em></span></div>
+    <div class="step"><span class="n">R4</span><span><b>Everything durable.</b> Mailbox and step logs survive restarts — a redeploy resumes turns and runs instead of killing them. <em>I8-2, in flight tonight</em></span></div>
+    <div class="step"><span class="n">R5</span><span><b>Phylax paces the way back.</b> Outbound to you is deduped and sequenced by one owner — no triple error bubbles, ever again.</span></div>
+  </div>
+</section>
+
+<!-- 5 · LOOP A -->
+<section>
+  <div class="kicker">User journey · the dev loop (what's literally running right now)</div>
+  <h2>Backlog → execute → test → summarize → discuss</h2>
+  <div class="flow">
+    <div class="step"><span class="n">1</span><span>You + the brain agree the <b>iteration document</b> (objective, tickets, acceptance criteria, tests). The doc is the brain's state — not a message between agents.</span></div>
+    <div class="step"><span class="n">2</span><span><b>Backlog sub-agent</b> turns the doc into real tickets via <code>archus.*</code> — verbatim criteria, IDs + URLs back.</span></div>
+    <div class="step"><span class="n">3</span><span><b>Executor sub-agents in parallel, one per ticket.</b> Each: fresh context, budget, durable log; PR auto-merges on green; appends a dated receipt to the doc. <em>your "parallelize please" — this is where it lives</em></span></div>
+    <div class="step"><span class="n">4</span><span><b>Tester sub-agent</b> (separate by design) runs the canonical board against the deployed build, appends the scoreboard. Fails must map to tickets.</span></div>
+    <div class="step"><span class="n">5</span><span><b>Summarizer sub-agent</b> reads the doc + receipts: what worked, what failed, proposed next backlog.</span></div>
+    <div class="step"><span class="n">6</span><span><b>The brain discusses with you</b> → iteration N+1 doc. Handoffs: the document and the tickets. Agent-to-agent chatter: zero.</span></div>
+  </div>
+</section>
+
+<!-- 6 · LOOP B -->
+<section>
+  <div class="kicker">User journey · the product loop (the thing we sell)</div>
+  <h2>Memory-fed posting, replying, and learning</h2>
+  <div class="flow">
+    <div class="step"><span class="n">VAULT</span><span>Objectives, briefings, product knowledge, voice — the brain's memory, owned by Zenod. You feed it by talking.</span></div>
+    <div class="step"><span class="n">SA-1</span><span><b>Researcher/marketer sub-agent</b> (scheduled): reads memory via <code>zenod.search/get</code>, researches the web, proposes a <b>post backlog</b> via <code>archus.*</code> — every proposal cites its memory sources.</span></div>
+    <div class="step"><span class="n">SA-2</span><span><b>Poster sub-agent</b>: takes the next queued item, posts via <code>callisthenes.post</code> (the only voice, throttled N/hour), files the permalink receipt into memory.</span></div>
+    <div class="step"><span class="n">SA-3</span><span><b>Replier sub-agent</b>: reads mentions/replies, drafts responses grounded in memory, sends via Callisthenes under the same throttle; sensitive ones held for you via Phylax.</span></div>
+    <div class="step"><span class="n">SA-4</span><span><b>Distiller sub-agent</b>: makes sense of audience signal and files it back via <code>zenod.store</code> — the loop learns; next proposals are sharper.</span></div>
+    <div class="step"><span class="n">YOU</span><span>Enable once → it runs. No per-item approvals — safety is <b>guardrails</b> (throttle, spend cap, quiet hours) + nudges ("push the memory angle") stored as standing directives in memory.</span></div>
+  </div>
+  <p class="note"><b>Is this loop a deciding factor? It was — and it decided FOR this model.</b> Four workers that
+  never talk to each other, coordinating through memory, a queue, and one voice: that's the sub-agent + owner
+  pattern verbatim. Nothing here needs Eve; everything here needs exactly the two pieces iteration 8 builds.</p>
+</section>
+
+<!-- 7 · GAP MAP -->
+<section>
+  <div class="kicker">Why "we're close" is a fact, not a mood</div>
+  <h2>Target component → what exists today</h2>
+  <table>
+    <tr><th>Component of the target</th><th>Status</th></tr>
+    <tr><td>Channels (WhatsApp, web) · schedules</td><td class="ok">✓ exists, keeps working</td></tr>
+    <tr><td>Governors as MCP servers (memory, backlog, voice, door)</td><td class="ok">✓ exists — unchanged by design</td></tr>
+    <tr><td>Sandbox / runner · parallel worker spawn (fanout)</td><td class="ok">✓ exists</td></tr>
+    <tr><td>Receipts / reply-gate (no claim without evidence)</td><td class="ok">✓ exists, proven (0 fabrications ×3 runs)</td></tr>
+    <tr><td>Canonical test board C-01…C-21</td><td class="ok">✓ exists — and is the acceptance bar for ANY future substrate</td></tr>
+    <tr><td>Typed gateways, one front door, no peer routing</td><td class="wip">⟳ I8-1 — running tonight (PR #499 + finish)</td></tr>
+    <tr><td>Durable step log · hard budgets · crash-resume</td><td class="wip">⟳ I8-2 — running tonight (spike modules, ~200 LOC, 6/6 tests)</td></tr>
+    <tr><td>Mailbox coalescing formalized at intake</td><td class="wip">⟳ falls out of I8-1/I8-2 (engine already serializes per conversation)</td></tr>
+  </table>
+  <p class="note"><b>The Eve clause, so we stop re-litigating:</b> the acceptance harness is standing. Eve at
+  1.0/GA (or Flue with a real off-Cloudflare store) gets re-run against the same six tests; it's adopted only
+  if it beats what we own on evidence. If you want to <i>see</i> Eve meanwhile, deploying steve untouched at
+  s1.zenod.dev is a fine weekend museum visit — off the critical path, zero decisions attached.</p>
+</section>
+
+</body>
+</html>
