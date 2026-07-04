@@ -121,6 +121,14 @@ export interface TaskingInput {
    * user's message; this note is extra guidance derived by the transport/shell.
    */
   contextNote?: string;
+  /**
+   * True when `text` is derived from EMBEDDED material — an image's described contents,
+   * a quoted/forwarded message — rather than the user's own directive. Embedded content
+   * is CONTEXT, never user intent (soak finding #1 / C-26): the Console must not decompose
+   * it into intake ask-buckets. The user's actual instruction, if any, is a caption handled
+   * as ordinary directive text.
+   */
+  embeddedContext?: boolean;
 }
 
 export interface TaskingAction {

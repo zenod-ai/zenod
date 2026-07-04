@@ -7,7 +7,42 @@ import {
   intakeAsksContextNote,
   isExecuteDirective,
   resolveCurrentIntents,
+  shouldDecomposeIntake,
 } from "../src/intakeAsks.js";
+
+// Soak finding #1 / C-26 — images are filed, not interrogated; internal ask-ledger
+// language never surfaces (doctrine rule 5).
+describe("C-26 · intake provenance + surface language (#565)", () => {
+  // A screenshot's described contents often LOOK like a multi-ask message. This is the
+  // exact leak text shape: a long block with several ask-signals.
+  const embeddedImageText =
+    "WhatsApp image from +123:\n\nThe screenshot shows a chat: can you research the idealista scraper, " +
+    "also please file a ticket for the benchmark, and notify me when the runner finishes. " +
+    "Another thing — investigate what happened to the prior backlog UI request and look up its status.";
+
+  it("PART 1: embedded (image-derived) content is NOT decomposed into asks", () => {
+    // The bare text WOULD decompose (it's full of ask-signals)…
+    expect(extractIntakeAsks(embeddedImageText).length).toBeGreaterThan(1);
+    // …but as embedded context on the Console it must not.
+    expect(shouldDecomposeIntake({ agentName: "console", text: embeddedImageText, embeddedContext: true })).toBe(false);
+    // A normal typed multi-ask message still decomposes.
+    expect(shouldDecomposeIntake({ agentName: "console", text: embeddedImageText })).toBe(true);
+    // Execute directives and non-Console agents never decompose.
+    expect(shouldDecomposeIntake({ agentName: "console", text: "have Epaminon run this and push it" })).toBe(false);
+    expect(shouldDecomposeIntake({ agentName: "zenod", text: embeddedImageText })).toBe(false);
+  });
+
+  it("PART 2: the intake context note forbids surfacing internal ask-ledger language", () => {
+    const asks = extractIntakeAsks(embeddedImageText);
+    const note = intakeAsksContextNote(asks);
+    // It must instruct the model to keep the decomposition internal (doctrine rule 5).
+    expect(note.toLowerCase()).toContain("doctrine rule 5");
+    expect(note.toLowerCase()).toContain("never render it to the user");
+    // The exact leaked phrasings are named as forbidden.
+    expect(note).toContain("no durable backlog request");
+    expect(note).toContain("no Phylax event/urgency provided");
+  });
+});
 
 describe("execute fast-lane (isExecuteDirective)", () => {
   it("recognizes a codex/Epaminon task directive, tolerating voice-transcription mangling", () => {

@@ -60,7 +60,7 @@ import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./con
 import { createIssueThenRunJourney, type CreateIssueThenRunInput, type CreateIssueThenRunResult } from "./createIssueRunJourney.js";
 import { createIssuesJourney, type CreateIssuesJourneyInput, type CreateIssuesJourneyResult } from "./parallelIssueJourney.js";
 import { type RunEphemeralJourneyInput, type RunEphemeralJourneyResult } from "./ephemeralJourney.js";
-import { extractIntakeAsks, intakeAsksContextNote, isExecuteDirective, prefixReplyWithIntakeAsks, resolveCurrentIntents, type IntakeAsk } from "./intakeAsks.js";
+import { extractIntakeAsks, intakeAsksContextNote, prefixReplyWithIntakeAsks, resolveCurrentIntents, shouldDecomposeIntake, type IntakeAsk } from "./intakeAsks.js";
 import {
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
@@ -420,7 +420,13 @@ export class Runtime {
         // Execute fast-lane (intake contract): a "task for codex/Epaminon" is ONE task,
         // filed verbatim — never decomposed into asks. Skip intake decomposition for it
         // so the Console hands the whole message to Codex instead of shattering it.
-        const asks = this.agent.name === "console" && !isExecuteDirective(input.text) ? extractIntakeAsks(input.text) : [];
+        // Soak finding #1 / C-26: embedded material (an image's described contents, quoted/
+        // forwarded text) is CONTEXT, never user intent — the Console must NOT decompose it
+        // into intake ask-buckets. The user's real instruction, if any, arrives as a caption
+        // handled as ordinary directive text; the embedded description is passed as context.
+        const asks = shouldDecomposeIntake({ agentName: this.agent.name, text: input.text, embeddedContext: input.embeddedContext })
+          ? extractIntakeAsks(input.text)
+          : [];
         const contextNote = asks.length > 1 ? [input.contextNote, intakeAsksContextNote(asks)].filter(Boolean).join("\n\n") : input.contextNote;
         const taskingInput = contextNote ? { ...input, contextNote } : input;
         const context: TaskingRunContext = {

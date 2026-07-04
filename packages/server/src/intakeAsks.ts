@@ -173,6 +173,14 @@ export function isExecuteDirective(text: string): boolean {
   return EXECUTE_AGENT_RE.test(t) && EXECUTE_ACTION_RE.test(t);
 }
 
+// Soak finding #1 / C-26 — the single decision for whether a turn's text is decomposed
+// into intake asks. Only the Console decomposes; an execute directive is one verbatim task
+// (never shattered); and EMBEDDED material (an image's described contents, quoted/forwarded
+// text) is CONTEXT, never user intent, so it is never decomposed. Pure + testable.
+export function shouldDecomposeIntake(opts: { agentName: string; text: string; embeddedContext?: boolean }): boolean {
+  return opts.agentName === "console" && !opts.embeddedContext && !isExecuteDirective(opts.text);
+}
+
 export function extractIntakeAsks(text: string): IntakeAsk[] {
   const normalized = normalizeWhitespace(text);
   if (
@@ -286,7 +294,8 @@ export function intakeAsksContextNote(asks: IntakeAsk[]): string {
   const intents = resolveCurrentIntents(asks);
   return [
     "Console intake decomposition detected multiple asks in the current user message.",
-    "Treat them as separate asks. Do not flatten them into one vague answer. If acting on one ask, keep the others visible as open/pending unless you have receipts.",
+    "This decomposition is an INTERNAL reasoning aid for you only. Doctrine rule 5: NEVER render it to the user. The reply must be plain, natural words and links — no ask numbering, no bucket/action-type names (research/create_backlog/execute/notify_or_escalate/clarify/answer_now), no status→resolution tokens, and no internal phrasings like \"no durable backlog request\", \"no Phylax event/urgency provided\", \"pending direct research\", or \"searched, no durable tracking requested\". Internal decomposition stays in operator logs; the user sees only the outcome.",
+    "Treat them as separate asks in your own reasoning. Do not flatten them into one vague answer, but answer in prose — if you can only partially address them, say so conversationally without exposing the internal ledger.",
     "",
     "Detected asks:",
     formatIntakeAsks(asks),
