@@ -232,3 +232,29 @@ Cloudflare WAF in the path. Jordi completed a real test-card checkout (`4242…`
 - Pricing page on `apps/site` (the customer-facing "buy" button) + link the H-11 legal pages (PR #523).
 - Swap the **$50 placeholder** price for the decided D-5 amount.
 - Rotate the `sk_test_` pasted in chat (use a restricted key).
+
+### 2026-07-04 (later 6) · Worker — H-1 live provision: BLOCKED on private GHCR image (acceptance NOT passed)
+
+Wildcard DNS confirmed (`*.zenod.dev → 49.13.24.121`, arbitrary `z-*.zenod.dev` resolves). Runbook +
+script updated to drop the per-tenant DNS step / assume the wildcard (zenod-ai/cloud `677ec6f`).
+
+**Live provision attempted, FAILED.** `provision-tenant.mjs --name testco` created the Dokploy compose
+`tenant-testco` (composeId `Xo_6cPQAlEBTMvBtBu0gU`), set git source (public zenod repo,
+`docker-compose.tenant.yml`), added domain `z-testco.zenod.dev` → `zenod-console:8080` — but **deploy
+errors in ~9s** (running→error, before any container starts).
+
+**Root cause: `ghcr.io/zenod-ai/zenod` is a PRIVATE package.** GHCR packages don't inherit repo
+visibility. Anonymous manifest pull → HTTP 403; the VPS can't pull the tenant image, so every tenant
+stack (and tenant-zero) fails. The tenant compose builds nothing (all images from ghcr), consistent with
+a pull-auth failure at ~9s. No Dokploy registry credential is configured either.
+
+**BLOCKED — needs Jordi (I can't; my token lacks `write:packages`):** make the package public —
+GitHub → `zenod-ai` → Packages → `zenod` → Package settings → Change visibility → **Public**. This is the
+intended state (the image is the public delivery artifact for tenants *and* self-host per HOSTED-PLAN §4).
+Alternative: add a Dokploy registry credential (ghcr + a read:packages PAT) and reference it in the
+tenant template — heavier, keeps the image private.
+
+Once public, no re-provision needed: redeploy compose `Xo_6cPQAlEBTMvBtBu0gU` and continue verification.
+`tenant-testco` left in place (failed deploy = no running containers) for that redeploy.
+
+**H-1 acceptance: NOT passed** (no tenant came up). Timing not meaningful until unblocked.
