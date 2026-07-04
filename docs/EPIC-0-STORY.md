@@ -45,7 +45,7 @@ adopted 2026-07-04.
 
 | ID | Deliverable | Acceptance criteria | State |
 |---|---|---|---|
-| **E0-1** | The narrative — one page | Arc memory→team→loops on one page; a one-liner; three headlines; resolves the tension (V5's "your memory and your team" grows to carry "works while you sleep" without losing the memory moat); Jordi settles SD-1 | 🟡 DRAFT v1 below — SD-1 with Jordi |
+| **E0-1** | The narrative — one page | v2 per SD-0: TWO-STORY structure — (a) the loop product's page (project memory + objective + the loop, machinery hidden, service CTA) as commercial lead; (b) Zenod-the-framework as movement/trust layer beneath. One-liner + headlines per story; names pending SD-2 | 🟡 v1 below (pre-SD-0, kept as record) — v2 next, needs SD-2 |
 | **E0-2** | Positioning deck V6 | HTML deck in docs/, same craft as V5; keeps council+memory spine; loop as the payoff; hosted as the CTA; zero peer-chatter implications (council-v2 KEEP/DELETE columns respected); Jordi review → replaces V5 as "the story" reference in LAUNCH-CONTROL (Epic-0 row only) | ⚪ blocked on E0-1/SD-1 |
 | **E0-3** | Website content map | Page-by-page copy plan for zenod.dev selling hosted: hero, the team, the flagship loop walked through, trust/receipts (public test board as proof), open-source page, pricing placeholder (copy only, no numbers); every page has purpose + copy + CTA; consistent with D-4 (QR pairing at launch) and D-5 (prepaid credits) states | ⚪ blocked on E0-1 |
 | **E0-4** | Launch materials | Drafts exist for: announcement post; the "we test our agent for lying" essay (grounded in CANONICAL-TESTS + real scoreboard receipts); demo script for the flagship loop (maps to the REAL loop only — receipts culture applies to marketing) | ⚪ blocked on E0-1 |
@@ -75,8 +75,45 @@ Cross-track tension to resolve inside this decision: Epic-2's settled launch SKU
 loop is the **public-presence operation** (decision 5). Both real; the story must pick which one a
 stranger meets first.
 
-**SD-1 · The hero line — PARKED pending SD-0.** Four candidates drafted in E0-1 below; whichever
-story architecture SD-0 picks, the hero line inherits it.
+**DECIDED 2026-07-04 (Jordi, voice): B — radically simplified. Sell the loop as its own branded
+service.** His words: "the loop has its own image and it's pre-configured and it does one thing,
+and we sell the loop — and its memory … we can say it uses Zenod technology, but that's kind of
+incidental … I just want to sell this service … Zenod is more like a movement, your own memory —
+maybe Zenod is more like a framework, and it allows you to create loops which can be sold and
+branded." Constituent calls inside the decision:
+- **The product is THE LOOP, undiluted:** memory + objective → miner proposes posts → poster
+  publishes → replier reads replies, replies, files feedback → results compared against the
+  objective.
+- **Project-centered, not person-centered:** one repo = the PROJECT's memory; authentication is the
+  project's accounts. This product promotes a project. (Zenod-the-movement stays about YOUR
+  memory — do not betray that.)
+- **Service-first:** hosted, sold as a service. Self-host is not this product's pitch.
+- **Machinery hidden:** the buyer sees a chat (train the memory by talking / voice notes) and a
+  backlog/queue UI, nothing else. Models, lanes, council internals pre-configured and invisible.
+- **Speed:** go out with it in parallel to the product finishing.
+Consequence for the nine inherited decisions: none are broken — decisions 1–7 describe the
+machinery UNDER the loop product; 8–9 now apply to the loop product's brand, and Zenod's own site
+carries the movement/framework story separately.
+
+**SD-1 · The hero line — RESCOPED by SD-0.** Two hero lines now needed: the loop product's
+(commercial lead) and Zenod-the-framework's (movement). Both pending SD-2.
+
+**SD-2 · The loop product's name — OPEN (with Jordi).** SD-0 requires "its own image." Naming
+direction: the category screams AI/agents; the buyable outcome is RHYTHM — a steady, on-message
+public heartbeat for a project, grounded in its memory. Candidates in play (chat, 2026-07-04):
+Drumbeat · Herald · Beacon · Chronicle. Steer pending.
+
+## Cross-track requirements (Jordi carries; rule 10)
+
+- **→ Epic 2 (Product-Fable):** SD-0 reframes the sellable unit as the branded loop service
+  (project-centered, presence loop). Their settled SKU language ("three-role project council") and
+  the D-6 three-tier pricing page may need re-aiming at the loop product. Not mine to decide —
+  needs a Fable-table alignment pass.
+- **→ Stability track:** transcription quality is now DOUBLY product-critical — the loop product's
+  primary input is voice ("you train the memory by talking") and Jordi reports transcripts are
+  consistently wrong ("it never gets it right"). Per the standing rule (unexpected behavior → test
+  list): needs a canonical test + ticket on the engine board. Raised by Jordi 2026-07-04, receipted
+  here.
 
 ---
 
@@ -152,6 +189,18 @@ the team that knows your company and posts for you — and shows you the receipt
   deck, alpha-research deck, vault canon incl. 2026-07-03 Architecture Canon, EPIC-2 doc for D-4/D-5
   consistency).
 - This doc created. E0-1 drafted (above). SD-1 put to Jordi as the single taste question.
+### 2026-07-04 · [planner/Story-Fable] SD-0 DECIDED — the loop is its own branded service
+- Jordi (voice): sell the loop, pre-configured, one thing, project-centered (project repo memory,
+  project accounts); "uses Zenod technology" incidental; service-first; machinery hidden (chat +
+  backlog UI only); speed — go out in parallel. Zenod stays the movement/framework. Recorded in
+  SD-0 above with his words. SD-1 rescoped (two hero lines), SD-2 (naming) opened.
+- Cross-track requirements section added: Epic-2 SKU alignment + transcription-quality engine
+  ticket. Jordi routes both.
+- Git state note: a runner rebased this track's first four commits onto origin/main and pushed
+  (now live as `4681aab`/`beed3cf`/`2333ed7`/`82ae6b5` — verified via raw.githubusercontent) but
+  the SD-0-opened commit `9800209` was dropped by the same reset — recovered via cherry-pick as
+  `266e99b`. This entry's commit is again LOCAL until pushed.
+
 ### 2026-07-04 · [planner/Story-Fable] SD-1 parked; SD-0 opened from Jordi's steer
 - Jordi (voice, via SD-1 prompt): memory at the center + loops around it confirmed as the two
   pillars; wants checkpoints-and-steering over polished outcomes; raised the real question — is the
