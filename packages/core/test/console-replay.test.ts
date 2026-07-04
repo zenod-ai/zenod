@@ -320,6 +320,21 @@ describe("Console behavior replay harness", () => {
       modelText:
         "I found two possible issues, [#108](https://github.com/AlfaBlok/obsidian-brain/issues/108) and [#109](https://github.com/AlfaBlok/obsidian-brain/issues/109). I did not close anything; which one do you mean?",
     },
+    {
+      // C-15 / #257 — a blocked edit whose prose still claims "Note added" (with NO
+      // issue number, so the number-adjacency guard can't catch it). Ground truth: a
+      // recorded edit_issue failure + zero successful write receipt.
+      prompt: "jot a note on #253 but the edit is blocked",
+      actions: [{ tool: "edit_issue", input: { message: "jot a note on #253" }, result: "ERROR: GitHub returned 403: forbidden" }],
+      modelText: "Note added to #253.",
+    },
+    {
+      // The healthy path must NOT be over-corrected: a real edit receipt makes "Note
+      // added" an honest claim.
+      prompt: "jot a note on #253 and it lands",
+      actions: [{ tool: "edit_issue", input: { message: "jot a note on #253" }, result: "Edited #253: https://github.com/AlfaBlok/obsidian-brain/issues/253" }],
+      modelText: "Note added to #253.",
+    },
   ];
 
   it.each(cases)("$prompt", async (replay) => {
@@ -370,6 +385,26 @@ describe("Console behavior replay harness", () => {
     expect(reply.text).toMatch(/^⚠️ Correction/);
     expect(reply.text).toContain("no GitHub issue was created");
     expect(reply.text).toContain("GitHub returned 403: forbidden");
+  });
+
+  it("C-15/#257: does not let a blocked edit render a fabricated 'Note added'", async () => {
+    const replay = cases.find((c) => c.prompt === "jot a note on #253 but the edit is blocked")!;
+    const engine = replayEngine([replay]);
+
+    const reply = await engine.handleTasking({ text: replay.prompt, surface: "selftest", conversationKey: "edit-blocked" });
+
+    expect(reply.text).toMatch(/^⚠️ Correction — that change was not applied/);
+    expect(reply.text).toContain("GitHub returned 403: forbidden");
+  });
+
+  it("C-15/#257: leaves a genuine 'Note added' untouched when the edit receipt is real", async () => {
+    const replay = cases.find((c) => c.prompt === "jot a note on #253 and it lands")!;
+    const engine = replayEngine([replay]);
+
+    const reply = await engine.handleTasking({ text: replay.prompt, surface: "selftest", conversationKey: "edit-lands" });
+
+    expect(reply.text).not.toMatch(/⚠️ Correction/);
+    expect(reply.text).toContain("Note added to #253.");
   });
 
   it("adds the real execution ticket URL when queue_execution succeeds but model prose omits it", async () => {

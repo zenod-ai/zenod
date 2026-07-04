@@ -50,7 +50,7 @@ export interface RecordedAction {
 }
 
 const READ_ONLY_REQUEST_RE =
-  /\b(read[- ]only|do not mutate|don't mutate|do not change|don't change|do not create|don't create|do not open|don't open|do not file|don't file|do not edit|don't edit|do not close|don't close|no mutation|no mutations|just (?:check|read|search|find|list|show|tell)|what (?:is|are|would)|what would|status of|what's the status|show me|tell me about)\b/i;
+  /\b(read[- ]only|do not mutate|don't mutate|do not change|don't change|do not create|don't create|do not open|don't open|do not file|don't file|do not edit|don't edit|do not close|don't close|no mutation|no mutations|just (?:check|read|search|find|list|show|tell)|what (?:is|are|would)|what would|status of|what's the status|show me|tell me about|need(?:s|ed)?\s+(?:context|info|information|details|background)|(?:context|(?:more\s+)?(?:info|information|details|background))\s+on)\b/i;
 const EXECUTION_STATUS_REQUEST_RE =
   /(?:^\s*(?:did|was|is|has|have|what(?:'s| is))\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished|status)\b|\b(?:execution|run|runner|queue)\s+status\b|\bstatus\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished)\b)/i;
 const QUALIFIED_ISSUE_REF_RE = /\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+\b/;
@@ -227,6 +227,22 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
       // later affirmative on this exact draft resolves without needing a write verb.
       registerApprovalToken(conversationId, normalized, args);
     }
+  }
+
+  // #256 · C-19 · doctrine rule 7 — backlog peer writes (open_issue, edit_issue,
+  // close_issue, archus_request_backlog_action) carry semantic mutation intent even
+  // without a canonical write verb ("jot a note on #253", "log this on #12"). The
+  // read-only guard above already blocks pure status turns, and outbound sends stay
+  // approval-gated in their own branch; there is no magic word to require here. Allow
+  // the write — reconcileTaskingReply (#257) makes a blocked/failed result impossible
+  // to render as a fabricated success, so honesty is structural, not keyword-gated.
+  if (
+    normalized === "openissue" ||
+    normalized === "editissue" ||
+    normalized === "closeissue" ||
+    normalized === "archusrequestbacklogaction"
+  ) {
+    return null;
   }
 
   return `Blocked ${tool}: mutating peer tools require an explicit write/run/send instruction from the user's current message.`;
@@ -533,6 +549,30 @@ function createError(actions: ReadonlyArray<RecordedAction>): string | undefined
   const failed = [...actions].reverse().find((action) => isCreateReceiptTool(action.tool) && /^ERROR:/.test(action.result));
   return failed?.result.replace(/^ERROR:\s*/, "");
 }
+
+// C-15 · #257 — the last ERROR from a NON-create backlog write (edit, comment, close,
+// label). open_issue / archus_request_backlog_action are creates (createError owns
+// them); this covers the edit/comment/close lanes whose failure otherwise slips past
+// the number-adjacency check because the fabricated success often carries no number
+// ("Note added", "Done — jotted that down").
+function nonCreateWriteError(actions: ReadonlyArray<RecordedAction>): string | undefined {
+  const failed = [...actions].reverse().find((action) => {
+    const normalized = normalizedToolName(action.tool);
+    return (
+      (normalized === "editissue" ||
+        normalized === "closeissue" ||
+        normalized === "labelissue" ||
+        normalized === "backlogcomment" ||
+        normalized === "backlogedit" ||
+        normalized === "backlogclose") &&
+      /^ERROR:/.test(action.result)
+    );
+  });
+  return failed?.result.replace(/^ERROR:\s*/, "");
+}
+// Active-voice success claims for an edit/comment/close write, including the number-less
+// phrasings ("Note added", "jotted that down") that NON_CREATION_MUTATION_VERBS misses.
+const NON_CREATE_WRITE_CLAIM_VERBS = "added|noted|jotted|logged|commented|updated|edited|closed|labeled|labelled|applied";
 
 function queueExecutionError(actions: ReadonlyArray<RecordedAction>): string | undefined {
   const failed = [...actions]
@@ -919,6 +959,24 @@ export function reconcileTaskingReply(text: string, actions: ReadonlyArray<Recor
         text,
       ].join("\n");
     }
+  }
+
+  // C-15 · #257 — the same ground-truth rule for NON-create writes (edit, comment,
+  // close, label). A blocked or failed edit_issue / close_issue / backlog_comment
+  // whose prose still says "Note added" / "Updated #253" / "Closed it" is a fabricated
+  // success — and unlike a create, the claim frequently carries no issue number
+  // ("Done, jotted that down"), so the number-adjacency check far below can't catch
+  // it. A recorded write failure with zero successful write receipt this turn can: on
+  // any mutating lane, no success text may render without a real receipt object.
+  const writeFailed = nonCreateWriteError(actions);
+  if (writeFailed && !writeReceipts.some((r) => r.verb !== "created") && hasActiveClaim(prose, NON_CREATE_WRITE_CLAIM_VERBS)) {
+    return [
+      "⚠️ Correction — that change was not applied (the write was blocked or failed); ignore any claim below that it went through.",
+      `The write step failed: ${writeFailed}`,
+      "Nothing changed — want me to try that again?",
+      "",
+      text,
+    ].join("\n");
   }
 
   // Execution state is not ordinary backlog state. A reply like "No, #108/#109
