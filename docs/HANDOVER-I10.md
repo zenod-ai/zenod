@@ -92,3 +92,15 @@ HANDOVER-I9.md, unchanged).
 - **Didn't (out of scope):** W1-3 closing run, W2, W3 — separate go orders. Behavioral on-host FP2 re-test left for W1-3.
 - **Discovered/filed:** zenod-ai/zenod#532 (no running-SHA endpoint — blocks clean deploy verification; W2 material).
 - **Recommend next:** pre-flight the credit tank (W2-3), then the W1-3 closing run (all 23 rows against `bf03939`), C-15 audited across everything — with the caveat that #532 remains open so SHA-pinning is by-deploy-timing, not by-endpoint, until it lands.
+
+### 2026-07-04 · FABLE AUDIT of W1-1/W1-2 — ACCEPTED, W1-3 authorized
+
+- Receipts verified: PR #531 → `bf03939` (CI green), regression tests present, suites green, #532
+  filed for the discovered observability gap (contract rule 3 followed exactly — this is the pattern).
+- **Audit note on #257's architecture:** the fix enforces the no-success-without-receipt invariant at
+  the COMPOSER layer (ground-truth correction) rather than the render-gate layer specified. Accepted —
+  the acceptance criterion is behavioral and W1-3 live-fires it. Standing fallback: if the closing run
+  shows ANY success-after-block leak, the hard reply-gate route becomes mandatory in the next pass.
+- **W1-3 GO — as a FRESH TESTER session** (this runner is the fixer; tester ≠ fixer). Step 0: credit
+  pre-flight (claude engine headroom vs ~23-row burn; Jordi tops up if thin). SHA caveat per #532:
+  confirm deploy by timing/host, record `bf03939` (+`1059a8c` docs tip).
