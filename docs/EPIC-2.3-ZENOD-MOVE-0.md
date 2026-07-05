@@ -504,3 +504,43 @@ tester-runnable funnel; none are solvable from this worker session. **Planner as
 Epic-2.5 PROVISIONING-RUNBOOK edit; (2) commission Z-2's standalone-provisioning path (distinct from
 the full-suite tenant stack); (3) set ZD-7. Pen returned to Zenod-Fable.
 Receipts: prior commit `4610fb9` (deliverables) + this HANDBACK commit (SEAM-SURFACE fix + append).
+
+### 2026-07-05 · [worker/HANDBACK-c2] Cycle 2 — environment gate FAILED on all 4 preconditions; every lane BLOCKED-env, no zombie
+Block C mandates verifying the four hard environment preconditions FIRST and stopping any lane whose
+precondition is missing, spending nothing on it. I verified all four in this session before touching a
+lane. **All four are MISSING** — this environment does not meet Block C's own entry condition ("paste
+ONLY into an environment with Docker UP · VPS · cloud checkout · LIVE Stripe").
+
+| # | Precondition | Verdict | Receipt (this session, 2026-07-05) |
+|---|---|---|---|
+| 1 | Docker daemon responds | ❌ MISSING | `docker version` → `Cannot connect to the Docker daemon at unix:///Users/jordi/.docker/run/docker.sock` (identical to cycle 1) |
+| 2 | VPS / operator access | ❌ MISSING | no `DOKPLOY_TOKEN` in env; no zenod/alpha9 ssh host alias; and Jordi's standing rule forbids manual VPS/`docker exec`/SSH ops regardless — no sanctioned operator path in this session |
+| 3 | `zenod-ai/cloud` checkout present | ❌ MISSING | no working checkout (`../cloud`, `~/Documents/GitHub/cloud` both absent); `gh repo view zenod-ai/cloud` resolves it PRIVATE but it is not checked out here, and the cloud wizard/dashboard (Z-2/Z-4) live there |
+| 4 | LIVE Stripe key | ❌ MISSING | no `STRIPE_*` env var; no `stripe` CLI; Stripe MCP unauthenticated (OAuth not completable in a non-interactive session) |
+
+**Per-lane consequence (dependency order), each stopped honestly:**
+- **Z-1 runtime** (docker build+run, live `tools/list`/401/forced-error transcripts, external plain-MCP
+  client round-trip): needs **P1 Docker** → **BLOCKED-env.** Z-1 stays GREEN-static (cycle-1 audit,
+  `4610fb9`/#600); the runtime box is un-checkable here. Cannot close Z-1.
+- **Z-2** (thin standalone provisioning path; cloud wizard → tokened URL): gated on Z-1-runtime-green
+  **+ P2 VPS + P3 cloud checkout + P4 Stripe webhook source** → **BLOCKED-env.** The commissioned path
+  is understood and ticketed; it is not authored/verified here because live firing (webhook → container
+  + GitHub-App repo + gateway key with €2 grant) cannot be exercised without P1–P4, and the wizard
+  belongs in `zenod-ai/cloud` which is not checked out.
+- **Z-3 checkout** (LIVE €5/mo SKU → webhook → Z-2): needs **P4 LIVE Stripe + P3 cloud** → **BLOCKED-env.**
+  Plan remains `docs/Z-3-CHECKOUT-WIRING.md`; site draft stays GREEN.
+- **Z-4** (meter + dashboard on the cloud surface): gated on Z-2 (blocked) **+ P3 cloud** → **BLOCKED-env.**
+- **Z-5 live** (register real tenants with the watchdog): needs **P2 VPS + real tenants from Z-2** →
+  **BLOCKED-env.** Wiring + runbook stay GREEN (`4610fb9`); drills correctly left to the tester.
+- **Z-6**: unchanged — Jordi in person; funnel shape unchanged this cycle, so
+  `docs/Z-6-CUSTOMER-1-CHECKLIST.md` needs no edit.
+
+**Honest bottom line:** cycle 2 is the LIVE-execution cycle and this environment supplies none of the
+four things it needs to execute. I did not zombie into them, did not fake-green, and did not perform
+forbidden manual VPS/Stripe workarounds. Nothing to re-author: cycle 1 already produced every
+environment-independent artifact. **The correct next step is not another worker turn — it is provisioning
+the environment.** Re-dispatch Block C only into a session/host that actually has: Docker daemon UP, a
+sanctioned VPS/operator path (or the deploy done via push-to-main autodeploy per standing rule), the
+`zenod-ai/cloud` repo checked out, and a LIVE Stripe key. Until then Z-1..Z-5 remain at their post-cycle-1
+states (static/authored GREEN; runtime/live BLOCKED-env). Pen returns to Zenod-Fable.
+Receipt: this HANDBACK commit on branch `epic23-c2-handback` (off `origin/main` `02d832c`).
