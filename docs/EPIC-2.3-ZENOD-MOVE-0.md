@@ -43,48 +43,47 @@ git repo behind it. Plain markdown; every AI you use reads and writes it through
 
 ## ZD decisions — planner frames, Jordi calls
 
-Status 2026-07-05 (Zenod-Fable): ZD-1 DECIDED. ZD-2/3/5/6 framed below and put to Jordi —
-they gate the SHAPE of Z-2/Z-3-checkout/Z-4 but do NOT gate the immediate starts
-(Z-1, Z-3-page, Z-5-runbook). ZD-4 carries a standing recommendation; silence = adopt.
+Status 2026-07-05 (Zenod-Fable): ZD-1..ZD-6 ALL DECIDED (Jordi, same day, via planner's framed
+options). ZD-7 minted from the ZD-5 call — framed, NON-BLOCKING. Do not relitigate without new
+evidence.
 
 - **ZD-1 · Price — DECIDED 2026-07-05 (Jordi): hosted €5/month.** Move 0 ships ONE simple SKU.
   (Jordi carries the number to Product-Fable so D-6 tiering stays coherent.) Consequence: at €5,
-  LLM spend cannot be bundled uncapped — forces ZD-5.
+  LLM spend cannot be bundled uncapped — forced ZD-5.
 
-- **ZD-2 · Provisioning mode at launch — AWAITING JORDI.**
-  (a) **Automated behind the Stripe webhook** — already proven ~1–2 min (Epic 2, I1-4); customer
-  #1 experiences the real funnel; the tester's stranger-run needs it anyway. **Recommended.**
-  (b) Concierge-manual (H-2 allows it) — buys nothing since automation is proven; would
-  invalidate Z-3's "provisioning fires without human touch" test.
-  Gates: Z-3 checkout wiring, Z-2 trigger path.
+- **ZD-2 · Provisioning mode — DECIDED 2026-07-05 (Jordi): automated behind the Stripe webhook.**
+  Proven ~1–2 min (Epic 2, I1-4); customer #1 experiences the real funnel; the tester's
+  stranger-run needs it anyway. Concierge-manual (H-2) rejected. Releases: Z-3 checkout wiring,
+  Z-2 trigger path.
 
-- **ZD-3 · Repo residency — AWAITING JORDI.**
-  (a) **Customer's own GitHub account via GitHub App** (auth per
-  GITHUB-AUTH-DEFINITIVE-RUNBOOK.md) — it IS the ownership story ("your repo, your memory, leave
-  anytime"); no transfer machinery, ever. **Recommended, day one.**
-  (b) Hosted-org repo + transfer-on-exit — weaker story, extra machinery, deferred liability.
-  Gates: Z-2 provisioning script + the wizard's "connect GitHub" step.
+- **ZD-3 · Repo residency — DECIDED 2026-07-05 (Jordi): customer's own GitHub account via
+  GitHub App, day one** (auth per GITHUB-AUTH-DEFINITIVE-RUNBOOK.md). It IS the ownership story
+  ("your repo, your memory, leave anytime"); no transfer machinery, ever. Hosted-org +
+  transfer-on-exit rejected.
 
-- **ZD-5 · LLM key model at €5 — AWAITING JORDI.**
-  (a) **BYO OpenRouter key** — user pastes their key in the wizard; €5 covers hosting only; we
-  meter from the per-call ledger and display calls · tokens · cost; zero billing machinery beyond
-  the Stripe sub; bounded liability; "monitor my usage as user 1" works identically.
-  Key-exhausted = loud error + dashboard notice (their balance, not ours). **Recommended for
-  Move 0.** (b) Bundled prepaid credits (Epic-2 D-5 machinery, gateway balance as truth) —
-  fast-follow once BYO proves demand, or for users who won't get a key.
-  Gates: Z-4 dashboard scope (usage-only vs balance + top-up), the wizard's key step.
+- **ZD-5 · LLM key model at €5 — DECIDED 2026-07-05 (Jordi): bundled prepaid credits.**
+  Epic-2 D-5 machinery reused; gateway balance is truth; warn at threshold, polite block at
+  zero, top-up restores. Planner had recommended BYO OpenRouter key; Jordi called credits —
+  recorded, honest board, not relitigated. Consequences: per-tenant gateway key minted at
+  provision (standalone keyring holds it); NO key step in the wizard; dashboard gains
+  balance + top-up (folds into ZD-4); spawns ZD-7 (starter-credit number).
 
-- **ZD-6 · Tenancy at €5 — AWAITING JORDI.**
-  (a) **Instance-per-user, fully automated** — law-7-consistent; reuses the proven provisioning;
-  watchdog per instance; fine to ~100 users on current infra. **Recommended for Move 0.**
-  (b) Multi-tenant Zenod service — better unit economics at scale; designated the FIRST
-  sanctioned law-7 exception, triggered by ops load, not speculation. Either way the setup UI is
-  built so the switch would be invisible to users.
-  Gates: Z-2 provisioning target, Z-5 watchdog registration shape.
+- **ZD-6 · Tenancy at €5 — DECIDED 2026-07-05 (Jordi): instance-per-user, fully automated.**
+  Law-7-consistent; reuses proven provisioning; watchdog per instance; fine to ~100 users on
+  current infra. Multi-tenant remains the designated FIRST sanctioned law-7 exception, triggered
+  by ops load only, never speculation. Setup UI still built so a future switch is invisible.
 
-- **ZD-4 · Dashboard scope v0: usage only** — calls · tokens · cost (+ balance/top-up link only
-  if ZD-5b). No analytics, no memory browser. Recommendation stands, ruthlessly; adopted unless
-  Jordi objects before Z-4 starts.
+- **ZD-4 · Dashboard scope v0 — usage + balance: calls · tokens · cost · balance · top-up link**
+  (balance/top-up per ZD-5). No analytics, no memory browser. Adopted unless Jordi objects
+  before Z-4 starts.
+
+- **ZD-7 · Starter-credit allotment at signup — AWAITING JORDI, NON-BLOCKING (config value).**
+  €5/month buys hosting + how much included LLM credit at signup?
+  (a) **Small starter grant** (enough for first-session digest + ask) then self-serve top-up —
+  recommended: the funnel works out of the box; liability bounded. (b) Zero grant, top-up
+  required before first `ask` — simplest, but customer #1's first minute hits a paywall.
+  The number is pricing → travels to Product-Fable via Jordi alongside ZD-1. Worker builds the
+  grant as a CONFIG VALUE and does not invent the number; Z-6 cannot RUN until it is set.
 
 ## Iteration 0 — tickets (lanes parallel; worker MUST fan out sub-agents, one per lane)
 
@@ -112,16 +111,18 @@ store → search → get on a FRESH instance using ONLY the README; commit-SHA +
 verified in the vault repo; a deliberate non-seam write attempt fails loudly; SEAM-SPEC scored
 line-by-line. Passing this ALSO satisfies 2.5's RD-4 split-trigger evidence and Epic 0's SD-6 gate.
 
-### Z-2 · Provision + setup UI — OPEN · blocked by Z-1 · shaped by ZD-2/3/6
+### Z-2 · Provision + setup UI — OPEN · blocked by Z-1 · ZD-2/3/5/6 decided
 
 Deliverable: one provisioning script + the hosted setup wizard + self-host terminal quickstart.
 
 Acceptance:
-- [ ] Script provisions per ZD-6: container + customer repo per ZD-3 + minted MCP token; emits
-      receipts (container ID, repo URL, token ID); idempotent on retry; fires per ZD-2.
-- [ ] Wizard (admin surface): connect/scaffold GitHub repo → LLM key step per ZD-5 → token issued
-      → "paste this into Claude" block → done screen. Health + token management pages exist.
-      No chat UI anywhere.
+- [ ] Script provisions one instance per user (ZD-6): container + repo in the CUSTOMER's GitHub
+      account via GitHub App (ZD-3, runbook path) + minted MCP token + per-tenant gateway key in
+      the standalone keyring (ZD-5); emits receipts (container ID, repo URL, token ID, gateway
+      key ID); idempotent on retry; fired by the Stripe webhook (ZD-2).
+- [ ] Wizard (admin surface): connect/scaffold GitHub repo → token issued → "paste this into
+      Claude" block → done screen. NO LLM-key step (ZD-5: gateway key is minted at provision,
+      invisible to the user). Health + token management pages exist. No chat UI anywhere.
 - [ ] Self-host: terminal quickstart in public docs reaches the same end state (endpoint + repo +
       token → Claude config) with no UI.
 
@@ -129,7 +130,7 @@ Test criteria: tester provisions a fresh user end-to-end via the WIZARD, timed, 
 separately completes self-host from docs alone on a clean VM; Claude round-trip with commit-SHA
 receipt on BOTH paths.
 
-### Z-3 · Website + checkout LIVE — OPEN · page starts NOW; checkout wiring needs ZD-2 + Z-2 target
+### Z-3 · Website + checkout LIVE — OPEN · page starts NOW; checkout wiring needs the Z-2 webhook target
 
 Deliverable: public Zenod website — pitch, both paths, LIVE €5/mo checkout, legal minimum.
 
@@ -137,27 +138,28 @@ Acceptance:
 - [ ] Page live: "your personal wiki brain" pitch; self-host path (docs) AND hosted path visible;
       "vault browser is Obsidian/GitHub" stated as a feature. Copy ships as functional DRAFT
       flagged `[DRAFT — Epic 0 voice pending]`; final voice lands via Jordi (Epic 0 owns it).
-- [ ] Stripe LIVE SKU €5/month; checkout → webhook → Z-2 provisioning fires per ZD-2.
+- [ ] Stripe LIVE SKU €5/month; checkout → webhook → Z-2 provisioning fires without human touch
+      (ZD-2).
 - [ ] Minimal ToS/privacy linked (Epic-2 H-11 minimum).
 
 Test criteria: a real card completes €5 checkout in prod; subscription visible in Stripe;
 provisioning fires without human touch; self-host instructions pass a cold read by a stranger.
 
-### Z-4 · Meter + dashboard — OPEN · blocked by Z-2 · shaped by ZD-5 (scope per ZD-4: usage only)
+### Z-4 · Meter + dashboard — OPEN · blocked by Z-2 · ZD-5 decided: bundled prepaid credits
 
 Deliverable: per-tenant metering wired at provision; usage page on the admin surface.
 
 Acceptance:
-- [ ] Per-tenant key wired at provision (BYO key stored in standalone keyring if ZD-5a;
-      per-tenant gateway key if ZD-5b).
-- [ ] Usage page shows calls · tokens · cost from the per-call ledger (usage.sqlite /
-      read_llm_timeline), reconciling with the source of truth (gateway balance if ZD-5b).
-- [ ] Exhaustion behavior: ZD-5a → key-dead is a loud, attributable error + dashboard notice;
-      ZD-5b → D-5 behaviors: warn at threshold, polite block at zero, top-up restores.
+- [ ] Per-tenant gateway key wired at provision, held in the standalone keyring (ZD-5).
+- [ ] Usage page shows calls · tokens · cost · balance from the per-call ledger (usage.sqlite /
+      read_llm_timeline), reconciling with the gateway balance (D-5: gateway is truth); top-up
+      link present (ZD-4).
+- [ ] D-5 behaviors: warn at threshold, polite block at zero, top-up restores. Starter grant
+      wired as a config value (number pending ZD-7).
 
-Test criteria: tester burns a known amount via scripted `ask` calls; dashboard matches
-ledger/gateway (exact call count; tokens/cost within provider-reported values); exhaustion +
-recovery receipted end to end.
+Test criteria: tester burns a known amount via scripted `ask` calls; dashboard matches the
+gateway within tolerance (exact call count; tokens/cost within provider-reported values);
+zero-credit block + top-up + resume all receipted.
 
 ### Z-5 · Watchdog + ops — OPEN · runbook starts NOW
 
@@ -202,7 +204,97 @@ stranger using only the public pages — that run closes the epic.
   LAUNCH-CONTROL (Jordi's pen).
 - Jordi is the only router between tracks.
 
+## Dispatch blocks (verbatim — Jordi pastes; planner never dispatches through the pipeline)
+
+### Block A · WORKER — paste when Jordi green-lights Iteration 0
+
+```
+You are the Zenod Move-0 WORKER. Your mission doc is docs/EPIC-2.3-ZENOD-MOVE-0.md in
+zenod-ai/zenod. Read it top to bottom before anything else — tickets Z-1..Z-5 with their
+acceptance criteria bind you. You hold the pen on that doc's APPEND ZONE only; planner
+sections are read-only to you.
+
+FAN-OUT IS REQUIRED, NOT OPTIONAL:
+- Spawn parallel sub-agents, one per lane. NOW: Z-1 (standalone GA), Z-3 (website + LIVE
+  checkout), Z-5 (watchdog + restore runbook) run in parallel from your first turn.
+- Z-2 (provision + wizard) starts the moment Z-1 is green; Z-4 (meter + dashboard) the
+  moment Z-2 provisions. Z-6 is NOT yours — it is Jordi in person; you leave Z-1..Z-5
+  green plus a one-page Z-6 checklist ready.
+- You verify each sub-agent's receipts before relaying them — verify, don't trust.
+
+DECIDED — do not relitigate: ZD-1 €5/month, one SKU. ZD-2 automated Stripe-webhook
+provisioning. ZD-3 customer's own GitHub via GitHub App (GITHUB-AUTH-DEFINITIVE-RUNBOOK.md).
+ZD-5 bundled prepaid credits — D-5 machinery, gateway balance is truth, warn/block/top-up;
+per-tenant gateway key minted at provision; NO key step in the wizard. ZD-6
+instance-per-user. ZD-7 (starter-credit number) pending — build it as a config value; do
+not invent the number.
+
+CONSTRAINTS: public seam ONLY — docs/SEAM-SPEC.md binds, UNEDITED. No chat UI on Zenod,
+ever. Website copy ships as functional draft flagged [DRAFT — Epic 0 voice pending]; final
+voice lands via Jordi. No ring, no council, no channel anywhere in this epic. REUSE Epic-2
+machinery (Stripe checkout, provisioning, per-call ledger, gateway keys, watchdog) — never
+rebuild it.
+
+RECEIPTS: every claim of state gets a dated, role-tagged entry in the APPEND ZONE, same
+turn, with URL/SHA/ID — tag [worker/Z-n]. A report without receipts is not a report.
+Acceptance boxes are checked ONLY with a same-line receipt.
+
+BUDGET: 1 working day wall-clock, 80 agent-turns total, ≤20 per sub-agent. A blocked lane
+(credential missing, dependency red, spec ambiguous) → write BLOCKED + the exact blocker in
+the APPEND ZONE and stop that lane honestly. Never zombie, never fake-green. When Z-1..Z-5
+are receipted green or blocked-honest, write a HANDBACK entry summarizing every lane's
+state and stop. The pen returns to Zenod-Fable on HANDBACK.
+```
+
+### Block B · TESTER — paste only after worker HANDBACK + Z-6 receipted
+
+```
+You are the Zenod Move-0 TESTER. Preconditions: the worker has written HANDBACK in the
+APPEND ZONE of docs/EPIC-2.3-ZENOD-MOVE-0.md (zenod-ai/zenod) AND Z-6 (Jordi's customer-#1
+run) is receipted. Read the doc top to bottom; the "Test criteria" lines of Z-1..Z-6 are
+your script. You are NOT the fixer: you never patch, reconfigure, or retry-until-green.
+You score, you map, you hand back. Fresh evidence only — never reuse the worker's receipts.
+
+RUN 1 — the stranger funnel, public pages ONLY:
+1. Start at the public website as a stranger: no repo access, no internal docs, no asking
+   anyone anything.
+2. Hosted path: €5 LIVE checkout with a real card → wizard (connect GitHub → token → paste
+   block) → paste into a fresh Claude → store / search / ask against production → verify
+   commit-SHA receipts land in YOUR repo → dashboard shows YOUR calls · tokens · cost ·
+   balance. Time the wizard leg; <30 min is the bar.
+3. Self-host path: clean VM, public docs only → same Claude round-trip with commit receipt.
+
+RUN 2 — ticket-by-ticket: score EVERY Z-1..Z-6 test criterion ✅/❌ with fresh evidence.
+Includes: external plain-MCP client from the README alone; a deliberate non-seam write
+fails loudly; SEAM-SPEC line-by-line; forced crash-loop → operator alert; restore drill
+(new container + existing repo = memory intact, same SHAs); metering burn test — a known
+number of scripted `ask` calls reconciles with dashboard and gateway balance; zero-credit
+block → top-up → resume, all receipted.
+
+SCORING: every criterion gets ✅/❌ in the APPEND ZONE, tagged [tester], each with its
+evidence (URL/SHA/screenshot/timing). Every ❌ maps to EXACTLY ONE ticket ID with a
+one-line repro. Anything surprising — silent ack, lying summary, magic words required —
+becomes a proposed new test criterion in your entry (Jordi's standing rule).
+
+BUDGET: 4 hours, 30 turns, €5 + fees + one credit top-up on a live card (expensed; planner
+reconciles in Stripe after scoring). If the funnel blocks you cold, that IS the result —
+score ❌, receipt it, stop. Never fix, never zombie. Pen returns to Zenod-Fable with your
+scorecard.
+```
+
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Bootstrap: pen taken, decisions called, iteration armed
+- Pen taken from Story-Fable per doc-created entry below. ZD-2/3/5/6 framed with options +
+  recommendations and put to Jordi same-day; Jordi called all four (receipts: the DECIDED lines
+  in the ZD section above, this doc). ZD-2a automated webhook · ZD-3a customer's GitHub ·
+  **ZD-5b bundled prepaid credits (against planner recommendation — recorded honestly)** ·
+  ZD-6a instance-per-user. ZD-7 minted (starter-credit number), awaiting Jordi, non-blocking.
+- Z-1..Z-6 refined from lanes into tickets with binary acceptance + tester criteria (sections
+  above). All OPEN, unstarted — no fake-green.
+- Dispatch blocks A (worker, fan-out mandatory, budget 1 day/80 turns) and B (tester ≠ fixer,
+  post-HANDBACK + Z-6, budget 4 h/30 turns) written above; handed to Jordi verbatim for manual
+  dispatch per DOCUMENT FLOW rule 2c.
 
 ### 2026-07-05 · [scribe/Story-Fable] Spec expanded per Jordi (same morning)
 - Jordi: public website · self-host + hosted €5/month (ZD-1 DECIDED) · multi-user self-serve ·
