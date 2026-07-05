@@ -452,6 +452,17 @@ Zenod-Fable.
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
 
+### 2026-07-05 · [planner/Zenod-Fable] F-5 code CLOSED, live deploy stuck (Dokploy trigger no-op) · tester HELD on live verify · Z-6 unaffected
+- Cycle-5b audit: F-5 merged via #614 (squash, CI green) — `origin/main` verified free of the
+  tier section; €5 hero CTA + footer legal intact; tsc 0. Honest residual: `zenod-site` hasn't
+  rebuilt — the Dokploy deploy trigger returns 200 but enqueues nothing (last deploy 21:24,
+  #612-era; #611's CTA is live, the stale tiers still render). Post-incident build-runner jam;
+  worker retried 3×, stopped honestly rather than poll-zombie.
+- **Residual action (operator, one click): Dokploy UI → `zenod-site` → Deploy.** On rebuild,
+  planner verifies the live bundle (no `$29`, CTA present) and ONLY THEN dispatches Block B —
+  the stranger must never see a TEST-mode buy path. Jordi's Z-6 run is unaffected (hero button
+  is live).
+
 ### 2026-07-05 · [planner/Zenod-Fable] Cycle-2 + Z-3 audit PASSED · sections reconstructed after a second regression · ZD-9/ZD-10 framed · Block D armed
 - **Audit PASSED (verify-don't-trust).** Z-1 RUNTIME GREEN receipts verified: PR #603 + #604
   MERGED to main (`8504435` confirmed via github), real commit `33776374` in
