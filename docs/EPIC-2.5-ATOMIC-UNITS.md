@@ -183,15 +183,18 @@ Law 3 amended to match.
 
 ## Iteration 0 — tickets (states owned by planner; refined 2026-07-05 [planner/Ring-Fable])
 
-| ID | Lane | State | Depends on | Sub-agent budget |
+| ID | Lane | State (post-audit 2026-07-05, planner) | Depends on | Budget |
 |---|---|---|---|---|
-| W-D | Seam spec | **READY — DO FIRST** | — | ≤2h |
-| W-F | Unit folders + split-readiness | READY (parallel with W-D; RD-4 DECIDED) | — | ≤4h |
-| W-A | Ring extraction (ring-core + Phylax) | BLOCKED → READY when W-D lands | W-D | ≤6h |
-| W-B | Council guy extraction | BLOCKED → READY when W-D lands | W-D (W-A for via-ring tests) | ≤4h |
-| W-C | Zenod standalone | BLOCKED → READY when W-D lands | W-D | ≤3h |
-| W-E | Fresh-user provisioning | BLOCKED | W-A, W-B, W-C | ≤3h |
-| W-G | Websites skeleton | READY except council-guy page (RD-2) | RD-2 for that page only | ≤2h |
+| W-D | Seam spec | **DELIVERED** (`f7b3560`, 16 items — audited) → awaiting tester | — | — |
+| W-F | Unit folders + split-readiness | **DELIVERED** (`212d791` — audited) → awaiting tester fresh-clone builds | — | — |
+| W-A | Ring extraction (ring-core + Phylax) | **PARTIAL** — blueprint + `units/ring/` scaffold (`9615d5e`); physical carve → Iteration 1 | Iteration 1 | — |
+| W-B | Council guy extraction | **PARTIAL** — blueprint + `units/council/` scaffold (`7ea673e`); carve → Iteration 1 | Iteration 1; RD-2 for final naming | — |
+| W-C | Zenod standalone | **PARTIAL** — blueprint + `units/zenod/` (`629adb2`), cross-import scan clean (audited); carve → Iteration 1 | Iteration 1 | — |
+| W-E | Fresh-user provisioning | **DELIVERED-THEN-AMENDED** — runbook + dry run (`8045ae9`) predates the watchdog law (`3b4da80`); watchdog gap = W-J | W-J for watchdog items | — |
+| W-G | Websites skeleton | **DELIVERED** minus council page (`fc1ba86`; RD-2) | RD-2 for that page | — |
+| **W-H** | Dispatch tracing: `origin_ticket_id` + depth ≤1 | **READY** (new — worker finding, audited: 0 hits in source) | — | ≤3h |
+| **W-I** | Engine genericization → publishable shared lib | **READY** (new — worker finding, audited: 18 domain refs in `core/src/engine/engine.ts`) | — | ≤4h |
+| **W-J** | Watchdog registration in provisioning (the law) | **READY** (new — folds `3b4da80`) | fleet watchdog exists (Epic-1 C-24 machinery) | ≤3h |
 
 ### W-D · Seam spec — DO FIRST; unblocks W-A/W-B/W-C
 **Deliverable:** `docs/SEAM-SPEC.md`, ≤2 pages: transport (pure standard MCP over streamable HTTP;
@@ -277,6 +280,48 @@ Static one-pager per unit: Ring (Phylax featured as its gateway, not a separate 
 Archus, Epaminon, Callisthenes. Council guy's page BLOCKED on RD-2 only. Content may lag. No
 tester criteria this iteration.
 
+### W-H · Dispatch tracing: `origin_ticket_id` + depth ≤1 (minted 2026-07-05 from worker finding)
+**Why:** RD-3's tightenings are LAW and SEAM-SPEC items 10/11 — but audited at **0 hits** in
+source. Every dispatch in the live path today would fail conformance.
+**Deliverable:** the dispatch path (engine/Epaminon/Archus ticket flow) carries
+`origin_ticket_id` end-to-end and enforces depth ≤1 (a dispatched unit refuses to emit a further
+dispatch, loudly).
+**Acceptance:** grep shows the field in the ticket schema + both enforcement points · a depth-2
+attempt errors loudly with a structured code.
+**Test criteria:** SEAM-SPEC items 10/11 pass against Epaminon; forced depth-2 dispatch returns
+the structured refusal, transcript attached.
+
+### W-I · Engine genericization → publishable shared lib (minted 2026-07-05 from worker finding)
+**Why:** the RD-4 staged split allows cross-unit code ONLY via a published shared lib —
+but `core/src/engine/engine.ts` hard-references whatsapp/telegram/backlog/notification
+(audited: 18 refs). As-is it can't be the shared lib; this blocks the split.
+**Deliverable:** domain refs extracted behind interfaces/adapters; engine package builds with
+zero channel/domain imports; publishable as the shared lib named in units/README.
+**Acceptance:** `grep -cE "whatsapp|telegram|backlog|notification" core/src/engine/engine.ts`
+= 0 · engine package builds standalone · existing Console behavior unchanged (canonical smoke).
+**Test criteria:** tester re-runs the grep + standalone build on fresh clone; Console smoke green.
+
+### W-J · Watchdog registration in provisioning (minted 2026-07-05; folds law `3b4da80`)
+**Why:** LAW (Jordi, via stability-Fable): "no instance without its watchdog." W-E's runbook
+(`8045ae9`) predates the law and lacks fleet-watchdog registration.
+**Deliverable:** provisioning registers every container of the instance-set with the fleet
+watchdog (fleet-level C-24 machinery: crash-loop / disk / dead-endpoint / dark-stack → operator
+alert); runbook amended; provisioning receipt includes the monitoring registration.
+**Acceptance:** a provisioned tenant's containers appear in fleet-watchdog coverage; the receipt
+shows the registration.
+**Test criteria:** provision fresh tenant → containers visible in watchdog · force one
+crash-loop on the fresh tenant → operator alert arrives (mirrors Epic-1 C-24 live-fire).
+
+## Iteration 1 — the carve (sketched 2026-07-05 post-audit; dispatched after tester results)
+
+The worker's deferral of the physical W-A/W-B/W-C carve was RIGHT for the wrong reason: RD-4
+gates the *repo* split, not the in-repo carve — but parallel sub-agents blindly carving ONE fused
+core against the live product would have broken it. Iteration 1 does the carve **serialized**, on
+the blueprints: order **W-I → W-H → W-A (ring-core + Phylax) → W-B (needs ring for via-ring
+tests) → W-C → W-E re-run + W-J**. Iteration-1 exit = the epic's exit criterion (fresh user on
+the NEW topology, watchdog included), run by the tester. RD-4's repo-split trigger is evaluated
+from the tester's W-D scoreboard (spec unedited across ≥2 units).
+
 **Iteration 0 exit = the epic's exit criterion run by the TESTER on a fresh user, all receipts in
 this doc.** Canonical tests: after exit, the stability suite re-baselines on the new topology
 (fresh-user setup test joins the canonical list; transcription accuracy joins the list).
@@ -329,7 +374,7 @@ Hand back: final APPEND ZONE entry "[worker] Iteration-0 hand-back" — per-tick
 (done/partial/blocked) with pointers to receipts. Then stop; the pen returns to Ring-Fable.
 ```
 
-### Dispatch block B — the tester (dispatch ONLY after the worker's hand-back entry exists)
+### Dispatch block B — the tester (rescoped 2026-07-05 post-audit; dispatch now)
 
 ```
 You are Tester-1 of EPIC 2.5 Iteration 0. Repo: zenod-ai/zenod. Precondition: the APPEND ZONE
@@ -338,19 +383,29 @@ of docs/EPIC-2.5-ATOMIC-UNITS.md contains "[worker] Iteration-0 hand-back". If a
 Read that doc top to bottom; docs/HANDOVER-EPIC2.md §THE DOCUMENT FLOW binds you. You are the
 tester, NOT the fixer: change no code, no config, no doc content except your own APPEND ZONE
 entries. Every red is scored, mapped to exactly one ticket ID, and handed back — you fix nothing.
+Verify with FRESH evidence — reproduce; never reuse worker receipts as proof.
 
-Mission: verify each ticket's Test criteria with FRESH evidence — reproduce; never reuse worker
-receipts as proof.
-1. W-D: apply the SEAM-SPEC conformance checklist to Archus; pass/fail per item, transcripts.
-2. W-A, W-B, W-C: run each ticket's test criteria exactly as written.
-3. The exit run (fresh-user E2E): provision a brand-new user following ONLY the W-E runbook —
-   no help, no code edits, timed. Then: pair WhatsApp → "hello" → attributed reply · voice
-   note → transcript → filed via the council guy → "what did I say about it" → answer with
-   Zenod citation · one Epaminon dispatch round-trips ticket + completion event through the ring.
+Scope (post-audit — extraction was staged, so test what EXISTS, honestly):
+1. W-D: apply the 16-item SEAM-SPEC conformance checklist to BOTH Archus and Epaminon (two
+   units — this also evaluates the RD-4 split trigger). Pass/fail per item per unit with
+   tool-call transcripts. Items 10/11 are expected-red today → map those ❌ to W-H (known gap);
+   any OTHER red maps to its own finding.
+2. W-F: on a FRESH clone, build each unit image independently from its folder; re-run the
+   cross-import scan. Pass/fail per unit.
+3. W-E (the exit dry-run, on the CURRENT fused tenant stack): provision a brand-new tenant
+   following ONLY units/PROVISIONING-RUNBOOK.md — no help, no code edits, timed (<30 min
+   target). Then E2E: pair WhatsApp → "hello" → attributed reply · voice note → transcript →
+   filed via the council brain → "what did I say about it" → answer with Zenod citation · one
+   Epaminon dispatch round-trips ticket + completion event. Watchdog items (containers visible
+   in fleet watchdog; forced crash-loop on the fresh tenant → operator alert) are expected-red
+   → map to W-J.
+4. W-A/W-B/W-C: do NOT fake-run container tests that need the carve. Score each NOT-TESTABLE
+   (carve staged to Iteration 1), and instead VERIFY their blueprints' checkable claims
+   (extraction maps reference real files; scaffolds build if they claim to).
 
-Append one dated scoreboard entry ([tester] YYYY-MM-DD): one ✅/❌ line per test criterion,
-evidence link on every line, every ❌ mapped to exactly one ticket ID. Surprises become proposed
-test-list entries in your notes.
+Append one dated scoreboard entry ([tester] YYYY-MM-DD): one ✅/❌/NOT-TESTABLE line per test
+criterion, evidence link on every line, every ❌ mapped to exactly one ticket ID. Surprises
+become proposed test-list entries in your notes.
 
 Budget: 4h. If the W-E runbook blocks you >30 min, that IS a result — score W-E ❌ with the
 blocking step named, and continue with whatever else is testable. Stop honestly. Never zombie.
@@ -556,3 +611,46 @@ moved).
 
 Tester (Dispatch block B) may now run: W-D checklist vs Archus, and the W-E fresh-user E2E.
 Worker stops here.
+
+### 2026-07-05 · [cross-track/stability-Fable, on Jordi's direct order] W-E amended — the watchdog law
+- Jordi's directive (routed via the stability table): **"no instance without its watchdog"** added to
+  W-E as LAW — provisioning includes fleet-monitoring registration; a tenant without active monitoring
+  is not provisioned. Rationale: Epic 1's operational lessons (silent 3,348× crash-loop, disk-full
+  outage #570, C-24 live-fire) multiply by the fleet under one-instance-per-user-per-unit — the
+  machinery must exist ONCE at fleet level, provisioned WITH each tenant, not rediscovered at
+  customer #10. W-E scope/acceptance/test criteria updated in place (attributed inline).
+- Ring-Fable owns folding this into W-E's dispatch; no other ticket touched. Pen returned.
+
+### 2026-07-05 · [planner/Ring-Fable] Worker-1 hand-back AUDITED — receipts verified, states folded
+- **Verified against the repo (fresh greps/log, not worker claims):** all 7 lane commits on
+  origin/main (`f7b3560`, `fc1ba86`, `7ea673e`, `212d791`, `9615d5e`, `629adb2`, `8045ae9`,
+  receipts `1aebbd5`; push range confirmed) · SEAM-SPEC has exactly 16 binary items incl. RD-3's
+  10/11 · `units/` + `sites/` trees exist as claimed, council page absent (RD-2) ·
+  `origin_ticket_id`: **0 hits in source — finding confirmed** · `engine.ts`: **18 domain refs —
+  finding confirmed** · whisper-lane isolation claim consistent (`45ca19a` separate, exempt).
+- **States folded** (ticket table): W-D/W-F/W-G DELIVERED awaiting tester · W-A/W-B/W-C PARTIAL
+  (blueprints + scaffolds; carve → Iteration 1) · W-E DELIVERED-THEN-AMENDED (runbook predates
+  watchdog law `3b4da80` — gap minted as W-J, not fake-green).
+- **New tickets minted:** W-H (dispatch tracing — items 10/11), W-I (engine genericization —
+  split blocker), W-J (watchdog registration — the law). Iteration 1 sketched: serialized carve
+  W-I → W-H → W-A → W-B → W-C → W-E+W-J re-run; exit = epic exit on new topology.
+- **Honesty note on the worker's deferral:** right call, wrong citation — RD-4 gates the REPO
+  split, not the in-repo carve. The real reason stands: parallel sub-agents can't safely carve
+  one fused core against the live product. Recorded so the law stays clean.
+- Dispatch block B rescoped to what exists (Archus AND Epaminon for the RD-4 trigger; W-A/B/C
+  scored NOT-TESTABLE, no fake runs; expected-reds pre-mapped to W-H/W-J). **Tester can dispatch
+  now.** RD-2 remains the only open decision.
+
+### 2026-07-05 · [planner/Ring-Fable] INCIDENT — two pens, one working tree (recorded per rule 8; stays visible)
+- Sequence: planner audit edits sat uncommitted in the shared working tree · stability-Fable's
+  session stashed them to commit the watchdog law (`3b4da80`) · planner committed the doc from
+  the stash-clobbered tree → `195c9b2` **silently reverted the law and carried none of the
+  audit** · the later `stash pop` conflicted in the APPEND ZONE. Caught by same-turn
+  verification of the commit diff (+5/−22 shape); resolved by keeping BOTH entries; this commit
+  restores law + audit. `195c9b2` stays in history as the regression it is.
+- **Guardrail (binding addendum to rule 3):** the pen covers the WORKING TREE, not just the doc.
+  Before any commit touching a shared doc, a session must check `git status` for foreign
+  stashes/locks/unmerged paths and verify the staged diff shape matches its own edits. A commit
+  whose diff removes text you didn't remove = STOP, investigate.
+- Cross-track note for Jordi to route: doc-truth will be synced to main; the whisper branch
+  remains the whisper lane's.
