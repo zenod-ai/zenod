@@ -23,22 +23,40 @@ ticket states; worker executes with dated receipts in the APPEND ZONE; tester ve
 evidence, tester ≠ fixer. Budgets on every dispatch. **Worker: the lanes are parallel by design —
 fan out sub-agents, one per lane, receipts from each.**
 
-## What this product is (settled — do not relitigate)
+## What this product is (settled — do not relitigate; expanded per Jordi 2026-07-05)
 
-Zenod standalone = **one MCP server, one container, the customer's git repo behind it.**
+**"Your personal wiki brain."** Zenod standalone = one MCP server, one container, the customer's
+git repo behind it. Plain markdown; every AI you use reads and writes it through one librarian.
+- **Two ways to have it, one public website:** self-host (open source, terminal quickstart —
+  instructions on the site, no UI required) or **hosted at €5/month** (ZD-1 DECIDED) with
+  self-serve signup. The platform is multi-user in the SaaS sense: anyone signs up, everyone gets
+  their own brain (tenancy model per ZD-6).
 - Access is the public seam only (pure MCP + receipt profile per SEAM-SPEC). Claude/Cursor/any
   client is the brain; Zenod never gets a chat UI.
-- Its human surface is a **thin admin page**: connect repo · issue/revoke MCP tokens · health ·
-  usage dashboard. The vault browser is Obsidian/GitHub — that's a feature, say it on the page.
+- **Hosted gets a setup UI** (the admin surface, wizard-shaped): connect/scaffold GitHub repo →
+  issue MCP token → "paste this into Claude" → done. Plus: health, token management, usage
+  dashboard. Self-host gets the same result via terminal + docs. The vault browser is
+  Obsidian/GitHub — that's a feature, say it on the page.
 - Standalone keyring: local credential store (the locked connections design's standalone mode).
-- LLM spend (digest + ask) flows through a **per-tenant OpenRouter/gateway key** — D-5 as decided:
-  prepaid credits, gateway balance is truth, soft-warn at threshold, new work blocks politely at
-  zero (in-flight lands), top-up restores.
+- LLM spend (digest + ask) is metered per user from the per-call ledger; key model per ZD-5;
+  the dashboard shows calls · tokens · cost either way.
 
 ## ZD decisions — planner frames, Jordi calls
 
-- **ZD-1 · The price.** One simple price for Move 0 vs Product-Fable's D-6 tiers. Number is
-  Product-Fable's lane — Jordi carries; this epic needs ONE live SKU to ship.
+- **ZD-1 · The price — DECIDED 2026-07-05 (Jordi): hosted €5/month.** Move 0 ships ONE simple
+  SKU. (Jordi carries the number to Product-Fable so D-6 tiering stays coherent.) Consequence:
+  at €5, LLM spend cannot be bundled uncapped — see ZD-5.
+- **ZD-5 · LLM key model at €5.** (a) **BYO OpenRouter key** — user pastes their key; €5 covers
+  hosting only; we meter and display their usage from the ledger; zero billing machinery beyond
+  the Stripe sub. Recommended for Move 0: bounded liability, simplest possible funnel, and
+  "monitor my OpenRouter usage as user 1" works identically. (b) Bundled prepaid credits (Epic-2
+  D-5 machinery, gateway balance as truth) — fast-follow once BYO proves demand, or immediately
+  for users who won't get their own key.
+- **ZD-6 · Tenancy at €5.** (a) **Instance-per-user, fully automated** — law-7-consistent,
+  reuses the proven ~1–2 min provisioning, watchdog per instance; fine to ~100 users on current
+  infra. Recommended for Move 0. (b) Multi-tenant Zenod service — better unit economics at scale;
+  designated as the FIRST sanctioned law-7 exception, triggered by ops load, not by speculation.
+  Build the setup UI so the switch would be invisible to users.
 - **ZD-2 · Provisioning mode at launch:** automated behind the Stripe webhook (proven ~1–2 min)
   vs concierge-manual (H-2 allows it). Recommendation: automated — it's already proven, and
   customer #1 should experience the real funnel.
@@ -53,8 +71,8 @@ Zenod standalone = **one MCP server, one container, the customer's git repo behi
 | ID | Lane | Deliverable + acceptance | Test criteria (tester, fresh evidence) |
 |---|---|---|---|
 | **Z-1** | Standalone GA (absorbs 2.5's W-C) | `units/zenod/` builds + deploys as one container; public-seam-only verified; stranger-grade README/quickstart (endpoint + repo + token → Claude config) | external plain-MCP client completes store/search/get on a FRESH instance using ONLY the README; any non-seam write path fails loudly |
-| **Z-2** | Provision + onboarding | script: container + repo (per ZD-3) + MCP token, emits receipts (container ID, repo URL, token ID); onboarding page: connect GitHub → get token → "paste into Claude" block | tester provisions a fresh user end-to-end from the runbook, timed <30 min; Claude round-trip with commit-SHA receipt |
-| **Z-3** | Checkout LIVE | Stripe live-mode SKU (ZD-1) → webhook → Z-2 provisioning; minimal ToS/privacy pages linked (Epic-2 H-11 minimum); Zenod one-pager (copy from Epic 0) | real card completes checkout in prod; subscription visible in Stripe; provisioning fires without human touch (per ZD-2) |
+| **Z-2** | Provision + setup UI | script: container + repo (per ZD-3) + MCP token, emits receipts (container ID, repo URL, token ID); **hosted setup wizard** (connect GitHub → token → "paste into Claude" → done) + terminal quickstart for self-host | tester provisions a fresh user end-to-end via the WIZARD, timed <30 min; separately, self-host path from docs alone on a clean VM; Claude round-trip with commit-SHA receipt on both |
+| **Z-3** | Website + checkout LIVE | **public Zenod website**: the pitch ("your personal wiki brain"), self-host path (docs) AND hosted path (€5/mo Stripe live SKU → webhook → Z-2); minimal ToS/privacy linked (Epic-2 H-11 minimum); copy from Epic 0 | real card completes €5 checkout in prod; subscription visible in Stripe; provisioning fires without human touch (per ZD-2); self-host instructions pass a cold read |
 | **Z-4** | Meter + dashboard | per-tenant gateway key wired at provision; usage page on the admin surface: calls · tokens · cost · balance (source: per-call ledger + gateway balance, reconciling); D-5 behaviors: warn at threshold, polite block at zero, top-up restores | tester burns a known amount via scripted `ask` calls; dashboard matches gateway within tolerance; zero-credit block + top-up + resume all receipted |
 | **Z-5** | Watchdog + ops | instance-set registered with fleet watchdog at provision (law `3b4da80`); restore-from-repo runbook (the vault IS the backup — prove it) | forced crash-loop on a fresh tenant → operator alert; restore drill: new container + existing repo = memory intact |
 | **Z-6** | Customer #1 run | Jordi executes the funnel personally, LIVE card, his Claude, his repo | scored ✅/❌ against the exit criterion, receipts inline (Stripe ID, container ID, commit SHAs, dashboard screenshot) |
@@ -80,6 +98,12 @@ tester's stranger-run closes the epic.
 - Jordi is the only router between tracks.
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [scribe/Story-Fable] Spec expanded per Jordi (same morning)
+- Jordi: public website · self-host + hosted €5/month (ZD-1 DECIDED) · multi-user self-serve ·
+  setup UI in cloud, terminal path for self-host · "your personal wiki brain." ZD-5 (LLM key
+  model) and ZD-6 (tenancy at €5) minted with recommendations; Z-2/Z-3 lanes upgraded
+  accordingly. Zenod-Fable frames ZD-2/3/5/6 for Jordi as its first move.
 
 ### 2026-07-05 · [scribe/Story-Fable] Doc created
 - Materializes Jordi's Move-0 ask (this morning) on top of: `units/zenod/` scaffold + clean
