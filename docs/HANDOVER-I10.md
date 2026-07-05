@@ -358,3 +358,40 @@ Jordi sent 2 voice notes + a few texts during active use. What he saw (Drive rec
 **Tickets filed (typed / gh):** #589 (ack-before-durable-enqueue), **#590** (multi-part asks get per-part receipts or explicit "did NOT act on X", never a flat ack — the real finding), **#591** (premature give-up on reads — "latest VN transcript" fetches the full row first-ask, never bounces a messageId to the user).
 
 **Correction to my own prior diagnosis:** I earlier called transcript retrieval "broken" — it is NOT; Zenod returned the full transcript when pushed (the model just gave up on the first attempt, #591). Verify a capability before declaring it broken.
+
+### 2026-07-05 · WHISPER REGRESSION REPAIR (Fable-authorized, whisper-exempt window) — SHIPPED + LIVE-FIRED
+
+Voice notes (Jordi's primary input) were failing live with `whisper-cli is not installed in this image`. Batch: resolve serving-stack tangle → restore whisper as a **prebuilt** binary → verify z2/C-27 → check reddit-replies wiring → receipts. **Soak conduct clean — every transcription failure this incident was reported HONESTLY (no fabrication); C-15/C-23 not implicated.**
+
+**STEP 1 · Serving-stack tangle — RESOLVED, and it corrected the batch's premise.**
+- Jordi's WhatsApp (`c1.zenod.dev`) is served by container **`zenod-console`** (Dokploy source-build). Its WA session (`/data/whatsapp/session/` + 2.2 MB sqlite, last write 11:00 UTC) matches the VN times — this is the real serving container.
+- The "second stack" (GHCR compose `compose-override-auxiliary-hard-drive-bavq21-*`, `ghcr.io/zenod-ai/zenod:latest`) serves **`z-testco.zenod.dev`** — a separate Epic-2 tenant with its OWN **empty, unpaired** WA session (4 KB sqlite, no `session/`). It is **not** a zombie sharing Jordi's session and **not** stale-serving-Jordi. **Retiring it would break the TestCo tenant — so NOT retired** (contract: instructions said "retire the stale stack"; evidence says it isn't stale — flagged, not blindly executed).
+- **"#578/#581 merged but not live" is FALSIFIED:** serving `zenod-console` was already on `9e938a6` = `origin/main`, which git-ancestry-confirms contains #578 (`08fa11ea`), #581/C-27 (`01911338`). Those fixes WERE live on Jordi's channel. The tangle was **not** the transcription cause.
+
+**STEP 1b · Real root cause (two-part, both now closed/ticketed):**
+- **OpenRouter STT is out of balance — HTTP 402** (`"This request requires at least $0.50 in balance for audio"`). `openrouter_api_key` IS set (73 chars) but 402s; `groq`/`openai` keys empty → OpenRouter is the *only* cloud STT and it's failing. **→ #594.**
+- **#575 removed the local whisper fallback.** So the cascade (transcribe.ts) fell from a 402-ing OpenRouter straight through to an absent whisper → `whisper-cli is not installed`. Cloud-down + no-fallback = total voice failure. This is exactly why Jordi insisted on keeping whisper.
+
+**STEP 2 · Whisper restored as a PREBUILT binary (per Jordi's verbatim directive — "use the binary, don't compile").**
+- **PR:** https://github.com/zenod-ai/zenod/pull/592 → squash merge **`066835c`** on `main` (CI `ci` green, auto-merged).
+- Built `whisper-cli` **once** (musl/amd64, whisper.cpp ref `8a9ad78`, in a `node:22-alpine` container so the ABI matches), runtime-verified it loads against only `libstdc++`/`libgomp`, vendored it at `vendor/whisper/whisper-cli-musl-amd64`, and `COPY` it into the runtime image. **No build stage, no compile, no network fetch** — deploys stay ~2-3 min. Also published as release asset `whisper-cli-musl-amd64` for provenance. OpenRouter stays primary; whisper is the last-resort net beneath it.
+- Dockerfile `RUN` fails the build loudly if the binary can't `--help` (so a bad binary can never ship silently).
+
+**STEP 2b · Deploy — autoDeploy coalescing skipped c1; re-fired its git webhook.**
+- A concurrent Epic-2.5 docs push (`1aebbd5`) coalesced the autoDeploy wave; `066835c` only re-triggered epaminon + zenod-runner, **not c1** (verified: no c1 deployment row for the whisper commit; none queued). So c1 would NOT self-update.
+- Re-fired **c1's own git-deploy webhook** (`POST /api/deploy/compose/<c1 refreshToken>` with `{"ref":"refs/heads/main"}`) → `{"message":"Compose deployed successfully"}`. This is the SAME mechanism autoDeploy uses (re-firing the webhook with the correct branch), not a manual `compose.deploy` override.
+
+**STEP 2c · LIVE-FIRE — PASS (real speech, end-to-end, on the deployed build).**
+- `c1` in-container: `/usr/local/bin/whisper-cli` present + loads (`WHISPER_LIVE_OK`); `/api/health.sha` = **`066835c`**.
+- Posted a real TTS speech clip to the live `POST /api/chat/voice/transcribe` (bearer-authed) → **HTTP 200**, transcript correct: *"This is a whisper fallback regression test for Zenod voice transcription on 6 July."*, `provider: "whisper.cpp small"`. Whisper caught the 402-ing OpenRouter and transcribed — the safety net working exactly as intended. **Voice notes work again on Jordi's channel.**
+- Honest boundary: a real VN through the WhatsApp gateway needs Jordi to send one; the endpoint live-fire above is the closest self-driven proof (same `transcribeAudio` path the WA handler uses).
+
+**STEP 3 · Production `zenod-z2` (C-27) — CONFIRMED.** In-container `/api/health.sha` = `9e938a6` (⊇ `01911338`, git-verified). C-27 durable-writes is running on the vault-owner.
+
+**STEP 4 · `read_reddit_replies` — WIRED, not missing.** The tool exists on the serving Console (`outboundTools.ts` → Composio `REDDIT_RETRIEVE_POST_COMMENTS`, surfaced via `app.ts:1030` `chat_with_outbound`, routed in `meshGateway.ts`). The live "no Reddit reply tool exists" answer was the model **denying an existing capability** (discoverability defect, #591 family) — **not** unwired, so no build ticket. Filed **#593** (model denies existing tool). Did **NOT** build anything (Epic-3 Herald replier lane owns any real work here).
+
+**Tickets filed:** #594 (OpenRouter STT 402 / cloud STT down — top up or add Groq key), #593 (model denies existing `read_reddit_replies`).
+
+**Deploy freeze resumes — nothing else pushes today** beyond this receipt. This receipt lands from an isolated worktree so the concurrent Epic-2.5 session's working tree is untouched.
+
+**Hand-back:** Did — whisper restored as prebuilt binary (#592, live-fired PASS via whisper.cpp on 066835c), serving stack pinned+verified, z2/C-27 confirmed, reddit-replies confirmed wired. Didn't (deliberate) — did not retire the "second stack" (it's the live TestCo tenant, not stale); did not fix OpenRouter balance (operational, needs Jordi/top-up — #594); did not build reddit-reply reading (exists). Recommend next — top up OpenRouter (or add a Groq key) to restore fast cloud STT primary (#594); the whisper fallback now guarantees voice works regardless.
