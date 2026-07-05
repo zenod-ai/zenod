@@ -105,6 +105,20 @@ direction: the category screams AI/agents; the buyable outcome is RHYTHM — a s
 public heartbeat for a project, grounded in its memory. Candidates in play (chat, 2026-07-04):
 Drumbeat · Herald · Beacon · Chronicle. Steer pending.
 
+**SD-4 · The seam is MCP — DECIDED 2026-07-04 (chat, affirmed by use).** Herald consumes Zenod
+only through the public MCP protocol — no private APIs. Zenod launches standalone as "an MCP
+server for project memory"; Herald is its first public customer. Two products, two brands, one
+protocol seam, one image (the factory rule holds: no second codebase).
+
+**SD-5 · The ring — CONVERGING (Jordi vision, 2026-07-04 late).** The personal front door as its
+own mini-product: ONE channel connection (Baileys = one number), holding four jobs — the channel
+gateway, the keyring/auth UI (apps authenticated once, possibly other vendors'), routing (smart
+fan-OUT, hand-the-chat-to-a-guy), and attention rules (trained standing orders; Phylax absorbed
+into the ring). Fan-IN is verbatim relay with attribution ("Herald says: …") — the ring never
+composes, summarizes, or acks on a guy's behalf. Hosted Herald = a ring permanently handed to
+Herald; personal = your ring fronting many guys. Constitution + council placement in chat
+2026-07-04; pending Jordi confirmation.
+
 ## Cross-track requirements (Jordi carries; rule 10)
 
 - **→ Epic 2 (Product-Fable):** SD-0 reframes the sellable unit as the branded loop service
