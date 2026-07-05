@@ -1,0 +1,51 @@
+# The council guy — Dokploy Compose stub (ticket W-B, EPIC 2.5)
+#
+# STUB / BLUEPRINT. This mirrors docker-compose.archus.yml: the SAME root application image
+# (../../Dockerfile), selected to run as the council guy via AGENT. It does NOT boot a real
+# council guy yet — see the BLOCKER note below and units/council/Dockerfile.
+#
+# RD-2 OPEN: `council` (name) and `<COUNCIL_NAME>.zenod.dev` (domain) are placeholders until the
+# guy is named. RD-4 STAGED: no physical extraction until the split trigger fires.
+#
+# Deploy (target, once COUNCIL_AGENT exists in packages/server/src/agent.ts):
+#   1. New Compose service from this file (autoDeploy on push to main).
+#   2. Add the domain <COUNCIL_NAME>.zenod.dev (port 8080) — Dokploy wires Traefik + TLS.
+#   3. Deploy. Provision via the ring's keyring: issue per-unit MCP tokens for
+#      Zenod / Archus / Epaminon ONLY (no world keys), and register those peers.
+
+networks:
+  # Dokploy's attachable overlay — lets Traefik reach this service and lets the council guy
+  # reach its peers (Zenod, Archus, Epaminon) over the MCP mesh/seam.
+  dokploy-network:
+    external: true
+
+volumes:
+  # The council guy is vaultless and holds no adapter state; this volume is only his local
+  # job/journey store + settings (no WhatsApp/Telegram session state — he has no gateways).
+  zenod-council-data:
+
+services:
+  zenod-council:
+    build:
+      context: ../..            # repo root — root image reuse (RD-4 staged)
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zenod-council:dokploy
+    container_name: zenod-council
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-council-data:/data
+    environment:
+      # BLOCKER: resolveAgent() has no `council` entry yet (only `console`, the fused brain).
+      # Until a COUNCIL_AGENT is added, this falls through to the default agent. Documented in
+      # units/council/Dockerfile + EXTRACTION-MAP.md. The live fused unit is AGENT=console.
+      AGENT: council
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # Per-unit bearer tokens (law 6c) — issued by the ring keyring at provision time. Unit
+      # tokens ONLY; NO world keys (no repo token, no outbound keys). Names illustrative.
+      # ZENOD_PEER_TOKEN / ARCHUS_PEER_TOKEN / EPAMINON_PEER_TOKEN wired via keyring, not here.
+    expose:
+      - "8080"
