@@ -319,36 +319,40 @@ score ❌, receipt it, stop. Never fix, never zombie. Pen returns to Zenod-Fable
 scorecard.
 ```
 
-### PRE-FLIGHT (Jordi, in the dispatch terminal) — Block C may be pasted ONLY on `PREFLIGHT PASS`
+### STEP 0 · credential gate — runs INSIDE the worker, first thing. Jordi pastes NOTHING but Block C.
 
-Added 2026-07-05 after two dispatches burned on missing environment: the prose gate is now
-executable. Run this; every ❌ line names its own fix; re-run until PASS.
+Sources: the I2-7 operator store, by its RECEIPTED names (Epic-2 B-6/B-9,
+`EPIC-2-HOSTED-READINESS.md:161-164`): Keychain `alpha9-dokploy-api-key` /
+`alpha9-openrouter-provisioning-key` / `alpha9-github-oauth-client-id`/`-secret`, account
+`jordi`; file fallback `~/.config/alpha9/dokploy.env`; full read commands in `zenod-ai/cloud`
+docs/PROVISIONING.md. The worker runs this verbatim; any ❌ → that lane BLOCKED, honestly.
 
 ```bash
-echo "— Epic 2.3 cycle-2 preflight (SELF-SOURCING; production path) —"; ok=1
-# 1 · Dokploy — key auto-sourced: env → ~/.dokploy_api_key → Keychain. Never pasted by hand.
-DKEY="${DOKPLOY_API_KEY:-$(cat "$HOME/.dokploy_api_key" 2>/dev/null)}"
-DKEY="${DKEY:-$(security find-generic-password -s DOKPLOY_API_KEY -w 2>/dev/null)}"
-DKEY="${DKEY:-$(security find-generic-password -s dokploy -w 2>/dev/null)}"
+echo "— STEP 0 · credential gate (I2-7 store, receipted names) —"; ok=1
+DKEY="${DOKPLOY_API_KEY:-$(security find-generic-password -s alpha9-dokploy-api-key -a jordi -w 2>/dev/null)}"
+[ -z "$DKEY" ] && [ -f "$HOME/.config/alpha9/dokploy.env" ] && \
+  DKEY=$(. "$HOME/.config/alpha9/dokploy.env" 2>/dev/null; echo "$DOKPLOY_API_KEY")
+[ -z "$DKEY" ] && DKEY=$(cat "$HOME/.dokploy_api_key" 2>/dev/null)
 code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -H "x-api-key: $DKEY" \
   "${DOKPLOY_URL:-https://dokploy.polyqu.com}/api/project.all")
-if [ "$code" = 200 ]; then echo "1 Dokploy               ✅ project.all → 200"
-else echo "1 Dokploy               ❌ HTTP ${code:-none} (000=URL/network · 401/403=key rejected · empty key = not found in env/~/.dokploy_api_key/Keychain)"; ok=0; fi
-# 2 · zenod-ai/cloud — auto-clones if missing
-[ -d "$HOME/Documents/GitHub/cloud/.git" ] || gh repo clone zenod-ai/cloud "$HOME/Documents/GitHub/cloud" >/dev/null 2>&1
-[ -d "$HOME/Documents/GitHub/cloud/.git" ] && echo "2 zenod-ai/cloud        ✅ checked out" \
-  || { echo "2 zenod-ai/cloud        ❌ auto-clone failed — check gh auth status"; ok=0; }
-# 3 · LIVE Stripe key — env → ~/.stripe_live_key → Keychain (restricted rk_live_ accepted)
-SKEY="${STRIPE_SECRET_KEY:-$(cat "$HOME/.stripe_live_key" 2>/dev/null)}"
-SKEY="${SKEY:-$(security find-generic-password -s STRIPE_LIVE_KEY -w 2>/dev/null)}"
-case "$SKEY" in sk_live_*|rk_live_*) echo "3 LIVE Stripe key       ✅";; \
-  *) echo "3 LIVE Stripe key       ❌ store it ONCE: security add-generic-password -s STRIPE_LIVE_KEY -a stripe -w 'rk_live_…'"; ok=0;; esac
-[ $ok = 1 ] && { export DOKPLOY_API_KEY="$DKEY" STRIPE_SECRET_KEY="$SKEY"; \
-  echo "PREFLIGHT PASS — keys exported into THIS shell; paste Block C here"; } \
-  || echo "PREFLIGHT FAIL — fix ❌ lines, run again"
+[ "$code" = 200 ] && echo "1 Dokploy                  ✅ project.all → 200" \
+  || { echo "1 Dokploy                  ❌ HTTP ${code:-none}"; ok=0; }
+OKEY="${OPENROUTER_PROVISIONING_KEY:-$(security find-generic-password -s alpha9-openrouter-provisioning-key -a jordi -w 2>/dev/null)}"
+[ -n "$OKEY" ] && echo "2 OpenRouter provisioning  ✅" \
+  || { echo "2 OpenRouter provisioning  ❌ (ZD-5 gateway keys need it — Epic-2 B-6 store)"; ok=0; }
+[ -d "$HOME/Documents/GitHub/cloud/.git" ] && echo "3 zenod-ai/cloud           ✅" \
+  || { gh repo clone zenod-ai/cloud "$HOME/Documents/GitHub/cloud" >/dev/null 2>&1 \
+       && echo "3 zenod-ai/cloud           ✅ cloned" \
+       || { echo "3 zenod-ai/cloud           ❌ clone failed (gh auth?)"; ok=0; }; }
+SKEY="${STRIPE_SECRET_KEY:-$(security find-generic-password -s alpha9-stripe-live-key -a jordi -w 2>/dev/null)}"
+case "$SKEY" in sk_live_*|rk_live_*) echo "4 LIVE Stripe key          ✅";; \
+  *) echo "4 LIVE Stripe key          ❌ the ONE genuinely new secret (Epic 2 was test-mode). Jordi stores it ONCE: security add-generic-password -s alpha9-stripe-live-key -a jordi -w 'rk_live_…'"; ok=0;; esac
+export DOKPLOY_API_KEY="$DKEY" OPENROUTER_PROVISIONING_KEY="$OKEY" STRIPE_SECRET_KEY="$SKEY"
+[ $ok = 1 ] && echo "GATE PASS — proceed to lanes" \
+  || echo "GATE FAIL — mark dependent lanes BLOCKED with the ❌ lines as receipts; do not zombie"
 ```
 
-### Block C · WORKER cycle 2 — paste ONLY after PREFLIGHT PASS (Dokploy deploy path · `zenod-ai/cloud` checkout · LIVE Stripe key — production path, no local Docker)
+### Block C · WORKER cycle 2 — Jordi's ONLY action. The worker runs the STEP-0 gate itself.
 
 ```
 You are the Zenod Move-0 WORKER, cycle 2. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in
@@ -358,11 +362,12 @@ chat client, NO UI; cloud handoff = ONE tokened URL per ZD-8; the cloud UI is a 
 multi-product surface in zenod-ai/cloud with optional OAuth buttons). You hold the pen on
 the APPEND ZONE only; planner sections are read-only.
 
-ENVIRONMENT PRECONDITIONS — verify FIRST, one receipt each; any missing → write BLOCKED,
-stop that lane, spend nothing on it: (1) Dokploy API alive (DOKPLOY_API_KEY;
-project.all → 200 — the sanctioned automated deploy path, no manual VPS ops, no local
-Docker); (2) zenod-ai/cloud checkout present; (3) LIVE Stripe key. Cycles 1–2 died on
-missing environment — do not zombie into it.
+STEP 0 — run the credential gate above Block C in the doc, VERBATIM, before anything else.
+It sources every key from the I2-7 operator store by its receipted names (Keychain
+alpha9-*, acct jordi; ~/.config/alpha9/dokploy.env; zenod-ai/cloud docs/PROVISIONING.md).
+NEVER ask Jordi for a key; never paste one into chat. Any ❌ → dependent lanes BLOCKED
+with the gate line as receipt, spend nothing on them. Production path only: deploys via
+the Dokploy API, no manual VPS ops, no local Docker.
 
 GIT DISCIPLINE (cycle-1 collision on a shared branch, receipted): fresh branch off latest
 origin/main named epic23-c2-<lane>; never reuse a shared branch; push early; if the tree
@@ -403,6 +408,21 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Gate moved INTO the worker; keychain names taken from receipts, not guessed
+- Jordi's 401 with a VALID key: the gate looked up Keychain service names the planner INVENTED
+  (`DOKPLOY_API_KEY`, `dokploy`) instead of the receipted ones — **`alpha9-dokploy-api-key` /
+  `alpha9-openrouter-provisioning-key`, acct `jordi`** (Epic-2 B-6, HOSTED-READINESS:161-164;
+  also `alpha9-github-oauth-client-id/-secret` per B-9; file fallback `~/.config/alpha9/dokploy.env`).
+  Empty key sent → 401. Three gate iterations burned Jordi's attention on plumbing Epic 2 already
+  solved — a REUSE-constraint violation by the planner itself. Recorded, not excused.
+- Structural fold (rule 6): the human is never the executor of a machine gate. PRE-FLIGHT is now
+  **STEP 0 inside Block C** — the worker sources all credentials from the I2-7 store by receipted
+  names, never asks Jordi for keys. Jordi's only action = paste Block C.
+- The ONE genuinely new secret this epic introduces: the **LIVE Stripe key** (Epic 2 ran
+  test-mode; Z-3 needs live). Store once as `alpha9-stripe-live-key`, acct `jordi` — follows the
+  established alpha9-* convention. Also needed later per Z-3-CHECKOUT-WIRING.md:
+  `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (worker mints/derives these, live key suffices).
 
 ### 2026-07-05 · [planner/Zenod-Fable] Preflight made SELF-SOURCING (Jordi: "I'm giving you that key every few hours")
 - A VALID Dokploy key failed check 1 because the gate only read `$DOKPLOY_API_KEY` from the
