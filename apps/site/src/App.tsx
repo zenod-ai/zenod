@@ -291,19 +291,25 @@ export default function App() {
               GitHub account. You keep the keys.
             </p>
 
+            {/* [DRAFT — Epic 0 voice pending] primary hosted CTA — LIVE €5/mo (ZD-1). */}
+            <div className="mt-10 flex flex-col items-center gap-2">
+              <Button asChild size="lg" className="rounded-none px-6">
+                <a href={HOSTED_PAYMENT_LINK}>
+                  Get hosted — €5/month
+                  <ArrowUpRightIcon data-icon="inline-end" />
+                </a>
+              </Button>
+              <p className="label-caps text-muted-foreground/70">
+                Fully managed · your repo, your keys · or self-host free below
+              </p>
+            </div>
+
             <div id="self-host" className="mx-auto mt-14 max-w-2xl scroll-mt-24 space-y-6 text-left">
               <CommandBlock step="1" title="Install" command={INSTALL_CMD} />
               <CommandBlock step="2" title="Connect your agents" command={CONNECT_CMD} />
             </div>
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              {/* [DRAFT — Epic 0 voice pending] LIVE €5/mo hosted checkout (ZD-1). */}
-              <Button asChild size="lg" className="rounded-none px-5">
-                <a href={HOSTED_PAYMENT_LINK}>
-                  Get hosted — €5/month
-                  <ArrowUpRightIcon data-icon="inline-end" />
-                </a>
-              </Button>
               <Button asChild size="lg" variant="outline" className="rounded-none px-5">
                 <a href={GITHUB_URL} target="_blank" rel="noreferrer">
                   <GithubIcon data-icon="inline-start" />
