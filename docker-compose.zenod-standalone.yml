@@ -35,8 +35,17 @@ services:
       AGENT: zenod
       ZENOD_DATA_DIR: /data
       PORT: "8080"
-      # VAULT_REPO / GITHUB_TOKEN / ZENOD_PROVIDER / OPENROUTER_API_KEY are injected via
-      # the Dokploy env box at provision (never committed here — secrets stay in the store).
+      # Await-provision by default: the box boots idle and the provisioner mints its MCP
+      # token + pushes config to /api/provision (the ZD-8 "provisioner mints the token"
+      # shape). A stranger self-hosting sets ZENOD_AWAIT_PROVISION=0 + the seeds below.
+      ZENOD_AWAIT_PROVISION: ${ZENOD_AWAIT_PROVISION:-1}
+      # These map the Dokploy env box INTO the container (compose interpolation alone does
+      # not — must be listed here). Unset → empty → self-host defaults. Secrets never
+      # committed; they live in the operator store / Dokploy env.
+      VAULT_REPO: ${VAULT_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ZENOD_PROVIDER: ${ZENOD_PROVIDER:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     expose:
       - "8080"
     # Public deploy fronts this with Traefik at https://<host>/mcp (domain added via API).
