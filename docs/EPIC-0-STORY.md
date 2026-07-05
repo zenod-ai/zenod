@@ -119,6 +119,13 @@ composes, summarizes, or acks on a guy's behalf. Hosted Herald = a ring permanen
 Herald; personal = your ring fronting many guys. Constitution + council placement in chat
 2026-07-04; pending Jordi confirmation.
 
+**SD-5 — DECIDED 2026-07-04 night (Jordi):** the ring shape confirmed and EXPANDED into the
+atomic-suite vision: every box = one MCP server = one container = one repo (same org) = one
+website; seam = pure MCP + receipt profile; tree-shaped calls only; router cheap; per-user unit
+instances. Materialized as [EPIC-2.5-ATOMIC-UNITS.md](EPIC-2.5-ATOMIC-UNITS.md) (`0ef4e7b`) —
+standing order: other build work pauses for the refactor. Epic 0 continues story work; consumes
+RD-1/RD-2 naming from that track.
+
 ## Cross-track requirements (Jordi carries; rule 10)
 
 - **→ Epic 2 (Product-Fable):** SD-0 reframes the sellable unit as the branded loop service
