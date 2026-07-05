@@ -317,7 +317,25 @@ score ❌, receipt it, stop. Never fix, never zombie. Pen returns to Zenod-Fable
 scorecard.
 ```
 
-### Block C · WORKER cycle 2 — paste ONLY into an environment with: Docker daemon UP · VPS/operator access · `zenod-ai/cloud` checkout · LIVE Stripe key
+### PRE-FLIGHT (Jordi, in the dispatch terminal) — Block C may be pasted ONLY on `PREFLIGHT PASS`
+
+Added 2026-07-05 after two dispatches burned on missing environment: the prose gate is now
+executable. Run this; every ❌ line names its own fix; re-run until PASS.
+
+```bash
+echo "— Epic 2.3 cycle-2 preflight —"; ok=1
+docker info >/dev/null 2>&1 && echo "1 Docker daemon         ✅ up" \
+  || { echo "1 Docker daemon         ❌ start Docker Desktop"; ok=0; }
+[ -n "$DOKPLOY_URL" ] && [ -n "$DOKPLOY_TOKEN" ] && echo "2 Deploy path (Dokploy) ✅" \
+  || { echo "2 Deploy path (Dokploy) ❌ export DOKPLOY_URL + DOKPLOY_TOKEN (sanctioned automated path — no manual VPS ops)"; ok=0; }
+[ -d "$HOME/Documents/GitHub/cloud/.git" ] && echo "3 zenod-ai/cloud        ✅ checked out" \
+  || { echo "3 zenod-ai/cloud        ❌ gh repo clone zenod-ai/cloud ~/Documents/GitHub/cloud"; ok=0; }
+case "$STRIPE_SECRET_KEY" in sk_live_*) echo "4 LIVE Stripe key       ✅";; \
+  *) echo "4 LIVE Stripe key       ❌ export STRIPE_SECRET_KEY=sk_live_… (restricted key preferred)"; ok=0;; esac
+[ $ok = 1 ] && echo "PREFLIGHT PASS — paste Block C" || echo "PREFLIGHT FAIL — fix ❌ lines, run again"
+```
+
+### Block C · WORKER cycle 2 — paste ONLY after PREFLIGHT PASS (Docker daemon UP · Dokploy deploy path · `zenod-ai/cloud` checkout · LIVE Stripe key)
 
 ```
 You are the Zenod Move-0 WORKER, cycle 2. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in
@@ -367,6 +385,19 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Cycle-2 audit PASSED (honest-BLOCKED) · executable PRE-FLIGHT gate added
+- **Audit of HANDBACK-c2: verified.** PR #602 (`6559e03`, auto-merge pending) sits on the correct
+  base (`02d832c`); all four precondition verdicts carry receipts; worker spent nothing on blocked
+  lanes and attempted no forbidden VPS/Stripe workarounds. Correct execution of Block C's gate —
+  no reds to map. Z-1..Z-5 unchanged from post-cycle-1 states.
+- **THE blocker is the dispatch environment, Jordi-personal to provision:** Docker Desktop up ·
+  `DOKPLOY_URL`/`DOKPLOY_TOKEN` (the sanctioned automated deploy path; manual VPS ops stay
+  forbidden) · `zenod-ai/cloud` cloned · LIVE Stripe key in env.
+- **Rule-6 fold:** a prose entry gate was skipped on two consecutive dispatches → gate is now
+  EXECUTABLE (PRE-FLIGHT script above Block C). Dispatch rule from here: Block C is pasted only
+  after `PREFLIGHT PASS` in the same terminal. A third gateless dispatch is prevented, not
+  requested.
 
 ### 2026-07-05 · [planner/Zenod-Fable] Cycle-1 audit PASSED · ZD-7/ZD-8 DECIDED · v0 surface spec folded · cycle 2 armed
 - **Audit (verify-don't-trust) of the worker HANDBACK: PASSED.** PR #600 MERGED to main
