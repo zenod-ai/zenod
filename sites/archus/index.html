@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Archus — the keeper of the backlog</title>
+    <meta name="description" content="Archus owns your backlog: one home per ticket, qualified IDs, no central duplicate." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%97%82%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+    <style>
+      :root {
+        --ink: #14110f;
+        --paper: #f6f3ee;
+        --muted: #6b625a;
+        --accent: #3a5b8c;
+        --line: #ddd6cc;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { -webkit-text-size-adjust: 100%; }
+      body { background: var(--paper); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; min-height: 100vh; display: flex; flex-direction: column; }
+      .wrap { flex: 1; max-width: 46rem; margin: 0 auto; padding: clamp(3rem, 10vw, 7rem) 1.5rem 3rem; width: 100%; }
+      .eyebrow { font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; font-weight: 600; }
+      h1 { font-family: Georgia, "Times New Roman", "Bodoni Moda", serif; font-weight: 500; font-size: clamp(2.6rem, 9vw, 4.6rem); line-height: 1.02; letter-spacing: -0.01em; margin-bottom: 1.4rem; }
+      .lede { font-size: clamp(1.1rem, 3.2vw, 1.4rem); color: var(--muted); max-width: 34rem; margin-bottom: 2.6rem; }
+      .job { border-left: 2px solid var(--accent); padding: 0.2rem 0 0.2rem 1.2rem; font-size: 1.05rem; margin-bottom: 2.8rem; }
+      .job strong { color: var(--ink); }
+      .rule { display: grid; gap: 1.1rem; border-top: 1px solid var(--line); padding-top: 2rem; margin-bottom: 2rem; }
+      .rule dt { font-family: Georgia, serif; font-size: 1.15rem; margin-bottom: 0.2rem; }
+      .rule dd { color: var(--muted); font-size: 0.98rem; }
+      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; padding: 1.6rem 1.5rem; text-align: center; }
+      footer a { color: var(--accent); text-decoration: none; }
+      footer a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <p class="eyebrow">The Suite · backlog</p>
+      <h1>Archus.</h1>
+      <p class="lede">The keeper of the backlog. One home per ticket, one qualified ID, no central duplicate to drift out of sync.</p>
+      <p class="job">Archus owns your work-to-do: he creates, edits, and closes tickets where they belong, aggregates across your repos, and enforces <strong>one ticket, one home</strong>. Public writes are intent that routes to his brain; the GitHub bookkeeping stays private.</p>
+      <dl class="rule">
+        <div>
+          <dt>One home per ticket</dt>
+          <dd>Tickets live in the repo they belong to — qualified <code>owner/repo#N</code>, never a bare number.</dd>
+        </div>
+        <div>
+          <dt>Guardian, not a scribe</dt>
+          <dd>Every write is an intent routed through Archus so the backlog stays coherent.</dd>
+        </div>
+        <div>
+          <dt>Reads are direct</dt>
+          <dd>Ask what's open and get the aggregated view straight back.</dd>
+        </div>
+      </dl>
+    </main>
+    <footer>
+      Iteration-0 skeleton · part of the Atomic Suite ·
+      <a href="https://github.com/zenod-ai/zenod">zenod-ai/zenod</a>
+    </footer>
+  </body>
+</html>

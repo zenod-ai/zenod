@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Callisthenes — the voice that goes out</title>
+    <meta name="description" content="Callisthenes owns the outbound voice: the only holder of your sending keys, throttled and accountable." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%A3%3C/text%3E%3C/svg%3E" />
+    <style>
+      :root {
+        --ink: #14110f;
+        --paper: #f6f3ee;
+        --muted: #6b625a;
+        --accent: #7a4a8c;
+        --line: #ddd6cc;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { -webkit-text-size-adjust: 100%; }
+      body { background: var(--paper); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; min-height: 100vh; display: flex; flex-direction: column; }
+      .wrap { flex: 1; max-width: 46rem; margin: 0 auto; padding: clamp(3rem, 10vw, 7rem) 1.5rem 3rem; width: 100%; }
+      .eyebrow { font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; font-weight: 600; }
+      h1 { font-family: Georgia, "Times New Roman", "Bodoni Moda", serif; font-weight: 500; font-size: clamp(2.6rem, 9vw, 4.6rem); line-height: 1.02; letter-spacing: -0.01em; margin-bottom: 1.4rem; }
+      .lede { font-size: clamp(1.1rem, 3.2vw, 1.4rem); color: var(--muted); max-width: 34rem; margin-bottom: 2.6rem; }
+      .job { border-left: 2px solid var(--accent); padding: 0.2rem 0 0.2rem 1.2rem; font-size: 1.05rem; margin-bottom: 2.8rem; }
+      .job strong { color: var(--ink); }
+      .rule { display: grid; gap: 1.1rem; border-top: 1px solid var(--line); padding-top: 2rem; margin-bottom: 2rem; }
+      .rule dt { font-family: Georgia, serif; font-size: 1.15rem; margin-bottom: 0.2rem; }
+      .rule dd { color: var(--muted); font-size: 0.98rem; }
+      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; padding: 1.6rem 1.5rem; text-align: center; }
+      footer a { color: var(--accent); text-decoration: none; }
+      footer a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <p class="eyebrow">The Suite · voice</p>
+      <h1>Callisthenes.</h1>
+      <p class="lede">The voice that goes out. The one unit allowed to speak to the world — X, Reddit, email — throttled and accountable.</p>
+      <p class="job">Callisthenes owns the outbound voice: he is the <strong>only holder of your sending keys</strong>. Every send is throttled, every send returns a receipt. Authority is not storage — no other unit can reach for the world's keys.</p>
+      <dl class="rule">
+        <div>
+          <dt>One holder of the keys</dt>
+          <dd>Only Callisthenes may pull outbound credentials. Everyone else asks him.</dd>
+        </div>
+        <div>
+          <dt>Throttled by design</dt>
+          <dd>Sends are rate-limited at the door, so nothing floods out by accident.</dd>
+        </div>
+        <div>
+          <dt>Receipts on every send</dt>
+          <dd>Each post returns a URL or errors loudly — no silent sends.</dd>
+        </div>
+      </dl>
+    </main>
+    <footer>
+      Iteration-0 skeleton · part of the Atomic Suite ·
+      <a href="https://github.com/zenod-ai/zenod">zenod-ai/zenod</a>
+    </footer>
+  </body>
+</html>
