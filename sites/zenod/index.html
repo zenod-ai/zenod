@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Zenod — the memory your agents report to</title>
-    <meta name="description" content="Zenod owns your memory: evidence in, meaning out, every fact a citation. Your vault, your repo, your keys." />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9A%3C/text%3E%3C/svg%3E" />
+    <title>Zenod — your personal wiki brain</title>
+    <meta name="description" content="One MCP server, your git repo as the vault. Every AI reads and writes it through one librarian, and every write is a real git commit receipt. Self-host free, or hosted for €5/month." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E" />
     <style>
       :root {
         --ink: #14110f;
@@ -13,56 +13,172 @@
         --muted: #6b625a;
         --accent: #2f6b52;
         --line: #ddd6cc;
+        --card: #fbf9f5;
+        --draft-bg: #fffbeb;
+        --draft-ink: #7c2d12;
+        --draft-line: #d97706;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      html { -webkit-text-size-adjust: 100%; }
+      html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
       body {
         background: var(--paper);
         color: var(--ink);
         font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        line-height: 1.5;
+        line-height: 1.55;
         min-height: 100vh;
         display: flex;
         flex-direction: column;
       }
-      .wrap { flex: 1; max-width: 46rem; margin: 0 auto; padding: clamp(3rem, 10vw, 7rem) 1.5rem 3rem; width: 100%; }
-      .eyebrow { font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; font-weight: 600; }
-      h1 { font-family: Georgia, "Times New Roman", "Bodoni Moda", serif; font-weight: 500; font-size: clamp(2.6rem, 9vw, 4.6rem); line-height: 1.02; letter-spacing: -0.01em; margin-bottom: 1.4rem; }
-      .lede { font-size: clamp(1.1rem, 3.2vw, 1.4rem); color: var(--muted); max-width: 34rem; margin-bottom: 2.6rem; }
-      .job { border-left: 2px solid var(--accent); padding: 0.2rem 0 0.2rem 1.2rem; font-size: 1.05rem; margin-bottom: 2.8rem; }
+      .draft-banner {
+        background: var(--draft-bg);
+        color: var(--draft-ink);
+        border-bottom: 1px solid var(--draft-line);
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-align: center;
+        padding: 0.55rem 1rem;
+        letter-spacing: 0.02em;
+      }
+      .wrap { flex: 1; max-width: 48rem; margin: 0 auto; padding: clamp(2.5rem, 8vw, 5rem) 1.5rem 3rem; width: 100%; }
+      .eyebrow { font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.4rem; font-weight: 600; }
+      h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 500; font-size: clamp(2.6rem, 9vw, 4.6rem); line-height: 1.03; letter-spacing: -0.01em; margin-bottom: 1.3rem; }
+      .lede { font-size: clamp(1.1rem, 3.2vw, 1.4rem); color: var(--muted); max-width: 36rem; margin-bottom: 2.4rem; }
+      .job { border-left: 2px solid var(--accent); padding: 0.2rem 0 0.2rem 1.2rem; font-size: 1.05rem; margin-bottom: 3rem; }
       .job strong { color: var(--ink); }
-      .rule { display: grid; gap: 1.1rem; border-top: 1px solid var(--line); padding-top: 2rem; margin-bottom: 2rem; }
-      .rule dt { font-family: Georgia, serif; font-size: 1.15rem; margin-bottom: 0.2rem; }
-      .rule dd { color: var(--muted); font-size: 0.98rem; }
-      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; padding: 1.6rem 1.5rem; text-align: center; }
+      .draft-flag {
+        display: inline-block;
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--draft-ink);
+        background: var(--draft-bg);
+        border: 1px solid var(--draft-line);
+        border-radius: 0.3rem;
+        padding: 0.08rem 0.4rem;
+        margin-bottom: 0.9rem;
+        text-transform: uppercase;
+      }
+      h2 { font-family: Georgia, serif; font-weight: 500; font-size: clamp(1.5rem, 5vw, 2rem); letter-spacing: -0.01em; margin-bottom: 1rem; }
+      section { border-top: 1px solid var(--line); padding-top: 2.4rem; margin-bottom: 2.8rem; }
+      section > p { color: var(--muted); font-size: 1rem; margin-bottom: 1rem; max-width: 38rem; }
+      .rule { display: grid; gap: 1.1rem; margin: 1.6rem 0; }
+      .rule dt { font-family: Georgia, serif; font-size: 1.12rem; color: var(--ink); margin-bottom: 0.2rem; }
+      .rule dd { color: var(--muted); font-size: 0.97rem; }
+      .paths { display: grid; gap: 1.4rem; grid-template-columns: 1fr 1fr; margin-top: 1.8rem; }
+      @media (max-width: 40rem) { .paths { grid-template-columns: 1fr; } }
+      .path {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 0.6rem;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+      }
+      .path h3 { font-family: Georgia, serif; font-weight: 500; font-size: 1.3rem; margin-bottom: 0.3rem; }
+      .path .price { font-size: 0.9rem; color: var(--accent); font-weight: 600; margin-bottom: 0.9rem; }
+      .path p { color: var(--muted); font-size: 0.95rem; margin-bottom: 1rem; flex: 1; }
+      pre {
+        background: var(--ink);
+        color: #f6f3ee;
+        border-radius: 0.4rem;
+        padding: 0.8rem 0.9rem;
+        font-size: 0.78rem;
+        line-height: 1.5;
+        overflow-x: auto;
+        margin-bottom: 1rem;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+      .btn {
+        display: inline-block;
+        text-align: center;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 0.7rem 1.1rem;
+        border-radius: 0.45rem;
+        transition: opacity 0.15s ease;
+      }
+      .btn:hover { opacity: 0.85; }
+      .btn-primary { background: var(--accent); color: #fff; }
+      .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+      .feature-vault { background: var(--card); border: 1px solid var(--line); border-radius: 0.6rem; padding: 1.6rem; margin-top: 1.6rem; }
+      .feature-vault strong { color: var(--ink); }
+      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; padding: 1.8rem 1.5rem; text-align: center; }
       footer a { color: var(--accent); text-decoration: none; }
       footer a:hover { text-decoration: underline; }
+      footer .legal { margin-top: 0.6rem; }
     </style>
   </head>
   <body>
+    <!-- [DRAFT — Epic 0 voice pending] All marketing copy below is a functional draft; final voice lands via Jordi (Epic 0 owns tone). -->
+    <div class="draft-banner">[DRAFT — Epic 0 voice pending] · functional draft, copy not final</div>
     <main class="wrap">
       <p class="eyebrow">The Suite · memory</p>
-      <h1>Zenod.</h1>
-      <p class="lede">The librarian your agents report to. Evidence in, meaning out — every fact a git commit in your own repo.</p>
-      <p class="job">Zenod owns your memory: it ingests and digests, keeps evidence and meaning together, and serves your knowledge back <strong>with citations</strong>. Plain markdown, in a git repo, in your GitHub account. Only Zenod holds the repo token.</p>
-      <dl class="rule">
-        <div>
-          <dt>Evidence, then meaning</dt>
-          <dd>Raw notes are filed first; ideas are distilled on top, always traceable to their source.</dd>
+      <h1>Your personal<br />wiki brain.</h1>
+      <p class="lede">One MCP server. Your git repo is the vault. Every AI you use reads and writes it through one librarian — and every write is a real git commit receipt.</p>
+      <p class="job">Zenod is <strong>one container, one endpoint, one repo</strong>. Plain markdown filed into a git repo in your own account. Ask any AI what you know about X; it answers with a citation that points at the commit the fact came from. Only Zenod holds your repo token.</p>
+
+      <section id="how">
+        <span class="draft-flag">Draft — Epic 0 voice pending</span>
+        <h2>How it works</h2>
+        <dl class="rule">
+          <div>
+            <dt>One librarian, every AI</dt>
+            <dd>Claude, Cursor, any MCP client is the brain. Zenod is the memory they all report to — evidence in, meaning out.</dd>
+          </div>
+          <div>
+            <dt>Every write is a receipt</dt>
+            <dd>Storing a memory returns a real git commit SHA and a GitHub URL. No silent acks — a write you can open and read.</dd>
+          </div>
+          <div>
+            <dt>Your vault, your keys</dt>
+            <dd>Your server, your repo, your LLM key. Access is over the public MCP seam only. Nothing else can write your repo.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section id="vault">
+        <span class="draft-flag">Draft — Epic 0 voice pending</span>
+        <h2>No lock-in, ever</h2>
+        <div class="feature-vault">
+          <p><strong>Your vault browser is Obsidian or GitHub.</strong> It is plain markdown in a git repo — no proprietary format, no export button to hunt for. Clone it, read it, and leave anytime. Your memory outlives your subscription.</p>
         </div>
-        <div>
-          <dt>Every answer cited</dt>
-          <dd>Ask what you said about X and get an answer that points at the commit it came from.</dd>
+      </section>
+
+      <section id="get">
+        <span class="draft-flag">Draft — Epic 0 voice pending</span>
+        <h2>Two ways to have it</h2>
+        <p>Same brain either way. Run it yourself for free, or let us host it.</p>
+        <div class="paths">
+          <div class="path">
+            <h3>Self-host</h3>
+            <p class="price">Open source · free</p>
+            <p>One Docker container. Point it at a repo you own and an LLM key. Serves plain MCP at <code>/mcp</code> — paste that into Claude and you are done.</p>
+            <pre>docker run -p 8080:8080 \
+  -e VAULT_REPO="you/your-vault" \
+  -e GITHUB_TOKEN="ghp_…" \
+  -e ANTHROPIC_API_KEY="sk-ant-…" \
+  zenod</pre>
+            <a class="btn btn-ghost" href="https://github.com/zenod-ai/zenod/tree/main/units/zenod">Read the quickstart →</a>
+          </div>
+          <div class="path">
+            <h3>Hosted</h3>
+            <p class="price">€5 / month</p>
+            <p>Skip the terminal. A setup wizard connects your GitHub repo, mints an MCP token, and shows you the line to paste into Claude. Health, tokens, and usage dashboard included.</p>
+            <!-- TODO Z-3: point to LIVE Stripe €5/mo Checkout Session URL once cloud control plane webhook target exists -->
+            <a class="btn btn-primary" href="#">Sign up — €5/month →</a>
+          </div>
         </div>
-        <div>
-          <dt>Your vault</dt>
-          <dd>Your server, your keys, your repo. Access is over the public seam only.</dd>
-        </div>
-      </dl>
+      </section>
     </main>
     <footer>
-      Iteration-0 skeleton · part of the Atomic Suite ·
+      Part of the Atomic Suite ·
       <a href="https://github.com/zenod-ai/zenod">zenod-ai/zenod</a>
+      <div class="legal">
+        <!-- Links to the Epic-2 H-11 legal minimum (DRAFT, lawyer review pending). Shared source: apps/site/public/legal/ -->
+        <a href="./legal/terms.html">Terms of Service</a> ·
+        <a href="./legal/privacy.html">Privacy</a>
+      </div>
     </footer>
   </body>
 </html>

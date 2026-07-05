@@ -72,6 +72,15 @@ Telegram; set the Zenod vault repo (`vault_repo` + a repo `github_token` scoped 
 holds this, law 6b).
 Receipt: the paired channel handle + the vault repo URL.
 
+**4b · Register with the fleet watchdog (law `3b4da80`).** The host watchdog watches a STATIC list
+(`scripts/watchdog/zenod-watchdog.sh:32-33`), not by discovery — a new tenant is invisible to it until
+added. On the VPS host, APPEND this tenant's containers to `ZENOD_WATCHDOG_CONTAINERS` and
+`https://z-<name>.zenod.dev/api/health` to `ZENOD_WATCHDOG_HEALTH_URLS` in `/etc/zenod-watchdog.env`,
+then force one pass (`sudo systemctl start zenod-watchdog.service`). Stale entries can't false-page
+(watchdog skips absent containers, `zenod-watchdog.sh:129`). Full drill + receipts:
+[../docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md](../docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md) Part A.
+Receipt: the `/etc/zenod-watchdog.env` diff + a watchdog journal line showing the new health URL at 200.
+
 **[TARGET] delta once extraction lands:** step 4's `zenod-console` becomes two services `ring`
 (serves the web UI + keyring, port 8080) and `council` (headless, seam-only); step 5 enables
 `ring → {council}` and `council → {zenod, archus, epaminon}` token sets; everything else identical.
@@ -85,7 +94,14 @@ Receipt: the paired channel handle + the vault repo URL.
 
 ## Teardown
 
-Delete the Dokploy Compose project `tenant-<name>` (removes containers + namespaced volumes). The
+**Deregister from the watchdog FIRST** (law `3b4da80`): remove this tenant's containers + health URL
+from `/etc/zenod-watchdog.env` and clear its alert state (`sudo rm -f
+/var/lib/zenod-watchdog/alert.*z-<name>* /var/lib/zenod-watchdog/restarts.*<name>*`) so the watchdog
+does not page on the intentional teardown. See
+[../docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md](../docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md) Part A.2.
+Receipt: the `/etc/zenod-watchdog.env` diff showing the tenant's entries removed.
+
+Then delete the Dokploy Compose project `tenant-<name>` (removes containers + namespaced volumes). The
 user's memory survives independently — it lives in their own vault git repo, not a volume.
 
 ---
