@@ -49,3 +49,14 @@ channel and any chat UI, and Z-1 is a **standalone single Zenod box**. So Z-6 de
 a NEW, thinner standalone-provisioning path (one Zenod container, own repo via GitHub App, MCP token,
 gateway key) — it does NOT reuse the full-suite tenant stack unchanged. This is flagged for the
 planner in the HANDBACK.
+
+## Final funnel shape (cycle 3, 2026-07-05)
+
+The topology gap above is RESOLVED — the thin standalone path is built and proven. The final funnel:
+**LIVE €5/mo checkout (Stripe Payment Link)** → **webhook → T8 auto-provision** (`provision-standalone.mjs`,
+enable with `ZENOD_AUTO_PROVISION=1`) → **cloud wizard** (GitHub App connect, ZD-3) → **done screen = ONE
+tokened MCP URL** (ZD-8, "treat like a password") → paste into your Claude → **usage dashboard**
+(calls·tokens·cost·balance, gateway-truth) → registered with the **cloud-fed watchdog** (ZD-10).
+Self-host skips all UI: set `ZENOD_API_TOKEN` (ZD-9) + `VAULT_REPO`/`GITHUB_TOKEN`/LLM key, done.
+Before running Z-6, apply the three config asks in the cycle-3 HANDBACK (GitHub App creds · `WATCHDOG_TOKEN`
+· `ZENOD_AUTO_PROVISION`). Step receipts 1–7 above are unchanged.
