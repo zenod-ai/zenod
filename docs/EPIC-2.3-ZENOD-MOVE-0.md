@@ -148,7 +148,7 @@ store → search → get on a FRESH instance using ONLY the README; commit-SHA +
 verified in the vault repo; a deliberate non-seam write attempt fails loudly; SEAM-SPEC scored
 line-by-line. Passing this ALSO satisfies 2.5's RD-4 split-trigger evidence and Epic 0's SD-6 gate.
 
-### Z-2 · Provision + setup UI — ✅ BUILT (cycle 3: wizard + full GitHub-App path, cloud #4; provisioner cloud #1; T8 cloud #3) · ⚠ App path runtime-gated on `alpha9-github-app-*` creds (Jordi config ask 1) · tester pending
+### Z-2 · Provision + setup UI — ✅ BUILT (cycle 3: wizard + full GitHub-App path, cloud #4; provisioner cloud #1; T8 cloud #3) · ⚠ App path runtime-gated — Z-2c reconciles it to the EXISTING `zenod-t3` App (no Jordi action) · tester pending
 
 **Z-2b (micro, cycle-3 follow-up a):** provisioner must persist the instance bearer as
 `account.mcp_token` at provision, so the dashboard's per-call detail lights up without a manual
@@ -365,10 +365,18 @@ TICKETS:
 - Z-5b (cloud): /watchdog/targets emits the STANDALONE container name (zenod-<slug>),
   not the full-suite pattern. Accept: targets output matches a provision-standalone
   instance exactly (name + health URL). tsc clean.
+- Z-2c (creds reconciliation — DO NOT ask Jordi to create anything): a GitHub App
+  ALREADY EXISTS — `zenod-t3`, installed on the zenod-ai org, PEM generated June
+  (GITHUB-AUTH-DEFINITIVE-RUNBOOK.md:39,42); the Connections/Identity platform layer
+  holds credentials (vault log 2026-06-16). Locate the App ID (API/installations) and
+  the existing PEM (connections service env · ~/.config/alpha9 · Keychain sweep ·
+  cloud repo env); wire the wizard to the credential's REAL home — or populate the
+  alpha9-github-app-* names yourself from the found source. ONLY if the PEM is truly
+  unrecoverable, hand Jordi a single regenerate-click link (App settings page) — one
+  click, nothing else. Accept: wizard App path non-503 with zenod-t3; ZD-3 ACTIVE.
 
 CONFIG VERIFICATION (read-only probes, receipts each; do NOT flip anything):
-- GitHub App path: creds present in Keychain (alpha9-github-app-*) AND wizard App path
-  returns non-503 → ZD-3 ACTIVE receipt; else BLOCKED line naming exactly what's absent.
+- GitHub App path: covered by Z-2c above — receipt is the non-503 probe with zenod-t3.
 - Watchdog: /watchdog/targets with WATCHDOG_TOKEN → 200 + plausible env output; host
   timer present per WATCHDOG-CLOUD-FED.md's check command if verifiable via API-safe
   means. Else BLOCKED line.
@@ -484,6 +492,23 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Jordi's push-back verified: the GitHub App EXISTS — config ask 1 cancelled, Z-2c minted
+- Jordi: "we already did this app ID business, stop asking me for GitHub tokens." Chain checked,
+  he's right: App `zenod-t3` exists, installed on the zenod-ai org, PEM generated in June
+  (GITHUB-AUTH-DEFINITIVE-RUNBOOK.md:39,42); the Connections/Identity platform layer holds the
+  credentials (vault 2026-06-16); B-9's OAuth sign-in creds are in Keychain. Epic-2 I3-2 was
+  DEFERRED, not credential-less. Cycle-3's wizard bound to INVENTED Keychain names
+  (`alpha9-github-app-*`) instead of the receipted credential home — second instance of the
+  invented-name bug (first: `DOKPLOY_TOKEN`).
+- **Binding rule (rule 6, second offense):** credentials have ONE receipted home; new code binds
+  to names found in the runbooks/receipts — grep GITHUB-AUTH-DEFINITIVE-RUNBOOK, EPIC-2 B-6/B-9,
+  I2-7 BEFORE minting a name. Asking Jordi for a credential requires first proving in receipts
+  that it does not exist.
+- Config ask 1 (create/store App creds) CANCELLED → **Z-2c** in Block E: worker reconciles the
+  wizard to zenod-t3's real credentials; Jordi's only possible residue is one regenerate-click if
+  the PEM is genuinely unrecoverable. Jordi's remaining asks: WATCHDOG_TOKEN + bootstrap (ask 2)
+  and the Z-6-time AUTO_PROVISION flip (ask 3).
 
 ### 2026-07-05 · [planner/Zenod-Fable] Cycle-3 audit PASSED · ZD-9/ZD-10 DECIDED · Z-2b/Z-5b minted · Block E armed · last mile sequenced
 - **Audit (verify-don't-trust): PASSED on everything verifiable from the planner seat.** Zenod
