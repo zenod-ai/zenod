@@ -46,13 +46,10 @@ const HOSTED_URL = `${GITHUB_URL}/issues/new?title=${encodeURIComponent(
   "I'd like to join the waitlist for the hosted Zenod alpha (first 100 users free).\n\nHow I plan to use it: "
 )}`
 
-// Hosted checkout: a top-level link to the control plane's /buy endpoint, which
-// creates a Stripe Checkout Session and 303-redirects. No CORS, no JS needed.
-const CHECKOUT_URL = "https://cloud.zenod.dev/buy"
 // [DRAFT — Epic 0 voice pending] LIVE €5/month hosted SKU (ZD-1, one SKU). This is the
 // real Stripe Payment Link; on completion it redirects to cloud.zenod.dev/success.html
-// → GitHub sign-in → setup wizard. (The tier CHECKOUT_URL above is a separate, older
-// path — flagged for reconciliation with the €5 single-SKU decision.)
+// → GitHub sign-in → setup wizard. (F-5: the older $-tier section + its TEST-mode
+// cloud.zenod.dev/buy path were removed — one €5 SKU is the decided hosted product.)
 const HOSTED_PAYMENT_LINK = "https://buy.stripe.com/3cIdR3bSLgyL7yi89HbAs01"
 const TERMS_URL = "/legal/terms.html"
 const PRIVACY_URL = "/legal/privacy.html"
@@ -574,105 +571,6 @@ export default function App() {
         </section>
 
         {/* ───────────────────────── the name ───────────────────────── */}
-        {/* ───────────────────────── pricing ───────────────────────── */}
-        <section className="border-b border-border px-6 py-20 sm:px-12">
-          <div className="mx-auto max-w-5xl">
-            <div id="pricing" className="mb-10 scroll-mt-24 text-center">
-              <p className="label-caps mb-3 text-rust">Hosted</p>
-              <h2 className="font-display text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-                Don't want to self-host? We'll run it for you.
-              </h2>
-              <p className="mx-auto mt-5 max-w-xl leading-relaxed text-muted-foreground">
-                The same open-source Council, run on our infrastructure — one
-                isolated container that's yours alone. Subscribe monthly; each tier
-                includes a usage credit your agents draw down as they work.
-              </p>
-            </div>
-
-            <div className="grid gap-6 sm:grid-cols-3">
-              {[
-                {
-                  tier: "starter",
-                  name: "Starter",
-                  price: "$29",
-                  credit: "$10",
-                  blurb: "Kick the tyres — light chat + memory.",
-                  featured: false,
-                },
-                {
-                  tier: "pro",
-                  name: "Pro",
-                  price: "$79",
-                  credit: "$50",
-                  blurb: "A fully-active council for one project.",
-                  featured: true,
-                },
-                {
-                  tier: "agency",
-                  name: "Agency",
-                  price: "$499",
-                  credit: "$350",
-                  blurb: "The team you hired — heavy execution + fan-out.",
-                  featured: false,
-                },
-              ].map((t) => (
-                <div
-                  key={t.tier}
-                  className={cn(
-                    "flex flex-col border p-6",
-                    t.featured ? "border-rust" : "border-border",
-                  )}
-                >
-                  <p className="label-caps text-rust">{t.name}</p>
-                  <div className="mt-3 flex items-baseline gap-1.5">
-                    <span className="font-display text-4xl font-bold tracking-tight">
-                      {t.price}
-                    </span>
-                    <span className="text-sm text-muted-foreground">/mo</span>
-                  </div>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    {t.blurb}
-                  </p>
-                  <ul className="mt-5 space-y-2.5 text-sm leading-relaxed text-muted-foreground">
-                    <li className="flex gap-2">
-                      <CheckIcon className="mt-0.5 size-4 shrink-0 text-rust" />
-                      <span>
-                        <span className="text-foreground">{t.credit}/mo</span>{" "}
-                        included usage credit
-                      </span>
-                    </li>
-                    <li className="flex gap-2">
-                      <CheckIcon className="mt-0.5 size-4 shrink-0 text-rust" />
-                      Your own isolated Council container
-                    </li>
-                    <li className="flex gap-2">
-                      <CheckIcon className="mt-0.5 size-4 shrink-0 text-rust" />
-                      Vault in your git repo — yours to keep
-                    </li>
-                  </ul>
-                  <Button
-                    asChild
-                    size="lg"
-                    variant={t.featured ? "default" : "outline"}
-                    className="mt-auto w-full rounded-none"
-                  >
-                    <a href={`${CHECKOUT_URL}?tier=${t.tier}`}>Get started</a>
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <p className="label-caps mt-6 text-center text-muted-foreground/70">
-              Secure checkout by Stripe · cancel anytime
-            </p>
-
-            <p className="mt-6 text-center text-xs text-muted-foreground/70">
-              By purchasing you agree to our{" "}
-              <a href={TERMS_URL} className="underline hover:text-rust">Terms</a>,{" "}
-              <a href={PRIVACY_URL} className="underline hover:text-rust">Privacy Policy</a>, and{" "}
-              <a href={DATA_URL} className="underline hover:text-rust">Data Handling</a>.
-            </p>
-          </div>
-        </section>
 
         <section className="relative overflow-hidden border-b border-border">
           <div className="grid lg:grid-cols-2">
