@@ -33,19 +33,28 @@ git repo behind it. Plain markdown; every AI you use reads and writes it through
   their own brain (tenancy model per ZD-6).
 - Access is the public seam only (pure MCP + receipt profile per SEAM-SPEC). Claude/Cursor/any
   client is the brain; Zenod never gets a chat UI.
-- **Hosted gets a setup UI** (the admin surface, wizard-shaped): connect/scaffold GitHub repo →
+- **Hosted gets a setup UI** (the CLOUD surface, wizard-shaped — see v0 surface spec below):
+  connect/scaffold GitHub repo →
   issue MCP token → "paste this into Claude" → done. Plus: health, token management, usage
   dashboard. Self-host gets the same result via terminal + docs. The vault browser is
   Obsidian/GitHub — that's a feature, say it on the page.
 - Standalone keyring: local credential store (the locked connections design's standalone mode).
 - LLM spend (digest + ask) is metered per user from the per-call ledger; key model per ZD-5;
   the dashboard shows calls · tokens · cost either way.
+- **v0 surface spec (Jordi, 2026-07-05 post-handback — settled):** Zenod v0 is PURELY an MCP
+  server; the customer's chat client IS the whole interface — auth and daily use ride the MCP
+  connection. **Self-host: no UI at all** — terminal + docs + your chat client; the server
+  exposes `/mcp` plus bare utility routes (health, `GET /api/token`). **Cloud handoff = ONE
+  URL:** signup ends with a single MCP endpoint URL you paste into Claude (auth shape per ZD-8).
+  **The cloud UI is a NEW, separate surface** living in the private control plane
+  (`zenod-ai/cloud`), not in this repo — multi-product by design, to be reused well beyond
+  Zenod. It carries the OAuth buttons (GitHub connect etc.) and the dashboard: there as the
+  convenience path, never required — everything needed to run your brain arrives with the URL.
 
 ## ZD decisions — planner frames, Jordi calls
 
-Status 2026-07-05 (Zenod-Fable): ZD-1..ZD-6 ALL DECIDED (Jordi, same day, via planner's framed
-options). ZD-7 minted from the ZD-5 call — framed, NON-BLOCKING. Do not relitigate without new
-evidence.
+Status 2026-07-05 (Zenod-Fable): **ZD-1..ZD-8 ALL DECIDED** (Jordi, same day, via planner's
+framed options; ZD-7/ZD-8 called post-handback). Do not relitigate without new evidence.
 
 - **ZD-1 · Price — DECIDED 2026-07-05 (Jordi): hosted €5/month.** Move 0 ships ONE simple SKU.
   (Jordi carries the number to Product-Fable so D-6 tiering stays coherent.) Consequence: at €5,
@@ -77,21 +86,28 @@ evidence.
   (balance/top-up per ZD-5). No analytics, no memory browser. Adopted unless Jordi objects
   before Z-4 starts.
 
-- **ZD-7 · Starter-credit allotment at signup — AWAITING JORDI, NON-BLOCKING (config value).**
-  €5/month buys hosting + how much included LLM credit at signup?
-  (a) **Small starter grant** (enough for first-session digest + ask) then self-serve top-up —
-  recommended: the funnel works out of the box; liability bounded. (b) Zero grant, top-up
-  required before first `ask` — simplest, but customer #1's first minute hits a paywall.
-  The number is pricing → travels to Product-Fable via Jordi alongside ZD-1. Worker builds the
-  grant as a CONFIG VALUE and does not invent the number; Z-6 cannot RUN until it is set.
+- **ZD-7 · Starter-credit allotment — DECIDED 2026-07-05 (Jordi): €2 grant at signup**, then
+  self-serve top-up. Funnel works out of the box; exposure capped at €2/signup. (Planner had
+  recommended €1 — recorded.) Wired as a CONFIG VALUE in the Z-2 provisioning path; the number
+  travels to Product-Fable via Jordi alongside ZD-1. Z-6 is no longer gated on this.
+
+- **ZD-8 · Cloud handoff auth shape — DECIDED 2026-07-05 (Jordi): tokened URL, one paste.**
+  Minted from Jordi's v0 surface refinement ("you just get a URL"). The MCP URL embeds the
+  secret (e.g. `https://<tenant>.<host>/mcp/<token>`); pasting ONE thing into Claude completes
+  setup. Rotation/revocation from the cloud UI mints a new URL. Trade-off accepted and owned:
+  the URL IS the credential — our surfaces never log it in plaintext, and the done screen says
+  "treat this like a password." URL + separate bearer rejected for funnel friction; the header
+  path (`GET /api/token` → `Authorization: Bearer`) remains the self-host mechanism.
 
 ## Iteration 0 — tickets (lanes parallel; worker MUST fan out sub-agents, one per lane)
 
 Sequencing: **Z-1 ∥ Z-3-page ∥ Z-5-runbook start immediately**; Z-2 needs Z-1 green; Z-4 needs
-Z-2; Z-6 last (Jordi in person); tester's stranger-run closes the epic. All tickets OPEN,
-unstarted, 2026-07-05. Acceptance boxes may be checked ONLY with a same-line receipt (URL/SHA/ID).
+Z-2; Z-6 last (Jordi in person); tester's stranger-run closes the epic. Acceptance boxes may be
+checked ONLY with a same-line receipt (URL/SHA/ID). **States as of 2026-07-05 post-cycle-1
+audit:** static/authoring work receipted green (worker entries + planner audit, APPEND ZONE);
+every runtime/LIVE/infra item BLOCKED-on-environment → cycle 2 (Block C).
 
-### Z-1 · Standalone GA (absorbs 2.5's W-C) — OPEN · starts NOW
+### Z-1 · Standalone GA (absorbs 2.5's W-C) — GREEN-static · runtime BLOCKED-env → cycle 2
 
 Deliverable: `units/zenod/` builds and deploys as ONE container exposing ONE MCP endpoint,
 SEAM-SPEC-conformant, with a stranger-grade README/quickstart.
@@ -99,55 +115,68 @@ SEAM-SPEC-conformant, with a stranger-grade README/quickstart.
 Acceptance:
 - [ ] `docker build` + run from `units/zenod/` (root image + `AGENT=zenod` until the repo split
       fires) → container serves `tools/list`/`tools/call` over streamable HTTP at `/mcp`.
-- [ ] SEAM-SPEC v1 checklist passes item-by-item, spec UNEDITED: mutating tools return evidence
-      handles (ID/URL/SHA); reads return data or explicit `none`; failures error loudly with
-      stable `code`; long tools return `{ticket_id}` + a poll tool exists.
-- [ ] Public-seam-only: the repo token lives ONLY inside Zenod; no non-MCP write path exists.
-- [ ] README/quickstart is stranger-grade: endpoint + repo + token → Claude MCP config, zero
-      suite/console knowledge assumed. (Voice pass = Epic 0 via Jordi; content correctness = here.)
+      **BLOCKED-env cycle 1 (no Docker daemon) → cycle 2.**
+- [x] *(static)* SEAM-SPEC v1 checklist passes item-by-item, spec UNEDITED — 16/16 scored with
+      file:line evidence, audited by planner. Receipt: [worker/Z-1] APPEND entry + `4610fb9`.
+      Live transcripts ride the docker item above.
+- [x] Public-seam-only: repo token read in exactly ONE place (`runtime.ts:296-299`, planner
+      re-verified 2026-07-05); no non-MCP write path on the public surface.
+- [x] README/quickstart stranger-grade: tokenless-claim trap found + fixed (`GET /api/token`
+      step, README:67 + SEAM-SURFACE:9). Receipts: `4610fb9` + PR #600 (`a86bd8b`).
+      (Voice pass = Epic 0 via Jordi; content correctness done here.)
 
 Test criteria (tester, fresh evidence): an EXTERNAL plain-MCP client (not our code) completes
 store → search → get on a FRESH instance using ONLY the README; commit-SHA + GitHub-URL receipts
 verified in the vault repo; a deliberate non-seam write attempt fails loudly; SEAM-SPEC scored
 line-by-line. Passing this ALSO satisfies 2.5's RD-4 split-trigger evidence and Epic 0's SD-6 gate.
 
-### Z-2 · Provision + setup UI — OPEN · blocked by Z-1 · ZD-2/3/5/6 decided
+### Z-2 · Provision + setup UI — OPEN · blocked by Z-1 runtime · standalone path COMMISSIONED 2026-07-05
 
-Deliverable: one provisioning script + the hosted setup wizard + self-host terminal quickstart.
+Deliverable: a **NEW thin standalone-provisioning path** + the cloud setup wizard + self-host
+terminal quickstart. **NOT the existing tenant stack** — that provisions the full suite WITH a
+chat UI, which this epic forbids (worker finding, HANDBACK 2026-07-05; commissioning is the
+planner's answer to that ask).
 
 Acceptance:
-- [ ] Script provisions one instance per user (ZD-6): container + repo in the CUSTOMER's GitHub
-      account via GitHub App (ZD-3, runbook path) + minted MCP token + per-tenant gateway key in
-      the standalone keyring (ZD-5); emits receipts (container ID, repo URL, token ID, gateway
-      key ID); idempotent on retry; fired by the Stripe webhook (ZD-2).
-- [ ] Wizard (admin surface): connect/scaffold GitHub repo → token issued → "paste this into
-      Claude" block → done screen. NO LLM-key step (ZD-5: gateway key is minted at provision,
-      invisible to the user). Health + token management pages exist. No chat UI anywhere.
-- [ ] Self-host: terminal quickstart in public docs reaches the same end state (endpoint + repo +
-      token → Claude config) with no UI.
+- [ ] NEW standalone provisioning script (thin: container + repo + token + key, nothing else):
+      one instance per user (ZD-6); repo in the CUSTOMER's GitHub account via GitHub App (ZD-3,
+      runbook path); minted MCP token; per-tenant gateway key in the standalone keyring (ZD-5)
+      carrying the €2 starter grant (ZD-7) as a config value; emits receipts (container ID, repo
+      URL, token ID, gateway key ID); idempotent on retry; fired by the Stripe webhook (ZD-2).
+- [ ] Signup ends in **ONE tokened MCP URL (ZD-8)** — the "paste this into Claude" block IS that
+      URL; nothing else is required to use your brain.
+- [ ] Wizard lives on the CLOUD surface (private `zenod-ai/cloud`, the new multi-product surface
+      per the v0 surface spec): connect/scaffold GitHub → done screen showing the URL. OAuth
+      buttons present but OPTIONAL. NO LLM-key step (ZD-5). Health + token management
+      (mint/rotate/revoke → new URL) pages exist. No chat UI anywhere.
+- [ ] Self-host: terminal quickstart in public docs reaches the same end state with NO UI — pure
+      MCP + terminal per the v0 surface spec (`GET /api/token` → bearer).
 
-Test criteria: tester provisions a fresh user end-to-end via the WIZARD, timed, <30 min bar;
-separately completes self-host from docs alone on a clean VM; Claude round-trip with commit-SHA
-receipt on BOTH paths.
+Test criteria: tester provisions a fresh user end-to-end via the WIZARD, timed, <30 min bar, and
+the wizard leg ends in a single copy-paste (the URL); separately completes self-host from docs
+alone on a clean VM; Claude round-trip with commit-SHA receipt on BOTH paths.
 
-### Z-3 · Website + checkout LIVE — OPEN · page starts NOW; checkout wiring needs the Z-2 webhook target
+### Z-3 · Website + checkout LIVE — page GREEN-draft · checkout BLOCKED-credentials → cycle 2
 
 Deliverable: public Zenod website — pitch, both paths, LIVE €5/mo checkout, legal minimum.
 
 Acceptance:
-- [ ] Page live: "your personal wiki brain" pitch; self-host path (docs) AND hosted path visible;
-      "vault browser is Obsidian/GitHub" stated as a feature. Copy ships as functional DRAFT
-      flagged `[DRAFT — Epic 0 voice pending]`; final voice lands via Jordi (Epic 0 owns it).
+- [x] Page draft: "your personal wiki brain" pitch; self-host AND hosted paths;
+      "vault browser is Obsidian/GitHub" feature line; `[DRAFT — Epic 0 voice pending]` flags;
+      0 CDN refs (planner re-verified). Receipt: `sites/zenod/index.html`, `4610fb9`.
+      Final voice lands via Jordi (Epic 0 owns it).
 - [ ] Stripe LIVE SKU €5/month; checkout → webhook → Z-2 provisioning fires without human touch
-      (ZD-2).
-- [ ] Minimal ToS/privacy linked (Epic-2 H-11 minimum).
+      (ZD-2). **BLOCKED-credentials cycle 1 (no LIVE key; `zenod-ai/cloud` private) → cycle 2;
+      plan receipted in `docs/Z-3-CHECKOUT-WIRING.md`.**
+- [x] Minimal ToS/privacy linked (Epic-2 H-11 minimum) — `sites/zenod/legal/`. Receipt: `4610fb9`.
 
 Test criteria: a real card completes €5 checkout in prod; subscription visible in Stripe;
 provisioning fires without human touch; self-host instructions pass a cold read by a stranger.
 
 ### Z-4 · Meter + dashboard — OPEN · blocked by Z-2 · ZD-5 decided: bundled prepaid credits
 
-Deliverable: per-tenant metering wired at provision; usage page on the admin surface.
+Deliverable: per-tenant metering wired at provision; usage page on the CLOUD surface
+(`zenod-ai/cloud`, per the v0 surface spec).
 
 Acceptance:
 - [ ] Per-tenant gateway key wired at provision, held in the standalone keyring (ZD-5).
@@ -155,30 +184,36 @@ Acceptance:
       read_llm_timeline), reconciling with the gateway balance (D-5: gateway is truth); top-up
       link present (ZD-4).
 - [ ] D-5 behaviors: warn at threshold, polite block at zero, top-up restores. Starter grant
-      wired as a config value (number pending ZD-7).
+      wired as a config value, set to €2 (ZD-7 DECIDED).
 
 Test criteria: tester burns a known amount via scripted `ask` calls; dashboard matches the
 gateway within tolerance (exact call count; tokens/cost within provider-reported values);
 zero-credit block + top-up + resume all receipted.
 
-### Z-5 · Watchdog + ops — OPEN · runbook starts NOW
+### Z-5 · Watchdog + ops — authored GREEN · live drills BLOCKED-infra → cycle 2 / tester
 
 Deliverable: fleet-watchdog registration at provision (law `3b4da80`) + restore-from-repo runbook.
 
 Acceptance:
-- [ ] Every provisioned instance auto-registers with the fleet watchdog; deregistration on
-      teardown.
-- [ ] Runbook: restore-from-repo, step-by-step with receipts required at each step — the vault IS
-      the backup, proven, not asserted.
+- [x] *(authored; live wiring rides cycle 2)* Auto-register at provision / deregister at teardown
+      — real gap found (watchdog is static-list; new tenants were invisible) and wired as
+      PROVISIONING-RUNBOOK step 4b + teardown deregister. Receipt: `4610fb9`,
+      `units/PROVISIONING-RUNBOOK.md:75-102`. **Cross-epic edit RATIFIED by Jordi 2026-07-05;
+      Jordi carries the notice to Ring-Fable (2.5) — rule-10 routing.**
+- [x] Runbook: restore-from-repo, step-by-step, every step with an explicit `Receipt:` slot —
+      `docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md`. Receipt: `4610fb9`. Drill slots deliberately
+      EMPTY until executed live (no fabricated drills).
 
 Test criteria: forced crash-loop on a fresh tenant → operator alert received (receipt: alert +
 timestamp); restore drill per runbook — new container + existing repo → store/search/get return
 pre-crash memories with the same commit SHAs.
 
-### Z-6 · Customer #1 run — OPEN · LAST · Jordi in person, not the worker
+### Z-6 · Customer #1 run — OPEN · LAST · Jordi in person, not the worker · checklist READY
 
 Deliverable: Jordi executes the funnel personally — LIVE card, his Claude, his repo, his dashboard.
-Worker's obligation: leave Z-1..Z-5 green and a one-page Z-6 checklist ready.
+Worker's obligation: leave Z-1..Z-5 green and a one-page Z-6 checklist ready — checklist done:
+`docs/Z-6-CUSTOMER-1-CHECKLIST.md` (`4610fb9`); ZD-7 gate cleared (€2 set); still gated on
+Z-1..Z-5 going live in cycle 2.
 
 Acceptance = the EXIT CRITERION above, verbatim, with receipts inline: Stripe subscription ID,
 container ID, repo URL, commit SHAs from his Claude session, dashboard screenshot, watchdog
@@ -206,7 +241,7 @@ stranger using only the public pages — that run closes the epic.
 
 ## Dispatch blocks (verbatim — Jordi pastes; planner never dispatches through the pipeline)
 
-### Block A · WORKER — paste when Jordi green-lights Iteration 0
+### Block A · WORKER — EXECUTED 2026-07-05 (cycle 1; HANDBACK in APPEND ZONE) · kept for the record
 
 ```
 You are the Zenod Move-0 WORKER. Your mission doc is docs/EPIC-2.3-ZENOD-MOVE-0.md in
@@ -282,7 +317,77 @@ score ❌, receipt it, stop. Never fix, never zombie. Pen returns to Zenod-Fable
 scorecard.
 ```
 
+### Block C · WORKER cycle 2 — paste ONLY into an environment with: Docker daemon UP · VPS/operator access · `zenod-ai/cloud` checkout · LIVE Stripe key
+
+```
+You are the Zenod Move-0 WORKER, cycle 2. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in
+zenod-ai/zenod — read it top to bottom; tickets Z-1..Z-5 as updated 2026-07-05 bind you,
+including the v0 surface spec (Zenod is purely an MCP server; self-host = terminal + your
+chat client, NO UI; cloud handoff = ONE tokened URL per ZD-8; the cloud UI is a separate
+multi-product surface in zenod-ai/cloud with optional OAuth buttons). You hold the pen on
+the APPEND ZONE only; planner sections are read-only.
+
+ENVIRONMENT PRECONDITIONS — verify FIRST, one receipt each; any missing → write BLOCKED,
+stop that lane, spend nothing on it: (1) Docker daemon responds; (2) VPS/operator access;
+(3) zenod-ai/cloud checkout present; (4) LIVE Stripe key. Cycle 1 died on exactly these —
+do not zombie into them.
+
+GIT DISCIPLINE (cycle-1 collision on a shared branch, receipted): fresh branch off latest
+origin/main named epic23-c2-<lane>; never reuse a shared branch; push early; if the tree
+shifts under you, re-fetch and verify your commits landed (git branch -r --contains <sha>).
+
+LANES, dependency order — fan out where parallel:
+- Z-1 runtime: docker build + run; live tools/list transcript; 401-without-bearer
+  transcript; forced-error transcript; external plain-MCP client completes
+  store/search/get from the README alone. Closes Z-1.
+- Z-2 (after Z-1): the NEW thin standalone provisioning path per the ticket — container +
+  customer-repo (GitHub App) + MCP token + gateway key carrying the €2 starter grant
+  (ZD-7), webhook-fired, receipts emitted; wizard on the cloud surface ending in ONE
+  tokened URL (ZD-8); OAuth buttons optional; self-host quickstart re-verified. NOT the
+  full-suite tenant stack.
+- Z-3 checkout: LIVE €5/mo SKU per docs/Z-3-CHECKOUT-WIRING.md; checkout → webhook → Z-2
+  fires with no human touch.
+- Z-4 (after Z-2): meter + dashboard per ticket — calls · tokens · cost · balance on the
+  cloud surface, gateway reconciliation, warn/block/top-up.
+- Z-5 live: register real tenants with the watchdog. Leave the crash-loop + restore DRILLS
+  to the tester (fresh evidence) — make them runnable; do not pre-run them as proof.
+- Z-6 stays Jordi's. Update docs/Z-6-CUSTOMER-1-CHECKLIST.md if the funnel shape changed.
+
+CONSTRAINTS unchanged: SEAM-SPEC UNEDITED; no chat UI on Zenod, ever; Epic 0 owns site
+voice ([DRAFT] flags stay); no ring/council/channel; REUSE Epic-2 machinery. ZD-1..ZD-8
+all DECIDED — do not relitigate.
+
+RECEIPTS: dated [worker/Z-n] entries in the APPEND ZONE, same turn, URL/SHA/ID/transcript.
+Acceptance boxes checked only with a same-line receipt.
+
+BUDGET: 1 working day wall-clock, 100 agent-turns total, ≤25 per sub-agent. Blocked →
+BLOCKED + exact blocker, stop that lane honestly. Never zombie, never fake-green. On
+completion or honest exhaustion: HANDBACK entry with every lane's state. Pen returns to
+Zenod-Fable.
+```
+
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Cycle-1 audit PASSED · ZD-7/ZD-8 DECIDED · v0 surface spec folded · cycle 2 armed
+- **Audit (verify-don't-trust) of the worker HANDBACK: PASSED.** PR #600 MERGED to main
+  (`a86bd8b`, 1 check passed, branch deleted — github.com/zenod-ai/zenod/pull/600). Planner
+  spot-checks this session: `runtime.ts:296-299` single repo-token read confirmed;
+  `sites/zenod/index.html` 0 CDN refs + `[DRAFT — Epic 0 voice pending]` present;
+  `units/zenod/README.md:67` `/api/token` step present; `SEAM-SURFACE.md:9` corrected; Z-5
+  runbook, Z-3 wiring doc, Z-6 checklist on disk. Blocked lanes verified environment-blocked,
+  not work-blocked. No fake-green found. Ticket sections updated to post-audit states.
+- **Jordi (same day, post-handback):** v0 surface spec settled (pure MCP server; self-host =
+  terminal + chat only, NO UI; cloud = ONE URL; cloud UI = new multi-product surface in
+  `zenod-ai/cloud`, OAuth buttons optional) — folded into "What this product is" and Z-2/Z-4.
+  **ZD-7 DECIDED: €2 starter grant** (planner recommended €1 — recorded). **ZD-8 minted +
+  DECIDED: tokened URL, one paste.** **PROVISIONING-RUNBOOK watchdog edit RATIFIED**; Jordi
+  carries the notice to Ring-Fable (2.5) per rule 10.
+- **Worker asks answered:** (1) ratified, above; (2) Z-2 standalone-provisioning path
+  COMMISSIONED — ticket rewritten (thin path, NOT the full-suite tenant stack); (3) ZD-7 set.
+- **Cycle 2 armed:** Block C written with hard environment preconditions (Docker · VPS ·
+  `zenod-ai/cloud` · LIVE Stripe) — cycle 1's three blockers become cycle 2's entry gate — plus
+  git discipline after the shared-branch collision (#599 stomped the HANDBACK; recovered in
+  #600). Block B (tester) unchanged, still gated on HANDBACK-c2 + Z-6.
 
 ### 2026-07-05 · [planner/Zenod-Fable] Bootstrap: pen taken, decisions called, iteration armed
 - Pen taken from Story-Fable per doc-created entry below. ZD-2/3/5/6 framed with options +
