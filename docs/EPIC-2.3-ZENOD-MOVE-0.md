@@ -113,9 +113,11 @@ Deliverable: `units/zenod/` builds and deploys as ONE container exposing ONE MCP
 SEAM-SPEC-conformant, with a stranger-grade README/quickstart.
 
 Acceptance:
-- [ ] `docker build` + run from `units/zenod/` (root image + `AGENT=zenod` until the repo split
-      fires) → container serves `tools/list`/`tools/call` over streamable HTTP at `/mcp`.
-      **BLOCKED-env cycle 1 (no Docker daemon) → cycle 2.**
+- [ ] Image builds + deploys via the SANCTIONED production path — Dokploy API (per Jordi
+      2026-07-05: test on the production path, never local Docker); the deployed instance serves
+      `tools/list`/`tools/call` over streamable HTTPS at `/mcp`. (Local `docker build` from
+      `units/zenod/` remains the SELF-HOST story only — proven by the tester's clean-VM run.)
+      **BLOCKED-env cycles 1–2 → cycle 2 retry via Dokploy.**
 - [x] *(static)* SEAM-SPEC v1 checklist passes item-by-item, spec UNEDITED — 16/16 scored with
       file:line evidence, audited by planner. Receipt: [worker/Z-1] APPEND entry + `4610fb9`.
       Live transcripts ride the docker item above.
@@ -323,19 +325,19 @@ Added 2026-07-05 after two dispatches burned on missing environment: the prose g
 executable. Run this; every ❌ line names its own fix; re-run until PASS.
 
 ```bash
-echo "— Epic 2.3 cycle-2 preflight —"; ok=1
-docker info >/dev/null 2>&1 && echo "1 Docker daemon         ✅ up" \
-  || { echo "1 Docker daemon         ❌ start Docker Desktop"; ok=0; }
-[ -n "$DOKPLOY_URL" ] && [ -n "$DOKPLOY_TOKEN" ] && echo "2 Deploy path (Dokploy) ✅" \
-  || { echo "2 Deploy path (Dokploy) ❌ export DOKPLOY_URL + DOKPLOY_TOKEN (sanctioned automated path — no manual VPS ops)"; ok=0; }
-[ -d "$HOME/Documents/GitHub/cloud/.git" ] && echo "3 zenod-ai/cloud        ✅ checked out" \
-  || { echo "3 zenod-ai/cloud        ❌ gh repo clone zenod-ai/cloud ~/Documents/GitHub/cloud"; ok=0; }
-case "$STRIPE_SECRET_KEY" in sk_live_*) echo "4 LIVE Stripe key       ✅";; \
-  *) echo "4 LIVE Stripe key       ❌ export STRIPE_SECRET_KEY=sk_live_… (restricted key preferred)"; ok=0;; esac
+echo "— Epic 2.3 cycle-2 preflight (production path — NO local Docker needed) —"; ok=1
+DKEY="${DOKPLOY_API_KEY:-$DOKPLOY_TOKEN}"  # canonical name per Epic-2 I2-7; Keychain read commands in zenod-ai/cloud docs/PROVISIONING.md
+curl -fsS -m 10 -H "x-api-key: $DKEY" "${DOKPLOY_URL:-https://dokploy.polyqu.com}/api/project.all" >/dev/null 2>&1 \
+  && echo "1 Deploy path (Dokploy) ✅ project.all → 200" \
+  || { echo "1 Deploy path (Dokploy) ❌ DOKPLOY_API_KEY missing or dead (B-6 lesson: 401 ⇒ regenerate); store per zenod-ai/cloud docs/PROVISIONING.md"; ok=0; }
+[ -d "$HOME/Documents/GitHub/cloud/.git" ] && echo "2 zenod-ai/cloud        ✅ checked out" \
+  || { echo "2 zenod-ai/cloud        ❌ gh repo clone zenod-ai/cloud ~/Documents/GitHub/cloud"; ok=0; }
+case "$STRIPE_SECRET_KEY" in sk_live_*) echo "3 LIVE Stripe key       ✅";; \
+  *) echo "3 LIVE Stripe key       ❌ export STRIPE_SECRET_KEY=sk_live_… (restricted key preferred)"; ok=0;; esac
 [ $ok = 1 ] && echo "PREFLIGHT PASS — paste Block C" || echo "PREFLIGHT FAIL — fix ❌ lines, run again"
 ```
 
-### Block C · WORKER cycle 2 — paste ONLY after PREFLIGHT PASS (Docker daemon UP · Dokploy deploy path · `zenod-ai/cloud` checkout · LIVE Stripe key)
+### Block C · WORKER cycle 2 — paste ONLY after PREFLIGHT PASS (Dokploy deploy path · `zenod-ai/cloud` checkout · LIVE Stripe key — production path, no local Docker)
 
 ```
 You are the Zenod Move-0 WORKER, cycle 2. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in
@@ -346,18 +348,23 @@ multi-product surface in zenod-ai/cloud with optional OAuth buttons). You hold t
 the APPEND ZONE only; planner sections are read-only.
 
 ENVIRONMENT PRECONDITIONS — verify FIRST, one receipt each; any missing → write BLOCKED,
-stop that lane, spend nothing on it: (1) Docker daemon responds; (2) VPS/operator access;
-(3) zenod-ai/cloud checkout present; (4) LIVE Stripe key. Cycle 1 died on exactly these —
-do not zombie into them.
+stop that lane, spend nothing on it: (1) Dokploy API alive (DOKPLOY_API_KEY;
+project.all → 200 — the sanctioned automated deploy path, no manual VPS ops, no local
+Docker); (2) zenod-ai/cloud checkout present; (3) LIVE Stripe key. Cycles 1–2 died on
+missing environment — do not zombie into it.
 
 GIT DISCIPLINE (cycle-1 collision on a shared branch, receipted): fresh branch off latest
 origin/main named epic23-c2-<lane>; never reuse a shared branch; push early; if the tree
 shifts under you, re-fetch and verify your commits landed (git branch -r --contains <sha>).
 
 LANES, dependency order — fan out where parallel:
-- Z-1 runtime: docker build + run; live tools/list transcript; 401-without-bearer
-  transcript; forced-error transcript; external plain-MCP client completes
-  store/search/get from the README alone. Closes Z-1.
+- Z-1 runtime — ON THE PRODUCTION PATH, not local (Jordi, 2026-07-05): deploy a fresh
+  instance via the Dokploy API (per units/PROVISIONING-RUNBOOK.md; Dokploy's build IS the
+  build receipt); then against the deployed HTTPS /mcp: live tools/list transcript;
+  401-without-bearer transcript; forced-error transcript; external plain-MCP client
+  completes store/search/get from the README alone. Local docker build is NOT required —
+  the self-host story is proven by the tester's clean-VM run, never the worker's laptop.
+  Closes Z-1.
 - Z-2 (after Z-1): the NEW thin standalone provisioning path per the ticket — container +
   customer-repo (GitHub App) + MCP token + gateway key carrying the €2 starter grant
   (ZD-7), webhook-fired, receipts emitted; wizard on the cloud surface ending in ONE
@@ -385,6 +392,27 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Course correction (Jordi): test on the PRODUCTION path — local Docker dropped from the gate
+- Jordi: "why local Docker? why not test closest to production?" — right. The sanctioned deploy
+  path is the Dokploy API (manual VPS ops forbidden) and the exit criterion is PRODUCTION
+  instances; local `docker build` was cycle-1's environment assumption promoted into the gate
+  uncritically. Unforced planner error, reversed: Z-1 runtime evidence = deploy a fresh instance
+  via Dokploy + transcripts against the deployed HTTPS `/mcp`; Dokploy's build IS the build
+  receipt. Local Docker survives only where it belongs — the self-host stranger test on the
+  tester's clean VM (Z-2 test criteria, unchanged).
+- PRE-FLIGHT reduced to 3 checks (Dokploy alive · `zenod-ai/cloud` checkout · LIVE Stripe key);
+  Block C preconditions + Z-1 lane + Z-1 acceptance rewritten to the production path. Rule-6
+  fold: if the gate demands something production doesn't, the gate is wrong.
+
+### 2026-07-05 · [planner/Zenod-Fable] Correction: deploy-path var name (vault memory + Epic-2 receipts)
+- PRE-FLIGHT check 2 used an invented name (`DOKPLOY_TOKEN`). Canonical per Epic-2 I2-7
+  (`EPIC-2-HOSTED-READINESS.md:794`): **`DOKPLOY_API_KEY`** — operator store is the Keychain,
+  read commands in `zenod-ai/cloud` docs/PROVISIONING.md; **B-6 CLOSED 2026-07-04** with the key
+  verified live (`project.all` → 200). Dokploy URL: `dokploy.polyqu.com` (vault:
+  `Notes/Alpha9 Dokploy VPS.md`). Check 2 rewritten: correct name (legacy fallback), URL
+  default, and a FUNCTIONAL probe — a present-but-dead key (401) fails the gate (B-6 lesson).
+  Block C precondition (2) reworded to match.
 
 ### 2026-07-05 · [planner/Zenod-Fable] Cycle-2 audit PASSED (honest-BLOCKED) · executable PRE-FLIGHT gate added
 - **Audit of HANDBACK-c2: verified.** PR #602 (`6559e03`, auto-merge pending) sits on the correct
