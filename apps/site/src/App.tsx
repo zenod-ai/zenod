@@ -243,8 +243,8 @@ export default function App() {
               <a href="#self-host" className="transition-colors hover:text-rust">
                 Self-host
               </a>
-              <a href="#pricing" className="transition-colors hover:text-rust">
-                Pricing
+              <a href={HOSTED_PAYMENT_LINK} className="transition-colors hover:text-rust">
+                Hosted €5/mo
               </a>
               <a
                 href={DOCS_URL}
