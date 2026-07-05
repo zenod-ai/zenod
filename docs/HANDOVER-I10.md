@@ -343,3 +343,18 @@ Jordi sent 2 voice notes + a few texts during active use. What he saw (Drive rec
 - **RECOVERY — nothing from tonight stays lost:** re-stored Jordi's **Pyrenees fact** (`add_memory` "Jordi likes the temperature in the Pyrenees in the summer") → filed `done` (`evidenceRef Log/2026-07-04.md#^e-d13f49`, committed), plus re-queued the **3 interrupted store jobs** (tonight's voice-note transcript + an outage note + an old note) → all `done`.
 - **FLAG for the planner (not fixed — soak, no churn):** there are TWO z2 deployments — the production `zenod-z2` (Dokploy source-build, still on the pre-C-27 image at this moment) and a separate GHCR-image compose that already has C-27. Production `zenod-z2` needs the C-27 image to protect FUTURE writes; this receipt push triggers its rebuild. Verify `zenod-z2` picks up `01911338`+; the duplicate-z2-stack itself is a separate cleanup (zombie-container risk).
 - **Then: NO MORE DEPLOYS until the soak ends** (per the standing rule).
+
+### 2026-07-05 · FABLE BATCH (VN diagnostic) — CLOCK VERDICT + ask executed + tickets
+
+**CLOCK VERDICT: HOLDS (no reset).** Investigated the VN `AC35AB1B` (@00:07:52Z) ack "Intent passed to Zenod for storage + Epic-2/Epic-3 linking." Durable evidence:
+- z2 `task_jobs` in the window (00:06–00:20 UTC) = **empty** — no store job was ever enqueued.
+- z2 `llm_usage` ran **`answer` ops at 00:08:09 and 00:08:26** (c1 at 00:08:28) — **a real zenod call carrying the intent EXISTED.**
+- ∴ NOT a fabricated state claim (a call existed) → **C-15 not tripped → clock HOLDS.** It is the **C-27-family gap: the ack rendered before/without a durable enqueue** (the relay ran as a chat answer, never invoked the store lane). Ticketed: **zenod-ai/zenod#589** (an ack may only render after a durable enqueue; ack carries the job id).
+
+**Original ask EXECUTED:**
+- **Note filed durably (with receipt):** the VN's strategic direction stored to the brain → `evidenceRef Log/2026-07-05.md#^e-1b73f7`, commit `f262c82`, librarian filed to 3 pages (Areas/Positioning & Story, Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan, Projects/Zenod). Nothing from the VN stays lost.
+- **Linked into every epic:** added a dated "Jordi steer" note (Zenod = open-source memory layer/harness; Herald = a product on top = Epic 3; launch both; multi-tenant — self-host→TestCo + a new Herald instance; per-instance WhatsApp routing + separate Telegram bots; one user across tenants) to **EPIC-0/1/2/3** docs, each linking back to the filed note. (This docs batch is today's single deploy.)
+
+**Tickets filed (typed / gh):** #589 (ack-before-durable-enqueue), **#590** (multi-part asks get per-part receipts or explicit "did NOT act on X", never a flat ack — the real finding), **#591** (premature give-up on reads — "latest VN transcript" fetches the full row first-ask, never bounces a messageId to the user).
+
+**Correction to my own prior diagnosis:** I earlier called transcript retrieval "broken" — it is NOT; Zenod returned the full transcript when pushed (the model just gave up on the first attempt, #591). Verify a capability before declaring it broken.

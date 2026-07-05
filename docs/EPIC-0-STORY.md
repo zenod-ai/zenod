@@ -1,5 +1,7 @@
 # EPIC 0 · THE STORY — public positioning, website, launch materials
 
+> **2026-07-05 · Jordi steer (voice note `AC35AB1B`).** Zenod = the open-source memory layer / framework / harness (expandable with extensions, build loops on top; usable per-project = "hire a team for a repo"). **Herald** = a product built ON TOP of Zenod — a Zenod instance with built-in loops (UI ≈ chat + voice via WhatsApp), **Epic 3**. **Launch BOTH** (the open-source Zenod repo AND Herald), market Herald, and "hire Herald for itself" → two customers to begin with. **Multi-tenant:** Jordi runs one Zenod instance for himself (self-hosting → migrate to the **TestCo** tenant) PLUS a new **Herald** instance; one phone number with per-instance WhatsApp routing (chosen at WhatsApp-connect time in the UI), a separate Telegram bot per instance; one user across tenants. Full note filed in the brain: [Log/2026-07-05.md#^e-1b73f7](https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-05.md).
+
 Owner: **Story-Fable** (planner, since 2026-07-04 per [HANDOVER-EPIC0.md](HANDOVER-EPIC0.md)) ·
 Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md) · Story spine: launch deck V5 → V6 (E0-2)
 **Exit criterion: launch materials ready to publish the day Epic 1's soak passes and the flagship

@@ -1,5 +1,7 @@
 # EPIC 1 · SYSTEM STABILITY — iterations 7–8
 
+> **2026-07-05 · Jordi steer (voice note `AC35AB1B`).** Zenod = the open-source memory layer / framework / harness (expandable with extensions, build loops on top; usable per-project = "hire a team for a repo"). **Herald** = a product built ON TOP of Zenod — a Zenod instance with built-in loops (UI ≈ chat + voice via WhatsApp), **Epic 3**. **Launch BOTH** (the open-source Zenod repo AND Herald), market Herald, and "hire Herald for itself" → two customers to begin with. **Multi-tenant:** Jordi runs one Zenod instance for himself (self-hosting → migrate to the **TestCo** tenant) PLUS a new **Herald** instance; one phone number with per-instance WhatsApp routing (chosen at WhatsApp-connect time in the UI), a separate Telegram bot per instance; one user across tenants. Full note filed in the brain: [Log/2026-07-05.md#^e-1b73f7](https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-05.md).
+
 ## ITERATION 8 — the refactor (scoped 2026-07-03 night; D-2 closed as DIY/candidate C)
 
 Three changes, in order. Everything else is out of scope.
