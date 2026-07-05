@@ -879,3 +879,12 @@ Gate 4/4 after recovery (Dokploy was down mid-cycle — see incident below). Fin
 **Z-6 GO/NO-GO: GO** — the stranger front-to-back path renders end to end: pitch → working LIVE €5 Buy button → Stripe checkout → success → GitHub sign-in → wizard → dashboard. Caveats (non-blocking, flagged): (a) the F-1 site button goes live on #611's autodeploy (~1–2 min); (b) the stale $-tier/test-mode section needs Epic-0 reconciliation; (c) ZD-3 App repo-in-customer-account still gated on the zenod-t3 PEM (cycle-4 one-click, independent of sign-in).
 
 **INCIDENT (mid-cycle, resolved):** Dokploy API went 401/down. Root cause: the separate **98G Hetzner Cloud Volume** holding Docker's data-root hit **100% full** → `dokploy-postgres` crash-looped (`No space left … postmaster.pid`) while the fleet kept serving. Jordi resized the volume to 150G; I `resize2fs /dev/sdb` (online, no data loss) + `docker image/builder/container prune` (no `--volumes`) → **148G, 87G free (39%)**, postgres 1/1, Dokploy API 200. Recorded in memory `dokploy-disk-full-recovery`; prevention = weekly image-prune cron (I2-8). SSH was used for incident triage only, at Jordi's explicit request — no manual deploys. Pen returns to Zenod-Fable.
+
+### 2026-07-05 · [worker/F-5] Stale $-tier / TEST-mode checkout section CUT from the live front door
+Gate 4/4. Removed the `#pricing` section from `apps/site/src/App.tsx` — the $29/$79/$499 tier grid
+whose "Get started" buttons hit `cloud.zenod.dev/buy` in **TEST mode** (`cs_test_…`), contradicting
+ZD-1 (€5, ONE SKU). Factual correction, not voice (Epic 0 re-voices later via Jordi). Also removed the
+now-unused `CHECKOUT_URL` constant (noUnusedLocals). **Kept:** the €5 hero CTA (`HOSTED_PAYMENT_LINK` →
+LIVE Payment Link → wizard) and the footer Terms/Privacy/Data links (unaffected — they also live in the
+footer). `tsc --noEmit` → 0. Branch `epic23-c5b-f5` → PR (auto-merge → autodeploys zenod.dev). Post-deploy
+verification of the live page below.
