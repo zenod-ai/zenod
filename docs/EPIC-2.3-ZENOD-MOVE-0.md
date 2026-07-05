@@ -667,3 +667,27 @@ Credential gate passed on the operator store (Dokploy 200 · OpenRouter `/keys` 
 **Teardown done at handback:** the `z1smoke` compose is deleted (removes the operator `gho_` token from the
 cloud env) and its OR smoke keys revoked; the vault repo + commit `33776374` are kept as the immutable Z-1
 receipt. Pen returns to Zenod-Fable.
+
+### 2026-07-05 · [worker/Z-3] RESOLVED — LIVE €5/mo checkout wired (Jordi loaded the real Stripe key)
+Supersedes the Z-3 BLOCKED entry above: Jordi stored the real LIVE secret key into
+`alpha9-stripe-live-key`; the gate now validates properly — `GET /v1/account` → **200**, account
+`acct_1TpJpc80yG7aohEW`, livemode, country ES (not just a prefix match this time).
+- [x] **LIVE €5/month SKU** — product `prod_UpYtFTErYgQal7`, price `price_1Tptlw80yG7aohEWL9X4zqMI`
+      (unit_amount 500, EUR, recurring monthly, livemode).
+- [x] **Payment Link (the site CTA target)** — `plink_1Tptlx80yG7aohEWDMhQYOWJ` →
+      `https://buy.stripe.com/3cIdR3bSLgyL7yi89HbAs01` (active, livemode). Site CTA wired: PR #605
+      (`sites/zenod/index.html`, `href="#"` → the Payment Link).
+- [x] **Webhook endpoint** — `we_1Tptly80yG7aohEWcS5P2H22` → `https://cloud.zenod.dev/webhook`, event
+      `checkout.session.completed`, status **enabled**. Signing secret wired into the `zenod-cloud`
+      Dokploy compose (`17QoMFRg…`): swapped ONLY the `STRIPE_WEBHOOK_SECRET` line (11-line env block
+      preserved), redeploy `done`, `healthz {"ok":true}`, unsigned POST still `400` (guard intact).
+- [~] **checkout → webhook → Z-2 without human touch (ZD-2):** PARTIAL. Checkout → webhook → **queue
+      task** is automated (the webhook verifies + records); but **queue → provision is still concierge**
+      — the auto-provisioner (cloud `services/webhook`, "Phase 1 provisioner / T8" per
+      `cloud/docs/PROVISIONING.md`) is NOT built, so an operator still runs `provision-standalone.mjs`.
+      True zero-touch needs T8 + the wizard. This is the honest remaining gap on the €-path; the real
+      €5 charge is the tester's / Z-6's run (I created no charge).
+
+**Z-3 net:** the LIVE SKU + Payment Link + site CTA + registered/secret-wired webhook are all GREEN and
+verified; only the queue→provision automation (T8) remains for full no-touch. Receipts above are all LIVE
+Stripe object ids + the site PR. No secrets committed or printed. Pen returns to Zenod-Fable.
