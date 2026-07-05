@@ -49,6 +49,11 @@ const HOSTED_URL = `${GITHUB_URL}/issues/new?title=${encodeURIComponent(
 // Hosted checkout: a top-level link to the control plane's /buy endpoint, which
 // creates a Stripe Checkout Session and 303-redirects. No CORS, no JS needed.
 const CHECKOUT_URL = "https://cloud.zenod.dev/buy"
+// [DRAFT — Epic 0 voice pending] LIVE €5/month hosted SKU (ZD-1, one SKU). This is the
+// real Stripe Payment Link; on completion it redirects to cloud.zenod.dev/success.html
+// → GitHub sign-in → setup wizard. (The tier CHECKOUT_URL above is a separate, older
+// path — flagged for reconciliation with the €5 single-SKU decision.)
+const HOSTED_PAYMENT_LINK = "https://buy.stripe.com/3cIdR3bSLgyL7yi89HbAs01"
 const TERMS_URL = "/legal/terms.html"
 const PRIVACY_URL = "/legal/privacy.html"
 const DATA_URL = "/legal/data-handling.html"
@@ -295,7 +300,14 @@ export default function App() {
             </div>
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              {/* [DRAFT — Epic 0 voice pending] LIVE €5/mo hosted checkout (ZD-1). */}
               <Button asChild size="lg" className="rounded-none px-5">
+                <a href={HOSTED_PAYMENT_LINK}>
+                  Get hosted — €5/month
+                  <ArrowUpRightIcon data-icon="inline-end" />
+                </a>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="rounded-none px-5">
                 <a href={GITHUB_URL} target="_blank" rel="noreferrer">
                   <GithubIcon data-icon="inline-start" />
                   Star on GitHub
