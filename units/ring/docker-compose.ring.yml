@@ -1,0 +1,82 @@
+# The Ring — small compose (STUB / blueprint, RD-4 split not yet fired).
+#
+# The Ring deploys and sells as ONE atomic unit but is internally a small compose of two
+# boxes plus the web UI served by ring-core. All three speak pure MCP over the internal
+# network (W-D SEAM-SPEC); the Phylax↔ring-core edge is itself the seam.
+#
+# This file is NOT wired for deploy yet — it documents the target topology. The live
+# product still builds/deploys from the root ./Dockerfile as the fused Console. Do not
+# `dokploy compose.deploy` this; it exists to make the eventual split a rename, not a
+# refactor.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-ring-core-data:   # mailbox SQLite, routing log, keyring/settings, oauth store
+  zenod-phylax-data:      # Baileys + Telegram session state (isolated; survives ring-core rebuilds)
+
+services:
+  # -------------------------------------------------------------------------------------
+  # ring-core — deterministic core + web UI + keyring. No brain/guy logic (that is W-B).
+  # -------------------------------------------------------------------------------------
+  ring-core:
+    build:
+      context: ../..            # root of the monorepo — reuse the root Dockerfile
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zenod-ring-core:dokploy
+    container_name: zenod-ring-core
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-ring-core-data:/data
+    environment:
+      AGENT: ring                       # boots the deterministic core, NOT a BrainEngine
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      ZENOD_WEB_DIST: /app/apps/web/dist
+      # Phylax gateway seam (internal MCP). ring-core calls phylax.send_to_user / get_media.
+      RING_PHYLAX_URL: http://zenod-phylax:8080
+      RING_PHYLAX_TOKEN: ${RING_PHYLAX_TOKEN}
+      # Router targets: per-unit MCP tokens for the guys ring-core may route to. Default
+      # route = the council guy. Wired at provision by the keyring; NOT world keys.
+      RING_COUNCIL_URL: ${RING_COUNCIL_URL:-http://zenod-council:8080}
+      RING_COUNCIL_TOKEN: ${RING_COUNCIL_TOKEN}
+      # Media pipeline: archive raw to Drive FIRST (OAuth at keyring), then STT (vault key).
+      # Router classifier LLM key (enum-constrained; cannot emit prose).
+      RING_ROUTER_LLM_KEY: ${RING_ROUTER_LLM_KEY}
+    expose:
+      - "8080"
+    # Public ingress (web chat + keyring UI) is attached by the deploy platform
+    # (Dokploy/Traefik) to this box only. Phylax is internal-only.
+
+  # -------------------------------------------------------------------------------------
+  # phylax — channel gateway (Baileys/WhatsApp + Telegram). Zero intelligence.
+  # Absorbs today's docker-compose.phylax.yml box; the NAME lands here, the attention
+  # LOGIC lands in ring-core (see EXTRACTION-MAP.md §attention).
+  # -------------------------------------------------------------------------------------
+  phylax:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zenod-phylax:dokploy
+    container_name: zenod-phylax
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-phylax-data:/data        # Baileys/Telegram auth state — isolated volume
+    environment:
+      AGENT: phylax                     # starts ONLY the sockets + pairing screen + MCP
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # Inbound calls ring-core; token issued by the keyring, auto-wired at provision.
+      PHYLAX_RING_CORE_URL: http://zenod-ring-core:8080
+      PHYLAX_RING_CORE_TOKEN: ${PHYLAX_RING_CORE_TOKEN}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    expose:
+      - "8080"
