@@ -54,7 +54,27 @@ git repo behind it. Plain markdown; every AI you use reads and writes it through
 ## ZD decisions — planner frames, Jordi calls
 
 Status 2026-07-05 (Zenod-Fable): **ZD-1..ZD-8 ALL DECIDED** (Jordi, same day, via planner's
-framed options; ZD-7/ZD-8 called post-handback). Do not relitigate without new evidence.
+framed options; ZD-7/ZD-8 called post-handback). **ZD-9/ZD-10 minted from cycle-2 live findings,
+AWAITING JORDI (plain-chat answer; the interactive ask tool is failing)** — Block D carries the
+recommended options as provisional defaults unless Jordi overrides before dispatch. Do not
+relitigate decided items without new evidence.
+
+- **ZD-9 · Self-host token story — AWAITING JORDI.** Cycle-2 finding: `/api/token` is auth-gated,
+  so the README's "curl your token" is circular on a deployed instance.
+  (a) **`ZENOD_API_TOKEN` env-seed** — self-hoster sets their own token next to
+  VAULT_REPO/GITHUB_TOKEN; if unset, the auto-minted token prints ONCE to boot logs. No new
+  endpoint; mirrors ZD-8's provisioner-set token. **Recommended; Block D default.**
+  (b) Print-at-boot only. (c) Ungate `/api/token` on localhost — adds an unauthenticated path to
+  the seam, disfavored. README + SEAM-SURFACE correction rides the call.
+
+- **ZD-10 · Watchdog registration path — AWAITING JORDI.** Cycle-2 finding: the fleet watchdog is
+  a host systemd timer; workers cannot shell the VPS (standing rule).
+  (a) **Cloud-fed list, one-time bootstrap** — Jordi makes ONE sanctioned host change (watchdog
+  reads its container/URL list from a file/endpoint the cloud service maintains); provision and
+  teardown then update it via API forever, law-`3b4da80`-automated. **Recommended; Block D
+  default — worker prepares everything, hands Jordi a single bootstrap command.**
+  (b) Containerize the watchdog (Docker-socket discovery) — clean but unbudgeted build.
+  (c) Manual per-tenant registration — doesn't scale; crash-loop gap stays open.
 
 - **ZD-1 · Price — DECIDED 2026-07-05 (Jordi): hosted €5/month.** Move 0 ships ONE simple SKU.
   (Jordi carries the number to Product-Fable so D-6 tiering stays coherent.) Consequence: at €5,
@@ -103,34 +123,39 @@ framed options; ZD-7/ZD-8 called post-handback). Do not relitigate without new e
 
 Sequencing: **Z-1 ∥ Z-3-page ∥ Z-5-runbook start immediately**; Z-2 needs Z-1 green; Z-4 needs
 Z-2; Z-6 last (Jordi in person); tester's stranger-run closes the epic. Acceptance boxes may be
-checked ONLY with a same-line receipt (URL/SHA/ID). **States as of 2026-07-05 post-cycle-1
-audit:** static/authoring work receipted green (worker entries + planner audit, APPEND ZONE);
-every runtime/LIVE/infra item BLOCKED-on-environment → cycle 2 (Block C).
+checked ONLY with a same-line receipt (URL/SHA/ID). **States as of 2026-07-05 post-cycle-2
+audit:** Z-1 RUNTIME GREEN on production (tester pending) · Z-3 wired LIVE (T8 pending) ·
+Z-2/Z-4 mechanism/substrate proven, front-end unbuilt · Z-5 gated on ZD-10 · Z-6 gated on the
+rest. Cycle 3 = Block D.
 
-### Z-1 · Standalone GA (absorbs 2.5's W-C) — GREEN-static · runtime BLOCKED-env → cycle 2
+### Z-1 · Standalone GA (absorbs 2.5's W-C) — ✅ RUNTIME GREEN 2026-07-05 (cycle 2) · tester's fresh evidence pending · README item REOPENED (ZD-9)
 
 Deliverable: `units/zenod/` builds and deploys as ONE container exposing ONE MCP endpoint,
 SEAM-SPEC-conformant, with a stranger-grade README/quickstart.
 
 Acceptance:
-- [ ] `docker build` + run from `units/zenod/` (root image + `AGENT=zenod` until the repo split
-      fires) → container serves `tools/list`/`tools/call` over streamable HTTP at `/mcp`.
-      **BLOCKED-env cycle 1 (no Docker daemon) → cycle 2.**
+- [x] Builds + deploys on the SANCTIONED production path (Dokploy API — per Jordi 2026-07-05:
+      never local Docker; Dokploy's build IS the build receipt) and serves `tools/list`/
+      `tools/call` over streamable HTTPS at `/mcp` — **cycle-2 receipts:** `z-z1smoke.zenod.dev`
+      live round trip, 14 tools, 401-without-bearer + forced-error transcripts, real commit
+      `33776374` in `zenod-ai/z1-smoke-vault`, PR #603 (merged). (Local `docker build` remains
+      the SELF-HOST story, proven by the tester's clean-VM run.)
 - [x] *(static)* SEAM-SPEC v1 checklist passes item-by-item, spec UNEDITED — 16/16 scored with
-      file:line evidence, audited by planner. Receipt: [worker/Z-1] APPEND entry + `4610fb9`.
-      Live transcripts ride the docker item above.
+      file:line evidence, audited by planner. Receipt: [worker/Z-1] APPEND entry + `4610fb9`;
+      live transcripts now captured (cycle 2).
 - [x] Public-seam-only: repo token read in exactly ONE place (`runtime.ts:296-299`, planner
       re-verified 2026-07-05); no non-MCP write path on the public surface.
-- [x] README/quickstart stranger-grade: tokenless-claim trap found + fixed (`GET /api/token`
-      step, README:67 + SEAM-SURFACE:9). Receipts: `4610fb9` + PR #600 (`a86bd8b`).
-      (Voice pass = Epic 0 via Jordi; content correctness done here.)
+- [ ] **REOPENED 2026-07-05 (cycle-2 finding 2, honest board):** README/quickstart
+      stranger-grade. The `GET /api/token` step added after cycle 1 is itself unreachable on a
+      deployed instance (`/api/*` globally auth-gated — token needs the token). Fix rides ZD-9;
+      README + SEAM-SURFACE correction due in cycle 3. Prior receipts: `4610fb9`, PR #600.
 
 Test criteria (tester, fresh evidence): an EXTERNAL plain-MCP client (not our code) completes
 store → search → get on a FRESH instance using ONLY the README; commit-SHA + GitHub-URL receipts
 verified in the vault repo; a deliberate non-seam write attempt fails loudly; SEAM-SPEC scored
 line-by-line. Passing this ALSO satisfies 2.5's RD-4 split-trigger evidence and Epic 0's SD-6 gate.
 
-### Z-2 · Provision + setup UI — OPEN · blocked by Z-1 runtime · standalone path COMMISSIONED 2026-07-05
+### Z-2 · Provision + setup UI — ◐ mechanism PROVEN + CODIFIED (cycle 2: `zenod-ai/cloud#1` `provision-standalone.mjs`, deploy → `/api/provision` → tokened URL, €2 grant) · wizard + GitHub App + T8 auto-provision = cycle 3
 
 Deliverable: a **NEW thin standalone-provisioning path** + the cloud setup wizard + self-host
 terminal quickstart. **NOT the existing tenant stack** — that provisions the full suite WITH a
@@ -156,7 +181,13 @@ Test criteria: tester provisions a fresh user end-to-end via the WIZARD, timed, 
 the wizard leg ends in a single copy-paste (the URL); separately completes self-host from docs
 alone on a clean VM; Claude round-trip with commit-SHA receipt on BOTH paths.
 
-### Z-3 · Website + checkout LIVE — page GREEN-draft · checkout BLOCKED-credentials → cycle 2
+### Z-3 · Website + checkout LIVE — ✅ WIRED LIVE 2026-07-05 (cycle 2) · "no human touch" pending T8
+
+State: LIVE SKU `prod_UpYtFTErYgQal7` / `price_1Tptlw…` (€5/mo) · Payment Link active+livemode,
+site CTA wired (PR #605) · webhook `we_1Tptly…` → `cloud.zenod.dev/webhook` enabled, signing
+secret wired, unsigned POST → 400 (receipts: [worker/Z-3] RESOLVED entry, PR #606). Remaining
+gap: checkout → webhook → queue is automated; **queue → provision (T8) is still concierge** —
+the "fires without human touch" acceptance stays open until T8 lands (cycle 3).
 
 Deliverable: public Zenod website — pitch, both paths, LIVE €5/mo checkout, legal minimum.
 
@@ -173,7 +204,7 @@ Acceptance:
 Test criteria: a real card completes €5 checkout in prod; subscription visible in Stripe;
 provisioning fires without human touch; self-host instructions pass a cold read by a stranger.
 
-### Z-4 · Meter + dashboard — OPEN · blocked by Z-2 · ZD-5 decided: bundled prepaid credits
+### Z-4 · Meter + dashboard — ◐ substrate LIVE (cycle 2: per-tenant $2-capped gateway key minted at provision; `read_llm_timeline` on the surface) · dashboard UI = cycle 3
 
 Deliverable: per-tenant metering wired at provision; usage page on the CLOUD surface
 (`zenod-ai/cloud`, per the v0 surface spec).
@@ -190,7 +221,7 @@ Test criteria: tester burns a known amount via scripted `ask` calls; dashboard m
 gateway within tolerance (exact call count; tokens/cost within provider-reported values);
 zero-credit block + top-up + resume all receipted.
 
-### Z-5 · Watchdog + ops — authored GREEN · live drills BLOCKED-infra → cycle 2 / tester
+### Z-5 · Watchdog + ops — authored GREEN · live registration gated on ZD-10 (watchdog = host systemd timer; workers can't shell the VPS)
 
 Deliverable: fleet-watchdog registration at provision (law `3b4da80`) + restore-from-repo runbook.
 
@@ -317,7 +348,60 @@ score ❌, receipt it, stop. Never fix, never zombie. Pen returns to Zenod-Fable
 scorecard.
 ```
 
-### Block C · WORKER cycle 2 — paste ONLY into an environment with: Docker daemon UP · VPS/operator access · `zenod-ai/cloud` checkout · LIVE Stripe key
+### Block D · WORKER cycle 3 — the funnel front-end. Jordi's only action; worker runs STEP 0 itself.
+
+```
+You are the Zenod Move-0 WORKER, cycle 3. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in
+zenod-ai/zenod — read it top to bottom; tickets as updated post-cycle-2 bind you. You hold
+the pen on the APPEND ZONE only; planner sections are read-only.
+
+STEP 0 — credential gate, VERBATIM, before anything else. Sources = the I2-7 operator
+store by its receipted names. NEVER ask Jordi for a key; never print one.
+  DKEY="${DOKPLOY_API_KEY:-$(security find-generic-password -s alpha9-dokploy-api-key -a jordi -w 2>/dev/null)}"
+  test "$(curl -s -o /dev/null -w '%{http_code}' -m 10 -H "x-api-key: $DKEY" \
+    "${DOKPLOY_URL:-https://dokploy.polyqu.com}/api/project.all")" = 200        # Dokploy alive
+  OKEY="${OPENROUTER_PROVISIONING_KEY:-$(security find-generic-password -s alpha9-openrouter-provisioning-key -a jordi -w 2>/dev/null)}"
+  test -n "$OKEY"                                                               # gateway keys (ZD-5/7)
+  test -d "$HOME/Documents/GitHub/cloud/.git" || gh repo clone zenod-ai/cloud "$HOME/Documents/GitHub/cloud"
+  SKEY="${STRIPE_SECRET_KEY:-$(security find-generic-password -s alpha9-stripe-live-key -a jordi -w 2>/dev/null)}"
+  test "$(curl -s -o /dev/null -w '%{http_code}' -m 10 -u "$SKEY:" \
+    https://api.stripe.com/v1/account)" = 200   # LIVE probe, NOT prefix match (cycle-2 finding 1)
+Any check fails → dependent lanes BLOCKED with the failing line as receipt; no zombie.
+
+DECIDED: ZD-1..ZD-8 (see ZD section). ZD-9/ZD-10 are AWAITING JORDI with Block-D defaults:
+ZD-9 = ZENOD_API_TOKEN env-seed (+ print-once-at-boot when unset); ZD-10 = cloud-fed
+watchdog list with a one-time Jordi bootstrap. If the doc records a different call before
+you start, THAT wins.
+
+LANES (fan out where parallel; all on the production path, no local Docker):
+- T8 auto-provision (closes Z-3's "no human touch"): webhook queue task →
+  provision-standalone.mjs (cloud#1) → instance + tokened URL (ZD-8), €2 grant (ZD-7).
+- Z-2 wizard on the cloud surface: post-checkout page → connect GitHub (App per ZD-3;
+  OAuth creds alpha9-github-oauth-client-id/-secret per Epic-2 B-9) → repo in the
+  CUSTOMER's account → done screen = the ONE URL ("treat it like a password"). OAuth
+  buttons optional; no LLM-key step; no chat UI. Health + token mint/rotate/revoke pages.
+- Z-4 dashboard on the cloud surface: calls · tokens · cost · balance (per-call ledger,
+  reconciling with gateway balance — D-5: gateway is truth) · top-up link · warn at
+  threshold / polite block at zero / top-up restores.
+- ZD-9 fix: implement the token story per the call (default env-seed); correct README +
+  SEAM-SURFACE; kill the circular /api/token instruction.
+- Z-5 per ZD-10 default: build the cloud-fed list end (provision/teardown update it);
+  prepare the host side and HAND JORDI ONE bootstrap command — never shell the VPS.
+- Update docs/Z-6-CUSTOMER-1-CHECKLIST.md to the final funnel shape.
+
+GIT DISCIPLINE (two receipted auto-merge races): fresh branch off LATEST origin/main per
+lane (epic23-c3-<lane>); push early; verify every commit with git branch -r --contains;
+NEVER edit planner sections (two regressions receipted).
+
+RECEIPTS: dated [worker/<lane>] APPEND-ZONE entries, same turn, URL/SHA/ID/transcript.
+Teardown any smoke instances at handback; keep immutable receipts.
+
+BUDGET: 1 working day, 100 turns total, ≤25 per sub-agent. Blocked → BLOCKED + exact
+blocker, stop that lane honestly. Never zombie, never fake-green. HANDBACK entry with
+every lane's state when done or exhausted. Pen returns to Zenod-Fable.
+```
+
+### Block C · WORKER cycle 2 — EXECUTED 2026-07-05 (two dispatches: env-gate BLOCKED hand-back, then the real run: Z-1 runtime GREEN, Z-3 wired LIVE). Kept for the record.
 
 ```
 You are the Zenod Move-0 WORKER, cycle 2. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in
@@ -367,6 +451,29 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Cycle-2 + Z-3 audit PASSED · sections reconstructed after a second regression · ZD-9/ZD-10 framed · Block D armed
+- **Audit PASSED (verify-don't-trust).** Z-1 RUNTIME GREEN receipts verified: PR #603 + #604
+  MERGED to main (`8504435` confirmed via github), real commit `33776374` in
+  `zenod-ai/z1-smoke-vault`, teardown corroborated (health probe returns nothing). Z-3 RESOLVED
+  verified: LIVE SKU/Payment-Link/webhook receipts in [worker/Z-3] entry; PRs #605/#606
+  auto-merge pending CI; `cloud#1` (thin provisioner) accepted on the worker's receipt — cloud
+  repo not readable from the planner sandbox, tester re-verifies. The three cycle-2 findings are
+  real and actioned: (1) gate Stripe check → LIVE `/v1/account` probe (now embedded in Block D's
+  STEP 0); (2) `/api/token` circularity → ZD-9 minted, Z-1's README acceptance box REOPENED
+  (honest board); (3) Dokploy env/redeploy quirks → codified in `provision-standalone.mjs`.
+- **Second planner-section regression (rule 8, recorded):** the STEP-0 gate section, Block-C
+  rewrites, and four planner APPEND entries (cycle-2-blocked audit; production-path course
+  correction; self-sourcing gate; alpha9-* names fold) were lost from main lineage during the
+  #602→#606 auto-merge races — content survives in git history (commits `ab6e100`, `7ad0dcb`,
+  `b02a91e` on merged PRs). Operationally superseded by this entry + Block D. New working rule:
+  the planner lands its own PR immediately after each fold instead of riding worker branches.
+- **Decisions:** ZD-9 (self-host token) + ZD-10 (watchdog registration) framed in the ZD section,
+  AWAITING JORDI by plain chat (the interactive ask tool crashed twice mid-answer). Block D
+  carries the recommended options as explicit provisional defaults.
+- **Cycle 3 armed (Block D):** T8 auto-provision · cloud wizard (GitHub App, ZD-3) · Z-4
+  dashboard · ZD-9 fix + README/SEAM-SURFACE correction · Z-5 cloud-fed list with one-command
+  Jordi bootstrap. After its HANDBACK: Z-6 (Jordi, real €5 charge) → Block B tester closes.
 
 ### 2026-07-05 · [planner/Zenod-Fable] Cycle-1 audit PASSED · ZD-7/ZD-8 DECIDED · v0 surface spec folded · cycle 2 armed
 - **Audit (verify-don't-trust) of the worker HANDBACK: PASSED.** PR #600 MERGED to main
