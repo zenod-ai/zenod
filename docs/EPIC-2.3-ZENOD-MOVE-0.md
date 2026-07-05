@@ -325,16 +325,27 @@ Added 2026-07-05 after two dispatches burned on missing environment: the prose g
 executable. Run this; every ❌ line names its own fix; re-run until PASS.
 
 ```bash
-echo "— Epic 2.3 cycle-2 preflight (production path — NO local Docker needed) —"; ok=1
-DKEY="${DOKPLOY_API_KEY:-$DOKPLOY_TOKEN}"  # canonical name per Epic-2 I2-7; Keychain read commands in zenod-ai/cloud docs/PROVISIONING.md
-curl -fsS -m 10 -H "x-api-key: $DKEY" "${DOKPLOY_URL:-https://dokploy.polyqu.com}/api/project.all" >/dev/null 2>&1 \
-  && echo "1 Deploy path (Dokploy) ✅ project.all → 200" \
-  || { echo "1 Deploy path (Dokploy) ❌ DOKPLOY_API_KEY missing or dead (B-6 lesson: 401 ⇒ regenerate); store per zenod-ai/cloud docs/PROVISIONING.md"; ok=0; }
+echo "— Epic 2.3 cycle-2 preflight (SELF-SOURCING; production path) —"; ok=1
+# 1 · Dokploy — key auto-sourced: env → ~/.dokploy_api_key → Keychain. Never pasted by hand.
+DKEY="${DOKPLOY_API_KEY:-$(cat "$HOME/.dokploy_api_key" 2>/dev/null)}"
+DKEY="${DKEY:-$(security find-generic-password -s DOKPLOY_API_KEY -w 2>/dev/null)}"
+DKEY="${DKEY:-$(security find-generic-password -s dokploy -w 2>/dev/null)}"
+code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -H "x-api-key: $DKEY" \
+  "${DOKPLOY_URL:-https://dokploy.polyqu.com}/api/project.all")
+if [ "$code" = 200 ]; then echo "1 Dokploy               ✅ project.all → 200"
+else echo "1 Dokploy               ❌ HTTP ${code:-none} (000=URL/network · 401/403=key rejected · empty key = not found in env/~/.dokploy_api_key/Keychain)"; ok=0; fi
+# 2 · zenod-ai/cloud — auto-clones if missing
+[ -d "$HOME/Documents/GitHub/cloud/.git" ] || gh repo clone zenod-ai/cloud "$HOME/Documents/GitHub/cloud" >/dev/null 2>&1
 [ -d "$HOME/Documents/GitHub/cloud/.git" ] && echo "2 zenod-ai/cloud        ✅ checked out" \
-  || { echo "2 zenod-ai/cloud        ❌ gh repo clone zenod-ai/cloud ~/Documents/GitHub/cloud"; ok=0; }
-case "$STRIPE_SECRET_KEY" in sk_live_*) echo "3 LIVE Stripe key       ✅";; \
-  *) echo "3 LIVE Stripe key       ❌ export STRIPE_SECRET_KEY=sk_live_… (restricted key preferred)"; ok=0;; esac
-[ $ok = 1 ] && echo "PREFLIGHT PASS — paste Block C" || echo "PREFLIGHT FAIL — fix ❌ lines, run again"
+  || { echo "2 zenod-ai/cloud        ❌ auto-clone failed — check gh auth status"; ok=0; }
+# 3 · LIVE Stripe key — env → ~/.stripe_live_key → Keychain (restricted rk_live_ accepted)
+SKEY="${STRIPE_SECRET_KEY:-$(cat "$HOME/.stripe_live_key" 2>/dev/null)}"
+SKEY="${SKEY:-$(security find-generic-password -s STRIPE_LIVE_KEY -w 2>/dev/null)}"
+case "$SKEY" in sk_live_*|rk_live_*) echo "3 LIVE Stripe key       ✅";; \
+  *) echo "3 LIVE Stripe key       ❌ store it ONCE: security add-generic-password -s STRIPE_LIVE_KEY -a stripe -w 'rk_live_…'"; ok=0;; esac
+[ $ok = 1 ] && { export DOKPLOY_API_KEY="$DKEY" STRIPE_SECRET_KEY="$SKEY"; \
+  echo "PREFLIGHT PASS — keys exported into THIS shell; paste Block C here"; } \
+  || echo "PREFLIGHT FAIL — fix ❌ lines, run again"
 ```
 
 ### Block C · WORKER cycle 2 — paste ONLY after PREFLIGHT PASS (Dokploy deploy path · `zenod-ai/cloud` checkout · LIVE Stripe key — production path, no local Docker)
@@ -392,6 +403,15 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Preflight made SELF-SOURCING (Jordi: "I'm giving you that key every few hours")
+- A VALID Dokploy key failed check 1 because the gate only read `$DOKPLOY_API_KEY` from the
+  shell while the key lives in `~/.dokploy_api_key`/Keychain — the gate demanded hand-feeding.
+  Rewritten: keys auto-sourced (env → file → Keychain), probe prints the real HTTP code
+  (401 ≠ missing ≠ network), `zenod-ai/cloud` auto-clones, and on PASS the keys are exported
+  into the dispatch shell so the Block-C worker inherits them. Nobody pastes keys again.
+- Rule-6 fold: a gate that needs hand-fed secrets fails exactly when attention is lowest —
+  gates must source their own inputs from the sanctioned stores (I2-7).
 
 ### 2026-07-05 · [planner/Zenod-Fable] Course correction (Jordi): test on the PRODUCTION path — local Docker dropped from the gate
 - Jordi: "why local Docker? why not test closest to production?" — right. The sanctioned deploy
