@@ -57,8 +57,17 @@ Desktop / `claude` with a custom connector, or the reference
 npx @modelcontextprotocol/inspector
 # transport: Streamable HTTP
 # URL:       http://localhost:8080/mcp
-# (if you minted a token, add header: Authorization: Bearer <token>)
+# header:    Authorization: Bearer <token>
 ```
+
+**Get your token.** A fresh self-host instance auto-mints an MCP token on first boot,
+so `/mcp` always requires it — there is no tokenless mode. Read it once:
+
+```bash
+curl -s http://localhost:8080/api/token   # -> { "token": "...", "mcpPath": "/mcp" }
+```
+
+Use that value as the `Authorization: Bearer <token>` header on every MCP call.
 
 Run `tools/list`. You should see `store_memory`, `search_memory`, `get_memory`,
 `ask_brain`, and `get_task_result` (full surface in [SEAM-SURFACE.md](./SEAM-SURFACE.md)).
