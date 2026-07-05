@@ -595,3 +595,75 @@ Receipts committed on branch `epic23-c2-z1` (compose files); credentials never p
 `z1smoke` box holds a broad `gho_` vault token in its env for the smoke — it will be TORN DOWN at handback
 (compose.delete + OR smoke keys revoked); the vault repo `zenod-ai/z1-smoke-vault` + commit `33776374` are
 left as the immutable receipt.
+
+### 2026-07-05 · [worker/Z-3] cycle-2 LIVE checkout — BLOCKED: the credential gate false-greened a placeholder key
+The STEP-0 gate reported Stripe ✅, but that check is **prefix-only** (`case "$SKEY" in rk_live_*`). The
+Keychain item `alpha9-stripe-live-key` holds a **placeholder**, not a real key: value is `rk_live_…_KEY`
+(len 38, last4 `_KEY`); `GET https://api.stripe.com/v1/account` → **401 Invalid API Key** (verified twice,
+no secret echoed). So Z-3 cannot create the LIVE SKU. **Gate bug to fix (planner):** the gate must actually
+call `/v1/account` (like it curls Dokploy `/project.all`), not just match a prefix — otherwise it green-lights
+a fake. What IS confirmed without the key (Z-3 sub-agent): the cloud webhook is LIVE — `GET
+https://cloud.zenod.dev/healthz` → `{"ok":true}`, `POST /webhook` unsigned → 400 (signature check reached),
+so the Stripe webhook target is `https://cloud.zenod.dev/webhook` (event `checkout.session.completed`), and
+the site CTA is a one-line swap once a Payment Link exists. **BLOCKED-needs:** a real LIVE key stored ONCE —
+`security add-generic-password -U -s alpha9-stripe-live-key -a jordi -w 'rk_live_…'`.
+
+### 2026-07-05 · [worker/Z-2] cycle-2 — thin standalone provisioner CODIFIED (mechanism proven); wizard/App/webhook remain
+The thin path the ticket commissioned is proven and codified. The whole deploy→provision→tokened-URL
+mechanism was exercised end-to-end by hand for Z-1 (z-z1smoke), then written up as a reusable script.
+- [x] *(mechanism proven + codified)* NEW thin provisioner: `zenod-ai/cloud` `scripts/provision-standalone.mjs`
+      (PR zenod-ai/cloud#1). Mints per-tenant OpenRouter gateway key with the **€2 grant (ZD-7)** as a config
+      value (`--grant 2`); ensures the vault repo; Dokploy API create→update(git+env)→domain→**deploy**;
+      waits health; `POST /api/provision` mints the MCP token + pushes config; prints the ONE tokened URL
+      (ZD-8). Emits receipts (composeId, repo URL, gateway-key id). Depends on
+      `docker-compose.zenod-standalone.yml` landing on `main` (PR #603).
+- [ ] **Wizard on the cloud surface** (connect/scaffold GitHub → done screen with the URL; OAuth buttons
+      optional; token mint/rotate/revoke): NOT built — a real front-end build in `zenod-ai/cloud`. NEXT.
+- [ ] **Customer's-own-GitHub via the GitHub App (ZD-3):** the script uses the operator token as the working
+      default today; the per-customer App-installation-token path is the remaining piece (rides the wizard's
+      GitHub OAuth button). NEXT.
+- [ ] **Webhook-fired (ZD-2):** blocked behind Z-3's LIVE Stripe key; the target URL is confirmed
+      (`cloud.zenod.dev/webhook`), the queue path exists (`cloud` `services/webhook`).
+- [x] **Self-host quickstart re-verified — and a bug found:** the v0 "no UI, curl `/api/token`" self-host
+      path is **broken** because `/api/token` is auth-gated (see Z-1 finding #1). Provision-path works; pure
+      self-host token-read needs the fix. Flagged, not silently passed.
+
+### 2026-07-05 · [worker/Z-4 + Z-5] cycle-2 states
+- **Z-4 (meter + dashboard):** the metering substrate is LIVE and correct — the z1smoke instance runs on a
+  per-tenant OpenRouter gateway key with a hard $2 cap (gateway-is-truth, D-5/ZD-5), minted at provision, and
+  `read_llm_timeline` is in the tool surface. The **usage dashboard is a cloud-surface UI build** (calls ·
+  tokens · cost · balance · top-up) that does not exist yet — same NEXT bucket as the Z-2 wizard. Not faked.
+- **Z-5 (live watchdog registration):** **BLOCKED-on-host-shell.** The watchdog is a *host* systemd timer
+  reading `/etc/zenod-watchdog.env` (`scripts/watchdog/zenod-watchdog.sh:24-33`) — it lives OUTSIDE Dokploy,
+  so registering a new tenant means editing a host file, which the Dokploy API cannot do and Jordi's standing
+  rule forbids by hand. The runbook wiring (cycle-1) stands; the live register step needs an operator with
+  host access (or moving the watched-list into a Dokploy-managed surface — a design note for the planner).
+
+### 2026-07-05 · [worker/HANDBACK-c2] Cycle 2 EXECUTED — Z-1 runtime GREEN; honest map of the rest
+Credential gate passed on the operator store (Dokploy 200 · OpenRouter `/keys` 200 · cloud cloned · Stripe
+**false-green**, see Z-3). Real production work happened this cycle — the epic's central claim is now proven.
+
+| Lane | Cycle-2 state | Receipt |
+|---|---|---|
+| **Z-1** | ✅ **RUNTIME GREEN** — standalone Zenod live, `/mcp` round trip, real commit | `z-z1smoke.zenod.dev`, commit `33776374` in `zenod-ai/z1-smoke-vault`, PR #603 |
+| **Z-2** | ◐ mechanism **proven + codified**; wizard/App/webhook remain | cloud#1 `provision-standalone.mjs` |
+| **Z-3** | ⛔ BLOCKED — Stripe key is a placeholder (gate bug) | `/v1/account` 401; webhook target `cloud.zenod.dev/webhook` confirmed |
+| **Z-4** | ◐ metering substrate live ($2 gateway key); dashboard UI = NEXT | gateway key `zenod-tenant:z1smoke`, `read_llm_timeline` in surface |
+| **Z-5** | ⛔ BLOCKED-on-host-shell (watchdog is a host systemd timer) | `zenod-watchdog.sh:24-33` |
+| **Z-6** | Jordi's; funnel shape confirmed (provision → tokened URL) | checklist updated |
+
+**Three findings for the planner (each a real bug the live run surfaced):**
+1. **Gate Stripe check is prefix-only → false-green.** Make it call `/v1/account` (2-line fix); it currently
+   passes `rk_live_…_KEY`. This is why cycle-2 thought it had 4/4 but really had 3/4.
+2. **`/api/token` is auth-gated** → the self-host "curl your token" story is broken; needs ungate-when-no-password
+   / print-at-boot / `ZENOD_API_TOKEN` seed. README + SEAM-SURFACE correction pending the choice.
+3. **Dokploy env box ≠ container env** unless the compose maps `${VAR}`; `compose.redeploy` reuses stale
+   clones (use `compose.deploy`). Baked into `provision-standalone.mjs` so the Z-2 path doesn't re-hit them.
+
+**NEXT (not blocked, just unbuilt — a cloud-surface front-end cycle):** the wizard + usage dashboard in
+`zenod-ai/cloud` (Z-2 wizard, Z-4 dashboard), the GitHub-App per-customer repo (ZD-3). **Truly blocked:** Z-3
+(real Stripe key) and Z-5 live (host shell for the watchdog).
+
+**Teardown done at handback:** the `z1smoke` compose is deleted (removes the operator `gho_` token from the
+cloud env) and its OR smoke keys revoked; the vault repo + commit `33776374` are kept as the immutable Z-1
+receipt. Pen returns to Zenod-Fable.
