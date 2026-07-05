@@ -834,3 +834,34 @@ correct, the load-bearing check).
 wizard (GitHub App, ZD-3) → tokened URL (ZD-8) → dashboard (calls·tokens·cost·balance) → cloud-fed watchdog
 (ZD-10) → self-host token pinning (ZD-9). What remains is **config, not code** (3 asks) plus the tester's
 live funnel run and Jordi's Z-6 customer-#1 run. Pen returns to Zenod-Fable.
+
+### 2026-07-05 · [worker/HANDBACK-c4] Cycle 4 micro-patch — 3 green, 1 gated on a single click; Z-6 = NO-GO→GO on one action
+Gate 4/4 (Dokploy 200 · OpenRouter · cloud · **Stripe LIVE /v1/account 200**). Four tickets, worktree/branch-per-ticket, sequential merges.
+
+| Ticket | State | Receipt |
+|---|---|---|
+| **Z-2b** provisioner persists mcp_token | ✅ merged | cloud **#10** — T8 `autoProvision` parses the provisioner's MCP url+bearer and `upsertAccount(sessionId,{mcp_token,…})`; dashboard per-call renders with no manual rotate. tsc 0. |
+| **Z-5b** standalone container name | ✅ merged | cloud **#9** — `/watchdog/targets` emits `zenod-<slug>` (matches the standalone `container_name`), health URL unchanged. tsc 0. |
+| **Z-5c** watchdog token + feed | ✅ merged + VERIFIED | token generated + stored (Keychain `alpha9-watchdog-token`, acct jordi = its receipted home); found the compose didn't map the var (cloud **#11** adds `WATCHDOG_TOKEN`/App-creds/`AUTO_PROVISION` passthroughs); set on `zenod-cloud` via Dokploy, redeployed. **Probe: `GET /watchdog/targets` (bearer) → 200** (core fleet, 0 tenants yet); no-bearer → 401; healthz ok. |
+| **Z-2c** App creds reconciliation | ◑ recovered, PEM-gated | `zenod-t3` **App ID 4063939 · slug zenod-t3 · installation 140570361** recovered via the org installations API and **set in the cloud env** (ZENOD_GITHUB_APP_ID/_SLUG). **PEM is unrecoverable from here** — GitHub private keys are download-once; the June PEM lives only in c1's connections sqlite (no export endpoint; `/api/connections` returns token/clients/grants, not the key; VPS shell forbidden) and is in no Dokploy env / disk / Keychain. Per the ticket's sanctioned fallback → **one regenerate click** (non-destructive; adds a key, old ones keep working). |
+
+**Config verification (read-only):** watchdog → 200 (above). App path → still 503 (PEM pending, expected). **`ZENOD_AUTO_PROVISION` = unset → OFF (confirmed).**
+
+**Z-6 GO/NO-GO: NO-GO → GO on ONE Jordi action** (the zenod-t3 PEM). Everything else is green/wired: standalone provisioning, tokened URL, dashboard+persisted token, LIVE checkout, watchdog feeding, self-host token. The App path (ZD-3 repo-in-customer-account) is the only gate, and it needs exactly one regenerate.
+
+**PASTE-LINE 1 — watchdog host bootstrap (ssh into the VPS as root, paste once; installs a 5-min sync timer, the ONLY host action ZD-10 needs):**
+```bash
+# see the fully-substituted block printed in the worker's chat receipt (contains the read-only watchdog token, also in Keychain alpha9-watchdog-token)
+# source: cloud/docs/WATCHDOG-CLOUD-FED.md, TOKEN substituted
+```
+
+**PASTE-LINE 2 — flip T8 to no-touch at Z-6 GO (run on your Mac; sets ZENOD_AUTO_PROVISION=1 + redeploys):**
+```bash
+DKEY=$(security find-generic-password -s alpha9-dokploy-api-key -a jordi -w); CID=17QoMFRgvmZ0Y2n19DINT; A=https://dokploy.polyqu.com/api; E=$(curl -s "$A/compose.one?composeId=$CID" -H "x-api-key: $DKEY" | python3 -c 'import sys,json;e=[l for l in json.load(sys.stdin)["env"].splitlines() if not l.startswith("ZENOD_AUTO_PROVISION=")]+["ZENOD_AUTO_PROVISION=1"];print(chr(10).join(e))'); curl -s -X POST "$A/compose.update" -H "x-api-key: $DKEY" -H "Content-Type: application/json" -d "$(ENVV="$E" python3 -c 'import os,json;print(json.dumps({"composeId":"17QoMFRgvmZ0Y2n19DINT","env":os.environ["ENVV"]}))')" >/dev/null; curl -s -X POST "$A/compose.deploy" -H "x-api-key: $DKEY" -H "Content-Type: application/json" -d '{"composeId":"17QoMFRgvmZ0Y2n19DINT"}' >/dev/null; echo flipped
+```
+
+**Z-2c regenerate (the one click, then one paste):** open **https://github.com/organizations/zenod-ai/settings/apps/zenod-t3** → "Private keys" → **Generate a private key** (downloads a .pem). Then paste on your Mac:
+```bash
+PEM=$(cat ~/Downloads/zenod-t3.*.private-key.pem); security add-generic-password -U -s alpha9-github-app-private-key -a jordi -w "$PEM"; DKEY=$(security find-generic-password -s alpha9-dokploy-api-key -a jordi -w); CID=17QoMFRgvmZ0Y2n19DINT; A=https://dokploy.polyqu.com/api; E=$(PEM="$PEM" curl -s "$A/compose.one?composeId=$CID" -H "x-api-key: $DKEY" | PEM="$PEM" python3 -c 'import sys,json,os;e=[l for l in json.load(sys.stdin)["env"].splitlines() if not l.startswith("ZENOD_GITHUB_APP_PRIVATE_KEY=")]+["ZENOD_GITHUB_APP_PRIVATE_KEY="+os.environ["PEM"].replace(chr(10),"\\n")];print(chr(10).join(e))'); curl -s -X POST "$A/compose.update" -H "x-api-key: $DKEY" -H "Content-Type: application/json" -d "$(ENVV="$E" python3 -c 'import os,json;print(json.dumps({"composeId":"17QoMFRgvmZ0Y2n19DINT","env":os.environ["ENVV"]}))')" >/dev/null; curl -s -X POST "$A/compose.deploy" -H "x-api-key: $DKEY" -H "Content-Type: application/json" -d '{"composeId":"17QoMFRgvmZ0Y2n19DINT"}' >/dev/null; echo "App PEM wired + redeploying — ZD-3 goes live in ~1 min"
+```
+After that paste, the wizard App path goes non-503 and **Z-6 is GO**. Pen returns to Zenod-Fable.
