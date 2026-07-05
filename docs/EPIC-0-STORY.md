@@ -126,6 +126,12 @@ instances. Materialized as [EPIC-2.5-ATOMIC-UNITS.md](EPIC-2.5-ATOMIC-UNITS.md) 
 standing order: other build work pauses for the refactor. Epic 0 continues story work; consumes
 RD-1/RD-2 naming from that track.
 
+**SD-6 · Movement launch gate — DECIDED 2026-07-05 (Jordi, by commissioning Epic 2.3).** The
+original publish gate (Epic-1 soak + live loop) applies to Herald/loop claims only. Zenod
+standalone may launch when its stranger-test passes (Epic 2.3 Z-1). Epic 0 owes 2.3 the Zenod
+one-pager + README voice. Epic doc: [EPIC-2.3-ZENOD-MOVE-0.md](EPIC-2.3-ZENOD-MOVE-0.md)
+(`3434174`).
+
 ## Cross-track requirements (Jordi carries; rule 10)
 
 - **→ Epic 2 (Product-Fable):** SD-0 reframes the sellable unit as the branded loop service
