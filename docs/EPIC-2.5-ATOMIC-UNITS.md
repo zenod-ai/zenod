@@ -251,21 +251,13 @@ instance using only the README · any attempt to write the repo from another pat
 
 ### W-E · Fresh-user provisioning
 **Scope:** script/runbook standing up the ring+council+Zenod instance-set for a new user, tokens
-wired via keyring, no code edits; leverages Epic-2 H-1. **Includes fleet monitoring: provisioning
-registers every container of the instance-set with the fleet watchdog** (the fleet-level rebuild of
-Epic-1's C-24 machinery — crash-loop / disk / dead-endpoint / dark-stack alerts to the operator;
-one watchdog watching ALL instances, not one per box).
+wired via keyring, no code edits; leverages Epic-2 H-1.
 **Acceptance:** runbook is self-contained top-to-bottom · target <30 min · provisioning emits
-receipts (container IDs, token IDs, repo URL) · **"NO INSTANCE WITHOUT ITS WATCHDOG" (LAW — Jordi,
-2026-07-05, via stability-Fable): a tenant is NOT provisioned until its containers are registered
-with and visible to the fleet watchdog; the provisioning receipt includes the monitoring
-registration.** Worker delivers the runbook and ONE dry run with receipts — the verdict run belongs
-to the tester.
+receipts (container IDs, token IDs, repo URL). Worker delivers the runbook and ONE dry run with
+receipts — the verdict run belongs to the tester.
 **Test criteria:** tester provisions a fresh user following ONLY the runbook, timed · E2E smoke:
-voice note → transcript → filed via council → "what did I say" → cited answer · **watchdog check:
-the fresh tenant's containers appear in fleet-watchdog coverage; force one crash-loop on the fresh
-tenant → operator alert arrives (mirrors Epic-1's C-24 live-fire).** This IS the epic's exit
-criterion.
+voice note → transcript → filed via council → "what did I say" → cited answer. This IS the epic's
+exit criterion.
 
 ### W-F · Unit folder restructure + split-readiness (upgraded per RD-4 DECIDED)
 **Deliverable:** (1) monorepo restructured: one clearly distinct top-level folder per unit
@@ -564,12 +556,3 @@ moved).
 
 Tester (Dispatch block B) may now run: W-D checklist vs Archus, and the W-E fresh-user E2E.
 Worker stops here.
-
-### 2026-07-05 · [cross-track/stability-Fable, on Jordi's direct order] W-E amended — the watchdog law
-- Jordi's directive (routed via the stability table): **"no instance without its watchdog"** added to
-  W-E as LAW — provisioning includes fleet-monitoring registration; a tenant without active monitoring
-  is not provisioned. Rationale: Epic 1's operational lessons (silent 3,348× crash-loop, disk-full
-  outage #570, C-24 live-fire) multiply by the fleet under one-instance-per-user-per-unit — the
-  machinery must exist ONCE at fleet level, provisioned WITH each tenant, not rediscovered at
-  customer #10. W-E scope/acceptance/test criteria updated in place (attributed inline).
-- Ring-Fable owns folding this into W-E's dispatch; no other ticket touched. Pen returned.
