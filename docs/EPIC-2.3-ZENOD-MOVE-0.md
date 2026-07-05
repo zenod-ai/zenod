@@ -307,3 +307,95 @@ scorecard.
   cross-import scan (2.5 worker, `629adb2`) · Stripe checkout TEST-live + tenant provision proven
   ~1–2 min + $50 gateway-key pattern (Epic 2, I1-4 CLOSED) · per-call usage ledger
   (usage.sqlite / read_llm_timeline). Pen hands to Zenod-Fable on bootstrap.
+
+### 2026-07-05 · [worker/Z-1] Standalone GA — SEAM-SPEC conformance GREEN-static; runtime BLOCKED (no Docker daemon)
+Fan-out sub-agent ran a line-by-line SEAM-SPEC v1 audit against real source (spec UNEDITED). All 16
+checklist items scored with file:line evidence; verified by me on the two load-bearing claims
+(token auto-mint `packages/server/src/settings.ts:115`, auth guard `packages/server/src/auth.ts:47-50`,
+`/api/token` route `packages/server/src/app.ts:1693`).
+- **Items 1–5 (transport + receipt profile): PASS-static.** Single `/mcp` streamable-HTTP transport
+  (`app.ts:2029/2198`, `mcp.ts:313`); `store_memory` returns `commitSha`+`githubUrls`
+  (`mcp.ts:267-275,690`), `create_issue`/`edit` return `issueUrl` (`mcp.ts:911,932`); `search_memory`
+  empty → explicit `"No memories match…"`+`hits:[]` (`mcp.ts:625-627`); `get_memory` unknown → loud
+  `not_found` (`ops/get.ts:8,18,32`).
+- **Items 6–8 (long/poll): PASS-static.** LONG tools return `{jobId}` immediately, polled via
+  `get_task_result` (`mcp.ts:678-680,768-812`). Field name is `jobId` not spec's `ticket_id` — a
+  documented naming variance, not a violation. No push-event bus; poll is the correlation mechanism.
+- **Items 9–11 (dispatch): N/A** — standalone memory unit exposes no guy→guy dispatch on its surface.
+- **Items 12–14 (auth): PASS-static.** `requireMcpAuth` 401s on missing/invalid bearer
+  (`auth.ts:75-89`), `timingSafeEqual`+non-empty guard (`auth.ts:47-56`), no world/OAuth key on the
+  agent→unit surface (repo token is a vault credential, not a bearer).
+- **Items 15–16 (error + stranger): PASS-static.** Structured `{code,message}` (`toolOutput.ts:27-32`,
+  `NoteNotFoundError`); public tool surface names zero suite-internal types.
+- **Public-seam-only: CONFIRMED** — the repo (vault) token is read in exactly ONE place,
+  `Runtime.getRepo()` at `packages/server/src/runtime.ts:296-297`, sole constructor of `VaultRepo`.
+  No non-MCP write path to the vault on the public surface.
+- **[x] README/quickstart stranger-grade** — content-correctness fixed here. Found + fixed a real
+  stranger trap: a self-host instance is NOT tokenless (auto-mints `api_token` on first boot,
+  `settings.ts:115`), so `/mcp` always needs the bearer; the docs claimed tokenless. Corrected
+  `units/zenod/README.md` (added "Get your token from `GET /api/token`" step) and
+  `units/zenod/SEAM-SURFACE.md:9`. Receipts: commit `4610fb9` (README) + the HANDBACK commit below
+  (SEAM-SURFACE). Env vars/port/health/tool-names all verified matching source (`settings.ts:73-77`,
+  `main.ts:10-11`, `app.ts:151`).
+- **[ ] `docker build`+run serves `tools/list` at `/mcp`** — **BLOCKED-on-environment:** the Docker
+  daemon is not running in this session, so build/run and a live `tools/list`/401/forced-error
+  transcript could not be executed. GREEN by code inspection, NOT executed. This is the tester's live
+  evidence (RUN 2, external plain-MCP client) and/or a re-run with Docker up.
+
+### 2026-07-05 · [worker/Z-3] Website functional-draft GREEN; LIVE checkout BLOCKED-on-credentials
+- **[x] Page live: pitch + both paths + Obsidian/GitHub feature + `[DRAFT]` flag** —
+  `sites/zenod/index.html` (184L) rebuilt: "Your personal wiki brain" hero, self-host (terminal
+  quickstart, links `units/zenod`) AND hosted €5/mo paths, the required feature line "Your vault
+  browser is Obsidian or GitHub… clone it and leave anytime", `[DRAFT — Epic 0 voice pending]`
+  banner + per-section chips, NO chat UI/surface. Self-contained: 0 CDN refs (grep verified), inline
+  CSS, emoji favicon. Receipt: commit `4610fb9`, `sites/zenod/index.html`.
+- **[x] Minimal ToS/privacy linked** — Epic-2 H-11 DRAFT minimum copied to `sites/zenod/legal/`
+  (terms 84L, privacy 81L) so the site is self-resolving; originals untouched. Receipt: `4610fb9`.
+- **[ ] Stripe LIVE €5/mo SKU; checkout → webhook → Z-2 provisioning without human touch** —
+  **BLOCKED-on-credentials.** No LIVE Stripe key (MCP unauthenticated in this session), no LIVE
+  price/Checkout URL, and the cloud control plane is the separate private repo `zenod-ai/cloud`
+  (not in this checkout). Not faked: the site CTA is a labeled placeholder
+  (`href="#"` + a `TODO Z-3` comment naming the exact wiring), and the full plan +
+  every blocked credential/access is documented in **`docs/Z-3-CHECKOUT-WIRING.md`** (7 steps, 8
+  BLOCKED-needs). Also depends on Z-2 provisioning being live.
+
+### 2026-07-05 · [worker/Z-5] Watchdog gap found+specified; restore runbook GREEN; live drills BLOCKED-on-infra
+- **Registration finding (verified):** the fleet watchdog is **static-list, not discovery-based** —
+  it only watches the containers/URLs in `ZENOD_WATCHDOG_CONTAINERS`/`ZENOD_WATCHDOG_HEALTH_URLS`
+  (`scripts/watchdog/zenod-watchdog.sh:32-33`), never enumerates `docker ps`. Provisioning had NO
+  watchdog step and teardown only deleted the Dokploy project → **a new tenant crash-looping pages
+  no one.** Real gap.
+- **[x] auto-register at provision / deregister at teardown — wiring authored** (spec GREEN, live
+  BLOCKED): added **step 4b (register)** + **teardown deregister** to `units/PROVISIONING-RUNBOOK.md`,
+  both citing law `3b4da80`; the fix is a safe config-list append (watchdog already skips absent
+  containers, `zenod-watchdog.sh:129`, so stale entries can't false-page — no script change needed).
+  Receipt: commit `4610fb9`, `units/PROVISIONING-RUNBOOK.md:75-102`. **Caveat for planner:**
+  PROVISIONING-RUNBOOK is an Epic-2.5 (W-E) artifact; this additive edit needs 2.5 ratification.
+- **[x] restore-from-repo runbook with receipts** — `docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md` (176L):
+  Part A (register/deregister/crash-loop alert drill), Part B (baseline SHA → simulate total loss →
+  rebuild from repo → same-SHA proof → store/search round-trip). EVERY step carries an explicit
+  `Receipt:` line; the vault-is-the-backup claim is provable, not asserted. Receipt: `4610fb9`.
+- **[ ] live crash-loop→alert + restore drill — BLOCKED-on-infra:** requires the VPS/operator; receipt
+  slots are left empty (no fabricated drill). This is the tester's / operator's execution.
+
+### 2026-07-05 · [worker/HANDBACK] Iteration 0 — pen returns to Zenod-Fable
+Fan-out ran: three parallel sub-agents (Z-1 audit, Z-3 site, Z-5 watchdog+runbook), one turn, receipts
+above verified by me before relay. Net lane states:
+
+| Lane | Static/authoring | Blocked (and why) |
+|---|---|---|
+| **Z-1** | SEAM-SPEC 16/16 scored, seam-only confirmed, README stranger-trap fixed | `docker build`+run + live transcripts — **no Docker daemon this session** |
+| **Z-3** | site draft + legal + checkout-wiring doc | LIVE Stripe SKU/checkout — **no LIVE keys; `zenod-ai/cloud` private, out of checkout** |
+| **Z-5** | watchdog gap found+wired, restore runbook complete | live crash-loop + restore drill — **no VPS/infra** |
+| **Z-2** | *not started* | **blocked by Z-1 runtime-green** (which is env-blocked) **+ needs a NEW thinner standalone-provisioning path** — the existing tenant stack provisions the full suite WITH a chat UI, which this epic forbids (see Z-6 checklist note) |
+| **Z-4** | *not started* | blocked by Z-2 provisioning (per sequencing) |
+| **Z-6** | one-page checklist READY (`docs/Z-6-CUSTOMER-1-CHECKLIST.md`) | Jordi in person; gated on Z-1..Z-5 live + **ZD-7 starter-credit number still unset (config value)** |
+
+**Honest bottom line:** every lane that could be advanced WITHOUT a running container, LIVE payment
+credentials, or VPS access was advanced to receipted-green-static; every lane that needs those is
+BLOCKED with the exact blocker named — no fake-green, no zombie. The three environment blockers
+(Docker daemon down · LIVE Stripe + private cloud repo · VPS access) are what stand between here and a
+tester-runnable funnel; none are solvable from this worker session. **Planner asks:** (1) ratify the
+Epic-2.5 PROVISIONING-RUNBOOK edit; (2) commission Z-2's standalone-provisioning path (distinct from
+the full-suite tenant stack); (3) set ZD-7. Pen returned to Zenod-Fable.
+Receipts: prior commit `4610fb9` (deliverables) + this HANDBACK commit (SEAM-SURFACE fix + append).
