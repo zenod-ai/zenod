@@ -109,11 +109,25 @@ export class Settings {
       if (envValue && this.get(key) === null) this.store.setSetting(key, envValue);
     }
     if (this.get("provider") === null) this.store.setSetting("provider", "anthropic");
+    // ZD-9: a self-hoster can PIN their MCP token via ZENOD_API_TOKEN (sits next to
+    // VAULT_REPO/GITHUB_TOKEN). This mirrors ZD-8's provisioner-set token, so the
+    // stranger knows the bearer without needing the auth-gated /api/token.
+    if (this.store.getSetting("api_token") === null && env.ZENOD_API_TOKEN) {
+      this.store.setSetting("api_token", env.ZENOD_API_TOKEN);
+    }
     // Un-provisioned agents (ZENOD_AWAIT_PROVISION=1, not yet provisioned) do NOT
     // mint their own api_token — the enabler (the Console) originates it and pushes
     // it in via /api/provision. Until then the agent idles, configured()=false.
     if (!this.awaitingProvision(env) && this.store.getSetting("api_token") === null) {
       this.regenerateApiToken();
+      // ZD-9: nothing was pinned, so print the generated token ONCE to the boot logs —
+      // otherwise a self-hoster can never learn it (/api/token needs the token). Pin
+      // ZENOD_API_TOKEN to silence this.
+      // eslint-disable-next-line no-console
+      console.log(
+        `[zenod] ZD-9: no ZENOD_API_TOKEN set — generated MCP bearer token: ${this.apiToken()} ` +
+          `(send as 'Authorization: Bearer <token>' to /mcp; set ZENOD_API_TOKEN to pin it)`,
+      );
     }
     if (this.store.getSetting("session_secret") === null) {
       this.store.setSetting("session_secret", randomBytes(32).toString("hex"));

@@ -33,6 +33,7 @@ docker run --rm -p 8080:8080 \
   -e VAULT_REPO="your-org/your-memory-repo" \
   -e GITHUB_TOKEN="ghp_xxx_a_token_that_can_push_to_that_repo" \
   -e ANTHROPIC_API_KEY="sk-ant-..." \
+  -e ZENOD_API_TOKEN="pick-any-long-secret-string" \
   zenod
 ```
 
@@ -60,14 +61,18 @@ npx @modelcontextprotocol/inspector
 # header:    Authorization: Bearer <token>
 ```
 
-**Get your token.** A fresh self-host instance auto-mints an MCP token on first boot,
-so `/mcp` always requires it — there is no tokenless mode. Read it once:
+**Your token.** `/mcp` always requires a bearer token — there is no tokenless mode. You
+control it two ways:
 
-```bash
-curl -s http://localhost:8080/api/token   # -> { "token": "...", "mcpPath": "/mcp" }
-```
+- **Pin it (recommended):** set `ZENOD_API_TOKEN` in the run command above to any long
+  secret string. That IS your bearer token — use it directly.
+- **Don't pin it:** if `ZENOD_API_TOKEN` is unset, Zenod generates a token on first boot
+  and **prints it once to the container logs** (`docker logs <container> | grep 'MCP bearer'`).
+  Copy it from there.
 
-Use that value as the `Authorization: Bearer <token>` header on every MCP call.
+Send it as `Authorization: Bearer <token>` on every MCP call. (Treat it like a password.
+Note: `GET /api/token` is itself auth-gated — you need the token to call it — so use one
+of the two paths above to learn it in the first place.)
 
 Run `tools/list`. You should see `store_memory`, `search_memory`, `get_memory`,
 `ask_brain`, and `get_task_result` (full surface in [SEAM-SURFACE.md](./SEAM-SURFACE.md)).
