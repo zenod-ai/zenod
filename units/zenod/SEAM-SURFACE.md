@@ -6,7 +6,8 @@ One MCP server over streamable HTTP at `https://<host>/mcp` (locally
 no unit imports Zenod internals. Grounded in `packages/server/src/mcp.ts`.
 
 Auth: per-unit bearer token in `Authorization: Bearer <token>`, issued by the keyring
-(SEAM-SPEC §4). A self-host quickstart with no keyring can run tokenless.
+(SEAM-SPEC §4). A self-host instance with no keyring is NOT tokenless — it auto-mints an
+`api_token` on first boot; read it from `GET /api/token` and send it as the bearer.
 
 ---
 
