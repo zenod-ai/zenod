@@ -1,0 +1,54 @@
+# units/zenod/docker-compose.zenod.yml — STUB (blueprint).
+#
+# Zenod = the memory owner: ingest/digest, evidence+meaning, citations, and the
+# git repo (vault) behind it. Deploys as one MCP-over-HTTP box. Today it reuses the
+# ROOT image with AGENT=zenod (RD-4 (b): monorepo, root-image reuse until the split
+# trigger fires). This file mirrors the live docker-compose.zenod-z2.yml pattern and
+# is the seam-of-record for the standalone unit.
+#
+# The one authority Zenod holds that no other unit may: the REPO TOKEN
+# (github_token / GitHub App installation token). It is read ONLY here, resolved in
+# packages/server/src/runtime.ts:296-307 (getRepo -> VaultRepo.open). No other unit
+# reads it (law 6b: "only Zenod the repo token"). See SEAM-SURFACE.md.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-data:
+
+services:
+  zenod:
+    build:
+      # BLUEPRINT: root context today (root-image reuse). Post-split this becomes
+      # `context: .` over the git-filter-repo'd units/zenod subtree.
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zenod:dokploy
+    container_name: zenod
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      # The vault git clone + SQLite state live here — one volume, whole state.
+      - zenod-data:/data
+    environment:
+      AGENT: zenod
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # --- provisioning model (token-origination; see docs/SUITE-SCAFFOLD.md) ---
+      # Boot un-provisioned and idle until the keyring/Console mints this unit's MCP
+      # token and pushes it + config (VAULT_REPO, github_token, LLM key) to
+      # /api/provision. A stranger self-hosting instead sets the vars directly — see
+      # README.md "Option B: configure by hand".
+      ZENOD_AWAIT_PROVISION: "1"
+      # --- the authority ONLY Zenod holds (set by provision OR by hand) ---
+      # VAULT_REPO:   owner/name of the memory repo (GitHub)
+      # GITHUB_TOKEN: PAT with repo write  — OR — GitHub App creds (installation token)
+      # (never set outbound/world keys here — law 6b; those belong to Callisthenes)
+    expose:
+      - "8080"
+    # Public deploys front this with a reverse proxy at https://<host>/mcp.
+    # ports: ["8080:8080"]   # uncomment for a local stranger quickstart (README)
