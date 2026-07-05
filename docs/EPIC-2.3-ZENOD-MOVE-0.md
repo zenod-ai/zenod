@@ -59,7 +59,10 @@ AWAITING JORDI (plain-chat answer; the interactive ask tool is failing)** — Bl
 recommended options as provisional defaults unless Jordi overrides before dispatch. Do not
 relitigate decided items without new evidence.
 
-- **ZD-9 · Self-host token story — AWAITING JORDI.** Cycle-2 finding: `/api/token` is auth-gated,
+- **ZD-9 · Self-host token story — DECIDED + IMPLEMENTED 2026-07-05 (default adopted):
+  `ZENOD_API_TOKEN` env-seed + print-once-at-boot** (zenod PR #608 merged, vitest 3/3, README +
+  SEAM-SURFACE corrected). [Supersedes the AWAITING framing below — kept for the record:]
+  Cycle-2 finding: `/api/token` is auth-gated,
   so the README's "curl your token" is circular on a deployed instance.
   (a) **`ZENOD_API_TOKEN` env-seed** — self-hoster sets their own token next to
   VAULT_REPO/GITHUB_TOKEN; if unset, the auto-minted token prints ONCE to boot logs. No new
@@ -67,8 +70,22 @@ relitigate decided items without new evidence.
   (b) Print-at-boot only. (c) Ungate `/api/token` on localhost — adds an unauthenticated path to
   the seam, disfavored. README + SEAM-SURFACE correction rides the call.
 
-- **ZD-10 · Watchdog registration path — AWAITING JORDI.** Cycle-2 finding: the fleet watchdog is
-  a host systemd timer; workers cannot shell the VPS (standing rule).
+- **ZD-11 · Site/repo topology + login — framed 2026-07-05 from Jordi's questions; Block F v2
+  carries it as default (dispatch = adoption).** Front door + self-host story = PUBLIC
+  `zenod-ai/zenod` (`apps/site/` → zenod.dev, push-deploy; PRs open to the world, only we merge —
+  nothing goes live unmerged). Everything AFTER payment = PRIVATE `zenod-ai/cloud` at
+  cloud.zenod.dev (wizard, dashboard, billing, provisioning). The seam is the Stripe payment:
+  zenod.dev → Buy → Stripe → success URL → cloud.zenod.dev. Login = GitHub OAuth (Epic-2 I3-1
+  account layer + B-9 OAuth App, `alpha9-github-oauth-*`): post-payment sign-in → claim the
+  checkout session → wizard → dashboard behind the same login. The Payment Link on the public
+  page is public information; no secrets in the public repo (F-4 verifies).
+
+- **ZD-10 · Watchdog registration path — DECIDED + IMPLEMENTED 2026-07-05 (default adopted):
+  cloud-fed list, one-time host bootstrap.** `GET /watchdog/targets` live (cloud #8/#11), host
+  timer bootstrapped by Jordi + token-sync fixed (`HOST-SYNC-FIXED` 22:04). [Supersedes the
+  AWAITING framing below — kept for the record:]
+  Cycle-2 finding: the fleet watchdog is a host systemd timer; workers cannot shell the VPS
+  (standing rule).
   (a) **Cloud-fed list, one-time bootstrap** — Jordi makes ONE sanctioned host change (watchdog
   reads its container/URL list from a file/endpoint the cloud service maintains); provision and
   teardown then update it via API forever, law-`3b4da80`-automated. **Recommended; Block D
@@ -181,7 +198,14 @@ Test criteria: tester provisions a fresh user end-to-end via the WIZARD, timed, 
 the wizard leg ends in a single copy-paste (the URL); separately completes self-host from docs
 alone on a clean VM; Claude round-trip with commit-SHA receipt on BOTH paths.
 
-### Z-3 · Website + checkout LIVE — ✅ WIRED LIVE 2026-07-05 (cycle 2) · "no human touch" pending T8
+### Z-3 · Website + checkout LIVE — ⚠ REOPENED 2026-07-05 (Z-6 stumble F-1): checkout LIVE + T8 built, but the site is NOT SERVED — no public front door
+
+Honest-board correction: "page live" was accepted on a FILE receipt (`sites/zenod/index.html`),
+not a serving URL — `cloud.zenod.dev/` returns "Cannot GET /". Checkout, webhook, and T8
+auto-provision remain live/wired. Fix = F-1 (Block F). New test criteria (rule 6, from Jordi's
+customer run): (a) a stranger at the public URL sees the pitch and a working Buy button;
+(b) checkout, wizard, and dashboard are all reachable by CLICKING from the front door; (c) no
+customer-facing page ever shows a config-error banner (see F-2).
 
 State: LIVE SKU `prod_UpYtFTErYgQal7` / `price_1Tptlw…` (€5/mo) · Payment Link active+livemode,
 site CTA wired (PR #605) · webhook `we_1Tptly…` → `cloud.zenod.dev/webhook` enabled, signing
@@ -348,7 +372,56 @@ score ❌, receipt it, stop. Never fix, never zombie. Pen returns to Zenod-Fable
 scorecard.
 ```
 
-### Block D · WORKER cycle 3 — the funnel front-end. Jordi's only action; worker runs STEP 0 itself.
+### Block F · WORKER cycle 5 (front door) — fixes Jordi's two Z-6 stumbles. Z-6 payment HELD until its GO.
+
+```
+You are the Zenod Move-0 WORKER, cycle 5 — FRONT DOOR micro-cycle. Two findings from
+Jordi's first minute as a customer (receipts: planner APPEND entry + screenshots in
+session). Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in zenod-ai/zenod; pen on the APPEND
+ZONE only. Run Block D's STEP-0 gate first, verbatim. Production path; worktree isolation;
+branch epic23-c5-frontdoor (+ one per extra fix if needed); never edit planner sections.
+
+F-1 · FRONT DOOR (corrected by Jordi + planner probe): the front door ALREADY EXISTS —
+https://zenod.dev is LIVE, served from apps/site/index.html in THIS repo (push-deploy).
+Do NOT build a new site and do NOT rewrite its voice (Epic 0 owns it). ADD the hosted
+path: a "€5/month hosted" CTA wired to the LIVE Payment Link
+(https://buy.stripe.com/3cIdR3bSLgyL7yi89HbAs01) + a short hosted-path section, any NEW
+copy flagged [DRAFT — Epic 0 voice pending]; link ToS/privacy; ensure the checkout
+success URL routes into the wizard (cloud.zenod.dev). Reconcile the orphan draft
+sites/zenod/index.html: fold anything useful, then mark it superseded-by-apps/site in a
+comment — do not delete. Acceptance: a stranger at https://zenod.dev sees the existing
+pitch + a working Buy button → LIVE Stripe checkout; wizard and dashboard reachable BY
+CLICKING from zenod.dev.
+
+F-2 · DASHBOARD ENABLE: /dashboard shows "Usage dashboard disabled
+(OPENROUTER_PROVISIONING_KEY unset)". Jordi wired the key into the Dokploy env by paste
+(receipt in chat); verify docker-compose.cloud.yml actually MAPS
+OPENROUTER_PROVISIONING_KEY into the container (cycle-4 cloud#11 added other
+passthroughs — this one may be missing); add if absent, redeploy, verify /dashboard
+renders numbers or an honest empty state — never a config-error banner to a customer.
+
+F-3 · LOGIN/CLAIM CHAIN (ZD-11): verify the full post-payment identity chain is DEPLOYED
+and clickable — Stripe success URL → claim page on cloud.zenod.dev → GitHub OAuth
+sign-in (Epic-2 I3-1 account layer, B-9 OAuth App creds alpha9-github-oauth-*) → account
+bound to the checkout session → wizard → dashboard behind the same login. I3-1 was
+BUILT in Epic 2 but its prod deploy was blocked (B-8) — if it is not deployed, deploy
+it. Receipt every hop rendering (screenshots/URLs). Do NOT pay; use the Stripe session
+of a canceled/test navigation or verify the route handlers directly.
+
+F-4 · PUBLIC/PRIVATE SEAM SWEEP (ZD-11): one receipted pass confirming the public repo
+leaks nothing: no secrets/keys/internal URLs beyond the public Payment Link in
+apps/site/ or sites/zenod/; cloud-only logic stays in zenod-ai/cloud. Receipt: the grep
+lines.
+
+THEN walk the click-path yourself, read-only, WITHOUT paying: zenod.dev → Buy → LIVE €5
+Stripe page renders → back; sign-in page renders; wizard route renders; dashboard
+renders. Write a GO line for Z-6 when ALL render. Receipts [worker/F-n] in the APPEND
+ZONE, same turn. BUDGET: 3 hours, 30 turns, ≤2 sub-agents (F-1/F-2 parallel to F-3;
+F-4 last). Blocked → BLOCKED + exact blocker, stop honestly. Never zombie, never
+fake-green. HANDBACK; pen returns to Zenod-Fable.
+```
+
+### Block D · WORKER cycle 3 — EXECUTED 2026-07-05 (five lanes, worktree-isolated; HANDBACK-c3). Cycle-4 micro-patch (Block E) also EXECUTED same day from the chat-routed block (HANDBACK-c4; its doc section was lost to a merge race — content preserved in git history + APPEND receipts). Kept for the record.
 
 ```
 You are the Zenod Move-0 WORKER, cycle 3. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in
@@ -451,6 +524,18 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Z-6 attempt 1 — STOPPED at step 0 by two real findings (F-1, F-2) · Block F armed
+- Jordi opened the funnel as a customer and was blocked before paying. **F-1:** `cloud.zenod.dev/`
+  → "Cannot GET /"; the public site (CTA wired to the LIVE Payment Link) is not SERVED anywhere —
+  Z-3's "page live" had a file receipt, not a URL receipt; planner audit let it pass — reopened,
+  correction on the ticket. **F-2:** `/dashboard` → "Usage dashboard disabled
+  (OPENROUTER_PROVISIONING_KEY unset)" — the key never reached the service env/container; same
+  key mints the €2 grant at provision, so Z-6 payment is HELD until fixed (screenshots in
+  session).
+- Jordi paste issued (wire the OR key from Keychain into the service env); compose passthrough
+  verification + the front door = **Block F** (cycle 5, micro). Z-6 resumes on Block F's GO.
+- Rule-6 criteria added to Z-3 (front door + click-path + no config banners to customers).
 
 ### 2026-07-05 · [planner/Zenod-Fable] Watchdog bootstrap DONE (after one 401 fix) — ZD-10 fully LIVE
 - Jordi ran the host bootstrap: timer installed, but first sync 401'd. Diagnosis via one paste:
