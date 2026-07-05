@@ -452,6 +452,18 @@ Zenod-Fable.
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
 
+### 2026-07-05 · [planner/Zenod-Fable] Watchdog bootstrap DONE (after one 401 fix) — ZD-10 fully LIVE
+- Jordi ran the host bootstrap: timer installed, but first sync 401'd. Diagnosis via one paste:
+  Keychain token valid (length 64, cloud probe 200) → host script's baked token was stale.
+  Self-fixing paste rewrote the token in `/usr/local/bin/zenod-watchdog-sync`, restarted →
+  `Finished zenod-watchdog-sync.service` + `HOST-SYNC-FIXED` (22:04 CEST, screenshot receipt in
+  session). Z-5's registration path is now live end-to-end: provision → cloud targets → host
+  timer (5-min sync). Tester still owns the crash-loop + restore drills.
+- State snapshot filed to Zenod memory — commit `32a57aa`, evidence `Log/2026-07-05.md#^e-ae662a`,
+  page `Projects/Zenod/Epic 2.3 · Zenod Move 0 Launch — 2026-07-05 Snapshot.md`. (Noted: the
+  product under launch filed the memory of its own launch, with a commit-SHA receipt.)
+- Remaining: AUTO_PROVISION flip (printed line) + Z-6 run (Jordi) → Block B tester → close.
+
 ### 2026-07-05 · [planner/Zenod-Fable] Z-2c CLOSED — Jordi wired the regenerated PEM · Z-6 is GO
 - Jordi executed the one-click regenerate + paste: PEM in Keychain
   (`alpha9-github-app-private-key`), wired into the `zenod-cloud` env, redeploy fired ("App PEM
