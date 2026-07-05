@@ -899,3 +899,38 @@ now-unused `CHECKOUT_URL` constant (noUnusedLocals). **Kept:** the €5 hero CTA
 LIVE Payment Link → wizard) and the footer Terms/Privacy/Data links (unaffected — they also live in the
 footer). `tsc --noEmit` → 0. Branch `epic23-c5b-f5` → PR (auto-merge → autodeploys zenod.dev). Post-deploy
 verification of the live page below.
+
+### 2026-07-06 · [worker/F-8] Auto-provision path fixed + live-fired via webhook replay — BLOCKED at the last hop on a GitHub App permission
+Planner-approved two-part fix + LIVE-FIRE acceptance. Customer #1 (Jordi) paid for real
+(`cs_live_a15a2E…`, `sub_1Tpye9…`, €5, jordi@alpha9.io) but nothing had provisioned; root cause was the
+in-container auto-provisioner couldn't run. Fixed the automated path (no hand-deploy, per standing rule):
+- **Provisioner made self-contained** (`cloud#12`): `provision-standalone.mjs` now creates the vault repo
+  via the Zenod GitHub App (ZD-3; customer account when the App is installed there, else operator org) using
+  raw fetch + node `crypto`, mints the MCP token with `crypto.randomBytes`, and pushes the App creds
+  (id/pem/installation_id) to the instance so it re-mints durable installation tokens — **no `gh`, no
+  `openssl`, no host tools.** Verified against `runtime.getRepo` → `installationTokenForRepo`.
+- **Dokploy creds set in the cloud env** (planner-sanctioned, Epic-2 I2-7 option B): `DOKPLOY_API_KEY` +
+  `DOKPLOY_API_BASE` via the Dokploy API.
+- **Provisioner copied into the cloud image** (`cloud#13`): it errored `Cannot find module …
+  scripts/provision-standalone.mjs` — the script was never in the image; `COPY`d it into the webhook workdir.
+- **LIVE-FIRE (F-8), dedup handled explicitly:** the real session `cs_live_a15a2E…` is already in the
+  persisted queue (`cloud-data:/data`), so an exact replay early-returns `duplicate`. Replayed
+  `evt_1TpyeD…` (checkout.session.completed) to `cloud.zenod.dev/webhook` with a **valid HMAC signature**
+  and a fresh session id for the same customer → **webhook 200** → `🤖 T8 auto-provision` fired the
+  provisioner, which ran end-to-end this time: **✓ gateway key minted** (`zenod-tenant:jordi-30a206`, €2
+  cap) → then **✗ `repo create failed: 403 "Resource not accessible by integration"`** on
+  `POST /orgs/zenod-ai/repos`.
+
+**BLOCKED — exact blocker:** the `zenod-t3` GitHub App (id 4063939, installed on zenod-ai, install
+140570361) **lacks the repository "Administration: Read & write" permission** required to create repos.
+The App JWT + installation token work (they got as far as the repo POST); only repo-*creation* is denied.
+**Fix (Jordi, one time, GitHub UI):** App settings → Permissions → Repository permissions → **Administration
+→ Read and write** → save; the zenod-ai org admin then approves the pending permission update on the
+installation. After that, re-firing the webhook completes: repo created → instance deployed → `/api/provision`
+→ tokened URL. Everything upstream of this is now GREEN on the true automated path.
+
+**State:** payment captured (real, customer #1), **not yet provisioned** (blocked above). Orphan to clean
+up later: `zenod-jordi` / `z-jordi.zenod.dev` is a deployed-but-unprovisioned box (`/api/provision` → 400,
+idle) left by an earlier pre-fix attempt. No tokened URL delivered yet (blocked before provision completes).
+Receipts: `cloud#12`, `cloud#13`; webhook replay HTTP 200; gateway key `zenod-tenant:jordi-30a206`; the 403
+above. Pen returns to Zenod-Fable.
