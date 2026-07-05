@@ -544,3 +544,54 @@ sanctioned VPS/operator path (or the deploy done via push-to-main autodeploy per
 `zenod-ai/cloud` repo checked out, and a LIVE Stripe key. Until then Z-1..Z-5 remain at their post-cycle-1
 states (static/authored GREEN; runtime/live BLOCKED-env). Pen returns to Zenod-Fable.
 Receipt: this HANDBACK commit on branch `epic23-c2-handback` (off `origin/main` `02d832c`).
+
+### 2026-07-05 · [worker/Z-1] cycle-2 RUNTIME GREEN — standalone Zenod LIVE on the production path, full round trip verified
+Supersedes the preconditions-missing HANDBACK-c2 above: this run was re-dispatched WITH the STEP-0
+credential gate, which passed on the operator store (Dokploy 200 · OpenRouter `/keys` 200 · `zenod-ai/cloud`
+cloned). Z-1 is now CLOSED on the production path.
+
+**Deploy (Dokploy API = the build receipt):** authored a NEW thin standalone compose
+`docker-compose.zenod-standalone.yml` (ONE public `/mcp` box, ghcr image, no UI, no council — NOT the
+full-suite tenant stack), branch `epic23-c2-z1`. Deployed via the Dokploy API (compose.create →
+compose.update git-source+env → domain.create → compose.deploy). Receipts: composeId
+`u_GpsvbfIwZfBK0zB-yzE`; domain `https://z-z1smoke.zenod.dev`; deployment status `done`; `GET /api/health`
+→ 200 (`{"status":"ok","name":"zenod","sha":"01911338…"}`).
+
+**Provisioning proven (this IS the ZD-8 shape):** the box boots await-provision and idle; the provisioner
+`POST /api/provision` mints the MCP token (a value we choose) + pushes config (provider=openrouter +
+per-tenant gateway key, vault_repo, github_token) → `{"ok":true,"configured":true}` HTTP 200. This is the
+thin Z-2 mechanism, exercised end-to-end by hand.
+
+**Live MCP transcripts against production `https://z-z1smoke.zenod.dev/mcp` (plain JSON-RPC / curl):**
+- [x] `tools/list` → 14 tools incl. `store_memory, search_memory, get_memory, ask_brain, get_task_result`
+      (serverInfo `zenod-mcp-server`).
+- [x] **401 without bearer** — `initialize` with no `Authorization` → HTTP 401 `{"error":"unauthorized"}`
+      (SEAM-SPEC item 12, live).
+- [x] **store → poll → search round trip:** `store_memory` → `{jobId:36e8e09e…}` → `get_task_result` →
+      `done` with **`commitSha 33776374c5589d8abe54c7673f81be0306b6321d`** + githubUrls in the vault repo;
+      `search_memory "insurance renewal"` → 3 hits with GitHub URLs. **Commit verified in the repo:**
+      `gh api repos/zenod-ai/z1-smoke-vault/commits/33776374…` → "memory: Record home insurance renewal
+      date"; `Areas/Insurance.md` (845 B) present. Real git commit in a real GitHub repo — the receipt is
+      the SHA.
+- [x] **forced error** — `get_memory "Areas/DoesNotExist.md"` → `isError:true`, text "note not found"
+      (SEAM-SPEC item 15, live loud error).
+
+**Two runtime-only bugs found (invisible to cycle-1's static audit — the value of running it live):**
+1. **`GET /api/token` is auth-gated** (`app.ts:219` `app.use("/api/*", requireAuth)` covers it). So the
+   self-host README's "curl `/api/token` to read your token" is unreachable — a stranger self-hosting
+   (ZENOD_AWAIT_PROVISION=0) gets an auto-minted token they CANNOT read, and `/mcp` always needs it. The
+   working path is the provisioner setting a known token via `/api/provision` (cloud/ZD-8). **Proposed fix
+   (planner):** either ungate `/api/token` when no admin password is set, OR print the token to stdout at
+   first boot, OR add a `ZENOD_API_TOKEN` env seed so self-host controls it. README/SEAM-SURFACE need a
+   correction pass once the mechanism is chosen — flagging, not unilaterally editing code late in budget.
+2. **Dokploy env box ≠ container env.** The env box only feeds compose `${VAR}` interpolation; a var reaches
+   the container ONLY if the compose lists it under `environment:`. First deploy silently ran unconfigured
+   because the standalone compose didn't map the vars. Fixed in `docker-compose.zenod-standalone.yml`
+   (maps `ZENOD_AWAIT_PROVISION/VAULT_REPO/GITHUB_TOKEN/ZENOD_PROVIDER/OPENROUTER_API_KEY`, matching the
+   proven `&agent-env` anchor in `docker-compose.tenant.yml`). Also: `compose.redeploy` reused a stale git
+   clone — `compose.deploy` forced the fresh commit. Both are real gotchas for the Z-2 provisioner script.
+
+Receipts committed on branch `epic23-c2-z1` (compose files); credentials never printed/committed. NOTE: the
+`z1smoke` box holds a broad `gho_` vault token in its env for the smoke — it will be TORN DOWN at handback
+(compose.delete + OR smoke keys revoked); the vault repo `zenod-ai/z1-smoke-vault` + commit `33776374` are
+left as the immutable receipt.

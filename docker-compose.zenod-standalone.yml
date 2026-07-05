@@ -1,0 +1,51 @@
+# docker-compose.zenod-standalone.yml — the THIN standalone Zenod box (Epic 2.3, Z-1/Z-2).
+#
+# ONE Zenod MCP server, publicly exposed at https://<host>/mcp via Traefik. This is the
+# v0 surface: purely an MCP server, NO chat UI, no council, no siblings. It is NOT the
+# full-suite docker-compose.tenant.yml (that boots console+council+phylax+… with a chat
+# UI, which Epic 2.3 forbids).
+#
+# Configure-by-hand model (self-host README Option B / the Z-2 thin provisioner sets the
+# same vars via the Dokploy API at create-time):
+#   VAULT_REPO     owner/name of the memory repo (GitHub)
+#   GITHUB_TOKEN   a token that can push to VAULT_REPO (or a GitHub App installation token)
+#   ZENOD_PROVIDER + OPENROUTER_API_KEY   the per-tenant metering gateway key (ZD-5)
+# It does NOT await provisioning — it self-mints its MCP api_token on first boot and
+# serves /mcp immediately (read the token from GET /api/token, per units/zenod/README.md).
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-standalone-data:
+
+services:
+  zenod:
+    image: ghcr.io/zenod-ai/zenod:${ZENOD_IMAGE_TAG:-latest}
+    container_name: zenod-${TENANT_NAME:-standalone}
+    restart: unless-stopped
+    networks: [dokploy-network]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    volumes:
+      - zenod-standalone-data:/data
+    environment:
+      AGENT: zenod
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # Await-provision by default: the box boots idle and the provisioner mints its MCP
+      # token + pushes config to /api/provision (the ZD-8 "provisioner mints the token"
+      # shape). A stranger self-hosting sets ZENOD_AWAIT_PROVISION=0 + the seeds below.
+      ZENOD_AWAIT_PROVISION: ${ZENOD_AWAIT_PROVISION:-1}
+      # These map the Dokploy env box INTO the container (compose interpolation alone does
+      # not — must be listed here). Unset → empty → self-host defaults. Secrets never
+      # committed; they live in the operator store / Dokploy env.
+      VAULT_REPO: ${VAULT_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ZENOD_PROVIDER: ${ZENOD_PROVIDER:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    expose:
+      - "8080"
+    # Public deploy fronts this with Traefik at https://<host>/mcp (domain added via API).
