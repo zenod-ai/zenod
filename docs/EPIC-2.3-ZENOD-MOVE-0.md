@@ -349,10 +349,10 @@ score ❌, receipt it, stop. Never fix, never zombie. Pen returns to Zenod-Fable
 scorecard.
 ```
 
-### Block E · WORKER cycle 4 (micro-patch) — last code before Z-6. Paste after Jordi's config asks 1+2 are done.
+### Block E · WORKER cycle 4 (micro-patch) — last code before Z-6. No Jordi prerequisites; the worker self-serves all credentials.
 
 ```
-You are the Zenod Move-0 WORKER, cycle 4 — a MICRO-PATCH cycle, two tickets + config
+You are the Zenod Move-0 WORKER, cycle 4 — a MICRO-PATCH cycle, four tickets + config
 verification, nothing else. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md in zenod-ai/zenod;
 you hold the pen on the APPEND ZONE only. Run Block D's STEP-0 credential gate first,
 verbatim. Production path only; git-worktree isolation; one branch per ticket off latest
@@ -375,18 +375,28 @@ TICKETS:
   unrecoverable, hand Jordi a single regenerate-click link (App settings page) — one
   click, nothing else. Accept: wizard App path non-503 with zenod-t3; ZD-3 ACTIVE.
 
-CONFIG VERIFICATION (read-only probes, receipts each; do NOT flip anything):
-- GitHub App path: covered by Z-2c above — receipt is the non-503 probe with zenod-t3.
-- Watchdog: /watchdog/targets with WATCHDOG_TOKEN → 200 + plausible env output; host
-  timer present per WATCHDOG-CLOUD-FED.md's check command if verifiable via API-safe
-  means. Else BLOCKED line.
-- ZENOD_AUTO_PROVISION: confirm it is STILL OFF (it flips only for Jordi's supervised
-  Z-6 run).
+- Z-5c (watchdog token + feed — ZERO Jordi input): generate the token YOURSELF
+  (openssl rand -hex 32); store it ONCE in the operator store — Keychain item
+  alpha9-watchdog-token, acct jordi (hereby the receipted home for this credential);
+  set WATCHDOG_TOKEN on the zenod-cloud service via the Dokploy API (merge env, swap
+  or add ONLY that line — cycle-2's Z-3 receipt shows the exact pattern) and redeploy;
+  verify GET /watchdog/targets → 200 with plausible env output. Final receipt: PRINT
+  the ONE fully-substituted, ssh-ready host bootstrap line for Jordi (from
+  cloud/docs/WATCHDOG-CLOUD-FED.md) — no placeholders, no choices, paste-and-done.
 
-EXIT: APPEND-ZONE receipts per ticket/probe + a GO/NO-GO line for Z-6 ("GO" = both
-patches merged, App path active, watchdog feeding). BUDGET: 3 hours, 30 turns, ≤2
-sub-agents. Blocked → BLOCKED + exact blocker, stop honestly. Never zombie, never
-fake-green. HANDBACK closes. Pen returns to Zenod-Fable.
+CONFIG VERIFICATION (read-only probes, receipts each; do NOT flip anything):
+- GitHub App path: covered by Z-2c — receipt is the non-503 probe with zenod-t3.
+- Watchdog: covered by Z-5c — receipt is the 200 probe + the printed bootstrap line.
+- ZENOD_AUTO_PROVISION: confirm it is STILL OFF. Additionally PRINT (do not run) the
+  single ready-made command that flips it to 1 via the Dokploy API, labeled
+  "run at Z-6 GO" — so the flip is also paste-and-done.
+
+EXIT: APPEND-ZONE receipts per ticket/probe + a GO/NO-GO line for Z-6 ("GO" = all four
+tickets merged/verified, App path active, watchdog feeding) + the TWO printed
+paste-lines for Jordi (host bootstrap · AUTO_PROVISION flip). Jordi picks nothing,
+invents nothing — he pastes. BUDGET: 3 hours, 30 turns, ≤3 sub-agents. Blocked →
+BLOCKED + exact blocker, stop honestly. Never zombie, never fake-green. HANDBACK
+closes. Pen returns to Zenod-Fable.
 ```
 
 ### Block D · WORKER cycle 3 — EXECUTED 2026-07-05 (five lanes, worktree-isolated; HANDBACK-c3 in APPEND ZONE). Kept for the record.
@@ -507,8 +517,10 @@ Zenod-Fable.
   that it does not exist.
 - Config ask 1 (create/store App creds) CANCELLED → **Z-2c** in Block E: worker reconciles the
   wizard to zenod-t3's real credentials; Jordi's only possible residue is one regenerate-click if
-  the PEM is genuinely unrecoverable. Jordi's remaining asks: WATCHDOG_TOKEN + bootstrap (ask 2)
-  and the Z-6-time AUTO_PROVISION flip (ask 3).
+  the PEM is genuinely unrecoverable. Ask 2 automated as **Z-5c** (worker generates + stores +
+  sets WATCHDOG_TOKEN, prints ONE ssh-ready bootstrap line). Ask 3 reduced to one printed flip
+  command, run at Z-6 GO. **Jordi picks nothing, invents nothing — he pastes.** (His standing
+  instruction, 2026-07-05, recorded.)
 
 ### 2026-07-05 · [planner/Zenod-Fable] Cycle-3 audit PASSED · ZD-9/ZD-10 DECIDED · Z-2b/Z-5b minted · Block E armed · last mile sequenced
 - **Audit (verify-don't-trust): PASSED on everything verifiable from the planner seat.** Zenod
