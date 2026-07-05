@@ -452,6 +452,18 @@ Zenod-Fable.
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
 
+### 2026-07-05 · [planner/Zenod-Fable] Z-2c CLOSED — Jordi wired the regenerated PEM · Z-6 is GO
+- Jordi executed the one-click regenerate + paste: PEM in Keychain
+  (`alpha9-github-app-private-key`), wired into the `zenod-cloud` env, redeploy fired ("App PEM
+  wired + redeploying"), service back up — planner probe `cloud.zenod.dev/healthz` → `{"ok":true}`.
+  The App path's first wizard render during Z-6 doubles as the final non-503 confirmation; per
+  the cycle-3 receipt it degrades to the operator-org fallback rather than blocking, so Z-6
+  cannot be stranded on it.
+- **Z-6 IS GO.** Remaining before epic close: Jordi's watchdog host bootstrap (one ssh paste,
+  printed in the cycle-4 worker chat), the AUTO_PROVISION flip (printed line, at Z-6 start),
+  Jordi's customer-#1 run per docs/Z-6-CUSTOMER-1-CHECKLIST.md, then Block B tester as the
+  stranger. Cycle-4 audit rides the Z-6/tester evidence — the funnel run IS the live audit.
+
 ### 2026-07-05 · [planner/Zenod-Fable] Cycle-2 + Z-3 audit PASSED · sections reconstructed after a second regression · ZD-9/ZD-10 framed · Block D armed
 - **Audit PASSED (verify-don't-trust).** Z-1 RUNTIME GREEN receipts verified: PR #603 + #604
   MERGED to main (`8504435` confirmed via github), real commit `33776374` in
