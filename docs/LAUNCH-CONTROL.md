@@ -74,8 +74,11 @@ rewrites the state after every review. One document per concern — never a new 
 
 | # | Epic | State | Exit criterion |
 |---|------|-------|----------------|
-| 1 | System Stability | 🔴 ACTIVE — iteration 7 | CANONICAL-TESTS board green ×2 consecutive builds |
-| 2 | Hosted Readiness | 🟡 SCOPING | First paying customer live (Jordi = customer #0 doesn't count) |
+| 0 | Story (Story-Fable) | 🟢 ACTIVE | Narrative/site for memory→team→loops; consumes RD-1/RD-2 names |
+| 1 | System Stability (this table) | 🟦 SOAKING — ends ~2026-07-07T18:00Z | Clean 72h soak; all gates met; suite re-baselines on new topology after 2.5 |
+| 2 | Hosted Readiness (Product-Fable) | 🟡 IN PROGRESS | Stripe tested, zenod-ai/cloud created; D-4/D-5 feed 2.5's keyring/meter |
+| 2.5 | ATOMIC SUITE (Ring-Fable) | 🔴 THE ACTIVE BUILD LANE — Jordi's standing order: all other build work pauses | Fresh user provisioned on the ring+units topology (EPIC-2.5 doc) |
+| 3 | Herald, first product (Herald-Fable) | ⏸ GATED on 2.5 exit | Herald = guy container + briefing on a working ring; weekend dogfood on fused Console runs in parallel |
 
 **⏸ DISPATCH FREEZE (Jordi, 2026-07-03 ~21:45):** no new tickets or dispatches until direction is
 clarified at the Fable table. In-flight runs land; nothing new starts.
@@ -156,3 +159,13 @@ live-fires make it cheap. Then Part 2: lanes. — Meanwhile Product-Fable is liv
   live-fire found and fixed a kill-path wiring bug that unit tests missed — the canonical board's whole
   argument, demonstrated. Notifications root-caused to a Dockerfile COPY gap (not a WhatsApp session
   issue). Deployed `6559e87`. Epic 1 closes on the fresh-pass board run.
+- **2026-07-05 · The empire restructured overnight (Jordi × Story-Fable × Ring-Fable).** EPIC 2.5
+  (ATOMIC SUITE) created and made the sole build lane by Jordi's standing order: every unit = one
+  MCP server/container/repo/site, pure-MCP seam + receipt-profile conformance (SEAM-SPEC v1 shipped,
+  16 binary items), ring(+Phylax gateway)/council-guy/Zenod extractions ticketed, RD-1/3/4/5 decided.
+  Stability-Fable rulings: (a) Epic 1's soak COMPLETES and Epic 1 closes as scoped — its real
+  deliverable (canonical suite + proven behaviors + the method) is what 2.5 inherits; the fused
+  Console must stay certified while it serves Jordi through the extraction. (b) Whisper transcription
+  regression (live, user-visible; root = two-stack serving-container lag) = regression repair, exempt
+  from the build pause: today's quiet window ships the prebuilt-binary fallback + routing-reach fix +
+  serving-stack SHA pin. (c) Weekend dogfood lane on the fused Console = protected (the needle).
