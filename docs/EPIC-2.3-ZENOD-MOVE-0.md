@@ -181,7 +181,7 @@ Test criteria: tester provisions a fresh user end-to-end via the WIZARD, timed, 
 the wizard leg ends in a single copy-paste (the URL); separately completes self-host from docs
 alone on a clean VM; Claude round-trip with commit-SHA receipt on BOTH paths.
 
-### Z-3 · Website + checkout LIVE — ✅ WIRED LIVE 2026-07-05 (cycle 2) · "no human touch" pending T8
+### Z-3 · Website + checkout LIVE — ✅ GREEN 2026-07-05 (cycle 2 checkout + cycle 5 front door: €5 hero CTA live on zenod.dev, #611 `d75a33d`, success → sign-in → wizard; T8 built + flipped ON) · F-5 OPEN: stale $29/$79/$499 TEST-mode tier section must be CUT before the stranger run (planner APPEND entry)
 
 State: LIVE SKU `prod_UpYtFTErYgQal7` / `price_1Tptlw…` (€5/mo) · Payment Link active+livemode,
 site CTA wired (PR #605) · webhook `we_1Tptly…` → `cloud.zenod.dev/webhook` enabled, signing
@@ -451,6 +451,24 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Cycle-5 audit PASSED · Z-6 GO stands · F-5 minted (stale tiers) · PEM-flag reconciled
+- **Audit: PASSED.** #611 MERGED (`d75a33d`, check green — €5 hero CTA autodeploys zenod.dev);
+  #612 HANDBACK MERGED; F-2 dashboard renders (no config banner); F-3 login chain deployed and
+  clickable (success → claim → GitHub OAuth 302 with session-bound state → wizard → dashboard);
+  F-4 seam sweep clean. Mid-cycle Dokploy outage (data-root volume full) diagnosed + fixed
+  (resize2fs + prune, 87G free) and recorded to memory by the worker — good incident hygiene.
+- **F-5 minted (pre-stranger hazard):** zenod.dev still shows a stale $29/$79/$499 tier section
+  whose "Get started" buttons hit `cloud.zenod.dev/buy` in TEST mode — contradicts ZD-1 (€5, ONE
+  SKU) and would instantly red the stranger run. This is factual pricing (Epic-2.3/ZD-1 truth),
+  not voice: CUT/hide the section, Epic 0 re-voices later via Jordi. Must land BEFORE Block B
+  tester; does not block Jordi's Z-6 (he uses the hero button).
+- **PEM flag reconciled:** cycle-5's "App PEM still outstanding" is a STALE read — Jordi wired
+  the regenerated PEM same evening (Z-2c CLOSED entry, healthz receipt). Caveat kept honest: no
+  cycle has yet probed the wizard's App path non-503 POST-PEM; Z-6's wizard step is that probe,
+  with the operator-org fallback as the safety net either way.
+- **Z-6 GO stands.** Jordi's funnel: zenod.dev → "Get hosted — €5/month" → pay → GitHub sign-in
+  → wizard → URL → Claude → dashboard.
 
 ### 2026-07-05 · [planner/Zenod-Fable] Cycle-2 + Z-3 audit PASSED · sections reconstructed after a second regression · ZD-9/ZD-10 framed · Block D armed
 - **Audit PASSED (verify-don't-trust).** Z-1 RUNTIME GREEN receipts verified: PR #603 + #604
