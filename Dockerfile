@@ -31,16 +31,23 @@ RUN npm prune --omit=dev
 
 # ---- runtime ----
 FROM node:22-alpine
-# ffmpeg normalizes audio to 16 kHz mono WAV before cloud STT.
+# ffmpeg normalizes audio to 16 kHz mono WAV; libstdc++/libgomp are whisper-cli's
+# runtime deps.
 #
-# NOTE: we intentionally do NOT compile/ship local whisper.cpp. Voice-note
-# transcription runs on cloud STT (Groq → OpenRouter, see transcribe.ts); the local
-# whisper-cli was only the FINAL fallback for when no cloud key is configured — never
-# hit in practice (keys are set), yet it added a ~15-minute in-image C++ compile to
-# EVERY deploy (and OOM/disk risk on the RAM-constrained shared box). Dropping it takes
-# builds from ~15 min to ~2-3 min. The code still supports a local binary if one is ever
-# put on PATH (ZENOD_WHISPER_BINARY) and degrades gracefully (ENOENT-handled) without it.
+# WHISPER FALLBACK — PREBUILT, NOT COMPILED. Voice-note transcription runs on cloud
+# STT first (Groq → OpenRouter, see transcribe.ts), but that cascade must have a
+# safety net: when the cloud provider errors (rate limit, network, quota), the code
+# falls through to local whisper.cpp. #575 removed whisper entirely, so any cloud
+# hiccup surfaced "whisper-cli is not installed" to the user (Jordi's primary input).
+# We restore the fallback WITHOUT the ~15-minute per-deploy C++ compile that #575
+# rightly killed: a prebuilt musl/amd64 whisper-cli (built once, whisper.cpp ref in
+# vendor/whisper/whisper-ref.txt, runtime-verified against libstdc++/libgomp) is
+# COPY'd straight in. No build stage, no compile, no network — just the binary, per
+# Jordi's directive. Overridable via ZENOD_WHISPER_BINARY; still ENOENT-graceful.
 RUN apk add --no-cache git ripgrep ffmpeg libstdc++ libgomp
+COPY vendor/whisper/whisper-cli-musl-amd64 /usr/local/bin/whisper-cli
+RUN chmod +x /usr/local/bin/whisper-cli && whisper-cli --help >/dev/null 2>&1 \
+  && echo "whisper-cli present" || (echo "whisper-cli FAILED to load" && exit 1)
 WORKDIR /app
 # Baked in at build time (--build-arg GIT_SHA=$(git rev-parse HEAD)) so /api/health
 # can report exactly which commit is running — deploy verification otherwise has
