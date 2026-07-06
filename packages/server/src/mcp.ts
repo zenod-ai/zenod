@@ -309,8 +309,11 @@ export function buildMcpServer(
   runExistingIssue?: ExistingIssueRunner,
   runEphemeralTask?: EphemeralTaskRunner,
   readSessionLog?: SessionLogReader,
+  // User-set display name for THIS instance (settings.instance_name). Lets a user
+  // run several memories and tell them apart in their client. Empty → default.
+  serverName: string = "",
 ): McpServer {
-  const server = new McpServer({ name: "zenod-mcp-server", version: VERSION });
+  const server = new McpServer({ name: serverName.trim() || "zenod-mcp-server", version: VERSION });
 
   // This agent's chat-brain tool: a full engine.chat turn (the agent reasons with
   // its own tools and replies). Named per-agent — chat_with_zenod, chat_with_archus

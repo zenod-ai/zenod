@@ -2194,6 +2194,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
               }
             : undefined,
           (query) => runtime.usageStore.timeline(query),
+          settings.get("instance_name") ?? "", // user-set display name for this memory
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

@@ -14,6 +14,9 @@ import type { PeerConfig } from "./peerClient.js";
 
 /** Runtime settings persisted in SQLite; env vars seed them on first boot. */
 export const SETTING_KEYS = [
+  // Display name this instance publishes as its MCP server name — lets a user run
+  // several memories (work / personal / a project) and tell them apart in their client.
+  "instance_name",
   "vault_repo",
   "vault_branch",
   "github_token",
@@ -70,6 +73,7 @@ const SECRET_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 const ENV_SEEDS: Record<SettingKey, string> = {
+  instance_name: "ZENOD_INSTANCE_NAME",
   vault_repo: "VAULT_REPO",
   vault_branch: "VAULT_BRANCH",
   github_token: "GITHUB_TOKEN",
