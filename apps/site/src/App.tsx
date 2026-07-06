@@ -19,6 +19,7 @@ import { MemoryDiagram } from "@/components/memory-diagram"
 import { ModelDiagram } from "@/components/model-diagram"
 import { cn } from "@/lib/utils"
 import alexandria from "@/assets/alexandria.jpg"
+import zenodPlate from "@/assets/zenod-plate.jpg"
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -275,36 +276,52 @@ export default function App() {
             aria-hidden
             className="duotone pointer-events-none absolute inset-0 h-full w-full object-cover opacity-[0.14]"
           />
-          <div className="relative mx-auto max-w-3xl px-6 py-20 text-center sm:py-28">
-            <p className="label-caps mb-6 text-rust">
-              Open source · AGPL-3.0 · Self-hosted
-            </p>
-            <h1 className="font-display text-5xl leading-[1.05] font-bold tracking-tight text-balance sm:text-7xl">
-              The librarian your agents report to.
-            </h1>
-            <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-              Zenod is a self-hosted memory agent that runs your personal
-              library. It files every piece of evidence, distills it into
-              living ideas, and serves your knowledge to every AI agent you
-              use — one brain across all of them. Plain markdown, in a git
-              repo, in <em className="text-foreground not-italic">your</em>{" "}
-              GitHub account. You keep the keys.
-            </p>
-
-            {/* [DRAFT — Epic 0 voice pending] primary hosted CTA — LIVE €5/mo (ZD-1). */}
-            <div className="mt-10 flex flex-col items-center gap-2">
-              <Button asChild size="lg" className="rounded-none px-6">
-                <a href={HOSTED_PAYMENT_LINK}>
-                  Get hosted — €5/month
-                  <ArrowUpRightIcon data-icon="inline-end" />
-                </a>
-              </Button>
-              <p className="label-caps text-muted-foreground/70">
-                Fully managed · your repo, your keys · or self-host free below
+          <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-6 py-20 sm:py-24 lg:grid-cols-[1fr_minmax(0,26rem)]">
+            <div className="text-center lg:text-left">
+              <p className="label-caps mb-6 text-rust">
+                Open source · AGPL-3.0 · Self-hosted
               </p>
+              <h1 className="font-display text-5xl leading-[1.05] font-bold tracking-tight text-balance sm:text-6xl xl:text-7xl">
+                The librarian your agents report to.
+              </h1>
+              <p className="mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground max-lg:mx-auto">
+                Zenod is a self-hosted memory agent that runs your personal
+                library. It files every piece of evidence, distills it into
+                living ideas, and serves your knowledge to every AI agent you
+                use — one brain across all of them. Plain markdown, in a git
+                repo, in <em className="text-foreground not-italic">your</em>{" "}
+                GitHub account. You keep the keys.
+              </p>
+
+              {/* [DRAFT — Epic 0 voice pending] primary hosted CTA — LIVE €5/mo (ZD-1). */}
+              <div className="mt-10 flex flex-col items-center gap-2 lg:items-start">
+                <Button asChild size="lg" className="rounded-none px-6">
+                  <a href={HOSTED_PAYMENT_LINK}>
+                    Get hosted — €5/month
+                    <ArrowUpRightIcon data-icon="inline-end" />
+                  </a>
+                </Button>
+                <p className="label-caps text-muted-foreground/70">
+                  Fully managed · your repo, your keys · or self-host free below
+                </p>
+              </div>
             </div>
 
-            <div id="self-host" className="mx-auto mt-14 max-w-2xl scroll-mt-24 space-y-6 text-left">
+            {/* The plate — Zenod himself, hung like museum art on the paper wall. */}
+            <figure className="mx-auto w-full max-w-xs sm:max-w-sm lg:max-w-none">
+              <img
+                src={zenodPlate}
+                alt="Zenod, the Librarian — engraved allegorical plate: a marble librarian with gilded scrolls and an open codex"
+                className="w-full border border-border bg-black shadow-[0_24px_60px_-24px_rgba(0,0,0,0.45)]"
+              />
+              <figcaption className="label-caps mt-3 text-center text-muted-foreground/70">
+                Zenod · the librarian that keeps your thoughts
+              </figcaption>
+            </figure>
+          </div>
+
+          <div className="relative mx-auto max-w-3xl px-6 pb-20 text-center">
+            <div id="self-host" className="mx-auto max-w-2xl scroll-mt-24 space-y-6 text-left">
               <CommandBlock step="1" title="Install" command={INSTALL_CMD} />
               <CommandBlock step="2" title="Connect your agents" command={CONNECT_CMD} />
             </div>

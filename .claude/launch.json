@@ -5,7 +5,8 @@
       "name": "site",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:site"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": true
     },
     {
       "name": "web",
@@ -18,6 +19,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:server"],
       "port": 8080
+    },
+    {
+      "name": "cloud-console",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/jordi/Documents/GitHub/cloud/services/console", "run", "dev", "--", "--port", "5199", "--strictPort"],
+      "port": 5199
     }
   ]
 }
