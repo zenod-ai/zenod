@@ -934,3 +934,31 @@ up later: `zenod-jordi` / `z-jordi.zenod.dev` is a deployed-but-unprovisioned bo
 idle) left by an earlier pre-fix attempt. No tokened URL delivered yet (blocked before provision completes).
 Receipts: `cloud#12`, `cloud#13`; webhook replay HTTP 200; gateway key `zenod-tenant:jordi-30a206`; the 403
 above. Pen returns to Zenod-Fable.
+
+### 2026-07-06 · [worker/F-8b] DONE — customer #1 provisioned on the TRUE automated path (webhook replay), tokened URL delivered
+Planner-approved operator-token fallback; no App-permission change, no hand-deploy, Jordi did nothing manual.
+- **Provisioner fallback** (`cloud#14`): repo creation is App-first (ZD-3 primary); on failure it falls back
+  to `GITHUB_FALLBACK_TOKEN` (operator PAT read from the worker's own `gh auth token`, set on the cloud env
+  via the Dokploy API) and creates the operator-org vault repo, honestly logged as `mode=fallback`. The
+  instance holds that token for pushes.
+- **Compose passthrough** (`cloud#15`): `GITHUB_FALLBACK_TOKEN` mapped into the container (Dokploy env box ≠
+  container env — the first replay silently no-op'd the fallback until this landed).
+- **LIVE-FIRE (F-8 standing rule), dedup handled explicitly:** the real session is already queued
+  (`cloud-data:/data`), so replayed a **validly-signed** `checkout.session.completed` for `jordi@alpha9.io`
+  with a fresh session id (`cs_live_f8bc…`) → **webhook 200** → provisioner ran to completion:
+  ✓ gateway key `zenod-tenant:jordi-f2c7a6` ($2) → App 403 → **⚠ fell back to the PAT** → ✓ vault repo
+  `zenod-ai/jordi-f2c7a6-vault` (private, created via fallback) → ✓ compose `xDxfVYs0_4M09naWuCl66` → deploy
+  `done` → **✓ provisioned `configured=true`** → account `mcp_token` set (Z-2b).
+- **Verified live (fresh evidence):** `https://z-jordi-f2c7a6.zenod.dev/api/health` = 200; `tools/list` over
+  `/mcp` with the minted bearer returns the tool surface (`store_memory`, `search_memory`, …); vault repo
+  confirmed via `gh api`. **This is the exit-criterion funnel completing on the real automated path.**
+- **DELIVERY (F-6):** tokened URL = `https://z-jordi-f2c7a6.zenod.dev/mcp` + its bearer — handed to Jordi in
+  the chat receipt (kept OUT of git history — it's the live credential). The on-screen delivery
+  (success/claim/dashboard show the URL; kill the dead email promise — no mailer exists) did NOT fit this
+  budget → **named next ticket F-6b**.
+- **Teardown:** orphan `zenod-jordi` / `z-jordi.zenod.dev` (pre-fix idle box) deleted (`compose.delete`
+  deleteVolumes → health now 404).
+
+**Residual (not blocking customer #1):** the `zenod-t3` App still lacks repo "Administration: write", so
+ZD-3 repos in the CUSTOMER's own account still need that permission; the operator-org fallback covers the
+funnel today. Pen returns to Zenod-Fable.
