@@ -452,6 +452,22 @@ export class Settings {
     return candidate.length === expected.length && timingSafeEqual(candidate, expected);
   }
 
+  /**
+   * OAuth-consent credential: accept the instance's API token (the bearer the user
+   * already has in their console) OR an admin password if one was set. For a hosted
+   * single-user memory the token IS the credential — the user pastes it, no separate
+   * admin password (which the hosted provisioner never sets). Constant-time compare.
+   */
+  verifyConsoleCredential(input: string): boolean {
+    const token = this.apiToken();
+    if (token) {
+      const a = Buffer.from(input);
+      const b = Buffer.from(token);
+      if (a.length === b.length && timingSafeEqual(a, b)) return true;
+    }
+    return this.verifyAdminPassword(input);
+  }
+
   // --- tokens ---
 
   apiToken(): string {
