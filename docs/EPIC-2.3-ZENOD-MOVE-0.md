@@ -239,7 +239,48 @@ Test criteria: forced crash-loop on a fresh tenant → operator alert received (
 timestamp); restore drill per runbook — new container + existing repo → store/search/get return
 pre-crash memories with the same commit SHAs.
 
-### Z-6 · Customer #1 run — OPEN · LAST · Jordi in person, not the worker · checklist READY
+### Z-6 · Customer #1 run — ◕ CAPABILITY VERIFIED 2026-07-07 (live, customer #1) · formal ✅/❌ scoring awaits Z-8 fix + tester
+
+Verified live 2026-07-07: €5 → auto-provisioned standalone → customer-OWNED repo via the
+single-repo "Zenod Memory" GitHub App (repo switchable in UI; commits land in
+`AlfaBlok/obsidian-brain`) → works from Claude CLI + Desktop → retrieval green. Open before
+scoring: Z-8 (store reliability — the blocker), Z-9 (synthesis fidelity), and the
+dashboard-shows-consumption leg of the exit criterion (not yet re-verified on the final surface).
+
+### Z-8 · Store reliability — 🔴 BLOCKER, gates epic close (found 2026-07-07, live run)
+
+~2 of 3 `store_memory` calls failed: "classification failed… No object generated: could not
+parse the response." Rollback clean, but the memory is SILENTLY DROPPED unless the user retries
+— unacceptable for a memory product. Fix directions: classify model choice and/or
+parse-repair-retry on the structured call; failures must surface loudly to the caller (SEAM-SPEC
+error profile), never silent.
+Acceptance: [ ] stress test of 20 sequential stores against a SCRATCH vault (never a live brain)
+→ ≥ 99% success (19.8/20 ⇒ in practice 20/20); [ ] any residual failure returns a loud
+structured error, zero silent drops; [ ] **log forensics (Jordi 2026-07-07):** debug FROM THE
+CONTAINER LOGS of the one live instance — read them via the sanctioned path (Dokploy API/UI
+logs, as prior cycles did for the cloud container); every stress store correlated to its full
+log trace (classify → semantic filing → validate → commit SHA); failure traces capture the raw
+model response that failed to parse. Test criteria (tester): repeat the stress run fresh with
+its own log-trace correlation; inject a malformed-response condition if feasible and verify the
+loud error.
+
+### Z-9 · Synthesis fidelity — 🟡 open (found 2026-07-07, live run)
+
+Compose dropped a stored detail ("owner = Jordi"); `ask_brain` reads the composed page rather
+than intact raw evidence and returns EMPTY structured `sources`. Acceptance: [ ] compose
+preserves stored facts (spot-battery); [ ] `ask_brain` returns non-empty `sources` citing the
+evidence refs. Test criteria: tester stores N facts on a scratch vault, asks, checks every fact
+survives round-trip and citations are structured.
+
+**EXIT BAR (planner, explicit, 2026-07-07; sharpened per Jordi same day):** store success ≥99%
+(Z-8) · retrieval battery all-green and efficient (standing) · **logs PROVE the pipeline**: each
+store's full trace visible in the instance container logs — classify → semantic
+filing/indexation → validate → git commit — with the commit SHA correlated per store, and any
+failure logging the exact model response (loud, never silent) · synthesis cites structured
+sources (Z-9) · stranger funnel pay→working URL < 30 min (Block B) · dashboard shows consumption
+· every ❌ mapped to one ticket. Roles stay split per rule 5: the WORKER fixes + stress-tests +
+reads logs; the TESTER (Block B v2, separate dispatch, fresh eyes) re-runs and scores. The epic
+closes on the tester's scorecard.
 
 Deliverable: Jordi executes the funnel personally — LIVE card, his Claude, his repo, his dashboard.
 Worker's obligation: leave Z-1..Z-5 green and a one-page Z-6 checklist ready — checklist done:
@@ -493,6 +534,30 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-07 · [planner/Zenod-Fable] Working-rule change (Jordi): workers carry the doc commits
+- Jordi commits nothing from here on. STANDING STEP 0.5 for EVERY dispatched worker, effective
+  immediately: before your own work, check `docs/EPIC-2.3-ZENOD-MOVE-0.md` for uncommitted
+  changes in the working tree; if present, commit + push them FIRST on a docs branch, message
+  prefixed `docs(epic2.3): planner fold —`, content verbatim (never edit planner text). Then
+  proceed. This entry itself is the first such fold to carry.
+
+### 2026-07-07 · [planner/Zenod-Fable] Operator report folded · Z-8 (store reliability, BLOCKER) + Z-9 (synthesis fidelity) minted · exit bar set · live write-probe run from the planner seat
+- Operator's live-verification report accepted: funnel + connect-your-own-repo + retrieval are
+  WORKING for customer #1 (receipts in the report + `2df14fb` "SERVICE IS LIVE"). The epic's
+  remaining distance is exactly: Z-8 fix → stress test (scratch vault, 20 stores, ≥99%) → Z-9 →
+  Block-B tester scored pass (which also covers the not-yet-re-verified dashboard leg).
+- Planner ran ONE live write-probe through customer #1's production instance from this seat
+  (store_memory of this very fold — jobId `1b628906`, result to be receipted next entry). One
+  meaningful write instead of junk-stress against the live brain; the 20-store stress test runs
+  against a SCRATCH vault only, per Z-8 acceptance.
+- Answers to the operator's asks: (a) YES — file Z-8/Z-9 as zenod-ai/zenod issues mirroring the
+  ticket text above; (b) folded here (this entry + tickets + exit bar); (c) YES — run the
+  20-store stress test NOW but on a scratch vault, never `AlfaBlok/obsidian-brain`; report the
+  hard failure rate + per-failure error text (it sizes the Z-8 fix).
+- Tester (Block B v2) preconditions updated implicitly by the exit bar: dispatch only after Z-8
+  green. Note: local `main` is ahead 1/behind 1 of origin — reconcile with pull --rebase before
+  the next push.
 
 ### 2026-07-05 · [planner/Zenod-Fable] Z-6 attempt 1 scored: ❌ AT DELIVERY (paid, got nothing) · Jordi is a USER — zero manual actions · F-8b approved (PAT fallback, App grant parked)
 - **Honest score, Jordi's words: "I paid 5eur got nada."** Money captured (`sub_1Tpye9…`),
