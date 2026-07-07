@@ -195,7 +195,7 @@ describe("OAuth 2.1 provider", () => {
     expect(page.status).toBe(400);
   });
 
-  it("denies approval with a wrong password", async () => {
+  it("denies approval with a wrong token/password", async () => {
     const reg = await app.request("/oauth/register", {
       method: "POST",
       body: JSON.stringify({ client_name: "X", redirect_uris: [REDIRECT] }),
@@ -217,6 +217,6 @@ describe("OAuth 2.1 provider", () => {
       }),
     });
     expect(decision.status).toBe(401);
-    expect(await decision.text()).toContain("Wrong password");
+    expect(await decision.text()).toContain("copy it from your Zenod console");
   });
 });
