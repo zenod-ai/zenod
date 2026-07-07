@@ -312,7 +312,49 @@ are receipted green or blocked-honest, write a HANDBACK entry summarizing every 
 state and stop. The pen returns to Zenod-Fable on HANDBACK.
 ```
 
-### Block B · TESTER — paste only after worker HANDBACK + Z-6 receipted
+### Block B v2 · TESTER — paste ONLY after (1) Z-6 receipted and (2) F-5 verified live. Supersedes the v1 block below.
+
+```
+You are the Zenod Move-0 TESTER. You are NOT the fixer: you never patch, reconfigure,
+or retry-until-green. You score, you map, you hand back. Fresh evidence only — never
+reuse a worker's or the planner's receipts. Mission doc: docs/EPIC-2.3-ZENOD-MOVE-0.md
+in zenod-ai/zenod — read it top to bottom; the tickets' "Test criteria" are your script.
+Pen on the APPEND ZONE only, tag [tester].
+
+RUN 1 — THE STRANGER FUNNEL. Start at https://zenod.dev knowing NOTHING but that URL.
+1. The page must sell you the thing and show ONE price: €5/month. Any stale tier,
+   TEST-mode checkout, broken link, or confusing step = a scored ❌ with a screenshot.
+2. Click the €5 CTA → complete a REAL LIVE checkout (card provided by operator; €5 +
+   fees, expensed).
+3. Follow ONLY what the screens give you: success → GitHub sign-in → wizard → new repo
+   → your tokened URL. Time this leg; <30 min from payment to working URL is the bar.
+4. Paste the URL into a fresh Claude: store → search → ask against production. Verify
+   the commit SHAs land in YOUR repo (gh/web, your own eyes).
+5. Dashboard: your calls · tokens · cost · balance render; burn a known number of
+   scripted ask calls and check the numbers move consistently (gateway is truth).
+6. Self-host path: on a clean VM, follow only the public README/quickstart (ZENOD_API_
+   TOKEN env-seed) → same Claude round-trip with a commit receipt.
+
+RUN 2 — TICKET-BY-TICKET: score EVERY test criterion of Z-1..Z-6 ✅/❌ with fresh
+evidence. Includes: external plain-MCP client from the README alone; 401-without-bearer;
+forced error is loud; a deliberate non-seam write fails; SEAM-SPEC line-by-line; forced
+crash-loop on YOUR tenant → operator alert (watchdog is cloud-fed — verify your tenant
+appears in targets); restore drill per docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md (new
+container + existing repo = memory intact, same SHAs); zero-credit block at the €2
+grant boundary → top-up → resume.
+
+SCORING: every criterion ✅/❌ in the APPEND ZONE with evidence (URL/SHA/screenshot/
+timing). Every ❌ maps to EXACTLY ONE ticket ID + a one-line repro. Anything surprising
+— silent ack, lying summary, magic words, confusing screen — becomes a proposed new
+test criterion (Jordi's standing rule). Your last line: the epic's exit criterion
+scored ✅ or ❌, no hedging.
+
+BUDGET: 4 hours, 40 turns, €5 + fees + one top-up on the live card (expensed). If the
+funnel blocks you cold, that IS the result — score ❌, receipt it, stop. Never fix,
+never zombie. HANDBACK; pen returns to Zenod-Fable.
+```
+
+### Block B · TESTER (v1, superseded 2026-07-05 by v2 above — kept for the record) — paste only after worker HANDBACK + Z-6 receipted
 
 ```
 You are the Zenod Move-0 TESTER. Preconditions: the worker has written HANDBACK in the
@@ -451,6 +493,78 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-05 · [planner/Zenod-Fable] Z-6 attempt 1 scored: ❌ AT DELIVERY (paid, got nothing) · Jordi is a USER — zero manual actions · F-8b approved (PAT fallback, App grant parked)
+- **Honest score, Jordi's words: "I paid 5eur got nada."** Money captured (`sub_1Tpye9…`),
+  identity linked, instance NOT delivered. Findings F-6/F-7/F-8 are that failure itemized. The
+  funnel is not done until a paying user reaches their URL by CLICKING ONLY.
+- **Standing constraint, recorded:** Jordi acts as a USER from here — buttons only. No keychain
+  writes, no env pastes, no GitHub settings, no ssh. Anything requiring those is machine work or
+  it doesn't ship. (The single GitHub-owner-gated App-permission click is PARKED as optional;
+  ZD-3's account-residency consequence is the tester's to score.)
+- **F-8b APPROVED:** provisioner gains a repo-create fallback via the operator GitHub token
+  (`gh auth token` from the coordinator's authenticated session → cloud env via API), used when
+  the App lacks permission; App path stays primary when available. Then replay → customer #1's
+  existing payment completes → URL delivered ON SCREEN (F-6) — acceptance is Jordi seeing his
+  URL without doing anything.
+
+### 2026-07-05 · [planner/Zenod-Fable] F-8 audit: automated path now REAL, live-fired to the last hop — blocked on ONE App permission
+- Worker's F-8 fix accepted: provisioner self-contained (cloud #12 — App-based repo creation +
+  node crypto, App creds pushed to the instance for durable vault pushes, model verified against
+  `getRepo`/`installationTokenForRepo`); Dokploy creds set in cloud env (I2-7 option B);
+  provisioner baked into the image (cloud #13 — it was MISSING from the container, the third
+  buried layer of F-8). Live-fired via validly-signed webhook replay (dedup handled explicitly:
+  fresh session id for the same customer): webhook 200 → auto-provision → gateway key minted ✓ →
+  **403 "Resource not accessible by integration" on repo creation**.
+- **Blocker (Jordi, one minute, GitHub UI):** the `zenod-t3` App lacks Repository
+  **Administration: Read and write** — grant it in App settings, then APPROVE the pending
+  permission update on the zenod-ai installation. Needed for repo creation wherever the App is
+  installed.
+- **ZD-3 nuance, recorded honestly:** this replay exercised the operator-org path
+  (`POST /orgs/zenod-ai/repos`) — repo-in-CUSTOMER's-account requires the App installed on the
+  customer's account (the wizard connect step). Tester must record WHOSE account the vault repo
+  lands in; if org-fallback, that's a scored finding against ZD-3, not silently accepted.
+- Cleanup ticket: orphan `zenod-jordi` / z-jordi.zenod.dev (pre-fix idle box, awaiting-provision)
+  — tear down after Z-6 completes. Jordi's payment: captured (`sub_1Tpye9…`), provisioning
+  pending the permission grant. F-8 HANDBACK: PR #617.
+
+### 2026-07-05 · [planner/Zenod-Fable] F-8: T8's last hop was never executable — root cause found by the LIVE run · fix APPROVED
+- **F-8 (root cause of customer #1's missing instance):** the webhook fired and AUTO_PROVISION
+  ran, but `provision-standalone.mjs` executes INSIDE the cloud webhook container, which (a) has
+  no `DOKPLOY_API_BASE`/`DOKPLOY_API_KEY` in env → exits on line 1, and (b) lacks `gh` and
+  `openssl` binaries entirely. T8 was accepted as "merged + tsc clean + routes render" — it was
+  never once EXECUTED in its real runtime. No mailer exists, so the failure was silent to the
+  customer (F-6 compounding).
+- **Rule-6 fold (the day's biggest lesson, same class as Epic-2's budget-kill):** for any
+  side-effecting automated path, "merged + rendering" is NOT acceptance — one LIVE-FIRE
+  execution in the real runtime container is required before any GO. Added as standing
+  acceptance criterion for every remaining and future automation ticket.
+- **Fix APPROVED (planner):** (1) set `DOKPLOY_API_BASE`/`DOKPLOY_API_KEY` on the cloud service
+  env via API — sanctioned: I2-7's documented option B (control plane as credential home);
+  (2) make the provisioner self-contained for the node container — GitHub App for repo creation
+  (upgrades onto the DECIDED ZD-3 path) + `crypto.randomBytes` for token minting; push →
+  autodeploy (no manual deploys, per Jordi's standing preference, recorded); then REPLAY
+  `evt_1TpyeD…` through the real webhook (handle the `alreadyQueued` dedup guard explicitly,
+  receipted) → customer #1's instance provisions on the true path → tokened URL delivered
+  on-screen receipts to the APPEND ZONE. F-6 (on-screen URL delivery) rides the same fix or the
+  immediately next one.
+
+### 2026-07-05 · [planner/Zenod-Fable] Z-6 IN PROGRESS — CUSTOMER #1 PAID (LIVE) · claim worked · two new findings (F-6, F-7)
+- **Jordi paid. LIVE session** (`cs_live_a15a2EWrEmoH…`, screenshot receipts in session):
+  zenod.dev → €5 CTA → Stripe → success page → "Claim your workspace with GitHub" → OAuth →
+  "Thanks, AlfaBlok — GitHub identity linked." The money path and identity chain WORK end to end
+  on production. Exit-criterion front half receipted.
+- **F-6 (found by customer #1): the URL delivery dead-ends.** The claim page promises "your
+  console link at jordi@alpha9.io shortly" — stale OLD-FLOW copy ("council/console") and NO
+  mailer exists in any receipt, so that email never arrives. The tokened URL (ZD-8) must be
+  delivered IN THE BROWSER on the claim/done screen (and the dashboard), never by email.
+  Criterion added: after claim, the customer sees their URL on screen within the provisioning
+  wait, with progress state — no dead ends, no external channels.
+- **F-7: `cloud.zenod.dev/` root serves "Cannot GET /"** to a paying customer — root must
+  redirect to sign-in/dashboard.
+- T8-fired verification pending: webhook verified live + AUTO_PROVISION=1 at purchase time, so
+  the instance likely exists but was never SHOWN. Jordi probing via dashboard?session_id and
+  Dokploy compose list; planner folds the result. Z-6 continues — not blocked, mid-stumble.
 
 ### 2026-07-05 · [planner/Zenod-Fable] F-5 code CLOSED, live deploy stuck (Dokploy trigger no-op) · tester HELD on live verify · Z-6 unaffected
 - Cycle-5b audit: F-5 merged via #614 (squash, CI green) — `origin/main` verified free of the
@@ -962,3 +1076,57 @@ Planner-approved operator-token fallback; no App-permission change, no hand-depl
 **Residual (not blocking customer #1):** the `zenod-t3` App still lacks repo "Administration: write", so
 ZD-3 repos in the CUSTOMER's own account still need that permission; the operator-org fallback covers the
 funnel today. Pen returns to Zenod-Fable.
+
+### 2026-07-07 · [zenod-fable] SERVICE IS LIVE — customer #1 uses their OWN repo, end-to-end, from Claude Desktop
+
+The funnel is not just provisioned — it is **in service**. Customer #1 (Jordi) connected his standalone
+cloud instance to Claude Desktop via the normal OAuth roundtrip, stored/read memory against his own repo,
+and re-pointed the repo himself from the UI. "We are now giving service."
+
+**The product pivot this session (the important one):** Zenod NEVER hosts the customer's memory. The old
+"operator-org vault fallback" is deleted as a concept — provisioning creates **no** vault; the instance idles
+until the customer connects a repo **they** own; there is no "operator-hosted" resting state anywhere. (See
+memory `zenod-vault-user-owned-repo`.) The mistake we kept making — "provision a vault first, then move it" —
+is gone.
+
+**Shipped + verified live (all merged):**
+- **Connect-your-own-repo (single-repo scope).** OAuth's `repo` scope is all-or-nothing → rejected. Correct
+  path is a **dedicated GitHub App** ("Zenod Memory") the customer installs on the ONE repo they pick
+  (GitHub's "Only select repositories" = the picker); Zenod holds Contents R/W on just that repo. The app is
+  stood up ONCE by the operator via a 2-click **manifest** flow (`/github/app/create` → GitHub pre-filled
+  "create this app?" → creds handed back and stored in the cloud data dir — no env, no fields). Cloud routes
+  `/github/connect` → App install → `/github/setup` re-point the live instance in place
+  (`/api/agent/github` + `/api/agent/repo`) and flip `vault_in_customer_account`. Customer can also **"Use a
+  different repo"** from the dashboard. (`cloud#33,35,37,39,41,47,48`)
+- **Provisioner stops creating any vault; boot migration clears legacy operator-hosted vaults.** Vault card
+  has two states only: *in your GitHub* / *Connect your memory repo*. (`cloud#40`)
+- **Claude Desktop OAuth connect fixed.** The instance consent screen demanded an *admin password* a hosted
+  user never has → dead end. Now it asks for **"Your Zenod token"** (the bearer from the console) and
+  authenticates against the instance `api_token`. Verified: paste URL → paste token → connected; MCP tools
+  live in new Claude sessions. (`zenod#622`)
+- **Multi-memory naming.** New `instance_name` setting (API/CLI/chat) drives the MCP `serverInfo.name`; the
+  hosted console has a "Name this memory" field that also aliases the connect snippet
+  (`claude mcp add work-brain …`). Engine-first; UI is the thin layer. (`zenod#621`, `cloud#42`)
+- **Real token in the Connect snippets; honest Vault card; persisted vault_repo.** (`cloud#29,31,32`)
+- **Operator / customer split.** `admin.zenod.dev` = operator surface (users, tenants, Zenod Memory app);
+  `cloud.zenod.dev` = customer dashboard only (no admin tab). One GitHub sign-in across both (cookie scoped
+  to `.zenod.dev`); logout clears both cookie variants; sign-in returns you to the door you started on; the
+  operator card shows "Configured" once the app exists (no re-create). (`cloud#28,42,44,45,46,47,48`)
+- **Brand:** the "Zenod, the Librarian" engraved plate is the zenod.dev hero + the console face; house image
+  pipeline (`scripts/gen-plate.mjs`, `docs/PLATES.md`) ported from nectary. (`zenod#620`, `cloud#25,28`)
+
+**Instance-update reality (worth knowing):** standalone tenants pin `ghcr.io/zenod-ai/zenod:${TAG}` with
+`autoDeploy:false`, and a running container does NOT re-pull a moving `:latest`. To roll an engine fix to a
+live tenant, pin `ZENOD_IMAGE_TAG=sha-<short>` (immutable, from the publish workflow) + `compose.redeploy`.
+Customer #1 is currently on `sha-c44c793` (naming + OAuth). Data survives redeploys (`cloud-data:/data`).
+
+**Verified end-to-end (fresh evidence):** `z-jordi-f2c7a6` health 200 on `sha-c44c793`; `instance_name`
+persists; `vault_repo = alpha-nine/zenod_memory`; OAuth consent asks for the token; the tenant's MCP server
+appears as tools in a connected Claude session (`store_memory`/`search_memory`/`ask_brain`); customer
+re-pointed the repo from the UI himself.
+
+**Open (not blocking service):** (a) the epic's formal TESTER pass (Block B v2 below) hasn't been run — this
+is operator-verified, not adversarially scored; (b) the `zenod-t3` App still lacks repo Administration:write,
+irrelevant now that the customer path uses the dedicated Zenod Memory app + user-selected repos; (c) polish:
+make "Create the Zenod Memory app" the operator home, and surface the tokened URL on the success/dashboard
+screens (F-6b). Pen holds with Zenod-Fable.
