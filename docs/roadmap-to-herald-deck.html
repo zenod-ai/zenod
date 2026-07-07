@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roadmap to Herald — July 2026</title>
+<style>
+  :root{--bg:#0d0f12;--panel:#14171c;--ink:#e8e6e1;--dim:#a5a19a;--accent:#d4a24e;--accent2:#6ea8a0;--line:#2a2e35;--bad:#c96a5a;--ok:#7fb069}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);font-family:Georgia,serif;overflow:hidden}
+  .deck{height:100vh;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;padding:5vh 7vw;overflow-y:auto}
+  .slide.active{display:flex}
+  .kicker{font-family:ui-monospace,Menlo,monospace;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin-bottom:1.1rem}
+  h2{font-size:clamp(1.9rem,4.2vw,3rem);font-weight:400;line-height:1.16;margin-bottom:1.2rem}
+  h2 em{font-style:italic;color:var(--accent)}
+  p.lede{font-size:clamp(1.15rem,1.9vw,1.45rem);color:var(--dim);line-height:1.55;max-width:58ch}
+  .diagram{width:100%;max-width:1000px;margin:.6rem auto 0}
+  .diagram svg{width:100%;height:auto;display:block}
+  svg text{font-family:Georgia,serif;fill:var(--ink)}
+  svg .mono{font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em}
+  svg .dim{fill:var(--dim)} svg .acc{fill:var(--accent)} svg .acc2{fill:var(--accent2)} svg .okc{fill:var(--ok)} svg .badc{fill:var(--bad)}
+  svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+  svg .boxacc{fill:var(--panel);stroke:var(--accent);stroke-width:2}
+  svg .boxteal{fill:var(--panel);stroke:var(--accent2);stroke-width:1.5}
+  svg .boxok{fill:var(--panel);stroke:var(--ok);stroke-width:1.5}
+  svg .boxdead{fill:var(--panel);stroke:var(--line);stroke-width:1.2;stroke-dasharray:4 4}
+  svg .wire{stroke:var(--dim);stroke-width:1.6;fill:none}
+  svg .wireacc{stroke:var(--accent);stroke-width:2;fill:none}
+  svg .wireteal{stroke:var(--accent2);stroke-width:2;fill:none}
+  .nav{position:fixed;bottom:1.2rem;right:1.6rem;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;color:var(--dim);z-index:10}
+  .nav button{background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;padding:.35rem .8rem;cursor:pointer;font-family:inherit;margin-left:.4rem}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);z-index:10;transition:width .25s}
+  .note{font-size:clamp(1rem,1.6vw,1.2rem);color:var(--dim);font-style:italic;margin-top:1rem;max-width:60ch}
+  .note b{color:var(--accent);font-weight:400;font-style:normal}
+</style>
+</head>
+<body>
+<div class="progress" id="bar"></div>
+<div class="deck">
+
+<!-- 1 · WHERE WE ARE -->
+<section class="slide active">
+  <div class="kicker">roadmap to herald · july 2026</div>
+  <h2>Where the pieces stand.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 300">
+    <rect x="30" y="60" width="220" height="90" rx="12" class="boxok"/>
+    <text x="140" y="95" text-anchor="middle" font-size="18">Zenod</text>
+    <text x="140" y="118" text-anchor="middle" class="okc mono" font-size="12">✓ SHIPPED · 2.3</text>
+    <text x="140" y="137" text-anchor="middle" class="dim" font-size="12">memory unit · stabilizing</text>
+    <rect x="280" y="60" width="220" height="90" rx="12" class="boxteal"/>
+    <text x="390" y="95" text-anchor="middle" font-size="18">Callisthenes</text>
+    <text x="390" y="118" text-anchor="middle" class="acc2 mono" font-size="12">SPEC'D · 2.4 · ready</text>
+    <text x="390" y="137" text-anchor="middle" class="dim" font-size="12">the mouth · posts to X</text>
+    <rect x="530" y="45" width="240" height="120" rx="12" class="boxacc"/>
+    <text x="650" y="88" text-anchor="middle" font-size="20">HERALD</text>
+    <text x="650" y="112" text-anchor="middle" class="acc mono" font-size="12">MISSING · THE MONEY</text>
+    <text x="650" y="132" text-anchor="middle" class="dim" font-size="12">the loop · ~$200/mo</text>
+    <rect x="800" y="60" width="170" height="90" rx="12" class="boxdead"/>
+    <text x="885" y="95" text-anchor="middle" class="dim" font-size="16">The Ring</text>
+    <text x="885" y="118" text-anchor="middle" class="dim mono" font-size="11">LATER · 2.7</text>
+    <text x="885" y="136" text-anchor="middle" class="dim" font-size="11">one number, many guys</text>
+    <text x="500" y="230" text-anchor="middle" class="dim" font-size="15" font-style="italic">2.3 built more than a product — it built the funnel machinery:</text>
+    <text x="500" y="255" text-anchor="middle" class="acc2 mono" font-size="13">STRIPE → PROVISION → METER → WATCHDOG · now a template</text>
+  </svg></div>
+</section>
+
+<!-- 2 · WHAT A HERALD CUSTOMER GETS -->
+<section class="slide">
+  <div class="kicker">the target</div>
+  <h2>One Herald customer = <em>three containers.</em></h2>
+  <div class="diagram"><svg viewBox="0 0 1000 380">
+    <rect x="40" y="40" width="200" height="70" rx="10" class="boxteal"/>
+    <text x="140" y="70" text-anchor="middle" font-size="15">His WhatsApp</text>
+    <text x="140" y="92" text-anchor="middle" class="dim" font-size="12">QR pairing — exists today</text>
+    <rect x="40" y="130" width="200" height="70" rx="10" class="boxteal"/>
+    <text x="140" y="160" text-anchor="middle" font-size="15">His Claude</text>
+    <text x="140" y="182" text-anchor="middle" class="dim" font-size="12">via MCP — free, Herald IS one</text>
+    <path class="wireteal" d="M240 75 L360 130"/>
+    <path class="wireteal" d="M240 165 L360 165"/>
+    <rect x="365" y="100" width="270" height="130" rx="12" class="boxacc"/>
+    <text x="500" y="135" text-anchor="middle" font-size="19">HERALD</text>
+    <text x="500" y="160" text-anchor="middle" class="dim" font-size="13">smart LLM · reads briefing every turn</text>
+    <text x="500" y="180" text-anchor="middle" class="dim" font-size="13">runs the practice on schedule</text>
+    <text x="500" y="200" text-anchor="middle" class="dim" font-size="13">MCP server shell</text>
+    <path class="wire" d="M635 140 L750 90"/>
+    <path class="wire" d="M635 190 L750 240"/>
+    <rect x="755" y="55" width="210" height="70" rx="10" class="boxok"/>
+    <text x="860" y="85" text-anchor="middle" font-size="15">Zenod — his memory</text>
+    <text x="860" y="107" text-anchor="middle" class="dim" font-size="12">auto-provisioned · his repo</text>
+    <rect x="755" y="205" width="210" height="70" rx="10" class="box"/>
+    <text x="860" y="235" text-anchor="middle" font-size="15">Callisthenes — his mouth</text>
+    <text x="860" y="257" text-anchor="middle" class="dim" font-size="12">his X keys · throttled</text>
+    <text x="500" y="320" text-anchor="middle" class="dim" font-size="14" font-style="italic">Hosted: the buy button wires all three — the customer chooses nothing.</text>
+    <text x="500" y="345" text-anchor="middle" class="dim" font-size="14" font-style="italic">Self-host/advanced: point Herald at ANY seam-conformant memory. Same claim, zero extra work.</text>
+  </svg></div>
+</section>
+
+<!-- 3 · NOT ON THE PATH -->
+<section class="slide">
+  <div class="kicker">the relief</div>
+  <h2>Not blockers. <em>Later.</em></h2>
+  <div class="diagram"><svg viewBox="0 0 1000 260">
+    <rect x="40" y="50" width="210" height="80" rx="10" class="boxdead"/>
+    <text x="145" y="82" text-anchor="middle" class="dim" font-size="16">The Ring</text>
+    <text x="145" y="105" text-anchor="middle" class="dim" font-size="12">needed when you talk to 2+ guys</text>
+    <rect x="280" y="50" width="210" height="80" rx="10" class="boxdead"/>
+    <text x="385" y="82" text-anchor="middle" class="dim" font-size="16">Council guy</text>
+    <text x="385" y="105" text-anchor="middle" class="dim" font-size="12">extracts alongside the ring</text>
+    <rect x="520" y="50" width="210" height="80" rx="10" class="boxdead"/>
+    <text x="625" y="82" text-anchor="middle" class="dim" font-size="16">Epaminon</text>
+    <text x="625" y="105" text-anchor="middle" class="dim" font-size="12">Herald's practice runs in-process</text>
+    <rect x="760" y="50" width="210" height="80" rx="10" class="boxdead"/>
+    <text x="865" y="82" text-anchor="middle" class="dim" font-size="16">Archus</text>
+    <text x="865" y="105" text-anchor="middle" class="dim" font-size="12">the queue lives in the memory</text>
+    <text x="500" y="200" text-anchor="middle" font-size="16" class="acc" font-style="italic">Herald needs exactly two units under him: memory + mouth. Both exist or are spec'd.</text>
+  </svg></div>
+</section>
+
+<!-- 4 · THE BUY BUTTON -->
+<section class="slide">
+  <div class="kicker">the funnel · machinery already proven in 2.3</div>
+  <h2>The buy button.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 200">
+    <rect x="20" y="60" width="150" height="70" rx="10" class="box"/>
+    <text x="95" y="90" text-anchor="middle" font-size="14">herald site</text>
+    <text x="95" y="112" text-anchor="middle" class="dim" font-size="12">one button</text>
+    <path class="wire" d="M170 95 L215 95"/>
+    <rect x="220" y="60" width="150" height="70" rx="10" class="box"/>
+    <text x="295" y="90" text-anchor="middle" font-size="14">Stripe</text>
+    <text x="295" y="112" text-anchor="middle" class="dim" font-size="12">~$200/mo LIVE</text>
+    <path class="wire" d="M370 95 L415 95"/>
+    <rect x="420" y="45" width="220" height="100" rx="10" class="boxacc"/>
+    <text x="530" y="75" text-anchor="middle" font-size="14">provision (auto, ~min)</text>
+    <text x="530" y="97" text-anchor="middle" class="dim" font-size="12">Zenod + Callisthenes + Herald</text>
+    <text x="530" y="115" text-anchor="middle" class="dim" font-size="12">tokens wired · watchdog · meter</text>
+    <path class="wire" d="M640 95 L685 95"/>
+    <rect x="690" y="60" width="140" height="70" rx="10" class="boxteal"/>
+    <text x="760" y="90" text-anchor="middle" font-size="14">pair WhatsApp</text>
+    <text x="760" y="112" text-anchor="middle" class="dim" font-size="12">QR · exists</text>
+    <path class="wire" d="M830 95 L875 95"/>
+    <rect x="880" y="60" width="105" height="70" rx="10" class="boxok"/>
+    <text x="932" y="90" text-anchor="middle" font-size="13">briefing</text>
+    <text x="932" y="112" text-anchor="middle" class="dim" font-size="11">work begins</text>
+  </svg></div>
+  <p class="note">Herald's first message: <b>"Tell me about your project."</b> The negotiated
+  briefing is the onboarding — no wizard needed beyond the QR.</p>
+</section>
+
+<!-- 5 · THE ORDER -->
+<section class="slide">
+  <div class="kicker">the sequence</div>
+  <h2>Four moves to Herald revenue.</h2>
+  <div class="diagram"><svg viewBox="0 0 1000 240">
+    <line x1="60" y1="120" x2="940" y2="120" stroke="#2a2e35" stroke-width="2"/>
+    <circle cx="120" cy="120" r="9" fill="#7fb069"/>
+    <text x="120" y="85" text-anchor="middle" class="mono okc" font-size="13">NOW</text>
+    <text x="120" y="160" text-anchor="middle" font-size="14">2.3 stabilizes</text>
+    <text x="120" y="180" text-anchor="middle" class="dim" font-size="12">Zenod paying · funnel proven</text>
+    <circle cx="360" cy="120" r="9" fill="#6ea8a0"/>
+    <text x="360" y="85" text-anchor="middle" class="mono acc2" font-size="13">NEXT</text>
+    <text x="360" y="160" text-anchor="middle" font-size="14">2.4 Callisthenes</text>
+    <text x="360" y="180" text-anchor="middle" class="dim" font-size="12">the mouth · clones the funnel</text>
+    <circle cx="620" cy="120" r="11" fill="#d4a24e"/>
+    <text x="620" y="85" text-anchor="middle" class="mono acc" font-size="13">THE MONEY</text>
+    <text x="620" y="160" text-anchor="middle" font-size="14">2.6 Herald</text>
+    <text x="620" y="180" text-anchor="middle" class="dim" font-size="12">guy container + buy button + loop</text>
+    <circle cx="870" cy="120" r="9" fill="#a5a19a"/>
+    <text x="870" y="85" text-anchor="middle" class="mono dim" font-size="13">AFTER</text>
+    <text x="870" y="160" text-anchor="middle" font-size="14">2.7 The Ring</text>
+    <text x="870" y="180" text-anchor="middle" class="dim" font-size="12">one number · many guys · council</text>
+  </svg></div>
+  <p class="note"><b>2.5 gets re-scoped, honestly:</b> its seam spec already won (2.3/2.4 run on
+  it); its ring+council carve moves into 2.7. No work lost — the exit criterion moved.</p>
+</section>
+
+<!-- 6 · YOUR CALLS -->
+<section class="slide">
+  <div class="kicker">three calls, then we cut 2.6</div>
+  <h2>What only you decide.</h2>
+  <p class="lede" style="margin-bottom:.8rem"><b style="color:var(--accent);font-weight:400">1 · Herald's channel at launch.</b>
+  Per-tenant QR pairing (D-4 as decided, zero new code) — or your shared-number idea
+  (one Baileys number routing all customers: better onboarding, but real routing work + one ban
+  kills every customer). Recommendation: QR now, shared number when the ring comes.</p>
+  <p class="lede" style="margin-bottom:.8rem"><b style="color:var(--accent);font-weight:400">2 · $200/mo</b> — you said it today
+  (up from $100 yesterday, toward the research's number). Carry to Product-Fable as the anchor.</p>
+  <p class="lede"><b style="color:var(--accent);font-weight:400">3 · Re-scope 2.5 with Ring-Fable</b> —
+  hand its ring/council remainder to 2.7 so nobody builds toward a superseded exit.</p>
+</section>
+
+</div>
+<div class="nav"><span id="count">1 / 6</span>
+  <button onclick="go(-1)">←</button><button onclick="go(1)">→</button></div>
+<script>
+  const s=[...document.querySelectorAll('.slide')];let i=0;
+  function show(n){s[i].classList.remove('active');i=(n+s.length)%s.length;s[i].classList.add('active');
+    document.getElementById('count').textContent=(i+1)+' / '+s.length;
+    document.getElementById('bar').style.width=((i+1)/s.length*100)+'%'}
+  function go(d){show(i+d)}
+  addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')go(1);if(e.key==='ArrowLeft')go(-1)});
+  show(0);
+</script>
+</body>
+</html>
