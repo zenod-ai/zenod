@@ -163,13 +163,19 @@ export async function handleAuthorizeDecision(c: Context, store: OAuthStore, set
   if (err) return c.html(errorPage(err), 400);
   const client = store.getClient(p.clientId)!;
 
-  // Authenticate the admin if a password was supplied and no session exists.
+  // Authenticate with the user's token (or an admin password, if set) when there's
+  // no session. The token is the bearer they already hold in their console.
   if (!hasValidSession(c, settings)) {
-    if (typeof password === "string" && settings.verifyAdminPassword(password)) {
+    if (typeof password === "string" && settings.verifyConsoleCredential(password.trim())) {
       issueSession(c, settings);
     } else {
       return c.html(
-        consentPage({ clientName: client.clientName, params: p, authed: false, error: "Wrong password." }),
+        consentPage({
+          clientName: client.clientName,
+          params: p,
+          authed: false,
+          error: "That token didn't match — copy it from your Zenod console.",
+        }),
         401,
       );
     }
@@ -291,6 +297,7 @@ button{flex:1;padding:10px 14px;border-radius:9px;border:1px solid #303030;font:
 .approve{background:#fafafa;color:#0a0a0a;border-color:#fafafa}
 .deny{background:transparent;color:#d4d4d4}
 .err{color:#f87171;font-size:13px;margin:0 0 14px}
+.hint{color:#a3a3a3;font-size:12px;margin:-8px 0 16px;line-height:1.5}
 .brand{font-weight:600;letter-spacing:-.01em}
 .client{color:#fafafa;font-weight:600}
 </style></head><body><div class="card">${body}</div></body></html>`;
@@ -309,10 +316,15 @@ function consentPage(opts: {
 ${error ? `<p class="err">${esc(error)}</p>` : ""}
 <form method="post" action="/oauth/authorize/decision">
   ${hidden(params)}
-  ${authed ? "" : `<label for="pw">Admin password</label><input id="pw" type="password" name="password" autofocus autocomplete="current-password">`}
+  ${
+    authed
+      ? ""
+      : `<label for="pw">Your Zenod token</label><input id="pw" type="password" name="password" autofocus autocomplete="off" placeholder="paste your token">
+         <p class="hint">Paste the token from your Zenod console — the same bearer you use to connect. It authenticates you; no separate password.</p>`
+  }
   <div class="row">
     <button class="deny" type="submit" name="decision" value="deny">Deny</button>
-    <button class="approve" type="submit" name="decision" value="approve">${authed ? "Approve" : "Sign in &amp; approve"}</button>
+    <button class="approve" type="submit" name="decision" value="approve">${authed ? "Approve" : "Connect"}</button>
   </div>
 </form>`);
 }
