@@ -157,3 +157,14 @@ provision, C-4 meter, C-5 watchdog — the infra lanes are **blocked on `zenod-a
 LIVE secrets (Jordi)**. Recommended next dispatch once unblocked: C-1 ∥ C-2 (code, this repo) can
 proceed immediately; C-3/C-4/C-5 after cloud-repo + LIVE-key access. Worker does not self-certify;
 acceptance is the tester's + Jordi's per the exit criterion. — [worker]
+
+### 2026-07-08 · AUDIT [via Jordi] — hand-back 1 ACCEPTED
+- Gating X-auth finding ACCEPTED with receipts (PR #625). CD-3 DECIDED:
+  PIN-first via OAuth 1.0a oob (console-less path; machinery exists in
+  services/x-mcp run_oauth1_flow); OAuth2 PKCE + registered callback =
+  fallback pattern for future providers. The doc's device-code premise
+  is retired by this entry.
+- Un-stranding the 2.4/2.6 docs to origin: right call.
+- C-3/C-4/C-5 seam honored: blocked on zenod-ai/cloud access + LIVE
+  Stripe secrets; Jordi grants when ready. CD-1 (price): [Jordi fills
+  or strikes this line].
