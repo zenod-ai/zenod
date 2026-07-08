@@ -1241,3 +1241,80 @@ image; **customer #1's live instance is on `sha-c44c793` and must be re-pinned t
 carry the fix (engine change; `compose.update ZENOD_IMAGE_TAG=sha-<new>` + redeploy — not auto). **Z-9
 (compose drops facts / empty `ask_brain` sources[]) NOT done this cycle — BLOCKED-honest: out of budget after
 MEASURE→FIX→PROVE; carried forward.** Pen returns to Zenod-Fable.
+
+### 2026-07-08 · [tester] Block B v2 scored — Z-8 fix VERIFIED LIVE + green; epic exit criterion ❌ (Z-9 unbuilt + money/dashboard legs unproven). Fresh evidence only.
+
+Fresh-eyes re-score. I did NOT reuse the worker's or planner's receipts. Non-interactive session:
+no physical card, no fresh Claude client with a tenant bearer, no clean VM, no VPS shell — legs
+requiring those are marked ⛔ UNTESTABLE-BY-THIS-AGENT (a tester-capability gap, NOT scored as a
+product ❌), everything else is scored from evidence I gathered this session.
+
+**Z-8 · store reliability (the blocker) — ✅ fix REAL + GREEN + LIVE (rate not independently re-run)**
+- Code: `packages/core/src/llm/aisdk.ts` — `repairStructuredJson()` + `experimental_repairText: REPAIR_HOOK`
+  on BOTH `generateObject` sites (classify `:491`, extractBacklog `:566`); both wrapped in try/catch →
+  `loudObjectError()` (`:509`, `:582`) which carries the raw model response (truncated) into logs. Loud,
+  never silent — SEAM-SPEC-conformant. ✅
+- Unit tests: `npx vitest run packages/core/test/schema-llm.test.ts` → **30/30 passed** (6 in main tree):
+  ```json fence, bare ``` fence, prose-wrapped, and clean-JSON recovery all locked. ✅
+- **LIVE on customer #1:** `z-jordi-f2c7a6.zenod.dev/api/health` → 200, `sha=4d5bcfc1e6…`.
+  `git merge-base --is-ancestor 7fc435a 4d5bcfc` = **YES** (live sha CONTAINS the Z-8 fix commit); the
+  deployed `aisdk.ts` at 4d5bcfc greps 4× `repairStructuredJson`/`experimental_repairText`. Fix is
+  deployed to the instance the customer actually uses. ✅ (Corrects the worker-handback note that #1 was
+  stuck on `sha-c44c793` needing a re-pin — it has since been rolled to 4d5bcfc.)
+- ⛔ NOT independently reproduced: the live 20-store ≥99% rate + per-store log-trace correlation
+  (classify→filing→validate→commit SHA). The only OpenRouter key I can reach (`alpha9-openrouter-
+  provisioning-key`) is provisioning-scoped — chat/completions returns `401 "User not found"` — so I
+  cannot fire the faithful large-index classify battery, and I will NOT run stores against a live brain.
+  The worker's 40%→100% receipt stands **unrefuted but not tester-reproduced**. Proposed standing fix:
+  provision a tester-scoped chat key so this leg is re-runnable by the tester, not just the fixer.
+
+**Z-3 · website + checkout — ✅ front door clean (live-pay leg not executed)**
+- `https://zenod.dev` (React SPA; evidence from the live JS bundle `index-C4ReJeYU.js`): exactly ONE price —
+  `€5/mo` / `€5/month`, no other tier, no `test mode`/`pk_test`/`cs_test` strings. ✅
+- CTA → `https://buy.stripe.com/3cIdR3bSLgyL7yi89HbAs01` → 200, page HTML contains `livemode` 48× + `EUR` —
+  a **LIVE** checkout, not test. ✅
+- Outbound links all resolve 200: repo, LIBRARIAN-DOCTRINE.md, ROADMAP.md, docs/. No broken links.
+  (`https://your-host/mcp` is a correct self-host placeholder, not a live link.) ✅
+- ⛔ "checkout → provision, no human touch" + pay→working-URL <30 min: NOT EXECUTED (no card / non-interactive).
+
+**Z-1 · standalone GA / seam — ◐ seam GREEN where reachable**
+- `/mcp` with NO bearer → **401 `{"error":"unauthorized"}`** ✅ (SEAM-SPEC items 12/13). `/api/health` 200.
+- SEAM-SPEC error profile is defined and testable: loud structured errors w/ stable codes, no silent ack
+  (`docs/SEAM-SPEC.md:30,33,64,70,100-101`). Static conformance holds.
+- ⛔ external plain-MCP client store→search→get from the README alone, and a forced `tools/call` non-seam
+  write failing loudly: NOT EXECUTED — I hold no tenant bearer and won't write to a live brain.
+
+**Z-4 · dashboard — ⛔ NOT EXECUTED** (no logged-in cloud session / tenant). Consumption render + burn-test
++ zero-credit block/top-up/resume all unverified this run.
+
+**Z-5 · watchdog + restore — ❌ live drills UNPROVEN → maps to Z-5.** Runbook is authored, but the
+crash-loop-alert drill (A.3) and restore-from-repo drill both carry EMPTY `Receipt:` slots and are
+tagged `BLOCKED-needs-infra: operator runs this on the VPS` (`docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md:73`,
+`:172`). Standing rule: workers/testers can't shell the VPS, so I cannot execute them either. No fresh
+evidence that a live tenant crash-loop pages the operator, nor that new-container+existing-repo restores
+the same SHAs. Repro: run A.3 + the restore drill on the VPS and paste the receipts.
+
+**Z-9 · synthesis fidelity — ❌ UNBUILT → maps to Z-9.** Worker handback (`7fc435a` cycle) states verbatim:
+"Z-9 … NOT done this cycle — BLOCKED-honest … carried forward." The exit bar explicitly requires
+"synthesis cites structured sources (Z-9)". Not delivered.
+
+**Surprising → proposed new test criteria (Jordi's standing rule):**
+1. The live instance advertised as `sha-c44c793` in one handback and `sha-4d5bcfc` in the GO note — pin
+   verification (live `/api/health` sha ⊇ the fix commit) should be a MANDATORY criterion before any
+   "fix is live" claim, because "merged" ≠ "deployed" on `autoDeploy:false` tenants.
+2. The tester must be handed a chat-scoped LLM key + a disposable scratch tenant at dispatch; otherwise the
+   store-reliability EXIT BAR is only ever fixer-verified, never independently scored.
+
+**SCORE SUMMARY:** ✅ Z-8 fix (deployed+green) · ✅ Z-3 front door · ◐ Z-1 seam (partial) · ⛔ Z-3 live-pay,
+Z-4 dashboard, RUN-1 store/self-host legs (untestable by this agent) · ❌ Z-5 live drills · ❌ Z-9 unbuilt.
+
+The Z-8 🔴 blocker is cleared: its fix is real, unit-green, and LIVE on customer #1. But the EPIC exit
+criterion is broader — it requires the stranger pay→URL funnel timed <30 min, a dashboard showing
+consumption, the live store battery ≥99% with log-trace correlation, AND Z-9 synthesis citing structured
+sources. Z-9 is unbuilt by the worker's own admission, and the money/dashboard/live-battery legs are
+unproven (untestable in this non-interactive seat). I do not fake-green what I could not run.
+
+**EPIC 2.3 exit criterion: ❌ — not met (Z-9 unbuilt; stranger-funnel pay/dashboard/live-store legs unproven).**
+
+HANDBACK — pen returns to Zenod-Fable. Next dispatch must (a) build Z-9, (b) hand the tester a chat key +
+scratch tenant + a way to drive the live card so RUN 1 and the Z-4/Z-5 drills are actually runnable.
