@@ -1,0 +1,15 @@
+# Keep the image lean: only the runtime modules (throttle/draft_guard/wrapper) and
+# the optional auth/ package need to reach /opt/xmcp. Everything below is build- or
+# docs-only. NB: never ignore auth/ — it is the C-2 chat-auth package loaded at boot.
+Dockerfile
+.dockerignore
+*.patch
+docker-compose.callisthenes.yml
+.env.example
+.env
+README.md
+SEAM-SURFACE.md
+test_*.py
+__pycache__/
+*.pyc
+.pytest_cache/

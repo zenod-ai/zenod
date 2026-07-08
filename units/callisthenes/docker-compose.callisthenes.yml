@@ -1,0 +1,58 @@
+# units/callisthenes/docker-compose.callisthenes.yml — the Callisthenes atomic unit.
+#
+# ONE container (unlike services/x-mcp's two-instance readonly/postread split): the
+# posting gate is no longer topology-only. Callisthenes exposes read + post tools on
+# a SINGLE endpoint, but every send passes through in-unit middleware:
+#   - drafts-never-send (C-22): a createPosts/deletePosts/mediaUpload call is refused
+#     unless it carries the approval arg (default `callisthenes_approve`); and
+#   - throttle: at most CALLISTHENES_THROTTLE_PER_HOUR approved sends per rolling hour.
+# So a raw/unapproved or over-rate send never reaches X even on the post endpoint.
+#
+# Creds: the five X_* values are interpolated from the environment. Standalone, put
+# them in units/callisthenes/.env (compose auto-loads it); under Dokploy, set them in
+# the compose's Environment. See .env.example. Per-tenant PIN chat-auth (C-2) will
+# supersede the single-owner X_OAUTH_ACCESS_TOKEN for hosted; single-owner stays for
+# dogfood.
+
+networks:
+  zenod-x-net:
+    name: zenod-x-net
+
+services:
+  callisthenes:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        XMCP_REF: "63d34362d88ed9f94d54ccd5ecd5bb4d12e11759"
+    image: zenod-callisthenes
+    container_name: callisthenes
+    environment:
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
+
+      # --- X app + single-owner OAuth1 (dogfood; C-2 PIN chat-auth supersedes for hosted) ---
+      X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY}
+      X_OAUTH_CONSUMER_SECRET: ${X_OAUTH_CONSUMER_SECRET}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN}
+      X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
+      X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
+
+      # --- Tool allowlist: read + post on ONE endpoint (the send GATE is the in-unit
+      #     draft-guard + throttle middleware, not topology). Confirm ids against the
+      #     "Loaded N tools" boot log. ---
+      X_API_TOOL_ALLOWLIST: "getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions,createPosts,deletePosts,mediaUpload"
+
+      # --- Callisthenes guardrails (ON by default) ---
+      # Conservative hourly send cap. 0 = fully closed; unset/negative => default 10.
+      CALLISTHENES_THROTTLE_PER_HOUR: ${CALLISTHENES_THROTTLE_PER_HOUR:-10}
+      # Tools treated as "sends" for BOTH throttle and draft-guard.
+      CALLISTHENES_SEND_TOOLS: ${CALLISTHENES_SEND_TOOLS:-createPosts,deletePosts,mediaUpload}
+      CALLISTHENES_GUARDED_TOOLS: ${CALLISTHENES_GUARDED_TOOLS:-createPosts,deletePosts,mediaUpload}
+      # Approval arg a send must carry to be allowed (drafts never send).
+      CALLISTHENES_APPROVE_ARG: ${CALLISTHENES_APPROVE_ARG:-callisthenes_approve}
+      # Optional shared approve token: if set, the approval arg must EQUAL it (not
+      # just be truthy). Leave empty for the truthy-flag mode.
+      CALLISTHENES_APPROVE_TOKEN: ${CALLISTHENES_APPROVE_TOKEN:-}
+    networks: [zenod-x-net]
+    restart: unless-stopped
