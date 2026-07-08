@@ -28,6 +28,8 @@ appear in any result and are never logged.
 
 from __future__ import annotations
 
+import functools
+import inspect
 import os
 import time
 from dataclasses import dataclass
@@ -302,14 +304,22 @@ def register(
 
     def _wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
         # Uniform loud-error envelope (SEAM-SPEC §5): AuthError/OAuth1Error -> {error}.
+        #
+        # #636: the inner function still uses (*args, **kwargs) to forward the
+        # call, but FastMCP's mcp.tool() introspects the signature and REFUSES a
+        # VAR_POSITIONAL (*args) parameter — which silently killed the entire auth
+        # registration. We pin `inner.__signature__` to the wrapped method's real
+        # signature (e.g. connect(mcp_token, service='x')), so FastMCP sees an
+        # explicit parameter list, builds the correct tool schema, and calls
+        # inner(mcp_token=..., service=...) — which *args forwards verbatim.
+        @functools.wraps(fn)
         def inner(*args: Any, **kwargs: Any) -> Any:
             try:
                 return fn(*args, **kwargs)
             except (AuthError, OAuth1Error) as e:
                 return {"ok": False, "error": {"code": e.code, "message": e.message}}
 
-        inner.__name__ = getattr(fn, "__name__", "tool")
-        inner.__doc__ = fn.__doc__
+        inner.__signature__ = inspect.signature(fn)  # type: ignore[attr-defined]
         return inner
 
     tools: Dict[str, Callable[..., Any]] = {

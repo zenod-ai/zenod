@@ -3,7 +3,12 @@
 # docs-only. NB: never ignore auth/ — it is the C-2 chat-auth package loaded at boot.
 Dockerfile
 .dockerignore
+# Ignore stray .patch files to keep the image lean, but RE-INCLUDE the two the
+# Dockerfile COPYs at build time — without these the build dies at the COPY step
+# ("/relax-response-required.patch: not found"). See EPIC-2.4 #635.
 *.patch
+!headless-oauth1.patch
+!relax-response-required.patch
 docker-compose.callisthenes.yml
 .env.example
 .env
