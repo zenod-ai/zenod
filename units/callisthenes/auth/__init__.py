@@ -273,7 +273,11 @@ class _PlainRegistry:
         self.tools[name] = fn
 
 
-def register(mcp: Any = None, engine: Optional[ChatAuth] = None) -> Any:
+def register(
+    mcp: Any = None,
+    engine: Optional[ChatAuth] = None,
+    usage_reader: Optional[Callable[[str], Dict[str, Any]]] = None,
+) -> Any:
     """Register the five chat-auth tools on `mcp`.
 
     Returns the `ChatAuth` engine (so a caller/test can reach it), and — when
@@ -282,8 +286,19 @@ def register(mcp: Any = None, engine: Optional[ChatAuth] = None) -> Any:
     The registered tool callables take `mcp_token` as their first argument; the
     wrapper (C-1) is responsible for injecting the caller's bearer token. This
     keeps tenant identity explicit and the package server-agnostic.
+
+    C-4a: when no `engine` is supplied, `usage()` is wired to the live
+    `/data/usage.sqlite` ledger if one is present. An explicit `usage_reader`
+    overrides; otherwise `sqlite_usage_reader()` auto-detects and returns None
+    when no ledger exists — leaving `usage()` in its honest `unavailable` stub.
     """
-    engine = engine or ChatAuth()
+    if engine is None:
+        reader = usage_reader
+        if reader is None:
+            from .usage_reader import sqlite_usage_reader
+
+            reader = sqlite_usage_reader()
+        engine = ChatAuth(usage_reader=reader)
 
     def _wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
         # Uniform loud-error envelope (SEAM-SPEC §5): AuthError/OAuth1Error -> {error}.
