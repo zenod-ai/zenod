@@ -86,3 +86,74 @@ tester's stranger-run + guardrail probes close the epic.
 - Materializes Jordi's 2.4 ask + the chat-auth idea, generalized to the console-less unit
   pattern (device-code/PIN-first, single callback fallback, chat as dashboard). CD-0..CD-4
   framed with recommendations. Pen hands to the 2.3/2.4 planner per CD-0.
+
+### 2026-07-08 · [worker] GATING X-auth verification + planner fold (pre-C-2)
+
+**0 · Housekeeping receipt.** The 2.4 (this) + 2.6 docs existed only in unpushed local commit
+`f3950f7` — the "reset-wiped" hazard, again. This PR carries them to origin so they stop being
+strandable. No code shipped this session; this entry is the gating finding + a grounded fold.
+
+**1 · GATING FINDING — X auth flows on our tier (receipted; blocks C-2 & resolves CD-3).**
+Verified against X's live developer docs:
+- **Device-code (RFC 8628): DOES NOT EXIST on X.** Absent from X's OAuth2 docs; only
+  Auth-Code-with-PKCE + refresh is offered. → the doc's "device-code preferred" premise is
+  **not buildable**. Source: https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code
+- **OAuth 2.0 Auth-Code + PKCE: supported, but `redirect_uri` is MANDATORY** and must be
+  pre-registered (localhost/127.0.0.1 banned) → a real callback route is required; not
+  "zero callback." Source: same URL as above.
+- **OAuth 1.0a PIN-based (`oauth_callback=oob`): supported & documented.** User visits x.com,
+  authorizes, copies a **7-digit PIN** back — zero *runtime* redirect (fits the console-less
+  thesis). Caveat: the app still must register a callback URL **once** and enable OAuth1.0a
+  Read+Write. Source: https://developer.twitter.com/en/docs/authentication/oauth-1-0a/pin-based-oauth
+- **Corroborating ground truth in-repo:** `services/x-mcp` already signs via the **OAuth1.0a**
+  client and the upstream (pinned `XMCP_REF=63d34362d88ed9f94d54ccd5ecd5bb4d12e11759`) ships
+  `run_oauth1_flow()` — the exact PIN/oob dance. Our `headless-oauth1.patch` currently *bypasses*
+  it with a single owner token/secret from env. So the PIN machinery exists; C-2's real work is
+  re-exposing it as **per-tenant** chat tools, not inventing a flow.
+
+**→ CD-3 RESOLUTION (recommend, Jordi calls): PIN-first via OAuth 1.0a `oob`**, with a single
+OAuth2/PKCE callback route kept only as the fallback for *future* providers (Reddit/email), not
+X. This is the only path that delivers the literal "visit x.com, enter this PIN" chat story.
+
+**2 · The real C-2 architecture note (multi-tenant is the work, not the flow).** Today x-mcp
+signs every request as **one owner** (single env token/secret). A hosted Callisthenes serving
+strangers needs **per-tenant OAuth1 access token+secret, keyed by the MCP access token**, with
+`connect()` → returns authorize-URL+PIN instructions, `complete_connect(pin)` → exchanges &
+stores that tenant's tokens, `revoke()` → drops them. The `headless-oauth1.patch` owner-token
+path stays only for self-host single-user. Security (binding, already in doc): tool results
+return **canonical x.com URLs only**; C-22 draft-never-send + conservative throttle ship ON — and
+note both are **delegated to the Callisthenes agent layer**, NOT present in x-mcp itself, so C-1
+must add them in the unit.
+
+**3 · Concrete "clone Z-2" map (grounds C-3/C-4/C-5; explorer-verified).**
+- **Website/checkout:** Zenod's live front door is `apps/site/src/App.tsx` (Stripe Payment Link
+  hardcoded); `sites/callisthenes/index.html` is a **copy-complete skeleton** ("one mouth…"
+  story) but has **no CTA/Stripe**. C-3 = add the SKU + link, mirror `apps/site`.
+- **HARD DEPENDENCY / HAND-BACK SEAM:** the **webhook + provisioner live in the PRIVATE
+  `zenod-ai/cloud` repo** (`provision-standalone.mjs`, `cloud.zenod.dev/webhook`), NOT here.
+  C-3/C-4/C-5 cannot be completed from this repo alone — they need cloud-repo access + **LIVE**
+  Stripe key + webhook signing secret. Ref: `docs/Z-3-CHECKOUT-WIRING.md`,
+  `docs/Z-6-CUSTOMER-1-CHECKLIST.md`.
+- **Meter:** per-call ledger `/data/usage.sqlite` via `packages/server/src/sessionLog.ts`,
+  surfaced by `read_llm_timeline`. C-4's `usage()` = a Callisthenes-flavoured read of the same
+  ledger (calls · **sends** · cost). Gateway-key = source of truth per D-5.
+- **Watchdog:** `scripts/watchdog/zenod-watchdog.sh` + `units/PROVISIONING-RUNBOOK.md` step 4b
+  (append containers+health URL to `/etc/zenod-watchdog.env`); restore drill in
+  `docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md`. C-5 = clone, registering the Callisthenes container.
+- **Unit packaging gap (C-1):** there is **no** `units/callisthenes/` dir, standalone Dockerfile,
+  or standalone compose. The outbound brain is baked into the monorepo `Dockerfile` as
+  `AGENT=outbound`. C-1 must extract an atomic unit + stranger-grade README.
+
+**4 · CD framing for Jordi (nothing built forecloses these):**
+- **CD-1 (price):** recommend mirror Zenod's €5/mo shape — keeps one checkout template. Not blocking C-1/C-2.
+- **CD-2 (channels):** X-only at Move 0 confirmed sensible — one OAuth dance, proven core.
+- **CD-3:** RESOLVED above → PIN-first OAuth1 oob (device-code impossible).
+- **CD-4 (dashboard):** recommend none — the `usage()` tool proves the console-less thesis; the
+  ledger surface already exists so a page can be added later without rework.
+
+**5 · Honest status & hand-back.** Completable-here = this gating finding + fold (DONE, this PR).
+NOT done and NOT faked: C-1 unit extraction, C-2 per-tenant chat-auth code, C-3 LIVE Stripe/
+provision, C-4 meter, C-5 watchdog — the infra lanes are **blocked on `zenod-ai/cloud` access +
+LIVE secrets (Jordi)**. Recommended next dispatch once unblocked: C-1 ∥ C-2 (code, this repo) can
+proceed immediately; C-3/C-4/C-5 after cloud-repo + LIVE-key access. Worker does not self-certify;
+acceptance is the tester's + Jordi's per the exit criterion. — [worker]
