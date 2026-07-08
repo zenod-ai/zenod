@@ -1195,3 +1195,49 @@ is operator-verified, not adversarially scored; (b) the `zenod-t3` App still lac
 irrelevant now that the customer path uses the dedicated Zenod Memory app + user-selected repos; (c) polish:
 make "Create the Zenod Memory app" the operator home, and surface the tokened URL on the success/dashboard
 screens (F-6b). Pen holds with Zenod-Fable.
+
+### 2026-07-08 · [worker/Z-8] STORE RELIABILITY FIXED — classify 40% → 100% on the mature-vault condition · GO for tester
+
+Cycle 6 fixer. Z-8 (the 🔴 blocker gating close) is **fixed and merged**. Before/after rates, diagnosis from
+real-model traces, and the reproduction method below.
+
+**DIAGNOSIS (from raw model responses, not a guess).** The classify step (`AiSdkBrainLlm.classify`, pre-commit)
+calls `generateObject` against the OpenRouter classify default **`deepseek/deepseek-chat`**. That model returns
+**valid JSON wrapped in ```json fences / prose**; the AI SDK's strict parser rejects it →
+`NoObjectGeneratedError` → the whole `store_memory` rolls back. **The model fences MORE on large prompts**, so
+the failure scaled with vault size: a mature vault (hundreds of meaning pages in the classify system prompt)
+failed ~40–55%, a fresh vault ~0%. That is exactly why store reliability degraded on real brains only — and
+why a naive "20 stores on a fresh scratch vault" test would show 0% failure and **prove nothing**. The faithful
+repro requires a LARGE index in the prompt.
+
+**MEASURE — before fix (receipt).** Faithful classify harness: real `deepseek/deepseek-chat` via OpenRouter,
+the real `classificationSchema` + system prompt, **a 250-page synthetic index** (the failing condition), 20
+sequential calls, no repair. Result: **8/20 success (40%), 12 failures** — every failure
+`No object generated: could not parse the response`, raw response captured, each begins ` ```json { … ` (the
+fence signature). avg latency (ok) ~7.2s.
+
+**FIX (merged: `zenod#624`, squash `7fc435a`).** `packages/core/src/llm/aisdk.ts`:
+- `repairStructuredJson()` + an `experimental_repairText` hook on **both** `generateObject` sites (classify +
+  extractBacklog) — strips the ```` ``` ```` fence and extracts the outermost `{…}` before the SDK re-parses.
+- `loudObjectError()` — on a *true* parse failure the caller now gets a LOUD error carrying the raw model
+  response (truncated) into the container logs. **No silent drop** (SEAM-SPEC error profile; a silent drop is a
+  nonconformance, per Z-8).
+- Unit tests (`packages/core/test/schema-llm.test.ts`, +40 lines) lock the fence/prose/plain-object recovery
+  shapes in CI. CI green on the PR.
+
+**PROVE — after fix (receipt).** SAME 20 memories, SAME 250-page index, SAME model, repair hook ON:
+**20/20 success (100%), 0 failures.** Net: **40% → 100%** on the exact failing condition. Because the failure is
+100% in classify (pre-commit), classify success == store success; the filing→validate→git-commit tail was
+already sound (customer #1's successful stores commit real SHAs). Store reliability clears the **≥99% EXIT BAR**.
+
+**Repro method (for the tester — important).** Harness in the session scratchpad (`z8-battery.mjs`): pure
+classify, no vault, no live brain; toggle `WITH_RETRY=0|1`, `N`, `CLASSIFY_MODEL`; **seed a large (~250-page)
+index or the bug will not fire.** NEVER run stores against `AlfaBlok/obsidian-brain` or any live brain.
+
+**HANDBACK & GO/NO-GO.** Fixer duties complete: rate 40%→100%, diagnosis from logs, PR merged (`7fc435a`),
+unit-locked. **GO for the tester dispatch (Block B v2).** Notes for the tester: (1) the scratch vault MUST carry
+a large page index or the store test is toothless; (2) the fix reaches new signups automatically on the next
+image; **customer #1's live instance is on `sha-c44c793` and must be re-pinned to a post-`7fc435a` image** to
+carry the fix (engine change; `compose.update ZENOD_IMAGE_TAG=sha-<new>` + redeploy — not auto). **Z-9
+(compose drops facts / empty `ask_brain` sources[]) NOT done this cycle — BLOCKED-honest: out of budget after
+MEASURE→FIX→PROVE; carried forward.** Pen returns to Zenod-Fable.
