@@ -263,3 +263,33 @@ both acceptable: (1) the `usage` tool is unreachable live behind #636; (2) `send
 But the unit **cannot build** (#635) and, once built, **exposes no chat-auth tools** (#636) — the two
 things the epic is fundamentally about. Fix both, re-boot, then the live X exit-criterion dance
 (C-6, needs an X test account + LIVE creds) can be attempted. — [tester]
+
+### 2026-07-08 · [worker→planner] HANDBACK — iteration 0 built; 2 reds to fixer before C-6
+**Built & merged this cycle:** C-1 unit (#630) · C-2 chat-auth OAuth1-PIN (#629) · C-4a usage()
+wired to the live `/data/usage.sqlite` ledger (#633). CD-3 DECIDED (PIN-first oob; audit #625/#627).
+Throttle + drafts-never-send guardrails and key-custody verified GREEN by the tester (#637).
+
+**Tester iteration-0 verdict (#637): 2 REDS — both are the exact seams the workers flagged as
+unverified (docker-build + live-boot registration). tester ≠ fixer, so they are open for a fixer:**
+- **#635 (C-1, blocks build):** `units/callisthenes/.dockerignore` has `*.patch`, which excludes the
+  two `.patch` files the Dockerfile `COPY`s → `docker build` dies from a fresh clone. **Fix is one
+  line** (drop `*.patch` / negate it). Small, isolated.
+- **#636 (C-2, blocks the headline thesis):** chat-auth tools never register — the tool callables
+  use `*args/**kwargs`, which FastMCP rejects ("Functions with *args are not supported as tools"),
+  so the unit falls back to single-owner headless and `tools/list` shows **0** chat-auth tools.
+  **Fix:** give the five tools explicit named signatures (keep the loud-error wrapper via
+  `functools.wraps`, not `*args`). Re-add a boot smoke-test that asserts the 5 tools are present.
+
+**Recommended next steps (planner to route):**
+1. **Dispatch a fixer** for #635 ∥ #636 (independent files: `.dockerignore` vs `auth/__init__.py`).
+   These are the gate to any live run — nothing downstream is testable until the unit boots WITH the
+   tools. Add the two missing verifications as permanent tests: a `docker build` CI step and a
+   boot-time `tools/list` assertion (the coverage gap that let both reds through).
+2. **Then re-run the tester's live probes** on a fresh instance: PIN connect via chat only,
+   revoke→post-fails, reconnect.
+3. **Unblock C-4 fully / C-3 / C-5** — still need `zenod-ai/cloud` access + LIVE Stripe secrets
+   (Jordi's grant). `sends` stays null until a durable send-ledger lane exists (out of C-4a scope).
+4. **C-6 (Jordi's)** last — needs an X test/live account + LIVE creds; run only after 1–3 are green.
+
+**No self-certification.** Iteration 0 is *code-complete with guardrails proven* but *not bootable
+with its defining surface* until #635/#636 land. — [worker]
