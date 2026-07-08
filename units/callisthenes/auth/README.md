@@ -30,7 +30,7 @@ value from the request and passing it — that token **is** the tenant identity
 | `complete_connect(pin, service="x")` | mutating | stores tenant's OAuth1 access token+secret; receipt = connected `@screen_name`/`user_id` |
 | `connections()` | read | per-service status for this tenant (no secrets) |
 | `revoke(service\|token)` | mutating | drops this tenant's tokens; loud `not_found` if nothing to revoke |
-| `usage()` | read | calls · sends · cost for this tenant (see **OPEN SEAM**) |
+| `usage()` | read | calls · cost for this tenant from the live ledger (C-4a); `sends` null pending a send-ledger |
 
 ## Flow: OAuth 1.0a PIN (`oauth_callback=oob`) — CD-3 DECIDED
 
@@ -71,29 +71,44 @@ Signing is HMAC-SHA1 over the RFC 5849 base string (stdlib only — mirrors upst
   (default, under `CALLISTHENES_DATA_DIR`, default `/data`) + `InMemoryTokenStore`.
 - `test_chat_auth.py`, `test_token_store.py` — pytest, X HTTP mocked. `python -m pytest`.
 
-## OPEN SEAM
+## `usage()` ledger — WIRED (C-4a, 2026-07-08)
 
-### Live per-tenant usage ledger (`usage()`)
-
-`usage()` must return **calls · sends · cost** for the calling tenant. The live
-ledger is `/data/usage.sqlite`, written by `packages/server/src/sessionLog.ts` and
-surfaced via `read_llm_timeline` (epic APPEND ZONE §3, "Meter"). That ledger is
-**not reachable from inside this unit** at build time, and its per-tenant keying
-(gateway-key = source of truth, D-5) is owned by lane **C-4**.
-
-**We do not fake numbers.** The interface is fixed and pluggable:
+`usage()` returns **calls · sends · cost** for the calling tenant. It is now
+wired to the live ledger `/data/usage.sqlite` (table `llm_usage`, written by
+`packages/server/src/usageStore.ts`) via `usage_reader.py`:
 
 ```python
-ChatAuth(..., usage_reader=lambda mcp_token -> {"calls": int, "sends": int, "cost_usd": float})
+from usage_reader import sqlite_usage_reader
+ChatAuth(..., usage_reader=sqlite_usage_reader())   # auto-wired by register() too
 ```
 
-- When a `usage_reader` is injected, `usage()` returns `{source: "ledger", usage: <reader output>}`.
-- With no reader wired, `usage()` returns the explicit stub
-  `{source: "unavailable", usage: {calls: null, sends: null, cost_usd: null}}` —
-  `null` (not `0`) signals "not measured" vs "measured zero" (SEAM-SPEC §2:
-  read tools return an explicit-empty marker, never fake data).
+Honest mapping (**zero faked values**, SEAM-SPEC §2):
+- `calls`    = `COUNT(*)`         → **real**
+- `cost_usd` = `SUM(cost_usd)`    → **real**
+- `sends`    = **`null`** → the `llm_usage` ledger *genuinely lacks* a send/post
+  column; it logs LLM calls, not outbound X sends. `null` means "not measured",
+  never "measured zero". A real send count needs a dedicated Callisthenes
+  send-ledger (written by the draft-guard/throttle send path) — a **future lane**,
+  not this table. See ↓ REMAINING SEAM.
 
-**Hand-back to C-4:** implement `usage_reader(mcp_token)` against
-`/data/usage.sqlite` (filter by the tenant's gateway key), then pass it into
-`ChatAuth(...)` at wrapper construction. No change to this package's surface is
-required.
+Behaviour:
+- Ledger present → `{source: "ledger", usage: {calls, sends: null, cost_usd}}`.
+- `register()` auto-detects the ledger; if the DB file is absent
+  `sqlite_usage_reader()` returns `None` and `usage()` stays in its explicit
+  `{source: "unavailable", usage: {calls: null, sends: null, cost_usd: null}}`
+  stub — `null` (not `0`) = "not measured".
+- Empty-but-present ledger → `calls: 0, cost_usd: 0.0` (measured zero is real);
+  table-missing DB → all-`null`.
+
+Tenancy: `llm_usage` has no tenant column. Zenod topology is instance-per-user
+(one container == one tenant), so the container-local ledger IS the tenant's;
+the `tenant` arg is accepted but not used as a DB filter (documented in
+`usage_reader.py`). If a multi-tenant-per-container topology ever lands, add a
+tenant column upstream and filter here — the interface does not change.
+
+Config knobs: `CALLISTHENES_USAGE_DB` (ledger path, default `/data/usage.sqlite`).
+
+### REMAINING SEAM (honest)
+`sends` stays `null` until a durable Callisthenes send-ledger exists. That is a
+separate lane, not C-4a. C-3/C-5 remain blocked on `zenod-ai/cloud` access +
+LIVE Stripe secrets (Jordi's grant).
