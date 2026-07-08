@@ -75,6 +75,60 @@
         margin-bottom: 0.2rem;
       }
       .rule dd { color: var(--muted); font-size: 0.98rem; }
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 2.8rem;
+      }
+      .btn {
+        display: inline-block;
+        background: var(--ink);
+        color: var(--paper);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1.02rem;
+        padding: 0.85rem 1.5rem;
+        border-radius: 0.6rem;
+        transition: opacity 0.15s ease;
+      }
+      .btn:hover { opacity: 0.88; }
+      .price { color: var(--muted); font-size: 0.95rem; }
+      .price strong { color: var(--ink); font-weight: 600; }
+      .steps {
+        display: grid;
+        gap: 1.1rem;
+        counter-reset: step;
+        border-top: 1px solid var(--line);
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+      }
+      .steps li {
+        list-style: none;
+        padding-left: 2.4rem;
+        position: relative;
+        color: var(--muted);
+        font-size: 0.98rem;
+      }
+      .steps li strong { color: var(--ink); font-weight: 600; }
+      .steps li::before {
+        counter-increment: step;
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: -0.1rem;
+        width: 1.6rem;
+        height: 1.6rem;
+        border: 1px solid var(--accent);
+        border-radius: 50%;
+        color: var(--accent);
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
       footer {
         border-top: 1px solid var(--line);
         color: var(--muted);
@@ -88,27 +142,37 @@
   </head>
   <body>
     <main class="wrap">
-      <p class="eyebrow">The Suite · one door</p>
-      <h1>The Ring.</h1>
-      <p class="lede">One door to everything. Your WhatsApp, your web chat, one number — your whole suite answers through it.</p>
-      <p class="job">The Ring is the product: it owns your conversation, serializes your turns, and routes every message to the right unit — then relays the answer back, verbatim and attributed. <strong>Phylax</strong> is the channel gateway inside it, wrapping WhatsApp and Telegram — zero intelligence, all pipe.</p>
+      <p class="eyebrow">The Ring · your WhatsApp agent</p>
+      <h1>One number. Your agent answers.</h1>
+      <p class="lede">Text one WhatsApp number and your own agent replies — with a brain that sees every tool you connect and routes each message where it belongs.</p>
+      <div class="cta-row">
+        <!-- LIVE €5/mo Stripe Payment Link (price_1Tptlw80yG7aohEWL9X4zqMI). Checkout → cloud.zenod.dev webhook → provisioning → success_url must land the buyer on their new tenant's /setup wizard (opens on the WhatsApp pairing step). Set that success_url on the Payment Link in Stripe. -->
+        <a class="btn" href="https://buy.stripe.com/3cIdR3bSLgyL7yi89HbAs01">Get your agent — €5/month →</a>
+        <span class="price"><strong>€5 / month</strong> · your own dedicated instance · cancel anytime</span>
+      </div>
+      <p class="job">The Ring is the one door: an LLM gateway that owns your conversation, serializes your turns, and decides — from the tools you've connected and the skill attached to each — which one handles a message. Name a guy (“ask Herald…”) and it passes straight through. <strong>Phylax</strong> is the channel gateway inside it, carrying WhatsApp and Telegram.</p>
+      <ol class="steps">
+        <li><strong>Pay €5.</strong> We provision your own dedicated instance — no shared servers, your git repo as its memory.</li>
+        <li><strong>Land on setup.</strong> Set a password, connect your vault and model.</li>
+        <li><strong>Pair WhatsApp.</strong> Scan one QR to link your own number, allowlist yourself — then just text your agent.</li>
+      </ol>
       <dl class="rule">
         <div>
           <dt>One number</dt>
-          <dd>You talk to one place. The Ring decides who inside handles it.</dd>
+          <dd>You talk to one place. The Ring's brain decides who inside handles it.</dd>
         </div>
         <div>
-          <dt>Verbatim relay</dt>
-          <dd>The Ring never composes or acks on anyone's behalf — every reply is attributed to the guy who wrote it.</dd>
+          <dt>Named pass-through</dt>
+          <dd>Address a guy by name and the Ring calls that tool directly — minimal thinking, the answer comes back attributed.</dd>
         </div>
         <div>
-          <dt>Provenance in, provenance out</dt>
-          <dd>Replies exit through the same gate they entered. Same chat, every time.</dd>
+          <dt>Your instance, your data</dt>
+          <dd>A dedicated container per customer; memory lives in a git repo you own, every write a real commit.</dd>
         </div>
       </dl>
     </main>
     <footer>
-      Iteration-0 skeleton · part of the Atomic Suite ·
+      Part of the Atomic Suite ·
       <a href="https://github.com/zenod-ai/zenod">zenod-ai/zenod</a>
     </footer>
   </body>
