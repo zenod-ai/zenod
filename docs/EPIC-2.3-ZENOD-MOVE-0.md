@@ -1318,3 +1318,47 @@ unproven (untestable in this non-interactive seat). I do not fake-green what I c
 
 HANDBACK — pen returns to Zenod-Fable. Next dispatch must (a) build Z-9, (b) hand the tester a chat key +
 scratch tenant + a way to drive the live card so RUN 1 and the Z-4/Z-5 drills are actually runnable.
+
+### 2026-07-08 · [worker/Z-9] HANDBACK — synthesis fidelity fixed (ask_brain always cites structured sources)
+
+Z-9 built and merged. `fix(core): Z-9 ask_brain … grounds in bodies + Log/ evidence` — PR #646, squash
+`e3daf6c` on main; image `sha-e3daf6c` published.
+
+**Diagnosis (from the code, matches the handback root cause):** `ask_brain`/`chat` share `answer()`
+(`packages/core/src/llm/aisdk.ts`). `sources` was built from `readPaths`, which fills ONLY when the model
+calls `read_note` (line ~1080). `search_vault` results never counted. So a snippet-only answer → empty
+`readPaths` → **empty structured `sources`**; and because the loop never fell through to note bodies /
+`Log/` receipts, a fact `compose` dropped from a summary was invisible at ask-time.
+
+**Fix (ask/answer loop only — store/classify path untouched, Z-8 preserved):**
+- Track the `search_vault` hit paths the model consulted (`searchedPaths`, ordered/deduped, parsed from the
+  `"<path> (score N) — snippet"` result lines).
+- `sources = notes read in full, else fallback to the top hits consulted` → a synthesized answer is **never
+  source-less when the vault had hits** (honest empty only on a genuine miss). The `Log/` evidence hit is
+  carried, so a compose-dropped fact stays **citable at ask-time** without touching `compose`.
+- Grounding prompt: open the top hit with `read_note` (incl. `Log/` when a detail seems missing) before
+  concluding.
+
+**Proof (deterministic, this seat):** `packages/core/test/aisdk-answer-sources.test.ts` (4 cases):
+non-empty sources on a search-only answer (incl. the `Log/` hit); precise sources when a note is read;
+grounding instruction present; honest-empty on a true miss. Full core suite green: **304 passed / 6
+skipped, 21 files** (incl. the Z-8 `schema-llm` test — store reliability un-regressed). `tsc --noEmit` clean.
+
+**Acceptance vs ticket:** (1) ask_brain cites structured sources — ✅ proven deterministically; live tenant
+spot-check ⚠️ BLOCKED (see below). (2) live store battery ≥99% still holds — ✅ by construction: no line of
+the store/classify path changed; Z-8 test green. (3) receipts land in tenant repo — unchanged (store path
+untouched).
+
+**⚠️ BLOCKED — live re-pin of customer #1's instance to `sha-e3daf6c`.** Env is set
+(`ZENOD_IMAGE_TAG=sha-e3daf6c`, verified), the image exists in GHCR (200), but Dokploy `compose.redeploy`
+AND `compose.deploy` both jump straight to `composeStatus=done` without recreating the container — instance
+stays on `sha-4d5bcfc`. This is the same intermittent Dokploy redeploy-no-op seen in cycle-5/6 (it resolved
+on a later retry, e.g. `c44c793→4d5bcfc`), NOT a Z-9 defect. The fix ships automatically to any NEW signup
+(provisioner pulls latest); existing tenant needs a successful recreate. Exact blocker: `compose.one`
+never leaves `done`/never enters `running` for compose `xDxfVYs0_4M09naWuCl66`.
+
+**GO/NO-GO for tester dispatch:** Z-9 CODE — **GO** (merged, deterministically proven, Z-8 preserved). Live
+tenant `ask_brain`-cites-sources verification — **retry the tenant re-pin first** (or provision a fresh
+scratch tenant on `sha-e3daf6c`); do NOT score Z-9 live against a tenant still on `sha-4d5bcfc`.
+
+HANDBACK — pen returns to Zenod-Fable.
