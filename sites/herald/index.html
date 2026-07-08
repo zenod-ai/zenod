@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Herald — your voice, posted with your ✓</title>
+    <meta name="description" content="Herald runs your public presence: it learns your brief, brings you the morning's proposals with sources, and posts only what you approve. One button, one price." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%AF%3C/text%3E%3C/svg%3E" />
+    <style>
+      :root {
+        --ink: #14110f;
+        --paper: #f6f3ee;
+        --muted: #6b625a;
+        --accent: #b4622a;
+        --line: #ddd6cc;
+        --card: #fbf9f5;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { -webkit-text-size-adjust: 100%; }
+      body { background: var(--paper); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; min-height: 100vh; display: flex; flex-direction: column; }
+      .draft-banner { background: var(--ink); color: var(--paper); font-size: 0.72rem; letter-spacing: 0.04em; text-align: center; padding: 0.4rem 1rem; }
+      .draft-flag { display: inline-block; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 0.6rem; }
+      .wrap { flex: 1; max-width: 46rem; margin: 0 auto; padding: clamp(2.4rem, 8vw, 5rem) 1.5rem 3rem; width: 100%; }
+      .eyebrow { font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; font-weight: 600; }
+      h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 500; font-size: clamp(2.6rem, 9vw, 4.4rem); line-height: 1.03; letter-spacing: -0.01em; margin-bottom: 1.4rem; }
+      h2 { font-family: Georgia, serif; font-weight: 500; font-size: clamp(1.5rem, 5vw, 2rem); margin-bottom: 1rem; }
+      .lede { font-size: clamp(1.1rem, 3.2vw, 1.4rem); color: var(--muted); max-width: 34rem; margin-bottom: 2.4rem; }
+      .job { border-left: 2px solid var(--accent); padding: 0.2rem 0 0.2rem 1.2rem; font-size: 1.05rem; margin-bottom: 2.8rem; }
+      .job strong { color: var(--ink); }
+      section { margin-top: 2.8rem; }
+      .rule { display: grid; gap: 1.1rem; border-top: 1px solid var(--line); padding-top: 1.6rem; margin-bottom: 1rem; }
+      .rule dt { font-family: Georgia, serif; font-size: 1.15rem; margin-bottom: 0.2rem; }
+      .rule dd { color: var(--muted); font-size: 0.98rem; }
+      .get { background: var(--card); border: 1px solid var(--line); border-radius: 0.6rem; padding: 1.8rem; margin-top: 1.6rem; text-align: center; }
+      .get .price { font-size: 0.95rem; color: var(--accent); font-weight: 600; margin-bottom: 0.5rem; }
+      .get p { color: var(--muted); font-size: 0.98rem; margin: 0 auto 1.4rem; max-width: 30rem; }
+      .btn { display: inline-block; text-align: center; text-decoration: none; font-weight: 600; font-size: 1rem; padding: 0.8rem 1.6rem; border-radius: 0.45rem; transition: opacity 0.15s ease; }
+      .btn:hover { opacity: 0.85; }
+      .btn-primary { background: var(--accent); color: #fff; }
+      .fineprint { font-size: 0.82rem; color: var(--muted); margin-top: 1rem; }
+      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; padding: 1.8rem 1.5rem; text-align: center; }
+      footer a { color: var(--accent); text-decoration: none; }
+      footer a:hover { text-decoration: underline; }
+      footer .legal { margin-top: 0.6rem; }
+    </style>
+  </head>
+  <body>
+    <!-- [DRAFT — Epic 0 voice pending] All marketing copy below is a functional placeholder. Per EPIC-2.6 boundary "↔ Epic 0": final marketing copy, briefing voice, and launch materials land via Jordi (Epic 0 owns tone) AND publish only after HD-3's dogfood loop is real. Keep copy minimal until then. -->
+    <div class="draft-banner">[DRAFT — Epic 0 voice pending] · placeholder copy, not final · publishes only after HD-3 dogfood loop is real</div>
+    <main class="wrap">
+      <p class="eyebrow">The Suite · the loop</p>
+      <h1>Your voice,<br />posted with your ✓.</h1>
+      <p class="lede">Herald runs your public presence. It learns your brief, brings you the morning's proposals — each citing where it came from — and posts only what you approve.</p>
+      <p class="job">Herald is <strong>one guy, living in your ring</strong>. He negotiates a briefing with you over WhatsApp, then every morning proposes what to say. Nothing goes out without your check. <strong>He posts only through Callisthenes</strong> — Herald never holds a sending key.</p>
+
+      <section id="how">
+        <span class="draft-flag">Draft — Epic 0 voice pending</span>
+        <h2>How it works</h2>
+        <dl class="rule">
+          <div>
+            <dt>You pair by QR, then just talk</dt>
+            <dd>Scan a code, connect WhatsApp, and negotiate your brief in plain chat. No dashboard to learn.</dd>
+          </div>
+          <div>
+            <dt>The morning proposals, sourced</dt>
+            <dd>Each day Herald brings a set of things to post. Every proposal cites the memory it came from. Approve the ones you like — "✓ 1, 3, and give me five more."</dd>
+          </div>
+          <div>
+            <dt>Supervised — every post carries your ✓</dt>
+            <dd>At launch, nothing sends without your check. Each post comes back with a permalink receipt, and a weekly report tells you how it's going.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section id="get">
+        <span class="draft-flag">Draft — Epic 0 voice pending</span>
+        <h2>Get Herald</h2>
+        <div class="get">
+          <!-- HD-1: one SKU, ~$200/mo LIVE. Final number via Product-Fable / Epic 0. -->
+          <p class="price">~$200 / month · one plan</p>
+          <p>One button provisions your whole stack — the ring, Herald, your memory, and your outbound voice — wired, metered, and watchdogged. You pair by QR and start talking. Zero setup.</p>
+          <!--
+            TODO H-3 (Epic 0 + LIVE SKU): replace href="#" with the LIVE Stripe Checkout / Payment Link URL.
+            Wiring plan: docs/HERALD-BUY-BUTTON-PLAN.md — checkout → cloud.zenod.dev webhook → provision full stack.
+            BLOCKED-needs: LIVE Stripe key + one recurring ~$200/mo price (HD-1), then drop the URL here.
+            Mirrors the Zenod pattern in sites/zenod/index.html (the live buy.stripe.com/... link).
+          -->
+          <a class="btn btn-primary" href="#">Get Herald →</a>
+          <p class="fineprint">Supervised mode at launch — every post carries your ✓. Herald posts only through Callisthenes and never holds your sending keys.</p>
+        </div>
+      </section>
+    </main>
+    <footer>
+      Iteration-0 skeleton · part of the Atomic Suite ·
+      <a href="https://github.com/zenod-ai/zenod">zenod-ai/zenod</a>
+      <div class="legal">
+        <!-- Reuse the Epic-2 H-11 legal minimum (DRAFT). Shared source: sites/zenod/legal/. Wire once Herald's own legal copy is ready. -->
+        <a href="../zenod/legal/terms.html">Terms of Service</a> ·
+        <a href="../zenod/legal/privacy.html">Privacy</a>
+      </div>
+    </footer>
+  </body>
+</html>

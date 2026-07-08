@@ -1,0 +1,70 @@
+# units/herald/docker-compose.herald.yml — STUB (blueprint).
+#
+# Herald = the practice guy: the LLM brain that negotiates the briefing, proposes the
+# morning N (each citing its memory source), and posts on the customer's ✓. It deploys
+# as one MCP-over-HTTP box that is BOTH an MCP server (its front door — the ring nucleus
+# or a BYO-ring points here) AND an MCP client to exactly two peers: memory (Zenod) and
+# mouth (Callisthenes). Today it reuses the ROOT image with AGENT=herald (RD-4 (b):
+# monorepo, root-image reuse until the split trigger fires), mirroring
+# units/zenod/docker-compose.zenod.yml. This file is the seam-of-record for the unit.
+#
+# The invariant that defines Herald: it holds NEITHER authority its peers hold.
+#   - NO repo token  -> memory is a seam (Zenod holds the repo token; law 6b).
+#   - NO world keys   -> sending is a seam (Callisthenes holds X/Reddit/email keys).
+# Herald carries only two PEER bearer tokens + its own front-door token. Every post is
+# ✓-gated (HD-2, supervised at launch) — there is no auto-send path. See SEAM-SURFACE.md.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  herald-data:
+
+services:
+  herald:
+    build:
+      # BLUEPRINT: root context today (root-image reuse). Post-split this becomes
+      # `context: .` over the git-filter-repo'd units/herald subtree.
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: herald:dokploy
+    container_name: herald
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      # In-process practices scheduler state + SQLite live here. Herald's durable
+      # MEMORY is NOT in this volume — that is the Zenod seam. This is just the guy's
+      # local working state (the proposal queue is mirrored to memory pages via Zenod).
+      - herald-data:/data
+    environment:
+      AGENT: herald
+      ZENOD_DATA_DIR: /data
+      PORT: "8090"
+      # --- provisioning model (token-origination; see docs/SUITE-SCAFFOLD.md) ---
+      # Boot un-provisioned and idle until the keyring/Console mints this unit's
+      # front-door token + the two PEER tokens and pushes them + config to
+      # /api/provision. A stranger self-hosting instead sets the vars below by hand
+      # (see README.md "The two seams Herald depends on").
+      ZENOD_AWAIT_PROVISION: "1"
+      # --- Herald's front-door bearer (set by provision OR pinned by hand) ---
+      # HERALD_API_TOKEN: pin any long secret string; if unset, one is generated and
+      #                   printed once to the boot logs (ZD-9 rule).
+      # --- Seam A: memory (a Zenod-conformant unit) ---
+      # ZENOD_MCP_URL:    e.g. http://zenod:8080/mcp   (the memory seam endpoint)
+      # ZENOD_MCP_TOKEN:  per-unit bearer for that memory unit (NOT the repo token)
+      # --- Seam B: mouth (a Callisthenes-conformant unit) ---
+      # CALLISTHENES_MCP_URL:   e.g. http://callisthenes:8100/mcp (the send seam endpoint)
+      # CALLISTHENES_MCP_TOKEN: per-unit bearer for that send unit (NOT any world key)
+      # --- LLM key (the brain) ---
+      # ANTHROPIC_API_KEY or OPENAI_API_KEY
+      #
+      # NEVER set here (Herald must not hold them): GITHUB_TOKEN / VAULT_REPO (Zenod's),
+      # any X / Reddit / SMTP / world key (Callisthenes's). Law 6b — no second door.
+    expose:
+      - "8090"
+    # Public deploys front this with a reverse proxy at https://<host>/mcp — this is the
+    # BYO-ring endpoint customers point their own ring at (README "The endpoint").
+    # ports: ["8090:8090"]   # uncomment for a local stranger quickstart

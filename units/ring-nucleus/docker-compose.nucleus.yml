@@ -1,0 +1,81 @@
+# The Ring Nucleus — small compose (STUB / blueprint, EPIC 2.6 lane H-1).
+#
+# The nucleus is the REAL ring at MINIMUM size: a Phylax channel gateway + a tiny
+# deterministic core with exactly four jobs — durable mailbox, provenance on every
+# entry, verbatim attributed relay, and a ONE-ROW routing table `* -> Herald`.
+#
+# EXPLICITLY NOT HERE (all 2.7 / units/ring/): keyring UI, LLM/enum classifier,
+# attention rules, council guy, media/STT, Telegram, web channel. This is the first
+# installment of the 2.7 ring — shared lineage, never a fork. See README.md.
+#
+# NOT wired for deploy yet — documents the target topology. Both boxes speak pure MCP
+# over the internal network (W-D SEAM-SPEC); the Phylax<->nucleus-core edge is the seam.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-nucleus-core-data:   # mailbox SQLite (provenance ledger)
+  zenod-phylax-data:         # Baileys/WhatsApp session state (isolated; survives core rebuilds)
+
+services:
+  # -------------------------------------------------------------------------------------
+  # nucleus-core — deterministic core: mailbox + provenance + verbatim relay + one-row
+  # route. NO brain/guy logic, NO classifier, NO keyring, NO attention rules (those are
+  # units/ring/ = 2.7). Routes every turn to exactly ONE guy: Herald.
+  # -------------------------------------------------------------------------------------
+  nucleus-core:
+    build:
+      context: ../..            # root of the monorepo — reuse the root Dockerfile
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zenod-nucleus-core:dokploy
+    container_name: zenod-nucleus-core
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-nucleus-core-data:/data
+    environment:
+      AGENT: nucleus                    # boots the deterministic core, NOT a BrainEngine
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # Phylax gateway seam (internal MCP). nucleus-core calls phylax.send_to_user / get_media.
+      NUCLEUS_PHYLAX_URL: http://zenod-phylax:8080
+      NUCLEUS_PHYLAX_TOKEN: ${NUCLEUS_PHYLAX_TOKEN}
+      # The ONE route. Static table `* -> Herald`. There is NO router LLM key here — the
+      # route is a const, not a classification. Herald's per-unit MCP token, wired at provision.
+      NUCLEUS_HERALD_URL: ${NUCLEUS_HERALD_URL:-http://herald:8080}
+      NUCLEUS_HERALD_TOKEN: ${NUCLEUS_HERALD_TOKEN}
+    expose:
+      - "8080"
+    # Public ingress is not required for the nucleus in Move 0; the channel is WhatsApp
+    # via Phylax. (A local operator can front nucleus-core for get_conversation.)
+
+  # -------------------------------------------------------------------------------------
+  # phylax — channel gateway (Baileys/WhatsApp + QR pairing screen). Zero intelligence.
+  # Own volume so a Baileys/BSP swap never touches the mailbox. Serves its own QR screen
+  # (H-1: fresh boot -> QR pair). Telegram/web are 2.7, not wired here.
+  # -------------------------------------------------------------------------------------
+  phylax:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zenod-phylax:dokploy
+    container_name: zenod-phylax
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-phylax-data:/data        # Baileys auth state — isolated volume
+    environment:
+      AGENT: phylax                     # starts ONLY the WhatsApp socket + QR screen + MCP
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      # Inbound calls nucleus-core; token issued at provision (no keyring UI in the nucleus).
+      PHYLAX_NUCLEUS_CORE_URL: http://zenod-nucleus-core:8080
+      PHYLAX_NUCLEUS_CORE_TOKEN: ${PHYLAX_NUCLEUS_CORE_TOKEN}
+    expose:
+      - "8080"
