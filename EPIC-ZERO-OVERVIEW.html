@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Epic Zero — Overview</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c232c; --line:#2b333d;
+    --tx:#e6edf3; --tx2:#9aa7b4; --tx3:#6e7b89;
+    --accent:#7c9cff; --green:#3fb950; --amber:#d29922; --red:#f26d6d; --grey:#8b949e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--tx);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+  .deck{height:100vh;display:flex;flex-direction:column}
+  .slide{flex:1;display:none;padding:34px 48px 20px;overflow:auto}
+  .slide.on{display:block;animation:f .25s ease}
+  @keyframes f{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  h1{font-size:27px;letter-spacing:-.4px;margin-bottom:4px}
+  h1 .n{color:var(--accent);font-size:14px;letter-spacing:2px;display:block;margin-bottom:6px;text-transform:uppercase}
+  h2{font-size:15px;color:var(--tx2);font-weight:600;margin:2px 0 16px}
+  .sub{color:var(--tx3);font-size:12.5px;margin-bottom:18px}
+  .grid{display:grid;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card h3{font-size:14px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .card p,.card li{color:var(--tx2);font-size:13px}
+  ul{padding-left:18px;margin-top:4px} li{margin:3px 0}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+  .p-done{background:rgba(63,185,80,.16);color:var(--green)}
+  .p-part{background:rgba(210,153,34,.16);color:var(--amber)}
+  .p-no{background:rgba(242,109,109,.16);color:var(--red)}
+  .p-plan{background:rgba(139,148,158,.16);color:var(--grey)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+  td.u{font-weight:600;color:var(--tx)}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  pre{background:#0a0e14;border:1px solid var(--line);border-radius:9px;padding:12px 14px;color:#c9d4e0;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;margin-top:8px}
+  .flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}
+  .node{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;text-align:center}
+  .node small{display:block;color:var(--tx3);font-weight:400;font-size:11px;margin-top:2px}
+  .node.ring{border-color:var(--accent);box-shadow:0 0 0 1px rgba(124,156,255,.25) inset}
+  .arw{color:var(--tx3);font-size:18px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--tx3);margin-top:12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid var(--line);background:var(--panel)}
+  .nav .ttl{color:var(--tx3);font-size:12px}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px}
+  .btn:hover{border-color:var(--accent)}
+  .dots{display:flex;gap:6px}
+  .dt{width:8px;height:8px;border-radius:50%;background:var(--line);cursor:pointer}
+  .dt.on{background:var(--accent)}
+  .two{grid-template-columns:1fr 1fr}
+  .three{grid-template-columns:1fr 1fr 1fr}
+  .tag{font-size:10.5px;color:var(--tx3);border:1px solid var(--line);border-radius:5px;padding:1px 6px;margin-left:6px}
+  b.k{color:var(--tx)}
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- 1 -->
+<section class="slide on">
+  <h1><span class="n">Epic Zero · the oversight</span>Launch Herald — by launching each unit first</h1>
+  <h2>Epic Zero isn't a feature. It's the campaign that ships four products and then points one of them (Herald) at promoting the other three — and itself.</h2>
+  <div class="grid three">
+    <div class="card"><h3>① Ship each unit standalone</h3><p>Three separately sold, separately deployed MCP products, each with its own site + Stripe + instance:</p>
+      <ul><li><b class="k">Zenod</b> — memory <span class="tag">2.3</span></li><li><b class="k">Callisthenes</b> — the voice <span class="tag">2.4</span></li><li><b class="k">The Ring</b> — the gateway <span class="tag">2.5/2.6</span></li></ul></div>
+    <div class="card"><h3>② Assemble Herald</h3><p>Herald = a guy the Ring routes to, that reads <b class="k">Zenod</b> and posts through <b class="k">Callisthenes</b>. The loop, sold as one button.</p><p style="margin-top:8px;color:var(--tx3)">"Herald alive" needs Zenod alive + Callisthenes alive + a Ring to carry WhatsApp.</p></div>
+    <div class="card"><h3>③ Herald promotes them all</h3><p>The dogfood experiment: Herald runs the public presence for Zenod, for Callisthenes, for the Ring — <i>and for Herald</i>. The growth chart becomes the sales page.</p></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>My role</h3><p>Keep the highest-level view: what are we actually building, where does each piece stand, what's the critical path, and what only <b class="k">you</b> can unblock. Low-level build stays with the workers.</p></div>
+</section>
+
+<!-- how we work -->
+<section class="slide">
+  <h1><span class="n">How we work · the operating model</span>The docs are the truth. You say "read up."</h1>
+  <h2>Workers explain themselves in each unit doc, additively, every iteration. I read them and tell you the next move. You never copy-paste between us.</h2>
+  <div class="grid two">
+    <div class="card"><h3>The loop</h3><ul>
+      <li>Worker does an iteration → writes a dated handback <b class="k">into the unit doc</b> (a commit is not "done" — the doc entry is)</li>
+      <li>You say <b class="k">"read up"</b> → I read the five docs → I know where we are</li>
+      <li>I bring you the <b class="k">next move</b> at high level. If you agree, you tell the worker: <i>"planner left instructions in the doc, go next iteration."</i></li>
+    </ul>
+    <p style="margin-top:8px;color:var(--tx3)">Live proof today: Z-9 code landed (commit 6e967d7) but the 2.3 doc still said "unbuilt" → so it wasn't done. That's the gap we're closing.</p></div>
+    <div class="card"><h3>My five signals</h3>
+      <table style="margin-top:2px">
+        <tr><td><span class="pill" style="background:rgba(124,156,255,.16);color:var(--accent)">🔵 TEST</span></td><td>ready for you to try — I say what to expect</td></tr>
+        <tr><td><span class="pill p-part">🟠 DECISION</span></td><td>a call only you can make</td></tr>
+        <tr><td><span class="pill p-no">🔴 PROBLEM</span></td><td>a blocker I can't solve (keys, access)</td></tr>
+        <tr><td><span class="pill p-plan">⚙️ ITERATE</span></td><td>instructions left in the doc — send the worker</td></tr>
+        <tr><td><span class="pill p-done">🟢 GREEN</span></td><td>passed its basic test — slide 4 turns greener</td></tr>
+      </table></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>Two standing orders just set</h3><ul>
+    <li><b class="k">SO-1 · Stripe = TEST mode.</b> Provision exactly as if real, but no live charges. Supersedes all "real card / LIVE" language.</li>
+    <li><b class="k">SO-2 · Worktree discipline.</b> One worktree per worker, named by unit, edits only its own folder + doc, lands via PR. (~20 worktrees exist today, most stale — prune them.)</li>
+  </ul></div>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <h1><span class="n">The revised spec · your call</span>The Ring <i>is</i> the Council</h1>
+  <h2>One instance, one brain. The Ring is a connector with an LLM that sees every connected MCP tool and mostly passes the prompt through. No separate "dumb router + smart council."</h2>
+  <div class="flow">
+    <div class="node">WhatsApp<small>+ Telegram + Drive</small></div><span class="arw">→</span>
+    <div class="node ring">THE RING = THE COUNCIL<small>LLM brain · sees all tools · routing skills · connect-MCP UI</small></div><span class="arw">→</span>
+    <div class="node">a guy / a tool</div>
+  </div>
+  <div class="grid three" style="margin-top:8px">
+    <div class="card"><h3>What the Ring owns</h3><ul>
+      <li>Channels: WhatsApp gateway, Telegram, Google Drive ingest</li>
+      <li>UI to <b class="k">connect MCP servers</b> — each added with a <b class="k">skill</b> teaching when to use it</li>
+      <li>Pick a <b class="k">default</b> route (what happens when the message is ambiguous)</li>
+      <li>Fan-in → route → relay the guy's answer back verbatim</li></ul></div>
+    <div class="card"><h3>The guys &amp; tools it connects</h3><ul>
+      <li><b class="k">Herald</b> — a guy (a member). Message "for Herald" → Ring calls the tool, passes the prompt, barely thinks.</li>
+      <li><b class="k">Zenod</b> — a tool/member (memory)</li>
+      <li><b class="k">Callisthenes</b> — a tool/member (the voice)</li>
+      <li>…any MCP server you add</li></ul></div>
+    <div class="card"><h3>Three UIs / three instances</h3><p>Each is its own website, its own Dokploy instance, for this user:</p><ul>
+      <li><b class="k">Memory UI</b> → set up your vault (Zenod)</li>
+      <li><b class="k">Callisthenes UI</b> → connect X / Reddit / Composio</li>
+      <li><b class="k">Ring UI</b> → WhatsApp + connect MCP servers + routing</li></ul></div>
+  </div>
+  <p class="sub" style="margin-top:14px">⚠ Spec delta: today's docs say <i>"no LLM in the ring's relay/attention path"</i> — the Ring is deterministic, the Council is the brain. Your model <b class="k">moves the brain into the Ring</b> and deletes the separate Council personality. That's a real rewrite of EPIC-2.5 + SEAM-SPEC (see slide 4).</p>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <h1><span class="n">Where we are · pulled from the docs (2026-07-08 16:45)</span>Status by epic</h1>
+  <table>
+    <thead><tr><th>Unit / Epic</th><th>Doc</th><th>Website</th><th>Stripe</th><th>Provision</th><th>User setup &amp; use</th><th>Net</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="u">Zenod<br><span style="color:var(--tx3);font-weight:400">memory · 2.3</span></td>
+        <td>EPIC-2.3-<br>ZENOD-MOVE-0.md</td>
+        <td><span class="pill p-done">live</span><br><span style="color:var(--tx3)">zenod.dev €5/mo</span></td>
+        <td><span class="pill p-done">LIVE link</span></td>
+        <td><span class="pill p-part">proven,<br>not run live</span></td>
+        <td><span class="pill p-part">seam green · Z-8 reliability fixed &amp; live · dashboard unverified · <b>Z-9 code landed (6e967d7) — pending doc + test</b></span></td>
+        <td>Verify Z-9, then prove the test-mode pay→URL funnel</td>
+      </tr>
+      <tr>
+        <td class="u">Callisthenes<br><span style="color:var(--tx3);font-weight:400">the voice · 2.4</span></td>
+        <td>EPIC-2.4-<br>CALLISTHENES-MOVE-0.md</td>
+        <td><span class="pill p-no">not started</span></td>
+        <td><span class="pill p-no">not started</span></td>
+        <td><span class="pill p-no">not started</span></td>
+        <td><span class="pill p-no">won't build (#635) · chat-auth doesn't load (#636)</span><br><span class="pill p-done" style="margin-top:4px">guardrails green</span></td>
+        <td>Fix 2 small bugs, then build the commercial half</td>
+      </tr>
+      <tr>
+        <td class="u">The Ring<br><span style="color:var(--tx3);font-weight:400">gateway · 2.5 / 2.6</span></td>
+        <td>EPIC-2.5-ATOMIC-UNITS.md<br>EPIC-2.6-HERALD-MOVE-0.md</td>
+        <td><span class="pill p-plan">blueprint</span></td>
+        <td><span class="pill p-plan">n/a yet</span></td>
+        <td><span class="pill p-plan">blueprint</span></td>
+        <td><span class="pill p-no">WhatsApp works only <b>fused</b> in console today; no extracted ring, no connect-MCP UI</span></td>
+        <td>Rewrite spec (ring=council), then build — biggest net-new</td>
+      </tr>
+      <tr>
+        <td class="u">Herald<br><span style="color:var(--tx3);font-weight:400">the guy · 2.6 / 3</span></td>
+        <td>EPIC-2.6-HERALD-MOVE-0.md<br>EPIC-3-HERALD.md</td>
+        <td><span class="pill p-plan">skeleton</span></td>
+        <td><span class="pill p-no">not started</span></td>
+        <td><span class="pill p-no">not started</span></td>
+        <td><span class="pill p-plan">blueprint scaffolds only — gated behind the three above</span></td>
+        <td>Build the guy last, once the ring + tools are wired</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--green)"></span> done</span>
+    <span><span class="dot" style="background:var(--amber)"></span> partial / unproven</span>
+    <span><span class="dot" style="background:var(--red)"></span> broken / not started</span>
+    <span><span class="dot" style="background:var(--grey)"></span> blueprint only</span>
+  </div>
+  <p class="sub" style="margin-top:12px">💳 <b class="k">Stripe = TEST mode (SO-1):</b> the live €5 link exists, but all provisioning tests run in Stripe <b>test mode</b> — provision as if real, no live charges. Goal: this whole table turns green.</p>
+</section>
+
+<!-- basic tests -->
+<section class="slide">
+  <h1><span class="n">The green bar · what "working separately" means</span>Basic tests per unit</h1>
+  <h2>This is what I mean when I send you a 🔵 TEST signal. Each unit passes on its own, provisioned like a real user would, in Stripe test mode.</h2>
+  <div class="grid two">
+    <div class="card"><h3>🧠 Zenod — memory</h3><ul>
+      <li>Fresh chat client → paste MCP URL</li>
+      <li>Store a fact → <b class="k">commit-SHA receipt</b> in your repo</li>
+      <li>Search finds it → <code>ask_brain</code> answers <b class="k">with cited sources</b></li>
+      <li>Test-mode pay → provisioned &lt;30 min → dashboard shows consumption</li></ul></div>
+    <div class="card"><h3>📣 Callisthenes — the voice</h3><ul>
+      <li>Unit builds + boots → <code>tools/list</code> shows connect/complete_connect/connections/revoke/usage</li>
+      <li>Connect X via chat (PIN) → post a tweet → <b class="k">permalink receipt</b></li>
+      <li>Throttle + drafts-never-send hold · revoke via chat works</li>
+      <li>Test-mode pay → provisioned instance with its own setup UI</li></ul></div>
+    <div class="card"><h3>💍 The Ring — gateway/council</h3><ul>
+      <li>Pair WhatsApp → send a message</li>
+      <li>Ring routes to a connected MCP server → <b class="k">verbatim reply back</b></li>
+      <li>Connect-MCP UI adds a server + its skill · a default route is set</li>
+      <li>Test-mode pay → provisioned "ring cloud" with a setup UI</li></ul></div>
+    <div class="card"><h3>📰 Herald — the guy</h3><ul>
+      <li>One-button (test-mode) provision of the full stack</li>
+      <li>Briefing negotiated → <b class="k">morning proposals each citing memory</b></li>
+      <li>Approve → posted via Callisthenes with permalink</li>
+      <li>Weekly report lands</li></ul></div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <h1><span class="n">Spec vs reality · the Ring</span>What you described vs what exists</h1>
+  <div class="grid two">
+    <div class="card"><h3>🎯 Your target Ring</h3><ul>
+      <li>One instance = Ring + Council fused</li>
+      <li>Has an <b class="k">LLM brain</b> with visibility of all connected MCP tools</li>
+      <li>UI: connect any MCP server, attach a <b class="k">skill</b> per server, set a <b class="k">default</b> route</li>
+      <li>Owns WhatsApp + Telegram + Google Drive</li>
+      <li>Routes by mostly passing the prompt through (thin thinking for a named guy like Herald)</li>
+    </ul></div>
+    <div class="card"><h3>🧱 What the repo has today</h3><ul>
+      <li>Ring &amp; Council are <b class="k">two separate</b> blueprints; docs forbid an LLM in the ring's relay path</li>
+      <li>No ring extracted — WhatsApp is <b class="k">fused</b> inside the console (in-process), one number → one baked-in brain</li>
+      <li>No connect-MCP UI, no per-server skills, no router in running code</li>
+      <li>Drive ingest &amp; WhatsApp/Telegram exist, but live <b class="k">inside the console</b>, not a standalone ring</li>
+    </ul></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>➜ So what's actually left for the Ring</h3><ul>
+    <li><b class="k">Decision first:</b> ratify "Ring = Council, with a brain." This deletes the separate Council unit and rewrites EPIC-2.5 + SEAM-SPEC.</li>
+    <li><b class="k">Then build:</b> the Ring instance = LLM + tool-visibility + routing skills + connect-MCP UI + default-route setting, wrapping the existing WhatsApp/Telegram/Drive gateways.</li>
+    <li><b class="k">Payoff:</b> your "add a server, add a skill" design — every new capability is just another MCP server the Ring learns.</li>
+  </ul></div>
+  <p class="sub" style="margin-top:12px">Your instinct is right: keeping the Council at the same level as Herald forces the router to constantly decide "is this Herald or the Council?" Collapsing them removes that whole class of routing ambiguity.</p>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <h1><span class="n">Critical path · what's left &amp; who unblocks it</span>The road to Herald</h1>
+  <div class="grid two">
+    <div class="card"><h3>🔧 Workers can clear (dispatch now)</h3><ul>
+      <li><b class="k">Zenod:</b> build <b>Z-9</b> — <code>ask_brain</code> must cite structured sources; compose must stop dropping facts</li>
+      <li><b class="k">Callisthenes:</b> fix <b>#635</b> (won't build) + <b>#636</b> (chat-auth doesn't load)</li>
+      <li><b class="k">Ring:</b> rewrite the spec to "Ring = Council with a brain" + produce the new ticket list</li>
+    </ul></div>
+    <div class="card"><h3>🔑 Only you can clear</h3><ul>
+      <li>A <b class="k">real card, LIVE mode</b> → run the Zenod pay→provision→setup funnel &lt;30 min</li>
+      <li>A <b class="k">tester chat-key + scratch tenant</b> → so store/dashboard legs are independently verified</li>
+      <li><b class="k">VPS / Dokploy access</b> → watchdog + restore drills (Z-5)</li>
+      <li><b class="k">zenod-ai/cloud access + LIVE Stripe keys</b> → unblocks all of Callisthenes' commercial half</li>
+      <li>An <b class="k">X test account</b> → Callisthenes' posting dance</li>
+    </ul></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>Suggested order</h3>
+    <div class="flow" style="margin:6px 0 0">
+      <div class="node">1 · Zenod<small>Z-9 + prove funnel</small></div><span class="arw">→</span>
+      <div class="node">2 · Callisthenes<small>fix #635/#636, build funnel</small></div><span class="arw">→</span>
+      <div class="node ring">3 · Ring spec + build<small>your daily loop back</small></div><span class="arw">→</span>
+      <div class="node">4 · Herald<small>assemble + go live</small></div>
+    </div>
+    <p style="margin-top:10px;color:var(--tx3)">Zenod &amp; Callisthenes bug-fixes and the Ring spec-rewrite can all run <b>in parallel today</b> — they don't depend on each other. The card/keys/access items are the real gating scarcity.</p>
+  </div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <h1><span class="n">Worker dispatch · ready to paste</span>Instructions per worker</h1>
+  <div class="card"><h3><span class="pill p-part">Worker A</span> Zenod — build Z-9 (synthesis fidelity)</h3>
+<pre>Doc: docs/EPIC-2.3-ZENOD-MOVE-0.md · ticket Z-9.
+Build Z-9: ask_brain must return non-empty STRUCTURED sources (commit-SHA + GitHub URL)
+for every synthesized answer, and compose must stop dropping facts. Root cause per handbacks:
+the research loop leans on titles/summaries and never falls through to page bodies / Log/ receipts.
+Acceptance: (1) ask_brain on a known fact returns the answer WITH cited sources; (2) live store
+battery ≥99% still holds; (3) receipts land in the tenant repo. Append dated receipt in the doc,
+hand pen back to Zenod-Fable. Do NOT touch commerce/provisioning lanes.</pre></div>
+  <div class="card" style="margin-top:12px"><h3><span class="pill p-no">Worker B</span> Callisthenes — fix build + chat-auth</h3>
+<pre>Doc: docs/EPIC-2.4-CALLISTHENES-MOVE-0.md · tickets #635, #636.
+#635 (won't build): units/callisthenes/.dockerignore line `*.patch` excludes the patch files the
+Dockerfile COPYs → build fails at step 5/10. Fix the ignore rule so both .patch files ship; verify
+`docker build units/callisthenes/` completes and the server boots.
+#636 (chat-auth doesn't load): register()._wrap returns inner(*args, **kwargs); FastMCP's mcp.tool()
+rejects *args, the whole auth registration throws and is swallowed → live tools/list shows only the
+6 X tools. Rewrite _wrap with an explicit signature so connect/complete_connect/connections/revoke/
+usage register. Verify live `tools/list` exposes all five. Keep guardrails (throttle, C-22) green.
+Append receipt, hand back.</pre></div>
+  <div class="card" style="margin-top:12px"><h3><span class="pill p-plan">Worker C</span> Ring — rewrite the spec (Ring = Council)</h3>
+<pre>Doc: docs/EPIC-2.5-ATOMIC-UNITS.md (+ docs/SEAM-SPEC.md).
+Jordi has collapsed the Ring and the Council into ONE instance: a gateway WITH an LLM brain that
+has visibility of all connected MCP tools and routes by mostly passing the prompt through. Delete
+the separate deterministic-ring / brain-council split. New spec must cover: (a) Ring owns channels
+(WhatsApp, Telegram, Google Drive); (b) a UI to connect MCP servers, each added WITH a skill that
+teaches when to use it; (c) a default-route setting for ambiguous messages; (d) named-guy pass-
+through (e.g. "for Herald" → call tool, minimal thinking). Produce: the delta vs current docs +
+a fresh ticket list for building it. Do NOT write code yet — spec + tickets only. Hand back to Jordi.</pre></div>
+</section>
+
+<div class="nav">
+  <button class="btn" onclick="go(-1)">‹ Prev</button>
+  <div class="dots" id="dots"></div>
+  <span class="ttl" id="ttl"></span>
+  <button class="btn" onclick="go(1)">Next ›</button>
+</div>
+</div>
+<script>
+  const S=[...document.querySelectorAll('.slide')];
+  const T=['Mission','How we work','Revised spec','Status by epic','Basic tests','Spec vs reality','Critical path','Worker dispatch'];
+  let i=0; const dots=document.getElementById('dots');
+  S.forEach((_,k)=>{const d=document.createElement('div');d.className='dt'+(k?'':' on');d.onclick=()=>set(k);dots.appendChild(d)});
+  function set(k){i=(k+S.length)%S.length;S.forEach((s,n)=>s.classList.toggle('on',n===i));[...dots.children].forEach((d,n)=>d.classList.toggle('on',n===i));document.getElementById('ttl').textContent=(i+1)+' / '+S.length+' · '+T[i]}
+  function go(d){set(i+d)}
+  document.onkeydown=e=>{if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1)};
+  set(0);
+</script>
+</body>
+</html>
