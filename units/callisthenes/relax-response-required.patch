@@ -1,0 +1,46 @@
+--- a/server.py
++++ b/server.py
+@@ -268,9 +268,43 @@
+             new_paths[path] = new_item
+ 
+     filtered["paths"] = new_paths
++    _relax_response_required(filtered)
+     return filtered
++
++
++def _relax_response_required(spec: dict) -> None:
++    """Strip JSON-schema `required` lists from RESPONSE schemas only.
++
++    X's live spec marks response fields as required that the API does not actually
++    return — e.g. MediaUploadResponse requires `meta`, but a successful one-shot
++    POST /2/media/upload returns only `data` — so FastMCP's output validation
++    rejects otherwise-successful calls ("Output validation error: 'meta' is a
++    required property"). Relaxing `required` only loosens validation of what the
++    API SENDS BACK; request-side schemas (and the tool input schemas built from
++    them) are untouched: it is applied to inline `responses` subtrees and to
++    component schemas named `*Response` (X's response-schema naming convention).
++    """
++
++    def strip(node):
++        if isinstance(node, dict):
++            node.pop("required", None)
++            for value in node.values():
++                strip(value)
++        elif isinstance(node, list):
++            for value in node:
++                strip(value)
+ 
++    for item in spec.get("paths", {}).values():
++        if not isinstance(item, dict):
++            continue
++        for operation in item.values():
++            if isinstance(operation, dict) and isinstance(operation.get("responses"), dict):
++                strip(operation["responses"])
++    for name, schema in spec.get("components", {}).get("schemas", {}).items():
++        if name.endswith("Response") and isinstance(schema, dict):
++            strip(schema)
+ 
++
+ def print_tool_list(spec: dict) -> None:
+     tools: list[str] = []
+     for path, item in spec.get("paths", {}).items():
