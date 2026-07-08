@@ -101,4 +101,42 @@ multi-session, Docker/WhatsApp/Stripe-dependent code jobs that cannot be CI-gree
 environment; shipping them here would be self-certification. They follow as CI-gated code PRs.
 Nucleus vs full-ring boundary and the supervised-no-auto-send invariant are held structurally in the
 scaffolds. Receipt: PR https://github.com/zenod-ai/zenod/pull/626 → merged to main 2026-07-08 as
-squash commit `a0050187734b88c5d040e24ae9e4c5d0f5be4c00` (CI `ci` green).
+squash commit `a0050187734b88c5d040e24ae9e4c5d0f5be4c00` (CI `ci` green). Receipt-finalization
+follow-up: PR https://github.com/zenod-ai/zenod/pull/628 → merged `45f2bd6cfc8696dfb3b123b08ca52f5c097ab10d`.
+
+### 2026-07-08 · [worker→planner] HANDBACK — Move-0 status + next steps
+
+**Status: scaffold/design installment DONE and in main; epic NOT exitable yet.** The three
+now-parallel lanes each have their blueprint landed (H-1 `units/ring-nucleus/`, H-2 `units/herald/`,
+H-3 `sites/herald/` + `docs/HERALD-BUY-BUTTON-PLAN.md`). What is NOT done is every executable half —
+those need Docker/WhatsApp/Stripe and real CI, which this worker could not green-verify without
+self-certifying. Nothing about the EXIT CRITERION (line 9) is met yet: no provisioned stack, no QR
+pair, no briefing, no morning-N, no posts, no scorecard.
+
+**What a planner should schedule next (dependency-ordered):**
+1. **H-1 code — the critical path.** Extract ring-core from the fused Console per
+   `units/ring-nucleus/EXTRACTION-MAP.md`: sever the `whatsappGateway.ts:14` `import ... from "zenod"`
+   blocker, turn the in-process `engine.handleTasking` calls into seam dispatches, generalize
+   `whatsappStore.ts` to `(channel, chat_id)`, and stand up the static one-row route. This unblocks
+   H-2's live test (H-2 tests THROUGH the nucleus WhatsApp) and everything downstream. Size: multi-PR,
+   the biggest single job in the epic. Suggest a dedicated worker with Docker + a WhatsApp test number.
+2. **H-2 code — Herald guy**, in parallel with H-1's tail. Add `HERALD_AGENT` to
+   `packages/server/src/agent.ts` (persona + `vaultless` + a practice flag, per `units/herald/README.md`),
+   wire the two-peer MCP client (Zenod + Callisthenes/OUTBOUND_AGENT), the turn-preamble briefing read,
+   and the in-process practices scheduler. Gate its acceptance on H-1 being boot-testable.
+3. **H-3 code — buy button.** Clone the LIVE-verified Zenod checkout path
+   (`docs/HERALD-BUY-BUTTON-PLAN.md` maps reuse-vs-NEW). The NEW pieces are the ~$200/mo SKU (HD-1,
+   final number via Product-Fable) and the 4-container provisioner (nucleus+Herald+Zenod+Callisthenes).
+   Epic-0 owes the final page copy — `sites/herald/index.html` is a `[DRAFT]` placeholder until then.
+4. **H-4 is still BLOCKED on 2.4 C-1 tester-green.** Per the live 2.4 scoreboard (#637, 2 reds:
+   #635 build, #636 chat-auth), Callisthenes' mouth is not yet tester-green — do NOT start H-4 until
+   it is. H-5 rides with H-4; H-6 (customers #0 dogfood, then Jordi's funnel) is last and Jordi's.
+
+**Router notes / open questions for Jordi (the only cross-track router):**
+- HD-1 final price + SKU creation is a Jordi/Product-Fable decision, not a worker call — the plan
+  leaves it as a TODO, not a guess.
+- Confirm the LIVE Stripe path Herald clones is the same one Zenod uses today (plan assumes
+  `sites/zenod/index.html`'s live Payment Link pattern — verify before wiring).
+- Invariants to keep enforcing in code review of the above: nucleus stays four-responsibilities-only
+  (no keyring/classifier/attention/council — that's 2.7); Herald holds unit tokens only, never world
+  keys; supervised HD-2 means NO auto-send path ships in Move 0.
