@@ -54,6 +54,18 @@ def build_app():
     except Exception as e:  # noqa: BLE001 — optional; unit must still boot
         log(f"auth package not registered ({e!r}); booting single-owner headless")
 
+    # C-8 — Reddit send connector (Composio). Registers the `post_reddit` send tool
+    # on the SAME endpoint; the draft-guard + throttle middleware guard it by name
+    # (post_reddit is defaulted into CALLISTHENES_SEND_TOOLS/CALLISTHENES_GUARDED_TOOLS).
+    # Optional at boot: if it can't register (missing deps), the unit still serves X.
+    try:
+        from reddit_connector import register as register_reddit  # type: ignore
+
+        register_reddit(mcp)
+        log("reddit connector registered (post_reddit)")
+    except Exception as e:  # noqa: BLE001 — optional; unit must still boot
+        log(f"reddit connector not registered ({e!r}); Reddit send unavailable")
+
     return mcp
 
 

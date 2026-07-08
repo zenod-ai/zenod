@@ -24,7 +24,7 @@ from threading import Lock
 from typing import Callable, Deque, Iterable
 
 DEFAULT_PER_HOUR = 10
-DEFAULT_SEND_TOOLS = ("createPosts", "deletePosts", "mediaUpload")
+DEFAULT_SEND_TOOLS = ("createPosts", "deletePosts", "mediaUpload", "post_reddit")
 WINDOW_SECONDS = 3600.0
 
 
