@@ -100,4 +100,5 @@ pairing (H-1/H-2/H-3 code), plus H-4 (blocks on 2.4 C-1 tester-green), H-5, and 
 multi-session, Docker/WhatsApp/Stripe-dependent code jobs that cannot be CI-green-verified in this
 environment; shipping them here would be self-certification. They follow as CI-gated code PRs.
 Nucleus vs full-ring boundary and the supervised-no-auto-send invariant are held structurally in the
-scaffolds. Receipt: PR #626 → merged as SHA appended on merge below.
+scaffolds. Receipt: PR https://github.com/zenod-ai/zenod/pull/626 → merged to main 2026-07-08 as
+squash commit `a0050187734b88c5d040e24ae9e4c5d0f5be4c00` (CI `ci` green).
