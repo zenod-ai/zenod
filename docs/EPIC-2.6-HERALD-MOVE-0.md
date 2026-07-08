@@ -67,3 +67,37 @@ Sequencing: H-1 ∥ H-2 ∥ H-3-page now (H-2 tests via H-1) · H-4 after 2.4 C-
 ### 2026-07-05 · [scribe/Story-Fable] Doc created
 - Materializes the one-room-ring convergence (chat, 2026-07-05): nucleus ships with Herald,
   additive growth to 2.7, modularity as config. Lanes H-1..H-6; HD-1..HD-3 framed.
+
+### 2026-07-08 · [worker] Move-0 scaffold installment — H-1 ∥ H-2 ∥ H-3-page (blueprints)
+Landed the binding scaffold layer that unblocks the three now-parallel lanes. Blueprint/scaffold
+only (doc-PR lane) — NO extraction code, NO live Stripe SKU, NO WhatsApp pairing were built or
+CI-verified this session (see "budget / stop-honestly" below). Files (see PR #626):
+- **H-1 · Ring nucleus** — new `units/ring-nucleus/` (README, SEAM-SURFACE, EXTRACTION-MAP,
+  docker-compose.nucleus.yml). The MINIMUM nucleus scoped distinct from the 2.7 full ring
+  (`units/ring/`): four responsibilities only — durable mailbox, provenance, **verbatim attributed
+  relay**, static **one-row route `* → Herald`**. Keyring UI / LLM classifier / attention-rules /
+  council guy each named OUT (scope failure if present, per epic line 24). EXTRACTION-MAP is a
+  strict subset of the ring's, citing the SAME real files (`whatsappGateway.ts`, `whatsappStore.ts`,
+  `conversationTranscript.ts`, `peerClient.ts`, `meshGateway.ts` forwarding half) — first additive
+  installment of 2.7, never a fork.
+- **H-2 · Herald guy** — new `units/herald/` (README, SEAM-SURFACE, docker-compose.herald.yml).
+  One guy container: MCP server shell (BYO-ring endpoint documented) + MCP client to EXACTLY Zenod
+  (memory) + Callisthenes (mouth = OUTBOUND_AGENT "Callistheness"); turn-preamble reads briefing
+  from Zenod every turn; in-process practices scheduler (no Epaminon/Archus); briefing-negotiation
+  + morning-N ritual (each proposal cites its memory source); **supervised HD-2 — no auto-send
+  path**; unit tokens only, never world keys; posts ONLY through Callisthenes. `HERALD_AGENT`
+  addition to `agent.ts` described as a FUTURE code step (not edited).
+- **H-3 · Buy button (page + plan)** — new `sites/herald/index.html` (scaffold, `[DRAFT — Epic 0
+  voice pending]`, CTA `href="#"` TODO for the LIVE ~$200/mo SKU) + `docs/HERALD-BUY-BUTTON-PLAN.md`
+  (provisioning wiring cloned from the proven Zenod path: `zenod-ai/cloud` control plane, Z-2
+  machinery, `scripts/gateway/openrouter-key.mjs`, `scripts/watchdog/`, ZD-5/D-5 credits). Maps each
+  step reuse-vs-NEW for the 4-container stack; HD-1/HD-2/HD-3 stated; H-3 acceptance checklist
+  included. Blueprint only — no live SKU, no keys.
+
+Budget / stop-honestly: this worker delivered the scaffold/design installment via the doc-PR lane.
+The executable halves — ring-core extraction from the fused Console, a LIVE Stripe SKU, WhatsApp QR
+pairing (H-1/H-2/H-3 code), plus H-4 (blocks on 2.4 C-1 tester-green), H-5, and H-6 (Jordi's) — are
+multi-session, Docker/WhatsApp/Stripe-dependent code jobs that cannot be CI-green-verified in this
+environment; shipping them here would be self-certification. They follow as CI-gated code PRs.
+Nucleus vs full-ring boundary and the supervised-no-auto-send invariant are held structurally in the
+scaffolds. Receipt: PR #626 → merged as SHA appended on merge below.
