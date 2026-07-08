@@ -1,4 +1,12 @@
-import { generateObject, generateText, stepCountIs, streamText, tool, type ModelMessage } from "ai";
+import {
+  generateObject,
+  generateText,
+  NoObjectGeneratedError,
+  stepCountIs,
+  streamText,
+  tool,
+  type ModelMessage,
+} from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
@@ -266,6 +274,46 @@ const classificationSchema = z.object({
 /** Exposed for regression testing the OpenAI-strict constraint. */
 export { classificationSchema };
 
+/**
+ * Repair a model's structured-output text before the AI SDK parses it (Z-8).
+ * Some OpenAI-compatible models — notably `deepseek/deepseek-chat` via OpenRouter,
+ * the classify default — return VALID JSON wrapped in ```json fences or with prose
+ * around it. `generateObject`'s strict parser then rejects it with
+ * NoObjectGeneratedError, and the whole store rolls back. The model fences more
+ * often on large prompts, so this degraded store reliability specifically on mature
+ * vaults (a big page index in the classify system prompt). Strip the fence and
+ * extract the outermost JSON object.
+ */
+export function repairStructuredJson(text: string): string {
+  if (!text) return text;
+  let t = text.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence?.[1]) t = fence[1].trim();
+  const first = t.indexOf("{");
+  const last = t.lastIndexOf("}");
+  if (first >= 0 && last > first) t = t.slice(first, last + 1);
+  return t;
+}
+
+/** The repair hook handed to generateObject — runs only when the first parse fails. */
+const REPAIR_HOOK = async ({ text }: { text: string }): Promise<string> => repairStructuredJson(text);
+
+/**
+ * Turn an opaque structured-output parse failure into a LOUD, diagnosable error
+ * (Z-8: a silent drop is a nonconformance). Carries the raw model response so the
+ * container logs show exactly what failed to parse.
+ */
+function loudObjectError(err: unknown, label: string): Error {
+  if (NoObjectGeneratedError.isInstance(err)) {
+    const raw = (err.text ?? "").slice(0, 500).replace(/\s+/g, " ").trim();
+    return new Error(
+      `${label}: model output could not be parsed as structured JSON even after fence-repair. ` +
+        `Raw response (truncated): ${raw}`,
+    );
+  }
+  return err instanceof Error ? err : new Error(`${label}: ${String(err)}`);
+}
+
 const backlogCandidateSchema = z.object({
   title: z.string().describe("short issue/backlog title"),
   type: z.enum(["action", "question-action", "blocker", "roadmap", "follow-up"]),
@@ -435,9 +483,12 @@ export class AiSdkBrainLlm implements BrainLlm {
       .map((p) => `${p.path} | ${p.title} | tags: ${p.tags.join(",")} | ${p.summary}`)
       .join("\n");
 
-    const { object, usage, providerMetadata } = await generateObject({
+    let result;
+    try {
+      result = await generateObject({
       model: this.model(this.classifyModelId),
       schema: classificationSchema,
+      experimental_repairText: REPAIR_HOOK,
       system: [
         "You are the librarian of a personal knowledge vault. Classify an incoming memory:",
         "decide which meaning page(s) it belongs to — update existing pages when one fits, create a new one only when nothing does.",
@@ -454,7 +505,11 @@ export class AiSdkBrainLlm implements BrainLlm {
       ]
         .filter(Boolean)
         .join("\n\n"),
-    });
+      });
+    } catch (err) {
+      throw loudObjectError(err, "classify");
+    }
+    const { object, usage, providerMetadata } = result;
     this.reportUsage("classify", this.classifyModelId, usage, providerMetadata);
 
     return {
@@ -503,9 +558,12 @@ export class AiSdkBrainLlm implements BrainLlm {
   }
 
   async extractBacklog(input: BacklogExtractInput): Promise<BacklogExtractResult> {
-    const { object, usage, providerMetadata } = await generateObject({
+    let result;
+    try {
+      result = await generateObject({
       model: this.model(this.classifyModelId),
       schema: backlogExtractSchema,
+      experimental_repairText: REPAIR_HOOK,
       system: [
         "You are Zenod's backlog/action digester. Mine memory evidence into structured backlog candidates.",
         "Extract concrete actions, question-actions, launch blockers, roadmap/phaseable items, dependencies, priority, difficulty, acceptance criteria, and open clarifying questions.",
@@ -520,7 +578,11 @@ export class AiSdkBrainLlm implements BrainLlm {
         "Memory/transcript content:",
         input.content,
       ].join("\n\n"),
-    });
+      });
+    } catch (err) {
+      throw loudObjectError(err, "extractBacklog");
+    }
+    const { object, usage, providerMetadata } = result;
     this.reportUsage("extractBacklog", this.classifyModelId, usage, providerMetadata);
 
     return {
