@@ -601,6 +601,14 @@ export class AiSdkBrainLlm implements BrainLlm {
     peerTools?: PeerTools,
   ): Promise<AnswerResult> {
     const readPaths = new Set<string>();
+    // Z-9: paths the model SAW via search_vault (ordered, deduped). If the model
+    // answered without opening a note (readPaths empty), these are the honest
+    // citation trail — a synthesized answer must never come back source-less.
+    const searchedPaths: string[] = [];
+    // Sources for the answer: the notes actually read in full, else a fallback to
+    // the top search hits the model consulted. Never empty when the vault had hits.
+    const sourcePaths = (): string[] =>
+      readPaths.size > 0 ? [...readPaths] : searchedPaths.slice(0, 3);
     const messages: ModelMessage[] = [
       ...input.conversation.map((m): ModelMessage => ({ role: m.role, content: m.text })),
       { role: "user", content: input.question },
@@ -1035,7 +1043,15 @@ export class AiSdkBrainLlm implements BrainLlm {
       "Plan accordingly: search and read early, ask for everything you need up front rather than one tool at a time, and never spend your last round on a tool call.",
       "If you are near the limit, stop gathering and answer with what you have — a clearly-caveated partial answer always beats no answer.",
     ].join(" ");
-    const systemText = [input.vaultBriefing, ...briefingExtras, budgetNote].filter(Boolean).join("\n\n");
+    // Z-9: search snippets and page summaries drop details that the note body and the
+    // Log/ evidence preserve. For any factual question, read the top hit(s) in full
+    // (read_note) — including the Log/ receipt when a fact seems missing from the
+    // composed page — before answering, and ground the answer in what you read.
+    const citationNote =
+      "GROUNDING: don't answer factual questions from search snippets alone — open the top hit(s) with read_note (and the Log/ evidence when a detail seems missing from a summary) before you conclude, then base your answer on what you read.";
+    const systemText = [input.vaultBriefing, ...briefingExtras, budgetNote, citationNote]
+      .filter(Boolean)
+      .join("\n\n");
     const config = {
       model: this.model(this.askModelId),
       maxOutputTokens: MAX_ANSWER_OUTPUT_TOKENS,
@@ -1068,6 +1084,15 @@ export class AiSdkBrainLlm implements BrainLlm {
                 inputSchema: z.object({ query: z.string() }),
                 execute: async ({ query }) => {
                   const result = await tools.searchVault!(query);
+                  // Z-9: capture the hit paths so the answer can cite what it consulted
+                  // even if the model doesn't open a note. Result lines are
+                  // "<path> (score N) — <snippet>"; a "no results" line yields nothing.
+                  for (const line of result.split("\n")) {
+                    const path = line.split(" (score ")[0]?.trim();
+                    if (path && path !== "no results" && !searchedPaths.includes(path)) {
+                      searchedPaths.push(path);
+                    }
+                  }
                   input.onReadAction?.("search_vault", { query }, result);
                   return result;
                 },
@@ -1149,7 +1174,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           input.onTextDelta,
         );
       }
-      return { text, readPaths: [...readPaths] };
+      return { text, readPaths: sourcePaths() };
     }
 
     const result = await generateText(config);
@@ -1163,7 +1188,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         result.reasoningText ?? "",
       );
     }
-    return { text, readPaths: [...readPaths] };
+    return { text, readPaths: sourcePaths() };
   }
 
   async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {
