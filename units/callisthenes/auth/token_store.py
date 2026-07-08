@@ -28,15 +28,26 @@ from typing import Dict, List, Optional
 
 @dataclass
 class StoredConnection:
-    """One service connection for one tenant. `secret` fields are sensitive."""
+    """One service connection for one tenant. Token fields are sensitive.
+
+    C-2R: OAuth 2.0 PKCE stores `access_token` (short-lived, ~2h) + `refresh_token`
+    (the durable per-tenant credential). `access_token_secret` is retained (default
+    None) only for the self-host OAuth1-PIN fallback, where it holds the OAuth1
+    token secret. `expires_at` is the epoch when the access token goes stale;
+    `token_type` is X's ("bearer"). `auth_flow` records which flow minted this.
+    """
 
     service: str
     access_token: str
-    access_token_secret: str
     connected_at: float
+    access_token_secret: Optional[str] = None
+    refresh_token: Optional[str] = None
+    expires_at: Optional[float] = None
+    token_type: Optional[str] = None
     user_id: Optional[str] = None
     screen_name: Optional[str] = None
-    scope: Optional[str] = None  # e.g. "read,write"
+    scope: Optional[str] = None  # e.g. "tweet.read tweet.write users.read offline.access"
+    auth_flow: Optional[str] = None  # "oauth2_pkce" (default) | "oauth1_pin"
 
     def public(self) -> Dict[str, object]:
         """Status view — NO secrets. Safe to return in a tool result."""

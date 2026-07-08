@@ -17,38 +17,47 @@ register_auth(mcp)   # registers connect/complete_connect/connections/revoke/usa
 `None`/unknown, tools register into a plain in-process registry (returned at
 `engine.registry`) so the package is drivable without a live server.
 
-Each registered tool takes the caller's **MCP access token** as its first argument
-(`mcp_token`). The wrapper is responsible for extracting the `Authorization: Bearer`
-value from the request and passing it — that token **is** the tenant identity
-(SEAM-SPEC §4). Keeping it explicit makes the package server-agnostic and testable.
+The tenant is derived from the **authenticated MCP request** (the
+`Authorization: Bearer` header), NOT from a client argument — so the PUBLIC tool
+schema does **not** contain `mcp_token` (#645, C-2R). `register()` wraps each tool
+so its public signature drops the tenant parameter and injects the resolved bearer
+from the request. Seam: the default resolver reads
+`fastmcp.server.dependencies.get_http_headers(include={"authorization"})` (FastMCP
+strips `authorization` by default, so it is opted back in). Self-host single-owner
+falls back to `CALLISTHENES_OWNER_TENANT` / `MCP_BEARER_TOKEN`; if neither yields a
+token the call fails loudly with `unauthorized` — never a silent default tenant.
+The `ChatAuth` engine methods still take the resolved tenant as their first argument
+so the package stays unit-testable (`tenant_resolver` is injectable).
 
 ## The five tools
 
 | Tool | Kind | Result |
 |---|---|---|
-| `connect(service="x")` | mutating (starts flow) | canonical x.com authorize URL + 7-digit-PIN instructions |
-| `complete_connect(pin, service="x")` | mutating | stores tenant's OAuth1 access token+secret; receipt = connected `@screen_name`/`user_id` |
+| `connect(service="x")` | mutating (starts flow) | canonical x.com **OAuth 2.0 PKCE** authorize URL + `state` |
+| `complete_connect(code, state, service="x")` | mutating | exchanges the code, stores tenant's **refresh** + access token; receipt = granted `scope` |
 | `connections()` | read | per-service status for this tenant (no secrets) |
 | `revoke(service\|token)` | mutating | drops this tenant's tokens; loud `not_found` if nothing to revoke |
 | `usage()` | read | calls · cost for this tenant from the live ledger (C-4a); `sends` null pending a send-ledger |
 
-## Flow: OAuth 1.0a PIN (`oauth_callback=oob`) — CD-3 DECIDED
+## Flow: OAuth 2.0 Authorization-Code + PKCE — C-2R DECIDED (2026-07-08, Jordi)
 
-X does **not** support device-code (RFC 8628); OAuth1.0a PIN is the only path that
-delivers the literal "visit x.com, approve, paste the PIN" console-less story
-(gating finding, epic APPEND ZONE 2026-07-08).
+Supersedes the OAuth1-PIN oob flow (`oauth1_pin.py` remains only as a self-host
+fallback). X does **not** support device-code (RFC 8628); Auth-Code + PKCE with a
+pre-registered `redirect_uri` is the OAuth2 path X offers — "just click Authorize".
 
-1. `connect()` → POST `oauth/request_token` (`oauth_callback=oob`) → returns the
-   **canonical** `https://api.x.com/oauth/authorize?oauth_token=…` URL. The
-   request-token secret is held process-local, keyed by `(tenant, service)`, for
-   the handoff to step 2.
-2. Tenant approves on x.com, copies the 7-digit PIN, calls `complete_connect(pin)`.
-3. `complete_connect()` → POST `oauth/access_token` (`oauth_verifier=<PIN>`) →
-   stores the tenant's long-lived access token+secret via `TokenStore`.
+1. `connect()` → mints a PKCE `code_verifier`/`code_challenge` (S256) + `state`,
+   returns the **canonical** `https://x.com/i/oauth2/authorize?...` URL. The
+   `code_verifier` + `state` are held process-local, keyed by `(tenant, service)`.
+2. Tenant clicks Authorize; X redirects to the registered callback with `code` +
+   `state`; the tenant/callback calls `complete_connect(code, state)`.
+3. `complete_connect()` → POST `https://api.x.com/2/oauth2/token`
+   (`grant_type=authorization_code`, `code_verifier`) → stores the tenant's
+   **refresh token** (durable) + short-lived (~2h) access token via `TokenStore`.
+   `OAuth2PkceFlow.refresh()` renews the access token from the refresh token.
 
-Signing is HMAC-SHA1 over the RFC 5849 base string (stdlib only — mirrors upstream
-`xdevplatform/xmcp`'s OAuth1.0a client). HTTP is isolated behind
-`oauth1_pin.HttpClient` so tests mock it — **no network, no real creds** in tests.
+Scopes: `tweet.read tweet.write users.read offline.access` (`offline.access` is what
+yields the refresh token). HTTP is isolated behind `oauth2_pkce.HttpClient` so tests
+mock it — **no network, no real creds** in tests.
 
 ## Security invariants (BINDING)
 
@@ -64,9 +73,13 @@ Signing is HMAC-SHA1 over the RFC 5849 base string (stdlib only — mirrors upst
 
 ## Files
 
-- `__init__.py` — `ChatAuth` engine + `register(mcp)` (the shared contract).
-- `oauth1_pin.py` — OAuth1.0a oob request_token / authorize-URL / access_token, with
-  an injectable `HttpClient` seam.
+- `__init__.py` — `ChatAuth` engine + `register(mcp)` (the shared contract) + the
+  request-bearer tenant resolver (#645).
+- `oauth2_pkce.py` — OAuth 2.0 Auth-Code + PKCE (S256): authorize-URL builder,
+  `/2/oauth2/token` code exchange + refresh, with an injectable `HttpClient` seam.
+  **This is the default/hosted flow (C-2R).**
+- `oauth1_pin.py` — legacy OAuth1.0a oob PIN flow, retained only as a **self-host
+  fallback**; no longer the default surface.
 - `token_store.py` — per-tenant storage keyed by MCP token; `SqliteTokenStore`
   (default, under `CALLISTHENES_DATA_DIR`, default `/data`) + `InMemoryTokenStore`.
 - `test_chat_auth.py`, `test_token_store.py` — pytest, X HTTP mocked. `python -m pytest`.
