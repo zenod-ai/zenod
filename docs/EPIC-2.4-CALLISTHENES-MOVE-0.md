@@ -263,3 +263,37 @@ both acceptable: (1) the `usage` tool is unreachable live behind #636; (2) `send
 But the unit **cannot build** (#635) and, once built, **exposes no chat-auth tools** (#636) — the two
 things the epic is fundamentally about. Fix both, re-boot, then the live X exit-criterion dance
 (C-6, needs an X test account + LIVE creds) can be attempted. — [tester]
+
+### 2026-07-08 · [tester] HANDBACK to planner — where the epic stands + next steps
+Pen back to the planner. Iteration-0 tester pass done; the scoreboard above is the evidence.
+
+**One-line status:** the unit's *logic* is sound (guardrails live, custody correct, 46 tests green),
+but the unit **does not build** (#635) and, once built, **exposes no chat-auth tools** (#636). The two
+console-less headline capabilities of the epic are therefore unproven end-to-end. **Epic exit: ❌.**
+
+**Blocking, in priority order (both trivial, both worker-fixable, no design change):**
+1. **#635 — `.dockerignore` `*.patch`** drops the two patches the Dockerfile COPYs. One-line fix
+   (drop the glob, or `!`-allow the two files). Gate: `docker build` exits 0 from a fresh clone.
+2. **#636 — `register()._wrap` uses `*args`**, which FastMCP's `mcp.tool()` rejects → all five
+   chat-auth tools silently fail to register; unit falls to single-owner headless. Fix the wrapper
+   signature (`functools.wraps` per-tool, or register unwrapped methods and move the error envelope).
+   Gate: fresh boot logs `auth package registered`; live `tools/list` shows all five tools.
+   **Add a boot-level test** that asserts the five tools appear against a real FastMCP instance — the
+   current suite only drives the plain-registry path, which is exactly why this shipped.
+
+**Recommended sequencing from here:**
+- **First:** dispatch a worker for #635 + #636 together (both in `units/callisthenes/`, tiny, disjoint
+  enough to co-fix). Re-boot, re-run the tester's live probes — everything else is already green.
+- **Then unblock the still-blocked lanes** (unchanged since the worker's note): **C-3** (checkout/
+  provision) + **C-5** (watchdog) need `zenod-ai/cloud` access + LIVE Stripe secrets — **needs Jordi's
+  grant**; nothing to build until then. **CD-1 (price)** still open — Jordi to fill.
+- **C-4a reconciliation** remains unverified live: the `usage()` tool is unreachable behind #636 and
+  `sends` has no ledger yet. Re-test the scripted-burn-vs-`usage()` reconciliation once #636 is fixed
+  and a send actually lands.
+- **C-6 (Jordi's exit run)** is last and needs a real X account + LIVE creds — only attemptable after
+  #635/#636 land and C-3 provisions a real instance.
+
+**Custody caveat for the planner to note:** the token-custody behaviour (unit-local hashed store, no
+secret leakage, revoke-deletes-at-rest, reconnect) is *implemented correctly* but is currently
+*unreachable through the server* because the auth tools don't register (#636). It becomes a live
+guarantee the moment #636 is fixed — no custody redesign needed. — [tester]
