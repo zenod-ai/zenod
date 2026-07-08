@@ -654,3 +654,121 @@ Worker stops here.
   whose diff removes text you didn't remove = STOP, investigate.
 - Cross-track note for Jordi to route: doc-truth will be synced to main; the whisper branch
   remains the whisper lane's.
+
+### 2026-07-08 · [planner/Ring-Fable] PIVOT (Jordi): collapse Ring + Council → ONE brain-gateway · DELTA + fresh tickets · AWAITING JORDI (RP-1..RP-5)
+
+Jordi's call, this session: **collapse the Ring and the Council into ONE instance — a channel
+gateway WITH an LLM brain that sees every connected MCP tool and routes by mostly passing the
+prompt through.** The deterministic-ring / brain-council split is deleted. The "guys" and "units"
+(Zenod, Archus, Epaminon, Callisthenes, Herald) become **MCP servers you connect through a UI,
+each carrying a skill that teaches the brain when to use it.** Ambiguous messages follow a
+configurable **default route**; a named guy ("for Herald") is a near-verbatim pass-through tool
+call with minimal thinking. This entry is the delta + a fresh ticket list — **no code yet, spec
+only**. The planner sections above are LEFT INTACT and marked superseded below; they are rewritten
+in place only after Jordi confirms RP-1..RP-5 (guardrail: no destructive rewrite of settled
+sections before the call).
+
+#### A · DELTA vs current docs (what changes)
+
+**Laws (§THE laws):**
+- **Law 3 (router is cheap / enum-constrained classifier) — DELETED & REPLACED.** There is no
+  separate router box and no enum gate. The brain-gateway *is* the router: it reads the inbound
+  message with all connected MCP tools + their skills in context and calls the right tool. Routing
+  = tool-selection by the brain. Still logged (chosen tool + input digest + misroute counter).
+- **Law 2 (tree not mesh; the ring relays VERBATIM, never composes/summarizes/acks) — AMENDED.**
+  KEPT: call shape stays a tree (brain → tool/guy → sub-units), **dispatch depth ≤ 1**, no sideways
+  guy↔guy chatter, provenance-based outbound (same channel out as in). DROPPED: "the front door
+  never composes." The brain-gateway composes/thinks by design — that IS the collapse. Verbatim
+  relay survives only as a *per-connection option* (RP-5), e.g. for Herald's voice.
+- **Law 5 (media = pipe-work), Law 6 (auth three planes) — substantively unchanged.** Law 6c
+  "agent→unit MCP tokens issued by the keyring" is reframed as "credentials for each connected MCP
+  server, managed in the connect-UI." Google Drive graduates from backup-sink to a first-class
+  channel/source (see requirement a).
+
+**Catalog (§The catalog):**
+- **The Ring row — REDEFINED.** Ring = Phylax gateway (WhatsApp + Telegram) **+ Google Drive
+  channel + the LLM brain + the MCP-connect UI + the default-route setting**. It is the door AND
+  the chief-of-staff in one instance.
+- **The Council guy row — DELETED.** Its job (default route, general asks → done-with-receipt,
+  files memory via Zenod, dispatches Epaminon) is absorbed into the Ring's brain.
+- Zenod / Archus / Epaminon / Callisthenes / Herald — unchanged as boxes, but **reframed as
+  connected MCP servers with skills**, not hardwired routes.
+
+**RD decisions:**
+- **RD-2 (council guy's name) — WITHDRAWN** (no separate council; the only thing it still blocked,
+  the council website page in W-G, is withdrawn with it).
+- **RD-5 (enum-constrained classifier router) — SUPERSEDED** by the brain-gateway model.
+- **RD-3 (dispatch depth ≤ 1 + origin_ticket_id) — SURVIVES** unchanged (good conformance; W-H).
+- **RD-1 (Phylax gateway inside the Ring's compose) — SURVIVES**, extended: Phylax fronts the
+  brain now, and Drive joins as a channel. **RD-4 (staged repo split) — SURVIVES.**
+
+**Tickets:**
+- **W-A (ring extraction) — REDEFINED** into N-1 (extract ring-core AS the brain-gateway; do NOT
+  split the brain out). **W-B (council extraction) — DELETED, merged into N-1.**
+- **W-H (dispatch tracing), W-I (engine genericization), W-J (watchdog), W-C (Zenod standalone,
+  already shipped via Epic 2.3), W-F (folder restructure) — SURVIVE.** W-G loses its council page.
+
+**SEAM-SPEC (docs/SEAM-SPEC.md) — MINIMAL change (the wire is still pure MCP; connected servers
+still conform).** Only edit needed, deferred to the build ticket N-8: §3 example line "Ring =
+ring-core + Phylax gateway" → "Ring = brain-gateway + Phylax + Drive." The conformance checklist
+is untouched — the connect-UI skill lives *inside* the Ring, never on the wire.
+
+#### B · NEW DECISIONS NEEDING JORDI (RP-1..RP-5 — planner frames, Jordi calls)
+
+- **RP-1 · Where the brain lives vs Phylax.** (a) brain inside ring-core (one container) + Phylax
+  gateway container, one compose — **recommended, matches "one instance"**; (b) brain its own
+  container. Rec **(a)**.
+- **RP-2 · Skill format for a connected MCP server.** Each connection carries a "when to use me"
+  skill injected into the brain's system prompt. (a) a short natural-language description block per
+  connection — **recommended, ship now**; (b) a structured skill file (triggers + examples + tool
+  hints); (c) auto-generated from the server's `tools/list`. Rec **(a) now, (b) as a later
+  upgrade**; always seed (a) from (c) as a default the user edits.
+- **RP-3 · Default route for ambiguous messages (requirement c).** (a) the brain answers directly
+  (it is the chief-of-staff) — **recommended default**; (b) forward to a configurable named
+  connected server; (c) ask the user to clarify. Rec: **ship (a) as the default but make it a
+  SETTING that can be pointed at (b) or (c)** — that setting IS requirement (c).
+- **RP-4 · Named pass-through fidelity (requirement d).** "for Herald" / "@Herald" → (a)
+  deterministic prefix match bypasses brain deliberation and forwards the message near-verbatim to
+  that server's primary tool, minimal thinking — **recommended**; (b) the brain always mediates.
+  Rec **(a)** (keeps the one cheap deterministic fast-path from old Law 3, now as a passthrough).
+- **RP-5 · Compose-vs-relay of a tool's answer.** Old law = verbatim; new brain may compose. (a)
+  brain composes/summarizes freely; (b) always verbatim + attribution; (c) **per-connection
+  setting** (verbatim for voice-guys like Herald, composed for utility tools). Rec **(c)**.
+
+#### C · FRESH TICKET LIST — Iteration 0, new topology (states = PROPOSED, pending RP calls)
+
+| ID | Lane | Deliverable | Depends | Budget |
+|---|---|---|---|---|
+| **N-1** | Brain-gateway core | ring-core hosts the LLM brain; every inbound channel message → one brain turn with all connected tools + skills in context; enum-classifier deleted; routing = tool-selection, logged + misroute counter. Absorbs old W-A + W-B. | W-I, RP-1/RP-5 | ≤6h |
+| **N-2** | Connect-a-server UI + skill store | UI to add/remove/enable/disable an MCP server (endpoint URL + bearer + display name), attach its skill ("when to use"), persisted in the keyring; skills injected into the brain's system prompt each turn. | N-1, RP-2 | ≤5h |
+| **N-3** | Default-route setting | config for ambiguous messages: brain-direct \| named-server \| clarify (RP-3); surfaced in the connect-UI; logged on every fallback. | N-1, RP-3 | ≤2h |
+| **N-4** | Named pass-through fast path | "for <name>" / "@name" → near-verbatim forward to that connection's primary tool, minimal deliberation (RP-4); unknown name → default route (N-3). | N-1, N-2, RP-4 | ≤2h |
+| **N-5** | Channels: WhatsApp + Telegram + Google Drive | Phylax fronts WA+TG (RD-1 retained); Drive as an ingest channel/source; archive-raw-FIRST-then-transcribe media pipeline retained (Law 5); provenance on every mailbox entry. | N-1 | ≤4h |
+| **N-6** | Compose/relay policy | per-connection verbatim-vs-composed flag (RP-5); Herald-style guys relayed with attribution, utility tools composed. | N-1, N-2, RP-5 | ≤2h |
+| **N-7** | Provisioning + watchdog (new topology) | provision ONE brain-gateway + Phylax + wired default connections; folds W-E runbook + W-J watchdog law into the collapsed shape; receipts on every container + connection. | N-1..N-6, W-J | ≤4h |
+| **N-8** | Docs + SEAM-SPEC delta apply | after RP calls: rewrite the epic laws/catalog/RD in place, retire Council/RD-2/RD-5 text, apply the one SEAM-SPEC §3 wording edit. | RP-1..RP-5 called | ≤2h |
+| **W-H** | Dispatch tracing (carried) | `origin_ticket_id` + depth ≤1 — unchanged, still LAW. | — | ≤3h |
+| **W-I** | Engine genericization (carried) | shared-lib engine, zero channel/domain imports — still the split blocker + N-1 prerequisite. | — | ≤4h |
+
+**Ticket acceptance/test sketches (full acceptance written at dispatch, post-RP):**
+- **N-1:** a channel message with 3+ connected servers → the brain calls exactly the right tool; a
+  memory ask → Zenod tool; routing log shows one decision/message; NO enum-classifier code path
+  remains (grep). Test: 5 scripted messages route correctly with transcripts.
+- **N-2:** add a server in the UI with a skill → it appears in the brain's tool set next turn;
+  disable it → its tool refuses/vanishes; skill text demonstrably changes routing. Test: connect a
+  dummy MCP echo server, prove skill-driven selection, then disable and prove it's gone.
+- **N-3:** flip the default-route setting → an ambiguous message lands where the setting says.
+- **N-4:** "for Herald: draft a tweet" → Herald's tool called with the message near-verbatim, no
+  brain rewrite; "@zenod what did I say" → Zenod tool. Test: transcript shows minimal-thinking path.
+- **N-5:** voice note on WhatsApp → raw archived to Drive BEFORE routing → transcript routed; a
+  file dropped in the Drive channel → ingested; reply exits the same channel it entered.
+
+**Proposed new canonical test criteria (surprises worth locking):** (1) "no orphaned enum-router
+code" grep gate on N-1 — the old router must be *deleted*, not dormant; (2) a connected-server
+skill must measurably change routing (N-2) — otherwise skills are decorative; (3) the default-route
+setting must be exercised in both directions (N-3).
+
+**HANDBACK to Jordi.** Deliverable is the delta (§A) + the five decisions to call (§B) + the fresh
+ticket list (§C). No code written. Next action is Jordi's: call RP-1..RP-5 (and confirm Council is
+withdrawn). On the calls, N-8 rewrites the sections above in place and Iteration 0 dispatches
+N-1..N-7 (order: W-I → N-1 → N-2/N-5 parallel → N-3/N-4/N-6 → N-7). Pen holds with Ring-Fable.
