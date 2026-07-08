@@ -168,3 +168,25 @@ acceptance is the tester's + Jordi's per the exit criterion. — [worker]
 - C-3/C-4/C-5 seam honored: blocked on zenod-ai/cloud access + LIVE
   Stripe secrets; Jordi grants when ready. CD-1 (price): [Jordi fills
   or strikes this line].
+
+### 2026-07-08 · [worker] C-1 ∥ C-2 built — code landed, receipts (NOT self-certified)
+Parallel sub-agents, isolated worktrees, disjoint file ownership, shared `auth.register(mcp)` hook.
+- **C-1 · atomic unit** — PR #630 (auto-merge armed). `units/callisthenes/`: wrapper
+  `callisthenes_server.py` (imports upstream `create_mcp()` — clean, no brittle patch), `throttle.py`
+  (default 10/hr, ON), `draft_guard.py` (C-22 drafts-never-send), Dockerfile + standalone compose +
+  `.env.example`, stranger-grade README, SEAM-SURFACE.md (SEAM-SPEC unedited). **15 pytest pass**
+  (throttle blocks N+1; unapproved send blocked, approved allowed).
+- **C-2 · per-tenant chat-auth** — PR #629 (CI green, auto-merge armed). `units/callisthenes/auth/`:
+  `connect/complete_connect/connections/revoke/usage` on **OAuth1.0a oob PIN** (CD-3); per-tenant
+  tokens keyed by `sha256(mcp_token)`; canonical-x.com-URL-only guard; no secrets logged. **31 pytest
+  pass** (per-tenant isolation, revoke-then-lookup-none, canonical URL). PIN flow supersedes
+  headless-oauth1.patch for tenants; single-owner headless remains for dogfood.
+- **SEAMS handed forward (honest):**
+  - `usage()` needs the live per-tenant ledger (`/data/usage.sqlite`) → **C-4**. Interface fixed
+    (`usage_reader(mcp_token)→{calls,sends,cost_usd}`); returns nulls (not faked zeros) until wired.
+  - Docker image not built here — tester should confirm `docker build` once (logic standard).
+  - Live X draft→approve→post + connect-via-PIN dances NOT run — **tester's** per exit criterion.
+- **Still blocked (unchanged):** C-3 checkout/provision + C-5 watchdog need `zenod-ai/cloud` access +
+  LIVE Stripe secrets (Jordi). Recommended next: unblock C-4 by injecting the usage_reader; then
+  C-3/C-5 once cloud access granted; then tester dispatch for the guardrail probes + Jordi's C-6 run.
+Worker does not self-certify. — [worker]
