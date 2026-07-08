@@ -1,4 +1,4 @@
-"""Boot-level registration test (EPIC-2.4 #636 regression guard).
+"""Boot-level registration test (EPIC-2.4 #636 + #645 regression guard).
 
 The rest of the auth suite drives the plain-registry / direct-engine path, which
 is exactly why #636 shipped: `register()._wrap` returned `inner(*args, **kwargs)`,
@@ -7,9 +7,11 @@ threw, and the wrapper swallowed it into single-owner-headless — so a live
 `tools/list` exposed ZERO chat-auth tools while every unit test stayed green.
 
 This test registers against a REAL FastMCP instance (the thing the unit actually
-boots) and asserts all five chat-auth tools appear with explicit parameters. If
-`_wrap` ever regresses to a `*args` signature, FastMCP raises at registration and
-this test fails loudly.
+boots) and asserts all five chat-auth tools appear with explicit parameters AND
+that the public schema does NOT contain `mcp_token` (#645 — identity comes from the
+authenticated request, never a client argument). If `_wrap` regresses to `*args`,
+FastMCP raises at registration and this test fails loudly; if it re-introduces
+`mcp_token`/`tenant` in the public schema, the schema assertions fail.
 """
 
 from __future__ import annotations
@@ -30,9 +32,13 @@ FIVE = {"connect", "complete_connect", "connections", "revoke", "usage"}
 def _fresh_mcp() -> FastMCP:
     mcp = FastMCP("callisthenes-test")
     engine = ChatAuth(
-        store=InMemoryTokenStore(), consumer_key="ck", consumer_secret="cs"
+        store=InMemoryTokenStore(),
+        client_id="cid",
+        client_secret="csec",
+        redirect_uri="https://callisthenes.example/oauth/callback",
     )
-    register(mcp, engine=engine)
+    # Fixed resolver so the tools are drivable without a live request context.
+    register(mcp, engine=engine, tenant_resolver=lambda: "mcp-tenant-A")
     return mcp
 
 
@@ -45,12 +51,23 @@ def test_all_five_chat_auth_tools_register_on_real_fastmcp():
 
 
 def test_registered_tools_have_explicit_params_not_varargs():
-    """The #636 fix: FastMCP must see explicit params (mcp_token, ...), never *args."""
+    """The #636 fix: FastMCP must see explicit params, never *args."""
     mcp = _fresh_mcp()
     tools = {t.name: t for t in asyncio.run(mcp.list_tools())}
-    # connect(mcp_token, service='x') — both must surface as declared inputs.
+    # connect(service='x') — service must surface as a declared input.
     props = tools["connect"].parameters.get("properties", {})
-    assert "mcp_token" in props, f"connect lost its explicit params: {list(props)}"
-    assert "service" in props
-    # A *args signature would have thrown at register() above; reaching here proves
-    # the explicit __signature__ pin held.
+    assert "service" in props, f"connect lost its explicit params: {list(props)}"
+    # complete_connect(code, state, service) — code/state surface.
+    cc_props = tools["complete_connect"].parameters.get("properties", {})
+    assert "code" in cc_props and "state" in cc_props, list(cc_props)
+
+
+def test_public_schema_never_exposes_tenant_identity():
+    """#645: the tenant is derived from the authenticated request, so NO tool may
+    expose `mcp_token` (or `tenant`) as a client-supplied argument."""
+    mcp = _fresh_mcp()
+    tools = {t.name: t for t in asyncio.run(mcp.list_tools())}
+    for name in FIVE:
+        props = tools[name].parameters.get("properties", {})
+        assert "mcp_token" not in props, f"{name} leaks mcp_token into its schema: {list(props)}"
+        assert "tenant" not in props, f"{name} leaks tenant into its schema: {list(props)}"

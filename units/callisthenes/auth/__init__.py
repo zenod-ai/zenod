@@ -1,12 +1,14 @@
-"""units/callisthenes/auth — per-tenant chat-auth for Callisthenes (EPIC-2.4 C-2).
+"""units/callisthenes/auth — per-tenant chat-auth for Callisthenes (EPIC-2.4 C-2R).
 
-The console-less auth surface. A tenant connects their X account entirely via chat:
+The console-less auth surface. A tenant connects their X account entirely via chat,
+now via **OAuth 2.0 Authorization-Code + PKCE** ("just click Authorize"):
 
-    connect(service="x")            -> canonical x.com authorize URL + PIN instructions
-    complete_connect(pin, "x")      -> exchanges the PIN, stores tokens keyed by MCP token
+    connect(service="x")            -> canonical x.com authorize URL + state (PKCE)
+    complete_connect(code, state)   -> exchanges the code, stores the tenant's
+                                       REFRESH token keyed by the request bearer
     connections()                   -> per-service status for THIS tenant (no secrets)
     revoke(service|token)           -> drops this tenant's tokens (next send fails loudly)
-    usage()                         -> calls / sends / cost for this tenant (ledger; see OPEN SEAM)
+    usage()                         -> calls / sends / cost for this tenant (ledger)
 
 SHARED CONTRACT with C-1's wrapper:
 
@@ -16,11 +18,21 @@ SHARED CONTRACT with C-1's wrapper:
 `register(mcp)` registers the five tools on `mcp`, supporting both a FastMCP-style
 `@mcp.tool()` decorator and an `mcp.add_tool(fn, name=...)` API. If `mcp` is None or
 neither API is present, tools register into a plain in-process registry (exposed as
-`register_auth(...)`'s return value) so tests can still drive them.
+the returned engine's `.registry`) so tests can still drive them.
 
-Per-tenant identity is the caller's MCP access token (SEAM-SPEC §4). The wrapper is
-responsible for extracting the bearer from the request and passing it as `mcp_token`.
-Tools accept `mcp_token` explicitly so the package is testable without a live server.
+Per-tenant identity (#645, CLOSED here): the tenant is derived from the AUTHENTICATED
+MCP request on the server (the `Authorization: Bearer` header), NOT from a
+client-supplied argument. The PUBLIC tool schema therefore does NOT contain
+`mcp_token` — a client cannot assert someone else's identity. The `ChatAuth` engine
+methods still take the resolved tenant as their first argument so the package stays
+unit-testable without a live server; `register()` wraps each tool so its PUBLIC
+signature drops that first parameter and the tenant is injected from the request.
+
+Seam (documented, exact): the default resolver reads the request via FastMCP's
+`fastmcp.server.dependencies.get_http_headers()`. If that API is unavailable it
+falls back to a self-host single-owner env token (CALLISTHENES_OWNER_TENANT /
+MCP_BEARER_TOKEN); if neither yields a token the call fails loudly with
+`unauthorized`. A custom `tenant_resolver` may be injected (tests do this).
 
 Security (BINDING): tool results return CANONICAL x.com URLs ONLY. Secrets never
 appear in any result and are never logged.
@@ -35,10 +47,12 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from .oauth1_pin import (
+from .oauth2_pkce import (
     CANONICAL_AUTHORIZE_HOSTS,
-    OAuth1Error,
-    OAuth1PinFlow,
+    DEFAULT_SCOPES,
+    OAuth2Error,
+    OAuth2PkceFlow,
+    TokenSet,
 )
 from .token_store import (
     StoredConnection,
@@ -62,43 +76,51 @@ class AuthError(Exception):
 
 
 @dataclass
-class _PendingRequest:
-    """A request-token awaiting its PIN, held between connect() and complete_connect()."""
+class _PendingAuth:
+    """A PKCE flow in flight, held between connect() and complete_connect(), keyed
+    by (tenant, service). `state` guards against CSRF; `code_verifier` completes PKCE."""
 
-    oauth_token: str
-    oauth_token_secret: str
+    state: str
+    code_verifier: str
     service: str
     created_at: float
 
 
 class ChatAuth:
-    """The chat-auth engine. Holds the token store + pending request-tokens and
-    builds the OAuth1 flow from consumer creds. One instance per unit process."""
+    """The chat-auth engine. Holds the token store + pending PKCE flows and builds
+    the OAuth2 flow from client creds. One instance per unit process."""
 
     def __init__(
         self,
         store: Optional[TokenStore] = None,
-        consumer_key: Optional[str] = None,
-        consumer_secret: Optional[str] = None,
-        flow_factory: Optional[Callable[[], OAuth1PinFlow]] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        scopes: Optional[str] = None,
+        flow_factory: Optional[Callable[[], OAuth2PkceFlow]] = None,
         usage_reader: Optional[Callable[[str], Dict[str, Any]]] = None,
     ):
         self.store = store or default_store()
-        self._consumer_key = consumer_key or os.getenv("X_OAUTH_CONSUMER_KEY", "")
-        self._consumer_secret = consumer_secret or os.getenv(
-            "X_OAUTH_CONSUMER_SECRET", ""
-        )
-        # flow_factory lets tests inject a mocked-HTTP OAuth1PinFlow.
+        self._client_id = client_id or os.getenv("X_OAUTH2_CLIENT_ID", "")
+        self._client_secret = client_secret or os.getenv("X_OAUTH2_CLIENT_SECRET", "")
+        self._redirect_uri = redirect_uri or os.getenv("X_OAUTH2_REDIRECT_URI", "")
+        self._scopes = scopes or os.getenv("X_OAUTH2_SCOPES", DEFAULT_SCOPES)
+        # flow_factory lets tests inject a mocked-HTTP OAuth2PkceFlow.
         self._flow_factory = flow_factory
         self._usage_reader = usage_reader
-        # { (tenant, service): _PendingRequest } — request-token secret handoff.
-        self._pending: Dict[str, _PendingRequest] = {}
+        # { (tenant, service): _PendingAuth } — state + code_verifier handoff.
+        self._pending: Dict[str, _PendingAuth] = {}
 
     # -- helpers ----------------------------------------------------------------
-    def _flow(self) -> OAuth1PinFlow:
+    def _flow(self) -> OAuth2PkceFlow:
         if self._flow_factory:
             return self._flow_factory()
-        return OAuth1PinFlow(self._consumer_key, self._consumer_secret)
+        return OAuth2PkceFlow(
+            client_id=self._client_id,
+            client_secret=self._client_secret,
+            redirect_uri=self._redirect_uri,
+            scopes=self._scopes,
+        )
 
     @staticmethod
     def _check_service(service: str) -> str:
@@ -111,49 +133,51 @@ class ChatAuth:
         return service
 
     @staticmethod
-    def _require_tenant(mcp_token: Optional[str]) -> str:
-        if not mcp_token:
+    def _require_tenant(tenant: Optional[str]) -> str:
+        if not tenant:
             raise AuthError(
                 "unauthorized",
-                "No MCP access token on the call; cannot identify the tenant.",
+                "No authenticated MCP bearer on the request; cannot identify the tenant.",
             )
-        return mcp_token
+        return tenant
 
     def _pending_key(self, tenant: str, service: str) -> str:
-        # tenant is the raw MCP token; never logged. Key is process-local only.
+        # tenant is the raw MCP bearer; never logged. Key is process-local only.
         return f"{tenant}\x00{service}"
 
     # -- tool 1: connect --------------------------------------------------------
-    def connect(self, mcp_token: str, service: str = "x") -> Dict[str, Any]:
-        tenant = self._require_tenant(mcp_token)
+    def connect(self, tenant: str, service: str = "x") -> Dict[str, Any]:
+        tenant = self._require_tenant(tenant)
         service = self._check_service(service)
         flow = self._flow()
-        rt = flow.request_token()
-        self._pending[self._pending_key(tenant, service)] = _PendingRequest(
-            oauth_token=rt.oauth_token,
-            oauth_token_secret=rt.oauth_token_secret,
+        challenge = flow.authorize()
+        _assert_canonical(challenge.authorize_url)
+        self._pending[self._pending_key(tenant, service)] = _PendingAuth(
+            state=challenge.state,
+            code_verifier=challenge.code_verifier,
             service=service,
             created_at=time.time(),
         )
-        url = flow.authorize_url(rt.oauth_token)
-        _assert_canonical(url)
         return {
             "ok": True,
             "service": service,
-            "authorize_url": url,
+            "authorize_url": challenge.authorize_url,
+            "state": challenge.state,
             "instructions": (
-                f"Visit {url} , approve access to your X account, then copy the "
-                f"7-digit PIN shown and send it back with "
-                f"complete_connect(pin=\"<PIN>\", service=\"{service}\")."
+                f"Open {challenge.authorize_url} , click Authorize to grant this app "
+                f"access to your X account. You'll be redirected to the registered "
+                f"callback with a `code` and `state`; complete the connection with "
+                f"complete_connect(code=\"<code>\", state=\"{challenge.state}\", "
+                f"service=\"{service}\")."
             ),
-            "flow": "oauth1_pin_oob",
+            "flow": "oauth2_pkce",
         }
 
     # -- tool 2: complete_connect ----------------------------------------------
     def complete_connect(
-        self, mcp_token: str, pin: str, service: str = "x"
+        self, tenant: str, code: str, state: str = "", service: str = "x"
     ) -> Dict[str, Any]:
-        tenant = self._require_tenant(mcp_token)
+        tenant = self._require_tenant(tenant)
         service = self._check_service(service)
         pending = self._pending.get(self._pending_key(tenant, service))
         if not pending:
@@ -161,42 +185,52 @@ class ChatAuth:
                 "not_found",
                 f"No pending {service} connection for this tenant. Call connect() first.",
             )
-        if not (pin or "").strip():
-            raise AuthError("invalid_input", "A PIN is required to complete the connection.")
+        if not (code or "").strip():
+            raise AuthError("invalid_input", "An authorization code is required.")
+        # CSRF: the state echoed back by X must match the one we minted.
+        if state and state != pending.state:
+            raise AuthError(
+                "invalid_input",
+                "State mismatch — the callback state does not match the pending flow.",
+            )
         flow = self._flow()
-        at = flow.access_token(
-            pending.oauth_token, pending.oauth_token_secret, pin
-        )
+        tokens: TokenSet = flow.exchange_code(code, pending.code_verifier)
+        if not tokens.refresh_token:
+            # offline.access should always yield a refresh token; its absence means
+            # agents could not post past the ~2h access-token lifetime. Fail loud.
+            raise AuthError(
+                "unavailable",
+                "X returned no refresh_token (offline.access scope missing?); "
+                "the connection would expire in ~2h and cannot be stored durably.",
+            )
         conn = StoredConnection(
             service=service,
-            access_token=at.oauth_token,
-            access_token_secret=at.oauth_token_secret,
+            access_token=tokens.access_token,
+            refresh_token=tokens.refresh_token,
+            expires_at=tokens.expires_at,
+            token_type=tokens.token_type,
             connected_at=time.time(),
-            user_id=at.user_id,
-            screen_name=at.screen_name,
-            scope="read,write",
+            scope=tokens.scope or self._scopes,
+            auth_flow="oauth2_pkce",
         )
         self.store.put(tenant, conn)
         self._pending.pop(self._pending_key(tenant, service), None)
         # Receipt (SEAM-SPEC §2): a mutating tool returns a concrete handle. The
-        # handle here is the connected X identity (screen_name / user_id) — the
-        # thing that was created — never the secret token.
+        # handle here is the connected service + granted scope — never a secret.
         return {
             "ok": True,
             "service": service,
             "connected": True,
-            "screen_name": at.screen_name,
-            "user_id": at.user_id,
+            "scope": conn.scope,
             "message": (
-                f"Connected X account "
-                + (f"@{at.screen_name}" if at.screen_name else "(id " + str(at.user_id) + ")")
-                + " for this tenant."
+                f"Connected your X account for this tenant via OAuth 2.0. "
+                f"Agents can now post through the always-on unit."
             ),
         }
 
     # -- tool 3: connections ----------------------------------------------------
-    def connections(self, mcp_token: str) -> Dict[str, Any]:
-        tenant = self._require_tenant(mcp_token)
+    def connections(self, tenant: str) -> Dict[str, Any]:
+        tenant = self._require_tenant(tenant)
         connected = {c.service: c for c in self.store.list_services(tenant)}
         services: List[Dict[str, Any]] = []
         for svc in SUPPORTED_SERVICES:
@@ -210,11 +244,11 @@ class ChatAuth:
     # -- tool 4: revoke ---------------------------------------------------------
     def revoke(
         self,
-        mcp_token: str,
+        tenant: str,
         service: Optional[str] = None,
         token: Optional[str] = None,
     ) -> Dict[str, Any]:
-        tenant = self._require_tenant(mcp_token)
+        tenant = self._require_tenant(tenant)
         # `token` param (SEAM allows revoke(service|token)): if a service string was
         # passed positionally as `token`, treat it as the service selector.
         if service is None and token is not None:
@@ -222,7 +256,7 @@ class ChatAuth:
         if service is not None:
             service = self._check_service(service)
         removed = self.store.revoke(tenant, service)
-        # Also clear any half-finished pending request for this tenant.
+        # Also clear any half-finished pending flow for this tenant.
         for key in list(self._pending):
             if key.startswith(tenant + "\x00") and (
                 service is None or key.endswith("\x00" + service)
@@ -241,8 +275,8 @@ class ChatAuth:
         }
 
     # -- tool 5: usage ----------------------------------------------------------
-    def usage(self, mcp_token: str) -> Dict[str, Any]:
-        tenant = self._require_tenant(mcp_token)
+    def usage(self, tenant: str) -> Dict[str, Any]:
+        tenant = self._require_tenant(tenant)
         if self._usage_reader is not None:
             data = self._usage_reader(tenant)
             return {"ok": True, "usage": data, "source": "ledger"}
@@ -263,6 +297,47 @@ class ChatAuth:
         }
 
 
+# --- Tenant resolution from the authenticated request --------------------------
+def _default_tenant_resolver() -> str:
+    """Derive the tenant from the AUTHENTICATED MCP request (#645).
+
+    Seam (exact): FastMCP exposes the live HTTP headers of the in-flight request
+    via `fastmcp.server.dependencies.get_http_headers()`. We read the
+    `Authorization: Bearer <token>` value — that bearer IS the tenant identity
+    (SEAM-SPEC §4). It is NEVER accepted as a tool argument, so a client cannot
+    assert another tenant's identity.
+
+    Fallbacks, in order:
+      1. `Authorization: Bearer` on the request (hosted, multi-tenant).
+      2. `CALLISTHENES_OWNER_TENANT` / `MCP_BEARER_TOKEN` env (self-host single-owner).
+      3. Loud `unauthorized` — never a silent default tenant.
+    """
+    token: Optional[str] = None
+    try:  # FastMCP request-scoped dependency; absent outside a live request.
+        from fastmcp.server.dependencies import get_http_headers  # type: ignore
+
+        # NB: FastMCP strips `authorization` by default (it excludes headers that
+        # are risky to forward downstream); we must opt it back IN. Newer FastMCP
+        # takes `include={...}`; older only `include_all=True`.
+        try:
+            headers = get_http_headers(include={"authorization"}) or {}
+        except TypeError:  # older FastMCP without the `include` param
+            headers = get_http_headers(include_all=True) or {}
+        auth = headers.get("authorization") or headers.get("Authorization")
+        if auth and auth.lower().startswith("bearer "):
+            token = auth[7:].strip()
+    except Exception:  # noqa: BLE001 — no request context / API absent
+        token = None
+    if not token:
+        token = os.getenv("CALLISTHENES_OWNER_TENANT") or os.getenv("MCP_BEARER_TOKEN")
+    if not token:
+        raise AuthError(
+            "unauthorized",
+            "No authenticated MCP bearer on the request; cannot identify the tenant.",
+        )
+    return token
+
+
 # --- MCP registration ----------------------------------------------------------
 class _PlainRegistry:
     """Fallback registry when `mcp` is None/unknown: name -> callable. Lets tests
@@ -279,20 +354,20 @@ def register(
     mcp: Any = None,
     engine: Optional[ChatAuth] = None,
     usage_reader: Optional[Callable[[str], Dict[str, Any]]] = None,
+    tenant_resolver: Optional[Callable[[], str]] = None,
 ) -> Any:
     """Register the five chat-auth tools on `mcp`.
 
     Returns the `ChatAuth` engine (so a caller/test can reach it), and — when
     `mcp` is None/unknown — a `_PlainRegistry` is attached at `engine.registry`.
 
-    The registered tool callables take `mcp_token` as their first argument; the
-    wrapper (C-1) is responsible for injecting the caller's bearer token. This
-    keeps tenant identity explicit and the package server-agnostic.
+    The registered tools DO NOT expose `mcp_token` in their schema (#645). The
+    tenant is injected from the authenticated request via `tenant_resolver`
+    (default: `_default_tenant_resolver`, which reads the request bearer). Tests
+    inject a fixed resolver.
 
     C-4a: when no `engine` is supplied, `usage()` is wired to the live
-    `/data/usage.sqlite` ledger if one is present. An explicit `usage_reader`
-    overrides; otherwise `sqlite_usage_reader()` auto-detects and returns None
-    when no ledger exists — leaving `usage()` in its honest `unavailable` stub.
+    `/data/usage.sqlite` ledger if one is present.
     """
     if engine is None:
         reader = usage_reader
@@ -302,24 +377,32 @@ def register(
             reader = sqlite_usage_reader()
         engine = ChatAuth(usage_reader=reader)
 
+    resolver = tenant_resolver or _default_tenant_resolver
+
     def _wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
-        # Uniform loud-error envelope (SEAM-SPEC §5): AuthError/OAuth1Error -> {error}.
-        #
-        # #636: the inner function still uses (*args, **kwargs) to forward the
-        # call, but FastMCP's mcp.tool() introspects the signature and REFUSES a
-        # VAR_POSITIONAL (*args) parameter — which silently killed the entire auth
-        # registration. We pin `inner.__signature__` to the wrapped method's real
-        # signature (e.g. connect(mcp_token, service='x')), so FastMCP sees an
-        # explicit parameter list, builds the correct tool schema, and calls
-        # inner(mcp_token=..., service=...) — which *args forwards verbatim.
+        # The engine method's real signature is e.g. connect(tenant, service='x').
+        # The PUBLIC tool must (a) NOT expose `tenant`/`mcp_token` (#645 — identity
+        # comes from the request, not the client) and (b) NEVER use *args, because
+        # FastMCP's mcp.tool() REJECTS a VAR_POSITIONAL parameter (#636 regression
+        # class). So we build an explicit public signature = the method's signature
+        # MINUS its first (tenant) parameter, pin it on `inner`, resolve the tenant
+        # from the request inside, and forward.
+        sig = inspect.signature(fn)
+        params = list(sig.parameters.values())
+        public_params = params[1:]  # drop `tenant`
+        public_sig = sig.replace(parameters=public_params)
+
         @functools.wraps(fn)
         def inner(*args: Any, **kwargs: Any) -> Any:
             try:
-                return fn(*args, **kwargs)
-            except (AuthError, OAuth1Error) as e:
+                tenant = resolver()
+                return fn(tenant, *args, **kwargs)
+            except (AuthError, OAuth2Error) as e:
                 return {"ok": False, "error": {"code": e.code, "message": e.message}}
 
-        inner.__signature__ = inspect.signature(fn)  # type: ignore[attr-defined]
+        inner.__signature__ = public_sig  # type: ignore[attr-defined]
+        # Drop the wrapped `tenant` param from any copied annotations too.
+        inner.__wrapped__ = fn  # type: ignore[attr-defined]
         return inner
 
     tools: Dict[str, Callable[..., Any]] = {
