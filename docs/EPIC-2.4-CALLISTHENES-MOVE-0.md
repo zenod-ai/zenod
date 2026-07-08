@@ -367,3 +367,53 @@ land via PR to `main`. **Write the handback HERE, inline on main (SO-3) — not 
 
 **After #645:** C-6 (live X post → permalink) once an X test account is provided; C-3/C-4/C-5 once
 `zenod-ai/cloud` access is granted (Stripe **TEST-mode** per SO-1). — [planner/Epic-Zero]
+### 2026-07-08 · [planner, via Jordi] NEW DIRECTION — OAuth2 + minimal hosted UI (settled)
+A design conversation (Jordi ↔ Fable) settled the auth model and the console question. This entry is
+the binding record; it supersedes the console-less / OAuth1-PIN framing above where they conflict.
+
+**Decisions (Jordi called each):**
+- **D-A · Keep the SELF-HOSTED xmcp (full toolkit).** Research: X's *hosted* `api.x.com/mcp` writes
+  are only bookmarks + Article publish (Posts fetch-only) — no general tweet posting. The vendored
+  `xdevplatform/xmcp` gives 140+ ops incl. `createPosts/deletePosts/media`. We do a lot of X → we
+  stay self-hosted for the toolkit. The hosted MCP's *auth idea* we adopt; its *server* we don't.
+- **D-B · Auth = OAuth 2.0 PKCE, not OAuth1-PIN.** The PIN flow (built in C-2) is page-less but costs
+  a manual 7-digit copy. OAuth2 "click Authorize → auto-redirect back" is zero-copy but needs a
+  callback page. Jordi wants the click-only UX (ZNOT parity; the Nex setup's variable-pasting pain is
+  the thing to kill). Scopes `tweet.read tweet.write users.read offline.access`. → **C-2R (#648)**;
+  OAuth1-PIN retired from the hosted surface (may remain a self-host fallback).
+- **D-C · Minimal hosted UI (reverses CD-4).** Hosted instances get a one-screen connect page — the
+  distinction of the hosted tier, same as ZNOT gives Zenod a UI. Not a dashboard: one-button Connect
+  X (OAuth2), a Reddit (Composio) field, an extensible connector list (Instagram/email later), and it
+  shows the MCP URL + token. It doubles as the OAuth2 callback. → **C-7 (#649)**. The "no UI anywhere"
+  thesis is retired for hosted; self-host stays CLI/headless.
+- **D-D · Reddit via Composio.** X first, Reddit fast-follow via the suite's existing Composio path;
+  token entered in the C-7 UI. Instagram/others later as connector rows. → **C-8 (#650)**.
+- **D-E · Receipt profile RETAINED (non-negotiable).** SEAM-SPEC receipt profile = every mutating
+  tool returns a real ID/URL or errors loudly; reads return explicit-empty, never faked. This is the
+  anti-hallucination discipline (last week's learnings): the assistant may only claim a send happened
+  by pointing at the permalink the tool returned. Enforced at the tool boundary — an MCP call ALWAYS
+  returns a result or an explicit error, so "receipts or it didn't happen" is structural, not policed.
+
+**What Callisthenes IS (Jordi's framing, recorded):** your *outbound identity broker* — "your guy."
+You authorize him ONCE per platform (X, Reddit, later Instagram/email); he's an always-on MCP server;
+every other agent (the ring, Claude, Cursor, scripts) points at him and can send without holding any
+credential. Value = **authentication aggregated in one always-on place** + evidence. A dumb
+"post this exact text" is still valuable because it's pre-authenticated; the smart end (LLM crafts the
+content) is an optional layer on top. This is the suite's "Outbound" concept, productized standalone.
+
+**Revised ticket set (supersedes the Iteration-0 table for auth/UI lanes):**
+| ID | Lane | Status |
+|---|---|---|
+| C-1 | self-hosted xmcp unit: throttle + C-22 + receipts | ✅ built + red-fixed live (#630/#643) |
+| ~~C-2~~ | ~~OAuth1-PIN chat-auth~~ | ⛔ superseded by C-2R |
+| **C-2R** | OAuth 2.0 PKCE connect for X + per-tenant bearer identity (closes #645) | 🔨 #648 — dispatch now |
+| **C-7** | minimal hosted connect-UI (Connect X / Reddit / MCP URL) | 🔨 #649 — after C-2R contract |
+| **C-8** | Reddit send connector via Composio | 🔨 #650 — dispatch now (disjoint) |
+| C-3 | website + Stripe checkout LIVE → provision (clone Z-2/Z-3) | ⛔ needs zenod-ai/cloud + Stripe LIVE (Jordi) |
+| C-4 | meter via `usage()` (C-4a landed) | ⚠️ live reconciliation once an instance runs |
+| C-5 | watchdog + ops | ⛔ needs cloud access (Jordi) |
+| C-6 | Jordi's exit run | ⏳ last |
+
+**Parallelizable NOW (dispatched):** C-2R (#648) ∥ C-8 (#650) — disjoint files, worktree-isolated.
+**Blocked on Jordi grants:** C-3/C-5 (zenod-ai/cloud access + LIVE Stripe). **Sequenced:** C-7 after
+C-2R's callback contract; C-4 reconciliation + C-6 once a real instance provisions. — [planner]
