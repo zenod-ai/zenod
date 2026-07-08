@@ -46,13 +46,36 @@ def build_app():
     log("installed middleware: draft-guard (C-22) + throttle")
 
     # SHARED CONTRACT with C-2 — auth package is optional at this stage.
+    # We build ONE ChatAuth engine here and hand the SAME instance to both the MCP
+    # auth tools (auth.register) and the C-7 hosted connect page (connect_page.register)
+    # so they share the pending-PKCE state + the per-tenant token store: a Connect X
+    # started from the page completes at the page's /oauth/callback, and a connection
+    # made either way is visible to the other.
+    auth_engine = None
     try:
-        from auth import register as register_auth  # type: ignore
+        from auth import register as register_auth, ChatAuth  # type: ignore
 
-        register_auth(mcp)
+        try:
+            from auth.usage_reader import sqlite_usage_reader  # C-4a live ledger seam
+
+            auth_engine = ChatAuth(usage_reader=sqlite_usage_reader())
+        except Exception:  # noqa: BLE001 — usage reader optional; engine still valid
+            auth_engine = ChatAuth()
+        register_auth(mcp, engine=auth_engine)
         log("auth package registered")
     except Exception as e:  # noqa: BLE001 — optional; unit must still boot
         log(f"auth package not registered ({e!r}); booting single-owner headless")
+
+    # C-7 — minimal hosted connect-UI. Mounts a one-screen connect page + the OAuth2
+    # callback route on the SAME FastMCP http app (Starlette custom routes; no sidecar).
+    # Optional at boot: absent/failed => the MCP tools + self-host CLI still work.
+    try:
+        from connect_page import register as register_connect_page  # type: ignore
+
+        register_connect_page(mcp, engine=auth_engine)
+        log("connect page mounted (/connect, /oauth/callback)")
+    except Exception as e:  # noqa: BLE001 — optional; unit must still boot
+        log(f"connect page not mounted ({e!r}); hosted connect-UI unavailable")
 
     # C-8 — Reddit send connector (Composio). Registers the `post_reddit` send tool
     # on the SAME endpoint; the draft-guard + throttle middleware guard it by name
