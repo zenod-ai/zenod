@@ -206,3 +206,60 @@ Worker does not self-certify. — [worker]
 - **Unchanged blockers:** C-3 checkout/provision + C-5 watchdog need `zenod-ai/cloud` access +
   LIVE Stripe secrets (Jordi's grant). `sends` remains null pending a send-ledger. No live
   acceptance self-certified — tester's per exit criterion. — [worker]
+
+### 2026-07-08 · [tester] Iteration-0 scoreboard — fresh evidence, tester ≠ fixer
+Budget: single-session, docker + python probes on a fresh GitHub clone. Retested against tip
+**c800755** (after C-4a landed mid-run). Method: built the image, booted the server, drove the live
+MCP endpoint, ran module-level custody probes, and executed the unit tests. Reds map one-to-one to a
+ticket; no fixes applied here.
+
+**❌ RED — Build & boot from a fresh clone (C-1, #630) → ticket #635.**
+`docker build units/callisthenes/` FAILS: `.dockerignore` line `*.patch` excludes both patch files
+the Dockerfile `COPY`s → `"/relax-response-required.patch": not found` at step 5/10. Reproduced
+twice. Proven to be the *sole* build blocker: with that one line removed (nothing else changed) the
+identical build completes, unpacks a ~549MB image, and boots FastMCP. The worker flagged "image not
+built here" — it does not build. `.dockerignore` unchanged by C-4a; still red on c800755.
+
+**❌ RED — Chat-auth surface absent at boot (C-2, #629) → ticket #636.**
+On real boot (both 6f9906d and c800755): `auth package not registered (ValueError('Functions with
+*args are not supported as tools')); booting single-owner headless`. Live `tools/list` returns only
+the 6 X tools — **zero** of `connect/complete_connect/connections/revoke/usage`. Cause:
+`register()._wrap` returns `inner(*args, **kwargs)`, which FastMCP's `mcp.tool()` rejects; the whole
+registration throws and is swallowed. C-4a touched `register()` but left `_wrap` byte-identical — red
+persists. Consequence: the console-less chat-auth thesis — the epic's headline — does not load. The
+auth unit tests pass only because they drive the plain-registry/direct-engine path, never FastMCP
+registration. Every live C-2 acceptance (connect a real X account via chat, revoke-then-post-fails,
+reconnect) is unreachable through the server, so the exit-criterion X dance was not run (also
+environmentally blocked: no X test account/creds available to the tester).
+
+**✅ GREEN — Guardrails, verified LIVE on the running MCP server (probe image, ignore-fix applied):**
+- throttle default **10/hr** enforced: 11 approved `createPosts` → sends #1–10 pass the guards,
+  **#11 `[throttle_exceeded]`**. Env override honored (3→3, 0→fully closed).
+- drafts-never-send (C-22): unapproved `createPosts` → `[draft_not_approved]`, `isError:true`,
+  never reaches X; approved call forwards with the approval arg **stripped** (no leak to X).
+- `installed middleware: draft-guard (C-22) + throttle` present in boot log.
+
+**✅ GREEN — Custody probes, verified at module level (correct, but gated behind #636 on the live surface):**
+- (a) token at rest = **unit-local SQLite** (`callisthenes-auth.sqlite`), tenant column = **sha256**
+  of the MCP token (verified == `sha256(raw)`); raw plaintext token **absent** from the DB file bytes.
+- (b) **no secret material** in any tool result, the `connections()` public view, or logs
+  (access token / access-token secret / request-token secret all absent from serialized results).
+- (c) `revoke()` **DELETEs** the row (rows 1→0), `get()` → `None` — deleted at rest, not flagged;
+  a subsequent send cannot be signed. `revoke` of nothing → loud `AuthError`.
+- (d) reconnect after revoke → `get()` returns the connection.
+- anti-phishing: non-canonical authorize URL refused; `api.x.com` allowed.
+
+**⚠️ ACCEPTABLE-NULL — `usage()` (C-4a).** C-4a is now on main and wires `usage()` to
+`/data/usage.sqlite` via `sqlite_usage_reader()`, which auto-detects and returns None when no ledger
+is present. On a bare standalone unit (no ledger) `usage()` returns
+`{calls:null, sends:null, cost_usd:null}`, `source:"unavailable"` — explicit nulls, not faked zeros,
+per SEAM-SPEC. Full reconciliation (scripted burn vs `usage()`) is not testable here for two reasons,
+both acceptable: (1) the `usage` tool is unreachable live behind #636; (2) `sends` has no ledger yet
+(worker-flagged). Values are honest nulls where the ledger lacks data — criteria satisfied.
+
+**Tests:** unit tests pass (throttle+draft_guard 15/15; auth 40/40 on c800755 incl. C-4a's +9).
+
+**Verdict:** Iteration-0 does NOT pass. Guardrail logic is solid and live; custody logic is correct.
+But the unit **cannot build** (#635) and, once built, **exposes no chat-auth tools** (#636) — the two
+things the epic is fundamentally about. Fix both, re-boot, then the live X exit-criterion dance
+(C-6, needs an X test account + LIVE creds) can be attempted. — [tester]
