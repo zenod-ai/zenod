@@ -190,3 +190,19 @@ Parallel sub-agents, isolated worktrees, disjoint file ownership, shared `auth.r
   LIVE Stripe secrets (Jordi). Recommended next: unblock C-4 by injecting the usage_reader; then
   C-3/C-5 once cloud access granted; then tester dispatch for the guardrail probes + Jordi's C-6 run.
 Worker does not self-certify. — [worker]
+
+### 2026-07-08 · [worker] C-4a — usage() wired to live ledger (receipt, not self-certified)
+- **PR #633** (auto-merge armed). `units/callisthenes/auth/usage_reader.py` reads the live
+  `/data/usage.sqlite` table `llm_usage` (schema per `packages/server/src/usageStore.ts`) via the
+  fixed interface `usage_reader(tenant)→{calls,sends,cost_usd}`.
+- **Honest mapping (zero faked values):** `calls`=COUNT(*) real · `cost_usd`=SUM(cost_usd) real ·
+  `sends`=**null** — the LLM ledger genuinely has no send column; null = "not measured", never
+  "measured zero". A real send count needs a dedicated Callisthenes send-ledger (future lane).
+- `register()` auto-wires when the ledger file exists; stays in the explicit `unavailable` stub
+  (all-null) when absent — preserves C-2 behaviour. Tenancy: instance-per-user ⇒ container-local
+  ledger IS the tenant's (documented; `tenant` arg accepted, not a DB filter).
+- **Receipts:** 9 new tests over a seeded ledger fixture; full `units/callisthenes/auth` suite
+  **40 passed** (31 prior + 9), no regression. Env knob `CALLISTHENES_USAGE_DB`.
+- **Unchanged blockers:** C-3 checkout/provision + C-5 watchdog need `zenod-ai/cloud` access +
+  LIVE Stripe secrets (Jordi's grant). `sends` remains null pending a send-ledger. No live
+  acceptance self-certified — tester's per exit criterion. — [worker]
