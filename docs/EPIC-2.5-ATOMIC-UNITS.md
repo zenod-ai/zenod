@@ -1,5 +1,19 @@
 # EPIC 2.5 · THE ATOMIC SUITE — the ring, the guys, the units
 
+> **▶ NEXT ITERATION (worker: start here). SPEC ONLY — no code this pass.**
+> Rewrite the Ring spec to Jordi's **Ring = Council** decision (2026-07-08): the Ring and the Council
+> collapse into ONE instance — a gateway *with* an LLM brain that has visibility of every connected
+> MCP tool and routes by mostly **passing the prompt through** (thin thinking for a named guy like
+> Herald). This deletes the separate deterministic-ring / brain-council split and supersedes the
+> current "no LLM in the ring's relay path" rule.
+> **Do:** (1) rewrite the unit model — the Ring owns the channels (WhatsApp, Telegram, Google Drive),
+> holds the LLM brain, exposes a UI to **connect MCP servers** (each added *with a skill* teaching
+> when to use it) and to set a **default route**; (2) reconcile the exit criterion (drop "council guy
+> connected as default") and SEAM-SPEC, and mark RD-2 (council-guy name) likely **moot**; (3) produce
+> the **delta vs current docs + a fresh ticket list** to build it.
+> **Discipline:** worktree `wt/ring-spec`, edit only `docs/EPIC-2.5-ATOMIC-UNITS.md` + `docs/SEAM-SPEC.md`,
+> handback inline on `main`. **Build waits** until Zenod is green and Callisthenes has its funnel — spec now, code later. — planner/Epic-Zero, 2026-07-08
+
 Owner: **Ring-Fable** (planner; fresh session, bootstrapped 2026-07-04 night) · Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md)
 Origin: Jordi × Story-Fable design session 2026-07-04 (SD-4/SD-5 in [EPIC-0-STORY.md](EPIC-0-STORY.md); promo v4 = the product this serves)
 **Standing order (Jordi, 2026-07-04): all other build work pauses. This refactor is the only active

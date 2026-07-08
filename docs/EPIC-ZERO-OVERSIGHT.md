@@ -25,6 +25,31 @@ workers in their own docs.
 | ⚙️ **ITERATE** | I've left next-iteration instructions in the unit doc. | You tell the worker: "planner left instructions, go next iteration." |
 | 🟢 **GREEN** | A unit passed its basic test. Slide 3 turns greener. | Celebrate; move on. |
 
+## The document contract (all comms go through the docs)
+
+The rule for everyone, every time, is one sentence: **"do another iteration on the document."**
+Nobody gets bespoke instructions in chat — the instruction lives in the doc.
+
+**Every doc has two zones that never collide:**
+- **▶ NEXT ITERATION** — pinned at the TOP, **planner-owned**. The single thing to do now
+  (task · acceptance · discipline), or **⏸ HOLD — awaiting <X>** when there's nothing to do. I
+  overwrite it each cycle.
+- **Append zone** — at the BOTTOM, **worker-owned**. The worker writes a dated handback here
+  (what changed · SHA · proven · next) and lands it inline on `main`. That handback is what "done" means.
+
+**The universal order — paste to ANY worker, always identical:**
+> Read your document. Do the ▶ NEXT ITERATION block at the top — in your own worktree, editing only
+> your unit's files. Append a dated handback to the append zone and land it inline on `main`
+> (not a dangling PR). Then stop.
+
+**The git-runner.** The planner can't commit/push from its sandbox, so git & repo ops are their own
+worker driven by [`OPS-RUNNER.md`](OPS-RUNNER.md): I queue the git tasks in its ▶ NEXT ITERATION
+block; you ping the git-runner with the same universal order. I never ask you to run git by hand.
+
+**The handshake (you ↔ me):** you say *"read up"* → I read every doc, we decide, I write what's
+needed → I tell you **"docs are ready — ping <worker(s)>."** You give each the universal order.
+That's the entire loop; nothing routes around the documents.
+
 ## Standing orders (apply to every unit + worker)
 
 - **SO-1 · Stripe = TEST MODE.** All provisioning funnels are proven in Stripe **test mode** —
@@ -71,11 +96,22 @@ workers in their own docs.
 ### 2026-07-08 · operating model set + first read-up
 - **Ring = Council (Jordi's spec call):** the Ring and Council collapse into one instance — a
   gateway *with* an LLM brain that sees all connected MCP tools and routes by mostly passing the
-  prompt through. Deletes the separate deterministic-ring / brain-council split. → Worker C rewrites
-  the spec (EPIC-2.5 + SEAM-SPEC); build waits on the new spec.
+  prompt through. Deletes the separate deterministic-ring / brain-council split. **2.5 was idle since
+  07-05 (never dispatched).** Now queued: `EPIC-2.5` ▶ NEXT ITERATION = rewrite the spec (Ring=Council,
+  LLM brain + connect-MCP UI + per-server skills + default route), reconcile SEAM-SPEC + exit
+  criterion, produce delta + ticket list. **Spec only; build waits until Zenod green + Callisthenes
+  funnel.**
 - **Zenod / Z-9 — ⚙️ ITERATE:** code landed (`6e967d7`) but not written into the 2.3 doc and not
   tester-verified. Next move: Worker A appends the Z-9 handback; tester verifies against the basic
   test (ask_brain cites sources). Then the funnel legs (test-mode pay → provision → dashboard) per SO-1.
-- **Callisthenes — awaiting handback:** #635 (won't build) + #636 (chat-auth doesn't load) in flight.
+- **Callisthenes — bugs GREEN, product NOT done:** #635 + #636 fixed and merged (`#643`). Unit
+  builds + boots; all 5 chat-auth tools live; guardrails green; 57 tests. **Not done:** the live X
+  post→permalink (C-6, needs an X test account), and **`#645`** — a real tenant-isolation seam
+  (`mcp_token` is caller-asserted, not injected from the bearer) that must land before any paid /
+  multi-tenant run. Commercial lanes C-3 (site+checkout) / C-4 (meter) / C-5 (watchdog) still
+  blocked on `zenod-ai/cloud` access (+ Stripe, now TEST-mode per SO-1).
+  ⚠ Worker routed its handback through PR `#644` (auto-merge armed), NOT inline on main, and local
+  is behind origin — so the receipt isn't visible on read-up. → **SO-3 amended:** doc handbacks
+  land on `main`; sync local to origin before any read-up.
 - **Git note:** the planner sandbox can create files but cannot finalize commits (a stale
   `.git/index.lock` it can't remove; `.git` objects can't be unlinked). Jordi commits each artifact.

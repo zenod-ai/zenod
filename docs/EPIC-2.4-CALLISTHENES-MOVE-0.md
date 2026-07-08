@@ -1,5 +1,11 @@
 # EPIC 2.4 · CALLISTHENES MOVE 0 — the second unit product: the voice, console-less
 
+> **▶ NEXT ITERATION (worker: start here).** Do **#645 — tenant isolation**: inject the
+> authenticated bearer as the tenant key; stop trusting the client-supplied `mcp_token`. Full spec
+> (task · 4 acceptance checks · discipline) is in the `2026-07-08 [planner/Epic-Zero]` entry at the
+> bottom. Worktree `wt/callisthenes-645`, edit only `units/callisthenes/` + this doc, handback inline
+> on `main`. — planner/Epic-Zero, 2026-07-08
+
 Owner: **Zenod-Fable** (recommended: same planner as 2.3 — the unit-product playbook repeats; see
 CD-0) · Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md)
 Origin: Jordi, 2026-07-05 — "bring up Callisthenes as 2.4; auth via chat; truly light, no
@@ -331,3 +337,33 @@ auto-merge armed on green. tester ≠ fixer honored: the tester's exact repro dr
 - Live X exit-criterion dance (connect real account via PIN → approved post → permalink) is now
   UNBLOCKED at the tool layer; still needs an X test account + LIVE creds (tester/Jordi).
 - C-4a `usage()` reconciliation now reachable live once a real instance provisions. — [worker]
+
+---
+
+### 2026-07-08 · [planner/Epic-Zero] ⚙️ ITERATE — #645 tenant-isolation (do BEFORE any paid/multi-tenant run)
+
+**Context.** #643 fixed #635/#636 — the unit builds and all five chat-auth tools register. But the
+chat-auth tools now take **`mcp_token` as a client-supplied argument**, and `callisthenes_server.py`
+does **not** inject the caller's real bearer. So tenant identity is **caller-asserted**: a client
+could pass any `mcp_token` and reach another tenant's connections. The isolation logic is correct
+(keys off `sha256(token)`); only the **source** of the token is untrusted. That's #645.
+
+**Task (worker).**
+1. Derive the tenant key from the **authenticated bearer** the MCP connection already carries — NOT
+   from a client-supplied argument. Remove `mcp_token` from the tool signatures (or override it
+   server-side) and have the server inject `sha256(real_bearer)` as the tenant key.
+2. All five tools (`connect / complete_connect / connections / revoke / usage`) must key off the
+   injected identity.
+
+**Acceptance (fresh evidence).**
+- (a) A client passing a **forged `mcp_token`** cannot reach another tenant — the server uses the
+  bearer, not the arg.
+- (b) connect → post → revoke still work per-tenant.
+- (c) The boot-level FastMCP registration test stays green (all 5 tools register).
+- (d) New test: a forged/absent token is rejected or scoped strictly to its own bearer.
+
+**Discipline.** Worktree `wt/callisthenes-645` per SO-2; edit only `units/callisthenes/` + this doc;
+land via PR to `main`. **Write the handback HERE, inline on main (SO-3) — not a dangling PR.**
+
+**After #645:** C-6 (live X post → permalink) once an X test account is provided; C-3/C-4/C-5 once
+`zenod-ai/cloud` access is granted (Stripe **TEST-mode** per SO-1). — [planner/Epic-Zero]
