@@ -21,7 +21,7 @@ from __future__ import annotations
 import os
 from typing import Iterable
 
-DEFAULT_GUARDED_TOOLS = ("createPosts", "deletePosts", "mediaUpload")
+DEFAULT_GUARDED_TOOLS = ("createPosts", "deletePosts", "mediaUpload", "post_reddit")
 DEFAULT_APPROVE_ARG = "callisthenes_approve"
 
 _TRUTHY = {"1", "true", "yes", "on", "approve", "approved"}

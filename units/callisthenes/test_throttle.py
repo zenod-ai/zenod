@@ -69,7 +69,7 @@ def test_limiter_from_env_reads_knob():
 
 def test_send_tools_default_and_override():
     assert _parse_send_tools(None) == frozenset(
-        ("createPosts", "deletePosts", "mediaUpload")
+        ("createPosts", "deletePosts", "mediaUpload", "post_reddit")
     )
     assert send_tools_from_env({"CALLISTHENES_SEND_TOOLS": "createPosts, foo"}) == (
         frozenset(("createPosts", "foo"))
