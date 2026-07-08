@@ -297,3 +297,37 @@ console-less headline capabilities of the epic are therefore unproven end-to-end
 secret leakage, revoke-deletes-at-rest, reconnect) is *implemented correctly* but is currently
 *unreachable through the server* because the auth tools don't register (#636). It becomes a live
 guarantee the moment #636 is fixed — no custody redesign needed. — [tester]
+
+### 2026-07-08 · [worker] C-1/C-2 red-fix — #635 + #636 fixed, verified LIVE (PR #643)
+Both Iteration-0 reds fixed and verified against a real built image (not the probe). PR #643,
+auto-merge armed on green. tester ≠ fixer honored: the tester's exact repro drove the fix.
+
+- **#635 (build) FIXED** — `units/callisthenes/.dockerignore` `*.patch` excluded the two patches the
+  Dockerfile COPYs. Kept the lean-image glob, re-included the required files
+  (`!headless-oauth1.patch`, `!relax-response-required.patch`). `docker build units/callisthenes/`
+  now exits 0 from a fresh clone; image unpacks and boots FastMCP.
+- **#636 (chat-auth) FIXED** — `register()._wrap` returned `inner(*args, **kwargs)`; FastMCP's
+  `mcp.tool()` rejects VAR_POSITIONAL, so the whole registration threw and was swallowed into
+  single-owner-headless. Pinned `inner.__signature__` to each wrapped method's real signature →
+  FastMCP builds the correct schema and all five tools register. Error-envelope + guardrail
+  behaviour unchanged.
+
+**LIVE verification (real image `zenod-calli-fix`, dummy X creds):**
+- boot log: `installed middleware: draft-guard (C-22) + throttle` + **`auth package registered`**.
+- `tools/list` → **11 tools**: the 6 X tools **plus** `connect / complete_connect / connections /
+  revoke / usage`, each with explicit params (e.g. `connect(mcp_token, service)`).
+- guardrails still green through the live server: unapproved `createPosts` → `[draft_not_approved]`.
+- **57 tests pass** (15 throttle+draft_guard, 40 auth, +2 new). Added
+  `auth/test_register_fastmcp.py` — a boot-level regression guard that registers against a **real
+  FastMCP instance** and asserts the five tools appear; this is the path the prior suite never
+  exercised, which is exactly why #636 shipped green. `importorskip("fastmcp")` keeps CI safe.
+
+**Handed forward to the tester/planner (honest, out of #635/#636 scope):**
+- **Bearer-injection seam (C-1 wrapper).** The chat-auth tools now expose `mcp_token` as a *client-
+  supplied* argument — the tools register and work, but `callisthenes_server.py` does not yet extract
+  the caller's real MCP bearer from the request and inject it. Until it does, tenant identity is
+  caller-asserted (a client could pass any `mcp_token`). Per-tenant isolation logic is correct; the
+  live wrapper wiring is a separate ticket. Recommend the planner mint it before the C-6 exit run.
+- Live X exit-criterion dance (connect real account via PIN → approved post → permalink) is now
+  UNBLOCKED at the tool layer; still needs an X test account + LIVE creds (tester/Jordi).
+- C-4a `usage()` reconciliation now reachable live once a real instance provisions. — [worker]
