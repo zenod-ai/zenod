@@ -118,6 +118,54 @@ cd units/callisthenes && python -m pytest -q
 # and an approved one is allowed (with the approval flag stripped).
 ```
 
+## Hosted connect-UI (C-7) — the one connect screen
+
+Hosted instances get a **minimal one-screen connect page** (EPIC-2.4 D-C). Self-host stays
+CLI/headless — this page is the hosted tier's distinction. It is **not** a dashboard: it does
+exactly three things, and it is mounted on the unit's existing port (no sidecar), because
+FastMCP's HTTP app is Starlette-based and exposes `@mcp.custom_route(...)`.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/connect` | GET | The one screen: connector list + MCP URL/token with copy buttons. |
+| `/connect/<id>/start` | GET | Begin OAuth2 (C-2R) → 302 to the **canonical x.com** authorize URL. |
+| `/oauth/callback` | GET | The OAuth2 landing: exchanges `?code&state` via C-2R, shows "connected". |
+| `/connect/<id>/token` | POST | Store a token-kind connector's value (e.g. Reddit's Composio user id). |
+
+**Connectors are data, not hardcoded.** `connect_page.default_connectors()` returns `[X (oauth2),
+Reddit (token)]`; add Instagram/email as one `Connector(...)` row (or pass `connectors=` to
+`connect_page.register`). OAuth2 connectors must also be in the auth engine's `SUPPORTED_SERVICES`.
+
+**Shared engine.** `callisthenes_server.py` builds one `ChatAuth` engine and hands the same instance
+to both `auth.register(engine=...)` and `connect_page.register(engine=...)`, so a Connect-X started
+on the page completes at the page's `/oauth/callback` (shared pending PKCE state + token store).
+
+### ## CLOUD SEAM (what the provisioner injects)
+
+A hosted instance is provisioned **per user** (instance-per-user — the container-local token store
+IS that user's), so the page acts as that one owner. The private `zenod-ai/cloud` provisioner injects
+three env vars; the in-repo unit works standalone without cloud access, and the page **honestly flags**
+any that are missing rather than faking them:
+
+| Env | Injected by | Used for |
+|---|---|---|
+| `CALLISTHENES_MCP_URL` | provisioner | Shown on the page for the user to paste into their MCP client. |
+| `CALLISTHENES_MCP_TOKEN` | provisioner | The access token shown/copied on the page. |
+| `CALLISTHENES_OWNER_TENANT` | provisioner | The tenant key the page + MCP tools key off (falls back to `MCP_BEARER_TOKEN`). |
+
+When these are absent (bare unit / self-host) the page still renders and shows a dashed "seam" notice
+naming the env var the provisioner would set. This is the exact wiring point for `zenod-ai/cloud`.
+
+### Real-creds gap (honest)
+
+The connect page is verified live end-to-end **except the real X token exchange**: the
+authorize→callback→connected round-trip past `/oauth/callback` calls X's `/2/oauth2/token`, which
+needs a real registered X OAuth2 app (`X_OAUTH2_CLIENT_ID` + the pre-registered `redirect_uri`) and a
+real user click. Tests mock that exchange (injected `HttpClient`); the **canonical authorize URL,
+callback wiring, token storage, and loud-failure paths are proven** on the running container. Jordi
+runs the real X round-trip once an app + account are provisioned. Same for Reddit: the field stores
+the Composio user id; the actual send is C-8's `post_reddit` with a real `COMPOSIO_API_KEY`.
+
 ## Upgrading the pin
 
 Bump `XMCP_REF` in `Dockerfile` and `docker-compose.callisthenes.yml` to the new commit, then
