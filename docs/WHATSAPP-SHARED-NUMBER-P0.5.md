@@ -2,6 +2,17 @@
 
 Ticket: #453 (P0.5, epic #448). Status: **investigated; recommending the low-risk path for Phase 0 and scoping the shared-number router as P1.**
 
+## DECISION — 2026-07-08 (Jordi)
+
+**Go with dedicated Baileys per user (Option A / tier 2). Shared-number router (Option B / tier 3) → backlog.**
+
+The three hosting tiers are:
+1. **Self-hosted** — user runs everything; pairs *their own* number.
+2. **Dedicated hosted** — Zenod runs one container per user; still pairs *their own* number. Same topology as tier 1, just Zenod-run. **This is what we ship.**
+3. **Multi-tenant shared number** — one Zenod number + `wa-router` demuxing `senderPhone → Ring`. **Backlog** (needs the new router service + `/api/whatsapp/inbound`; a shared socket is a shared failure domain).
+
+Tier 2 needs **no new WhatsApp gateway code** — the in-process per-tenant socket (`whatsappGateway.ts`, `runtime.ts:205`) is exactly this and runs live. "Moving forward" = provision a dedicated tenant + QR-pair the user's number during onboarding. Under Epic 2.5, WhatsApp inbound feeds that tenant's Ring/brain-gateway; Phylax owns outbound over the same socket.
+
 ## What the code actually does today
 
 The WhatsApp gateway is **one Baileys socket bound in-process to one engine, per container**:
