@@ -7,6 +7,7 @@ import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 import { CONSOLE_AGENT, type AgentDefinition } from "../src/agent.js";
 import { journeyStepIdempotencyKey } from "../src/journeyContracts.js";
+import { createHostedEntryTicket } from "../src/auth.js";
 
 describe("server API", () => {
   let dir: string;
@@ -20,6 +21,7 @@ describe("server API", () => {
   });
 
   afterEach(async () => {
+    delete process.env.ZENOD_HOSTED_MODE;
     runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
@@ -51,6 +53,7 @@ describe("server API", () => {
   it("first-boot setup: create password, get session, read settings", async () => {
     const status = await (await app.request("/api/auth/status")).json();
     expect(status.needsSetup).toBe(true);
+    expect((await app.request("/api/auth/hosted-entry?ticket=invalid")).status).toBe(404);
 
     const setup = await app.request("/api/auth/setup", {
       method: "POST",
@@ -72,6 +75,36 @@ describe("server API", () => {
     expect(settings.status).toBe(200);
     const body = await settings.json();
     expect(body.configured).toBe(false);
+  });
+
+  it("hosted Ring uses a signed one-time entry without enabling self-host setup", async () => {
+    process.env.ZENOD_HOSTED_MODE = "ring";
+    const status = await (await app.request("/api/auth/status")).json();
+    expect(status).toMatchObject({ needsSetup: false, hostedMode: "ring" });
+
+    const setup = await app.request("/api/auth/setup", {
+      method: "POST",
+      body: JSON.stringify({ password: "not-allowed-here" }),
+    });
+    expect(setup.status).toBe(404);
+    expect((await app.request("/api/settings")).status).toBe(401);
+    expect((await app.request("/api/auth/hosted-entry?ticket=invalid")).status).toBe(401);
+
+    const ticket = createHostedEntryTicket(runtime.settings.apiToken(), "ring-router-products");
+    const entry = await app.request(`/api/auth/hosted-entry?ticket=${encodeURIComponent(ticket)}`);
+    expect(entry.status).toBe(303);
+    expect(entry.headers.get("location")).toBe("/#ring-router-products");
+    const cookie = entry.headers.get("set-cookie")!;
+    expect(cookie).toContain("zenod_session=");
+    expect((await app.request("/api/settings", { headers: { cookie } })).status).toBe(200);
+    expect((await app.request(`/api/auth/hosted-entry?ticket=${encodeURIComponent(ticket)}`)).status).toBe(401);
+
+    const phylaxTicket = createHostedEntryTicket(runtime.settings.apiToken(), "phylax-channels");
+    const phylaxEntry = await app.request(
+      `/api/auth/hosted-entry?ticket=${encodeURIComponent(phylaxTicket)}`,
+    );
+    expect(phylaxEntry.status).toBe(303);
+    expect(phylaxEntry.headers.get("location")).toBe("/#phylax-channels");
   });
 
   it("login with wrong password fails; right password succeeds", async () => {

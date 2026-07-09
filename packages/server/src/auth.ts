@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Context, Next } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { OAuthStore } from "./oauthStore.js";
@@ -7,9 +7,43 @@ import { publicBaseUrl, validateAccessToken, wwwAuthenticate } from "./oauth.js"
 
 const SESSION_COOKIE = "zenod_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const HOSTED_ENTRY_TTL_MS = 2 * 60 * 1000;
+const HOSTED_SURFACES = new Set(["ring-router-products", "phylax-channels"]);
 
 function sign(secret: string, payload: string): string {
   return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+export function hostedRingMode(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.ZENOD_HOSTED_MODE === "ring";
+}
+
+export function createHostedEntryTicket(
+  secret: string,
+  surface: string,
+  now = Date.now(),
+  nonce = randomUUID(),
+): string {
+  if (!HOSTED_SURFACES.has(surface)) throw new Error("invalid hosted entry surface");
+  const expires = now + HOSTED_ENTRY_TTL_MS;
+  const payload = `${expires}.${nonce}.${surface}`;
+  return `${payload}.${sign(secret, payload)}`;
+}
+
+export function verifyHostedEntryTicket(
+  secret: string,
+  ticket: string,
+  now = Date.now(),
+): { nonce: string; surface: string } | null {
+  if (!secret) return null;
+  const [expires, nonce, surface, mac] = ticket.split(".");
+  if (!expires || !nonce || !surface || !mac || !HOSTED_SURFACES.has(surface)) return null;
+  const expiresAt = Number(expires);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt < now || expiresAt > now + HOSTED_ENTRY_TTL_MS) return null;
+  const expected = sign(secret, `${expires}.${nonce}.${surface}`);
+  const a = Buffer.from(mac);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b) ? { nonce, surface } : null;
 }
 
 export function issueSession(c: Context, settings: Settings): void {

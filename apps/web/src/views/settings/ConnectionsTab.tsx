@@ -92,6 +92,7 @@ export function ConnectionsTab() {
   const [regenerating, setRegenerating] = React.useState(false)
   const [refreshing, setRefreshing] = React.useState(false)
   const [ringMode, setRingMode] = React.useState(false)
+  const [hostedRing, setHostedRing] = React.useState(false)
 
   React.useEffect(() => {
     let cancelled = false
@@ -113,9 +114,12 @@ export function ConnectionsTab() {
 
   React.useEffect(() => {
     let cancelled = false
-    api<{ vaultless?: boolean }>("/api/agent")
+    api<{ vaultless?: boolean; hostedMode?: "ring" | null }>("/api/agent")
       .then((result) => {
-        if (!cancelled) setRingMode(Boolean(result.vaultless))
+        if (!cancelled) {
+          setRingMode(Boolean(result.vaultless))
+          setHostedRing(result.hostedMode === "ring")
+        }
       })
       .catch(() => {})
     return () => {
@@ -220,10 +224,22 @@ export function ConnectionsTab() {
       </Card>
 
       <div id="phylax-channels" className="scroll-mt-4">
-        <div className="flex flex-col gap-6">
-          <WhatsAppConnect />
-          <TelegramConnect />
-        </div>
+        {hostedRing ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Managed Phylax channels</CardTitle>
+              <CardDescription>
+                WhatsApp and Telegram use the hosted provider connection. Channel health,
+                sender policy, and delivery receipts are managed here without device QR pairing.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : (
+          <div className="flex flex-col gap-6">
+            <WhatsAppConnect />
+            <TelegramConnect />
+          </div>
+        )}
       </div>
       {!ringMode && <GoogleDriveConnect />}
       <ComposioConnect />
