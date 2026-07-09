@@ -1743,3 +1743,46 @@ Cross-spine update needed (read-only referenced spine):
   with evidence: `taskJobMediaIngestArchive.test.ts`, `mcp.test.ts -t "ingest_memory"`, full `mcp.test.ts`, and
   server build passed on 2026-07-09. Epic 2.5 should keep Ring/Phylax ownership unchanged: Ring routes; Phylax
   transports; Zenod owns archive/transcription/OCR/extraction/digest/filing/receipts.
+
+### 2026-07-09 · [#664 LIVE VALIDATION] media-memory scorecard after deploy
+
+Deploy candidate:
+- PR [#673](https://github.com/zenod-ai/zenod/pull/673), branch `codex/epic23-z10-ledger-fold`.
+- Runtime image published by GitHub Actions workflow run `29028188613`.
+- Live tenant `https://z-jordi-f2c7a6.zenod.dev/api/health` -> SHA
+  `422a7d1ffcc13e2b95b785e3dbfe6ca706f8c263`, image `ghcr.io/zenod-ai/zenod:sha-422a7d1`.
+- Live config for validation: local archive enabled with `ZENOD_ARTIFACT_ARCHIVE_PROVIDER=local` and
+  `ZENOD_ARTIFACT_ARCHIVE_LOCAL_DIR=/data/artifacts`.
+
+Fixes discovered by live validation:
+- Clean image build initially failed because `settings.ts` depended on WhatsApp config fields left unstaged;
+  fixed in commit `4c47b1d`.
+- Live audio initially bypassed the generic media seam and hit the old Drive-only ingest path; fixed in commit
+  `422a7d1`.
+- Standalone compose did not pass artifact archive env into the container; source fix committed in `e8b66b8`.
+  For the live tenant, Dokploy's generated compose still stripped the new passthrough, so the generated VPS
+  compose was temporarily patched and `docker compose -p compose-quantify-multi-byte-firewall-r3b7ka up -d`
+  was run against the existing named `/data` volume. This is a deployment caveat, not a memory-data loss.
+
+Live media receipts:
+- ✅ Screenshot/SVG: job `53b15578-6b59-4fcb-ba6f-74b0a537a0dd` -> `done`. Raw artifact
+  `file:///data/artifacts/2026/07/09/847f739bd625c3d5-epic23-20260709151524.svg`; extraction
+  `file:///data/artifacts/2026/07/09/15dc6e8530298f3d-epic23-20260709151524.extraction.txt`
+  (`provider=svg text`); evidence `Log/2026-07-09.md#^e-04505b`; commit
+  `a91bad67a273d321de541f760bafc905ca73ecdf`.
+- ✅ PDF: job `3b72506e-a0fe-448d-8a41-d9b1959f8e89` -> `done`. Raw artifact
+  `file:///data/artifacts/2026/07/09/c6ea6e87211b81e0-epic23-20260709151524.pdf`; extraction
+  `file:///data/artifacts/2026/07/09/a9784b43beeb64f4-epic23-20260709151524.extraction.txt`
+  (`provider=embedded PDF text`); evidence `Log/2026-07-09.md#^e-2ec977`; commit
+  `32e70de7ec11b62e703a9ff3d7c975a6fe1ffb6d`.
+- ✅ Audio: job `e03eb66c-23b6-4ec9-8998-6128596543c0` -> `done`. Raw artifact
+  `file:///data/artifacts/2026/07/09/2b25502fca502292-epic23-20260709151524.aiff`; transcript
+  `file:///data/artifacts/2026/07/09/212f5c3524f4d303-epic23-20260709151524.transcript.txt`
+  (`provider=openrouter openai/whisper-large-v3-turbo`); evidence `Log/2026-07-09.md#^e-f5fa94`;
+  commit `cf6c5e88395d7d5e941c496c54c87ebf635c71ef`.
+- ✅ Exact recall proof: `search_memory` for `violet harbor eight` found `Log/2026-07-09.md` with the
+  snippet `EPIC23 SVG MEDIA LIVE 20260709151524 violet harbor eight Zenod owns media ingest archive extraction digest receipts.`
+  `get_memory Log/2026-07-09.md` contains `violet harbor eight`, `silver orchard three`,
+  `Zenod owns media ingest archive extraction digest receipts`, and `Raw artifact: file:///data/artifacts`.
+- ◐ `ask_brain` proof: cited `Log/2026-07-09.md` but did not restate the exact synthetic markers, so final
+  exact-answer quality remains a follow-up for retrieval/synthesis tuning, not an ingest/archive failure.
