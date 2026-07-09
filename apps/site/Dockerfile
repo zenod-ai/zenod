@@ -19,4 +19,5 @@ RUN npm run build -w site
 # ---- runtime ----
 FROM nginx:alpine
 COPY --from=build /app/apps/site/dist /usr/share/nginx/html
+COPY sites/ring/index.html /usr/share/nginx/html/ring/index.html
 EXPOSE 80
