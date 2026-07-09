@@ -628,3 +628,28 @@ checkout target.
   paid reconciliation -> provision -> `/connect` on this new `cloud-test` lane. X OAuth credentials
   remain absent, so final Connect X OAuth completion is still blocked on credentials/registration. —
   [worker]
+
+### 2026-07-09 · [worker] C-3T fresh paid cloud-test checkout reached running
+Jordi ran the fresh browser checkout on the separated Stripe TEST lane while this worker watched the
+deployment.
+
+- **Paid test session:** `cs_test_a1M2HFrePQonSlqQrAejRo9D9G5GQ3VNdLjMv90ocAW2U4gwd9QjQmaPvn`,
+  email `jordi+test2@alpha9.io`, completed on `cloud-test.zenod.dev`.
+- **Cloud-test status:** `https://cloud-test.zenod.dev/api/callisthenes/status?...` returned
+  `status:"running"`, `tenant_slug:"jorditest2-qmapvn"`,
+  `mcp_url:"https://c-jorditest2-qmapvn.zenod.dev/mcp"`, `mcp_token_set:true`,
+  `connect_url:"https://c-jorditest2-qmapvn.zenod.dev/connect"`, `connect_ok:true`,
+  `provision_error:null`.
+- **Tenant verification:** `https://c-jorditest2-qmapvn.zenod.dev/connect` returned HTTP 200 and the
+  running container `callisthenes-jorditest2-qmapvn` logged auth package registration, `/connect`,
+  `/oauth/callback`, Reddit connector registration, draft guard, throttle, and MCP on `0.0.0.0:8000`.
+- **Provisioner recovery:** Dokploy created compose `e-YFn3suCCKIol9w3akW7` but did not materialize
+  the checkout directory/container through the old `compose.deploy` path. Worker manually
+  materialized the compose project once from the recorded Dokploy env and existing domain, then
+  patched the cloud provisioner in `zenod-ai/cloud@7015d00` to use `compose.redeploy` like the Ring
+  provisioner. `zenod-cloud-test` was rebuilt/recreated on `cloud@7015d00`; post-restart status
+  remained running.
+- **Remaining boundary:** final X OAuth completion still requires hosted X OAuth credentials and
+  callback registration. C-3T payment -> callback -> status -> tenant `/connect` is green on
+  `cloud-test`; the no-human-touch provisioner path should be retested on the next checkout after
+  the `compose.redeploy` fix. — [worker]
