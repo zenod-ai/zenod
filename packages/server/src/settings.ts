@@ -1,8 +1,11 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { SqliteStateStore } from "zenod";
 import {
+  normalizeOptionalConfigString,
   normalizeAllowedSenders,
+  normalizeWhatsAppCloudStatus,
   parseStoredAllowedSenders,
+  normalizeWhatsAppProviderMode,
   type WhatsAppSettings,
 } from "./whatsappConfig.js";
 import {
@@ -52,17 +55,6 @@ export const SETTING_KEYS = [
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
-export type WhatsAppProviderMode = "cloud" | "self_host_dev";
-export type WhatsAppCloudStatus = "not_configured" | "configured" | "connected" | "error";
-
-export interface WhatsAppChannelSettings extends WhatsAppSettings {
-  providerMode: WhatsAppProviderMode;
-  cloudProvider: string | null;
-  cloudWebhookUrl: string | null;
-  cloudPhoneNumberId: string | null;
-  cloudStatus: WhatsAppCloudStatus;
-  testRecipient: string | null;
-}
 
 export interface RingTenantConfig {
   enabled: boolean;
@@ -435,7 +427,7 @@ export class Settings {
     return this.get("openrouter_transcription_model") || "openai/whisper-large-v3-turbo";
   }
 
-  whatsappSettings(): WhatsAppChannelSettings {
+  whatsappSettings(): WhatsAppSettings {
     return {
       enabled: this.getRaw("whatsapp_enabled") === "true",
       providerMode: normalizeWhatsAppProviderMode(this.getRaw("whatsapp_provider_mode")),
@@ -451,10 +443,10 @@ export class Settings {
   }
 
   setWhatsAppSettings(
-    input: Partial<Omit<WhatsAppChannelSettings, "allowedSenders">> & { allowedSenders?: unknown },
-  ): WhatsAppChannelSettings {
+    input: Partial<Omit<WhatsAppSettings, "allowedSenders">> & { allowedSenders?: unknown },
+  ): WhatsAppSettings {
     const current = this.whatsappSettings();
-    const next: WhatsAppChannelSettings = {
+    const next: WhatsAppSettings = {
       enabled: input.enabled ?? current.enabled,
       providerMode:
         input.providerMode === undefined ? current.providerMode : normalizeWhatsAppProviderMode(input.providerMode),
@@ -610,19 +602,6 @@ function mask(value: string): string {
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeOptionalConfigString(value: unknown): string | null {
-  const trimmed = normalizeString(value);
-  return trimmed ? trimmed : null;
-}
-
-function normalizeWhatsAppProviderMode(value: unknown): WhatsAppProviderMode {
-  return value === "cloud" ? "cloud" : "self_host_dev";
-}
-
-function normalizeWhatsAppCloudStatus(value: unknown): WhatsAppCloudStatus {
-  return value === "configured" || value === "connected" || value === "error" ? value : "not_configured";
 }
 
 function normalizeStringArray(value: unknown): string[] {
