@@ -1,11 +1,11 @@
-"""OAuth 1.0a PIN-based (`oauth_callback=oob`) flow for X (Twitter).
+"""OAuth 1.0a authorization flow for X (Twitter), with PIN compatibility.
 
 CD-3 (EPIC-2.4): PIN-first via OAuth 1.0a `oob`. X does NOT support device-code
 (RFC 8628); OAuth1.0a PIN is the only path that yields the literal "visit x.com,
 approve, paste the 7-digit PIN" console-less chat story.
 
 This module owns:
-  1. `request_token()`    — POST oauth/request_token with oauth_callback=oob
+  1. `request_token()`    — POST oauth/request_token with a callback or `oob`
   2. `authorize_url(...)` — the CANONICAL x.com URL the tenant visits (anti-phishing: BINDING)
   3. `access_token(...)`  — POST oauth/access_token exchanging the PIN (oauth_verifier)
 
@@ -139,7 +139,7 @@ class AccessToken:
 
 
 class OAuth1PinFlow:
-    """Per-tenant OAuth1.0a PIN (oob) flow. Stateless across instances except the
+    """Per-tenant OAuth1.0a callback/PIN flow. Stateless across instances except the
     request-token secret, which the caller must persist between connect() and
     complete_connect() (keyed by MCP token in the token store)."""
 

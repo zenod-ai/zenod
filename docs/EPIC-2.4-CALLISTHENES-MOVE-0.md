@@ -3,9 +3,10 @@
 > **▶ CURRENT STATE (worker: start here).** #645 / C-2R is landed on `main`; the stale
 > client-supplied `mcp_token` path is no longer the next lane. C-3 Stripe TEST checkout/provision is
 > green on `cloud-test.zenod.dev`; current push is C-7 human acceptance. The active hosted tenant now
-> has one guided bring-your-own-X-app setup, verifies the four OAuth1 sender credentials against
-> X, and displays the bound `@handle`. Human gate: rotate screenshot-exposed app credentials, then
-> generate the separate user Access Token pair. `cloud.zenod.dev` remains reserved for Stripe LIVE.
+> has one guided bring-your-own-X-app setup with the same three values X shows at app creation;
+> Callisthenes then runs OAuth1 authorization and stores the generated user token pair out of sight.
+> Human gate: rotate screenshot-exposed app credentials, register the callback, and complete the
+> real X authorization. `cloud.zenod.dev` remains reserved for Stripe LIVE.
 > Bound spine:
 > this document only; referenced parent/sibling spines are read-only unless Jordi widens scope.
 > — worker, 2026-07-09
@@ -763,3 +764,27 @@ Token + Secret identify the posting user, and Bearer Token is app-only rather th
   of a Bearer Token field. No horizontal overflow at 1280px or 390px. Changes continue on draft PR
   [#700](https://github.com/zenod-ai/zenod/pull/700) / C-7 [#649](https://github.com/zenod-ai/zenod/issues/649).
   — [worker]
+
+### 2026-07-09 · [worker] C-7 production X journey reduced to the three app values
+Jordi rejected the four-field sender form and its red exposure warning as an implementation detail
+leaking into the production journey. The accepted journey now starts from exactly the three values
+shown by X's **Application Created Successfully** screen.
+
+- **Production UX:** `/connect` has only Consumer Key / API Key, Secret Key / API Key Secret, and
+  Bearer Token inputs. The red warning, Access Token input, and Access Token Secret input are gone.
+  The page provides the tenant's exact callback URL and instructs the user to enable OAuth 1.0a
+  Read and write before choosing **Save and continue to X**.
+- **Account binding:** Callisthenes exchanges an OAuth1 request token through the registered
+  `/oauth/callback`; after the user authorizes in X, the callback stores the generated Access Token
+  and Access Token Secret tenant-locally and applies them to the posting signer. Those user tokens
+  never appear as customer inputs or rendered values. A connected return renders the verified
+  `@handle`.
+- **Compatibility:** the existing OAuth1 PIN helper now accepts a callback URL while retaining its
+  `oob` default for the console-less/chat-auth path. Hidden legacy endpoints remain compatible but
+  are no longer part of the hosted UI.
+- **Evidence:** hosted focused suite: **20 passed** (one Starlette/httpx TestClient deprecation
+  warning). Live `https://c-jordikalitest-godu15.zenod.dev/connect` renders exactly three app-form
+  inputs, no red warning, no Access Token fields, and the canonical callback
+  `https://c-jordikalitest-godu15.zenod.dev/oauth/callback`. Browser verification found no horizontal
+  overflow at 1280px or 390px. Real X authorization and first approved post remain the human C-7
+  acceptance gate. — [worker]
