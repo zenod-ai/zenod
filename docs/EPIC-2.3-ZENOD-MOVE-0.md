@@ -156,7 +156,7 @@ relitigate decided items without new evidence.
 | [#661](https://github.com/zenod-ai/zenod/issues/661) | Z-10C · Audio ingest | integrated locally · tests green | worker | consumes #659/#660 receipt/archive shapes | Raw audio archive, transcription, digest, commit/search/ask receipts |
 | [#662](https://github.com/zenod-ai/zenod/issues/662) | Z-10D · Screenshot/image/PDF ingest | integrated locally · tests green | worker | consumes #659/#660 receipt/archive shapes | Raw image/PDF archive, vision/PDF extraction, digest receipts wired; scanned/no-text PDFs fail loudly |
 | [#663](https://github.com/zenod-ai/zenod/issues/663) | Z-10E · Hosted memory UI | integrated locally · cloud builds green | worker | uses honest cloud placeholders until tenant status APIs are deployed | Cloud UI controls for Drive/archive, transcription, extraction, ingest receipts, retention |
-| [#664](https://github.com/zenod-ai/zenod/issues/664) | Final validation scorecard | ready for tester dispatch | tester | after integration commit/deploy candidate | Stranger/customer funnel, text+media memory, dashboard, watchdog, restore, log trace |
+| [#664](https://github.com/zenod-ai/zenod/issues/664) | Final validation scorecard | needs-review · live media pass with caveats | tester | PR #673 ready; merge/repoint decision pending | Stranger/customer funnel, text+media memory, dashboard, watchdog, restore, log trace |
 | [#670](https://github.com/zenod-ai/zenod/issues/670) | Cross-spine Zenod media ingest seam | patch ready for tester | worker | reconciles #659-#662 outputs; Epic 2.5 routes only | Public `ingest_memory` seam handles audio, screenshots/images, PDFs, and Drive/data/URL refs with raw/extraction/digest/commit receipts |
 
 Dispatch receipts, 2026-07-09:
@@ -165,19 +165,23 @@ Dispatch receipts, 2026-07-09:
 - #661 -> worker `Harvey` (`019f4752-1469-78a3-b7d8-3fbba949d679`)
 - #662 -> worker `Mencius` (`019f4752-3733-7540-b613-ec8f8740e266`)
 - #663 -> worker `Pauli` (`019f4752-577b-7ea0-826d-e0c29f8cf0be`)
-- #664 tester dispatch is unblocked by local integration receipts; it still requires a deploy candidate or live branch to validate against.
+- #664 tester pass completed; issue is `status:needs-review` with screenshot/SVG, PDF, audio, archive, extraction/transcript, commit, `search_memory`, and `get_memory` live PASS receipts.
 
 Integration receipt, 2026-07-09:
 - Public repo server/media tests green: `npm test --workspace @zenod/server -- mcp.test.ts taskJobMediaIngestArchive.test.ts drive.test.ts artifactArchive.test.ts` -> 4 files / 56 tests passed.
 - Public repo typechecks green: `npm run typecheck --workspace @zenod/server`; `npm run typecheck --workspace zenod`.
 - Cloud repo hosted UI builds green: `npm run build` in `services/console`; `npm run build` in `services/webhook`.
-- Deploy/review candidate: public branch `codex/epic23-z10-ledger-fold` pushed to `origin`; draft PR
-  [#673](https://github.com/zenod-ai/zenod/pull/673) opened. Cloud hosted UI commit `2789f67`
-  pushed to `zenod-ai/cloud` `main`.
+- Deploy/review candidate: public branch `codex/epic23-z10-ledger-fold` pushed to `origin`; PR
+  [#673](https://github.com/zenod-ai/zenod/pull/673) is ready for review, not draft, merge state `CLEAN`,
+  CI green (`npm run build`, Docker build target, `npm test`). Cloud hosted UI commit `2789f67`
+  pushed to `zenod-ai/cloud` `main` and live bundle contains `Evidence pipeline` / `memory-ops`.
 - Tester dispatch: #664 assigned to tester agent `Euler` (`019f475e-7fb7-7ad1-aa6e-028dc24833e1`).
 - Issue-comment caveat: direct `gh issue comment 664` failed locally because GitHub GraphQL rate limit
   was already exceeded for the authenticated user; this spine entry is the durable handoff receipt.
-- Remaining #664 proof: deploy the integrated candidate and run live customer-stranger media-memory tests for audio plus screenshot/image/PDF, then verify raw artifact archive, transcript/extraction evidence, committed digest, `search_memory`, `ask_brain`, dashboard receipt, watchdog, and restore scorecard.
+- Remaining close decisions: merge PR #673 to `main`, then repoint tenant `xDxfVYs0_4M09naWuCl66` from
+  `customGitBranch=codex/epic23-z10-ledger-fold` back to `main` and verify the normal Dokploy-generated
+  compose preserves artifact archive env. `ask_brain` exact marker enumeration remains partial; watchdog
+  sanity passed but the restore/crash drill was not repeated after the final media deploy.
 
 ## Iteration 0 — tickets (lanes parallel; worker MUST fan out sub-agents, one per lane)
 
