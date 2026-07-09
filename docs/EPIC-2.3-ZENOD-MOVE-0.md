@@ -171,6 +171,12 @@ Integration receipt, 2026-07-09:
 - Public repo server/media tests green: `npm test --workspace @zenod/server -- mcp.test.ts taskJobMediaIngestArchive.test.ts drive.test.ts artifactArchive.test.ts` -> 4 files / 56 tests passed.
 - Public repo typechecks green: `npm run typecheck --workspace @zenod/server`; `npm run typecheck --workspace zenod`.
 - Cloud repo hosted UI builds green: `npm run build` in `services/console`; `npm run build` in `services/webhook`.
+- Deploy/review candidate: public branch `codex/epic23-z10-ledger-fold` pushed to `origin`; draft PR
+  [#673](https://github.com/zenod-ai/zenod/pull/673) opened. Cloud hosted UI commit `2789f67`
+  pushed to `zenod-ai/cloud` `main`.
+- Tester dispatch: #664 assigned to tester agent `Euler` (`019f475e-7fb7-7ad1-aa6e-028dc24833e1`).
+- Issue-comment caveat: direct `gh issue comment 664` failed locally because GitHub GraphQL rate limit
+  was already exceeded for the authenticated user; this spine entry is the durable handoff receipt.
 - Remaining #664 proof: deploy the integrated candidate and run live customer-stranger media-memory tests for audio plus screenshot/image/PDF, then verify raw artifact archive, transcript/extraction evidence, committed digest, `search_memory`, `ask_brain`, dashboard receipt, watchdog, and restore scorecard.
 
 ## Iteration 0 — tickets (lanes parallel; worker MUST fan out sub-agents, one per lane)
