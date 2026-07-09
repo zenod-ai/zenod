@@ -564,3 +564,18 @@ End-to-end hosted test path completed with a Stripe TEST checkout and live tenan
   button will show the hosted surface but cannot complete the final X OAuth callback until
   `X_OAUTH2_CLIENT_ID` and `X_OAUTH2_CLIENT_SECRET` are installed and the callback is registered with
   X. — [worker]
+
+### 2026-07-09 · [worker] Step 0 public site restored
+Jordi correctly flagged that `/buy/callisthenes` is not a public Step 0 site. I made
+`https://callisthenes.zenod.dev` the production starting point for the hosted test journey.
+
+- **Cloud commit:** `zenod-ai/cloud@1407be7` serves a host-aware Callisthenes landing page at
+  `callisthenes.zenod.dev/` and a fallback at `cloud.zenod.dev/callisthenes`.
+- **Deploy:** rebuilt/recreated the cloud webhook service, preserved existing cloud/admin Traefik
+  labels, and added a `callisthenes.zenod.dev` router to the same service.
+- **Stripe TEST env:** restored `PRICE_CALLISTHENES=price_1TrJDA76yJ3p1J6XMbHBRiII` in the deployed
+  cloud runtime; the live container confirmed `PRICE_CALLISTHENES:true`.
+- **Live verification:** `https://callisthenes.zenod.dev` returns HTTP 200 with the public landing
+  page; `https://cloud.zenod.dev/callisthenes` returns HTTP 200; and
+  `https://cloud.zenod.dev/buy/callisthenes` returns HTTP 303 to a Stripe `cs_test_...` Checkout
+  Session. — [worker]
