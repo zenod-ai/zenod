@@ -123,16 +123,24 @@ function displayNameFromId(id: string): string {
     .join(" ");
 }
 
+function normalizeExecutionEffort(value: unknown, fallback: "low" | "medium" | "high" | "max" = "medium"): "low" | "medium" | "high" | "max" {
+  return value === "low" || value === "medium" || value === "high" || value === "max" ? value : fallback;
+}
+
 function ringServerFromPeer(peer: { name: string; url: string; token: string; tool?: string }): RingConnectedServer {
+  const id = peer.name.trim().toLowerCase();
+  const isEpaminon = id === "epaminon";
   return {
-    id: peer.name.trim().toLowerCase(),
+    id,
     endpoint: peer.url,
     token: peer.token,
     displayName: displayNameFromId(peer.name),
     skillText: "",
     enabled: true,
     relayPolicy: "same_channel",
-    tools: { chat: peer.tool ?? "ask_brain" },
+    tools: isEpaminon
+      ? { chat: peer.tool ?? "chat_with_epaminon", runTask: "epaminon.run_task" }
+      : { chat: peer.tool ?? "ask_brain" },
   };
 }
 
@@ -350,7 +358,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const bad = execLaneGate(c.req.header("X-Lane-Secret"));
     if (bad) return c.json({ error: bad.error }, bad.status);
     const body = await c.req
-      .json<{ execution_id?: number | string; target?: string; context?: string; notify_on_start?: boolean }>()
+      .json<{ execution_id?: number | string; target?: string; context?: string; effort?: unknown; notify_on_start?: boolean }>()
       .catch(() => ({}) as Record<string, unknown>);
     const executionId = body.execution_id != null ? String(body.execution_id) : "";
     if (!executionId || !body.target) return c.json({ error: "execution_id and target are required" }, 400);
@@ -358,6 +366,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       executionId,
       target: String(body.target),
       context: String(body.context ?? ""),
+      effort: normalizeExecutionEffort(body.effort, settings.executorSettings().defaultEffort),
       ...(body.notify_on_start === false ? { notifyOnStart: false } : {}),
     });
     return c.json({ ok: true });
@@ -611,6 +620,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       instructions?: string;
       repo?: string;
       path?: string;
+      effort?: "low" | "medium" | "high" | "max";
+      outputTarget?: string;
+      mcpServers?: string[];
+      skills?: string[];
       artifactPolicy?: string;
     };
     const body = await c.req.json<RunEphemeralBody>().catch((): RunEphemeralBody => ({}));
@@ -624,6 +637,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       ...(body.instructions?.trim() ? { instructions: body.instructions } : {}),
       ...(body.repo?.trim() ? { repo: body.repo } : {}),
       ...(body.path?.trim() ? { path: body.path } : {}),
+      ...(body.effort ? { effort: body.effort } : {}),
+      ...(body.outputTarget?.trim() ? { outputTarget: body.outputTarget } : {}),
+      ...(body.mcpServers?.length ? { mcpServers: body.mcpServers.filter((item) => item.trim()) } : {}),
+      ...(body.skills?.length ? { skills: body.skills.filter((item) => item.trim()) } : {}),
       ...(body.artifactPolicy?.trim() ? { artifactPolicy: body.artifactPolicy } : {}),
     });
     return c.json(result, result.status === "completed" ? 201 : 409);
@@ -767,6 +784,25 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       await syncComposioToOutbound();
     }
     return c.json({ settings: settings.masked(), configured: settings.configured() });
+  });
+
+  app.get("/api/executor/settings", (c) =>
+    c.json(settings.executorSettings()),
+  );
+
+  app.put("/api/executor/settings", async (c) => {
+    const body = await c.req
+      .json<{
+        defaultEffort?: unknown;
+        workerInstructions?: unknown;
+        cliProvider?: unknown;
+        mcpServers?: unknown;
+        skills?: unknown;
+      }>()
+      .catch(() => ({}));
+    const next = settings.setExecutorSettings(body);
+    runtime.invalidate();
+    return c.json(next);
   });
 
   const ringProducts = (): RingConnectedServer[] => {
@@ -1137,8 +1173,25 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     },
   ];
   // Epaminon's "top tools": exact existing-issue execution starts and execution reads.
-  // Backlog creation/update stays with Archus; Epaminon owns the execution queue.
+  // Backlog creation/update stays with Archus; Epaminon owns the execution queue
+  // and cloud worker harness.
   const EPAMINON_EXECUTION_TOOLS = [
+    {
+      as: "epaminon_run_task",
+      mcp: "epaminon.run_task",
+      arg: "prompt",
+      inputSchema: "epaminon.run_task",
+      description:
+        "Owner: Epaminon. Prompt-first cloud worker harness for research, code, or ops tasks. Use when the user asks Codex/Epaminon to run a task and did NOT require a pre-created GitHub issue. Pass the prompt plus any explicit effort, repo/path, output target, MCP servers, skills, and instructions; Epaminon returns an execution id/ticket and later status/evidence through epaminon_read_issue_execution_status.",
+    },
+    {
+      as: "epaminon_dispatch_worker",
+      mcp: "epaminon.dispatch_worker",
+      arg: "prompt",
+      inputSchema: "epaminon.dispatch_worker",
+      description:
+        "Owner: Epaminon. Alias for epaminon_run_task when thinking of Epaminon as a cloud Codex/Claude-style worker dispatcher. Starts one direct prompt-first execution without requiring a caller-created issue, preserving repo/output/MCP/skills context for the worker.",
+    },
     {
       as: "epaminon_run_existing_issue",
       mcp: "epaminon.run_existing_issue",
@@ -1147,17 +1200,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       description:
         "Owner: Epaminon. Start execution for one exact existing GitHub issue/work ticket. Input must include target owner/repo#123. Use for run/start/execute requests when the issue already exists. Do NOT use for status questions; use epaminon_read_issue_execution_status. If the user says to notify only after terminal/blocked state, set notifyOnStart=false.",
     },
-    // NOTE (#stab): the issue-less `epaminon_run_ephemeral_task` is intentionally NOT
-    // exposed here. One-off tasks must be ticket-backed — run them through the Console's
-    // `console_run_ephemeral_task` journey, which mints a real execution ticket (a GitHub
-    // issue) and dispatches Epaminon against it. The old tool created issue-less runs that
-    // left no durable trace; that path is retired from the front-end surface.
     {
       as: "epaminon_read_issue_execution_status",
       mcp: "execution_status",
       arg: "message",
       description:
-        "Owner: Epaminon. Read execution status for a GitHub issue/work ticket: did it run, was it picked up, queued, running, blocked, awaiting review, done, failed, or what did the runner do. Input is the user's exact issue reference/question. Read-only; does NOT start work. Do NOT use for GitHub issue title/body/labels/existence; those are Archus GitHub issue questions.",
+        "Owner: Epaminon. Read execution status for a GitHub issue/work ticket or direct prompt-first execution id: did it run, was it picked up, queued, running, blocked, awaiting review, done, failed, or what did the runner do. Input is the user's exact issue reference, execution id, or status question. Read-only; does NOT start work. Do NOT use for GitHub issue title/body/labels/existence; those are Archus GitHub issue questions.",
     },
   ];
   // Callistheness's "top tools": named delegation handles that ALL route to his chat
@@ -2531,28 +2579,32 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           agent.backlog ? runtime.buildBacklogIssueReader() : undefined,
           (input) => runtime.whatsappStore.recentTranscript(input),
           runtime.executionQueue
-            ? async ({ target, instructions, notifyOnStart }) => {
+            ? async ({ target, instructions, effort, notifyOnStart }) => {
                 const executionId = `direct-${Date.now()}-${randomBytes(4).toString("hex")}`;
-                const context = [`Direct Epaminon run requested for ${target}.`, instructions ? `User instructions: ${instructions}` : ""]
+                const resolvedEffort = normalizeExecutionEffort(effort, settings.executorSettings().defaultEffort);
+                const context = [`Direct Epaminon run requested for ${target}.`, `Effort: ${resolvedEffort}.`, instructions ? `User instructions: ${instructions}` : ""]
                   .filter(Boolean)
                   .join("\n");
                 await runtime.executionQueue!.enqueue({
                   executionId,
                   target,
                   context,
+                  effort: resolvedEffort,
                   ...(notifyOnStart === false ? { notifyOnStart: false } : {}),
                 });
                 return runtime.executionQueue!.get(executionId)!;
               }
             : undefined,
           runtime.executionQueue
-            ? async ({ objective, instructions, artifactPolicy, repo, path }) => {
+            ? async ({ objective, instructions, artifactPolicy, repo, path, effort, outputTarget, mcpServers, skills }) => {
                 const executionId = `ephemeral-${Date.now()}-${randomBytes(4).toString("hex")}`;
+                const resolvedEffort = normalizeExecutionEffort(effort, settings.executorSettings().defaultEffort);
                 // Resolve a known-project alias (T4) so the worker gets a concrete repo/path
                 // instead of "find it yourself" — the cause of guess-and-fail runs (T5).
                 const match = resolveProject(loadProjectRegistry(), repo || objective);
                 const targetRepo = repo || match?.repo;
                 const targetPath = path || match?.path;
+                const outputPolicy = artifactPolicy || outputTarget;
 
                 // M-3 — issue/ticket-creation intent on a known code repo must dispatch the
                 // dedicated issue-create worker flow, never the generic ephemeral prompt
@@ -2563,7 +2615,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
                 // fires for a request that reached here directly, without going through that
                 // journey.
                 const requestText = [objective, instructions].filter(Boolean).join(" ");
-                if (targetRepo && isIssueCreateIntent(requestText) && !isAlreadyForcedIssueCreateObjective(artifactPolicy)) {
+                if (targetRepo && isIssueCreateIntent(requestText) && !isAlreadyForcedIssueCreateObjective(outputPolicy)) {
                   const title = oneOffIssueTitle(extractIssueCreateSubject(objective));
                   const body = [
                     `Objective: ${objective.trim()}`,
@@ -2584,11 +2636,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
                   const context = [
                     forced.objective,
                     targetPath ? `Target path within repo: ${targetPath}` : "",
+                    `Effort: ${resolvedEffort}`,
+                    mcpServers?.length ? `MCP servers/context: ${mcpServers.join(", ")}` : "",
+                    skills?.length ? `Skills: ${skills.join(", ")}` : "",
                     `Artifact policy: ${forced.artifactPolicy}`,
                   ]
                     .filter(Boolean)
                     .join("\n\n");
-                  await runtime.executionQueue!.enqueue({ executionId, target: `ephemeral:${executionId}`, context });
+                  await runtime.executionQueue!.enqueue({ executionId, target: `ephemeral:${executionId}`, context, effort: resolvedEffort });
                   return runtime.executionQueue!.get(executionId)!;
                 }
 
@@ -2596,16 +2651,20 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
                   "Ephemeral one-off execution requested.",
                   `Objective: ${objective}`,
                   instructions ? `Instructions: ${instructions}` : "",
+                  `Effort: ${resolvedEffort}`,
                   targetRepo ? `Target repo: ${targetRepo}. Clone and work THIS repo; do not guess or search for a different one.` : "",
                   targetPath ? `Target path within repo: ${targetPath}` : "",
+                  outputTarget ? `Output target: ${outputTarget}` : "",
+                  mcpServers?.length ? `MCP servers/context: ${mcpServers.join(", ")}` : "",
+                  skills?.length ? `Skills: ${skills.join(", ")}` : "",
                   match?.deployNote ? `Deploy reality: ${match.deployNote}` : "",
-                  artifactPolicy
-                    ? `Artifact policy: ${artifactPolicy}`
+                  outputPolicy
+                    ? `Artifact policy: ${outputPolicy}`
                     : "Artifact policy: do not create backlog issues unless explicitly needed. For code work, open ONE PR against main and do not merge it yourself — the controller enables GitHub auto-merge on green by default; say HOLD-FOR-REVIEW to keep it open for review.",
                 ]
                   .filter(Boolean)
                   .join("\n");
-                await runtime.executionQueue!.enqueue({ executionId, target: `ephemeral:${executionId}`, context });
+                await runtime.executionQueue!.enqueue({ executionId, target: `ephemeral:${executionId}`, context, effort: resolvedEffort });
                 return runtime.executionQueue!.get(executionId)!;
               }
             : undefined,

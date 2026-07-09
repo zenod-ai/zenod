@@ -24,6 +24,8 @@ volumes:
     external: true
   zenod-agent-codex-home:
     external: true
+  zenod-agent-claude-home:
+    external: true
   zenod-agent-gh:
     external: true
 
@@ -39,6 +41,7 @@ services:
     volumes:
       - zenod-agent-work:/runner/work
       - zenod-agent-codex-home:/runner/codex-home
+      - zenod-agent-claude-home:/runner/claude-home
       - zenod-agent-gh:/runner/gh
     environment:
       # Proactive runner notifications ("working", "needs review", "blocked",

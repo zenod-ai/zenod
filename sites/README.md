@@ -15,7 +15,7 @@ describe. Each page names the unit and its one-sentence job from the catalog in
 | `ring/` | The Ring | one door — owns your conversation, routes, relays verbatim (Phylax = its gateway) |
 | `zenod/` | Zenod | memory owner — evidence in, meaning out, every fact cited |
 | `archus/` | Archus | backlog owner — one home per ticket |
-| `epaminon/` | Epaminon | execution — ticket + budgeted workers + completion event |
+| `epaminon/` | Epaminon | cloud MCP worker — prompt + effort in, GitHub artifacts out |
 | `callisthenes/` | Callisthenes | outbound voice — only holder of the sending keys, throttled |
 
 ## Deliberately absent

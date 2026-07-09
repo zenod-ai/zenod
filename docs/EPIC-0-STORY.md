@@ -7,7 +7,8 @@ Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md) · Story spine: launch deck V5 �
 **Exit criterion: launch materials ready to publish the day Epic 1's soak passes and the flagship
 loop is live. Draft everything; publish nothing before both gates.**
 
-Status: 🟡 OPEN — E0-1 drafted below, SD-1 (the hero line) with Jordi.
+Status: 🟡 OPEN — E0-1 drafted below, SD-1 (the hero line) with Jordi; SD-7
+adds the evidence-to-memory doctrine that E0-1/E0-3 must carry.
 
 ## Contract
 
@@ -47,9 +48,9 @@ adopted 2026-07-04.
 
 | ID | Deliverable | Acceptance criteria | State |
 |---|---|---|---|
-| **E0-1** | The narrative — one page | v2 per SD-0: TWO-STORY structure — (a) the loop product's page (project memory + objective + the loop, machinery hidden, service CTA) as commercial lead; (b) Zenod-the-framework as movement/trust layer beneath. One-liner + headlines per story; names pending SD-2 | 🟡 v1 below (pre-SD-0, kept as record) — v2 next, needs SD-2 |
+| **E0-1** | The narrative — one page | v2 per SD-0 + SD-7: TWO-STORY structure — (a) the loop product's page (project memory + objective + the loop, machinery hidden, service CTA) as commercial lead; (b) Zenod-the-framework as movement/trust/evidence-to-memory layer beneath. One-liner + headlines per story; names pending SD-2 | 🟡 v1 below (pre-SD-0, kept as record) — v2 next, needs SD-2 |
 | **E0-2** | Positioning deck V6 | HTML deck in docs/, same craft as V5; keeps council+memory spine; loop as the payoff; hosted as the CTA; zero peer-chatter implications (council-v2 KEEP/DELETE columns respected); Jordi review → replaces V5 as "the story" reference in LAUNCH-CONTROL (Epic-0 row only) | ⚪ blocked on E0-1/SD-1 |
-| **E0-3** | Website content map | Page-by-page copy plan for zenod.dev selling hosted: hero, the team, the flagship loop walked through, trust/receipts (public test board as proof), open-source page, pricing placeholder (copy only, no numbers); every page has purpose + copy + CTA; consistent with D-4 (QR pairing at launch) and D-5 (prepaid credits) states | ⚪ blocked on E0-1 |
+| **E0-3** | Website content map | Page-by-page copy plan for zenod.dev selling hosted: hero, the team, the flagship loop walked through, trust/receipts (public test board as proof), open-source page, pricing placeholder (copy only, no numbers), and the SD-7 media/evidence-to-memory story; every page has purpose + copy + CTA; consistent with D-4 (QR pairing at launch) and D-5 (prepaid credits) states | ⚪ blocked on E0-1 |
 | **E0-4** | Launch materials | Drafts exist for: announcement post; the "we test our agent for lying" essay (grounded in CANONICAL-TESTS + real scoreboard receipts); demo script for the flagship loop (maps to the REAL loop only — receipts culture applies to marketing) | ⚪ blocked on E0-1 |
 
 **Publish gates (both required, non-negotiable):** Epic 1 soak complete · flagship loop live as
@@ -132,6 +133,17 @@ standalone may launch when its stranger-test passes (Epic 2.3 Z-1). Epic 0 owes 
 one-pager + README voice. Epic doc: [EPIC-2.3-ZENOD-MOVE-0.md](EPIC-2.3-ZENOD-MOVE-0.md)
 (`3434174`).
 
+**SD-7 · Evidence-to-memory is core Zenod philosophy — DECIDED 2026-07-09 (Jordi).** Zenod is
+not "markdown notes only." The public story should say: pass Zenod the thing you want remembered —
+text, screenshot, image, audio, voice note, PDF/document, or artifact link — and Zenod preserves the
+source, extracts/transcribes/OCRs/describes it, digests it into durable memory, cites the evidence,
+and returns receipts into the user's repo. Google Drive or equivalent archive belongs to Zenod as
+the raw-evidence store for heavy artifacts; the git vault remains the meaning/index layer. This is
+a core moat story because the memory becomes trustworthy from source artifact to later answer.
+Boundary for the story: Phylax transports channel media, the Ring routes intent, Zenod ingests and
+remembers. Epic 0 owns the language; Epic 2.3 owns the Zenod UI/ingest product work; Epic 2.5 owns
+the router/gateway boundary.
+
 ## Cross-track requirements (Jordi carries; rule 10)
 
 - **→ Epic 2 (Product-Fable):** SD-0 reframes the sellable unit as the branded loop service
@@ -143,6 +155,12 @@ one-pager + README voice. Epic doc: [EPIC-2.3-ZENOD-MOVE-0.md](EPIC-2.3-ZENOD-MO
   consistently wrong ("it never gets it right"). Per the standing rule (unexpected behavior → test
   list): needs a canonical test + ticket on the engine board. Raised by Jordi 2026-07-04, receipted
   here.
+- **→ Epic 2.3 (Zenod-Fable):** SD-7 must be reflected as Zenod product scope: hosted Zenod needs
+  media/evidence configuration in its UI (Drive or equivalent archive, transcription, OCR/vision,
+  ingest receipts) and public-seam ingest tools. Epic 0 does not implement it.
+- **→ Epic 2.5 (Ring-Fable):** SD-7 clarifies that Ring is the router and Phylax is a gateway.
+  Existing deployed Council/Console behavior can be mined for working parts, but media memory logic
+  should be described as moving into Zenod, not remaining in Ring.
 
 ---
 
@@ -262,3 +280,14 @@ the team that knows your company and posts for you — and shows you the receipt
   and wiped them from the branch; recovered via cherry-pick as `6e7be22` + `67c85c5`, doc at
   `e9ad820` (this entry's own commit follows it). **Jordi: `git push origin main` ASAP** — until pushed, every local commit on
   this shared working copy can be silently reset away by any other session syncing to origin.
+
+### 2026-07-09 · [worker/Epic-0] SD-7 captured — Zenod remembers evidence, not only text
+- Jordi clarified the cross-epic doctrine and reported that the other epic agents agree: media
+  handling belongs to Zenod 2.3. Zenod should accept "the thing to memorize" and own archive,
+  extraction/transcription/OCR/vision, digestion, citations, and receipts. This is not just an
+  implementation detail; it is public Zenod philosophy.
+- Story consequence: E0-1/E0-3 must describe Zenod as the evidence-to-memory layer beneath Herald's
+  loop. A screenshot or audio note is not "handled by the Ring"; the Ring routes it, Phylax carries
+  it, and Zenod turns it into durable memory.
+- Cross-track routing only: Epic 0 records the story and language requirement. Epic 2.3 updates the
+  Zenod product/UI/ingest scope; Epic 2.5 updates the Ring/Phylax boundary. No code changes here.

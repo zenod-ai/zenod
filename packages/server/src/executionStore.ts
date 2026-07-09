@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { DeliverableManifest, ExecState, ExecutionTicket } from "./executionQueue.js";
+import type { DeliverableManifest, ExecState, ExecutionEffort, ExecutionTicket } from "./executionQueue.js";
 
 /**
  * Durable state for Epaminon's execution queue. The queue remains the state
@@ -14,6 +14,7 @@ interface Row {
   execution_id: string;
   target: string;
   context: string;
+  effort: string | null;
   state: string;
   evidence_url: string | null;
   note: string | null;
@@ -54,6 +55,7 @@ function rowToTicket(row: Row): ExecutionTicket {
     executionId: row.execution_id,
     target: row.target,
     context: row.context,
+    ...(row.effort ? { effort: row.effort as ExecutionEffort } : {}),
     state: row.state as ExecState,
     ...(row.evidence_url ? { evidenceUrl: row.evidence_url } : {}),
     ...(row.note ? { note: row.note } : {}),
@@ -80,6 +82,7 @@ export class ExecutionStore {
         execution_id TEXT PRIMARY KEY,
         target TEXT NOT NULL,
         context TEXT NOT NULL,
+        effort TEXT,
         state TEXT NOT NULL,
         evidence_url TEXT,
         note TEXT,
@@ -100,6 +103,9 @@ export class ExecutionStore {
     const cols = this.db.prepare(`PRAGMA table_info(execution_tickets)`).all() as unknown as Array<{ name: string }>;
     if (!cols.some((c) => c.name === "deliverable")) {
       this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN deliverable TEXT`);
+    }
+    if (!cols.some((c) => c.name === "effort")) {
+      this.db.exec(`ALTER TABLE execution_tickets ADD COLUMN effort TEXT`);
     }
     // Migration (F-2 / C-09): mid-run telemetry columns — started_at (elapsed basis) +
     // the controller-observed coarse phase/partial. Additive, guard-idempotent.
@@ -136,13 +142,14 @@ export class ExecutionStore {
     this.db
       .prepare(
         `INSERT INTO execution_tickets (
-           execution_id, target, context, state, evidence_url, note,
+           execution_id, target, context, effort, state, evidence_url, note,
            final_content, outward, deliverable, started_at, phase, progress_note,
            recent_events, transcript_url, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(execution_id) DO UPDATE SET
            target=excluded.target,
            context=excluded.context,
+           effort=excluded.effort,
            state=excluded.state,
            evidence_url=excluded.evidence_url,
            note=excluded.note,
@@ -160,6 +167,7 @@ export class ExecutionStore {
         ticket.executionId,
         ticket.target,
         ticket.context,
+        ticket.effort ?? null,
         ticket.state,
         ticket.evidenceUrl ?? null,
         ticket.note ?? null,

@@ -154,6 +154,10 @@ export const RUN_ISSUE_SHAPE = {
     .describe("Exact work issue to run, as owner/repo#123. Do not pass a fuzzy reference."),
   instructions: z.string().min(1).optional().describe("Optional user instructions to include in Archus's execution request."),
   repo: z.string().min(1).optional().describe("Optional central backlog repo where Archus should mint the execution ticket, as owner/repo."),
+  effort: z
+    .enum(["low", "medium", "high", "max"])
+    .optional()
+    .describe("Optional worker effort/depth hint. Defaults are owned by the Epaminon runtime."),
   notifyOnStart: z
     .boolean()
     .optional()
@@ -163,17 +167,52 @@ export const RUN_ISSUE_SHAPE = {
 export const RUN_EPHEMERAL_TASK_SHAPE = {
   objective: z.string().min(1).describe("The one-off task objective. This does not create a GitHub issue by default."),
   instructions: z.string().min(1).optional().describe("Optional constraints, context, or success criteria for the ephemeral run."),
+  effort: z
+    .enum(["low", "medium", "high", "max"])
+    .optional()
+    .describe("Optional worker effort/depth hint. Defaults are owned by the Epaminon runtime."),
   repo: z
     .string()
     .min(1)
     .optional()
     .describe("Target GitHub repo as owner/repo when the task works a known codebase. Resolve the user's informal project name to this BEFORE calling; pass it so the worker clones the right repo instead of guessing."),
   path: z.string().min(1).optional().describe("Sub-path within the repo where the relevant code lives, if known (e.g. 'app/telegram-bot')."),
+  outputTarget: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Optional requested durable output target, e.g. 'write docs/research.md', 'open one PR', or 'return summary only'."),
   artifactPolicy: z
     .string()
     .min(1)
     .optional()
     .describe("Optional guidance for where durable output should land, e.g. 'return summary only' or 'create follow-up issues only if needed'."),
+  mcpServers: z
+    .array(z.string().min(1))
+    .optional()
+    .describe("Optional MCP servers/connectors to prewire for the worker, by name or connection hint."),
+  skills: z.array(z.string().min(1)).optional().describe("Optional Codex/Claude skills or playbooks the worker should load."),
+};
+
+export const EPAMINON_RUN_TASK_SHAPE = {
+  prompt: z.string().min(1).describe("The task prompt/objective to run. No pre-created GitHub issue is required."),
+  effort: z
+    .enum(["low", "medium", "high", "max"])
+    .optional()
+    .describe("Optional worker effort/depth hint. Defaults are owned by the Epaminon runtime."),
+  repo: z.string().min(1).optional().describe("Optional target GitHub repo as owner/repo when the task works a known codebase."),
+  path: z.string().min(1).optional().describe("Optional sub-path within the repo where the worker should focus."),
+  outputTarget: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Optional requested durable output target, e.g. 'write docs/research.md', 'open one PR', or 'return summary only'."),
+  mcpServers: z
+    .array(z.string().min(1))
+    .optional()
+    .describe("Optional MCP servers/connectors to prewire for the worker, by name or connection hint."),
+  skills: z.array(z.string().min(1)).optional().describe("Optional Codex/Claude skills or playbooks the worker should load."),
+  instructions: z.string().min(1).optional().describe("Optional constraints, context, success criteria, or handoff instructions."),
 };
 
 export const CREATE_ISSUE_SHAPE = {

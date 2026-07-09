@@ -75,6 +75,38 @@ export interface RingTenantConfig {
   zenodServerId: string | null;
 }
 
+export type ExecutorEffort = "low" | "medium" | "high" | "max";
+export type ExecutorCliProvider = "auto" | "codex" | "claude";
+
+export interface ExecutorMcpServer {
+  name: string;
+  url: string;
+  enabled: boolean;
+  token?: string;
+  hasToken: boolean;
+}
+
+export interface ExecutorSettings {
+  defaultEffort: ExecutorEffort;
+  workerInstructions: string;
+  cliProvider: ExecutorCliProvider;
+  mcpServers: ExecutorMcpServer[];
+  skills: string[];
+  status: {
+    githubAuth: "configured" | "missing";
+    providerAuth: "configured" | "missing";
+    cliAuth: "configured" | "missing";
+    provider: Provider;
+    hasGithubToken: boolean;
+    hasGithubApp: boolean;
+    hasProviderKey: boolean;
+    hasCodexCliAuth: boolean;
+    hasClaudeCliAuth: boolean;
+    executionLaneConfigured: boolean;
+    archusPeerUrl: string | null;
+  };
+}
+
 /** The settings key holding each provider's API key. */
 export const PROVIDER_KEY: Record<Provider, SettingKey> = {
   anthropic: "anthropic_api_key",
@@ -259,6 +291,88 @@ export class Settings {
       defaultServerId: normalizeOptionalConfigString(this.getRaw("ring_default_server_id")),
       zenodServerId: normalizeOptionalConfigString(this.getRaw("ring_zenod_server_id")),
     };
+  }
+
+  executorSettings(env: NodeJS.ProcessEnv = process.env): ExecutorSettings {
+    const hasGithubToken = Boolean(this.get("github_token"));
+    const hasGithubApp = this.hasGithubApp();
+    const provider = this.provider();
+    const hasProviderKey = Boolean(this.activeApiKey());
+    const hasCodexCliAuth = Boolean(
+      this.getRaw("epaminon_codex_cli_auth") ||
+        env.CODEX_API_KEY ||
+        env.OPENAI_API_KEY,
+    );
+    const hasClaudeCliAuth = Boolean(
+      this.getRaw("epaminon_claude_cli_auth") ||
+        env.CLAUDE_CODE_OAUTH_TOKEN ||
+        env.ANTHROPIC_API_KEY,
+    );
+    return {
+      defaultEffort: normalizeExecutorEffort(this.getRaw("epaminon_default_effort")),
+      workerInstructions: this.getRaw("epaminon_worker_instructions") ?? "",
+      cliProvider: normalizeExecutorCliProvider(this.getRaw("epaminon_cli_provider")),
+      mcpServers: this.executorMcpServers().map(({ token: _token, ...server }) => server),
+      skills: this.executorSkills(),
+      status: {
+        githubAuth: hasGithubToken || hasGithubApp ? "configured" : "missing",
+        providerAuth: hasProviderKey ? "configured" : "missing",
+        cliAuth: hasCodexCliAuth || hasClaudeCliAuth ? "configured" : "missing",
+        provider,
+        hasGithubToken,
+        hasGithubApp,
+        hasProviderKey,
+        hasCodexCliAuth,
+        hasClaudeCliAuth,
+        executionLaneConfigured: Boolean(this.getRaw("exec_lane_secret")),
+        archusPeerUrl: normalizeOptionalConfigString(this.getRaw("exec_archus_url")),
+      },
+    };
+  }
+
+  setExecutorSettings(input: {
+    defaultEffort?: unknown;
+    workerInstructions?: unknown;
+    cliProvider?: unknown;
+    mcpServers?: unknown;
+    skills?: unknown;
+  }): ExecutorSettings {
+    if (input.defaultEffort !== undefined) {
+      this.setRaw("epaminon_default_effort", normalizeExecutorEffort(input.defaultEffort));
+    }
+    if (input.workerInstructions !== undefined) {
+      this.setRaw("epaminon_worker_instructions", normalizeString(input.workerInstructions));
+    }
+    if (input.cliProvider !== undefined) {
+      this.setRaw("epaminon_cli_provider", normalizeExecutorCliProvider(input.cliProvider));
+    }
+    if (input.mcpServers !== undefined) {
+      this.setRaw("epaminon_mcp_servers", JSON.stringify(normalizeExecutorMcpServers(input.mcpServers, this.executorMcpServers())));
+    }
+    if (input.skills !== undefined) {
+      this.setRaw("epaminon_skills", JSON.stringify(normalizeExecutorSkills(input.skills)));
+    }
+    return this.executorSettings();
+  }
+
+  private executorMcpServers(): ExecutorMcpServer[] {
+    const raw = this.getRaw("epaminon_mcp_servers");
+    if (!raw) return [];
+    try {
+      return normalizeExecutorMcpServers(JSON.parse(raw));
+    } catch {
+      return [];
+    }
+  }
+
+  private executorSkills(): string[] {
+    const raw = this.getRaw("epaminon_skills");
+    if (!raw) return [];
+    try {
+      return normalizeExecutorSkills(JSON.parse(raw));
+    } catch {
+      return [];
+    }
   }
 
   setRingTenantConfig(input: Partial<RingTenantConfig>): RingTenantConfig {
@@ -617,6 +731,47 @@ function normalizeOptionalConfigString(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
+function normalizeExecutorEffort(value: unknown): ExecutorEffort {
+  return value === "low" || value === "high" || value === "max" ? value : "medium";
+}
+
+function normalizeExecutorCliProvider(value: unknown): ExecutorCliProvider {
+  return value === "codex" || value === "claude" ? value : "auto";
+}
+
+function normalizeExecutorSkills(value: unknown): string[] {
+  const items =
+    typeof value === "string"
+      ? value.split(/\r?\n|,/)
+      : Array.isArray(value)
+        ? value
+        : [];
+  return [...new Set(items.map((item) => normalizeString(item)).filter(Boolean))];
+}
+
+function normalizeExecutorMcpServers(value: unknown, existing: ExecutorMcpServer[] = []): ExecutorMcpServer[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const name = normalizeString(record.name);
+      const url = normalizeString(record.url);
+      if (!name || !url) return null;
+      const previous = existing.find((server) => server.name === name);
+      const rawToken = normalizeString(record.token);
+      const token = rawToken && !rawToken.includes("••••") ? rawToken : previous?.token ?? "";
+      return {
+        name,
+        url,
+        enabled: record.enabled === undefined ? true : record.enabled !== false,
+        ...(token ? { token } : {}),
+        hasToken: Boolean(token),
+      };
+    })
+    .filter((server): server is ExecutorMcpServer => server !== null);
+}
+
 function normalizeWhatsAppProviderMode(value: unknown): WhatsAppProviderMode {
   return value === "cloud" ? "cloud" : "self_host_dev";
 }
@@ -638,7 +793,7 @@ function normalizeTools(value: unknown): RingConnectedServer["tools"] {
   if (!value || typeof value !== "object") return undefined;
   const input = value as Record<string, unknown>;
   const tools: RingConnectedServer["tools"] = {};
-  for (const key of ["chat", "askMemory", "storeMemory", "ingestMemory"] as const) {
+  for (const key of ["chat", "askMemory", "storeMemory", "ingestMemory", "runTask"] as const) {
     const v = normalizeString(input[key]);
     if (v) tools[key] = v;
   }

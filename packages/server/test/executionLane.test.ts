@@ -18,6 +18,11 @@ describe("execution lane — Epaminon receivers", () => {
   let app: ReturnType<typeof createApp>;
   const SECRET = "lane-secret-xyz";
   const lane = (extra?: Record<string, string>) => ({ "Content-Type": "application/json", "X-Lane-Secret": SECRET, ...extra });
+  const mockRunner = () => {
+    runtime.settings.setRaw("github_token", "gh-test-token");
+    process.env.ZENOD_RUNNER_POKE_URL = "http://runner.test";
+    return vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("launched", { status: 202 }));
+  };
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "zenod-execlane-"));
@@ -64,24 +69,49 @@ describe("execution lane — Epaminon receivers", () => {
     expect(wrong.status).toBe(401);
   });
 
-  it("enqueue → the ticket lands in the queue and runs (under the seam)", async () => {
+  it("enqueue → the ticket lands in the queue and runs through the runner seam", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
+    mockRunner();
     const res = await app.request("/api/exec/enqueue", {
       method: "POST",
       headers: lane(),
       body: JSON.stringify({ execution_id: 42, target: "zenod-ai/zenod#42", context: "fix the bug" }),
     });
     expect(res.status).toBe(200);
-    // The launch seam is a no-op stub (#194), so the ticket sits at running.
     const t = runtime.executionQueue!.get("42");
     expect(t?.target).toBe("zenod-ai/zenod#42");
     expect(t?.state).toBe("running");
   });
 
-  it("preserves terminal-only notification preference and passes it to the runner", async () => {
+  it("executor settings expose MCP token presence without returning token material", () => {
+    runtime.settings.setExecutorSettings({
+      mcpServers: [{ name: "memory", url: "https://memory.test/mcp", token: "secret-token", enabled: true }],
+    });
+
+    expect(runtime.settings.executorSettings().mcpServers).toEqual([
+      { name: "memory", url: "https://memory.test/mcp", enabled: true, hasToken: true },
+    ]);
+  });
+
+  it("fails loudly instead of fake-running when runner/auth preflight is missing", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
-    process.env.ZENOD_RUNNER_POKE_URL = "http://runner.test";
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("launched", { status: 202 }));
+
+    const res = await app.request("/api/exec/enqueue", {
+      method: "POST",
+      headers: lane(),
+      body: JSON.stringify({ execution_id: "missing-runner-1", target: "zenod-ai/zenod#42", context: "fix the bug" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(runtime.executionQueue!.get("missing-runner-1")).toMatchObject({
+      state: "failed",
+      note: expect.stringContaining("launch failed: execution auth preflight failed"),
+    });
+  });
+
+  it("preserves effort and terminal-only notification preference and passes both to the runner", async () => {
+    runtime.settings.setRaw("exec_lane_secret", SECRET);
+    const fetchMock = mockRunner();
 
     const res = await app.request("/api/exec/enqueue", {
       method: "POST",
@@ -90,12 +120,13 @@ describe("execution lane — Epaminon receivers", () => {
         execution_id: "terminal-only-1",
         target: "zenod-ai/zenod#42",
         context: "notify only after terminal state",
+        effort: "high",
         notify_on_start: false,
       }),
     });
 
     expect(res.status).toBe(200);
-    expect(runtime.executionQueue!.get("terminal-only-1")).toMatchObject({ notifyOnStart: false, state: "running" });
+    expect(runtime.executionQueue!.get("terminal-only-1")).toMatchObject({ effort: "high", notifyOnStart: false, state: "running" });
     expect(fetchMock).toHaveBeenCalledWith(
       "http://runner.test/run",
       expect.objectContaining({
@@ -103,6 +134,7 @@ describe("execution lane — Epaminon receivers", () => {
           execution_id: "terminal-only-1",
           target: "zenod-ai/zenod#42",
           context: "notify only after terminal state",
+          effort: "high",
           notify_on_start: false,
         }),
       }),
@@ -112,7 +144,9 @@ describe("execution lane — Epaminon receivers", () => {
   it("does not post Console/Epaminon-owned string execution ids to Archus's numeric event endpoint", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
     runtime.settings.setRaw("exec_archus_url", "https://archus.test");
+    process.env.ZENOD_RUNNER_POKE_URL = "http://runner.test";
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("unexpected", { status: 500 }));
+    fetchMock.mockResolvedValue(new Response("launched", { status: 202 }));
 
     await runtime.executionQueue!.enqueue({
       executionId: "ephemeral-smoke-1",
@@ -136,6 +170,7 @@ describe("execution lane — Epaminon receivers", () => {
 
   it("execution_status read returns the live queue (normal auth, not the lane path)", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
+    mockRunner();
     await app.request("/api/exec/enqueue", {
       method: "POST",
       headers: lane(),
@@ -150,6 +185,7 @@ describe("execution lane — Epaminon receivers", () => {
 
   it("execution_status still returns terminal executions after a restart", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
+    mockRunner();
     await app.request("/api/exec/enqueue", {
       method: "POST",
       headers: lane(),
@@ -185,6 +221,8 @@ describe("execution lane — Epaminon receivers", () => {
   it("execution_status reconciles needs-review PR evidence to done once GitHub says the PR is merged", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
     runtime.settings.setRaw("github_token", "gh-test-token");
+    process.env.ZENOD_RUNNER_POKE_URL = "http://runner.test";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("launched", { status: 202 }));
     await app.request("/api/exec/enqueue", {
       method: "POST",
       headers: lane(),
@@ -225,6 +263,8 @@ describe("execution lane — Epaminon receivers", () => {
   it("execution_status leaves needs-review PR evidence parked while the PR is still open", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
     runtime.settings.setRaw("github_token", "gh-test-token");
+    process.env.ZENOD_RUNNER_POKE_URL = "http://runner.test";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("launched", { status: 202 }));
     await app.request("/api/exec/enqueue", {
       method: "POST",
       headers: lane(),
@@ -253,6 +293,7 @@ describe("execution lane — Epaminon receivers", () => {
 
   it("approve on a ticket not awaiting review surfaces the illegal transition", async () => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
+    mockRunner();
     await app.request("/api/exec/enqueue", {
       method: "POST",
       headers: lane(),
@@ -270,6 +311,7 @@ describe("execution lane — Epaminon receivers", () => {
   // The runner reports a dispatched run's result back (#194) — the queue advances.
   const dispatch = async (id: number) => {
     runtime.settings.setRaw("exec_lane_secret", SECRET);
+    mockRunner();
     await app.request("/api/exec/enqueue", {
       method: "POST",
       headers: lane(),

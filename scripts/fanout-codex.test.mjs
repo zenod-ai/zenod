@@ -71,6 +71,7 @@ test("resolveEffort defaults Claude to low, honors override, leaves Codex to thi
   assert.equal(resolveEffort("claude", {}), "low");
   assert.equal(resolveEffort("claude", { effort: "high" }), "high");
   assert.equal(resolveEffort("codex", {}), null);
+  assert.equal(resolveEffort("codex", { effort: "high" }), "high");
   assert.equal(resolveEffort("codex", { thinking: "high" }), "high");
 });
 

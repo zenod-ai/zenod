@@ -1,59 +1,459 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Epaminon — the one who gets it done</title>
-    <meta name="description" content="Epaminon owns execution: a ticket, workers with budgets, and a completion event when it's done." />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%99%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epaminon - cloud workers for Codex and Claude</title>
+    <meta
+      name="description"
+      content="Epaminon is a hosted MCP worker: send a prompt, choose an effort level, attach repo and MCP context, and get GitHub-backed artifacts when the run finishes."
+    >
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%99%EF%B8%8F%3C/text%3E%3C/svg%3E"
+    >
     <style>
       :root {
         --ink: #14110f;
         --paper: #f6f3ee;
-        --muted: #6b625a;
+        --muted: #665f57;
         --accent: #8c3a3a;
+        --accent-2: #176b62;
         --line: #ddd6cc;
+        --card: #fbf9f5;
+        --dark: #181513;
+        --white: #fffaf2;
+        --code: #221d19;
       }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      html { -webkit-text-size-adjust: 100%; }
-      body { background: var(--paper); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; min-height: 100vh; display: flex; flex-direction: column; }
-      .wrap { flex: 1; max-width: 46rem; margin: 0 auto; padding: clamp(3rem, 10vw, 7rem) 1.5rem 3rem; width: 100%; }
-      .eyebrow { font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5rem; font-weight: 600; }
-      h1 { font-family: Georgia, "Times New Roman", "Bodoni Moda", serif; font-weight: 500; font-size: clamp(2.6rem, 9vw, 4.6rem); line-height: 1.02; letter-spacing: -0.01em; margin-bottom: 1.4rem; }
-      .lede { font-size: clamp(1.1rem, 3.2vw, 1.4rem); color: var(--muted); max-width: 34rem; margin-bottom: 2.6rem; }
-      .job { border-left: 2px solid var(--accent); padding: 0.2rem 0 0.2rem 1.2rem; font-size: 1.05rem; margin-bottom: 2.8rem; }
-      .job strong { color: var(--ink); }
-      .rule { display: grid; gap: 1.1rem; border-top: 1px solid var(--line); padding-top: 2rem; margin-bottom: 2rem; }
-      .rule dt { font-family: Georgia, serif; font-size: 1.15rem; margin-bottom: 0.2rem; }
-      .rule dd { color: var(--muted); font-size: 0.98rem; }
-      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; padding: 1.6rem 1.5rem; text-align: center; }
-      footer a { color: var(--accent); text-decoration: none; }
-      footer a:hover { text-decoration: underline; }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        scroll-behavior: smooth;
+      }
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        line-height: 1.5;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .wrap {
+        flex: 1;
+        max-width: 64rem;
+        margin: 0 auto;
+        padding: clamp(3rem, 8vw, 6rem) 1.5rem 3rem;
+        width: 100%;
+      }
+      .eyebrow,
+      .label {
+        font-size: 0.72rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-weight: 750;
+      }
+      .eyebrow {
+        color: var(--accent);
+        margin-bottom: 1.4rem;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(18rem, 0.95fr);
+        gap: clamp(2rem, 5vw, 4rem);
+        align-items: start;
+        margin-bottom: 3.4rem;
+      }
+      h1 {
+        font-family: Georgia, "Times New Roman", "Bodoni Moda", serif;
+        font-weight: 500;
+        font-size: clamp(2.7rem, 8vw, 5.2rem);
+        line-height: 1.02;
+        letter-spacing: 0;
+        margin-bottom: 1.35rem;
+      }
+      .lede {
+        font-size: clamp(1.12rem, 3vw, 1.42rem);
+        color: var(--muted);
+        max-width: 39rem;
+        margin-bottom: 2.2rem;
+      }
+      .job {
+        border-left: 2px solid var(--accent);
+        padding: 0.2rem 0 0.2rem 1.2rem;
+        font-size: 1.04rem;
+        margin-bottom: 2rem;
+        max-width: 42rem;
+      }
+      .job strong {
+        color: var(--ink);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.85rem;
+        align-items: center;
+      }
+      .btn {
+        display: inline-flex;
+        min-height: 3rem;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--dark);
+        border-radius: 0.45rem;
+        padding: 0.78rem 1rem;
+        color: var(--dark);
+        text-decoration: none;
+        font-size: 0.96rem;
+        font-weight: 750;
+      }
+      .btn-primary {
+        background: var(--dark);
+        color: var(--white);
+      }
+      .btn-secondary {
+        border-color: var(--line);
+        background: transparent;
+        color: var(--ink);
+      }
+      .btn:hover {
+        opacity: 0.86;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 0.5rem;
+        background: rgba(255, 250, 242, 0.7);
+        overflow: hidden;
+      }
+      .panel-head,
+      .panel-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: center;
+      }
+      .panel-head {
+        background: var(--dark);
+        color: var(--white);
+        padding: 0.85rem 1rem;
+      }
+      .dots {
+        display: flex;
+        gap: 0.35rem;
+      }
+      .dot {
+        width: 0.62rem;
+        height: 0.62rem;
+        border-radius: 999px;
+        background: rgba(255, 250, 242, 0.54);
+      }
+      .panel-body {
+        padding: 1rem;
+      }
+      .prompt-box {
+        border: 1px solid var(--line);
+        background: var(--card);
+        border-radius: 0.45rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+      .prompt-box p {
+        color: var(--muted);
+        font-size: 0.94rem;
+        margin-top: 0.35rem;
+      }
+      .panel-row {
+        border-top: 1px solid var(--line);
+        padding: 0.78rem 0;
+        font-size: 0.93rem;
+      }
+      .panel-row:last-child {
+        padding-bottom: 0;
+      }
+      .pill-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+      .pill {
+        border: 1px solid rgba(23, 107, 98, 0.3);
+        border-radius: 999px;
+        color: var(--accent-2);
+        padding: 0.2rem 0.55rem;
+        font-size: 0.78rem;
+        font-weight: 750;
+      }
+      section {
+        border-top: 1px solid var(--line);
+        padding-top: 2.2rem;
+        margin-bottom: 2.8rem;
+      }
+      h2 {
+        font-family: Georgia, "Times New Roman", "Bodoni Moda", serif;
+        font-size: clamp(1.55rem, 4vw, 2rem);
+        font-weight: 500;
+        letter-spacing: 0;
+        margin-bottom: 1rem;
+      }
+      .section-copy {
+        color: var(--muted);
+        max-width: 42rem;
+        margin-bottom: 1.35rem;
+      }
+      .rule {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.2rem;
+      }
+      .rule dt {
+        font-family: Georgia, serif;
+        font-size: 1.13rem;
+        margin-bottom: 0.2rem;
+      }
+      .rule dd {
+        color: var(--muted);
+        font-size: 0.97rem;
+      }
+      .checkout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.92fr) minmax(18rem, 1.08fr);
+        gap: 1.2rem;
+        align-items: stretch;
+      }
+      .checkout-card,
+      .receipt {
+        border: 1px solid var(--line);
+        border-radius: 0.5rem;
+        background: var(--card);
+        padding: 1.25rem;
+      }
+      .checkout-card .price {
+        color: var(--accent);
+        font-weight: 800;
+        margin-bottom: 0.45rem;
+      }
+      .checkout-card p,
+      .receipt p,
+      .receipt li {
+        color: var(--muted);
+        font-size: 0.96rem;
+      }
+      .checkout-card p {
+        margin-bottom: 1rem;
+      }
+      .test-note {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.9rem;
+        border: 1px solid rgba(23, 107, 98, 0.35);
+        border-radius: 999px;
+        padding: 0.25rem 0.65rem;
+        color: var(--accent-2);
+        font-size: 0.74rem;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 0.85rem;
+      }
+      .receipt {
+        scroll-margin-top: 2rem;
+      }
+      .receipt ol {
+        margin: 0.75rem 0 1rem 1.15rem;
+      }
+      .receipt code,
+      .command code {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+      .command {
+        background: var(--code);
+        color: var(--white);
+        border-radius: 0.45rem;
+        overflow-x: auto;
+        padding: 0.85rem 0.95rem;
+        font-size: 0.82rem;
+        line-height: 1.55;
+        white-space: pre;
+        margin-top: 1rem;
+      }
+      .fineprint {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 0.8rem;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.82rem;
+        padding: 1.6rem 1.5rem;
+        text-align: center;
+      }
+      footer a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      footer a:hover {
+        text-decoration: underline;
+      }
+      @media (max-width: 48rem) {
+        .hero,
+        .checkout,
+        .rule {
+          grid-template-columns: 1fr;
+        }
+        .hero {
+          gap: 2rem;
+        }
+      }
     </style>
   </head>
   <body>
     <main class="wrap">
-      <p class="eyebrow">The Suite · execution</p>
-      <h1>Epaminon.</h1>
-      <p class="lede">The one who gets it done. Hand him a ticket; workers with budgets run it; a completion event tells you when it's finished.</p>
-      <p class="job">Epaminon owns execution: async tools, a ticket for every job, and workers sized to the work with hard budgets. Long jobs never hold the wire — you get a <strong>ticket receipt now, a completion event later</strong>, traceable end to end.</p>
-      <dl class="rule">
+      <div class="hero">
         <div>
-          <dt>Ticket in, event out</dt>
-          <dd>Every dispatch returns a ticket ID immediately; completion arrives carrying the same ID.</dd>
+          <p class="eyebrow">The Suite / execution</p>
+          <h1>Epaminon.</h1>
+          <p class="lede">
+            A cloud Codex/Claude-style worker, exposed as an MCP server. Send a
+            prompt, choose effort, attach context, and get the artifact back.
+          </p>
+          <p class="job">
+            Epaminon owns execution: <strong>prompt + effort in</strong>, a
+            durable worker run in the cloud, and <strong>GitHub artifacts out</strong>
+            when the job is done.
+          </p>
+          <div class="actions" role="group" aria-label="Primary actions">
+            <a class="btn btn-primary" href="#checkout-receipt">Simulate Stripe test checkout</a>
+            <a
+              class="btn btn-secondary"
+              href="https://github.com/zenod-ai/zenod/tree/main/sites/epaminon"
+            >
+              Inspect the public page
+            </a>
+          </div>
         </div>
-        <div>
-          <dt>Workers with budgets</dt>
-          <dd>Each job gets its own worker, sized and capped — no runaway runs.</dd>
+
+        <aside class="panel">
+          <div class="panel-head">
+            <span class="label">worker run</span>
+            <span class="dots" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+          </div>
+          <div class="panel-body">
+            <div class="prompt-box">
+              <span class="label">prompt</span>
+              <p>Audit this repo, implement the fix, open a PR, and leave evidence.</p>
+            </div>
+            <div class="panel-row">
+              <span>Effort</span>
+              <strong>high</strong>
+            </div>
+            <div class="panel-row">
+              <span>Prewired MCP</span>
+              <span class="pill-list">
+                <span class="pill">Zenod memory</span>
+                <span class="pill">GitHub</span>
+                <span class="pill">Skills</span>
+              </span>
+            </div>
+            <div class="panel-row">
+              <span>Artifact</span>
+              <strong>branch + PR + receipt</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <section id="offer">
+        <h2>What the hosted worker includes</h2>
+        <p class="section-copy">
+          Epaminon is the cloud execution unit for jobs that are too long or too
+          stateful for a chat window. It keeps the MCP surface small and gives
+          each run a durable receipt.
+        </p>
+        <dl class="rule">
+          <div>
+            <dt>Prompt and effort level</dt>
+            <dd>Submit the task in plain text, then pick a bounded effort profile for the worker.</dd>
+          </div>
+          <div>
+            <dt>Prewired MCP servers and skills</dt>
+            <dd>Memory, GitHub, repo context, and approved skill packs are configured before the worker starts.</dd>
+          </div>
+          <div>
+            <dt>GitHub artifacts</dt>
+            <dd>Code work can land as a branch, commit, issue note, pull request, or linked evidence bundle.</dd>
+          </div>
+          <div>
+            <dt>Status you can poll</dt>
+            <dd>Each checkout and run returns a receipt id that leads back to status, transcript, and setup.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section id="checkout">
+        <h2>Test purchase path</h2>
+        <p class="section-copy">
+          Move 0 uses a test-mode boundary on cloud-test.zenod.dev: the public page
+          simulates the Stripe success receipt and links directly to the test cloud
+          instance setup path. Live Stripe stays on cloud.zenod.dev separately.
+        </p>
+        <div class="checkout">
+          <div class="checkout-card">
+            <span class="test-note">Stripe test mode</span>
+            <p class="price">Epaminon hosted worker / test checkout</p>
+            <p>
+              This CTA intentionally does not contain a production Payment Link or
+              secret. Replace it with the hosted Stripe test Checkout Session URL
+              when the cloud provisioner exposes the Epaminon product route.
+            </p>
+            <!--
+              TODO EPM-2: replace the hash CTA with the Stripe TEST Checkout URL once
+              cloud-test.zenod.dev exposes the Epaminon checkout route. Expected handoff:
+              checkout.session.completed -> provisioning receipt -> /setup/epaminon.
+              Do not commit live Stripe secrets or production-only Payment Links here.
+            -->
+            <a class="btn btn-primary" href="#checkout-receipt">Complete simulated test purchase</a>
+            <p class="fineprint">No production secrets, live prices, or live webhook keys are present in this page.</p>
+          </div>
+
+          <section id="checkout-receipt" class="receipt" aria-labelledby="receipt-title">
+            <span class="test-note">Receipt boundary</span>
+            <h2 id="receipt-title">Test receipt: epm2_epaminon_checkout_simulated</h2>
+            <p>
+              Treat this as the Stripe success landing state until the real test
+              checkout URL exists.
+            </p>
+            <ol>
+              <li>Checkout succeeded in test mode.</li>
+              <li>Provisioning receipt links the customer to the cloud setup UI.</li>
+              <li>The setup UI shows MCP URL, token, worker defaults, GitHub auth, and connection commands.</li>
+            </ol>
+            <a
+              class="btn btn-secondary"
+              href="https://cloud-test.zenod.dev/setup/epaminon?receipt=epm2_epaminon_checkout_simulated"
+            >
+              Continue to cloud-test instance setup
+            </a>
+            <pre class="command"><code>claude mcp add --transport http epaminon https://cloud-test.zenod.dev/mcp/epaminon/&lt;instance&gt; \
+  --header "Authorization: Bearer &lt;token from setup&gt;"</code></pre>
+          </section>
         </div>
-        <div>
-          <dt>Traceable to the origin</dt>
-          <dd>Every ticket carries the request that spawned it, so receipts trace all the way back.</dd>
-        </div>
-      </dl>
+      </section>
     </main>
     <footer>
-      Iteration-0 skeleton · part of the Atomic Suite ·
+      Iteration-0 public page / part of the Atomic Suite /
       <a href="https://github.com/zenod-ai/zenod">zenod-ai/zenod</a>
     </footer>
   </body>

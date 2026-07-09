@@ -47,11 +47,10 @@ const HOSTED_URL = `${GITHUB_URL}/issues/new?title=${encodeURIComponent(
   "I'd like to join the waitlist for the hosted Zenod alpha (first 100 users free).\n\nHow I plan to use it: "
 )}`
 
-// [DRAFT — Epic 0 voice pending] LIVE €5/month hosted SKU (ZD-1, one SKU). This is the
-// real Stripe Payment Link; on completion it redirects to cloud.zenod.dev/success.html
-// → GitHub sign-in → setup wizard. (F-5: the older $-tier section + its TEST-mode
-// cloud.zenod.dev/buy path were removed — one €5 SKU is the decided hosted product.)
-const HOSTED_PAYMENT_LINK = "https://buy.stripe.com/3cIdR3bSLgyL7yi89HbAs01"
+// [TEST MODE - 2026-07-09] Hosted Zenod signup points to cloud-test while the
+// full Stripe/GitHub/provisioning flow is validated. Live checkout returns to
+// cloud.zenod.dev only after live Stripe keys, prices, webhook, and OAuth are set.
+const HOSTED_PAYMENT_LINK = "https://cloud-test.zenod.dev/buy?unit=zenod&tier=starter"
 const TERMS_URL = "/legal/terms.html"
 const PRIVACY_URL = "/legal/privacy.html"
 const DATA_URL = "/legal/data-handling.html"
@@ -293,16 +292,16 @@ export default function App() {
                 GitHub account. You keep the keys.
               </p>
 
-              {/* [DRAFT — Epic 0 voice pending] primary hosted CTA — LIVE €5/mo (ZD-1). */}
+              {/* [TEST MODE - 2026-07-09] primary hosted CTA uses cloud-test Stripe. */}
               <div className="mt-10 flex flex-col items-center gap-2 lg:items-start">
                 <Button asChild size="lg" className="rounded-none px-6">
                   <a href={HOSTED_PAYMENT_LINK}>
-                    Get hosted — €5/month
+                    Test hosted signup
                     <ArrowUpRightIcon data-icon="inline-end" />
                   </a>
                 </Button>
                 <p className="label-caps text-muted-foreground/70">
-                  Fully managed · your repo, your keys · or self-host free below
+                  Stripe test mode · your repo, your keys · or self-host free below
                 </p>
               </div>
             </div>

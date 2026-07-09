@@ -24,6 +24,7 @@ import { WhatsAppConnect } from "@/components/whatsapp-connect"
 import { TelegramConnect } from "@/components/telegram-connect"
 import { PeerAgents } from "@/components/peer-agents"
 import { RingControlSurface } from "@/components/ring-control-surface"
+import { EpaminonExecutorSettings } from "@/components/epaminon-executor-settings"
 import { GithubConnect } from "@/components/github-connect"
 import { ComposioConnect } from "@/components/composio-connect"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -92,6 +93,7 @@ export function ConnectionsTab() {
   const [regenerating, setRegenerating] = React.useState(false)
   const [refreshing, setRefreshing] = React.useState(false)
   const [ringMode, setRingMode] = React.useState(false)
+  const [showExecutorSettings, setShowExecutorSettings] = React.useState(false)
 
   React.useEffect(() => {
     let cancelled = false
@@ -113,9 +115,12 @@ export function ConnectionsTab() {
 
   React.useEffect(() => {
     let cancelled = false
-    api<{ vaultless?: boolean }>("/api/agent")
+    api<{ name?: string; vaultless?: boolean }>("/api/agent")
       .then((result) => {
-        if (!cancelled) setRingMode(Boolean(result.vaultless))
+        if (!cancelled) {
+          setRingMode(Boolean(result.vaultless))
+          setShowExecutorSettings(result.name === "epaminon")
+        }
       })
       .catch(() => {})
     return () => {
@@ -205,6 +210,9 @@ export function ConnectionsTab() {
   return (
     <div className="flex flex-col gap-6">
       <RingControlSurface enabled={ringMode} />
+      {showExecutorSettings && (
+        <EpaminonExecutorSettings mcpUrl={mcpUrl} token={data.token} />
+      )}
 
       <Card>
         <CardHeader>

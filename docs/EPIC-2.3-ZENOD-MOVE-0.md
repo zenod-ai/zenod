@@ -119,6 +119,21 @@ relitigate decided items without new evidence.
   "treat this like a password." URL + separate bearer rejected for funnel friction; the header
   path (`GET /api/token` → `Authorization: Bearer`) remains the self-host mechanism.
 
+- **ZD-12 · Stripe environment split — DECIDED 2026-07-09 (Jordi): `cloud-test` is test,
+  `cloud` is live.** The Zenod funnel must support live customer checkout while still allowing
+  repeated test-card/provisioning drills. Do not manually flip one production Cloud service between
+  test and live Stripe values. Use `cloud-test.zenod.dev` with `STRIPE_MODE=test`, test prices,
+  and a test webhook secret for regression drills such as "three test users create three deployments";
+  use `cloud.zenod.dev` with `STRIPE_MODE=live`, live prices, and a live webhook secret for real
+  customers. The Cloud control-plane service now exposes the mode on `/healthz` and rejects key or
+  webhook `livemode` mismatches. Implementation receipt lives in `zenod-ai/cloud`:
+  `services/webhook/src/server.ts`, `docker-compose.cloud.yml`, `.env.example`,
+  `docs/DOKPLOY-DEPLOY.md`, `docs/AGENTS.md`; VPS smoke 2026-07-09:
+  `cloud-test.zenod.dev/healthz` -> `{"ok":true,"stripe_mode":"test"}` and `/buy/ring` -> 303
+  to Stripe `cs_test_...`. `cloud.zenod.dev` is code-ready for live mode but currently still has
+  test Stripe values installed, so `/healthz` correctly reports `stripe_mode:"test"` until live
+  keys/prices/webhook secret are loaded.
+
 ## Iteration 0 — tickets (lanes parallel; worker MUST fan out sub-agents, one per lane)
 
 Sequencing: **Z-1 ∥ Z-3-page ∥ Z-5-runbook start immediately**; Z-2 needs Z-1 green; Z-4 needs
@@ -199,6 +214,9 @@ Acceptance:
 - [ ] Stripe LIVE SKU €5/month; checkout → webhook → Z-2 provisioning fires without human touch
       (ZD-2). **BLOCKED-credentials cycle 1 (no LIVE key; `zenod-ai/cloud` private) → cycle 2;
       plan receipted in `docs/Z-3-CHECKOUT-WIRING.md`.**
+- [ ] `cloud-test.zenod.dev` bound as the Stripe TEST-mode proving ground per ZD-12; test-card
+      runs may create real disposable Dokploy tenants, but they must be visibly test-scoped and never
+      share the live Stripe key/prices/webhook secret.
 - [x] Minimal ToS/privacy linked (Epic-2 H-11 minimum) — `sites/zenod/legal/`. Receipt: `4610fb9`.
 
 Test criteria: a real card completes €5 checkout in prod; subscription visible in Stripe;
@@ -1362,3 +1380,139 @@ tenant `ask_brain`-cites-sources verification — **retry the tenant re-pin firs
 scratch tenant on `sha-e3daf6c`); do NOT score Z-9 live against a tenant still on `sha-4d5bcfc`.
 
 HANDBACK — pen returns to Zenod-Fable.
+
+### 2026-07-09 · [worker/cloud-billing] ZD-12 recorded — Stripe TEST/LIVE split for Zenod checkout drills
+
+Jordi accepted the operating model: `cloud-test.zenod.dev` is wired to Stripe TEST mode and
+`cloud.zenod.dev` is wired to Stripe LIVE mode. This is now part of the 2.3 checkout/provisioning
+spine because the epic needs repeatable test users without risking live billing configuration drift.
+
+Implementation deployed to the VPS control-plane services: added `STRIPE_MODE=test|live`,
+boot-time key-prefix validation, webhook `event.livemode` validation, mode visibility on `/healthz`,
+mode echo from `/create-checkout-session`, compose env passthrough, and runbook updates for separate
+`cloud-test` and `cloud` services. Validation in the Cloud repo: `npm run typecheck` and
+`npm run build` passed; `STRIPE_MODE=live` with an `sk_test...` key exits before startup.
+
+VPS receipts, 2026-07-09: `cloud-test.zenod.dev/healthz` -> `{"ok":true,"stripe_mode":"test"}`;
+`cloud-test.zenod.dev/buy/ring` and `/buy` -> HTTP 303 to Stripe `cs_test_...`; container env has
+`STRIPE_MODE=test`, `DOMAIN=https://cloud-test.zenod.dev`, and test Stripe key/prices. The existing
+`cloud.zenod.dev` service also runs the mode-aware code and reports `{"ok":true,"stripe_mode":"test"}`
+because it still has test Stripe credentials installed. Do not call it live until live key/prices/
+webhook secret are installed and `STRIPE_MODE=live` passes boot.
+
+Next operator work: run the three-test-user provisioning drill on `cloud-test.zenod.dev`; confirm or
+register the dedicated Stripe TEST webhook endpoint `https://cloud-test.zenod.dev/webhook`; then load
+live Stripe values into `cloud.zenod.dev` and flip `STRIPE_MODE=live`.
+
+### 2026-07-09 · [worker/public-test] Zenod public site now starts from Stripe TEST, no Council naming
+
+Jordi rejected the confusing "Zenod Council" naming in the pure Zenod signup path. Corrective action
+landed without an in-container patch: Stripe TEST products were renamed to `Zenod - Starter`,
+`Zenod - Pro`, and `Zenod - Agency`; the public Zenod site CTA now points explicitly to
+`https://cloud-test.zenod.dev/buy?unit=zenod&tier=starter`; and the hosted Zenod legal copy no longer
+describes the product as Council.
+
+Deployment receipt: `zenod.dev` was rebuilt from the Dokploy application source with
+`apps/site/Dockerfile` and the Swarm service `zenod-site-zxvcqp` converged. External smoke:
+`zenod.dev` ships the `cloud-test` checkout URL and no `buy.stripe.com`/`Zenod Council`/`Council service`
+strings in the loaded entry asset; `https://cloud-test.zenod.dev/buy?unit=zenod&tier=starter` returns
+HTTP 303 to Stripe checkout session `cs_test_...`.
+
+Remaining proper blocker for the from-scratch flow: cloud-test needs its own GitHub OAuth app, because
+GitHub rejected `https://cloud-test.zenod.dev/auth/github/callback` for the existing live client id.
+Do not bypass this. The product homepage and only public starting point remains `https://zenod.dev`;
+test customers reach cloud-test only after choosing hosted purchase. Create/configure the TEST OAuth app
+with homepage `https://zenod.dev` and callback
+`https://cloud-test.zenod.dev/auth/github/callback`, then install its client id/secret into the
+`cloud-test` service before scoring the claim/setup leg.
+
+### 2026-07-09 · [worker/cloud-test] First paid TEST session provisions a working Zenod tenant
+
+Stripe TEST session `cs_test_…GMcxem` completed and paid for `jordi+zenodtest33@alpha9.io`; its signed
+webhook queued the Zenod task. The first provisioner process was interrupted during a Cloud redeploy,
+leaving a healthy tenant but an account stuck at `provisioning`. Recovery then exposed two retry defects:
+Dokploy's deploy call could hang, and a retry created another compose instead of adopting the deterministic
+tenant hostname. Cloud fixes now (a) re-fire queued/stale provisioning on boot and every minute, (b) bound
+the Dokploy deploy call, (c) adopt an already-healthy tenant on retry, and (d) redact the bearer token from
+provisioner logs while retaining it only in the account record.
+
+Live receipts after requeue: account state `running`, tenant slug `jordizenodtest33-gmcxem`,
+`https://z-jordizenodtest33-gmcxem.zenod.dev/api/health` -> 200 at Zenod SHA `2793082e…`;
+the exact Stripe success URL -> 200; `/claim` -> 200; `/mcp` without bearer -> 401; authenticated MCP
+`initialize` -> 200; authenticated `tools/list` -> 200 with 16 tools, including `ingest_memory` and
+`get_ingest_result`. This proves payment -> signed webhook -> automatic standalone deployment -> working
+MCP for one cloud-test user. It does not yet prove three independent users.
+The setup token-rotation path was also corrected to authenticate its tenant call; live receipt:
+rotate -> 200, credential changed, old bearer -> 401, new bearer -> authenticated MCP 200.
+
+Claim remains correctly blocked at GitHub OAuth configuration, not provisioning: `/auth/github` redirects
+with callback `https://cloud-test.zenod.dev/auth/github/callback`, but the currently installed GitHub client
+does not authorize that callback. Required human input is unchanged: create the dedicated cloud-test OAuth
+app and provide its client id/secret. After that, rerun claim/repo-connect and the three-user drill.
+
+Routing clarification from Jordi: users never begin at cloud-test. TEST flow is
+`zenod.dev -> hosted purchase -> Stripe TEST -> cloud-test.zenod.dev success/claim/setup`; LIVE flow is
+`zenod.dev -> hosted purchase -> Stripe LIVE -> cloud.zenod.dev success/claim/setup`. `cloud-test` and
+`cloud` distinguish billing/control-plane environments, not separate product homepages.
+
+Deployment correction: the first 2026-07-09 rebuild had rebuilt Git-backed `main`, so the public bundle
+still contained the old LIVE Payment Link despite the corrected local source. The actual corrected
+`apps/site` source was then built and deployed to the `zenod-site-zxvcqp` service. Fresh external receipt:
+public asset `index-C79W3h2s.js` contains exactly one `cloud-test.zenod.dev/buy` reference, zero
+`buy.stripe.com` references, and zero `cloud.zenod.dev` references; following the hosted CTA returns 303
+to a Stripe `cs_test_...` checkout.
+
+Second independent TEST customer receipt from Jordi's browser screenshots: Stripe success and Cloud claim
+screens rendered correctly for session `cs_test_…BCCNZAY`; signed webhook provisioned distinct tenant
+`jordizenodtest-ccnzay`, compose `3nUSkSxl-6eWBCosCN5RD`, account state `running`, MCP credential stored.
+GitHub then rejected the callback because cloud-test still carries the live OAuth client id. This is a
+clean OAuth-environment failure after successful payment/provisioning, not a tenant failure. The three-user
+deployment count is now at least two independently observed Zenod test customers; claim/setup remains
+blocked until the dedicated TEST OAuth client is installed.
+
+Dedicated TEST GitHub OAuth client installed 2026-07-09 in cloud-test only; credentials are retained in
+the operator Keychain and cloud-test runtime configuration, never in this repository or spine. Receipt:
+`cloud-test/healthz` -> test/healthy; `/auth/github` -> 302 using the TEST client and callback
+`https://cloud-test.zenod.dev/auth/github/callback`; GitHub no longer renders the callback-rejected warning
+(unauthenticated probe reaches the normal GitHub sign-in page). Browser authorization/callback is ready
+for Jordi to resume from the existing claim screen.
+
+### 2026-07-09 · [worker/browser-E2E] Real Chrome funnel GREEN through durable memory commit
+
+Prior curl-only claims were rejected by Jordi and correctly withdrawn. Worker controlled Jordi's
+authenticated Chrome and executed paid session `cs_test_…4PTjqj`. Browser evidence exposed and fixed:
+cached old OAuth redirects; duplicate success -> claim -> OAuth screens; stale SPA HTML/API cache; a false
+`No workspace` flash while account data loaded; and Ring/council controls leaking into a pure Zenod account.
+Success now links directly to OAuth, `/claim` is only a compatibility redirect, relevant HTML/auth/API
+responses are non-cacheable, account load completes before rendering, and Zenod accounts hide Ring.
+
+Worker created the dedicated `Zenod Memory a72b` GitHub App through the product manifest flow and installed
+it on exactly one disposable customer-owned repo: `AlfaBlok/zenod-cloud-test-vault-4ptjqj`. Final Chrome
+result: Payment received -> one GitHub claim action -> authorization -> authenticated Zenod Console; no
+second claim screen, no `No workspace` flash, customer vault visible, Zenod evidence controls visible, and
+no Ring navigation/configuration.
+
+Authenticated MCP battery on tenant `jorditestzenod0000-4ptjqj`: `store_memory` job
+`9a6d34a3-f451-4ac9-a223-9091ec003382` -> done; commit
+`adb50f9511df0d0a74cfbe94b98bc267a9e95f0d`; `search_memory` found the exact marker in both
+`Inbox/needs-filing-2026-07-09T19-30-03.md` and `Log/2026-07-09.md`; `get_memory` returned the exact
+verbatim body and GitHub URL. GitHub independently verified the commit and both changed files. Diagnostic
+bearer was rotated afterward: old -> 401, replacement -> MCP 200. This TEST customer is green through
+Stripe, provisioning, OAuth, single-repo installation, console, MCP write/read, and durable GitHub receipt.
+
+### 2026-07-09 · [Jordi correction] Customer GitHub authority is OAuth only
+
+The preceding dedicated `Zenod Memory a72b` GitHub App/customer-install path is **REJECTED and
+superseded**. Jordi's product rule is explicit: the end customer performs one GitHub OAuth authorization;
+Zenod must not ask them to create/install another App, paste another token, or complete another authority
+flow. The mistakenly created test App was queued for deletion in GitHub and `/data/vault-app.json` was
+removed from cloud-test.
+
+Cloud-test now requests `read:user user:email repo` in the single checkout claim OAuth, retains that OAuth
+token on the account, automatically creates/reuses a private `zenod-memory-<tenant>` repository in the
+customer account, pushes the OAuth token + repo into the tenant, and records the customer-owned vault.
+The legacy GitHub-App connect route is disabled for customers. Browser retest reached GitHub's one OAuth
+"additional permissions" page, but GitHub left its Authorize button disabled while organization-access
+rows remained stuck loading in the current extension-heavy Chrome profile. Therefore the corrected
+OAuth-only implementation is deployed and code-green, but the new browser callback is not yet honestly
+scored green; do not restore or reintroduce the App-install workaround.

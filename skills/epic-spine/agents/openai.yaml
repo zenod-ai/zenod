@@ -1,0 +1,4 @@
+interface:
+  display_name: "EpicSpine"
+  short_description: "Authority-driven epic delivery system"
+  default_prompt: "Use $epic-spine to bind a role and steward, orient from the epic document, reconcile its GitHub execution state, and drive the next handoff."

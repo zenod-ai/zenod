@@ -635,12 +635,23 @@ describe("Epaminon MCP execution status", () => {
   let dir: string;
   let runtime: Runtime;
   let server: ServerType;
+  let runnerServer: ServerType;
   let url: URL;
   let token: string;
+  let oldRunnerUrl: string | undefined;
 
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), "zenod-epaminon-mcp-"));
+    oldRunnerUrl = process.env.ZENOD_RUNNER_POKE_URL;
+    runnerServer = serve({
+      fetch: (request) => (new URL(request.url).pathname === "/run" ? Response.json({ ok: true }) : new Response("not found", { status: 404 })),
+      port: 0,
+    });
+    const runnerPort = (runnerServer.address() as AddressInfo).port;
+    process.env.ZENOD_RUNNER_POKE_URL = `http://127.0.0.1:${runnerPort}`;
     runtime = new Runtime(dir, EPAMINON_AGENT);
+    runtime.settings.set("github_token", "test-token");
+    runtime.settings.setRaw("epaminon_codex_cli_auth", "test-cli");
     token = runtime.settings.apiToken();
     await runtime.executionQueue!.enqueue({
       executionId: "104",
@@ -665,6 +676,9 @@ describe("Epaminon MCP execution status", () => {
 
   afterAll(async () => {
     server.close();
+    runnerServer.close();
+    if (oldRunnerUrl === undefined) delete process.env.ZENOD_RUNNER_POKE_URL;
+    else process.env.ZENOD_RUNNER_POKE_URL = oldRunnerUrl;
     runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
@@ -862,16 +876,86 @@ describe("Epaminon MCP execution status", () => {
 
       const result = await client.callTool({
         name: "epaminon.run_existing_issue",
-        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch.", notifyOnStart: false },
+        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch.", effort: "high", notifyOnStart: false },
       });
       const structured = result.structuredContent as {
-        ticket: { executionId: string; target: string; state: string; context: string; notifyOnStart?: boolean };
+        ticket: { executionId: string; target: string; state: string; context: string; effort?: string; note?: string; notifyOnStart?: boolean };
       };
       expect(structured.ticket).toMatchObject({ target: "zenod-ai/zenod#270" });
       expect(["queued", "running"]).toContain(structured.ticket.state);
       expect(structured.ticket.executionId).toMatch(/^direct-/);
       expect(structured.ticket.context).toContain("Use the current branch.");
+      expect(structured.ticket.context).toContain("Effort: high");
+      expect(structured.ticket.effort).toBe("high");
       expect(structured.ticket.notifyOnStart).toBe(false);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("exposes prompt-first Epaminon task dispatch aliases and status readback", async () => {
+    const client = await connect();
+    try {
+      const { tools } = await client.listTools();
+      const names = tools.map((t) => t.name);
+      expect(names).toContain("epaminon.run_task");
+      expect(names).toContain("epaminon.dispatch_worker");
+
+      const runTask = tools.find((t) => t.name === "epaminon.run_task");
+      expect((runTask?.inputSchema as { properties?: Record<string, unknown> })?.properties).toEqual(
+        expect.objectContaining({
+          prompt: expect.any(Object),
+          effort: expect.any(Object),
+          repo: expect.any(Object),
+          path: expect.any(Object),
+          outputTarget: expect.any(Object),
+          mcpServers: expect.any(Object),
+          skills: expect.any(Object),
+          instructions: expect.any(Object),
+        }),
+      );
+
+      const result = await client.callTool({
+        name: "epaminon.run_task",
+        arguments: {
+          prompt: "Research the current server MCP contract.",
+          effort: "high",
+          repo: "zenod-ai/zenod",
+          path: "packages/server",
+          outputTarget: "write a concise handoff artifact",
+          mcpServers: ["github", "zenod-memory"],
+          skills: ["epic-spine"],
+          instructions: "Keep runner lifecycle unchanged.",
+        },
+      });
+      const structured = result.structuredContent as {
+        executionId: string;
+        statusTool: string;
+        typedStatusTool: string;
+        ticket: { executionId: string; target: string; state: string; context: string };
+      };
+      expect(structured.executionId).toBe(structured.ticket.executionId);
+      expect(structured.statusTool).toBe("execution_status");
+      expect(structured.typedStatusTool).toBe("epaminon.execution_status");
+      expect(structured.ticket.target).toBe(`ephemeral:${structured.ticket.executionId}`);
+      expect(structured.ticket.context).toContain("Research the current server MCP contract.");
+      expect(structured.ticket.context).toContain("Effort: high");
+      expect(structured.ticket.context).toContain("Target repo: zenod-ai/zenod");
+      expect(structured.ticket.context).toContain("Target path within repo: packages/server");
+      expect(structured.ticket.context).toContain("Output target: write a concise handoff artifact");
+      expect(structured.ticket.context).toContain("MCP servers/context: github, zenod-memory");
+      expect(structured.ticket.context).toContain("Skills: epic-spine");
+
+      const status = await client.callTool({ name: "execution_status", arguments: { message: structured.executionId } });
+      expect((status.structuredContent as { tickets: Array<{ executionId: string }> }).tickets).toEqual([
+        expect.objectContaining({ executionId: structured.executionId }),
+      ]);
+
+      const alias = await client.callTool({
+        name: "epaminon.dispatch_worker",
+        arguments: { prompt: "Summarize one file.", outputTarget: "return summary only" },
+      });
+      expect((alias.structuredContent as { executionId: string }).executionId).toMatch(/^ephemeral-/);
     } finally {
       await client.close();
     }
@@ -885,14 +969,16 @@ describe("Epaminon MCP execution status", () => {
 
       const result = await client.callTool({
         name: "epaminon.run_ephemeral_task",
-        arguments: { objective: "Research one thing without creating a backlog ticket.", artifactPolicy: "return summary only" },
+        arguments: { objective: "Research one thing without creating a backlog ticket.", effort: "high", artifactPolicy: "return summary only" },
       });
-      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string } };
+      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string; effort?: string; note?: string } };
       expect(structured.ticket.executionId).toMatch(/^ephemeral-/);
       expect(structured.ticket.target).toBe(`ephemeral:${structured.ticket.executionId}`);
       expect(["queued", "running"]).toContain(structured.ticket.state);
       expect(structured.ticket.context).toContain("Research one thing");
+      expect(structured.ticket.context).toContain("Effort: high");
       expect(structured.ticket.context).toContain("return summary only");
+      expect(structured.ticket.effort).toBe("high");
     } finally {
       await client.close();
     }

@@ -42,9 +42,11 @@ anti-phishing guarded). No secret material is ever written to logs.
 from __future__ import annotations
 
 import html
+import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Mapping, Optional
 
 
 # --------------------------------------------------------------------------- #
@@ -55,6 +57,52 @@ from typing import Any, Dict, List, Optional
 
 KIND_OAUTH2 = "oauth2"   # click Authorize -> redirect -> callback exchanges the code
 KIND_TOKEN = "token"     # paste a token/id -> stored under `service` in the token store
+
+X_CONFIG_KEYS = (
+    "X_OAUTH2_CLIENT_ID",
+    "X_OAUTH2_CLIENT_SECRET",
+    "X_OAUTH2_REDIRECT_URI",
+    "X_OAUTH2_SCOPES",
+    "X_OAUTH_CONSUMER_KEY",
+    "X_OAUTH_CONSUMER_SECRET",
+    "X_BEARER_TOKEN",
+    "X_OAUTH_ACCESS_TOKEN",
+    "X_OAUTH_ACCESS_TOKEN_SECRET",
+)
+
+X_OAUTH2_REQUIRED = ("X_OAUTH2_CLIENT_ID", "X_OAUTH2_REDIRECT_URI")
+X_SENDER_REQUIRED = (
+    "X_OAUTH_CONSUMER_KEY",
+    "X_OAUTH_CONSUMER_SECRET",
+    "X_OAUTH_ACCESS_TOKEN",
+    "X_OAUTH_ACCESS_TOKEN_SECRET",
+)
+X_CONFIG_METADATA_KEYS = ("X_VERIFIED_USER_ID", "X_VERIFIED_USERNAME")
+X_DEVELOPER_CONSOLE_URL = "https://console.x.com/"
+X_CREDENTIALS_GUIDE_URL = "https://docs.x.com/x-api/getting-started/getting-access"
+
+X_SETUP_FIELDS = (
+    (
+        "X_OAUTH_CONSUMER_KEY",
+        "Consumer Key / API Key",
+        "From the Application Created screen: Consumer Key.",
+    ),
+    (
+        "X_OAUTH_CONSUMER_SECRET",
+        "Secret Key / API Key Secret",
+        "From the Application Created screen: Secret Key.",
+    ),
+    (
+        "X_OAUTH_ACCESS_TOKEN",
+        "Access Token",
+        "This binds Callisthenes to the X account that generated the token.",
+    ),
+    (
+        "X_OAUTH_ACCESS_TOKEN_SECRET",
+        "Access Token Secret",
+        "Generate this together with the Access Token after enabling Read and write.",
+    ),
+)
 
 
 @dataclass
@@ -153,10 +201,13 @@ class ConnectPage:
         engine: Any,
         connectors: Optional[List[Connector]] = None,
         config: Optional[ConnectPageConfig] = None,
+        x_verifier: Optional[Callable[[Dict[str, str]], Dict[str, Any]]] = None,
     ):
         self.engine = engine
         self.connectors = connectors if connectors is not None else default_connectors()
         self.config = config or ConnectPageConfig.from_env()
+        self.x_verifier = x_verifier or _verify_x_account
+        self.apply_x_runtime_config()
 
     # -- tenant identity (single-owner hosted instance) ------------------------
     def tenant(self) -> Optional[str]:
@@ -165,6 +216,102 @@ class ConnectPage:
         return self.config.owner_tenant or (
             os.getenv("CALLISTHENES_OWNER_TENANT") or os.getenv("MCP_BEARER_TOKEN")
         )
+
+    # -- tenant-local X app/runtime config ------------------------------------
+    def apply_x_runtime_config(self) -> Dict[str, str]:
+        """Load tenant-local X config from /data and apply it to this process.
+
+        The connect page displays only set/missing status, but the shared ChatAuth
+        engine needs the OAuth2 values in memory to build the authorize/exchange
+        flow. Env stays the bootstrap source; the saved /data file lets a hosted
+        tenant paste credentials after provisioning without rebuilding the image.
+        """
+        cfg = self.x_config()
+        for key, value in cfg.items():
+            if value:
+                os.environ[key] = value
+        if self.engine is not None:
+            if "X_OAUTH2_CLIENT_ID" in cfg and hasattr(self.engine, "_client_id"):
+                self.engine._client_id = cfg.get("X_OAUTH2_CLIENT_ID", "")  # noqa: SLF001
+            if "X_OAUTH2_CLIENT_SECRET" in cfg and hasattr(self.engine, "_client_secret"):
+                self.engine._client_secret = cfg.get("X_OAUTH2_CLIENT_SECRET", "")  # noqa: SLF001
+            if "X_OAUTH2_REDIRECT_URI" in cfg and hasattr(self.engine, "_redirect_uri"):
+                self.engine._redirect_uri = cfg.get("X_OAUTH2_REDIRECT_URI", "")  # noqa: SLF001
+            if "X_OAUTH2_SCOPES" in cfg and hasattr(self.engine, "_scopes"):
+                self.engine._scopes = cfg.get("X_OAUTH2_SCOPES", "")  # noqa: SLF001
+        return cfg
+
+    def x_config(self) -> Dict[str, str]:
+        """Effective X config. Env provides defaults; /data overrides non-empty keys."""
+        cfg = {key: os.getenv(key, "").strip() for key in X_CONFIG_KEYS if os.getenv(key, "").strip()}
+        cfg.update(_read_x_config_file())
+        return cfg
+
+    def x_config_status(self) -> Dict[str, Any]:
+        cfg = self.x_config()
+        present = {key: bool(cfg.get(key)) for key in X_CONFIG_KEYS}
+        missing_oauth2 = [key for key in X_OAUTH2_REQUIRED if not present.get(key)]
+        missing_sender = [key for key in X_SENDER_REQUIRED if not present.get(key)]
+        metadata = _read_x_config_metadata()
+        return {
+            "present": present,
+            "oauth2_ready": not missing_oauth2,
+            "missing_oauth2": missing_oauth2,
+            "sender_ready": not missing_sender,
+            "missing_sender": missing_sender,
+            "verified_user_id": metadata.get("X_VERIFIED_USER_ID", ""),
+            "verified_username": metadata.get("X_VERIFIED_USERNAME", ""),
+            "redirect_uri": cfg.get("X_OAUTH2_REDIRECT_URI", ""),
+            "config_path": str(_x_config_path()),
+        }
+
+    def save_x_config(self, values: Any) -> Dict[str, Any]:
+        if isinstance(values, str):
+            parsed = _parse_env_config(values)
+        elif isinstance(values, Mapping):
+            parsed = {
+                key: str(values.get(key, "")).strip().strip("\"'").strip()
+                for key in X_SENDER_REQUIRED
+                if str(values.get(key, "")).strip().strip("\"'").strip()
+            }
+        else:
+            parsed = {}
+        if not parsed:
+            return {
+                "ok": False,
+                "error": "Enter at least one X credential to save.",
+            }
+        existing = _read_x_config_file()
+        existing.update(parsed)
+        for key in X_CONFIG_METADATA_KEYS:
+            existing.pop(key, None)
+        _write_x_config_file(existing)
+        cfg = self.apply_x_runtime_config()
+        missing = [key for key in X_SENDER_REQUIRED if not cfg.get(key)]
+        return {
+            "ok": True,
+            "saved_keys": sorted(parsed),
+            "sender_ready": not missing,
+            "missing_sender": missing,
+        }
+
+    def verify_x_connection(self) -> Dict[str, Any]:
+        cfg = self.apply_x_runtime_config()
+        missing = [key for key in X_SENDER_REQUIRED if not cfg.get(key)]
+        if missing:
+            return {
+                "ok": False,
+                "error": "Complete all four X credential fields before verification.",
+                "missing_sender": missing,
+            }
+        result = self.x_verifier(cfg)
+        if not result.get("ok"):
+            return result
+        saved = _read_x_config_file(include_metadata=True)
+        saved["X_VERIFIED_USER_ID"] = str(result.get("user_id", "")).strip()
+        saved["X_VERIFIED_USERNAME"] = str(result.get("username", "")).strip()
+        _write_x_config_file(saved)
+        return result
 
     # -- connection status (generic over connector kind) -----------------------
     def _status_for(self, c: Connector, tenant: str) -> Dict[str, Any]:
@@ -191,14 +338,21 @@ class ConnectPage:
         tenant = self.tenant()
         if not tenant:
             return {"ok": False, "error": "no owner tenant configured (provisioner seam)."}
+        self.apply_x_runtime_config()
         # engine.connect returns {ok, authorize_url, ...} or an error envelope.
-        return self.engine.connect(tenant, c.service)
+        try:
+            return self.engine.connect(tenant, c.service)
+        except Exception as e:  # noqa: BLE001 — setup errors belong on the page, not as 500s
+            code_attr = getattr(e, "code", "unavailable")
+            msg = getattr(e, "message", str(e))
+            return {"ok": False, "error": {"code": code_attr, "message": msg}}
 
     # -- action: OAuth2 callback (exchange the code) ---------------------------
     def complete_oauth(self, code: str, state: str, service: str = "x") -> Dict[str, Any]:
         tenant = self.tenant()
         if not tenant:
             return {"ok": False, "error": "no owner tenant configured (provisioner seam)."}
+        self.apply_x_runtime_config()
         try:
             return self.engine.complete_connect(tenant, code, state, service)
         except Exception as e:  # noqa: BLE001 — surface loudly on the page, never fake success
@@ -258,10 +412,13 @@ class ConnectPage:
         tenant = self.tenant()
         rows = []
         for c in self.connectors:
+            if c.id == "x":
+                continue
             status = self._status_for(c, tenant) if tenant else {"connected": False}
             rows.append(_render_connector_row(c, status))
         return _PAGE_TEMPLATE.format(
             rows="\n".join(rows),
+            x_config_block=_render_x_config_block(self.x_config_status()),
             mcp_block=_render_mcp_block(self.config),
             flash=_render_flash(flash, flash_kind),
         )
@@ -300,6 +457,188 @@ def _render_flash(flash: Optional[str], kind: str) -> str:
     if not flash:
         return ""
     return f'<div class="flash {html.escape(kind)}">{html.escape(flash)}</div>'
+
+
+def _x_config_path() -> Path:
+    explicit = os.getenv("CALLISTHENES_X_CONFIG_PATH", "").strip()
+    if explicit:
+        return Path(explicit)
+    data_dir = os.getenv("CALLISTHENES_DATA_DIR", "/data")
+    return Path(data_dir) / "x-config.json"
+
+
+def _read_x_config_file(*, include_metadata: bool = False) -> Dict[str, str]:
+    path = _x_config_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    allowed = X_CONFIG_KEYS + (X_CONFIG_METADATA_KEYS if include_metadata else ())
+    return {
+        key: str(data.get(key, "")).strip()
+        for key in allowed
+        if str(data.get(key, "")).strip()
+    }
+
+
+def _read_x_config_metadata() -> Dict[str, str]:
+    saved = _read_x_config_file(include_metadata=True)
+    return {key: saved.get(key, "") for key in X_CONFIG_METADATA_KEYS if saved.get(key)}
+
+
+def _write_x_config_file(config: Dict[str, str]) -> None:
+    path = _x_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    allowed = X_CONFIG_KEYS + X_CONFIG_METADATA_KEYS
+    safe = {
+        key: str(config.get(key, "")).strip()
+        for key in allowed
+        if str(config.get(key, "")).strip()
+    }
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(safe, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    tmp.replace(path)
+
+
+def _parse_env_config(raw: str) -> Dict[str, str]:
+    parsed: Dict[str, str] = {}
+    for line in (raw or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key not in X_CONFIG_KEYS:
+            continue
+        value = value.strip().strip("\"'").strip()
+        if value:
+            parsed[key] = value
+    return parsed
+
+
+def _verify_x_account(config: Dict[str, str]) -> Dict[str, Any]:
+    """Verify the saved OAuth1 credentials and return the bound X account."""
+    try:
+        import httpx
+        from oauthlib.oauth1 import Client as OAuth1Client
+
+        client = OAuth1Client(
+            client_key=config["X_OAUTH_CONSUMER_KEY"],
+            client_secret=config["X_OAUTH_CONSUMER_SECRET"],
+            resource_owner_key=config["X_OAUTH_ACCESS_TOKEN"],
+            resource_owner_secret=config["X_OAUTH_ACCESS_TOKEN_SECRET"],
+            signature_type="AUTH_HEADER",
+        )
+        url, headers, _ = client.sign(
+            "https://api.x.com/2/users/me",
+            http_method="GET",
+            headers={},
+        )
+        response = httpx.get(url, headers=headers, timeout=15.0)
+    except Exception:
+        return {
+            "ok": False,
+            "error": "Could not reach X to verify these credentials. Nothing was marked connected.",
+        }
+    if response.status_code != 200:
+        return {
+            "ok": False,
+            "error": (
+                f"X rejected these credentials (HTTP {response.status_code}). Check all four "
+                "values and regenerate the Access Token after enabling Read and write."
+            ),
+        }
+    try:
+        account = response.json().get("data") or {}
+    except Exception:
+        account = {}
+    if not account.get("id") or not account.get("username"):
+        return {
+            "ok": False,
+            "error": "X accepted the request but did not return an account identity.",
+        }
+    return {
+        "ok": True,
+        "user_id": str(account["id"]),
+        "username": str(account["username"]),
+        "name": str(account.get("name") or ""),
+    }
+
+
+def _render_x_config_block(status: Dict[str, Any]) -> str:
+    present = status.get("present") or {}
+    sender_ready = bool(status.get("sender_ready"))
+    username = str(status.get("verified_username") or "")
+    if username:
+        badge = f'<span class="badge on">Connected as @{html.escape(username)}</span>'
+    elif sender_ready:
+        badge = '<span class="badge warn">Credentials saved, verification needed</span>'
+    else:
+        badge = '<span class="badge off">Not connected</span>'
+    fields = []
+    for key, label, help_text in X_SETUP_FIELDS:
+        is_set = bool(present.get(key))
+        required = "" if is_set else " required"
+        placeholder = "Saved - paste a new value to replace" if is_set else f"Paste {label}"
+        state = "Saved" if is_set else "Required"
+        fields.append(
+            '<div class="credential-field">'
+            f'<div class="field-head"><label for="{html.escape(key)}">{html.escape(label)}</label>'
+            f'<span class="field-state {("set" if is_set else "missing")}">{state}</span></div>'
+            f'<input id="{html.escape(key)}" name="{html.escape(key)}" type="password" '
+            f'autocomplete="new-password" spellcheck="false" placeholder="{html.escape(placeholder)}"{required} />'
+            f'<p>{html.escape(help_text)}</p></div>'
+        )
+    return (
+        '<section class="xsetup" aria-labelledby="x-setup-title">'
+        f'<div class="setup-title"><div><h2 id="x-setup-title">Connect your X account</h2>'
+        '<p class="hint">Use credentials generated by your own X app. There is no user-ID field: '
+        'your Access Token is what binds this instance to the X account that will post.</p></div>'
+        f'{badge}</div>'
+        '<ol class="setup-steps">'
+        f'<li><a href="{X_DEVELOPER_CONSOLE_URL}" target="_blank" rel="noreferrer">Open the X Developer Console</a> '
+        'and sign in with the account you want Callisthenes to post as.</li>'
+        '<li>Create an app. The <strong>Application Created Successfully</strong> screen gives you '
+        '<strong>Consumer Key</strong>, <strong>Secret Key</strong>, and <strong>Bearer Token</strong>. '
+        'Use the first two below; Callisthenes does not need the Bearer Token for posting.</li>'
+        '<li>Close that screen and open your app. In <strong>User authentication settings</strong>, '
+        'enable <strong>OAuth 1.0a</strong> and choose <strong>Read and write</strong>.</li>'
+        '<li>Open <strong>Keys and tokens</strong>. Under <strong>Access Token and Secret</strong>, click '
+        '<strong>Generate</strong>. This produces the two user credentials that bind the posting account. '
+        'If you changed permissions, regenerate this pair.</li>'
+        '<li>Paste the four values below. Callisthenes will save them only in this hosted instance and '
+        'verify which @account they belong to.</li>'
+        '</ol>'
+        '<div class="credential-map" aria-label="X credential mapping">'
+        '<h3>The three values X showed you</h3>'
+        '<div><strong>Consumer Key</strong><span>&rarr;</span><span>Consumer Key / API Key field</span></div>'
+        '<div><strong>Secret Key</strong><span>&rarr;</span><span>Secret Key / API Key Secret field</span></div>'
+        '<div><strong>Bearer Token</strong><span>&rarr;</span><span>Do not enter it here</span></div>'
+        '<p>You still need to generate <strong>Access Token</strong> and '
+        '<strong>Access Token Secret</strong> after enabling OAuth 1.0a Read and write.</p>'
+        '</div>'
+        '<p class="credential-warning"><strong>Credentials shown in screenshots or chat are exposed.</strong> '
+        'Regenerate them in X before saving them here.</p>'
+        f'<p class="official-guide"><a href="{X_CREDENTIALS_GUIDE_URL}" target="_blank" rel="noreferrer">'
+        'Read X\'s official credential guide</a></p>'
+        '<form method="post" action="/connect/x/config" class="xform">'
+        f'<div class="credential-grid">{"".join(fields)}</div>'
+        '<button class="btn primary full" type="submit">Save and verify X account</button>'
+        '<p class="security-note">Secrets are never shown again after saving.</p>'
+        '</form></section>'
+    )
 
 
 def _render_connector_row(c: Connector, status: Dict[str, Any]) -> str:
@@ -379,11 +718,30 @@ h1.title{{font-size:22px;margin:0 0 2px}} .sub{{color:#9aa0a6;margin:0 0 24px;fo
 .clabel{{font-weight:600}} .ctag{{color:#9aa0a6;font-size:13px;margin-top:2px}}
 .badge{{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle}}
 .badge.on{{background:#123524;color:#4ade80}} .badge.off{{background:#2a2140;color:#c4b5fd}}
+.badge.warn{{background:#3a2a12;color:#fbbf24}}
 .btn{{display:inline-block;background:#262b35;color:#e8e8ea;border:1px solid #333a46;border-radius:8px;
 padding:8px 14px;font-size:14px;cursor:pointer;text-decoration:none}}
 .btn.primary{{background:#1d9bf0;border-color:#1d9bf0;color:#fff}}
 .tokform{{display:flex;gap:8px}} .tokform input{{flex:1;min-width:160px;background:#0f1115;border:1px solid #333a46;
 border-radius:8px;color:#e8e8ea;padding:8px 10px}}
+.xsetup{{margin-top:14px;background:#12151b;border:1px solid #262b35;border-radius:12px;padding:18px}}
+.xsetup h2{{font-size:17px;margin:0 0 4px}} .small{{color:#9aa0a6;font-size:12px;margin:6px 0}}
+.small code{{color:#dbeafe}} .warntext{{color:#fbbf24}}
+.setup-title{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}}
+.setup-title .badge{{margin:2px 0 0}} .setup-title .hint{{max-width:470px}}
+.setup-steps{{color:#c4c8ce;font-size:13px;margin:16px 0;padding-left:22px}}
+.setup-steps li{{margin:8px 0;padding-left:3px}} a{{color:#7dd3fc}}
+.credential-map{{border-top:1px solid #2b303a;border-bottom:1px solid #2b303a;padding:12px 0;margin:14px 0;color:#c4c8ce;font-size:12px}}
+.credential-map h3{{font-size:13px;margin:0 0 8px;color:#e8e8ea}} .credential-map>div{{display:grid;grid-template-columns:145px 18px 1fr;gap:5px;margin:5px 0}}
+.credential-map p{{margin:9px 0 0;color:#9aa0a6}} .credential-warning{{background:#32161d;color:#fecaca;border-left:3px solid #ef4444;padding:9px 11px;font-size:12px;margin:0 0 14px}}
+.official-guide{{font-size:13px;margin:0 0 16px}}
+.xform{{display:grid;gap:12px}} .credential-grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
+.credential-field{{min-width:0}} .field-head{{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:5px}}
+.credential-field label{{font-size:12px;font-weight:600}} .credential-field input{{width:100%;background:#0f1115;
+border:1px solid #333a46;border-radius:8px;color:#e8e8ea;padding:9px 10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}}
+.credential-field p{{color:#8f96a1;font-size:11px;line-height:1.4;margin:5px 0 0}}
+.field-state{{font-size:10px;font-weight:600}} .field-state.set{{color:#4ade80}} .field-state.missing{{color:#fbbf24}}
+.btn.full{{display:block;width:100%;text-align:center;margin-top:2px}} .security-note{{color:#7f8792;font-size:11px;text-align:center;margin:0}}
 .mcp{{margin-top:28px;background:#12151b;border:1px solid #262b35;border-radius:12px;padding:16px}}
 .mcp h2{{font-size:16px;margin:0 0 4px}} .hint{{color:#9aa0a6;font-size:13px;margin:0 0 12px}}
 .field{{margin:10px 0}} .field label{{display:block;font-size:12px;color:#9aa0a6;margin-bottom:4px}}
@@ -395,11 +753,13 @@ border-radius:8px;color:#e8e8ea;padding:8px 10px}}
 .flash{{border-radius:8px;padding:10px 12px;margin:0 0 16px;font-size:14px}}
 .flash.info{{background:#12233a;color:#93c5fd}} .flash.ok{{background:#123524;color:#4ade80}}
 .flash.err{{background:#3a1220;color:#fca5a5}}
+@media(max-width:560px){{.credential-grid{{grid-template-columns:1fr}}.credential-map>div{{grid-template-columns:1fr}}.credential-map>div span:first-of-type{{display:none}}}}
 </style></head>
 <body><div class="wrap">
 <h1 class="title">Callisthenes</h1>
 <p class="sub">One mouth for all your agents. Authorize each platform once — every agent sends through here.</p>
 {flash}
+{x_config_block}
 {rows}
 {mcp_block}
 </div>
@@ -439,6 +799,7 @@ def register(
     engine: Any = None,
     connectors: Optional[List[Connector]] = None,
     config: Optional[ConnectPageConfig] = None,
+    x_verifier: Optional[Callable[[Dict[str, str]], Dict[str, Any]]] = None,
 ) -> ConnectPage:
     """Mount the connect page on the FastMCP app.
 
@@ -461,7 +822,12 @@ def register(
             from __init__ import ChatAuth  # type: ignore
         engine = ChatAuth()
 
-    page = ConnectPage(engine=engine, connectors=connectors, config=config)
+    page = ConnectPage(
+        engine=engine,
+        connectors=connectors,
+        config=config,
+        x_verifier=x_verifier,
+    )
 
     custom_route = getattr(mcp, "custom_route", None)
     if not callable(custom_route):
@@ -511,6 +877,28 @@ def register(
         err = result.get("error")
         msg = err.get("message") if isinstance(err, dict) else (err or "could not save")
         return HTMLResponse(page.render_page(flash=str(msg), flash_kind="err"), status_code=400)
+
+    @custom_route("/connect/x/config", methods=["POST"])
+    async def _connect_x_config(request: "Request") -> Any:  # noqa: ANN001
+        form = await request.form()
+        values = {key: str(form.get(key, "")) for key in X_SENDER_REQUIRED}
+        result = page.save_x_config(values)
+        if result.get("ok"):
+            if result.get("sender_ready"):
+                verified = page.verify_x_connection()
+                if verified.get("ok"):
+                    username = str(verified.get("username") or "")
+                    msg = f"X connected and verified as @{username}."
+                    return HTMLResponse(page.render_page(flash=msg, flash_kind="ok"), status_code=200)
+                return HTMLResponse(
+                    page.render_page(flash=str(verified.get("error")), flash_kind="err"),
+                    status_code=400,
+                )
+            missing = ", ".join(result.get("missing_sender") or [])
+            msg = f"Saved. Complete the remaining X fields: {missing}."
+            return HTMLResponse(page.render_page(flash=msg, flash_kind="info"), status_code=200)
+        err = result.get("error") or "could not save X config"
+        return HTMLResponse(page.render_page(flash=str(err), flash_kind="err"), status_code=400)
 
     setattr(mcp, "_connect_page", page)
     return page

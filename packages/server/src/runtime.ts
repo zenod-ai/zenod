@@ -63,6 +63,7 @@ import { type RunEphemeralJourneyInput, type RunEphemeralJourneyResult } from ".
 import { extractIntakeAsks, intakeAsksContextNote, prefixReplyWithIntakeAsks, resolveCurrentIntents, shouldDecomposeIntake, type IntakeAsk } from "./intakeAsks.js";
 import {
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+  EPAMINON_RUN_TASK_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
   RUN_ISSUE_SHAPE,
   V4_FIND_ISSUE_SHAPE,
@@ -94,6 +95,15 @@ interface TaskingRunContext {
   journeyId?: string;
 }
 
+type EpaminonEffort = "low" | "medium" | "high" | "max";
+
+type RunEphemeralTaskInput = RunEphemeralJourneyInput & {
+  effort?: EpaminonEffort;
+  outputTarget?: string;
+  mcpServers?: string[];
+  skills?: string[];
+};
+
 function peerToolInputSchema(schemaKey?: string): ZodTypeAny | undefined {
   switch (schemaKey) {
     case "archus.get_issue":
@@ -106,6 +116,9 @@ function peerToolInputSchema(schemaKey?: string): ZodTypeAny | undefined {
       return z.object(GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE);
     case "epaminon.run_existing_issue":
       return z.object(RUN_ISSUE_SHAPE);
+    case "epaminon.run_task":
+    case "epaminon.dispatch_worker":
+      return z.object(EPAMINON_RUN_TASK_SHAPE);
     case "epaminon.run_ephemeral_task":
       return z.object(RUN_EPHEMERAL_TASK_SHAPE);
     default:
@@ -796,10 +809,14 @@ export class Runtime {
           instructions: z.string().optional().describe("extra execution constraints/context"),
           repo: z.string().optional().describe("target repo as owner/repo when the task works a known codebase"),
           path: z.string().optional().describe("sub-path within the repo where the relevant code lives, if known"),
+          effort: z.enum(["low", "medium", "high", "max"]).optional().describe("worker effort/depth hint"),
+          outputTarget: z.string().optional().describe("where durable output should land, if specified"),
+          mcpServers: z.array(z.string()).optional().describe("MCP servers/connectors to prewire for the worker"),
+          skills: z.array(z.string()).optional().describe("skills/playbooks the worker should load"),
           artifactPolicy: z.string().optional().describe("where/how Epaminon should report artifacts, if the user specified it"),
         }),
         run: async (input) => {
-          const args = input as Partial<RunEphemeralJourneyInput>;
+          const args = input as Partial<RunEphemeralTaskInput>;
           if (!args.objective) return "ERROR: objective is required.";
           const result = await this.runEphemeralTask({
             ...contextFor(args),
@@ -807,6 +824,10 @@ export class Runtime {
             ...(args.instructions ? { instructions: args.instructions } : {}),
             ...(args.repo ? { repo: args.repo } : {}),
             ...(args.path ? { path: args.path } : {}),
+            ...(args.effort ? { effort: args.effort } : {}),
+            ...(args.outputTarget ? { outputTarget: args.outputTarget } : {}),
+            ...(args.mcpServers?.length ? { mcpServers: args.mcpServers } : {}),
+            ...(args.skills?.length ? { skills: args.skills } : {}),
             ...(args.artifactPolicy ? { artifactPolicy: args.artifactPolicy } : {}),
           });
           return formatEphemeralResult(result);
@@ -1786,7 +1807,7 @@ export class Runtime {
     });
   }
 
-  async runEphemeralTask(input: RunEphemeralJourneyInput): Promise<RunEphemeralJourneyResult> {
+  async runEphemeralTask(input: RunEphemeralTaskInput): Promise<RunEphemeralJourneyResult> {
     if (this.agent.name !== "console") {
       throw new Error("ephemeral execution journeys are owned by the Console");
     }
@@ -1806,6 +1827,16 @@ export class Runtime {
     // as the meta-instruction that asked for it.
     const requestText = [input.originalRequest, input.objective, input.instructions].filter(Boolean).join(" ");
     const titleSource = isIssueCreateIntent(requestText) ? extractIssueCreateSubject(input.objective) : input.objective;
+    const outputPolicy = input.artifactPolicy || input.outputTarget;
+    const executionInstructions = [
+      input.instructions,
+      input.effort ? `Effort: ${input.effort}` : "",
+      input.outputTarget ? `Output target: ${input.outputTarget}` : "",
+      input.mcpServers?.length ? `MCP servers/context: ${input.mcpServers.join(", ")}` : "",
+      input.skills?.length ? `Skills: ${input.skills.join(", ")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     const result = await this.createIssueThenRun({
       originalRequest: input.originalRequest,
       conversationId: input.conversationId ?? null,
@@ -1819,11 +1850,11 @@ export class Runtime {
           ...(repo ? { repo } : {}),
           ...(path ? { path } : {}),
           ...(match?.deployNote ? { deployNote: match.deployNote } : {}),
-          ...(input.artifactPolicy ? { artifactPolicy: input.artifactPolicy } : {}),
+          ...(outputPolicy ? { artifactPolicy: outputPolicy } : {}),
         }),
         labels: ["one-off"],
       },
-      ...(input.instructions ? { runInstructions: input.instructions } : {}),
+      ...(executionInstructions ? { runInstructions: executionInstructions } : {}),
     });
     return {
       journeyId: result.journeyId,
