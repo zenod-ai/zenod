@@ -147,6 +147,25 @@ relitigate decided items without new evidence.
   the evidence-to-memory story; Epic 2.5 should keep Ring as router and Phylax as gateway,
   borrowing working deployed Council behavior but not keeping media logic there.
 
+## Issue ledger — EpicSpine backlog
+
+| Issue | Lane | Status | Owner/role | Dependencies | Acceptance summary |
+|---|---|---|---|---|---|
+| [#659](https://github.com/zenod-ai/zenod/issues/659) | Z-10A · Media ingest MCP seam | proposed · dispatch now | worker | none | Public async MCP ingest tool contract, receipt shape, docs, tests |
+| [#660](https://github.com/zenod-ai/zenod/issues/660) | Z-10B · Artifact archive | proposed · dispatch now | worker | none; coordinates with #659 result shape | Zenod-owned Drive/local raw artifact archive with handles and tests |
+| [#661](https://github.com/zenod-ai/zenod/issues/661) | Z-10C · Audio ingest | proposed · dispatch now | worker | #659/#660 contract may be refined in parallel | Raw audio archive, transcription, digest, commit/search/ask receipts |
+| [#662](https://github.com/zenod-ai/zenod/issues/662) | Z-10D · Screenshot/image/PDF ingest | proposed · dispatch now | worker | #659/#660 contract may be refined in parallel | Raw image/PDF archive, OCR/vision/PDF extraction, digest, receipts |
+| [#663](https://github.com/zenod-ai/zenod/issues/663) | Z-10E · Hosted memory UI | proposed · dispatch now | worker | can use placeholder statuses until #659-#662 land | Cloud UI controls for Drive/archive, transcription, extraction, ingest receipts, retention |
+| [#664](https://github.com/zenod-ai/zenod/issues/664) | Final validation scorecard | proposed · gated | tester | after #659-#663 implementation handbacks | Stranger/customer funnel, text+media memory, dashboard, watchdog, restore, log trace |
+
+Dispatch receipts, 2026-07-09:
+- #659 -> worker `Heisenberg` (`019f4751-cf2f-7582-88bd-5eccbfbaa044`)
+- #660 -> worker `Boole` (`019f4751-f66e-7cd2-a9bd-ed9c2ec4f911`)
+- #661 -> worker `Harvey` (`019f4752-1469-78a3-b7d8-3fbba949d679`)
+- #662 -> worker `Mencius` (`019f4752-3733-7540-b613-ec8f8740e266`)
+- #663 -> worker `Pauli` (`019f4752-577b-7ea0-826d-e0c29f8cf0be`)
+- #664 tester dispatch is deliberately HELD until #659-#663 hand back implementation receipts.
+
 ## Iteration 0 — tickets (lanes parallel; worker MUST fan out sub-agents, one per lane)
 
 Sequencing: **Z-1 ∥ Z-3-page ∥ Z-5-runbook start immediately**; Z-2 needs Z-1 green; Z-4 needs
