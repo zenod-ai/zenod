@@ -89,7 +89,8 @@ That's the entire loop; nothing routes around the documents.
 | 2.4 | Callisthenes — voice | [`EPIC-2.4-CALLISTHENES-MOVE-0.md`](EPIC-2.4-CALLISTHENES-MOVE-0.md) |
 | 2.5 | The Ring — gateway/council | [`EPIC-2.5-ATOMIC-UNITS.md`](EPIC-2.5-ATOMIC-UNITS.md) |
 | 2.6 | Herald Move-0 (nucleus + guy) | [`EPIC-2.6-HERALD-MOVE-0.md`](EPIC-2.6-HERALD-MOVE-0.md) |
-| 3 | Herald — the product | [`EPIC-3-HERALD.md`](EPIC-3-HERALD.md) |
+| 3 | Multi-tenant chassis replatform | [`EPIC-3.0-CHASSIS-REPLATFORM.md`](EPIC-3.0-CHASSIS-REPLATFORM.md) |
+| 4 | Herald — the product | [`EPIC-4-HERALD.md`](EPIC-4-HERALD.md) |
 
 ## Moves log (append-only)
 

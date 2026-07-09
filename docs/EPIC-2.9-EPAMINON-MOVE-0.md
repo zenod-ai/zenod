@@ -138,17 +138,16 @@ Implications to resolve before minting worker tickets:
 
 ## Current State
 
-Phase: cloud-test setup route live; final acceptance blocked on Stripe price/provisioning credentials
+Phase: cloud-test checkout route live; final acceptance blocked on paid TEST purchase/provisioning proof
 Last verified: 2026-07-09
-Next action: configure Stripe TEST `PRICE_EPAMINON` on `cloud-test.zenod.dev`, confirm webhook
-signing and either enable `ZENOD_AUTO_PROVISION=1` with Dokploy credentials or run
-`scripts/provision-epaminon.mjs` from the queue, then rerun EPM-8.
+Next action: complete one Stripe TEST card checkout at `cloud-test.zenod.dev/buy/epaminon`, verify
+the webhook queues/provisions `e-<slug>.zenod.dev`, then rerun EPM-8 against the hosted Epaminon MCP
+address and the WhatsApp/Council route.
 Blockers: local assembled acceptance passed, and `cloud-test.zenod.dev` now serves `/healthz` with
-`stripe_mode=test` plus the Epaminon simulated setup page. The full Jordi-ready E2E is still blocked
-because `/buy/epaminon` returns `Epaminon checkout is not configured (set PRICE_EPAMINON)`, this
-environment lacks the real TEST Stripe/webhook values and deploy secrets, Dokploy list/deploy API
-access returned 403 for broad discovery calls, and the real runner/model/WhatsApp/Phylax credentials
-are absent here.
+`stripe_mode=test`, the Epaminon simulated setup page, and `/buy/epaminon` as a 303 redirect to a
+Stripe TEST subscription checkout using TEST price `price_1TrPa276yJ3p1J6XLDBRgagt`. The full
+Jordi-ready E2E is still blocked until a paid TEST checkout proves automatic provisioning and until
+the real runner/model/WhatsApp/Phylax credentials are present for a live research-task dispatch.
 
 ## Bootstrap Map
 
@@ -207,14 +206,14 @@ MCP/WhatsApp dispatch → real repo/artifact evidence.
 |---|---|---|---|---|---|---|---|---|---|
 | [#682](https://github.com/zenod-ai/zenod/issues/682) | Epic worker | Current Codex thread | EPM-0 scope and dispatch | in-progress | `codex/reconcile-recovery-to-main-20260709` | `3848b04` | Issues #682..#690 minted. | 2026-07-09 | Reconcile workers and board. |
 | [#683](https://github.com/zenod-ai/zenod/issues/683) | Worker | `019f47a5-5442-7352-8b3b-10c910358080` | Unit surface and seam | ready-for-test | reconciliation branch | `3848b04` | `units/epaminon/` docs and compose added. | 2026-07-09 | Tester review. |
-| [#684](https://github.com/zenod-ai/zenod/issues/684) | Worker | `019f47a5-7b61-7372-a076-2476dfab67d7` | Public page and checkout | ready-for-test | reconciliation branch | `3848b04` | Public Epaminon page and test handoff added. | 2026-07-09 | Wire real cloud-test price. |
+| [#684](https://github.com/zenod-ai/zenod/issues/684) | Worker | `019f47a5-7b61-7372-a076-2476dfab67d7` | Public page and checkout | ready-for-test | reconciliation branch + Cloud `codex/epic25-ring-cloud` | `3848b04`; Cloud `fbdcc01` | Public Epaminon page exists; cloud-test `/buy/epaminon` now redirects to Stripe TEST price. | 2026-07-09 | Complete paid TEST checkout. |
 | [#685](https://github.com/zenod-ai/zenod/issues/685) | Worker | `019f47a5-a363-7731-9bf5-d0e9ca541ef1` | Instance settings UI | ready-for-test | reconciliation branch | `3848b04` | Epaminon executor settings render conditionally. | 2026-07-09 | Test provisioned instance. |
 | [#686](https://github.com/zenod-ai/zenod/issues/686) | Worker | `019f47a5-c75b-78e1-aed3-0df61419c86e` | Standalone MCP task contract | ready-for-test | reconciliation branch | `3848b04` | Direct task aliases and tests added. | 2026-07-09 | Verify public aliases. |
 | [#687](https://github.com/zenod-ai/zenod/issues/687) | Worker | Epic 2.9 worker | Worker harness lifecycle | ready-for-test | reconciliation branch | `3848b04` | Effort, auth preflight, transcript and receipts wired. | 2026-07-09 | Run authenticated worker smoke. |
 | [#688](https://github.com/zenod-ai/zenod/issues/688) | Worker | Epic 2.9 worker | Auth and private lanes | ready-for-test | reconciliation branch | `3848b04` | Private-lane negative tests and persisted settings. | 2026-07-09 | Verify aggregate exposure. |
 | [#689](https://github.com/zenod-ai/zenod/issues/689) | Worker | Epic 2.9 worker | Ring/Council integration | ready-for-test | reconciliation branch | `3848b04` | Ring route-test carries Epaminon task context. | 2026-07-09 | Test real Phylax path. |
-| [#690](https://github.com/zenod-ai/zenod/issues/690) | Tester | `019f47c2-b343-7452-8ec0-4eb5a79f6fc1` | End-to-end acceptance | blocked | reconciliation branch | `3848b04` | Local acceptance passed; cloud-test price absent. | 2026-07-09 | Configure price and rerun. |
-| [#692](https://github.com/zenod-ai/zenod/issues/692) | Worker | Epic 2.9 worker | Cloud-test deployment | in-progress | reconciliation branch | `3848b04` | Setup route deployed; checkout reports missing price. | 2026-07-09 | Set TEST price and provisioner env. |
+| [#690](https://github.com/zenod-ai/zenod/issues/690) | Tester | `019f47c2-b343-7452-8ec0-4eb5a79f6fc1` | End-to-end acceptance | blocked | reconciliation branch + Cloud `codex/epic25-ring-cloud` | `3848b04`; Cloud `fbdcc01` | Local acceptance passed; cloud-test checkout now redirects to Stripe TEST, but paid provisioning and live dispatch are not yet proven. | 2026-07-09 | Complete paid TEST checkout and rerun EPM-8. |
+| [#692](https://github.com/zenod-ai/zenod/issues/692) | Worker | Epic 2.9 worker | Cloud-test deployment | ready-for-test | Cloud `codex/epic25-ring-cloud` | Cloud `3846e58` | TEST price configured; Cloud commit `fbdcc01` deployed; `cloud-test` health/setup pass and `/buy/epaminon` redirects to Stripe TEST. | 2026-07-09 | Verify checkout completion provisions `e-<slug>.zenod.dev`. |
 
 ## Branch And Integration
 
@@ -283,19 +282,16 @@ stale, preserve its branch/history, record the takeover in the issue, and dispat
 | 2026-07-09 | EPM-9 Cloud route patch local validation | In `/Users/jordi/Documents/GitHub/cloud/services/webhook`: `npm run typecheck`; `npm run build`; local `STRIPE_MODE=test PRICE_EPAMINON=price_test_epaminon PORT=4259 node dist/server.js`; `curl -I 'http://127.0.0.1:4259/setup/epaminon?receipt=epm2_epaminon_checkout_simulated'`; `curl -fsS http://127.0.0.1:4259/healthz`. | pass/local-only | Cloud webhook typecheck/build passed. Local health returned `{"ok":true,"stripe_mode":"test"}` and simulated Epaminon setup returned HTTP 200 with `PRICE_EPAMINON`, `/buy/epaminon`, `/epaminon/status`, and `cloud-test` copy. `/buy/epaminon` reached Stripe code but failed with expected 401 because the smoke used a dummy `sk_test_replace_me` key. |
 | 2026-07-09 | Epaminon static-page image packaging | `apps/site/Dockerfile` inspection and patch. | pass/local-only | Runtime image now copies `sites/epaminon/index.html` into `/usr/share/nginx/html/epaminon/index.html`, matching the already-present Ring public page copy. |
 | 2026-07-09 | EPM-9 hosted Epaminon provisioner bridge | `docker compose -f units/epaminon/docker-compose.hosted.yml config`; in `/Users/jordi/Documents/GitHub/cloud`: `node scripts/provision-epaminon.mjs --name epm9test --email test@example.com --image test --dry-run`; `npm run typecheck`; `npm run build`; local port 4260 health/setup/buy smoke. | pass/local-only | Hosted compose resolves to a direct `AGENT=epaminon` service on `dokploy-network`. Provisioner dry-run printed `https://e-epm9test.zenod.dev`, `https://e-epm9test.zenod.dev/mcp`, bearer token, and watchdog target. Cloud typecheck/build passed after auto-provision wiring. Local health/setup smoke returned 200; `/buy/epaminon` failed at expected dummy Stripe auth. |
-| 2026-07-09 | Deployed cloud-test Epaminon route check | `curl -I https://cloud-test.zenod.dev/healthz`; `curl -I 'https://cloud-test.zenod.dev/setup/epaminon?receipt=epm2_epaminon_checkout_simulated'`; `curl https://cloud-test.zenod.dev/buy/epaminon`; setup body grep. | blocked | Deployed health is HTTP 200 with `{"ok":true,"stripe_mode":"test"}`. Simulated Epaminon setup is HTTP 200 and contains `Epaminon TEST receipt`, `PRICE_EPAMINON`, `/buy/epaminon`, `/epaminon/status`, `cloud-test`, and live-only `cloud.zenod.dev` copy. Real checkout is HTTP 503 body `Epaminon checkout is not configured (set PRICE_EPAMINON)`. |
+| 2026-07-09 | Deployed cloud-test Epaminon route check | `curl -fsS https://cloud-test.zenod.dev/healthz`; `curl -I 'https://cloud-test.zenod.dev/setup/epaminon?receipt=epm2_epaminon_checkout_simulated'`; `curl -I https://cloud-test.zenod.dev/buy/epaminon`; Stripe TEST session retrieve. | pass/ready-for-paid-test | Deployed health is HTTP 200 with `{"ok":true,"stripe_mode":"test"}`. Simulated Epaminon setup is HTTP 200. `/buy/epaminon` is HTTP 303 to Stripe TEST checkout. Retrieved session `cs_test_a1YTe0ww9gn7tp1Pj7IfEciHs0hsV9T5pfbSFMV6RJeOlCvU8jk2TattFd` has `livemode=false`, `mode=subscription`, metadata `unit=epaminon`, `tier=hosted`, success URL on `cloud-test.zenod.dev`, and unpaid status endpoint returns `payment_pending`. |
 
 ## Residual Risks
 
-- Real purchase-to-instance flow is not proven. The public page has a documented simulated receipt,
-  and the private Cloud repo now has a local setup/status/checkout route patch, but the patch is not
-  deployed to `cloud-test.zenod.dev`.
-- Real Stripe TEST checkout/provisioning is not proven because this environment has no live test
-  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, or `PRICE_EPAMINON` value. The local `/buy/epaminon`
-  smoke reached Stripe session creation and failed only because a dummy test key was used.
-- Hosted Epaminon provisioning is implemented locally but not deployed. The chosen target is a direct
-  `AGENT=epaminon` hosted compose at `e-<slug>.zenod.dev`; it still needs cloud-test deployment and
-  real Dokploy/Stripe TEST credentials before EPM-8 can prove it.
+- Real purchase-to-instance flow is not proven. The Cloud TEST price is configured and
+  `cloud-test.zenod.dev/buy/epaminon` redirects to Stripe TEST checkout, but no paid test-card
+  session has yet proved webhook queueing or `e-<slug>.zenod.dev` provisioning.
+- Hosted Epaminon provisioning is deployed through Cloud commit `fbdcc01` and targets a direct
+  `AGENT=epaminon` hosted compose at `e-<slug>.zenod.dev`; EPM-8 still needs a paid checkout to prove
+  it creates the instance and returns the UI/MCP/token receipt.
 - Real worker dispatch is not proven against a live runner because `ZENOD_RUNNER_POKE_URL`,
   `ZENOD_CONSOLE_TOKEN`, `ZENOD_EPAMINON_URL`, and runner-scoped GitHub/Codex/Claude auth are absent.
 - Real WhatsApp/Council/Phylax dispatch is not proven because no WhatsApp or Phylax credentials or
@@ -304,6 +300,34 @@ stale, preserve its branch/history, record the takeover in the issue, and dispat
   runner, and evidence-path tests until a real runner-auth smoke can execute.
 
 ## Handoff Journal
+
+### 2026-07-09 - Codex epic worker - EPM-9 cloud-test checkout unblocked
+
+Context: Continued the EPM-9 cloud-test deployment after the deployed Epaminon setup page still
+reported missing `PRICE_EPAMINON`.
+
+Result: Created the Stripe TEST Epaminon product/price (`price_1TrPa276yJ3p1J6XLDBRgagt`,
+`livemode=false`, EUR 5/month), configured the Cloud compose for `STRIPE_MODE=test`,
+`DOMAIN=https://cloud-test.zenod.dev`, and `PRICE_EPAMINON`, pushed Cloud commit `fbdcc01` to
+`codex/epic25-ring-cloud`, rebuilt/recreated the Dokploy service, and added the
+`cloud-test.zenod.dev` Dokploy domain. The deployed service now serves test health/setup and redirects
+`/buy/epaminon` to Stripe TEST checkout.
+
+Validation: `https://cloud-test.zenod.dev/healthz` returns HTTP 200 with `stripe_mode=test`;
+`/setup/epaminon?receipt=epm2_epaminon_checkout_simulated` returns HTTP 200; `/buy/epaminon` returns
+HTTP 303 to a Stripe TEST checkout. Stripe session
+`cs_test_a1YTe0ww9gn7tp1Pj7IfEciHs0hsV9T5pfbSFMV6RJeOlCvU8jk2TattFd` has `livemode=false`,
+`mode=subscription`, metadata `unit=epaminon`, and success URL on `cloud-test.zenod.dev`. Its status
+endpoint currently reports `payment_pending`, as expected for an unpaid checkout.
+
+Blocker: EPM-8 is not ready to pass until someone completes a paid Stripe TEST checkout and verifies
+the webhook/provisioner creates `e-<slug>.zenod.dev` with the Epaminon UI, MCP URL, and bearer-token
+receipt. Real WhatsApp/Council research-task acceptance still also requires runner/model/GitHub and
+WhatsApp/Phylax credentials.
+
+Next: Complete one test-card checkout from `cloud-test.zenod.dev/buy/epaminon`, inspect
+`/api/epaminon/status?session_id=<cs_test_...>`, then run a real prompt-through-MCP or
+WhatsApp/Council dispatch and leave the result in the requested repo/artifact target.
 
 ### 2026-07-09 - Codex epic worker - EPM-9 cloud-test route patch prepared
 

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unsticking MCP Hosting — the options, simply</title>
+<style>
+  :root{
+    --bg:#0e1116; --card:#161b22; --ink:#e6edf3; --dim:#8b949e;
+    --accent:#4ec9b0; --warn:#e5c07b; --bad:#e06c75; --good:#98c379;
+    --line:#30363d; --blue:#61afef;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  .slide{display:none;width:100vw;height:100vh;padding:48px 64px;flex-direction:column;overflow-y:auto}
+  .slide.active{display:flex}
+  h1{font-size:2.4em;margin-bottom:16px;line-height:1.15}
+  h2{font-size:1.7em;margin-bottom:20px;color:var(--accent)}
+  h3{font-size:1.05em;margin-bottom:8px}
+  p,li{font-size:1.02em;line-height:1.5;color:var(--ink)}
+  .dim{color:var(--dim)}
+  .accent{color:var(--accent)} .warn{color:var(--warn)} .bad{color:var(--bad)} .good{color:var(--good)} .blue{color:var(--blue)}
+  ul{margin:8px 0 8px 22px}
+  li{margin-bottom:8px}
+  .cols{display:flex;gap:24px;flex:1;min-height:0}
+  .col{flex:1;min-width:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+  .diagram{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;justify-content:center;align-items:center}
+  svg{max-width:100%;height:auto}
+  svg text{font-family:inherit}
+  code{background:#21262d;border-radius:4px;padding:2px 6px;font-size:.92em;color:var(--warn)}
+  table{border-collapse:collapse;width:100%;font-size:.95em}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:#1c2128;color:var(--accent)}
+  .nav{position:fixed;bottom:18px;right:24px;display:flex;gap:10px;align-items:center;z-index:10}
+  .nav button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 16px;font-size:1em;cursor:pointer}
+  .nav button:hover{border-color:var(--accent)}
+  .counter{color:var(--dim);font-size:.9em}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);transition:width .25s}
+  .kicker{color:var(--dim);text-transform:uppercase;letter-spacing:.12em;font-size:.8em;margin-bottom:10px}
+  .big{font-size:1.25em}
+  .pill{display:inline-block;border:1px solid var(--line);border-radius:20px;padding:2px 12px;font-size:.85em;margin-right:6px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<!-- 1 · TITLE -->
+<section class="slide active">
+  <div class="kicker">Zenod · MCP hosting architecture</div>
+  <h1>Selling MCP servers without <span class="bad">400 containers</span></h1>
+  <p class="big dim" style="margin-bottom:28px">The options, the recommended shape, and why it's simpler than what you have now — not scarier.</p>
+  <div class="card" style="max-width:760px">
+    <p><span class="accent">The one-line answer:</span> the atomic DevOps unit for a sellable MCP server is <b>one stateless HTTP service + one database + one secrets vault</b> — not one container per customer. A new customer is an <code>INSERT</code>, not a deploy.</p>
+  </div>
+  <p class="dim" style="margin-top:auto">→ / ← to navigate · July 2026</p>
+</section>
+
+<!-- 2 · WHERE YOU ARE -->
+<section class="slide">
+  <h2>Where you are today (and why it hurts)</h2>
+  <div class="cols">
+    <div class="col">
+      <div class="card">
+        <h3 class="bad">The current shape (Law 7)</h3>
+        <p>One always-on container <b>per user per unit</b>, provisioned through Dokploy on a Stripe webhook. 100 users × 4 units ≈ <b>400 containers</b>, each with its own subdomain, token, volume, repo, watchdog entry.</p>
+      </div>
+      <div class="card">
+        <h3 class="warn">Why it's killing the dev experience</h3>
+        <ul>
+          <li>Every code change = <b>M redeploys</b> through a flaky Dokploy API.</li>
+          <li>Idle containers burn RAM (Callisthenes ≈ 549&nbsp;MB each).</li>
+          <li>Watchdog registration, DNS, and provisioning machinery grow per user.</li>
+          <li>Hosted and self-hosted have drifted into two different products.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col diagram">
+      <svg viewBox="0 0 420 300">
+        <text x="210" y="22" fill="#8b949e" font-size="13" text-anchor="middle">Your VPS, container-per-user</text>
+        <!-- grid of containers -->
+        <g font-size="10" fill="#e6edf3">
+        <rect x="20" y="40" width="380" height="230" rx="8" fill="none" stroke="#30363d"/>
+        <!-- rows -->
+        <g>
+          <!-- generate boxes -->
+          <rect x="35" y="55" width="80" height="34" rx="5" fill="#1c2128" stroke="#e06c75"/><text x="75" y="76" text-anchor="middle">zenod-u1</text>
+          <rect x="125" y="55" width="80" height="34" rx="5" fill="#1c2128" stroke="#e06c75"/><text x="165" y="76" text-anchor="middle">zenod-u2</text>
+          <rect x="215" y="55" width="80" height="34" rx="5" fill="#1c2128" stroke="#e06c75"/><text x="255" y="76" text-anchor="middle">zenod-u3</text>
+          <rect x="305" y="55" width="80" height="34" rx="5" fill="#1c2128" stroke="#e06c75"/><text x="345" y="76" text-anchor="middle">zenod-…</text>
+          <rect x="35" y="100" width="80" height="34" rx="5" fill="#1c2128" stroke="#e5c07b"/><text x="75" y="121" text-anchor="middle">calli-u1</text>
+          <rect x="125" y="100" width="80" height="34" rx="5" fill="#1c2128" stroke="#e5c07b"/><text x="165" y="121" text-anchor="middle">calli-u2</text>
+          <rect x="215" y="100" width="80" height="34" rx="5" fill="#1c2128" stroke="#e5c07b"/><text x="255" y="121" text-anchor="middle">calli-u3</text>
+          <rect x="305" y="100" width="80" height="34" rx="5" fill="#1c2128" stroke="#e5c07b"/><text x="345" y="121" text-anchor="middle">calli-…</text>
+          <rect x="35" y="145" width="80" height="34" rx="5" fill="#1c2128" stroke="#61afef"/><text x="75" y="166" text-anchor="middle">ring-u1</text>
+          <rect x="125" y="145" width="80" height="34" rx="5" fill="#1c2128" stroke="#61afef"/><text x="165" y="166" text-anchor="middle">ring-u2</text>
+          <rect x="215" y="145" width="80" height="34" rx="5" fill="#1c2128" stroke="#61afef"/><text x="255" y="166" text-anchor="middle">ring-u3</text>
+          <rect x="305" y="145" width="80" height="34" rx="5" fill="#1c2128" stroke="#61afef"/><text x="345" y="166" text-anchor="middle">ring-…</text>
+          <text x="210" y="205" text-anchor="middle" fill="#8b949e" font-size="18">⋮ × every user × every unit ⋮</text>
+          <text x="210" y="245" text-anchor="middle" fill="#e06c75" font-size="12">every box: RAM + subdomain + watchdog + redeploy</text>
+        </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- 3 · PHYLAX -->
+<section class="slide">
+  <h2>First correction: Phylax was never per-user</h2>
+  <div class="cols">
+    <div class="col">
+      <div class="card">
+        <p>You caught this correctly. Phylax fronts <b>one WhatsApp number</b>. Many people talk to that one number. So there is <b>one Phylax container per phone number you operate</b> — probably one, total.</p>
+      </div>
+      <div class="card">
+        <h3 class="good">Adding a user =</h3>
+        <p>Add their number to the whitelist. A config row. <b>Not a deploy.</b></p>
+      </div>
+      <div class="card">
+        <h3>Why it still lives in its own container</h3>
+        <p>Not for tenancy — for <b>blast radius</b>. Baileys is flaky and ToS-exposed; isolating it means WhatsApp breakage never touches the ring. That reasoning survives; per-user does not.</p>
+      </div>
+    </div>
+    <div class="col diagram">
+      <svg viewBox="0 0 420 280">
+        <g font-size="12" fill="#e6edf3">
+          <circle cx="60" cy="60" r="18" fill="#1c2128" stroke="#8b949e"/><text x="60" y="65" text-anchor="middle">👤</text>
+          <circle cx="60" cy="130" r="18" fill="#1c2128" stroke="#8b949e"/><text x="60" y="135" text-anchor="middle">👤</text>
+          <circle cx="60" cy="200" r="18" fill="#1c2128" stroke="#8b949e"/><text x="60" y="205" text-anchor="middle">👤</text>
+          <line x1="82" y1="60" x2="170" y2="125" stroke="#8b949e"/>
+          <line x1="82" y1="130" x2="170" y2="130" stroke="#8b949e"/>
+          <line x1="82" y1="200" x2="170" y2="138" stroke="#8b949e"/>
+          <rect x="172" y="100" width="110" height="64" rx="8" fill="#1c2128" stroke="#98c379"/>
+          <text x="227" y="126" text-anchor="middle">ONE Phylax</text>
+          <text x="227" y="146" text-anchor="middle" fill="#8b949e" font-size="10">one number · whitelist</text>
+          <line x1="284" y1="130" x2="345" y2="130" stroke="#8b949e" marker-end="url(#a1)"/>
+          <rect x="347" y="104" width="58" height="52" rx="8" fill="#1c2128" stroke="#61afef"/>
+          <text x="376" y="134" text-anchor="middle" font-size="11">Ring</text>
+          <text x="210" y="250" text-anchor="middle" fill="#98c379" font-size="12">new user → whitelist row, not a container</text>
+        </g>
+        <defs><marker id="a1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#8b949e"/></marker></defs>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- 4 · THE ATOMIC UNIT -->
+<section class="slide">
+  <h2>The DevOps atom for a sellable MCP server</h2>
+  <p class="dim" style="margin-bottom:16px">This is the industry-standard shape for remote MCP (Streamable HTTP). It is what AWS, Cloudflare, and every MCP hosting platform converge on.</p>
+  <div class="cols">
+    <div class="col diagram">
+      <svg viewBox="0 0 460 300">
+        <g font-size="12" fill="#e6edf3">
+          <rect x="130" y="20" width="200" height="56" rx="8" fill="#1c2128" stroke="#4ec9b0" stroke-width="2"/>
+          <text x="230" y="43" text-anchor="middle" fill="#4ec9b0">1 stateless HTTP service</text>
+          <text x="230" y="62" text-anchor="middle" fill="#8b949e" font-size="10">the MCP server image, ONE container</text>
+          <line x1="180" y1="76" x2="120" y2="150" stroke="#8b949e" marker-end="url(#a2)"/>
+          <line x1="280" y1="76" x2="340" y2="150" stroke="#8b949e" marker-end="url(#a2)"/>
+          <rect x="40" y="152" width="160" height="60" rx="8" fill="#1c2128" stroke="#61afef"/>
+          <text x="120" y="177" text-anchor="middle" fill="#61afef">1 database</text>
+          <text x="120" y="196" text-anchor="middle" fill="#8b949e" font-size="10">tenants, ledgers, data — keyed by tenant_id</text>
+          <rect x="260" y="152" width="160" height="60" rx="8" fill="#1c2128" stroke="#e5c07b"/>
+          <text x="340" y="177" text-anchor="middle" fill="#e5c07b">1 secrets vault</text>
+          <text x="340" y="196" text-anchor="middle" fill="#8b949e" font-size="10">encrypted world keys per tenant</text>
+          <text x="230" y="255" text-anchor="middle" fill="#98c379" font-size="13">new customer = INSERT INTO tenants — zero deploys</text>
+          <text x="230" y="278" text-anchor="middle" fill="#8b949e" font-size="11">code update = redeploy ONE container, everyone upgraded</text>
+        </g>
+        <defs><marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#8b949e"/></marker></defs>
+      </svg>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Stateless means</h3>
+        <p>No per-user memory in the process. Every request carries a bearer token; everything tenant-specific is looked up from the DB/vault on each request. That's what lets one container serve 1 or 1,000 users identically.</p>
+      </div>
+      <div class="card">
+        <h3>Your fleet becomes</h3>
+        <p>~5 containers total: <span class="accent">zenod</span>, <span class="accent">callisthenes</span>, <span class="accent">ring</span>, <span class="accent">phylax</span>, <span class="accent">epaminon-api</span> (+ Postgres). On one VPS. Forever, until real scale.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 · AUTH FLOW -->
+<section class="slide">
+  <h2>"But how does auth work with 20 users in one container?"</h2>
+  <p class="dim" style="margin-bottom:14px">You already built the hard part. The #645 fix — tenant = <code>sha256(real_bearer)</code> — IS multi-tenant auth. Here is the whole request, end to end:</p>
+  <div class="diagram" style="flex:1">
+    <svg viewBox="0 0 760 250">
+      <g font-size="12" fill="#e6edf3">
+        <rect x="10" y="90" width="120" height="60" rx="8" fill="#1c2128" stroke="#8b949e"/>
+        <text x="70" y="115" text-anchor="middle">Claude / Ring /</text><text x="70" y="132" text-anchor="middle">any agent</text>
+        <line x1="130" y1="120" x2="205" y2="120" stroke="#8b949e" marker-end="url(#a3)"/>
+        <text x="168" y="108" text-anchor="middle" fill="#e5c07b" font-size="10">Bearer tok_abc</text>
+        <rect x="207" y="80" width="150" height="80" rx="8" fill="#1c2128" stroke="#4ec9b0" stroke-width="2"/>
+        <text x="282" y="108" text-anchor="middle" fill="#4ec9b0">MCP server</text>
+        <text x="282" y="126" text-anchor="middle" fill="#8b949e" font-size="10">hash token →</text>
+        <text x="282" y="141" text-anchor="middle" fill="#8b949e" font-size="10">lookup tenant</text>
+        <line x1="357" y1="105" x2="440" y2="60" stroke="#8b949e" marker-end="url(#a3)"/>
+        <rect x="442" y="30" width="190" height="58" rx="8" fill="#1c2128" stroke="#61afef"/>
+        <text x="537" y="53" text-anchor="middle" fill="#61afef" font-size="11">tenants table</text>
+        <text x="537" y="72" text-anchor="middle" fill="#8b949e" font-size="10">hash(tok_abc) → tenant=jordi, plan, quota</text>
+        <line x1="357" y1="140" x2="440" y2="180" stroke="#8b949e" marker-end="url(#a3)"/>
+        <rect x="442" y="155" width="190" height="58" rx="8" fill="#1c2128" stroke="#e5c07b"/>
+        <text x="537" y="178" text-anchor="middle" fill="#e5c07b" font-size="11">every query / key pull</text>
+        <text x="537" y="197" text-anchor="middle" fill="#8b949e" font-size="10">WHERE tenant_id = 'jordi' — always</text>
+        <text x="380" y="240" text-anchor="middle" fill="#98c379" font-size="12">isolation = the tenant_id scope on every read/write, enforced in one place (DB row-level security if you want belt+braces)</text>
+      </g>
+      <defs><marker id="a3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#8b949e"/></marker></defs>
+    </svg>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <p><b>Where do tokens live?</b> Only their <b>hashes</b>, in the tenants table. World keys (X, Gmail, repo tokens) live encrypted in the vault, one row per tenant, decrypted at request time — exactly your existing Law-6 keyring, just tenant-keyed instead of container-keyed.</p>
+  </div>
+</section>
+
+<!-- 6 · DNS & NETWORKING -->
+<section class="slide">
+  <h2>DNS &amp; networking: it gets simpler, not harder</h2>
+  <div class="cols">
+    <div class="col">
+      <div class="card">
+        <h3 class="bad">Today</h3>
+        <p>A subdomain per tenant per unit: <code>u1.zenod.dev</code>, <code>c-u1.zenod.dev</code>, <code>e-u1.zenod.dev</code>… DNS records, TLS certs, and proxy routes multiply with users.</p>
+      </div>
+      <div class="card">
+        <h3 class="good">Multi-tenant</h3>
+        <p><b>One hostname per unit.</b> Five DNS records, total, forever:</p>
+        <ul>
+          <li><code>zenod.zenod.dev/mcp/&lt;token&gt;</code></li>
+          <li><code>calli.zenod.dev/mcp/&lt;token&gt;</code></li>
+          <li><code>epaminon.zenod.dev/mcp/&lt;token&gt;</code> …</li>
+        </ul>
+        <p class="dim">The token in the URL identifies the tenant — your ZD-8 "the URL is the credential" design already works this way. Clients notice nothing.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Inside the VPS</h3>
+        <p>One reverse proxy (Caddy/Traefik — Dokploy's built-in is fine) → one upstream per unit. No per-tenant routes. TLS is one wildcard or 5 certs.</p>
+      </div>
+      <div class="card">
+        <h3>Provisioning on Stripe webhook</h3>
+        <p>Old: call Dokploy API, create compose, wait 1–2 min, hope it materializes, register watchdog, mint DNS.<br><span class="good">New: <code>INSERT INTO tenants</code>, mint token, email the URL. Milliseconds. Nothing to watch.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 · HOSTED VS SELF-HOSTED -->
+<section class="slide">
+  <h2>Hosted vs self-hosted stop being two products</h2>
+  <div class="cols">
+    <div class="col diagram">
+      <svg viewBox="0 0 440 260">
+        <g font-size="12" fill="#e6edf3">
+          <rect x="120" y="15" width="200" height="46" rx="8" fill="#1c2128" stroke="#4ec9b0" stroke-width="2"/>
+          <text x="220" y="43" text-anchor="middle" fill="#4ec9b0">ONE image</text>
+          <line x1="170" y1="61" x2="110" y2="115" stroke="#8b949e" marker-end="url(#a4)"/>
+          <line x1="270" y1="61" x2="330" y2="115" stroke="#8b949e" marker-end="url(#a4)"/>
+          <rect x="20" y="118" width="185" height="100" rx="8" fill="#1c2128" stroke="#61afef"/>
+          <text x="112" y="142" text-anchor="middle" fill="#61afef">Hosted (you)</text>
+          <text x="112" y="164" text-anchor="middle" fill="#8b949e" font-size="10">same image + Postgres</text>
+          <text x="112" y="181" text-anchor="middle" fill="#8b949e" font-size="10">tenants table: many rows</text>
+          <text x="112" y="198" text-anchor="middle" fill="#8b949e" font-size="10">Stripe webhook inserts rows</text>
+          <rect x="235" y="118" width="185" height="100" rx="8" fill="#1c2128" stroke="#98c379"/>
+          <text x="327" y="142" text-anchor="middle" fill="#98c379">Self-hosted (customer)</text>
+          <text x="327" y="164" text-anchor="middle" fill="#8b949e" font-size="10">same image + SQLite</text>
+          <text x="327" y="181" text-anchor="middle" fill="#8b949e" font-size="10">tenants table: ONE row</text>
+          <text x="327" y="198" text-anchor="middle" fill="#8b949e" font-size="10">token from env var</text>
+          <text x="220" y="248" text-anchor="middle" fill="#98c379" font-size="12">self-hosted = the hosted product with a tenant count of 1</text>
+        </g>
+        <defs><marker id="a4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#8b949e"/></marker></defs>
+      </svg>
+    </div>
+    <div class="col">
+      <div class="card">
+        <p>The complexity you're tired of — two divergent deployment stories — collapses. Multi-tenant code with a tenant count of 1 <b>is</b> the self-hosted product. One image, one docs page, one Dockerfile.</p>
+      </div>
+      <div class="card">
+        <h3>Zenod's git-repo state</h3>
+        <p>The one stateful wrinkle. A multi-tenant Zenod keeps N clones under <code>/data/&lt;tenant&gt;/repo</code> on one volume. Same code path as today, path prefixed by tenant.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 · OPTIONS TABLE -->
+<section class="slide">
+  <h2>The three options, honestly compared</h2>
+  <table style="margin-bottom:16px">
+    <tr><th style="width:24%"></th><th>A · Container-per-user (today)</th><th>B · Multi-tenant on your VPS <span class="pill">recommended</span></th><th>C · Cloudflare Workers</th></tr>
+    <tr><td><b>New customer</b></td><td class="bad">Dokploy provision, 1–2 min, can fail</td><td class="good">DB insert, instant</td><td class="good">DB insert, instant</td></tr>
+    <tr><td><b>Code update</b></td><td class="bad">M redeploys</td><td class="good">1 redeploy</td><td class="good">1 deploy (wrangler)</td></tr>
+    <tr><td><b>Idle cost</b></td><td class="bad">RAM per user, always-on</td><td class="warn">~5 containers always-on (fine on a VPS you already pay for)</td><td class="good">scale-to-zero, ~free idle</td></tr>
+    <tr><td><b>Isolation</b></td><td class="good">OS-level per user</td><td class="warn">tenant_id scoping (industry standard for SaaS)</td><td class="warn">same, + per-tenant Durable Objects if wanted</td></tr>
+    <tr><td><b>DNS/TLS</b></td><td class="bad">grows per user</td><td class="good">fixed, ~5 records</td><td class="good">fixed</td></tr>
+    <tr><td><b>Rewrite cost</b></td><td>—</td><td class="good">small: tenant lookup + tenant-keyed storage</td><td class="bad">port to Workers runtime (no filesystem — hard for Zenod's git repos)</td></tr>
+    <tr><td><b>Ceiling</b></td><td class="bad">~100 users, ops-bound</td><td class="good">thousands on one VPS; then add a second</td><td class="good">effectively unbounded</td></tr>
+  </table>
+  <div class="card">
+    <p><b>On Cloudflare:</b> beautiful for stateless MCP (and it has <a style="color:#61afef" href="https://blog.cloudflare.com/building-ai-agents-with-mcp-authn-authz-and-durable-objects/">hibernating per-tenant state</a>), but Zenod needs a real filesystem and git, and Epaminon needs to run CLI agents — neither fits Workers. Keep it as a future option for Callisthenes, not the plan.</p>
+  </div>
+</section>
+
+<!-- 9 · TARGET PICTURE -->
+<section class="slide">
+  <h2>The target picture: your whole business on one VPS</h2>
+  <div class="diagram" style="flex:1">
+    <svg viewBox="0 0 780 320">
+      <g font-size="12" fill="#e6edf3">
+        <rect x="15" y="15" width="750" height="290" rx="10" fill="none" stroke="#30363d"/>
+        <text x="390" y="38" text-anchor="middle" fill="#8b949e">VPS (Dokploy still fine as the deployer — it just deploys 6 things, once)</text>
+        <rect x="40" y="60" width="130" height="54" rx="8" fill="#1c2128" stroke="#4ec9b0"/><text x="105" y="83" text-anchor="middle">proxy</text><text x="105" y="100" text-anchor="middle" font-size="9" fill="#8b949e">*.zenod.dev, TLS</text>
+        <rect x="220" y="50" width="130" height="50" rx="8" fill="#1c2128" stroke="#61afef"/><text x="285" y="72" text-anchor="middle">zenod</text><text x="285" y="88" text-anchor="middle" font-size="9" fill="#8b949e">all tenants</text>
+        <rect x="220" y="115" width="130" height="50" rx="8" fill="#1c2128" stroke="#e5c07b"/><text x="285" y="137" text-anchor="middle">callisthenes</text><text x="285" y="153" text-anchor="middle" font-size="9" fill="#8b949e">all tenants</text>
+        <rect x="220" y="180" width="130" height="50" rx="8" fill="#1c2128" stroke="#98c379"/><text x="285" y="202" text-anchor="middle">ring + phylax</text><text x="285" y="218" text-anchor="middle" font-size="9" fill="#8b949e">one number</text>
+        <rect x="220" y="245" width="130" height="50" rx="8" fill="#1c2128" stroke="#e06c75"/><text x="285" y="267" text-anchor="middle">epaminon-api</text><text x="285" y="283" text-anchor="middle" font-size="9" fill="#8b949e">all tenants</text>
+        <line x1="170" y1="87" x2="218" y2="75" stroke="#8b949e"/><line x1="170" y1="90" x2="218" y2="140" stroke="#8b949e"/><line x1="170" y1="93" x2="218" y2="205" stroke="#8b949e"/><line x1="170" y1="96" x2="218" y2="270" stroke="#8b949e"/>
+        <rect x="430" y="60" width="150" height="60" rx="8" fill="#1c2128" stroke="#61afef"/><text x="505" y="85" text-anchor="middle">Postgres</text><text x="505" y="103" text-anchor="middle" font-size="9" fill="#8b949e">tenants · ledgers · vault</text>
+        <line x1="350" y1="75" x2="428" y2="85" stroke="#8b949e"/><line x1="350" y1="140" x2="428" y2="95" stroke="#8b949e"/><line x1="350" y1="270" x2="428" y2="110" stroke="#8b949e"/>
+        <rect x="430" y="150" width="150" height="60" rx="8" fill="#1c2128" stroke="#8b949e"/><text x="505" y="175" text-anchor="middle">/data volume</text><text x="505" y="193" text-anchor="middle" font-size="9" fill="#8b949e">/data/&lt;tenant&gt;/repo …</text>
+        <rect x="620" y="230" width="130" height="60" rx="8" fill="#1c2128" stroke="#e06c75" stroke-dasharray="5,4"/><text x="685" y="255" text-anchor="middle" font-size="11">job containers</text><text x="685" y="272" text-anchor="middle" font-size="9" fill="#8b949e">spawned per task, destroyed</text>
+        <line x1="350" y1="275" x2="618" y2="262" stroke="#e06c75" stroke-dasharray="5,4" marker-end="url(#a5)"/>
+        <text x="620" y="60" fill="#98c379" font-size="12">The ONLY per-something</text>
+        <text x="620" y="78" fill="#98c379" font-size="12">containers left: Epaminon's</text>
+        <text x="620" y="96" fill="#98c379" font-size="12">ephemeral per-JOB sandboxes.</text>
+        <text x="620" y="114" fill="#8b949e" font-size="11">Isolation where it's real</text>
+        <text x="620" y="130" fill="#8b949e" font-size="11">(running arbitrary CLI agents),</text>
+        <text x="620" y="146" fill="#8b949e" font-size="11">gone when the job ends.</text>
+      </g>
+      <defs><marker id="a5" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#e06c75"/></marker></defs>
+    </svg>
+  </div>
+</section>
+
+<!-- 10 · MIGRATION -->
+<section class="slide">
+  <h2>How to get unstuck: the smallest path</h2>
+  <div class="cols">
+    <div class="col">
+      <div class="card">
+        <h3 class="bad">Stop building</h3>
+        <ul>
+          <li>Per-tenant Dokploy provisioner &amp; its failure recovery</li>
+          <li>Watchdog registration API for per-user instances</li>
+          <li>Per-tenant subdomain/DNS minting</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="good">Build instead (small)</h3>
+        <ul>
+          <li><b>1.</b> Add a <code>tenants</code> table (token_hash, plan, quota) to each unit. You have the bearer seam already.</li>
+          <li><b>2.</b> Prefix all storage by tenant: <code>/data/&lt;tenant&gt;/…</code>, <code>WHERE tenant_id=</code>.</li>
+          <li><b>3.</b> Point the Stripe webhook at <code>INSERT + mint token + send URL</code>.</li>
+          <li><b>4.</b> Epaminon: keep the API multi-tenant, spawn a throwaway container per job.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Order of attack</h3>
+        <p><b>Callisthenes first</b> — it's stateless key-custody + throttle, the easiest conversion and the cleanest proof of the pattern. Then Zenod (tenant-prefixed repos). Epaminon's API was headless anyway. Ring/Phylax barely change.</p>
+      </div>
+      <div class="card">
+        <h3 class="accent">The reframe</h3>
+        <p>You're not choosing between "simple but unscalable" and "scary but scalable." The multi-tenant shape is <b>less</b> machinery: no provisioner, no per-user DNS, no watchdog fleet, one deploy, hosted = self-hosted. It's the version of this product you can actually be un-tired in.</p>
+      </div>
+      <div class="card">
+        <p class="dim">Law 7 amendment to record in the spine: <i>"one container per unit, multi-tenant within; isolation exceptions: Epaminon job sandboxes (per-job, ephemeral) and Phylax (per phone number)."</i></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="nav">
+  <span class="counter" id="counter">1 / 10</span>
+  <button onclick="go(-1)">←</button>
+  <button onclick="go(1)">→</button>
+</div>
+
+<script>
+const slides=[...document.querySelectorAll('.slide')];let i=0;
+function show(){slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+document.getElementById('counter').textContent=(i+1)+' / '+slides.length;
+document.getElementById('progress').style.width=((i+1)/slides.length*100)+'%';}
+function go(d){i=Math.max(0,Math.min(slides.length-1,i+d));show();}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')go(1);if(e.key==='ArrowLeft')go(-1);});
+show();
+</script>
+</body>
+</html>
