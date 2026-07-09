@@ -824,7 +824,8 @@ and container before the tenant reached running. The later `compose.redeploy` pa
 existing checkout, so it was not an acceptable fresh-tenant strategy.
 
 - **Strategy correction:** private cloud PR
-  [#55](https://github.com/zenod-ai/cloud/pull/55) restores the same fresh-tenant sequence used by
+  [#55](https://github.com/zenod-ai/cloud/pull/55), merged as `ecbfa69`, restores the same
+  fresh-tenant sequence used by
   Zenod: `compose.create` -> `compose.update` -> `domain.create` -> `compose.deploy` -> status poll.
   If the first deploy ends in the observed checkout-initialization `error`, it repeats that same
   standard deploy once; it never switches to `compose.redeploy` or host-side materialization.
