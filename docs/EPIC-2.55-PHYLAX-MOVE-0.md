@@ -90,7 +90,7 @@ Phase: planning / dispatch
 Last verified: 2026-07-09 23:55 CEST
 Integration target: `main`
 Fresh base commit: `c8fdb5b57d28a9701918b4ff01981e3e4aec0731` in `zenod-ai/zenod`; cloud audit commit `5474802c17665a962714434b18e6286ae46dde2c` on local branch `codex/epic25-ring-cloud` with existing dirty Ring changes.
-Next action: monitor the first dispatched worker batch (#705 Laplace, #703 James, #704 Gibbs), then dispatch the next non-conflicting cloud/UI/provider batch when API/site/doc contracts are ready.
+Next action: resume or re-dispatch #705, #703, and #704 when ready; the first worker batch was paused before integration after Jordi asked the steward to return to `main`.
 Blockers: live managed WhatsApp/provider credentials and any production deployment require human approval; cloud checkout implementation must use a clean dedicated worktree because the local cloud checkout is dirty.
 
 ## Role Goals
@@ -160,10 +160,10 @@ Audit findings on 2026-07-09:
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#702](https://github.com/zenod-ai/zenod/issues/702) | Epic worker | Epic 2.55 Phylax steward | P-0 spine and execution board | running | - | `codex/epic-2.55-phylax-spine` | `c8fdb5b` | Spine exists, issue board created, validator passes. | Issue created; spine draft in branch. | 2026-07-09 23:55 CEST | Validate spine, update issue, push/PR or hand off. |
-| [#705](https://github.com/zenod-ai/zenod/issues/705) | Ticket worker | Laplace / phylax-product-page-worker | P-1 public Phylax product page and hosted CTA | running | #702 | `codex/epic-2.55-phylax-site` | `c8fdb5b` | Public page with cloud-test hosted CTA and correct boundaries. | Subagent Laplace dispatched. | 2026-07-09 23:55 CEST | Worker to update #705 with handoff. |
-| [#703](https://github.com/zenod-ai/zenod/issues/703) | Ticket worker | James / phylax-selfhost-unit-worker | P-2 self-host Phylax unit README, seam, compose, runbook | running | #702 | `codex/epic-2.55-phylax-selfhost-unit` | `c8fdb5b` | Self-host unit docs/compose/runbook complete and legacy wording retired. | Subagent James dispatched. | 2026-07-09 23:55 CEST | Worker to update #703 with handoff. |
-| [#704](https://github.com/zenod-ai/zenod/issues/704) | Ticket worker | Gibbs / phylax-runtime-api-worker | P-3 runtime APIs for hosted config, health, receipts, Ring seam | running | #702 | `codex/epic-2.55-phylax-runtime-api` | `c8fdb5b` | Runtime API supports hosted Phylax settings, write-only tokens, health, receipts, Ring endpoint. | Subagent Gibbs dispatched. | 2026-07-09 23:55 CEST | Worker to update #704 with handoff. |
+| [#702](https://github.com/zenod-ai/zenod/issues/702) | Epic worker | Epic 2.55 Phylax steward | P-0 spine and execution board | review | - | `main` / `7c8dfd4` then follow-up reconciliation | `c8fdb5b` | Spine exists, issue board created, validator passes. | Merged locally to `main`; #702 marked needs-review. | 2026-07-09 23:55 CEST | Review or push from `main` if desired. |
+| [#705](https://github.com/zenod-ai/zenod/issues/705) | Ticket worker | Laplace / phylax-product-page-worker | P-1 public Phylax product page and hosted CTA | paused | #702 | `codex/epic-2.55-phylax-site` | `c8fdb5b` | Public page with cloud-test hosted CTA and correct boundaries. | Partial site work exists in `/Users/jordi/Documents/GitHub/zenod-epic255-phylax-site`; not integrated. | 2026-07-09 23:55 CEST | Resume validation before integration. |
+| [#703](https://github.com/zenod-ai/zenod/issues/703) | Ticket worker | James / phylax-selfhost-unit-worker | P-2 self-host Phylax unit README, seam, compose, runbook | paused | #702 | `codex/epic-2.55-phylax-selfhost-unit` | `c8fdb5b` | Self-host unit docs/compose/runbook complete and legacy wording retired. | Worker was shut down before handoff; no integrated changes. | 2026-07-09 23:55 CEST | Re-dispatch or resume issue. |
+| [#704](https://github.com/zenod-ai/zenod/issues/704) | Ticket worker | Gibbs / phylax-runtime-api-worker | P-3 runtime APIs for hosted config, health, receipts, Ring seam | paused | #702 | `codex/epic-2.55-phylax-runtime-api` | `c8fdb5b` | Runtime API supports hosted Phylax settings, write-only tokens, health, receipts, Ring endpoint. | Partial `packages/server/src/settings.ts` scaffolding exists in `/Users/jordi/Documents/GitHub/zenod-epic255-phylax-runtime-api`; not integrated. | 2026-07-09 23:55 CEST | Resume API/routes/tests before integration. |
 | [#707](https://github.com/zenod-ai/zenod/issues/707) | Ticket worker | phylax-hosted-settings-ui-worker | P-4 hosted Phylax settings UI in cloud console | ready | #704 | `codex/epic-2.55-phylax-hosted-ui` | cloud `5474802` | Hosted settings UI covers required controls and hides QR. | Issue created. | 2026-07-09 23:55 CEST | Dispatch after or alongside API contract with mocks. |
 | [#709](https://github.com/zenod-ai/zenod/issues/709) | Ticket worker | phylax-checkout-provisioning-worker | P-5 Stripe TEST checkout and automatic provisioning | ready | #703, #704, #705 | `codex/epic-2.55-phylax-checkout-provision` | cloud `5474802` | unit=phylax checkout, status, queue, provisioner, watchdog. | Issue created. | 2026-07-09 23:55 CEST | Dispatch in clean cloud worktree. |
 | [#706](https://github.com/zenod-ai/zenod/issues/706) | Ticket worker | phylax-signed-entry-worker | P-6 signed checkout-to-settings handoff | ready | #707, #709 | `codex/epic-2.55-phylax-signed-entry` | cloud `5474802` | Paid buyer enters Phylax settings via signed link without admin password. | Issue created. | 2026-07-09 23:55 CEST | Dispatch after status/settings route exists. |
@@ -219,9 +219,9 @@ Recovery instructions:
 
 ## Worker Queue
 
-- #705 public product page - dispatched to Laplace.
-- #703 self-host unit docs/compose/runbook - dispatched to James.
-- #704 runtime hosted Phylax APIs - dispatched to Gibbs.
+- #705 public product page - paused with partial isolated work; validate before integration.
+- #703 self-host unit docs/compose/runbook - paused before handoff.
+- #704 runtime hosted Phylax APIs - paused with partial isolated settings scaffolding; complete routes/tests before integration.
 - #707 hosted settings UI.
 - #709 Stripe TEST checkout/provisioning.
 - #706 signed hosted-entry.
@@ -245,6 +245,7 @@ Recovery instructions:
 | 2026-07-09 | GitHub board creation | `c8fdb5b` | GitHub `zenod-ai/zenod` | Created labels `epic:2.55`, `phylax` and issues #702-#713. | pass | Issue Ledger links. |
 | 2026-07-09 | Spine structural validation | working tree from `c8fdb5b` | local | `python3 skills/epic-spine/scripts/validate_spine.py --strict docs/EPIC-2.55-PHYLAX-MOVE-0.md` | pass | `OK` |
 | 2026-07-09 | Parallel dispatch batch 1 | `c8fdb5b` | multi-agent | Spawned workers Laplace (#705), James (#703), and Gibbs (#704). | running | Issue labels updated to `status:running`. |
+| 2026-07-09 | Spine merged locally to main | `7c8dfd4` | local `main` | `git switch main && git merge --ff-only codex/epic-2.55-phylax-spine`; validator rerun. | pass | `docs/EPIC-2.55-PHYLAX-MOVE-0.md OK` |
 
 ## Handoff Journal
 
@@ -293,6 +294,27 @@ Last verified: 2026-07-09 23:55 CEST
 
 Links:
 
+- #705
+- #703
+- #704
+
+### 2026-07-09 - Epic worker - Steward work brought to main and workers paused
+
+Context: Jordi asked to bring all steward work to `main` and stay there. The new Phylax spine was committed as `7c8dfd4` and fast-forwarded into local `main`. The first worker batch was interrupted and closed before integration.
+
+Next: Stay on `main`. Resume #705 only after browser/mobile validation; resume #704 only after completing runtime routes/tests; re-dispatch #703 if self-host unit docs are still needed.
+
+Risks: #705 and #704 have useful partial work in isolated worktrees, but neither is ready to merge. #703 closed before a useful handoff.
+
+Assignment identity: Epic 2.55 Phylax steward
+
+Branch / latest commit: `main` at `7c8dfd4` plus this reconciliation edit.
+
+Last verified: 2026-07-09 23:55 CEST
+
+Links:
+
+- #702
 - #705
 - #703
 - #704
