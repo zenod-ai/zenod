@@ -2,9 +2,8 @@
 
 > **▶ CURRENT STATE (worker: start here).** #645 / C-2R is landed on `main`; the stale
 > client-supplied `mcp_token` path is no longer the next lane. Current push is C-3 demo fidelity:
-> first-class Callisthenes Stripe TEST buy surface on `cloud-test.zenod.dev` + clear
-> hosted/self-hosted demo path, then Callisthenes-specific provision/watchdog once the split
-> test/live cloud envs are ready. `cloud.zenod.dev` is reserved for the later Stripe LIVE lane.
+> first-class Callisthenes Stripe TEST buy surface is deployed on `cloud-test.zenod.dev` + clear
+> hosted/self-hosted demo path. `cloud.zenod.dev` is reserved for the later Stripe LIVE lane.
 > Bound spine:
 > this document only; referenced parent/sibling spines are read-only unless Jordi widens scope.
 > — worker, 2026-07-09
@@ -601,3 +600,31 @@ control-plane ambiguous. This pass changes the C-3T target to a separate test la
   `price_1TrJDA76yJ3p1J6XMbHBRiII`, point `callisthenes.zenod.dev` at that runtime for Step 0, and
   verify `cloud-test.zenod.dev/buy/callisthenes` returns a `cs_test_...` Checkout Session before
   asking Jordi to test. — [worker]
+
+### 2026-07-09 · [worker] C-3T cloud-test lane deployed and verified
+The separate Stripe TEST lane is now live. `cloud.zenod.dev` is no longer the Callisthenes test
+checkout target.
+
+- **Cloud commit:** `zenod-ai/cloud@809f5a4` adds the `CALLISTHENES_CHECKOUT_URL` knob and test/live
+  operator docs.
+- **Zenod commit:** `zenod-ai/zenod@d8f158e` points the Callisthenes public page/deck to
+  `https://cloud-test.zenod.dev/buy/callisthenes` and records this lane split.
+- **Deploy:** created the separate `zenod-cloud-test` compose project from `cloud@809f5a4`, with its
+  own `cloud-data` volume, `DOMAIN=https://cloud-test.zenod.dev`,
+  `CALLISTHENES_CHECKOUT_URL=https://cloud-test.zenod.dev/buy/callisthenes`, and
+  `PRICE_CALLISTHENES=price_1TrJDA76yJ3p1J6XMbHBRiII`. Moved `callisthenes.zenod.dev` routing from
+  the live cloud project to `zenod-cloud-test`.
+- **Live/lane separation verified:** `zenod-cloud-test` has routers for `cloud-test.zenod.dev` and
+  `callisthenes.zenod.dev`; the live cloud project has only `cloud.zenod.dev` and `admin.zenod.dev`.
+  The test container reports `DOMAIN=https://cloud-test.zenod.dev`, `PRICE_CALLISTHENES:true`, and a
+  Stripe `sk_test_...` key; the live cloud container reports `PRICE_CALLISTHENES:false`.
+- **Public verification:** `https://cloud-test.zenod.dev/healthz` returns 200;
+  `https://callisthenes.zenod.dev/` returns 200 with the cloud-test checkout CTA;
+  `https://cloud-test.zenod.dev/buy/callisthenes` returns 303 to a Stripe `cs_test_...` Checkout
+  Session; `https://cloud-test.zenod.dev/callisthenes/status?session_id=cs_test_probe` renders the
+  status UI; and `https://cloud.zenod.dev/buy/callisthenes` now returns 503 because the live lane has
+  no Callisthenes test price configured.
+- **Still out of scope:** a fresh paid checkout still needs human/browser test to prove callback ->
+  paid reconciliation -> provision -> `/connect` on this new `cloud-test` lane. X OAuth credentials
+  remain absent, so final Connect X OAuth completion is still blocked on credentials/registration. —
+  [worker]
