@@ -2,8 +2,10 @@
 
 > **▶ CURRENT STATE (worker: start here).** #645 / C-2R is landed on `main`; the stale
 > client-supplied `mcp_token` path is no longer the next lane. Current push is C-3 demo fidelity:
-> first-class Callisthenes Stripe TEST buy surface + clear hosted/self-hosted demo path, then
-> Callisthenes-specific provision/watchdog once cloud env and deploy are ready. Bound spine:
+> first-class Callisthenes Stripe TEST buy surface on `cloud-test.zenod.dev` + clear
+> hosted/self-hosted demo path, then Callisthenes-specific provision/watchdog once the split
+> test/live cloud envs are ready. `cloud.zenod.dev` is reserved for the later Stripe LIVE lane.
+> Bound spine:
 > this document only; referenced parent/sibling spines are read-only unless Jordi widens scope.
 > — worker, 2026-07-09
 
@@ -579,3 +581,23 @@ Jordi correctly flagged that `/buy/callisthenes` is not a public Step 0 site. I 
   page; `https://cloud.zenod.dev/callisthenes` returns HTTP 200; and
   `https://cloud.zenod.dev/buy/callisthenes` returns HTTP 303 to a Stripe `cs_test_...` Checkout
   Session. — [worker]
+
+### 2026-07-09 · [worker] C-3T target split — cloud-test for Stripe TEST, cloud for LIVE
+Jordi caught the deploy naming risk: using `cloud.zenod.dev` for Stripe TEST makes the future live
+control-plane ambiguous. This pass changes the C-3T target to a separate test lane.
+
+- **Decision:** the Callisthenes Stripe TEST journey targets `https://cloud-test.zenod.dev`. The live
+  lane remains `https://cloud.zenod.dev` and should not carry `PRICE_CALLISTHENES` until a LIVE Stripe
+  Callisthenes price/key/webhook exists.
+- **User-facing surfaces:** the public page at `sites/callisthenes/index.html`, the Epic 2.4 deck, and
+  the cloud-hosted Callisthenes landing template now send the buy action to
+  `https://cloud-test.zenod.dev/buy/callisthenes`.
+- **Cloud repo support:** `zenod-ai/cloud` now has a `CALLISTHENES_CHECKOUT_URL` env knob, defaulting
+  to the cloud-test checkout route, and the operator docs describe `zenod-cloud-test` / Stripe TEST
+  alongside `zenod-cloud` / Stripe LIVE.
+- **Ticket updated:** C-3T is tracked in GitHub issue #656; updated with this target split and will get
+  live verification receipts after deploy.
+- **Next action:** deploy/reconcile a separate cloud-test runtime with the existing TEST price
+  `price_1TrJDA76yJ3p1J6XMbHBRiII`, point `callisthenes.zenod.dev` at that runtime for Step 0, and
+  verify `cloud-test.zenod.dev/buy/callisthenes` returns a `cs_test_...` Checkout Session before
+  asking Jordi to test. — [worker]
