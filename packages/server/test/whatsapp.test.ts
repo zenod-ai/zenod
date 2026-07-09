@@ -248,8 +248,40 @@ describe("WhatsApp API", () => {
       });
       expect(saved.status).toBe(200);
       const body = await saved.json();
+      expect(body.providerMode).toBe("self_host_dev");
       expect(body.allowedSenders).toEqual(["34600000001"]);
       expect(JSON.stringify(body)).not.toContain("session");
+
+      const cloud = await app.request("/api/whatsapp/settings", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          enabled: true,
+          providerMode: "cloud",
+          cloudProvider: "managed-whatsapp",
+          cloudWebhookUrl: "https://ring.example.test/webhooks/phylax",
+          cloudPhoneNumberId: "pn_123",
+          cloudStatus: "configured",
+          testRecipient: "+34 600 000 002",
+        }),
+      });
+      expect(cloud.status).toBe(200);
+      const cloudBody = await cloud.json();
+      expect(cloudBody).toEqual(
+        expect.objectContaining({
+          enabled: true,
+          providerMode: "cloud",
+          state: "disconnected",
+          qr: null,
+          cloud: {
+            provider: "managed-whatsapp",
+            webhookUrl: "https://ring.example.test/webhooks/phylax",
+            phoneNumberId: "pn_123",
+            status: "configured",
+            testRecipient: "+34 600 000 002",
+          },
+        }),
+      );
 
       const reset = await app.request("/api/whatsapp/reset-session", {
         method: "POST",

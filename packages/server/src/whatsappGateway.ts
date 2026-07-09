@@ -29,6 +29,8 @@ import {
   maskPhoneNumber,
   normalizeWhatsAppIdentifier,
   senderIsAllowed,
+  type WhatsAppProviderMode,
+  type WhatsAppCloudStatus,
   type WhatsAppSettings,
 } from "./whatsappConfig.js";
 import {
@@ -54,6 +56,14 @@ export type WhatsAppConnectionState = "disabled" | "disconnected" | "pairing" | 
 
 export interface WhatsAppStatus {
   enabled: boolean;
+  providerMode: WhatsAppProviderMode;
+  cloud: {
+    provider: string | null;
+    webhookUrl: string | null;
+    phoneNumberId: string | null;
+    status: WhatsAppCloudStatus;
+    testRecipient: string | null;
+  };
   state: WhatsAppConnectionState;
   linkedNumber: string | null;
   lastActivity: number | null;
@@ -316,13 +326,23 @@ export class WhatsAppGateway {
   status(): WhatsAppStatus {
     const settings = this.options.settings.whatsappSettings();
     const linked = this.socket?.user?.id ?? this.options.settings.getRaw("whatsapp_linked_jid");
+    const cloudState: WhatsAppConnectionState =
+      settings.cloudStatus === "connected" ? "connected" : settings.cloudStatus === "error" ? "error" : "disconnected";
     return {
       enabled: settings.enabled,
-      state: settings.enabled ? this.state : "disabled",
+      providerMode: settings.providerMode,
+      cloud: {
+        provider: settings.cloudProvider,
+        webhookUrl: settings.cloudWebhookUrl,
+        phoneNumberId: settings.cloudPhoneNumberId,
+        status: settings.cloudStatus,
+        testRecipient: settings.testRecipient,
+      },
+      state: settings.enabled ? (settings.providerMode === "cloud" ? cloudState : this.state) : "disabled",
       linkedNumber: maskPhoneNumber(linked),
       lastActivity: this.options.store.lastActivity(),
       lastError: this.lastError,
-      qr: this.state === "pairing" ? this.qr : null,
+      qr: settings.providerMode === "self_host_dev" && this.state === "pairing" ? this.qr : null,
       allowedSenders: settings.allowedSenders,
       groupsEnabled: settings.groupsEnabled,
       acceptAll: settings.acceptAll,
@@ -343,7 +363,8 @@ export class WhatsAppGateway {
   }
 
   async startIfEnabled(): Promise<void> {
-    if (this.options.settings.whatsappSettings().enabled) await this.start();
+    const settings = this.options.settings.whatsappSettings();
+    if (settings.enabled && settings.providerMode === "self_host_dev") await this.start();
   }
 
   async start(): Promise<void> {
@@ -357,6 +378,9 @@ export class WhatsAppGateway {
 
   async pair(): Promise<void> {
     this.options.settings.setWhatsAppSettings({ enabled: true });
+    if (this.options.settings.whatsappSettings().providerMode !== "self_host_dev") {
+      throw new Error("WhatsApp QR pairing is available only in self_host_dev mode");
+    }
     if (this.socket) {
       await this.disconnect({ keepEnabled: true });
     }
