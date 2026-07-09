@@ -63,14 +63,62 @@ cross-note questions where `search_memory` alone is not enough.
 
 ## Ingest / digest (the intake pipeline)
 
-Zenod ingests raw sources (documents, transcribed audio, Drive files) and digests them
-into evidence+meaning through the SAME store pipeline. Today this runs inside Zenod
-behind an ingest queue (`packages/server/src/ingestQueue.ts`): a job moves
-download → transcribe → **file (store)** → archive, each step updating its own row so a
-caller can watch it and it survives restart. Receipts are the same `StoreResult` shape
-(evidenceRef / pagesTouched / commitSha / githubUrls). A dedicated public `ingest`/
-`digest` MCP tool is the intended surface; the mechanism exists and is receipt-shaped —
-exposing it as a first-class seam tool is a follow-up (see EXTRACTION-MAP.md).
+### `ingest_memory` — LONG (mutating)
+Queue a raw memory-bound artifact through the public seam. Use this when the user passes
+Zenod "the thing to remember" as media or an artifact handle: audio, screenshot/image,
+PDF/document, link, or a staged transport reference from Ring/Drive/object storage.
+
+- **Input:**
+  ```jsonc
+  {
+    "mediaType": "audio" | "screenshot" | "image" | "pdf" | "document" | "link",
+    "artifactUrl": "https://...",  // OR bytesRef is required
+    "bytesRef": "drive:file-id-or-object-key",
+    "filename": "voice-note.ogg",
+    "sourceHint": "WhatsApp | Claude upload | Ring | Drive",
+    "contentHint": "what the user wants remembered about this artifact",
+    "senderTimestamp": "2026-07-09T12:00:00Z",
+    "hints": ["optional filing hints"]
+  }
+  ```
+- **Class:** LONG. Returns immediately with `{ jobId, kind: "media_ingest", status:
+  "queued" }`; poll `get_task_result`.
+- **Terminal receipt shape:** on terminal poll, `result` carries the media contract:
+  ```jsonc
+  {
+    "status": "done",
+    "message": "Media artifact archived, extracted, digested, filed, and committed.",
+    "mediaType": "screenshot",
+    "source": { "artifactUrl": "https://...", "filename": "screen.png" },
+    "rawArtifact": {
+      "handle": "file:///.../screen.png",   // or drive://file/<id>
+      "archiveUrl": "file:///.../screen.png",
+      "sha256": "..."
+    },
+    "extraction": {
+      "handle": "file:///.../screen.extraction.txt",
+      "transcriptHandle": null,         // audio uses the transcript archive handle
+      "ocrHandle": "file:///.../screen.extraction.txt",
+      "archiveUrl": "file:///.../screen.extraction.txt",
+      "provider": "vision model"
+    },
+    "digest": {
+      "evidenceRef": "Log/2026-07-09.md#^e-...",
+      "pagesTouched": ["Areas/Insurance.md"],
+      "commitSha": "...",
+      "githubUrls": ["https://github.com/..."]
+    }
+  }
+  ```
+  Resolvable bytes (`artifactUrl`, `data:` refs, and configured Drive refs such as
+  `drive://file/<id>`) run the full pipeline: raw archive first, transcription/OCR/extraction
+  archive second, then digest/file/commit. Opaque transport handles that Zenod cannot resolve
+  are still archived as references and return a loud `media_ingest_processor_unavailable`
+  receipt rather than a success-shaped fake.
+
+Existing Google Drive folder intake (`list_drive_files` / `ingest_drive_file`) remains an
+optional configured source tool. `ingest_memory` is the generic public contract for plain MCP
+clients and Ring/Phylax transport handoff.
 
 ## Poll tool
 

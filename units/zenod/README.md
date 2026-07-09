@@ -74,8 +74,34 @@ Send it as `Authorization: Bearer <token>` on every MCP call. (Treat it like a p
 Note: `GET /api/token` is itself auth-gated — you need the token to call it — so use one
 of the two paths above to learn it in the first place.)
 
-Run `tools/list`. You should see `store_memory`, `search_memory`, `get_memory`,
-`ask_brain`, and `get_task_result` (full surface in [SEAM-SURFACE.md](./SEAM-SURFACE.md)).
+Run `tools/list`. You should see `store_memory`, `ingest_memory`, `search_memory`,
+`get_memory`, `ask_brain`, and `get_task_result` (full surface in
+[SEAM-SURFACE.md](./SEAM-SURFACE.md)).
+
+#### Codex Desktop bearer-token setup
+
+Codex Desktop's MCP server settings have two separate concepts:
+
+- **URL:** paste the Zenod MCP URL, for example `https://<host>/mcp`.
+- **Bearer token env var:** enter the environment variable name, for example
+  `ZENOD_MCP_TOKEN`.
+
+Do not paste the token itself into the `Bearer token env var` field. Codex reads that
+field as the name of an environment variable, then reads the actual bearer token from
+the Codex process environment.
+
+For Codex CLI, this works when `codex` is launched from the same shell:
+
+```bash
+export ZENOD_MCP_TOKEN="<token>"
+codex mcp add zenod --url https://<host>/mcp --bearer-token-env-var ZENOD_MCP_TOKEN
+```
+
+A normal shell `export` is temporary: it lasts only for that shell session and child
+processes. It does not survive a machine restart, and it does not affect an already
+running macOS GUI app launched from Finder, Dock, or Spotlight. For Codex Desktop,
+set the variable in the environment before starting Codex Desktop, or use a literal
+`Authorization: Bearer <token>` header in the MCP server settings.
 
 ### 3. Store / search / get
 
@@ -98,6 +124,33 @@ Run `tools/list`. You should see `store_memory`, `search_memory`, `get_memory`,
 ```
 
 Open the `githubUrls` link — the memory is a committed file in **your** repo.
+
+**Ingest media/artifacts** (mutating, async — returns a `jobId`, then poll):
+
+```jsonc
+// tools/call ingest_memory
+{
+  "mediaType": "screenshot",
+  "artifactUrl": "https://example.test/screen.png",
+  "filename": "screen.png",
+  "sourceHint": "Claude upload",
+  "contentHint": "remember the renewal date visible in this screenshot",
+  "hints": ["insurance"]
+}
+// -> returns { jobId: "...", kind: "media_ingest", status: "queued" }
+
+// tools/call get_task_result
+{ "jobId": "..." }
+// -> when done, result includes:
+// {
+//   status: "done",
+//   rawArtifact: { handle, archiveUrl, sha256 },
+//   extraction: { handle, ocrHandle, transcriptHandle, archiveUrl, provider },
+//   digest: { evidenceRef, pagesTouched, commitSha, githubUrls }
+// }
+// Opaque handles that Zenod cannot resolve still return a loud
+// media_ingest_processor_unavailable receipt instead of fake success.
+```
 
 **Search** (read, fast, no LLM):
 
@@ -127,8 +180,10 @@ synthesized answer with cited sources.
 - **The endpoint is standard MCP** — nothing custom on the wire. `tools/list` +
   `tools/call` is all a caller needs to know. See [../../docs/SEAM-SPEC.md](../../docs/SEAM-SPEC.md).
 - **Every write returns a receipt.** `store_memory` gives you a `commitSha` + GitHub
-  URL (via `get_task_result`); a read returns data or an explicit "none". No silent
-  acks; failures error loudly with `{ code, message }`.
+  URL (via `get_task_result`). `ingest_memory` gives an async media receipt with
+  raw artifact, extraction/transcript archive, digest, commit, and archive fields.
+  A read returns data or an explicit "none". No silent acks; failures error loudly
+  with `{ code, message }`.
 - **Only Zenod holds your repo token.** It is supplied to this one box (env or
   `/api/provision`) and read in exactly one place internally. Nothing else in the
   suite can write your repo. Any write attempt down another path fails loudly.

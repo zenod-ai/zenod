@@ -27,6 +27,16 @@ fan out sub-agents, one per lane, receipts from each.**
 
 **"Your personal wiki brain."** Zenod standalone = one MCP server, one container, the customer's
 git repo behind it. Plain markdown; every AI you use reads and writes it through one librarian.
+- **Core doctrine added 2026-07-09 (Jordi): evidence-to-memory is Zenod's job, not just
+  text notes.** If the user passes Zenod "the thing I want remembered" — text, screenshot,
+  image, audio, voice note, PDF/document, or a link to an artifact — Zenod owns the full
+  pipeline: preserve raw evidence, extract/transcribe/OCR/describe, digest into markdown with
+  citations, prepare it for later extraction/search/ask, and return receipts. Google Drive
+  (or equivalent object storage) is a Zenod-owned evidence archive for heavy raw artifacts;
+  the git vault remains the durable, user-owned memory index and meaning layer. This was
+  previously tangled in the Council/Console; it belongs inside Zenod for standalone and
+  hosted. The Ring/Phylax boundary is explicit: Phylax transports media, Ring routes intent,
+  Zenod ingests and remembers.
 - **Two ways to have it, one public website:** self-host (open source, terminal quickstart —
   instructions on the site, no UI required) or **hosted at €5/month** (ZD-1 DECIDED) with
   self-serve signup. The platform is multi-user in the SaaS sense: anyone signs up, everyone gets
@@ -41,6 +51,12 @@ git repo behind it. Plain markdown; every AI you use reads and writes it through
 - Standalone keyring: local credential store (the locked connections design's standalone mode).
 - LLM spend (digest + ask) is metered per user from the per-call ledger; key model per ZD-5;
   the dashboard shows calls · tokens · cost either way.
+- Hosted Zenod's cloud UI is therefore a **memory operations console**, not a chat UI: GitHub
+  repo connection, MCP token, usage/balance, Google Drive evidence archive, transcription
+  provider/fallbacks, screenshot/PDF extraction/OCR/vision settings, ingest queue health,
+  retention policy, and recent receipt history. These controls are required because they
+  configure Zenod's memory work. UI/readout deck:
+  [EPIC-2.3-ZENOD-HOSTED-MEDIA-DECK.html](EPIC-2.3-ZENOD-HOSTED-MEDIA-DECK.html).
 - **v0 surface spec (Jordi, 2026-07-05 post-handback — settled):** Zenod v0 is PURELY an MCP
   server; the customer's chat client IS the whole interface — auth and daily use ride the MCP
   connection. **Self-host: no UI at all** — terminal + docs + your chat client; the server
@@ -119,6 +135,54 @@ relitigate decided items without new evidence.
   "treat this like a password." URL + separate bearer rejected for funnel friction; the header
   path (`GET /api/token` → `Authorization: Bearer`) remains the self-host mechanism.
 
+- **ZD-12 · Media memory ownership — DECIDED 2026-07-09 (Jordi): Zenod owns media ingest.**
+  Media handling moves from the old Council/Console tangle into Zenod. Audio transcription,
+  screenshot/image OCR or vision extraction, PDF/document extraction, raw artifact archive
+  (Google Drive for hosted, local/object-store equivalent for self-host), digest, citations,
+  and commit receipts are Zenod concerns. The public seam should grow first-class ingest tools
+  rather than relying on hidden UI/chat routes. Ring/Phylax are routing/transport only:
+  inbound media handle -> Ring intent routing -> Zenod ingest; response/receipt -> Ring/Phylax
+  outbound. Consequence: Z-2 hosted UI gains memory-operation OAuth/config controls; Z-10
+  is minted below for media ingest acceptance. Cross-track consequences: Epic 0 should tell
+  the evidence-to-memory story; Epic 2.5 should keep Ring as router and Phylax as gateway,
+  borrowing working deployed Council behavior but not keeping media logic there.
+
+## Issue ledger — EpicSpine backlog
+
+| Issue | Lane | Status | Owner/role | Dependencies | Acceptance summary |
+|---|---|---|---|---|---|
+| [#659](https://github.com/zenod-ai/zenod/issues/659) | Z-10A · Media ingest MCP seam | integrated locally · tests green | worker | none | Public async MCP ingest tool contract, receipt shape, docs, tests |
+| [#660](https://github.com/zenod-ai/zenod/issues/660) | Z-10B · Artifact archive | integrated locally · tests green | worker | coordinated with #659 receipt shape | Zenod-owned Drive/local raw artifact archive with handles and tests |
+| [#661](https://github.com/zenod-ai/zenod/issues/661) | Z-10C · Audio ingest | integrated locally · tests green | worker | consumes #659/#660 receipt/archive shapes | Raw audio archive, transcription, digest, commit/search/ask receipts |
+| [#662](https://github.com/zenod-ai/zenod/issues/662) | Z-10D · Screenshot/image/PDF ingest | integrated locally · tests green | worker | consumes #659/#660 receipt/archive shapes | Raw image/PDF archive, vision/PDF extraction, digest receipts wired; scanned/no-text PDFs fail loudly |
+| [#663](https://github.com/zenod-ai/zenod/issues/663) | Z-10E · Hosted memory UI | integrated locally · cloud builds green | worker | uses honest cloud placeholders until tenant status APIs are deployed | Cloud UI controls for Drive/archive, transcription, extraction, ingest receipts, retention |
+| [#664](https://github.com/zenod-ai/zenod/issues/664) | Final validation scorecard | needs-review · live media pass with caveats | tester | PR #673 ready; merge/repoint decision pending | Stranger/customer funnel, text+media memory, dashboard, watchdog, restore, log trace |
+| [#670](https://github.com/zenod-ai/zenod/issues/670) | Cross-spine Zenod media ingest seam | patch ready for tester | worker | reconciles #659-#662 outputs; Epic 2.5 routes only | Public `ingest_memory` seam handles audio, screenshots/images, PDFs, and Drive/data/URL refs with raw/extraction/digest/commit receipts |
+
+Dispatch receipts, 2026-07-09:
+- #659 -> worker `Heisenberg` (`019f4751-cf2f-7582-88bd-5eccbfbaa044`)
+- #660 -> worker `Boole` (`019f4751-f66e-7cd2-a9bd-ed9c2ec4f911`)
+- #661 -> worker `Harvey` (`019f4752-1469-78a3-b7d8-3fbba949d679`)
+- #662 -> worker `Mencius` (`019f4752-3733-7540-b613-ec8f8740e266`)
+- #663 -> worker `Pauli` (`019f4752-577b-7ea0-826d-e0c29f8cf0be`)
+- #664 tester pass completed; issue is `status:needs-review` with screenshot/SVG, PDF, audio, archive, extraction/transcript, commit, `search_memory`, and `get_memory` live PASS receipts.
+
+Integration receipt, 2026-07-09:
+- Public repo server/media tests green: `npm test --workspace @zenod/server -- mcp.test.ts taskJobMediaIngestArchive.test.ts drive.test.ts artifactArchive.test.ts` -> 4 files / 56 tests passed.
+- Public repo typechecks green: `npm run typecheck --workspace @zenod/server`; `npm run typecheck --workspace zenod`.
+- Cloud repo hosted UI builds green: `npm run build` in `services/console`; `npm run build` in `services/webhook`.
+- Deploy/review candidate: public branch `codex/epic23-z10-ledger-fold` pushed to `origin`; PR
+  [#673](https://github.com/zenod-ai/zenod/pull/673) is ready for review, not draft, merge state `CLEAN`,
+  CI green (`npm run build`, Docker build target, `npm test`). Cloud hosted UI commit `2789f67`
+  pushed to `zenod-ai/cloud` `main` and live bundle contains `Evidence pipeline` / `memory-ops`.
+- Tester dispatch: #664 assigned to tester agent `Euler` (`019f475e-7fb7-7ad1-aa6e-028dc24833e1`).
+- Issue-comment caveat: direct `gh issue comment 664` failed locally because GitHub GraphQL rate limit
+  was already exceeded for the authenticated user; this spine entry is the durable handoff receipt.
+- Remaining close decisions: merge PR #673 to `main`, then repoint tenant `xDxfVYs0_4M09naWuCl66` from
+  `customGitBranch=codex/epic23-z10-ledger-fold` back to `main` and verify the normal Dokploy-generated
+  compose preserves artifact archive env. `ask_brain` exact marker enumeration remains partial; watchdog
+  sanity passed but the restore/crash drill was not repeated after the final media deploy.
+
 ## Iteration 0 — tickets (lanes parallel; worker MUST fan out sub-agents, one per lane)
 
 Sequencing: **Z-1 ∥ Z-3-page ∥ Z-5-runbook start immediately**; Z-2 needs Z-1 green; Z-4 needs
@@ -173,13 +237,41 @@ Acceptance:
 - [ ] Wizard lives on the CLOUD surface (private `zenod-ai/cloud`, the new multi-product surface
       per the v0 surface spec): connect/scaffold GitHub → done screen showing the URL. OAuth
       buttons present but OPTIONAL. NO LLM-key step (ZD-5). Health + token management
-      (mint/rotate/revoke → new URL) pages exist. No chat UI anywhere.
+      (mint/rotate/revoke → new URL) pages exist. Because ZD-12 makes media memory a Zenod
+      concern, the hosted UI also owns: Google Drive evidence archive connection, transcription
+      provider/fallback status, screenshot/image/PDF extraction controls, ingest queue health,
+      retention policy, and recent media-ingest receipts. No chat UI anywhere.
 - [ ] Self-host: terminal quickstart in public docs reaches the same end state with NO UI — pure
       MCP + terminal per the v0 surface spec (`GET /api/token` → bearer).
 
 Test criteria: tester provisions a fresh user end-to-end via the WIZARD, timed, <30 min bar, and
 the wizard leg ends in a single copy-paste (the URL); separately completes self-host from docs
 alone on a clean VM; Claude round-trip with commit-SHA receipt on BOTH paths.
+
+### Z-10 · Media ingest — 🆕 minted 2026-07-09 (ZD-12) · core doctrine, not yet Move-0 green
+
+Deliverable: Zenod accepts memory-bound media/artifacts through the public seam and hosted UI
+configuration, preserving raw evidence and digesting extracted meaning into the customer's repo.
+
+Acceptance:
+- [x] Public seam exposes a first-class ingest/digest path for at least audio and screenshots
+      (tool name to settle; candidate: `ingest_memory` with `{artifactUrl|bytesRef, mediaType,
+      contentHint}`), returning an async job id and terminal receipts.
+- [x] Audio path archives the raw audio, transcribes it through configured STT with a tested
+      fallback, stores transcript evidence, digests meaning, and commits markdown citations.
+- [x] Screenshot/image path archives the raw image, extracts text/visual facts via OCR/vision,
+      stores extraction evidence, digests meaning, and commits markdown citations.
+- [x] Hosted UI can connect/configure the evidence archive (Google Drive or equivalent),
+      transcription provider/fallback, extraction provider, retention policy, ingest queue
+      status, and recent receipts. These configs belong to Zenod, not Ring or Phylax.
+- [x] Self-host docs describe the no-cloud equivalent: local artifact directory/object store,
+      STT/OCR/vision keys or local fallbacks, and the same MCP ingest result shape.
+
+Test criteria: tester sends one audio clip and one screenshot to a fresh hosted Zenod instance
+through the public seam or the Ring->Zenod route, then verifies: raw artifact archived, transcript
+or extraction stored, meaning page updated with citations, commit SHA returned, search finds the
+fact, and `ask_brain` answers with structured sources. Repeat one clean self-host path if included
+in the Move-0 close scope; otherwise mark self-host media as a follow-up, not fake-green.
 
 ### Z-3 · Website + checkout LIVE — ✅ WIRED LIVE 2026-07-05 (cycle 2) · "no human touch" pending T8
 
@@ -300,12 +392,19 @@ stranger using only the public pages — that run closes the epic.
   Iteration-1 order drops W-C from its critical path — ring/council carve continues unblocked;
   SEAM-SPEC remains 2.5's artifact and Z-1 must conform to it unedited, which ALSO satisfies
   2.5's RD-4 split-trigger evidence). No ring, no council, no channel anywhere in this epic.
+  **ZD-12 clarification:** Ring is the proper router and Phylax is a simple gateway. Phylax's
+  inbound rule is "send to Ring"; outbound rule is "deliver Ring's response." If inbound media
+  should be remembered, Ring routes it to Zenod ingest. Zenod owns archive/transcription/OCR/
+  digest/citations. Epic 2.5 should borrow working deployed Council behavior, but move these
+  memory-operation bits back into Zenod.
 - **↔ Epic 2 (Product-Fable):** checkout/provisioning/meter machinery is REUSED, not rebuilt;
   pricing number (ZD-1) is theirs via Jordi; this epic's Zenod SKU becomes the first LIVE product
   in their shop.
 - **↔ Epic 0 (Story-Fable):** Zenod one-pager + README voice = Epic 0 deliverable (SD-6: the
   movement may launch when Z-1's stranger-test passes); Herald marketing stays behind the
-  original gates.
+  original gates. **ZD-12 story addition:** Epic 0 should describe Zenod as the evidence-to-memory
+  layer: pass it the thing to remember, and it preserves the source, extracts/transcribes, digests
+  meaning, cites evidence, and writes receipts into your repo.
 - **Standing-order note:** 2026-07-04's "all other work pauses" amends to: 2.5 (ring/council
   carve) + 2.3 (this) are the two active build lanes — requires Jordi's confirmation on
   LAUNCH-CONTROL (Jordi's pen).
@@ -534,6 +633,61 @@ Zenod-Fable.
 ```
 
 ## APPEND ZONE (dated, role-tagged, append-only — receipts or it didn't happen)
+
+### 2026-07-09 · [worker/Z-10A #659] Media ingest MCP seam handoff
+- Implemented public `ingest_memory` contract in `packages/server/src/mcp.ts` with shared
+  schema in `packages/server/src/mcpToolSchemas.ts`: accepts `mediaType` plus `artifactUrl`
+  or `bytesRef`, metadata/hints, returns async `jobId`, rejects missing artifact refs with
+  structured `{code:"invalid_input", message:"ingest_memory requires either artifactUrl or bytesRef."}`.
+- Added `media_ingest` task-job kind and receipt type in `packages/server/src/taskJobStore.ts`
+  / `packages/server/src/taskJobQueue.ts`. The seam archives a raw `bytesRef` placeholder when
+  a local/Drive artifact archive is configured, then terminates loudly with
+  `media_ingest_processor_unavailable` and the required `rawArtifact`, `extraction`, and
+  `digest` receipt fields. It does NOT fake transcription/OCR/digest success; #660-#662 own
+  those adapters.
+- Accommodated parallel Z-10C audio work in the same file by keeping one `ingest_memory`
+  registration and delegating audio `bytesRef` jobs to the `mediaIngest` adapter when present;
+  `get_ingest_result` remains the audio-lane poller.
+- Docs updated: `units/zenod/SEAM-SURFACE.md` now describes `ingest_memory` input and terminal
+  receipt/error shape; `units/zenod/README.md` shows a plain MCP `ingest_memory` call and the
+  current unavailable receipt.
+- Validation: `cd packages/server && npm test -- test/mcp.test.ts` PASS — 22 tests, including
+  tools/list visibility, bearer-token rejection coverage already in the file, structured bad
+  input, queued screenshot `media_ingest` job, local raw artifact handle, and terminal
+  processor-unavailable receipt shape.
+- Validation: `cd packages/server && npm run typecheck` PASS after the parallel artifact/archive
+  lane's shared worktree fixes landed.
+- PR/commit: none created in this worker turn.
+
+### 2026-07-09 · [worker/Z-10C #661] HANDBACK — audio ingest wired to transcript/digest receipts
+- Scope honored: audio ingest path only, while accommodating parallel #659/#660/#662 edits already
+  in the tree. No hosted UI work, no Ring/Phylax routing, and no new screenshot/PDF implementation
+  from this lane.
+- Implemented audio `ingest_memory` delegation: `mediaType: "audio"` plus a staged/Drive `bytesRef`
+  uses the real Zenod ingest queue; non-audio media remains on the generic #659/#660 placeholder
+  `media_ingest` job and fails loudly until its owning processors land.
+- Added `get_ingest_result` for audio jobs. Terminal receipts include raw artifact handle/link,
+  archived flag, transcript evidence ref/provider, pages touched, commit SHA, GitHub URLs, backlog
+  payload, and loud error state.
+- Extended durable ingest job rows with `sourceLink`, `transcribedBy`, and `githubUrls` so audio
+  receipts survive polling/restart and cite both raw audio and transcript evidence.
+- Drive audio ingest continues to reuse the existing transcription cascade
+  (Groq/OpenRouter/OpenAI/local fake-test path) and then calls the Zenod librarian
+  `engine.store({ source: "drive", verbatim: true })`, preserving transcript text as evidence before
+  committing meaning pages.
+- Loud failure preserved: no-speech/transcription failure ends `status=error`, `commitSha=null`,
+  `evidenceRef=null`, `githubUrls=[]`, and does not call `engine.store`.
+- Validation: `npm run test -w @zenod/server -- drive.test.ts mcp.test.ts taskJobMediaIngestArchive.test.ts`
+  PASS — 48 tests. Fixture audio success: `Zenod voice note.m4a` → transcript "remember to renew
+  the travel insurance" → evidence `Log/2026-06-12.md#^e-abc123`, page `Areas/Insurance.md`,
+  commit `0000000000000000000000000000000000000000`, GitHub URLs. Fixture failure proves loud
+  transcription error and no fake commit.
+- Validation: `npm run typecheck -w @zenod/server` PASS (`tsc --noEmit`).
+- Residual risk: no live hosted/provider audio clip was run in this pass. Search/ask proof is
+  indirect through the existing `engine.store` pipeline plus MCP `search_memory`/`ask_brain` tests,
+  not a live post-ingest ask against a production vault.
+- PR/commit: none created in this worker turn because the worktree contains parallel #659/#660/#662/#663
+  edits in overlapping files; committing would capture unrelated lane changes.
 
 ### 2026-07-07 · [planner/Zenod-Fable] Working-rule change (Jordi): workers carry the doc commits
 - Jordi commits nothing from here on. STANDING STEP 0.5 for EVERY dispatched worker, effective
@@ -1362,3 +1516,277 @@ tenant `ask_brain`-cites-sources verification — **retry the tenant re-pin firs
 scratch tenant on `sha-e3daf6c`); do NOT score Z-9 live against a tenant still on `sha-4d5bcfc`.
 
 HANDBACK — pen returns to Zenod-Fable.
+
+### 2026-07-09 · [worker/final-test] Live MCP + spend + watchdog receipts on customer #1 tenant
+
+Context: Jordi clarified this is a test environment attached to a real durable brain repo; live spend
+tests and VPS/Dokploy operations are permitted during testing. Target tenant:
+`https://z-jordi-f2c7a6.zenod.dev/mcp`, bearer from `ZENOD_MCP_TOKEN`.
+
+**Z-9 live verification — ✅ GREEN on `sha-e3daf6c`.**
+- Health receipt: `GET https://z-jordi-f2c7a6.zenod.dev/api/health` -> 200 with
+  `sha=e3daf6c3952522039bdbd7022fca263404f86b10`.
+- No-bearer auth receipt: unauthenticated `POST /mcp initialize` -> HTTP 401 `{"error":"unauthorized"}`.
+- MCP `tools/list` receipt: 14 tools exposed, including `store_memory`, `search_memory`, `get_memory`,
+  `ask_brain`, `get_task_result`, `read_llm_timeline`.
+- Live store receipt: `store_memory` marker
+  `EPIC-2.3 FINAL TEST epic23-final-2026-07-09T14-19-11-722Z` -> job
+  `250c3f86-3efc-4ce2-8fab-e8db063170c4` -> done with evidence
+  `Log/2026-07-09.md#^e-bef674`, pages touched
+  `Projects/Zenod/Epic 2.3 · Zenod Move 0 Launch — 2026-07-05 Snapshot.md`, commit
+  `7bfd5dd6eaecfa344fdcf5e61896c372992baeae`, URLs:
+  `https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-09.md` and
+  `https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Zenod/Epic%202.3%20%C2%B7%20Zenod%20Move%200%20Launch%20%E2%80%94%202026-07-05%20Snapshot.md`.
+- Search/get receipt: `search_memory` for `SABLE-FINAL-23 epic23-final-2026-07-09T14-19-11-722Z`
+  returned hits in `Log/2026-07-09.md` and the Epic 2.3 project note; `get_memory` on the log path
+  returned a body containing `SABLE-FINAL-23`.
+- `ask_brain` receipt: asking for the validation code and owner returned `SABLE-FINAL-23` and owner
+  attribution, with non-empty structured `sources` pointing at the Epic 2.3 project note. This proves
+  the Z-9 source-shape fix live on the tenant.
+
+**Z-4 spend / usage evidence — ◐ tenant ledger GREEN; operator dashboard gap remains.**
+- `read_llm_timeline` over 120 minutes after the test returned 13 calls, including this run's
+  `classify`, `compose`, and `answer` operations on OpenRouter `deepseek/deepseek-chat`; newest call:
+  `operation=answer`, `inputTokens=24861`, `outputTokens=282`, `costUsd=0.005197800000000001`.
+- `cloud.zenod.dev/dashboard` without a `session_id` returns 503
+  `Operator dashboard disabled (DASHBOARD_TOKEN unset)`. This does not disprove the customer dashboard
+  (Jordi showed it logged in), but the operator-wide dashboard remains disabled in this environment.
+
+**Z-5 watchdog live drill — ✅ alert and recovery path proven; full volume-loss restore NOT executed.**
+- Dokploy receipt: target compose `zenod-jordi-f2c7a6`, composeId `xDxfVYs0_4M09naWuCl66`, status `done`,
+  domain `z-jordi-f2c7a6.zenod.dev`, env includes `ZENOD_IMAGE_TAG=sha-e3daf6c`. Finding:
+  `autoDeploy=false`, so this tenant is pinned, not auto-redeploying from main.
+- Watchdog registration receipt from `/etc/zenod-watchdog.env`: containers include
+  `zenod-jordi-f2c7a6`; health URLs include
+  `https://z-jordi-f2c7a6.zenod.dev/api/health`. Timer state: `zenod-watchdog.timer` enabled+active.
+- Baseline watchdog pass: `2026-07-09T14:21:48Z all healthy`.
+- Fault injection: repeated `docker kill zenod-jordi-f2c7a6` left the container `exited`
+  (`RestartCount=0`, restart policy `unless-stopped`) instead of forming a Docker restart-count
+  crash loop. Watchdog still caught the tenant outage through the health URL.
+- Alert receipt: `2026-07-09T14:22:19Z ALERT[page/healthhttps---z-jordi-f2c7a6-zenod-dev-api-health-]
+  Endpoint https://z-jordi-f2c7a6.zenod.dev/api/health returned 404000 (expected 200)`, followed by
+  `delivery=phylax` at `2026-07-09T14:22:20Z`.
+- Recovery receipt: `docker start zenod-jordi-f2c7a6`; public health progressed
+  `attempt=1 status=running health=404`, `attempt=2 status=running health=502`,
+  `attempt=3 status=running health=200`; forced watchdog pass at `2026-07-09T14:23:08Z all healthy`.
+- Post-recovery memory receipt: MCP `search_memory` for the same `SABLE-FINAL-23` marker returned the
+  same log/project-note hits, proving the brain repo/read path survived the tenant outage.
+- Container log-forensics receipt: `docker logs --since 2026-07-09T14:18:00Z zenod-jordi-f2c7a6`
+  contained `[task-job] 250c3f86-3efc-4ce2-8fab-e8db063170c4 done: store`, but did NOT expose the full
+  classify -> compose -> validate -> commit trace required by the exit bar. Behavior passed; log
+  granularity remains a gap.
+
+**Current honest score from this worker pass:** Z-9 live MCP/source verification GREEN; tenant ledger
+spend evidence GREEN; watchdog registration+alert+recovery GREEN; full destructive restore-from-empty
+volume not run; operator dashboard disabled without `DASHBOARD_TOKEN`; target tenant is pinned with
+`autoDeploy=false`, contrary to the expected "auto redeploy main" operating model.
+
+### 2026-07-09 · [worker/Z-10B #660] HANDBACK — Zenod artifact archive abstraction implemented
+
+Scope honored: archive/storage modules plus settings/tests; no MCP registration edits. Parallel context:
+#659 landed `ingest_memory` and `MediaIngestReceipt` while this lane was active, so #660 wired raw artifact
+handles into that receipt shape through the task-job processor only.
+
+Implemented:
+- New `packages/server/src/artifactArchive.ts`: `ArtifactArchiveProvider` abstraction, local filesystem
+  provider, Drive-compatible provider, settings-based provider selection, and `archiveRawArtifact()`.
+- Settings/env seeds: `ZENOD_ARTIFACT_ARCHIVE_PROVIDER`, `ZENOD_ARTIFACT_ARCHIVE_LOCAL_DIR`,
+  `ZENOD_ARTIFACT_ARCHIVE_DRIVE_FOLDER_ID` (`google_drive_folder_id` remains the Drive fallback).
+- Local archive writes raw bytes under dated folders, sanitizes filenames, computes SHA-256/size, and writes
+  a sidecar metadata JSON containing source/sender/timestamp/metadata for citations.
+- Drive provider uses the existing Drive client interface, ensures a `Raw Artifacts` folder under the
+  configured archive root, uploads raw bytes, and returns `drive://file/<id>` plus web URL when available.
+- `TaskJobQueue` now archives `media_ingest` raw input before returning the #659 downstream-processor error:
+  `rawArtifact.handle` and `rawArtifact.archiveUrl` are populated on archive success; transcription/OCR/digest
+  still honestly return `media_ingest_processor_unavailable` until #661/#662 land. Archive config/download
+  failures throw and mark the job error rather than producing success-shaped receipts.
+
+Validation receipts:
+- ✅ `npm --prefix packages/server test -- artifactArchive.test.ts` — 6 passed.
+- ✅ `npm --prefix packages/server test -- artifactArchive.test.ts taskJobMediaIngestArchive.test.ts` — 7 passed;
+  proves local archive + mocked Drive + media-ingest receipt integration.
+- ✅ `npm --prefix packages/server test -- mcp.test.ts -t "search_memory and store_memory round-trip"` — 1 passed
+  / 20 skipped; evidence that text `store_memory` round-trip still works.
+- ⚠️ `npm --prefix packages/server test -- mcp.test.ts` failed outside #660 scope because the #659 worker added
+  `ingest_memory` to the tool list while the static expected list still omits it. The `store_memory` test in the
+  same file passed before that assertion failure.
+- ⚠️ `npm --prefix packages/server run build` is currently blocked by parallel-worker changes in
+  `packages/server/src/artifactExtraction.ts` and `packages/server/src/ingestStore.ts`
+  (`sourceLink` duplicate/missing property errors). This handoff did not modify those files.
+
+Residual risks / next owners:
+- #661/#662 still need to consume `rawArtifact.handle` and add transcript/OCR/extraction/digest handles.
+- Hosted UI config remains #663; it can now write the three archive settings above.
+- A future cleanup can migrate legacy `voiceArchive.ts`/Drive ingest archive helpers onto this generic provider,
+  but #660 left channel-specific best-effort behavior untouched to avoid widening blast radius.
+
+### 2026-07-09 · [worker/Z-10D #662] HANDBACK — screenshot/image/PDF extraction ingest wired
+
+Scope honored: image/screenshot/PDF extraction and ingest hooks only. Did not work on audio transcription
+(#661) or hosted UI (#663). Parallel context: #659 added the public `ingest_memory` seam and #660 added
+the raw artifact archive abstraction while this lane was active; #662 consumed those shapes instead of
+forking them.
+
+Implemented:
+- New `packages/server/src/artifactExtraction.ts`: deterministic extraction adapter for image/PDF artifacts.
+  Images use the configured `BrainEngine.describeImage` vision path (SVG text is parsed directly); embedded-text
+  PDFs use a lightweight deterministic parser. Scanned/no-text PDFs throw a loud error:
+  `PDF extraction failed ... scanned PDFs need OCR/vision extraction configured`.
+- Existing Drive ingest queue now accepts image/screenshot and PDF MIME types in addition to audio/text/Google
+  Docs. It downloads once, caches extraction text/provider/source link, files through `engine.store` as verbatim
+  Drive evidence, archives the raw Drive artifact, and records `evidenceRef`, pages, commit SHA, GitHub URLs,
+  source link, extraction provider, and archive status on the job receipt.
+- Generic `ingest_memory` / `media_ingest` jobs now process image/screenshot/PDF artifacts when bytes are
+  available as `artifactUrl` downloads or `data:` bytes refs: raw archive -> extraction -> `engine.store` digest
+  -> terminal `MediaIngestReceipt` with raw artifact handle/archive URL, extraction handle/provider, evidence ref,
+  pages touched, commit SHA, and GitHub URLs. Opaque non-downloadable `bytesRef` values still archive the ref and
+  return the existing loud `media_ingest_processor_unavailable` receipt until a resolver is supplied.
+- MCP and core Drive-tool descriptions now describe media/document ingest, not audio-only transcription.
+
+Validation receipts:
+- ✅ `npm test --workspace @zenod/server -- taskJobMediaIngestArchive.test.ts drive.test.ts` — 28 passed.
+  Fixtures covered: fake PNG screenshot bytes, embedded-text PDF bytes, scanned-PDF stand-in, Drive image/PDF
+  files, and existing audio retry/failure coverage.
+- ✅ `npm test --workspace @zenod/server -- mcp.test.ts -t "ingest_memory|get_ingest_result|tools/list"` —
+  1 passed / 21 skipped; confirms public seam test remains green after the #662 processor branch.
+- ✅ `npm run typecheck --workspace @zenod/server` — clean.
+- ✅ `npm run typecheck --workspace zenod` — clean.
+
+Acceptance status:
+- ✅ Screenshot/image ingest job id + terminal receipt: proven in `drive.test.ts` and
+  `taskJobMediaIngestArchive.test.ts` with archive/source handle, extraction provider/handle, evidence ref,
+  pages, commit SHA, and GitHub URLs.
+- ✅ PDF/document ingest works for embedded-text PDFs and fails loudly for scanned/no-text PDFs; no fake-green OCR.
+- ✅ Extracted facts are passed into `engine.store` as verbatim evidence for the normal memory pipeline.
+- ⚠️ Live search/ask receipts were not run in this seat. The code returns the commit/search/ask-enabling receipts
+  from the normal store pipeline; tester still needs a fresh hosted/self-host run to verify search finds the
+  extracted fact and `ask_brain` cites it against a real vault.
+- ⚠️ Real OCR for scanned PDFs is still a follow-up provider integration; current behavior is intentionally loud.
+
+No commit/PR from this worker: the worktree contains active parallel edits from #659/#660/#661/#663 and planner
+doc changes in the same files. This handoff leaves the code and EpicSpine receipts in the shared working tree for
+the integration owner to stage atomically.
+
+### 2026-07-09 · [worker/Z-10E #663] HANDBACK — hosted memory-operations UI controls implemented
+
+Scope honored: work landed in private `zenod-ai/cloud`; no core media ingest implementation in public
+Zenod. UI is customer-dashboard only, no chat UI.
+
+Implemented:
+- New customer dashboard `MemoryOpsCard` in `services/console/src/MemoryOps.tsx`, rendered after existing
+  MCP endpoint, usage, connect, and GitHub memory repo cards.
+- New console API client types/fetcher for `/api/console/memory-ops`.
+- New cloud placeholder/status endpoint in `services/webhook/src/server.ts`. It first tries a future tenant
+  `GET /api/memory-operations/status` with the stored MCP bearer; if absent/unreachable, it returns honest
+  `cloud-placeholder` statuses instead of fake connected states.
+- Controls rendered: evidence archive / Google Drive, audio transcription, screenshot/image/PDF extraction,
+  ingest queue/worker health, raw artifact retention, and recent receipts empty state.
+- Current truthful statuses: Drive/archive `configure`; transcription, extraction, ingest queue
+  `unavailable`; retention `disabled`; receipts empty until the ingest seam returns job receipts. Existing
+  MCP endpoint, token, usage, connect snippets, and GitHub repo cards remain in place.
+
+Validation receipts:
+- ✅ `npm run build` in `/Users/jordi/Documents/GitHub/cloud/services/console` — `tsc -b && vite build`
+  passed.
+- ✅ `npm run build` in `/Users/jordi/Documents/GitHub/cloud/services/webhook` — `tsc -p tsconfig.json`
+  passed.
+- ✅ Local API render data: seeded throwaway account under `/tmp/zenod-cloud-render`, ran webhook on
+  `127.0.0.1:4243`, and `GET /api/console/memory-ops` returned `source=cloud-placeholder` with
+  `configure`/`unavailable`/`disabled` states and no receipts.
+- ✅ Local browser render: built SPA served through the real webhook server and a local cookie-injecting proxy
+  at `127.0.0.1:4250`; rendered dashboard contained the existing MCP endpoint plus the full
+  "Evidence pipeline" section with all five controls and the "No media ingest receipts yet" empty state.
+
+Residual risks / next owners:
+- #659-#662 need to expose the real tenant memory-operations status route and receipts. The cloud endpoint is
+  ready to consume it when available.
+- Real Google Drive OAuth/archive connection, STT provider config, extraction provider config, queue health,
+  and retention writes remain backend follow-ups; this pass deliberately marks them configure/unavailable
+  rather than pretending they are connected.
+
+### 2026-07-09 · [worker/#670] HANDBACK — public Zenod media ingest seam reconciled for Ring handoff
+
+Scope honored: Zenod media ingest seam only. No Ring router or Phylax gateway code edited. This worker built on the
+parallel #659-#663 outputs already present in the working tree rather than reverting or replacing them.
+
+Implemented / advanced:
+- Generic MCP `ingest_memory` / `media_ingest` jobs now run the real Zenod evidence-to-memory pipeline for
+  resolvable media bytes: raw artifact archive -> audio transcription or screenshot/image/PDF/text extraction ->
+  extracted transcript/text archive -> `engine.store` digest/filing -> terminal `MediaIngestReceipt` with raw
+  handle/archive URL/SHA-256, extraction/transcript handle, provider, evidence ref, pages touched, commit SHA,
+  and GitHub URLs.
+- Supported resolvers: `artifactUrl`, `data:` bytes refs, and configured Drive refs (`drive://file/<id>`,
+  `drive:<id>`, `google-drive:<id>`, `gdrive:<id>`). Google Docs refs export text through the existing Drive
+  client. Opaque transport refs such as unresolved `ring://...` handles still archive the reference and return
+  the loud `media_ingest_processor_unavailable` receipt; Ring must pass a resolvable bytes ref or a Drive ref
+  until a Ring media resolver is wired inside Zenod.
+- Audio path uses the same `transcribeAudio` provider cascade/settings as the Drive ingest queue. Screenshot/image
+  and PDF paths use `artifactExtraction.ts`; embedded-text PDFs are supported, scanned/no-text PDFs remain a loud
+  OCR follow-up.
+- `units/zenod/SEAM-SURFACE.md` and `units/zenod/README.md` now describe the real receipt shape instead of the
+  earlier stub/null-field contract.
+
+Validation receipts:
+- ✅ `npm --prefix packages/server test -- taskJobMediaIngestArchive.test.ts` — 3 passed; covers audio transcript
+  receipt, screenshot extraction receipt, and embedded-text PDF digest receipt.
+- ✅ `npm --prefix packages/server test -- mcp.test.ts -t "ingest_memory"` — 2 passed; covers invalid input,
+  unresolved opaque handle loud error, and successful screenshot `data:` ingest through the MCP seam.
+- ✅ `npm --prefix packages/server test -- mcp.test.ts` — 23 passed.
+- ✅ `npm --prefix packages/server run build` — schema bundle check + `tsc` passed.
+
+Open risks / tester targets:
+- Live hosted validation still needs a fresh `ingest_memory` audio clip and screenshot through a real tenant, then
+  `search_memory`/`ask_brain` verification against committed vault pages.
+- Real OCR for scanned PDFs is not green; current behavior is intentionally loud.
+- Ring handoff contract: Ring should route memory-bound media to Zenod by passing `artifactUrl`, `data:` bytes,
+  or a Zenod-configured Drive ref. Passing only an opaque `ring://media/...` handle remains insufficient unless
+  Zenod gets a resolver for that handle.
+
+Cross-spine update needed (read-only referenced spine):
+- `docs/EPIC-2.5-ATOMIC-UNITS.md` row #670 should move from `ready (cross-spine)` to `patch ready for tester`
+  with evidence: `taskJobMediaIngestArchive.test.ts`, `mcp.test.ts -t "ingest_memory"`, full `mcp.test.ts`, and
+  server build passed on 2026-07-09. Epic 2.5 should keep Ring/Phylax ownership unchanged: Ring routes; Phylax
+  transports; Zenod owns archive/transcription/OCR/extraction/digest/filing/receipts.
+
+### 2026-07-09 · [#664 LIVE VALIDATION] media-memory scorecard after deploy
+
+Deploy candidate:
+- PR [#673](https://github.com/zenod-ai/zenod/pull/673), branch `codex/epic23-z10-ledger-fold`.
+- Runtime image published by GitHub Actions workflow run `29028188613`.
+- Live tenant `https://z-jordi-f2c7a6.zenod.dev/api/health` -> SHA
+  `422a7d1ffcc13e2b95b785e3dbfe6ca706f8c263`, image `ghcr.io/zenod-ai/zenod:sha-422a7d1`.
+- Live config for validation: local archive enabled with `ZENOD_ARTIFACT_ARCHIVE_PROVIDER=local` and
+  `ZENOD_ARTIFACT_ARCHIVE_LOCAL_DIR=/data/artifacts`.
+
+Fixes discovered by live validation:
+- Clean image build initially failed because `settings.ts` depended on WhatsApp config fields left unstaged;
+  fixed in commit `4c47b1d`.
+- Live audio initially bypassed the generic media seam and hit the old Drive-only ingest path; fixed in commit
+  `422a7d1`.
+- Standalone compose did not pass artifact archive env into the container; source fix committed in `e8b66b8`.
+  For the live tenant, Dokploy's generated compose still stripped the new passthrough, so the generated VPS
+  compose was temporarily patched and `docker compose -p compose-quantify-multi-byte-firewall-r3b7ka up -d`
+  was run against the existing named `/data` volume. This is a deployment caveat, not a memory-data loss.
+
+Live media receipts:
+- ✅ Screenshot/SVG: job `53b15578-6b59-4fcb-ba6f-74b0a537a0dd` -> `done`. Raw artifact
+  `file:///data/artifacts/2026/07/09/847f739bd625c3d5-epic23-20260709151524.svg`; extraction
+  `file:///data/artifacts/2026/07/09/15dc6e8530298f3d-epic23-20260709151524.extraction.txt`
+  (`provider=svg text`); evidence `Log/2026-07-09.md#^e-04505b`; commit
+  `a91bad67a273d321de541f760bafc905ca73ecdf`.
+- ✅ PDF: job `3b72506e-a0fe-448d-8a41-d9b1959f8e89` -> `done`. Raw artifact
+  `file:///data/artifacts/2026/07/09/c6ea6e87211b81e0-epic23-20260709151524.pdf`; extraction
+  `file:///data/artifacts/2026/07/09/a9784b43beeb64f4-epic23-20260709151524.extraction.txt`
+  (`provider=embedded PDF text`); evidence `Log/2026-07-09.md#^e-2ec977`; commit
+  `32e70de7ec11b62e703a9ff3d7c975a6fe1ffb6d`.
+- ✅ Audio: job `e03eb66c-23b6-4ec9-8998-6128596543c0` -> `done`. Raw artifact
+  `file:///data/artifacts/2026/07/09/2b25502fca502292-epic23-20260709151524.aiff`; transcript
+  `file:///data/artifacts/2026/07/09/212f5c3524f4d303-epic23-20260709151524.transcript.txt`
+  (`provider=openrouter openai/whisper-large-v3-turbo`); evidence `Log/2026-07-09.md#^e-f5fa94`;
+  commit `cf6c5e88395d7d5e941c496c54c87ebf635c71ef`.
+- ✅ Exact recall proof: `search_memory` for `violet harbor eight` found `Log/2026-07-09.md` with the
+  snippet `EPIC23 SVG MEDIA LIVE 20260709151524 violet harbor eight Zenod owns media ingest archive extraction digest receipts.`
+  `get_memory Log/2026-07-09.md` contains `violet harbor eight`, `silver orchard three`,
+  `Zenod owns media ingest archive extraction digest receipts`, and `Raw artifact: file:///data/artifacts`.
+- ◐ `ask_brain` proof: cited `Log/2026-07-09.md` but did not restate the exact synthetic markers, so final
+  exact-answer quality remains a follow-up for retrieval/synthesis tuning, not an ingest/archive failure.

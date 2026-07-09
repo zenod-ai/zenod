@@ -4,6 +4,7 @@ import { driveIngestArchiveFolder } from "./driveFolders.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 import type { IngestJob, IngestStore } from "./ingestStore.js";
 import type { Settings } from "./settings.js";
+import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
 
 /**
  * Background worker that drains the ingest queue one job at a time, fully
@@ -96,11 +97,13 @@ export class IngestQueue {
       this.store.update(job.id, { status: "downloading", step: `Downloading ${file.name}`, progress: 0 });
 
       let body: string;
-      let transcribedBy: string | undefined;
+      let extractedBy: string | undefined;
+      let bodyKind: "Voice note" | "Document" | "Media artifact" = "Document";
       if (cached) {
         body = cached.body;
-        transcribedBy = cached.provider ?? undefined;
-        console.log(`[ingest] ${job.id} using cached transcript for ${file.name} (${body.length} chars)`);
+        extractedBy = cached.provider ?? undefined;
+        bodyKind = extractedBy?.includes("whisper") || extractedBy?.includes("transcrib") ? "Voice note" : "Media artifact";
+        console.log(`[ingest] ${job.id} using cached extraction for ${file.name} (${body.length} chars)`);
       } else if (isAudioMimeType(file.mimeType)) {
         const data = await client.download(file.id);
         this.store.update(job.id, { status: "transcribing", step: `Transcribing ${file.name}`, progress: 0 });
@@ -117,14 +120,35 @@ export class IngestQueue {
         });
         if (!result.success) throw new Error(`transcription failed: ${result.error}`);
         body = result.transcript!;
-        transcribedBy = result.provider;
+        extractedBy = result.provider;
+        bodyKind = "Voice note";
         this.store.update(job.id, {
           cachedBody: body,
-          cachedProvider: transcribedBy ?? null,
+          cachedProvider: extractedBy ?? null,
           cachedSourceLink: sourceLink,
           progress: 100,
         });
-        console.log(`[ingest] ${job.id} transcribed ${file.name} via ${transcribedBy} (${body.length} chars)`);
+        console.log(`[ingest] ${job.id} transcribed ${file.name} via ${extractedBy} (${body.length} chars)`);
+      } else if (isExtractableArtifactMimeType(file.mimeType)) {
+        const data = await client.download(file.id);
+        this.store.update(job.id, { status: "extracting", step: `Extracting ${file.name}`, progress: 25 });
+        const engine = await this.getEngine();
+        const result = await extractArtifact({
+          data,
+          fileName: file.name,
+          mimeType: file.mimeType,
+          engine,
+        });
+        body = result.body;
+        extractedBy = result.provider ?? undefined;
+        bodyKind = "Media artifact";
+        this.store.update(job.id, {
+          cachedBody: body,
+          cachedProvider: extractedBy ?? null,
+          cachedSourceLink: sourceLink,
+          progress: 100,
+        });
+        console.log(`[ingest] ${job.id} extracted ${file.name} via ${extractedBy ?? result.kind} (${body.length} chars)`);
       } else if (GOOGLE_DOC_MIMES.has(file.mimeType)) {
         body = await client.exportText(file.id);
         this.store.update(job.id, { cachedBody: body, cachedProvider: null, cachedSourceLink: sourceLink });
@@ -132,18 +156,18 @@ export class IngestQueue {
         body = (await client.download(file.id)).toString("utf8");
         this.store.update(job.id, { cachedBody: body, cachedProvider: null, cachedSourceLink: sourceLink });
       } else {
-        throw new Error(`unsupported file type ${file.mimeType} — audio, text, and Google Docs are supported`);
+        throw new Error(`unsupported file type ${file.mimeType} — audio, text, Google Docs, images, and PDFs are supported`);
       }
 
       const header = [
-        `${transcribedBy ? "Voice note" : "Document"} "${file.name}" ingested from Google Drive.`,
+        `${bodyKind} "${file.name}" ingested from Google Drive.`,
         `Original: ${sourceLink}`,
-        ...(transcribedBy ? [`Transcribed by ${transcribedBy}.`] : []),
+        ...(extractedBy ? [`${bodyKind === "Voice note" ? "Transcribed" : "Extracted"} by ${extractedBy}.`] : []),
       ].join("\n");
 
       this.store.update(job.id, {
         status: "filing",
-        step: cached ? `Filing cached transcript for ${file.name}` : `Filing ${file.name}`,
+        step: cached ? `Filing cached extraction for ${file.name}` : `Filing ${file.name}`,
         progress: 100,
       });
       const engine = await this.getEngine();
@@ -180,6 +204,7 @@ export class IngestQueue {
         evidenceRef: stored.evidenceRef,
         pages: stored.pagesTouched,
         commitSha: stored.commitSha,
+        githubUrls: stored.githubUrls,
         backlog: stored.backlog ?? null,
         archived,
       });

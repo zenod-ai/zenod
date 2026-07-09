@@ -239,12 +239,12 @@ export interface VaultTaskTools {
 /**
  * External-source callbacks for the chat loop — implemented by the server
  * (Google Drive today). listDriveFiles returns a formatted listing;
- * ingestDriveFile downloads one file, transcribes it when it is audio, and
- * runs it through the librarian store pipeline, returning a filing report.
+ * ingestDriveFile downloads one file, extracts/transcribes it when supported,
+ * and runs it through the librarian store pipeline, returning a filing report.
  */
 export interface DriveSourceTools {
   listDriveFiles(query?: string): Promise<string>;
-  /** Enqueue a file for background transcription; returns immediately with the job status. */
+  /** Enqueue a file for background media/document ingest; returns immediately with the job status. */
   ingestDriveFile(fileId: string, hints?: string[]): Promise<string>;
 }
 

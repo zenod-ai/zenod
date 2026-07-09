@@ -236,7 +236,7 @@ export class Runtime {
     // constructor marks any job left mid-flight by a restart as "interrupted";
     // resume() then drains anything still queued.
     this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"));
-    this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine());
+    this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine(), this.settings);
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
     // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
