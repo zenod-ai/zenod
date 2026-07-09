@@ -27,6 +27,16 @@ fan out sub-agents, one per lane, receipts from each.**
 
 **"Your personal wiki brain."** Zenod standalone = one MCP server, one container, the customer's
 git repo behind it. Plain markdown; every AI you use reads and writes it through one librarian.
+- **Core doctrine added 2026-07-09 (Jordi): evidence-to-memory is Zenod's job, not just
+  text notes.** If the user passes Zenod "the thing I want remembered" — text, screenshot,
+  image, audio, voice note, PDF/document, or a link to an artifact — Zenod owns the full
+  pipeline: preserve raw evidence, extract/transcribe/OCR/describe, digest into markdown with
+  citations, prepare it for later extraction/search/ask, and return receipts. Google Drive
+  (or equivalent object storage) is a Zenod-owned evidence archive for heavy raw artifacts;
+  the git vault remains the durable, user-owned memory index and meaning layer. This was
+  previously tangled in the Council/Console; it belongs inside Zenod for standalone and
+  hosted. The Ring/Phylax boundary is explicit: Phylax transports media, Ring routes intent,
+  Zenod ingests and remembers.
 - **Two ways to have it, one public website:** self-host (open source, terminal quickstart —
   instructions on the site, no UI required) or **hosted at €5/month** (ZD-1 DECIDED) with
   self-serve signup. The platform is multi-user in the SaaS sense: anyone signs up, everyone gets
@@ -41,6 +51,12 @@ git repo behind it. Plain markdown; every AI you use reads and writes it through
 - Standalone keyring: local credential store (the locked connections design's standalone mode).
 - LLM spend (digest + ask) is metered per user from the per-call ledger; key model per ZD-5;
   the dashboard shows calls · tokens · cost either way.
+- Hosted Zenod's cloud UI is therefore a **memory operations console**, not a chat UI: GitHub
+  repo connection, MCP token, usage/balance, Google Drive evidence archive, transcription
+  provider/fallbacks, screenshot/PDF extraction/OCR/vision settings, ingest queue health,
+  retention policy, and recent receipt history. These controls are required because they
+  configure Zenod's memory work. UI/readout deck:
+  [EPIC-2.3-ZENOD-HOSTED-MEDIA-DECK.html](EPIC-2.3-ZENOD-HOSTED-MEDIA-DECK.html).
 - **v0 surface spec (Jordi, 2026-07-05 post-handback — settled):** Zenod v0 is PURELY an MCP
   server; the customer's chat client IS the whole interface — auth and daily use ride the MCP
   connection. **Self-host: no UI at all** — terminal + docs + your chat client; the server
@@ -119,6 +135,18 @@ relitigate decided items without new evidence.
   "treat this like a password." URL + separate bearer rejected for funnel friction; the header
   path (`GET /api/token` → `Authorization: Bearer`) remains the self-host mechanism.
 
+- **ZD-12 · Media memory ownership — DECIDED 2026-07-09 (Jordi): Zenod owns media ingest.**
+  Media handling moves from the old Council/Console tangle into Zenod. Audio transcription,
+  screenshot/image OCR or vision extraction, PDF/document extraction, raw artifact archive
+  (Google Drive for hosted, local/object-store equivalent for self-host), digest, citations,
+  and commit receipts are Zenod concerns. The public seam should grow first-class ingest tools
+  rather than relying on hidden UI/chat routes. Ring/Phylax are routing/transport only:
+  inbound media handle -> Ring intent routing -> Zenod ingest; response/receipt -> Ring/Phylax
+  outbound. Consequence: Z-2 hosted UI gains memory-operation OAuth/config controls; Z-10
+  is minted below for media ingest acceptance. Cross-track consequences: Epic 0 should tell
+  the evidence-to-memory story; Epic 2.5 should keep Ring as router and Phylax as gateway,
+  borrowing working deployed Council behavior but not keeping media logic there.
+
 ## Iteration 0 — tickets (lanes parallel; worker MUST fan out sub-agents, one per lane)
 
 Sequencing: **Z-1 ∥ Z-3-page ∥ Z-5-runbook start immediately**; Z-2 needs Z-1 green; Z-4 needs
@@ -173,13 +201,41 @@ Acceptance:
 - [ ] Wizard lives on the CLOUD surface (private `zenod-ai/cloud`, the new multi-product surface
       per the v0 surface spec): connect/scaffold GitHub → done screen showing the URL. OAuth
       buttons present but OPTIONAL. NO LLM-key step (ZD-5). Health + token management
-      (mint/rotate/revoke → new URL) pages exist. No chat UI anywhere.
+      (mint/rotate/revoke → new URL) pages exist. Because ZD-12 makes media memory a Zenod
+      concern, the hosted UI also owns: Google Drive evidence archive connection, transcription
+      provider/fallback status, screenshot/image/PDF extraction controls, ingest queue health,
+      retention policy, and recent media-ingest receipts. No chat UI anywhere.
 - [ ] Self-host: terminal quickstart in public docs reaches the same end state with NO UI — pure
       MCP + terminal per the v0 surface spec (`GET /api/token` → bearer).
 
 Test criteria: tester provisions a fresh user end-to-end via the WIZARD, timed, <30 min bar, and
 the wizard leg ends in a single copy-paste (the URL); separately completes self-host from docs
 alone on a clean VM; Claude round-trip with commit-SHA receipt on BOTH paths.
+
+### Z-10 · Media ingest — 🆕 minted 2026-07-09 (ZD-12) · core doctrine, not yet Move-0 green
+
+Deliverable: Zenod accepts memory-bound media/artifacts through the public seam and hosted UI
+configuration, preserving raw evidence and digesting extracted meaning into the customer's repo.
+
+Acceptance:
+- [ ] Public seam exposes a first-class ingest/digest path for at least audio and screenshots
+      (tool name to settle; candidate: `ingest_memory` with `{artifactUrl|bytesRef, mediaType,
+      contentHint}`), returning an async job id and terminal receipts.
+- [ ] Audio path archives the raw audio, transcribes it through configured STT with a tested
+      fallback, stores transcript evidence, digests meaning, and commits markdown citations.
+- [ ] Screenshot/image path archives the raw image, extracts text/visual facts via OCR/vision,
+      stores extraction evidence, digests meaning, and commits markdown citations.
+- [ ] Hosted UI can connect/configure the evidence archive (Google Drive or equivalent),
+      transcription provider/fallback, extraction provider, retention policy, ingest queue
+      status, and recent receipts. These configs belong to Zenod, not Ring or Phylax.
+- [ ] Self-host docs describe the no-cloud equivalent: local artifact directory/object store,
+      STT/OCR/vision keys or local fallbacks, and the same MCP ingest result shape.
+
+Test criteria: tester sends one audio clip and one screenshot to a fresh hosted Zenod instance
+through the public seam or the Ring->Zenod route, then verifies: raw artifact archived, transcript
+or extraction stored, meaning page updated with citations, commit SHA returned, search finds the
+fact, and `ask_brain` answers with structured sources. Repeat one clean self-host path if included
+in the Move-0 close scope; otherwise mark self-host media as a follow-up, not fake-green.
 
 ### Z-3 · Website + checkout LIVE — ✅ WIRED LIVE 2026-07-05 (cycle 2) · "no human touch" pending T8
 
@@ -300,12 +356,19 @@ stranger using only the public pages — that run closes the epic.
   Iteration-1 order drops W-C from its critical path — ring/council carve continues unblocked;
   SEAM-SPEC remains 2.5's artifact and Z-1 must conform to it unedited, which ALSO satisfies
   2.5's RD-4 split-trigger evidence). No ring, no council, no channel anywhere in this epic.
+  **ZD-12 clarification:** Ring is the proper router and Phylax is a simple gateway. Phylax's
+  inbound rule is "send to Ring"; outbound rule is "deliver Ring's response." If inbound media
+  should be remembered, Ring routes it to Zenod ingest. Zenod owns archive/transcription/OCR/
+  digest/citations. Epic 2.5 should borrow working deployed Council behavior, but move these
+  memory-operation bits back into Zenod.
 - **↔ Epic 2 (Product-Fable):** checkout/provisioning/meter machinery is REUSED, not rebuilt;
   pricing number (ZD-1) is theirs via Jordi; this epic's Zenod SKU becomes the first LIVE product
   in their shop.
 - **↔ Epic 0 (Story-Fable):** Zenod one-pager + README voice = Epic 0 deliverable (SD-6: the
   movement may launch when Z-1's stranger-test passes); Herald marketing stays behind the
-  original gates.
+  original gates. **ZD-12 story addition:** Epic 0 should describe Zenod as the evidence-to-memory
+  layer: pass it the thing to remember, and it preserves the source, extracts/transcribes, digests
+  meaning, cites evidence, and writes receipts into your repo.
 - **Standing-order note:** 2026-07-04's "all other work pauses" amends to: 2.5 (ring/council
   carve) + 2.3 (this) are the two active build lanes — requires Jordi's confirmation on
   LAUNCH-CONTROL (Jordi's pen).
