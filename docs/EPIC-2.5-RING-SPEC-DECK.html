@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Epic 2.5 Ring Spec</title>
+<style>
+  :root {
+    --bg: #101214;
+    --panel: #191c1f;
+    --panel-2: #202428;
+    --ink: #f1eee8;
+    --muted: #b6afa4;
+    --line: #343a40;
+    --gold: #d8ad61;
+    --green: #79b58a;
+    --blue: #7aa8c7;
+    --red: #cf776d;
+    --shadow: rgba(0, 0, 0, .28);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body { overflow: hidden; }
+  .deck { height: 100vh; position: relative; }
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    padding: 5.4vh 6.2vw;
+    overflow: auto;
+  }
+  .slide.active {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 28px;
+  }
+  .eyebrow {
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  h1, h2 {
+    margin: 10px 0 0;
+    letter-spacing: 0;
+    line-height: 1.04;
+    font-weight: 720;
+  }
+  h1 { font-size: clamp(46px, 7vw, 86px); max-width: 980px; }
+  h2 { font-size: clamp(36px, 5vw, 64px); max-width: 1020px; }
+  p {
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(20px, 2.1vw, 30px);
+    line-height: 1.34;
+    max-width: 980px;
+  }
+  .small {
+    font-size: clamp(15px, 1.35vw, 18px);
+    line-height: 1.46;
+  }
+  .body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 24px;
+    min-height: 0;
+  }
+  .two {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(380px, 1.1fr);
+    gap: 34px;
+    align-items: center;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .grid.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 16px 45px var(--shadow);
+    padding: 22px;
+  }
+  .card h3 {
+    margin: 0 0 10px;
+    font-size: clamp(19px, 1.8vw, 26px);
+    letter-spacing: 0;
+  }
+  .card p, .card li {
+    color: var(--muted);
+    font-size: clamp(15px, 1.25vw, 18px);
+    line-height: 1.46;
+  }
+  .card ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 10px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .tag.gold { color: var(--gold); border-color: rgba(216, 173, 97, .55); }
+  .tag.green { color: var(--green); border-color: rgba(121, 181, 138, .55); }
+  .tag.blue { color: var(--blue); border-color: rgba(122, 168, 199, .55); }
+  .tag.red { color: var(--red); border-color: rgba(207, 119, 109, .55); }
+  .diagram {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px;
+    box-shadow: 0 16px 45px var(--shadow);
+  }
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1.12fr;
+    gap: 13px;
+    align-items: center;
+  }
+  .box {
+    min-height: 94px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+  }
+  .box strong {
+    font-size: clamp(18px, 1.45vw, 24px);
+  }
+  .box span {
+    color: var(--muted);
+    font-size: clamp(13px, 1.05vw, 16px);
+    line-height: 1.35;
+  }
+  .arrow {
+    color: var(--gold);
+    font-size: 30px;
+    line-height: 1;
+  }
+  .screen {
+    background: #121518;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .screen-bar {
+    height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--line);
+  }
+  .screen-content {
+    display: grid;
+    grid-template-columns: 230px 1fr;
+    min-height: 390px;
+  }
+  .sidebar {
+    border-right: 1px solid var(--line);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .navrow {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .navrow.active {
+    color: var(--ink);
+    border-color: rgba(216, 173, 97, .6);
+    background: rgba(216, 173, 97, .08);
+  }
+  .mainpane {
+    padding: 18px;
+    display: grid;
+    gap: 14px;
+    align-content: start;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 130px 1fr 88px;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .row strong { font-size: 15px; }
+  .row span { color: var(--muted); font-size: 13px; line-height: 1.32; }
+  .pill {
+    justify-self: end;
+    color: var(--green);
+    border: 1px solid rgba(121, 181, 138, .5);
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .callout {
+    border-left: 4px solid var(--gold);
+    background: rgba(216, 173, 97, .08);
+    padding: 18px 20px;
+    border-radius: 0 8px 8px 0;
+  }
+  .callout p {
+    font-size: clamp(18px, 1.6vw, 23px);
+  }
+  .progress {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 3px;
+    background: var(--gold);
+    width: 0;
+    z-index: 20;
+    transition: width .2s ease;
+  }
+  .controls {
+    position: fixed;
+    right: 22px;
+    bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 14px;
+    z-index: 30;
+  }
+  button {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    min-width: 42px;
+    min-height: 38px;
+    cursor: pointer;
+    font: inherit;
+  }
+  button:hover { border-color: var(--gold); }
+  @media (max-width: 900px) {
+    body { overflow: auto; }
+    .deck { min-height: 100vh; height: auto; }
+    .slide {
+      position: relative;
+      min-height: 100vh;
+      display: none;
+      padding: 42px 20px 86px;
+    }
+    .slide.active { display: grid; }
+    .two, .grid, .grid.two-col, .screen-content, .flow {
+      grid-template-columns: 1fr;
+    }
+    .arrow { transform: rotate(90deg); text-align: center; }
+    .row { grid-template-columns: 1fr; }
+    .pill { justify-self: start; }
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<main class="deck">
+  <section class="slide active">
+    <header>
+      <div class="eyebrow">Epic 2.5 · Ring Spec Readout</div>
+      <h1>What are we building?</h1>
+    </header>
+    <div class="body">
+      <p>The Ring is the cloud version of the working Console/Council experience: channels come in, the Ring routes the turn, and connected MCP servers do the work.</p>
+      <div class="callout">
+        <p>Final boundary: Phylax transports messages, Ring routes conversations, Zenod owns memory ingest including audio, screenshots, Drive, transcription, and digest.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">The simplest model</div>
+      <h2>One place talks to everything.</h2>
+    </header>
+    <div class="body">
+      <div class="diagram">
+        <div class="flow">
+          <div class="box">
+            <strong>Channels</strong>
+            <span>WhatsApp, Telegram, web chat</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box">
+            <strong>The Ring</strong>
+            <span>Mailbox + router + control UI</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box">
+            <strong>Connected servers</strong>
+            <span>Zenod, Herald, Callisthenes, Archus, Epaminon, any MCP server</span>
+          </div>
+        </div>
+      </div>
+      <p class="small">The Ring receives the message, sees the connected tools and their “when to use me” skills, then calls the right server. If something should become memory, Ring sends it to Zenod ingest.</p>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">The UI expectation</div>
+      <h2>The Ring needs a real control surface.</h2>
+    </header>
+    <div class="body two">
+      <div>
+        <p>The UI is not a dashboard for decoration. It is where the user connects channels and servers, tells the Ring when to use them, and chooses the fallback behavior.</p>
+        <div style="height:22px"></div>
+        <div class="grid two-col">
+          <div class="card">
+            <span class="tag gold">Must have</span>
+            <h3>Connect channels</h3>
+            <p>Connect WhatsApp, add Telegram, open web chat. Drive lives under Zenod settings.</p>
+          </div>
+          <div class="card">
+            <span class="tag gold">Must have</span>
+            <h3>Connect servers</h3>
+            <p>Add an MCP URL, bearer token, display name, and skill text.</p>
+          </div>
+          <div class="card">
+            <span class="tag blue">Must have</span>
+            <h3>Default route</h3>
+            <p>Choose what happens when the Ring is unsure.</p>
+          </div>
+          <div class="card">
+            <span class="tag blue">Must have</span>
+            <h3>Relay policy</h3>
+            <p>Per connection: pass through verbatim or let the Ring summarize.</p>
+          </div>
+        </div>
+      </div>
+      <div class="screen" aria-label="Mock Ring settings screen">
+        <div class="screen-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span>The Ring</span>
+        </div>
+        <div class="screen-content">
+          <div class="sidebar">
+            <div class="navrow active">Connected servers</div>
+            <div class="navrow">Channels</div>
+            <div class="navrow">Default route</div>
+            <div class="navrow">Mailbox</div>
+            <div class="navrow">Logs</div>
+          </div>
+          <div class="mainpane">
+            <div class="row">
+              <strong>Zenod</strong>
+              <span>Use for memory, media ingest, citations, saved facts, and “what did I say?”</span>
+              <span class="pill">Enabled</span>
+            </div>
+            <div class="row">
+              <strong>Herald</strong>
+              <span>Use when the user says “for Herald” or asks about the public loop.</span>
+              <span class="pill">Enabled</span>
+            </div>
+            <div class="row">
+              <strong>Callisthenes</strong>
+              <span>Use for approved outbound posts and social publishing.</span>
+              <span class="pill">Enabled</span>
+            </div>
+            <div class="card">
+              <span class="tag blue">Default route</span>
+              <h3>Route to Ring by default</h3>
+              <p>Alternative settings: ask the user to clarify, or forward ambiguous memory to Zenod.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Container target</div>
+      <h2>Target shape: one Ring product, two core containers.</h2>
+    </header>
+    <div class="body">
+      <div class="grid two-col">
+        <div class="card">
+          <span class="tag gold">Public</span>
+          <h3>ring-core</h3>
+          <p>Owns the UI, mailbox, keyring, routing logs, default route, connected-server list, and web chat. This is the only box the browser hits.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">Internal</span>
+          <h3>phylax</h3>
+          <p>Owns WhatsApp and Telegram transport. Inbound rule: send to Ring. Outbound rule: deliver Ring's response. No memory digest here.</p>
+        </div>
+      </div>
+      <div class="diagram">
+        <div class="flow">
+          <div class="box">
+            <strong>Human channels</strong>
+            <span>Cloud WhatsApp, Telegram, web chat</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box">
+            <strong>Ring compose</strong>
+            <span>ring-core router + phylax gateway</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box">
+            <strong>External MCP servers</strong>
+            <span>Zenod memory, Herald guy, Callisthenes mouth, Archus backlog, Epaminon execution</span>
+          </div>
+        </div>
+      </div>
+      <p class="small">Important: live today is still the fused Console stack using one registry image and different <code>AGENT=...</code> modes. Epic 2.5 borrows that working Council/Console behavior and turns it into a configurable cloud router with MCP servers plugged in behind it.</p>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Public product sites</div>
+      <h2>Clean target: six independent product websites.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <span class="tag gold">1</span>
+          <h3>Ring</h3>
+          <p>The front door: channels, UI, router, connected servers. Includes Phylax; Phylax is not a separate product.</p>
+        </div>
+        <div class="card">
+          <span class="tag green">2</span>
+          <h3>Zenod</h3>
+          <p>Memory as an independent MCP server. Purchase/deploy alone or connect to the Ring.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">3</span>
+          <h3>Callisthenes</h3>
+          <p>The mouth: outbound posting/sending with custody, approval, and throttle.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">4</span>
+          <h3>Herald</h3>
+          <p>The paid guy/product loop. Website can exist now; purchase goes live when Epic 3 lands.</p>
+        </div>
+        <div class="card">
+          <span class="tag">5</span>
+          <h3>Archus</h3>
+          <p>Backlog/planning server. Independently deployable, but likely a lower-priority commercial page.</p>
+        </div>
+        <div class="card">
+          <span class="tag">6</span>
+          <h3>Epaminon</h3>
+          <p>Execution server. Independently deployable, but likely sold as infrastructure behind Ring/Herald first.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <p>No separate Council site. No separate Phylax site. The Ring absorbs both for the product story.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">WhatsApp config</div>
+      <h2>Cloud WhatsApp is not QR pairing.</h2>
+    </header>
+    <div class="body">
+      <div class="grid two-col">
+        <div class="card">
+          <span class="tag gold">Cloud product</span>
+          <h3>Managed WhatsApp gateway</h3>
+          <p>The customer should not scan a personal WhatsApp QR. Cloud uses a hosted channel setup: platform number, customer number through a provider, or business-account connect. Phylax owns the plumbing.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">Self-host / dev</span>
+          <h3>Baileys QR pairing</h3>
+          <p>The QR flow stays for self-hosting and dogfood because it is fast and already works. It should not be the default cloud buying experience.</p>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <span class="tag green">Customer sees</span>
+          <h3>Phone status</h3>
+          <p>Connected number, inbound status, send status, allowed senders, groups, test message.</p>
+        </div>
+        <div class="card">
+          <span class="tag green">Operator sees</span>
+          <h3>Gateway health</h3>
+          <p>Provider, webhook URL, delivery failures, session health, reconnects, delivery receipts.</p>
+        </div>
+        <div class="card">
+          <span class="tag green">Media rule</span>
+          <h3>Pass to Zenod</h3>
+          <p>Phylax exposes media to Ring; Ring routes memory-bound media to Zenod ingest. Zenod archives, transcribes, digests, and files.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <p>The Ring UI is the customer's control surface. Phylax is the channel gateway behind it: inbound to Ring, outbound from Ring, nothing more.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Cloud cycle</div>
+      <h2>The buyer path is the product.</h2>
+    </header>
+    <div class="body">
+      <div class="diagram">
+        <div class="flow">
+          <div class="box">
+            <strong>Public website</strong>
+            <span>Clear offer, Stripe checkout, plan terms</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box">
+            <strong>Deployment</strong>
+            <span>Tenant stack created, domain assigned, meter + watchdog wired</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box">
+            <strong>Config UI</strong>
+            <span>Connect channel, connect MCP servers, set default route, start using it</span>
+          </div>
+        </div>
+      </div>
+      <div class="callout">
+        <p>This is the cloud Console/Council: the same idea you are using over WhatsApp now, productized, paid, tenant-isolated, and configurable.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Ring UI mockup</div>
+      <h2>What the customer sees after purchase.</h2>
+    </header>
+    <div class="body">
+      <div class="screen" aria-label="Ring cloud dashboard mockup">
+        <div class="screen-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span>ring.acme.zenod.dev</span>
+        </div>
+        <div class="screen-content">
+          <div class="sidebar">
+            <div class="navrow active">Overview</div>
+            <div class="navrow">Channels</div>
+            <div class="navrow">Connected servers</div>
+            <div class="navrow">Routing</div>
+            <div class="navrow">Inbox</div>
+            <div class="navrow">Billing</div>
+            <div class="navrow">Logs</div>
+          </div>
+          <div class="mainpane">
+            <div class="row">
+              <strong>WhatsApp</strong>
+              <span>Cloud number connected. Inbound and outbound are healthy.</span>
+              <span class="pill">Live</span>
+            </div>
+            <div class="row">
+              <strong>Default route</strong>
+              <span>Ring handles general turns unless a named server or memory intent is detected.</span>
+              <span class="pill">Set</span>
+            </div>
+            <div class="row">
+              <strong>Zenod</strong>
+              <span>Memory and media ingest connected. Ring owns route policy; Zenod owns settings.</span>
+              <span class="pill">Settings</span>
+            </div>
+            <div class="row">
+              <strong>Herald</strong>
+              <span>Pass-through on “for Herald”. Configure briefing and practices in Herald.</span>
+              <span class="pill">Settings</span>
+            </div>
+            <div class="row">
+              <strong>Callisthenes</strong>
+              <span>Outbound posting connected. Configure accounts and throttles in Callisthenes.</span>
+              <span class="pill">Settings</span>
+            </div>
+            <div class="card">
+              <span class="tag gold">Next action</span>
+              <h3>Run two live tests</h3>
+              <p>Test a normal WhatsApp turn through Ring, then send audio or a screenshot to memory and prove Zenod ingests it with receipts.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Phylax UI mockup</div>
+      <h2>Phylax is the channel health screen.</h2>
+    </header>
+    <div class="body">
+      <div class="screen" aria-label="Phylax channel gateway mockup">
+        <div class="screen-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span>Ring / Channels / WhatsApp</span>
+        </div>
+        <div class="screen-content">
+          <div class="sidebar">
+            <div class="navrow active">WhatsApp</div>
+            <div class="navrow">Telegram</div>
+            <div class="navrow">Media handoff</div>
+            <div class="navrow">Delivery log</div>
+            <div class="navrow">Provider</div>
+          </div>
+          <div class="mainpane">
+            <div class="row">
+              <strong>Mode</strong>
+              <span>Cloud managed WhatsApp. No QR required for this tenant.</span>
+              <span class="pill">Cloud</span>
+            </div>
+            <div class="row">
+              <strong>Number</strong>
+              <span>+1 555 0142 connected to acme.zenod.dev.</span>
+              <span class="pill">Ready</span>
+            </div>
+            <div class="row">
+              <strong>Webhook</strong>
+              <span>Receiving messages and delivery receipts from the provider.</span>
+              <span class="pill">Healthy</span>
+            </div>
+            <div class="row">
+              <strong>Allowed senders</strong>
+              <span>Owner plus two approved team members. Groups disabled.</span>
+              <span class="pill">Edit</span>
+            </div>
+            <div class="row">
+              <strong>Media handoff</strong>
+              <span>Media handles are available to Ring; Zenod owns archive, transcription, and digest.</span>
+              <span class="pill">Ready</span>
+            </div>
+            <div class="card">
+              <span class="tag blue">Gateway law</span>
+              <h3>Inbound to Ring, outbound from Ring</h3>
+              <p>Phylax does not decide, summarize, remember, or digest. It transports messages and exposes media handles.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Guy UI pattern</div>
+      <h2>Ring links out to each guy's own cloud settings.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <span class="tag green">Zenod</span>
+          <h3>Memory settings</h3>
+          <p>Opened from Ring, hosted by Zenod. Vault repo, Drive archive, audio transcription, screenshot/PDF extraction, citation policy, recent commits, reindex controls.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">Herald</span>
+          <h3>Practice settings</h3>
+          <p>Opened from Ring, hosted by Herald. Briefing, schedule, approval mode, public loop goals, scorecard, last proposals.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">Callisthenes</span>
+          <h3>Outbound settings</h3>
+          <p>Opened from Ring, hosted by Callisthenes. X/Reddit/email connections, throttle, approval token, quiet hours, send ledger.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Archus</span>
+          <h3>Backlog settings</h3>
+          <p>Opened from Ring, hosted by Archus. Target repo, labels, issue templates, queue policy, planner mode.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Epaminon</span>
+          <h3>Execution settings</h3>
+          <p>Opened from Ring, hosted by Epaminon. Runner access, budgets, branch rules, PR policy, current jobs, completion receipts.</p>
+        </div>
+        <div class="card">
+          <span class="tag gold">Common</span>
+          <h3>What Ring owns</h3>
+          <p>Endpoint, token, enabled/disabled, skill text, relay policy, test call, health, and the settings link. The guy owns deeper configuration.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <p>The Ring is the switchboard, not the admin panel for every product. Each product has its own cloud settings page.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">What changed</div>
+      <h2>Old spec vs current spec.</h2>
+    </header>
+    <div class="body">
+      <div class="grid two-col">
+        <div class="card">
+          <span class="tag red">Old</span>
+          <h3>Fused Console/Council</h3>
+          <ul>
+            <li>Working WhatsApp Console exists.</li>
+            <li>Routing, memory, media, and tools are tangled together.</li>
+            <li>Settings are not productized for cloud tenants.</li>
+            <li>It proves the behavior, but not the product shape.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag green">Current</span>
+          <h3>Ring as cloud router</h3>
+          <ul>
+            <li>Phylax is a simple gateway.</li>
+            <li>Ring owns conversation routing and control UI.</li>
+            <li>Connected MCP servers come with skills and settings links.</li>
+            <li>Zenod owns memory media ingest and digest.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="small">The wire contract stays the same: MCP, bearer tokens, receipts, loud errors, and traceable long-running work.</p>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">What the spec says today</div>
+      <h2>The build list is now N-1 through N-8.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <span class="tag gold">N-1</span>
+          <h3>Ring router core</h3>
+          <p>Every inbound message becomes a routed Ring turn, borrowing the working deployed Console/Council behavior.</p>
+        </div>
+        <div class="card">
+          <span class="tag gold">N-2</span>
+          <h3>Connect-a-server UI</h3>
+          <p>Add, remove, enable, disable MCP servers and attach skill text.</p>
+        </div>
+        <div class="card">
+          <span class="tag gold">N-3</span>
+          <h3>Default route</h3>
+          <p>Decide what the Ring does when a message is ambiguous.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">N-4</span>
+          <h3>Named pass-through</h3>
+          <p>“For Herald” or “@Herald” forwards mostly unchanged to that server.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">N-5</span>
+          <h3>Channels</h3>
+          <p>WhatsApp, Telegram, web chat, provenance, and Phylax handoff. Drive/media ingest belongs to Zenod.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">N-6</span>
+          <h3>Compose or relay</h3>
+          <p>Per connected server: verbatim attribution or Ring-composed answer.</p>
+        </div>
+        <div class="card">
+          <span class="tag green">N-7</span>
+          <h3>Provisioning</h3>
+          <p>One Ring router plus Phylax plus default connected servers, watched and receipted.</p>
+        </div>
+        <div class="card">
+          <span class="tag green">N-8</span>
+          <h3>Doc cleanup</h3>
+          <p>Rewrite the old laws/catalog so the doc says one thing, not two.</p>
+        </div>
+        <div class="card">
+          <span class="tag green">Carried</span>
+          <h3>W-H / W-I</h3>
+          <p>Dispatch tracing and shared engine cleanup still matter.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Still unresolved</div>
+      <h2>The five decisions are simple.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <span class="tag gold">RP-1</span>
+          <h3>How smart is Ring routing?</h3>
+          <p>Recommended: borrow from the working Console/Council path, but keep memory ingest in Zenod and transport in Phylax.</p>
+        </div>
+        <div class="card">
+          <span class="tag gold">RP-2</span>
+          <h3>What is a skill?</h3>
+          <p>Recommended: start with editable plain-language instructions per server.</p>
+        </div>
+        <div class="card">
+          <span class="tag gold">RP-3</span>
+          <h3>What is the fallback?</h3>
+          <p>Recommended: Ring handles general turns by default, routes memory-bound turns to Zenod, and make the fallback configurable.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">RP-4</span>
+          <h3>How strict is “for Herald”?</h3>
+          <p>Recommended: deterministic pass-through with minimal Ring thinking.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">RP-5</span>
+          <h3>Can Ring rewrite answers?</h3>
+          <p>Recommended: per-server setting. Herald can be verbatim; tools can be summarized.</p>
+        </div>
+        <div class="card">
+          <span class="tag red">Meta</span>
+          <h3>Is this the right UI?</h3>
+          <p>This is the real product question: does the Ring feel like a control surface, an inbox, or both?</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">My read</div>
+      <h2>The spec is clear enough to rewrite, but not clear enough to build.</h2>
+    </header>
+    <div class="body">
+      <div class="grid two-col">
+        <div class="card">
+          <span class="tag green">Clear</span>
+          <h3>The product shape</h3>
+          <p>The Ring is the cloud router/control surface. Phylax handles channel transport. Zenod handles memory media ingest. Other guys do their own jobs.</p>
+        </div>
+        <div class="card">
+          <span class="tag red">Needs your feedback</span>
+          <h3>The user experience</h3>
+          <p>The deck now names the UI boundaries; the remaining question is how polished/simple the first cloud configuration flow should be.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <p>If this deck matches your intent, the next step is to rewrite the Epic 2.5 spine around this model and push media-ingest ownership back into Epic 2.3 Zenod.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="controls">
+  <span id="counter">1 / 14</span>
+  <button type="button" id="prev" aria-label="Previous slide">‹</button>
+  <button type="button" id="next" aria-label="Next slide">›</button>
+</div>
+<script>
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const counter = document.getElementById("counter");
+  const progress = document.getElementById("progress");
+  let index = 0;
+
+  function show(nextIndex) {
+    index = Math.max(0, Math.min(slides.length - 1, nextIndex));
+    slides.forEach((slide, i) => slide.classList.toggle("active", i === index));
+    counter.textContent = `${index + 1} / ${slides.length}`;
+    progress.style.width = `${((index + 1) / slides.length) * 100}%`;
+  }
+
+  document.getElementById("prev").addEventListener("click", () => show(index - 1));
+  document.getElementById("next").addEventListener("click", () => show(index + 1));
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") show(index + 1);
+    if (event.key === "ArrowLeft" || event.key === "PageUp") show(index - 1);
+  });
+  show(0);
+</script>
+</body>
+</html>

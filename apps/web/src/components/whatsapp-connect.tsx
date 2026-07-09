@@ -2,9 +2,15 @@ import * as React from "react"
 import * as QRCode from "qrcode"
 import {
   CheckIcon,
+  CloudIcon,
+  FileCheckIcon,
+  ListChecksIcon,
   QrCodeIcon,
   RefreshCwIcon,
+  RouteIcon,
   SaveIcon,
+  SendIcon,
+  ServerIcon,
   SmartphoneIcon,
   Trash2Icon,
   TriangleAlertIcon,
@@ -38,6 +44,12 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
+
+type NotifyReceipt = {
+  sent: number
+  recipients: string[]
+}
 
 function statusLabel(status: WhatsAppStatus | null): string {
   if (!status) return "Loading"
@@ -83,6 +95,71 @@ function diagnosticText(status: WhatsAppStatus | null): string {
   return "no WhatsApp messages seen yet"
 }
 
+function statusBadgeVariant(
+  status: WhatsAppStatus | null
+): React.ComponentProps<typeof Badge>["variant"] {
+  if (!status || !status.enabled) return "outline"
+  if (status.state === "connected") return "secondary"
+  if (status.state === "error") return "destructive"
+  return "outline"
+}
+
+function lastOutboundText(status: WhatsAppStatus | null): string {
+  const outbound = status?.diagnostics.store.lastOutbound
+  if (!outbound) return "no delivery receipt yet"
+  return `${outbound.status} ${timeAgo(outbound.at)}`
+}
+
+function FieldValue({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: React.ReactNode
+  detail?: React.ReactNode
+}) {
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <p className="text-sm text-muted-foreground">{value}</p>
+      {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
+    </Field>
+  )
+}
+
+function ModeTile({
+  icon,
+  title,
+  badge,
+  active = false,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  badge: string
+  active?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-32 flex-col gap-2 rounded-lg border p-3",
+        active && "border-primary/30 bg-primary/5"
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 font-medium">
+          {icon}
+          {title}
+        </div>
+        <Badge variant={active ? "secondary" : "outline"}>{badge}</Badge>
+      </div>
+      <p className="text-sm text-muted-foreground">{children}</p>
+    </div>
+  )
+}
+
 function PairingQr({ value }: { value: string }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
 
@@ -97,7 +174,11 @@ function PairingQr({ value }: { value: string }) {
 
   return (
     <div className="flex justify-center rounded-md border bg-white p-3">
-      <canvas ref={canvasRef} className="size-[220px]" aria-label="WhatsApp pairing QR code" />
+      <canvas
+        ref={canvasRef}
+        className="size-[220px]"
+        aria-label="WhatsApp pairing QR code"
+      />
     </div>
   )
 }
@@ -112,6 +193,10 @@ export function WhatsAppConnect() {
   const [pairing, setPairing] = React.useState(false)
   const [disconnecting, setDisconnecting] = React.useState(false)
   const [resetting, setResetting] = React.useState(false)
+  const [testing, setTesting] = React.useState(false)
+  const [testReceipt, setTestReceipt] = React.useState<NotifyReceipt | null>(
+    null
+  )
 
   const loadStatus = React.useCallback(() => {
     return api<WhatsAppStatus>("/api/whatsapp/status")
@@ -135,7 +220,9 @@ export function WhatsAppConnect() {
     return () => window.clearInterval(timer)
   }, [loadStatus, status?.enabled, status?.state])
 
-  async function saveSettings(enabled: boolean | null = status?.enabled ?? false) {
+  async function saveSettings(
+    enabled: boolean | null = status?.enabled ?? false
+  ) {
     setSaving(true)
     try {
       const body: {
@@ -219,6 +306,35 @@ export function WhatsAppConnect() {
     }
   }
 
+  async function handleTestMessage() {
+    setTesting(true)
+    try {
+      const result = await api<NotifyReceipt>("/api/notify", {
+        method: "POST",
+        body: {
+          surface: "whatsapp",
+          eventType: "phylax.channel_test",
+          severity: "info",
+          text: "Phylax WhatsApp channel test: Ring outbound delivery path is reachable.",
+        },
+      })
+      setTestReceipt(result)
+      toast.success("WhatsApp test sent", {
+        description:
+          result.sent > 0
+            ? `Delivered to ${result.sent} recipient${result.sent === 1 ? "" : "s"}.`
+            : "No WhatsApp recipient was available.",
+      })
+      void loadStatus()
+    } catch (err) {
+      toast.error("Could not send WhatsApp test", {
+        description: errorMessage(err),
+      })
+    } finally {
+      setTesting(false)
+    }
+  }
+
   const connected = status?.state === "connected"
   const pairingActive = status?.state === "pairing" && status.qr
 
@@ -228,15 +344,15 @@ export function WhatsAppConnect() {
         <SmartphoneIcon className="size-5 text-muted-foreground" />
         <CardTitle className="flex items-center gap-2">
           WhatsApp
-          <Badge variant={connected ? "secondary" : "outline"}>
+          <Badge variant={statusBadgeVariant(status)}>
             {connected && <CheckIcon />}
             {statusLabel(status)}
           </Badge>
         </CardTitle>
         <CardDescription>
-          Link a dedicated WhatsApp or WhatsApp Business number with a local
-          Baileys session. Only allowlisted senders can trigger Zeno replies.
-          Baileys is an unofficial WhatsApp Web adapter.
+          Phylax handles WhatsApp transport for the Ring: inbound messages go to
+          Ring, outbound responses come from Ring. It does not decide, remember,
+          transcribe, archive, or digest.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -258,22 +374,90 @@ export function WhatsAppConnect() {
 
         {pairingActive && <PairingQr value={status.qr!} />}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field>
-            <FieldLabel>Linked number</FieldLabel>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ModeTile
+            icon={<CloudIcon className="size-4 text-muted-foreground" />}
+            title="Managed cloud"
+            badge="Cloud"
+          >
+            Provider number and webhook delivery belong here when the hosted
+            WhatsApp provider is wired. No QR pairing is required for a cloud
+            tenant.
+          </ModeTile>
+          <ModeTile
+            icon={<ServerIcon className="size-4 text-muted-foreground" />}
+            title="Self-host/dev QR"
+            badge="Current"
+            active
+          >
+            This build uses a local Baileys WhatsApp Web session with isolated
+            session state. QR pairing is kept for dogfood and self-hosting.
+          </ModeTile>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <FieldValue
+            label="Provider"
+            value="Baileys Web session"
+            detail="unofficial WhatsApp Web adapter"
+          />
+          <FieldValue
+            label="Linked number"
+            value={status?.linkedNumber ?? "not linked"}
+          />
+          <FieldValue
+            label="Session health"
+            value={statusLabel(status)}
+            detail={diagnosticText(status)}
+          />
+          <FieldValue
+            label="Last activity"
+            value={timeAgo(status?.lastActivity ?? null)}
+            detail={`alias refresh ${timeAgo(status?.diagnostics.lastAliasRefreshAt ?? null)}`}
+          />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div className="rounded-lg border p-3">
+            <div className="mb-2 flex items-center gap-2 font-medium">
+              <RouteIcon className="size-4 text-muted-foreground" />
+              Ring handoff
+            </div>
             <p className="text-sm text-muted-foreground">
-              {status?.linkedNumber ?? "not linked"}
+              Inbound WhatsApp turns are handed to Ring. Ring replies through
+              Phylax using the same channel and chat provenance.
             </p>
-          </Field>
-          <Field>
-            <FieldLabel>Last activity</FieldLabel>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="mb-2 flex items-center gap-2 font-medium">
+              <FileCheckIcon className="size-4 text-muted-foreground" />
+              Media handoff
+            </div>
             <p className="text-sm text-muted-foreground">
-              {timeAgo(status?.lastActivity ?? null)}
+              Phylax exposes media handles to Ring. Zenod owns ingest, archive,
+              transcription, OCR, digest, filing, and receipts.
+            </p>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="mb-2 flex items-center gap-2 font-medium">
+              <ListChecksIcon className="size-4 text-muted-foreground" />
+              Delivery log
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {lastOutboundText(status)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {diagnosticText(status)}
+              {status?.diagnostics.store.outboundAudits ?? 0} outbound audit
+              rows; {status?.diagnostics.store.inboundMessages ?? 0} inbound
+              rows.
             </p>
-          </Field>
+            {testReceipt && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Last test sent to {testReceipt.sent} recipient
+                {testReceipt.sent === 1 ? "" : "s"}.
+              </p>
+            )}
+          </div>
         </div>
 
         <Field>
@@ -287,8 +471,8 @@ export function WhatsAppConnect() {
             disabled={acceptAll}
           />
           <FieldDescription>
-            One phone number per line. Zenod normalizes punctuation and country
-            prefixes before matching.
+            One phone number per line. Phylax normalizes punctuation and country
+            prefixes before matching; Ring receives only allowed turns.
           </FieldDescription>
         </Field>
 
@@ -321,13 +505,26 @@ export function WhatsAppConnect() {
           {saving ? <Spinner /> : <SaveIcon data-icon="inline-start" />}
           Save settings
         </Button>
-        <Button type="button" onClick={() => void handlePair()} disabled={pairing}>
+        <Button
+          type="button"
+          onClick={() => void handlePair()}
+          disabled={pairing}
+        >
           {pairing ? <Spinner /> : <QrCodeIcon data-icon="inline-start" />}
           {connected ? "Re-pair" : "Pair number"}
         </Button>
         <Button type="button" variant="ghost" onClick={() => void loadStatus()}>
           <RefreshCwIcon data-icon="inline-start" />
           Refresh
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={!connected || testing}
+          onClick={() => void handleTestMessage()}
+        >
+          {testing ? <Spinner /> : <SendIcon data-icon="inline-start" />}
+          Send test
         </Button>
 
         {status?.enabled && (
@@ -337,7 +534,11 @@ export function WhatsAppConnect() {
             disabled={disconnecting}
             onClick={() => void handleDisconnect()}
           >
-            {disconnecting ? <Spinner /> : <UnplugIcon data-icon="inline-start" />}
+            {disconnecting ? (
+              <Spinner />
+            ) : (
+              <UnplugIcon data-icon="inline-start" />
+            )}
             Disconnect
           </Button>
         )}
@@ -350,7 +551,11 @@ export function WhatsAppConnect() {
               className="text-destructive hover:text-destructive"
               disabled={resetting}
             >
-              {resetting ? <Spinner /> : <Trash2Icon data-icon="inline-start" />}
+              {resetting ? (
+                <Spinner />
+              ) : (
+                <Trash2Icon data-icon="inline-start" />
+              )}
               Reset session
             </Button>
           </AlertDialogTrigger>
@@ -358,7 +563,7 @@ export function WhatsAppConnect() {
             <AlertDialogHeader>
               <AlertDialogTitle>Reset WhatsApp session?</AlertDialogTitle>
               <AlertDialogDescription>
-                Zenod deletes the local linked-device session. You will need to
+                Phylax deletes the local linked-device session. You will need to
                 pair the WhatsApp number again. The allowlist is kept.
               </AlertDialogDescription>
             </AlertDialogHeader>
