@@ -816,3 +816,30 @@ bad credential or webhook requirement.
 - **Integration receipt:** implementation commit `98f418b`; PR
   [#700](https://github.com/zenod-ai/zenod/pull/700); CI run
   [29051077445](https://github.com/zenod-ai/zenod/actions/runs/29051077445) passed in 2m6s. — [worker]
+
+### 2026-07-09 · [worker] C-3T fresh-tenant deployment revalidated without recovery
+Audit correction: the earlier `jorditest2-qmapvn` checkout was **not valid automated-deployment
+acceptance**. Dokploy created its compose record, but the worker manually materialized the checkout
+and container before the tenant reached running. The later `compose.redeploy` patch also assumed an
+existing checkout, so it was not an acceptable fresh-tenant strategy.
+
+- **Strategy correction:** private cloud PR
+  [#55](https://github.com/zenod-ai/cloud/pull/55) restores the same fresh-tenant sequence used by
+  Zenod: `compose.create` -> `compose.update` -> `domain.create` -> `compose.deploy` -> status poll.
+  If the first deploy ends in the observed checkout-initialization `error`, it repeats that same
+  standard deploy once; it never switches to `compose.redeploy` or host-side materialization.
+- **Deterministic checks:** `provision-callisthenes.test.mjs` covers first-pass success, one standard
+  deploy retry after initialization error, and hard failure after a second error: **3 passed**.
+- **Fresh browser receipt:** created Stripe TEST customer
+  `jordi+calli-fresh-33087769@alpha9.io`, paid EUR 5 with the Stripe test card, and followed the
+  browser from `callisthenes.zenod.dev` through Checkout to the polling status page. New compose
+  `NR_px8Ul2L2w_RaM4-DWe` moved `running` -> `done` on its first `compose.deploy`; no retry was needed.
+- **Tenant receipt:** `c-jordicallifresh33087-muhmxp.zenod.dev` reached browser status **Running**
+  and `/connect` HTTP 200 in the same journey. Container
+  `callisthenes-jordicallifresh33087-muhmxp` is running, attached to its networks, and mounts `/data`.
+  The connect page is the current Epic 2.4 three-field X UI with callback/PIN support.
+- **No-intervention rule:** after Stripe submission, the worker performed read-only browser/status,
+  log, and container inspection only. No compose API call, filesystem materialization, manual Docker
+  command, or tenant repair was performed. C-3T automated payment -> provision -> `/connect` is now
+  genuinely green; C-7 real X authorization and first approved post remain the next human gate.
+  — [worker]
