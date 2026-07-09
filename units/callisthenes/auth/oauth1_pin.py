@@ -26,8 +26,9 @@ import hmac
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional
+from typing import Dict, Optional
 from urllib.parse import parse_qs, quote, urlencode
+from xml.etree import ElementTree
 
 # --- Canonical X endpoints (anti-phishing: the ONLY origin we ever emit) -------
 REQUEST_TOKEN_URL = "https://api.x.com/oauth/request_token"
@@ -40,10 +41,19 @@ CANONICAL_AUTHORIZE_HOSTS = ("api.x.com", "x.com", "api.twitter.com", "twitter.c
 class OAuth1Error(Exception):
     """Loud failure in the OAuth1 dance. Carries a stable `code` (SEAM-SPEC §5)."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        http_status: Optional[int] = None,
+        provider_code: Optional[str] = None,
+    ):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.http_status = http_status
+        self.provider_code = provider_code
 
 
 # --- HTTP seam: injectable so tests mock it (no network in unit tests) ---------
@@ -170,9 +180,13 @@ class OAuth1PinFlow:
         )
         resp = self.http.post_form(REQUEST_TOKEN_URL, {"Authorization": header})
         if resp.status_code != 200:
+            provider_code, provider_message = _parse_provider_error(resp.text)
+            detail = provider_message or "X rejected the authorization request."
             raise OAuth1Error(
                 "unavailable",
-                f"request_token failed (HTTP {resp.status_code}): {resp.text[:200]}",
+                detail,
+                http_status=resp.status_code,
+                provider_code=provider_code,
             )
         data = _parse_form(resp.text)
         if "oauth_token" not in data or "oauth_token_secret" not in data:
@@ -233,3 +247,17 @@ class OAuth1PinFlow:
 
 def _parse_form(text: str) -> Dict[str, str]:
     return {k: v[0] for k, v in parse_qs(text, keep_blank_values=True).items()}
+
+
+def _parse_provider_error(text: str) -> tuple[Optional[str], Optional[str]]:
+    """Extract X's legacy XML error without surfacing the raw provider body."""
+    try:
+        root = ElementTree.fromstring(text)
+    except (ElementTree.ParseError, TypeError):
+        return None, None
+    error = root.find(".//error")
+    if error is None:
+        return None, None
+    code = str(error.get("code") or "").strip() or None
+    message = " ".join("".join(error.itertext()).split()) or None
+    return code, message

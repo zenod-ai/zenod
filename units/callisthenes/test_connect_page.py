@@ -26,6 +26,11 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from auth import ChatAuth  # noqa: E402
+from auth.oauth1_pin import (  # noqa: E402
+    HttpResponse as OAuth1HttpResponse,
+    OAuth1Error,
+    OAuth1PinFlow,
+)
 from auth.oauth2_pkce import HttpClient, HttpResponse, OAuth2PkceFlow  # noqa: E402
 from auth.token_store import InMemoryTokenStore  # noqa: E402
 import connect_page as cp  # noqa: E402
@@ -74,8 +79,31 @@ class _FakeOAuth1Flow:
         )
 
 
+class _DesktopOAuth1Flow(_FakeOAuth1Flow):
+    callbacks = []
+
+    def request_token(self, callback):  # noqa: ANN001
+        self.callbacks.append(callback)
+        if callback != "oob":
+            raise OAuth1Error(
+                "unavailable",
+                "Desktop applications only support the oauth_callback value 'oob'",
+                http_status=401,
+                provider_code="417",
+            )
+        return SimpleNamespace(
+            oauth_token="request-token",
+            oauth_token_secret="request-secret",
+            callback_confirmed=True,
+        )
+
+
 def _oauth1_factory(_key, _secret):  # noqa: ANN001
     return _FakeOAuth1Flow()
+
+
+def _desktop_oauth1_factory(_key, _secret):  # noqa: ANN001
+    return _DesktopOAuth1Flow()
 
 
 def _engine() -> ChatAuth:
@@ -90,6 +118,18 @@ def _engine() -> ChatAuth:
         )
 
     return ChatAuth(store=store, flow_factory=flow_factory)
+
+
+class _DesktopProviderErrorHttp:
+    def post_form(self, _url, _headers):  # noqa: ANN001
+        return OAuth1HttpResponse(
+            status_code=401,
+            text=(
+                "<?xml version='1.0'?><errors><error code='417'>"
+                "Desktop applications only support the oauth_callback value 'oob'"
+                "</error></errors>"
+            ),
+        )
 
 
 def _page(**cfg) -> cp.ConnectPage:
@@ -108,6 +148,15 @@ def _page(**cfg) -> cp.ConnectPage:
 # --------------------------------------------------------------------------- #
 # Controller layer
 # --------------------------------------------------------------------------- #
+
+def test_oauth1_provider_xml_is_parsed_without_exposing_raw_body():
+    flow = OAuth1PinFlow("consumer", "secret", http=_DesktopProviderErrorHttp())
+    with pytest.raises(OAuth1Error) as raised:
+        flow.request_token("https://calli.example/oauth/callback")
+    assert raised.value.provider_code == "417"
+    assert raised.value.http_status == 401
+    assert "Desktop applications only support" in raised.value.message
+    assert "<errors>" not in raised.value.message
 
 def test_page_renders_connector_list_and_mcp_block():
     html = _page().render_page()
@@ -270,6 +319,28 @@ def test_x_setup_has_exactly_the_three_fields_x_shows_at_app_creation(
     assert 'name="x_config"' not in rendered
 
 
+def test_x_setup_shows_only_last_four_characters_of_saved_app_values(
+    monkeypatch, tmp_path
+):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    page = _page()
+    page.save_x_app_config(
+        {
+            "X_OAUTH_CONSUMER_KEY": "consumer-AB12",
+            "X_OAUTH_CONSUMER_SECRET": "secret-CD34",
+            "X_BEARER_TOKEN": "bearer-EF56",
+        }
+    )
+    rendered = page.render_page()
+    for suffix in ("AB12", "CD34", "EF56"):
+        assert f"Saved · {suffix}" in rendered
+        assert f"ending in {suffix}" in rendered
+    for secret in ("consumer-AB12", "secret-CD34", "bearer-EF56"):
+        assert secret not in rendered
+
+
 def test_x_app_credentials_start_oauth1_and_callback_stores_posting_account(
     monkeypatch, tmp_path
 ):
@@ -296,6 +367,36 @@ def test_x_app_credentials_start_oauth1_and_callback_stores_posting_account(
     assert "Connected as @calli_test" in rendered
     assert "user-access-token" not in rendered
     assert "user-access-secret" not in rendered
+
+
+def test_desktop_x_app_falls_back_to_pin_without_more_credentials(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    _DesktopOAuth1Flow.callbacks.clear()
+    page = _page(x_oauth1_flow_factory=_desktop_oauth1_factory)
+    page.save_x_app_config(
+        {
+            "X_OAUTH_CONSUMER_KEY": "consumer-AB12",
+            "X_OAUTH_CONSUMER_SECRET": "secret-CD34",
+            "X_BEARER_TOKEN": "bearer-EF56",
+        }
+    )
+    started = page.start_x_oauth1()
+    assert started["ok"] is True
+    assert started["pin_required"] is True
+    assert _DesktopOAuth1Flow.callbacks == [
+        "https://calli.example/oauth/callback",
+        "oob",
+    ]
+    rendered = page.render_page()
+    assert "Finish with an X PIN" in rendered
+    assert "Open X to get PIN" in rendered
+    assert 'action="/connect/x/pin"' in rendered
+    assert "Desktop applications only support" not in rendered
+    completed = page.complete_x_oauth1_pin("pin-or-verifier")
+    assert completed["ok"] is True
+    assert "Connected as @calli_test" in page.render_page()
 
 
 # --------------------------------------------------------------------------- #
@@ -433,3 +534,38 @@ def test_live_three_field_x_app_form_redirects_and_callback_connects(monkeypatch
     assert completed.status_code == 200
     assert "Connected" in completed.text
     assert "@calli_test" in completed.text
+
+
+def test_live_desktop_x_app_redirects_to_pin_step_and_connects(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    _DesktopOAuth1Flow.callbacks.clear()
+    client, _ = _live_client(x_oauth1_flow_factory=_desktop_oauth1_factory)
+    started = client.post(
+        "/connect/x/app",
+        data={
+            "X_OAUTH_CONSUMER_KEY": "consumer-AB12",
+            "X_OAUTH_CONSUMER_SECRET": "secret-CD34",
+            "X_BEARER_TOKEN": "bearer-EF56",
+        },
+        follow_redirects=False,
+    )
+    assert started.status_code == 303
+    assert started.headers["location"] == "/connect"
+    pin_page = client.get("/connect")
+    assert pin_page.status_code == 200
+    assert "Open X to get PIN" in pin_page.text
+    assert "Desktop applications only support" not in pin_page.text
+    for suffix in ("AB12", "CD34", "EF56"):
+        assert f"Saved · {suffix}" in pin_page.text
+
+    completed = client.post(
+        "/connect/x/pin",
+        data={"pin": "pin-or-verifier"},
+        follow_redirects=False,
+    )
+    assert completed.status_code == 303
+    assert completed.headers["location"] == "/connect"
+    connected = client.get("/connect")
+    assert "Connected as @calli_test" in connected.text

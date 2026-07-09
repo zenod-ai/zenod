@@ -5,8 +5,8 @@
 > green on `cloud-test.zenod.dev`; current push is C-7 human acceptance. The active hosted tenant now
 > has one guided bring-your-own-X-app setup with the same three values X shows at app creation;
 > Callisthenes then runs OAuth1 authorization and stores the generated user token pair out of sight.
-> Human gate: rotate screenshot-exposed app credentials, register the callback, and complete the
-> real X authorization. `cloud.zenod.dev` remains reserved for Stripe LIVE.
+> Human gate: rotate screenshot-exposed app credentials, complete the callback or desktop PIN
+> authorization, then perform the first approved post. `cloud.zenod.dev` remains reserved for Stripe LIVE.
 > Bound spine:
 > this document only; referenced parent/sibling spines are read-only unless Jordi widens scope.
 > — worker, 2026-07-09
@@ -791,3 +791,25 @@ shown by X's **Application Created Successfully** screen.
 - **Integration receipt:** implementation commit `2e48454` is rebased on `origin/main`; draft PR
   [#700](https://github.com/zenod-ai/zenod/pull/700) is conflict-free and CI run
   [29049706689](https://github.com/zenod-ai/zenod/actions/runs/29049706689) passed in 2m16s. — [worker]
+
+### 2026-07-09 · [worker] C-7 desktop X apps gain automatic PIN completion
+The first real three-value submission reached X but failed before authorization with provider error
+417: **Desktop applications only support `oauth_callback=oob`**. This was an app-type branch, not a
+bad credential or webhook requirement.
+
+- **Flow correction:** Callisthenes first attempts the registered OAuth callback. On X error 417 it
+  automatically retries the request token with `oauth_callback=oob`, persists that pending mode,
+  and returns the owner to `/connect`. The page then presents **Open X to get PIN** plus one transient
+  PIN field. Submitting the PIN exchanges and stores the same hidden posting-token pair as the
+  callback flow. No additional app credential is requested; no webhook is required.
+- **Stored-value clarity:** each of the three app inputs now identifies a stored value as
+  `Saved · <last 4>` and repeats that suffix in its replacement placeholder. Full values are never
+  rendered.
+- **Provider errors:** the legacy X XML response is parsed structurally; raw XML is no longer shown
+  to the customer.
+- **Evidence:** focused remote suite **24 passed**. Live tenant image
+  `sha256:f83f85ef6d9a3581ee8f5dd1525c3593b5fa0680049802741b39f4128663f819` is running; a real
+  `/connect/x/authorize` probe returned to `/connect` with the PIN panel active. Live DOM has three
+  masked suffixes, one transient `pin` input, zero Access Token inputs, no raw provider XML, and no
+  horizontal overflow at 1280px or 390px. The current human gate is the one-time X PIN followed by
+  the first approved post. — [worker]

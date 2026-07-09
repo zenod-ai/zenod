@@ -133,14 +133,15 @@ FastMCP's HTTP app is Starlette-based and exposes `@mcp.custom_route(...)`.
 | `/connect/<id>/token` | POST | Store a token-kind connector's value (e.g. Reddit's Composio user id). |
 | `/connect/x/app` | POST | Store the three app-creation credentials and redirect to X authorization. |
 | `/connect/x/authorize` | POST | Reconnect using the already stored app credentials. |
+| `/connect/x/pin` | POST | Complete OAuth1 for desktop/native X apps using the one-time PIN. |
 
 **Connectors are data, not hardcoded.** `connect_page.default_connectors()` returns `[X (oauth2),
 Reddit (token)]`; add Instagram/email as one `Connector(...)` row (or pass `connectors=` to
 `connect_page.register`). OAuth2 connectors must also be in the auth engine's `SUPPORTED_SERVICES`.
 
 **Shared engine.** `callisthenes_server.py` builds one `ChatAuth` engine and hands the same instance
-to both `auth.register(engine=...)` and `connect_page.register(engine=...)`, so a Connect-X started
-on the page completes at the page's `/oauth/callback` (shared pending PKCE state + token store).
+to both `auth.register(engine=...)` and `connect_page.register(engine=...)`. OAuth1 callback and PIN
+completion both apply their generated posting tokens to that running unit.
 
 **Hosted X setup is runtime-configurable.** `/connect` links to the official X Developer Console,
 guides the owner through enabling OAuth 1.0a with **Read and write**, shows the exact callback URL,
@@ -152,15 +153,19 @@ X_OAUTH_CONSUMER_SECRET=...
 X_BEARER_TOKEN=...
 ```
 
-Submitting those values starts OAuth1 user authorization at X. X returns to `/oauth/callback`, where
-Callisthenes exchanges the verifier for the Access Token + Access Token Secret and stores that pair
-internally. The customer never sees or enters those generated posting-account credentials.
+Submitting those values starts OAuth1 user authorization at X. Web apps return to `/oauth/callback`.
+If X identifies the app as desktop/native (provider code 417), Callisthenes automatically retries
+with `oauth_callback=oob`, renders an **Open X to get PIN** step, and accepts the one-time PIN at
+`/connect/x/pin`. Both paths exchange the verifier for the Access Token + Access Token Secret and
+store that pair internally. The customer never sees or enters those generated posting-account
+credentials.
 
 The values are stored in `/data/x-config.json` by default (`CALLISTHENES_X_CONFIG_PATH` overrides),
 chmodded best-effort to `0600`, and applied to the process immediately. A successful callback records
 and displays the bound `@handle`. The upstream X request hook rebuilds its OAuth1 signer from current process config for
-each request, so a credential change applies without restarting the container. Secret values are
-never rendered back into the page.
+each request, so a credential change applies without restarting the container. Full secret values
+are never rendered back into the page; saved app values are identified only by their final four
+characters.
 
 ### ## CLOUD SEAM (what the provisioner injects)
 
@@ -181,9 +186,10 @@ naming the env var the provisioner would set. This is the exact wiring point for
 ### Real-creds gap (honest)
 
 Automated tests inject the OAuth1 provider and never use real X credentials. Human acceptance still
-requires an owner to create/open an X app, enable OAuth 1.0a Read and write, register the displayed
-callback URL, and submit the three app-creation values. X authorization then generates the posting
-token pair behind the scenes. Reddit remains separate: its field stores the Composio user id;
+requires an owner to create/open an X app, enable OAuth 1.0a Read and write, and submit the three
+app-creation values. Web apps also register the displayed callback URL; desktop/native apps use the
+one-time PIN path and need no webhook or callback. X authorization then generates the posting token
+pair behind the scenes. Reddit remains separate: its field stores the Composio user id;
 the actual send is C-8's `post_reddit` with a real `COMPOSIO_API_KEY`.
 
 ## Upgrading the pin

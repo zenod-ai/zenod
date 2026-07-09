@@ -6,7 +6,7 @@ dashboard. It is the smallest surface that:
 
     1. Connect X   -> accepts the three credentials from X's app-creation screen,
                       starts OAuth1 user authorization at a canonical X URL, and
-                      exchanges the callback verifier for the hidden posting tokens.
+                      exchanges a callback verifier or desktop PIN for hidden posting tokens.
     2. Connect each outbound platform -> Reddit today (paste the Composio token,
                       stored under service="reddit" for the C-8 connector to read),
                       Instagram/email later as data-driven connector rows.
@@ -47,6 +47,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional
+from urllib.parse import urlencode
 
 
 # --------------------------------------------------------------------------- #
@@ -83,9 +84,14 @@ X_SENDER_REQUIRED = (
     "X_OAUTH_ACCESS_TOKEN_SECRET",
 )
 X_CONFIG_METADATA_KEYS = ("X_VERIFIED_USER_ID", "X_VERIFIED_USERNAME")
-X_CONFIG_INTERNAL_KEYS = ("X_PENDING_OAUTH_TOKEN", "X_PENDING_OAUTH_TOKEN_SECRET")
+X_CONFIG_INTERNAL_KEYS = (
+    "X_PENDING_OAUTH_TOKEN",
+    "X_PENDING_OAUTH_TOKEN_SECRET",
+    "X_PENDING_OAUTH_MODE",
+)
 X_DEVELOPER_CONSOLE_URL = "https://console.x.com/"
 X_CREDENTIALS_GUIDE_URL = "https://docs.x.com/x-api/getting-started/getting-access"
+X_AUTHORIZE_URL = "https://api.x.com/oauth/authorize"
 
 X_SETUP_FIELDS = (
     (
@@ -257,8 +263,13 @@ class ConnectPage:
         missing_app = [key for key in X_APP_REQUIRED if not present.get(key)]
         missing_sender = [key for key in X_SENDER_REQUIRED if not present.get(key)]
         saved = _read_x_config_file(include_metadata=True, include_internal=True)
+        pending_token = saved.get("X_PENDING_OAUTH_TOKEN", "")
+        pending_mode = saved.get("X_PENDING_OAUTH_MODE", "")
         return {
             "present": present,
+            "credential_suffixes": {
+                key: str(cfg.get(key, ""))[-4:] for key in X_APP_REQUIRED if cfg.get(key)
+            },
             "oauth2_ready": not missing_oauth2,
             "missing_oauth2": missing_oauth2,
             "app_ready": not missing_app,
@@ -267,7 +278,13 @@ class ConnectPage:
             "missing_sender": missing_sender,
             "verified_user_id": saved.get("X_VERIFIED_USER_ID", ""),
             "verified_username": saved.get("X_VERIFIED_USERNAME", ""),
-            "oauth1_pending": bool(saved.get("X_PENDING_OAUTH_TOKEN")),
+            "oauth1_pending": bool(pending_token),
+            "oauth1_mode": pending_mode,
+            "oauth1_authorize_url": (
+                f"{X_AUTHORIZE_URL}?{urlencode({'oauth_token': pending_token})}"
+                if pending_token and pending_mode == "pin"
+                else ""
+            ),
             "callback_url": self.x_callback_url(),
             "redirect_uri": cfg.get("X_OAUTH2_REDIRECT_URI", ""),
             "config_path": str(_x_config_path()),
@@ -362,17 +379,29 @@ class ConnectPage:
             return {"ok": False, "error": "Enter the three X app credentials first."}
         if not callback_url:
             return {"ok": False, "error": "The hosted X callback URL is not configured."}
+        flow = self._x_oauth1_flow(cfg)
+        mode = "callback"
         try:
-            flow = self._x_oauth1_flow(cfg)
             request_token = flow.request_token(callback_url)
-            authorize_url = flow.authorize_url(request_token.oauth_token)
         except Exception as exc:  # noqa: BLE001 - provider failures render on the page
-            return {"ok": False, "error": getattr(exc, "message", str(exc))}
+            if not _oauth1_requires_oob(exc):
+                return {"ok": False, "error": _oauth1_error_message(exc)}
+            try:
+                request_token = flow.request_token("oob")
+                mode = "pin"
+            except Exception as pin_exc:  # noqa: BLE001 - provider failure is user-facing
+                return {"ok": False, "error": _oauth1_error_message(pin_exc)}
+        authorize_url = flow.authorize_url(request_token.oauth_token)
         saved = _read_x_config_file(include_metadata=True, include_internal=True)
         saved["X_PENDING_OAUTH_TOKEN"] = request_token.oauth_token
         saved["X_PENDING_OAUTH_TOKEN_SECRET"] = request_token.oauth_token_secret
+        saved["X_PENDING_OAUTH_MODE"] = mode
         _write_x_config_file(saved)
-        return {"ok": True, "authorize_url": authorize_url}
+        return {
+            "ok": True,
+            "authorize_url": authorize_url,
+            "pin_required": mode == "pin",
+        }
 
     def complete_x_oauth1(self, oauth_token: str, verifier: str) -> Dict[str, Any]:
         saved = _read_x_config_file(include_metadata=True, include_internal=True)
@@ -404,6 +433,12 @@ class ConnectPage:
             "user_id": access.user_id,
             "screen_name": access.screen_name,
         }
+
+    def complete_x_oauth1_pin(self, verifier: str) -> Dict[str, Any]:
+        saved = _read_x_config_file(include_metadata=True, include_internal=True)
+        if saved.get("X_PENDING_OAUTH_MODE") != "pin":
+            return {"ok": False, "error": "There is no X PIN authorization waiting to finish."}
+        return self.complete_x_oauth1(saved.get("X_PENDING_OAUTH_TOKEN", ""), verifier)
 
     def verify_x_connection(self) -> Dict[str, Any]:
         cfg = self.apply_x_runtime_config()
@@ -693,8 +728,24 @@ def _verify_x_account(config: Dict[str, str]) -> Dict[str, Any]:
     }
 
 
+def _oauth1_requires_oob(exc: Exception) -> bool:
+    provider_code = str(getattr(exc, "provider_code", "") or "")
+    message = str(getattr(exc, "message", str(exc))).lower()
+    return provider_code == "417" or (
+        "desktop applications" in message and "oauth_callback" in message and "oob" in message
+    )
+
+
+def _oauth1_error_message(exc: Exception) -> str:
+    message = " ".join(str(getattr(exc, "message", str(exc))).split())
+    if message and "<" not in message and ">" not in message:
+        return f"X could not start authorization: {message}"
+    return "X could not start authorization. Check the saved app credentials and try again."
+
+
 def _render_x_config_block(status: Dict[str, Any]) -> str:
     present = status.get("present") or {}
+    suffixes = status.get("credential_suffixes") or {}
     sender_ready = bool(status.get("sender_ready"))
     app_ready = bool(status.get("app_ready"))
     username = str(status.get("verified_username") or "")
@@ -717,9 +768,14 @@ def _render_x_config_block(status: Dict[str, Any]) -> str:
     fields = []
     for key, label, help_text in X_SETUP_FIELDS:
         is_set = bool(present.get(key))
+        suffix = str(suffixes.get(key) or "")
         required = "" if is_set else " required"
-        placeholder = "Saved - paste a new value to replace" if is_set else f"Paste {label}"
-        state = "Saved" if is_set else "Required"
+        placeholder = (
+            f"Saved, ending in {suffix} - paste a new value to replace"
+            if is_set and suffix
+            else ("Saved - paste a new value to replace" if is_set else f"Paste {label}")
+        )
+        state = f"Saved · {suffix}" if is_set and suffix else ("Saved" if is_set else "Required")
         fields.append(
             '<div class="credential-field">'
             f'<div class="field-head"><label for="{html.escape(key)}">{html.escape(label)}</label>'
@@ -729,6 +785,21 @@ def _render_x_config_block(status: Dict[str, Any]) -> str:
             f'<p>{html.escape(help_text)}</p></div>'
         )
     callback_url = html.escape(str(status.get("callback_url") or ""))
+    pin_block = ""
+    if status.get("oauth1_pending") and status.get("oauth1_mode") == "pin":
+        authorize_url = html.escape(str(status.get("oauth1_authorize_url") or ""), quote=True)
+        pin_block = (
+            '<div class="pin-panel"><h3>Finish with an X PIN</h3>'
+            '<p>This X app uses desktop authorization. Open X, approve Callisthenes, '
+            'then paste the one-time PIN here.</p>'
+            f'<a class="btn primary" href="{authorize_url}" target="_blank" rel="noreferrer">Open X to get PIN</a>'
+            '<form method="post" action="/connect/x/pin" class="pin-form">'
+            '<label for="x-oauth-pin">One-time PIN</label>'
+            '<div class="pin-row"><input id="x-oauth-pin" name="pin" type="text" inputmode="numeric" '
+            'autocomplete="one-time-code" pattern="[0-9]{5,10}" placeholder="Enter the PIN from X" required />'
+            '<button class="btn primary" type="submit">Verify PIN</button></div>'
+            '</form></div>'
+        )
     return (
         '<section class="xsetup" aria-labelledby="x-setup-title">'
         f'<div class="setup-title"><div><h2 id="x-setup-title">Connect your X account</h2>'
@@ -738,10 +809,11 @@ def _render_x_config_block(status: Dict[str, Any]) -> str:
         '<ol class="setup-steps">'
         f'<li><a href="{X_DEVELOPER_CONSOLE_URL}" target="_blank" rel="noreferrer">Open your app in X</a> '
         'and enable <strong>OAuth 1.0a</strong> with <strong>Read and write</strong>.</li>'
-        '<li>Add this exact callback URL to the app:</li>'
+        '<li>For a Web App, add this exact callback URL. Desktop apps automatically use a one-time PIN.</li>'
         '</ol>'
         f'<div class="copyrow callback-row"><input class="mono" type="text" readonly value="{callback_url}" />'
         '<button class="btn copy" type="button" onclick="copyNear(this)">Copy</button></div>'
+        f'{pin_block}'
         f'<p class="official-guide"><a href="{X_CREDENTIALS_GUIDE_URL}" target="_blank" rel="noreferrer">'
         'Read X\'s official credential guide</a></p>'
         '<form method="post" action="/connect/x/app" class="xform">'
@@ -843,6 +915,11 @@ border-radius:8px;color:#e8e8ea;padding:8px 10px}}
 .setup-steps{{color:#c4c8ce;font-size:13px;margin:16px 0;padding-left:22px}}
 .setup-steps li{{margin:8px 0;padding-left:3px}} a{{color:#7dd3fc}}
 .callback-row{{margin:-4px 0 12px}} .official-guide{{font-size:13px;margin:0 0 16px}}
+.pin-panel{{background:#172033;border:1px solid #29466f;border-radius:8px;padding:14px;margin:12px 0 16px}}
+.pin-panel h3{{font-size:14px;margin:0 0 4px}} .pin-panel p{{color:#b8c5d9;font-size:12px;margin:0 0 10px}}
+.pin-form{{margin-top:12px}} .pin-form label{{display:block;font-size:12px;font-weight:600;margin-bottom:5px}}
+.pin-row{{display:flex;gap:8px}} .pin-row input{{flex:1;min-width:0;background:#0f1115;border:1px solid #3b4f6b;
+border-radius:8px;color:#e8e8ea;padding:8px 10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}}
 .xform{{display:grid;gap:12px}} .credential-grid{{display:grid;grid-template-columns:1fr;gap:12px}}
 .credential-field{{min-width:0}} .field-head{{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:5px}}
 .credential-field label{{font-size:12px;font-weight:600}} .credential-field input{{width:100%;background:#0f1115;
@@ -862,7 +939,7 @@ border-radius:8px;color:#e8e8ea;padding:8px 10px}}
 .flash{{border-radius:8px;padding:10px 12px;margin:0 0 16px;font-size:14px}}
 .flash.info{{background:#12233a;color:#93c5fd}} .flash.ok{{background:#123524;color:#4ade80}}
 .flash.err{{background:#3a1220;color:#fca5a5}}
-@media(max-width:560px){{.credential-grid{{grid-template-columns:1fr}}}}
+@media(max-width:560px){{.credential-grid{{grid-template-columns:1fr}}.pin-row{{flex-direction:column}}}}
 </style></head>
 <body><div class="wrap">
 <h1 class="title">Callisthenes</h1>
@@ -923,6 +1000,7 @@ def register(
         GET  /connect                         -> the one connect screen
         POST /connect/x/app                   -> save the three app values, start OAuth1
         POST /connect/x/authorize             -> reconnect using saved app values
+        POST /connect/x/pin                   -> finish desktop/native OAuth1 authorization
         GET  /oauth/callback?oauth_token&...  -> exchange verifier, show "connected"
         GET  /connect/<id>/start              -> legacy OAuth2 connector start
         POST /connect/<id>/token              -> store a token-kind connector's value
@@ -1042,6 +1120,8 @@ def register(
             )
         started = page.start_x_oauth1()
         if started.get("ok") and started.get("authorize_url"):
+            if started.get("pin_required"):
+                return RedirectResponse("/connect", status_code=303)
             return RedirectResponse(started["authorize_url"], status_code=303)
         return HTMLResponse(
             page.render_page(flash=str(started.get("error")), flash_kind="err"),
@@ -1052,9 +1132,22 @@ def register(
     async def _connect_x_authorize(request: "Request") -> Any:  # noqa: ANN001
         started = page.start_x_oauth1()
         if started.get("ok") and started.get("authorize_url"):
+            if started.get("pin_required"):
+                return RedirectResponse("/connect", status_code=303)
             return RedirectResponse(started["authorize_url"], status_code=303)
         return HTMLResponse(
             page.render_page(flash=str(started.get("error")), flash_kind="err"),
+            status_code=400,
+        )
+
+    @custom_route("/connect/x/pin", methods=["POST"])
+    async def _connect_x_pin(request: "Request") -> Any:  # noqa: ANN001
+        form = await request.form()
+        result = page.complete_x_oauth1_pin(str(form.get("pin", "")))
+        if result.get("ok"):
+            return RedirectResponse("/connect", status_code=303)
+        return HTMLResponse(
+            page.render_page(flash=str(result.get("error")), flash_kind="err"),
             status_code=400,
         )
 
