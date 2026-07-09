@@ -1,16 +1,28 @@
 diff --git a/server.py b/server.py
-index 7930e87..facdff5 100644
+index 7930e87..51ea0e6 100644
 --- a/server.py
 +++ b/server.py
-@@ -307,7 +307,12 @@ def build_oauth1_client() -> OAuth1Client:
-         raise RuntimeError(
-             "Missing X_OAUTH_CONSUMER_KEY or X_OAUTH_CONSUMER_SECRET for OAuth1 signing."
+@@ -304,10 +304,22 @@ def build_oauth1_client() -> OAuth1Client:
+     consumer_key = os.getenv("X_OAUTH_CONSUMER_KEY")
+     consumer_secret = os.getenv("X_OAUTH_CONSUMER_SECRET")
+     if not consumer_key or not consumer_secret:
+-        raise RuntimeError(
+-            "Missing X_OAUTH_CONSUMER_KEY or X_OAUTH_CONSUMER_SECRET for OAuth1 signing."
++        LOGGER.warning(
++            "Missing X_OAUTH_CONSUMER_KEY or X_OAUTH_CONSUMER_SECRET; "
++            "booting with inert OAuth1 signing placeholders. X API calls will "
++            "fail until credentials are configured, but /connect remains usable."
          )
 -    access_token, access_secret = run_oauth1_flow()
++        consumer_key = consumer_key or "missing-consumer-key"
++        consumer_secret = consumer_secret or "missing-consumer-secret"
 +    env_token = os.getenv("X_OAUTH_ACCESS_TOKEN", "").strip()
 +    env_secret = os.getenv("X_OAUTH_ACCESS_TOKEN_SECRET", "").strip()
 +    if env_token and env_secret:
 +        access_token, access_secret = env_token, env_secret
++    elif consumer_key.startswith("missing-") or consumer_secret.startswith("missing-"):
++        access_token = "missing-access-token"
++        access_secret = "missing-access-secret"
 +    else:
 +        access_token, access_secret = run_oauth1_flow()
      if is_truthy(os.getenv("X_OAUTH_PRINT_TOKENS", "0")):
