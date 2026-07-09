@@ -1,14 +1,12 @@
 """C-7 tests — the minimal hosted connect-UI.
 
 Two layers:
-  1. Controller layer (no server): ConnectPage renders the connector list, Connect X
-     yields a CANONICAL x.com authorize URL, the callback exchanges a (mocked) code
-     into the shared store, a token connector stores its value, and the connector
-     list is extensible (add a row -> it renders + routes).
+  1. Controller layer (no server): ConnectPage renders the connector list, the
+     three-field X form yields a CANONICAL x.com authorize URL, the callback stores
+     a mocked posting-account token pair, and token connectors remain extensible.
   2. Live HTTP layer (real FastMCP + Starlette TestClient): GET /connect renders,
-     GET /connect/x/start 302-redirects to a canonical x.com authorize URL, the
-     /oauth/callback route exchanges a mocked code and reports connected, and the
-     POST token route stores a Reddit token.
+     POST /connect/x/app redirects to X, /oauth/callback reports connected, and the
+     POST token route stores a Reddit token. Legacy OAuth2 routes stay covered.
 
 All network (X's token endpoint) is mocked via an injected HttpClient — NO real X
 creds, NO real Composio token, NO outbound HTTP.
@@ -19,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,6 +26,11 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from auth import ChatAuth  # noqa: E402
+from auth.oauth1_pin import (  # noqa: E402
+    HttpResponse as OAuth1HttpResponse,
+    OAuth1Error,
+    OAuth1PinFlow,
+)
 from auth.oauth2_pkce import HttpClient, HttpResponse, OAuth2PkceFlow  # noqa: E402
 from auth.token_store import InMemoryTokenStore  # noqa: E402
 import connect_page as cp  # noqa: E402
@@ -48,6 +52,60 @@ class _FakeTokenHttp(HttpClient):
         return HttpResponse(status_code=200, text=json.dumps(body))
 
 
+class _FakeOAuth1Flow:
+    def request_token(self, callback):  # noqa: ANN001
+        assert callback == "https://calli.example/oauth/callback"
+        return SimpleNamespace(
+            oauth_token="request-token",
+            oauth_token_secret="request-secret",
+            callback_confirmed=True,
+        )
+
+    @staticmethod
+    def authorize_url(oauth_token):  # noqa: ANN001
+        return f"https://api.x.com/oauth/authorize?oauth_token={oauth_token}"
+
+    def access_token(self, oauth_token, oauth_token_secret, verifier):  # noqa: ANN001
+        assert (oauth_token, oauth_token_secret, verifier) == (
+            "request-token",
+            "request-secret",
+            "pin-or-verifier",
+        )
+        return SimpleNamespace(
+            oauth_token="user-access-token",
+            oauth_token_secret="user-access-secret",
+            user_id="12345",
+            screen_name="calli_test",
+        )
+
+
+class _DesktopOAuth1Flow(_FakeOAuth1Flow):
+    callbacks = []
+
+    def request_token(self, callback):  # noqa: ANN001
+        self.callbacks.append(callback)
+        if callback != "oob":
+            raise OAuth1Error(
+                "unavailable",
+                "Desktop applications only support the oauth_callback value 'oob'",
+                http_status=401,
+                provider_code="417",
+            )
+        return SimpleNamespace(
+            oauth_token="request-token",
+            oauth_token_secret="request-secret",
+            callback_confirmed=True,
+        )
+
+
+def _oauth1_factory(_key, _secret):  # noqa: ANN001
+    return _FakeOAuth1Flow()
+
+
+def _desktop_oauth1_factory(_key, _secret):  # noqa: ANN001
+    return _DesktopOAuth1Flow()
+
+
 def _engine() -> ChatAuth:
     """A ChatAuth whose OAuth2 flow uses the mocked HTTP client + an in-memory store."""
     store = InMemoryTokenStore()
@@ -62,18 +120,43 @@ def _engine() -> ChatAuth:
     return ChatAuth(store=store, flow_factory=flow_factory)
 
 
+class _DesktopProviderErrorHttp:
+    def post_form(self, _url, _headers):  # noqa: ANN001
+        return OAuth1HttpResponse(
+            status_code=401,
+            text=(
+                "<?xml version='1.0'?><errors><error code='417'>"
+                "Desktop applications only support the oauth_callback value 'oob'"
+                "</error></errors>"
+            ),
+        )
+
+
 def _page(**cfg) -> cp.ConnectPage:
     config = cp.ConnectPageConfig(
         mcp_url=cfg.get("mcp_url", "https://calli.example/mcp"),
         mcp_token=cfg.get("mcp_token", "MCP-ACCESS-TOKEN-xyz"),
         owner_tenant=cfg.get("owner_tenant", OWNER),
     )
-    return cp.ConnectPage(engine=_engine(), config=config)
+    return cp.ConnectPage(
+        engine=_engine(),
+        config=config,
+        x_oauth1_flow_factory=cfg.get("x_oauth1_flow_factory"),
+    )
 
 
 # --------------------------------------------------------------------------- #
 # Controller layer
 # --------------------------------------------------------------------------- #
+
+def test_oauth1_provider_xml_is_parsed_without_exposing_raw_body():
+    flow = OAuth1PinFlow("consumer", "secret", http=_DesktopProviderErrorHttp())
+    with pytest.raises(OAuth1Error) as raised:
+        flow.request_token("https://calli.example/oauth/callback")
+    assert raised.value.provider_code == "417"
+    assert raised.value.http_status == 401
+    assert "Desktop applications only support" in raised.value.message
+    assert "<errors>" not in raised.value.message
 
 def test_page_renders_connector_list_and_mcp_block():
     html = _page().render_page()
@@ -212,13 +295,12 @@ def test_x_config_form_saves_redacted_values_and_updates_engine(monkeypatch, tmp
     assert engine._client_id == "cid-live"  # noqa: SLF001
     assert engine._redirect_uri == "https://c.example/oauth/callback"  # noqa: SLF001
     rendered = page.render_page()
-    assert "API Key" in rendered
-    assert "Credentials saved, verification needed" in rendered
+    assert "X account connected" in rendered
     assert "super-secret" not in rendered
     assert "access-secret" not in rendered
 
 
-def test_x_setup_guides_user_to_official_console_and_has_one_field_per_sender_credential(
+def test_x_setup_has_exactly_the_three_fields_x_shows_at_app_creation(
     monkeypatch, tmp_path
 ):
     for key in cp.X_CONFIG_KEYS:
@@ -227,24 +309,101 @@ def test_x_setup_guides_user_to_official_console_and_has_one_field_per_sender_cr
     rendered = _page().render_page()
     assert 'href="https://console.x.com/"' in rendered
     assert 'href="https://docs.x.com/x-api/getting-started/getting-access"' in rendered
-    assert "There is no user-ID field" in rendered
     assert "Read and write" in rendered
-    assert "Application Created Successfully" in rendered
-    assert "The three values X showed you" in rendered
-    assert "Consumer Key / API Key field" in rendered
-    assert "Secret Key / API Key Secret field" in rendered
-    assert "Do not enter it here" in rendered
-    assert "Credentials shown in screenshots or chat are exposed" in rendered
-    for key in cp.X_SENDER_REQUIRED:
+    assert "posting-account tokens are created automatically" in rendered
+    assert "credential-warning" not in rendered
+    for key in cp.X_APP_REQUIRED:
         assert f'name="{key}"' in rendered
+    for key in ("X_OAUTH_ACCESS_TOKEN", "X_OAUTH_ACCESS_TOKEN_SECRET"):
+        assert f'name="{key}"' not in rendered
     assert 'name="x_config"' not in rendered
+
+
+def test_x_setup_shows_only_last_four_characters_of_saved_app_values(
+    monkeypatch, tmp_path
+):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    page = _page()
+    page.save_x_app_config(
+        {
+            "X_OAUTH_CONSUMER_KEY": "consumer-AB12",
+            "X_OAUTH_CONSUMER_SECRET": "secret-CD34",
+            "X_BEARER_TOKEN": "bearer-EF56",
+        }
+    )
+    rendered = page.render_page()
+    for suffix in ("AB12", "CD34", "EF56"):
+        assert f"Saved · {suffix}" in rendered
+        assert f"ending in {suffix}" in rendered
+    for secret in ("consumer-AB12", "secret-CD34", "bearer-EF56"):
+        assert secret not in rendered
+
+
+def test_x_app_credentials_start_oauth1_and_callback_stores_posting_account(
+    monkeypatch, tmp_path
+):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    page = _page(x_oauth1_flow_factory=_oauth1_factory)
+    saved = page.save_x_app_config(
+        {
+            "X_OAUTH_CONSUMER_KEY": "consumer-key",
+            "X_OAUTH_CONSUMER_SECRET": "consumer-secret",
+            "X_BEARER_TOKEN": "bearer-token",
+        }
+    )
+    assert saved == {"ok": True, "app_ready": True}
+    started = page.start_x_oauth1()
+    assert started["authorize_url"] == (
+        "https://api.x.com/oauth/authorize?oauth_token=request-token"
+    )
+    completed = page.complete_x_oauth1("request-token", "pin-or-verifier")
+    assert completed["ok"] is True
+    assert completed["screen_name"] == "calli_test"
+    rendered = page.render_page()
+    assert "Connected as @calli_test" in rendered
+    assert "user-access-token" not in rendered
+    assert "user-access-secret" not in rendered
+
+
+def test_desktop_x_app_falls_back_to_pin_without_more_credentials(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    _DesktopOAuth1Flow.callbacks.clear()
+    page = _page(x_oauth1_flow_factory=_desktop_oauth1_factory)
+    page.save_x_app_config(
+        {
+            "X_OAUTH_CONSUMER_KEY": "consumer-AB12",
+            "X_OAUTH_CONSUMER_SECRET": "secret-CD34",
+            "X_BEARER_TOKEN": "bearer-EF56",
+        }
+    )
+    started = page.start_x_oauth1()
+    assert started["ok"] is True
+    assert started["pin_required"] is True
+    assert _DesktopOAuth1Flow.callbacks == [
+        "https://calli.example/oauth/callback",
+        "oob",
+    ]
+    rendered = page.render_page()
+    assert "Finish with an X PIN" in rendered
+    assert "Open X to get PIN" in rendered
+    assert 'action="/connect/x/pin"' in rendered
+    assert "Desktop applications only support" not in rendered
+    completed = page.complete_x_oauth1_pin("pin-or-verifier")
+    assert completed["ok"] is True
+    assert "Connected as @calli_test" in page.render_page()
 
 
 # --------------------------------------------------------------------------- #
 # Live HTTP layer — real FastMCP + Starlette TestClient
 # --------------------------------------------------------------------------- #
 
-def _live_client(x_verifier=None):
+def _live_client(x_verifier=None, x_oauth1_flow_factory=None):
     pytest.importorskip("fastmcp")
     from fastmcp import FastMCP
     from starlette.testclient import TestClient
@@ -260,12 +419,16 @@ def _live_client(x_verifier=None):
             owner_tenant=OWNER,
         ),
         x_verifier=x_verifier,
+        x_oauth1_flow_factory=x_oauth1_flow_factory,
     )
     app = mcp.http_app()
     return TestClient(app), engine
 
 
-def test_live_get_connect_renders():
+def test_live_get_connect_renders(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
     client, _ = _live_client()
     r = client.get("/connect")
     assert r.status_code == 200
@@ -304,6 +467,14 @@ def test_live_oauth_callback_provider_error_is_loud():
     assert "failed" in r.text.lower()
 
 
+def test_live_oauth1_callback_denial_is_clear():
+    client, _ = _live_client()
+    r = client.get("/oauth/callback?denied=request-token")
+    assert r.status_code == 400
+    assert "authorization was cancelled" in r.text
+    assert "No posting account was connected" in r.text
+
+
 def test_live_post_reddit_token_stores_it():
     client, engine = _live_client()
     r = client.post("/connect/reddit/token", data={"token": "usr_live_reddit"}, follow_redirects=False)
@@ -337,3 +508,64 @@ def test_live_post_x_config_saves_without_redirecting_secrets(monkeypatch, tmp_p
     assert "Connected as @calli_test" in r.text
     assert "consumer-secret" not in r.text
     assert "access-secret" not in r.text
+
+
+def test_live_three_field_x_app_form_redirects_and_callback_connects(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    client, _ = _live_client(x_oauth1_flow_factory=_oauth1_factory)
+    started = client.post(
+        "/connect/x/app",
+        data={
+            "X_OAUTH_CONSUMER_KEY": "consumer-key",
+            "X_OAUTH_CONSUMER_SECRET": "consumer-secret",
+            "X_BEARER_TOKEN": "bearer-token",
+        },
+        follow_redirects=False,
+    )
+    assert started.status_code == 303
+    assert started.headers["location"] == (
+        "https://api.x.com/oauth/authorize?oauth_token=request-token"
+    )
+    completed = client.get(
+        "/oauth/callback?oauth_token=request-token&oauth_verifier=pin-or-verifier"
+    )
+    assert completed.status_code == 200
+    assert "Connected" in completed.text
+    assert "@calli_test" in completed.text
+
+
+def test_live_desktop_x_app_redirects_to_pin_step_and_connects(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    _DesktopOAuth1Flow.callbacks.clear()
+    client, _ = _live_client(x_oauth1_flow_factory=_desktop_oauth1_factory)
+    started = client.post(
+        "/connect/x/app",
+        data={
+            "X_OAUTH_CONSUMER_KEY": "consumer-AB12",
+            "X_OAUTH_CONSUMER_SECRET": "secret-CD34",
+            "X_BEARER_TOKEN": "bearer-EF56",
+        },
+        follow_redirects=False,
+    )
+    assert started.status_code == 303
+    assert started.headers["location"] == "/connect"
+    pin_page = client.get("/connect")
+    assert pin_page.status_code == 200
+    assert "Open X to get PIN" in pin_page.text
+    assert "Desktop applications only support" not in pin_page.text
+    for suffix in ("AB12", "CD34", "EF56"):
+        assert f"Saved · {suffix}" in pin_page.text
+
+    completed = client.post(
+        "/connect/x/pin",
+        data={"pin": "pin-or-verifier"},
+        follow_redirects=False,
+    )
+    assert completed.status_code == 303
+    assert completed.headers["location"] == "/connect"
+    connected = client.get("/connect")
+    assert "Connected as @calli_test" in connected.text

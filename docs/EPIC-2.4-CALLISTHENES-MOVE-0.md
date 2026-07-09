@@ -3,9 +3,10 @@
 > **▶ CURRENT STATE (worker: start here).** #645 / C-2R is landed on `main`; the stale
 > client-supplied `mcp_token` path is no longer the next lane. C-3 Stripe TEST checkout/provision is
 > green on `cloud-test.zenod.dev`; current push is C-7 human acceptance. The active hosted tenant now
-> has one guided bring-your-own-X-app setup, verifies the four OAuth1 sender credentials against
-> X, and displays the bound `@handle`. Human gate: rotate screenshot-exposed app credentials, then
-> generate the separate user Access Token pair. `cloud.zenod.dev` remains reserved for Stripe LIVE.
+> has one guided bring-your-own-X-app setup with the same three values X shows at app creation;
+> Callisthenes then runs OAuth1 authorization and stores the generated user token pair out of sight.
+> Human gate: rotate screenshot-exposed app credentials, complete the callback or desktop PIN
+> authorization, then perform the first approved post. `cloud.zenod.dev` remains reserved for Stripe LIVE.
 > Bound spine:
 > this document only; referenced parent/sibling spines are read-only unless Jordi widens scope.
 > — worker, 2026-07-09
@@ -762,4 +763,84 @@ Token + Secret identify the posting user, and Bearer Token is app-only rather th
   all three mappings, the separate Access Token generation step, the exposure warning, and absence
   of a Bearer Token field. No horizontal overflow at 1280px or 390px. Changes continue on draft PR
   [#700](https://github.com/zenod-ai/zenod/pull/700) / C-7 [#649](https://github.com/zenod-ai/zenod/issues/649).
+  — [worker]
+
+### 2026-07-09 · [worker] C-7 production X journey reduced to the three app values
+Jordi rejected the four-field sender form and its red exposure warning as an implementation detail
+leaking into the production journey. The accepted journey now starts from exactly the three values
+shown by X's **Application Created Successfully** screen.
+
+- **Production UX:** `/connect` has only Consumer Key / API Key, Secret Key / API Key Secret, and
+  Bearer Token inputs. The red warning, Access Token input, and Access Token Secret input are gone.
+  The page provides the tenant's exact callback URL and instructs the user to enable OAuth 1.0a
+  Read and write before choosing **Save and continue to X**.
+- **Account binding:** Callisthenes exchanges an OAuth1 request token through the registered
+  `/oauth/callback`; after the user authorizes in X, the callback stores the generated Access Token
+  and Access Token Secret tenant-locally and applies them to the posting signer. Those user tokens
+  never appear as customer inputs or rendered values. A connected return renders the verified
+  `@handle`.
+- **Compatibility:** the existing OAuth1 PIN helper now accepts a callback URL while retaining its
+  `oob` default for the console-less/chat-auth path. Hidden legacy endpoints remain compatible but
+  are no longer part of the hosted UI.
+- **Evidence:** hosted focused suite: **20 passed** (one Starlette/httpx TestClient deprecation
+  warning). Live `https://c-jordikalitest-godu15.zenod.dev/connect` renders exactly three app-form
+  inputs, no red warning, no Access Token fields, and the canonical callback
+  `https://c-jordikalitest-godu15.zenod.dev/oauth/callback`. Browser verification found no horizontal
+  overflow at 1280px or 390px. Real X authorization and first approved post remain the human C-7
+  acceptance gate. — [worker]
+- **Integration receipt:** implementation commit `2e48454` is rebased on `origin/main`; draft PR
+  [#700](https://github.com/zenod-ai/zenod/pull/700) is conflict-free and CI run
+  [29049706689](https://github.com/zenod-ai/zenod/actions/runs/29049706689) passed in 2m16s. — [worker]
+
+### 2026-07-09 · [worker] C-7 desktop X apps gain automatic PIN completion
+The first real three-value submission reached X but failed before authorization with provider error
+417: **Desktop applications only support `oauth_callback=oob`**. This was an app-type branch, not a
+bad credential or webhook requirement.
+
+- **Flow correction:** Callisthenes first attempts the registered OAuth callback. On X error 417 it
+  automatically retries the request token with `oauth_callback=oob`, persists that pending mode,
+  and returns the owner to `/connect`. The page then presents **Open X to get PIN** plus one transient
+  PIN field. Submitting the PIN exchanges and stores the same hidden posting-token pair as the
+  callback flow. No additional app credential is requested; no webhook is required.
+- **Stored-value clarity:** each of the three app inputs now identifies a stored value as
+  `Saved · <last 4>` and repeats that suffix in its replacement placeholder. Full values are never
+  rendered.
+- **Provider errors:** the legacy X XML response is parsed structurally; raw XML is no longer shown
+  to the customer.
+- **Evidence:** focused remote suite **24 passed**. Live tenant image
+  `sha256:f83f85ef6d9a3581ee8f5dd1525c3593b5fa0680049802741b39f4128663f819` is running; a real
+  `/connect/x/authorize` probe returned to `/connect` with the PIN panel active. Live DOM has three
+  masked suffixes, one transient `pin` input, zero Access Token inputs, no raw provider XML, and no
+  horizontal overflow at 1280px or 390px. The current human gate is the one-time X PIN followed by
+  the first approved post. — [worker]
+- **Integration receipt:** implementation commit `98f418b`; PR
+  [#700](https://github.com/zenod-ai/zenod/pull/700); CI run
+  [29051077445](https://github.com/zenod-ai/zenod/actions/runs/29051077445) passed in 2m6s. — [worker]
+
+### 2026-07-09 · [worker] C-3T fresh-tenant deployment revalidated without recovery
+Audit correction: the earlier `jorditest2-qmapvn` checkout was **not valid automated-deployment
+acceptance**. Dokploy created its compose record, but the worker manually materialized the checkout
+and container before the tenant reached running. The later `compose.redeploy` patch also assumed an
+existing checkout, so it was not an acceptable fresh-tenant strategy.
+
+- **Strategy correction:** private cloud PR
+  [#55](https://github.com/zenod-ai/cloud/pull/55), merged as `ecbfa69`, restores the same
+  fresh-tenant sequence used by
+  Zenod: `compose.create` -> `compose.update` -> `domain.create` -> `compose.deploy` -> status poll.
+  If the first deploy ends in the observed checkout-initialization `error`, it repeats that same
+  standard deploy once; it never switches to `compose.redeploy` or host-side materialization.
+- **Deterministic checks:** `provision-callisthenes.test.mjs` covers first-pass success, one standard
+  deploy retry after initialization error, and hard failure after a second error: **3 passed**.
+- **Fresh browser receipt:** created Stripe TEST customer
+  `jordi+calli-fresh-33087769@alpha9.io`, paid EUR 5 with the Stripe test card, and followed the
+  browser from `callisthenes.zenod.dev` through Checkout to the polling status page. New compose
+  `NR_px8Ul2L2w_RaM4-DWe` moved `running` -> `done` on its first `compose.deploy`; no retry was needed.
+- **Tenant receipt:** `c-jordicallifresh33087-muhmxp.zenod.dev` reached browser status **Running**
+  and `/connect` HTTP 200 in the same journey. Container
+  `callisthenes-jordicallifresh33087-muhmxp` is running, attached to its networks, and mounts `/data`.
+  The connect page is the current Epic 2.4 three-field X UI with callback/PIN support.
+- **No-intervention rule:** after Stripe submission, the worker performed read-only browser/status,
+  log, and container inspection only. No compose API call, filesystem materialization, manual Docker
+  command, or tenant repair was performed. C-3T automated payment -> provision -> `/connect` is now
+  genuinely green; C-7 real X authorization and first approved post remain the next human gate.
   — [worker]
