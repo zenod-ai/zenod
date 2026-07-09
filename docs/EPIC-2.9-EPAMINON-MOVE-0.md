@@ -5,6 +5,9 @@ Created: 2026-07-09
 Updated: 2026-07-09
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-2.9-EPAMINON-MOVE-0.md`
+Integration branch: `main`
+Active spine steward: Epic 2.9 worker, current Codex thread
+Last reconciled commit: `3848b04c0d0c4485735163be335427550c588f07`
 GitHub issues: https://github.com/zenod-ai/zenod/issues/682 through https://github.com/zenod-ai/zenod/issues/692
 Planner: Epic 0 Foundation / Epaminon-Fable
 Worker: Codex epic worker, current thread (bound 2026-07-09)
@@ -45,6 +48,14 @@ Read-only linked spines:
 
 Cross-spine change rule: read linked spines for context, but record proposed edits here unless
 explicitly granted write authority for the target spine.
+
+## Authority By Artifact
+
+- This spine owns Epaminon intent, scope, acceptance, decisions, and rollup state.
+- GitHub issues own ticket-level execution detail and worker handoffs.
+- Branches and pull requests own implementation truth.
+- Named test receipts own validation truth.
+- Epic 0 owns portfolio direction and cross-epic priority.
 
 ## Mission
 
@@ -192,18 +203,38 @@ MCP/WhatsApp dispatch → real repo/artifact evidence.
 
 ## Issue Ledger
 
-| Issue | Role | Title | Status | Depends On | PR/Branch | Acceptance | Latest Evidence | Next Action |
-|---|---|---|---|---|---|---|---|---|
-| [#682](https://github.com/zenod-ai/zenod/issues/682) | Epic worker | EPM-0 scope finalization and dispatch | in-progress | - | - | GitHub issues exist for accepted rows and workers are dispatched. | Issues #682..#690 minted 2026-07-09. | Dispatch workers and record owners. |
-| [#683](https://github.com/zenod-ai/zenod/issues/683) | Worker | EPM-1 unit surface and seam contract | ready-for-test | [#682](https://github.com/zenod-ai/zenod/issues/682) | agent `019f47a5-5442-7352-8b3b-10c910358080`; local docs | `units/epaminon/` has README, SEAM-SURFACE, Docker/compose/runbook, auth remit, and maps current code paths. | `units/epaminon/` docs added 2026-07-09; local markdown links OK; public/private terminology grep passed. | Tester review. |
-| [#684](https://github.com/zenod-ai/zenod/issues/684) | Worker | EPM-2 public page and test Stripe checkout | ready-for-test | [#682](https://github.com/zenod-ai/zenod/issues/682) | agent `019f47a5-7b61-7372-a076-2476dfab67d7`; local public-site files | Public Epaminon page has test purchase path and clear offer; checkout hands off to cloud-test instance setup or documented simulation. | `sites/epaminon/index.html` rewritten with literal cloud worker offer and simulated Stripe test receipt; cloud-test URL correction applied 2026-07-09; static validation passed 2026-07-09. | Tester review; replace simulated checkout with real `cloud-test.zenod.dev` Stripe test route when cloud provisioner exposes it. |
-| [#685](https://github.com/zenod-ai/zenod/issues/685) | Worker | EPM-3 cloud instance landing and executor settings UI | ready-for-test | [#682](https://github.com/zenod-ai/zenod/issues/682) | agent `019f47a5-a363-7731-9bf5-d0e9ca541ef1`; local web/server files | Purchased/provisioned user lands on instance UI with MCP address, token, connection commands, auth status, worker instructions, effort defaults, prewired MCP servers, and skills. | 2026-07-09: Connections tab renders Epaminon executor settings on Epaminon instances; targeted web/server typechecks pass; mocked local DOM check passed. | Tester review against real provisioned Epaminon instance/settings store. |
-| [#686](https://github.com/zenod-ai/zenod/issues/686) | Worker | EPM-4 standalone MCP task contract | ready-for-test | [#683](https://github.com/zenod-ai/zenod/issues/683) | agent `019f47a5-c75b-78e1-aed3-0df61419c86e`; local server files | Public MCP exposes durable `run_task`/equivalent with prompt, effort, repo/path/output target, MCP/skills context, and returns execution id/status. | 2026-07-09: direct Epaminon MCP aliases added and targeted typecheck/tests passed. | Tester verify direct aliases, status readback, and aggregate private-lane hiding. |
-| [#687](https://github.com/zenod-ai/zenod/issues/687) | Worker | EPM-5 worker harness dispatch and lifecycle | ready-for-test | [#686](https://github.com/zenod-ai/zenod/issues/686) | local workspace | Epaminon dispatches containerized Codex/Claude-style worker with orderly queue, effort levels, auth, transcript, status, and artifact capture. | 2026-07-09: effort persists to execution tickets and runner launch body; missing runner/GitHub auth fails loudly; runner preflights GitHub/Codex/Claude auth; fan-in uploads launch logs as transcripts before terminal/blocked reports. | Tester run real runner-auth smoke with `ZENOD_RUNNER_POKE_URL`, GitHub auth, and Codex/Claude auth. |
-| [#688](https://github.com/zenod-ai/zenod/issues/688) | Worker | EPM-6 auth, private lanes, and receipt model | ready-for-test | [#686](https://github.com/zenod-ai/zenod/issues/686) | local workspace | GitHub/model/CLI/MCP auth remit is implemented or documented; private Archus/Epaminon lane tools remain hidden; every run has durable receipt/evidence. | 2026-07-09: executor settings/auth status reflected by concurrent settings work; runner compose now persists Claude auth; private-lane negative mesh tests still pass; queue/store records effort and transcript/evidence pointers durably. | Tester verify public gateway still omits internal lane tools after EPM-4 aliases are merged. |
-| [#689](https://github.com/zenod-ai/zenod/issues/689) | Worker | EPM-7 Ring/Council integration and WhatsApp research path | ready-for-test | [#685](https://github.com/zenod-ai/zenod/issues/685), [#686](https://github.com/zenod-ai/zenod/issues/686) | local server/web files | Ring/Council can route a WhatsApp research/execution request to Epaminon and leave results on requested repo/artifact target. | 2026-07-09: Console/Gateway expose prompt-first Epaminon run tools; Ring named Epaminon route-test carries WhatsApp provenance, effort, repo, and output target to `epaminon.run_task`; targeted typecheck/tests passed. | Tester review against `cloud-test.zenod.dev` provisioned Epaminon instance and real WhatsApp/Phylax path. |
-| [#690](https://github.com/zenod-ai/zenod/issues/690) | Tester | EPM-8 end-to-end acceptance run | blocked | [#683](https://github.com/zenod-ai/zenod/issues/683)..[#689](https://github.com/zenod-ai/zenod/issues/689), [#692](https://github.com/zenod-ai/zenod/issues/692) | agent `019f47c2-b343-7452-8ec0-4eb5a79f6fc1` | `cloud-test.zenod.dev` Stripe TEST purchase → cloud instance UI → connect Claude/Codex or WhatsApp/Council → run research task → result/evidence in repo. | 2026-07-09: local automated acceptance passed; deployed `cloud-test` health/setup route now pass, but `/buy/epaminon` is blocked by missing `PRICE_EPAMINON`; real E2E also still needs provisioning and runner/channel credentials. | Configure `PRICE_EPAMINON`/webhook/provisioner env, then rerun EPM-8 against the real cloud-test instance. |
-| [#692](https://github.com/zenod-ai/zenod/issues/692) | Worker | EPM-9 cloud-test Epaminon checkout/setup/provisioner deploy | in-progress | [#684](https://github.com/zenod-ai/zenod/issues/684), [#685](https://github.com/zenod-ai/zenod/issues/685), [#690](https://github.com/zenod-ai/zenod/issues/690) | private Cloud repo local patch; `units/epaminon/docker-compose.hosted.yml`; partial deploy visible on `cloud-test` | `cloud-test.zenod.dev` exposes Epaminon TEST checkout/setup/status, separates Stripe TEST from live, and provisions a hosted Epaminon instance or records the exact missing credential/deploy blocker. | 2026-07-09: local patch adds `PRICE_EPAMINON`, `/buy/epaminon`, `/setup/epaminon`, `/epaminon/status`, webhook receipt, direct hosted Epaminon compose, `provision-epaminon.mjs`, auto-provision wiring, and watchdog target; deployed `cloud-test` returns 200 for health/setup and 503 for `/buy/epaminon` with missing `PRICE_EPAMINON`. | Set TEST `PRICE_EPAMINON`/webhook and Dokploy provisioner env on `cloud-test`, then rerun EPM-8. |
+| Issue | Role | Owner / Assignment | Title | Status | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
+|---|---|---|---|---|---|---|---|---|---|
+| [#682](https://github.com/zenod-ai/zenod/issues/682) | Epic worker | Current Codex thread | EPM-0 scope and dispatch | in-progress | `codex/reconcile-recovery-to-main-20260709` | `3848b04` | Issues #682..#690 minted. | 2026-07-09 | Reconcile workers and board. |
+| [#683](https://github.com/zenod-ai/zenod/issues/683) | Worker | `019f47a5-5442-7352-8b3b-10c910358080` | Unit surface and seam | ready-for-test | reconciliation branch | `3848b04` | `units/epaminon/` docs and compose added. | 2026-07-09 | Tester review. |
+| [#684](https://github.com/zenod-ai/zenod/issues/684) | Worker | `019f47a5-7b61-7372-a076-2476dfab67d7` | Public page and checkout | ready-for-test | reconciliation branch | `3848b04` | Public Epaminon page and test handoff added. | 2026-07-09 | Wire real cloud-test price. |
+| [#685](https://github.com/zenod-ai/zenod/issues/685) | Worker | `019f47a5-a363-7731-9bf5-d0e9ca541ef1` | Instance settings UI | ready-for-test | reconciliation branch | `3848b04` | Epaminon executor settings render conditionally. | 2026-07-09 | Test provisioned instance. |
+| [#686](https://github.com/zenod-ai/zenod/issues/686) | Worker | `019f47a5-c75b-78e1-aed3-0df61419c86e` | Standalone MCP task contract | ready-for-test | reconciliation branch | `3848b04` | Direct task aliases and tests added. | 2026-07-09 | Verify public aliases. |
+| [#687](https://github.com/zenod-ai/zenod/issues/687) | Worker | Epic 2.9 worker | Worker harness lifecycle | ready-for-test | reconciliation branch | `3848b04` | Effort, auth preflight, transcript and receipts wired. | 2026-07-09 | Run authenticated worker smoke. |
+| [#688](https://github.com/zenod-ai/zenod/issues/688) | Worker | Epic 2.9 worker | Auth and private lanes | ready-for-test | reconciliation branch | `3848b04` | Private-lane negative tests and persisted settings. | 2026-07-09 | Verify aggregate exposure. |
+| [#689](https://github.com/zenod-ai/zenod/issues/689) | Worker | Epic 2.9 worker | Ring/Council integration | ready-for-test | reconciliation branch | `3848b04` | Ring route-test carries Epaminon task context. | 2026-07-09 | Test real Phylax path. |
+| [#690](https://github.com/zenod-ai/zenod/issues/690) | Tester | `019f47c2-b343-7452-8ec0-4eb5a79f6fc1` | End-to-end acceptance | blocked | reconciliation branch | `3848b04` | Local acceptance passed; cloud-test price absent. | 2026-07-09 | Configure price and rerun. |
+| [#692](https://github.com/zenod-ai/zenod/issues/692) | Worker | Epic 2.9 worker | Cloud-test deployment | in-progress | reconciliation branch | `3848b04` | Setup route deployed; checkout reports missing price. | 2026-07-09 | Set TEST price and provisioner env. |
+
+## Branch And Integration
+
+Integration target is protected `main`. Ticket work uses dedicated branches/worktrees and records
+base, owner, evidence, and last verification in the ledger. Human acceptance runs only from merged
+`main`, a named integration commit, or an explicit preview.
+
+## Human Gates
+
+- Stripe LIVE activation and production secrets require Jordi's explicit approval.
+- Real GitHub/model/channel credentials require the account owner.
+- Product scope or acceptance changes return to the planner.
+- The current EPM-8 gate is TEST price/provisioner configuration, not LIVE activation.
+
+## Recovery And Takeover
+
+Resume from this spine, then the bound issue, then the recorded branch and base. If an assignment is
+stale, preserve its branch/history, record the takeover in the issue, and dispatch from current
+`main`. The 2026-07-09 mixed-worktree recovery source is
+`codex/recovery-epic25-worktree-20260709` at `daa1462`.
 
 ## Planner Queue
 

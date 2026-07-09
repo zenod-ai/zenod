@@ -125,6 +125,8 @@ describe("execution lane API", () => {
   });
 
   it("receives Archus execution dispatches idempotently into durable state", async () => {
+    vi.stubEnv("ZENOD_RUNNER_POKE_URL", "https://runner.test");
+    const launchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok", { status: 200 }));
     const first = await app.request("/api/exec/enqueue", {
       method: "POST",
       headers: { "X-Lane-Secret": "lane-secret" },
@@ -141,6 +143,7 @@ describe("execution lane API", () => {
       context: "Objective: ship the thing",
       state: "running",
     });
+    expect(launchMock).toHaveBeenCalledTimes(1);
 
     const second = await app.request("/api/exec/enqueue", {
       method: "POST",

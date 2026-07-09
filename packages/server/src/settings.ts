@@ -724,11 +724,6 @@ function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeOptionalConfigString(value: unknown): string | null {
-  const trimmed = normalizeString(value);
-  return trimmed ? trimmed : null;
-}
-
 function normalizeExecutorEffort(value: unknown): ExecutorEffort {
   return value === "low" || value === "high" || value === "max" ? value : "medium";
 }
@@ -768,14 +763,6 @@ function normalizeExecutorMcpServers(value: unknown, existing: ExecutorMcpServer
       };
     })
     .filter((server): server is ExecutorMcpServer => server !== null);
-}
-
-function normalizeWhatsAppProviderMode(value: unknown): WhatsAppProviderMode {
-  return value === "cloud" ? "cloud" : "self_host_dev";
-}
-
-function normalizeWhatsAppCloudStatus(value: unknown): WhatsAppCloudStatus {
-  return value === "configured" || value === "connected" || value === "error" ? value : "not_configured";
 }
 
 function normalizeStringArray(value: unknown): string[] {
