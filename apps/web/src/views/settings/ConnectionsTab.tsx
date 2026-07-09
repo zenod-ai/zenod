@@ -23,6 +23,7 @@ import { GoogleDriveConnect } from "@/components/google-drive-connect"
 import { WhatsAppConnect } from "@/components/whatsapp-connect"
 import { TelegramConnect } from "@/components/telegram-connect"
 import { PeerAgents } from "@/components/peer-agents"
+import { RingControlSurface } from "@/components/ring-control-surface"
 import { GithubConnect } from "@/components/github-connect"
 import { ComposioConnect } from "@/components/composio-connect"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -90,6 +91,8 @@ export function ConnectionsTab() {
   const [showToken, setShowToken] = React.useState(false)
   const [regenerating, setRegenerating] = React.useState(false)
   const [refreshing, setRefreshing] = React.useState(false)
+  const [ringMode, setRingMode] = React.useState(false)
+  const [hostedRing, setHostedRing] = React.useState(false)
 
   React.useEffect(() => {
     let cancelled = false
@@ -104,6 +107,21 @@ export function ConnectionsTab() {
           setLoadError(errorMessage(err))
         }
       })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  React.useEffect(() => {
+    let cancelled = false
+    api<{ vaultless?: boolean; hostedMode?: "ring" | null }>("/api/agent")
+      .then((result) => {
+        if (!cancelled) {
+          setRingMode(Boolean(result.vaultless))
+          setHostedRing(result.hostedMode === "ring")
+        }
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -171,6 +189,8 @@ export function ConnectionsTab() {
   const claudeCodeOauthCommand = `claude mcp add --transport http zenod ${mcpUrl}\n# then: /mcp  →  Authenticate`
   const codexCommand = `codex mcp add zenod --url ${mcpUrl}\ncodex mcp login zenod   # opens a browser to approve`
   const codexTokenCommand = `export ZENOD_MCP_TOKEN="${data.token}"\ncodex mcp add zenod --url ${mcpUrl} --bearer-token-env-var ZENOD_MCP_TOKEN`
+  const codexDesktopUrl = mcpUrl
+  const codexDesktopEnvVar = "ZENOD_MCP_TOKEN"
 
   async function handleRevoke(clientId: string) {
     try {
@@ -188,6 +208,8 @@ export function ConnectionsTab() {
 
   return (
     <div className="flex flex-col gap-6">
+      <RingControlSurface enabled={ringMode} />
+
       <Card>
         <CardHeader>
           <CardTitle>GitHub</CardTitle>
@@ -201,9 +223,25 @@ export function ConnectionsTab() {
         </CardContent>
       </Card>
 
-      <WhatsAppConnect />
-      <TelegramConnect />
-      <GoogleDriveConnect />
+      <div id="phylax-channels" className="scroll-mt-4">
+        {hostedRing ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Managed Phylax channels</CardTitle>
+              <CardDescription>
+                WhatsApp and Telegram use the hosted provider connection. Channel health,
+                sender policy, and delivery receipts are managed here without device QR pairing.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : (
+          <div className="flex flex-col gap-6">
+            <WhatsAppConnect />
+            <TelegramConnect />
+          </div>
+        )}
+      </div>
+      {!ringMode && <GoogleDriveConnect />}
       <ComposioConnect />
       <PeerAgents />
 
@@ -319,6 +357,21 @@ export function ConnectionsTab() {
             instead:
           </p>
           <CodeSnippet code={codexTokenCommand} />
+          <p className="text-sm text-muted-foreground">
+            In Codex Desktop, paste the MCP URL in the MCP server settings URL
+            field, then set the bearer token env var field to{" "}
+            <span className="font-mono">{codexDesktopEnvVar}</span>. That field
+            is the variable name, not the token value.
+          </p>
+          <CodeSnippet
+            code={`URL: ${codexDesktopUrl}\nBearer token env var: ${codexDesktopEnvVar}`}
+          />
+          <p className="text-sm text-muted-foreground">
+            The actual token must be set in the environment of the Codex
+            process before Codex starts. A shell{" "}
+            <span className="font-mono">export</span> only lasts for that shell
+            session and child processes.
+          </p>
         </CardContent>
       </Card>
 

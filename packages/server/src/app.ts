@@ -8,7 +8,14 @@ import { serveStatic, type ServeStaticOptions } from "@hono/node-server/serve-st
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { conversationId, NoteNotFoundError, VERSION, type CleanSlateResult } from "zenod";
-import { clearSession, issueSession, requireAuth, requireMcpAuth } from "./auth.js";
+import {
+  clearSession,
+  hostedRingMode,
+  issueSession,
+  requireAuth,
+  requireMcpAuth,
+  verifyHostedEntryTicket,
+} from "./auth.js";
 import {
   authServerMetadata,
   handleAuthorizeDecision,
@@ -63,6 +70,9 @@ import { driveArchiveUnavailableReason } from "./voiceArchive.js";
 import { validateStepCallback, type StepCallbackResult } from "./journeyContracts.js";
 import type { DeliverableManifest } from "./executionQueue.js";
 import { creditHeadroomDecision } from "./sessionLog.js";
+import { callPeerTool } from "./peerClient.js";
+import { RingRouterCore, type RingConnectedServer, type RingInboundMessage, type RingToolCall } from "./ringRouter.js";
+import type { PhylaxChannel } from "./phylaxGateway.js";
 
 // #532/#548 — the running commit SHA for /api/health. Prefer an explicit GIT_SHA env
 // (GHCR/CI builds pass it); otherwise fall back to the `.gitsha` file the Docker build
@@ -113,9 +123,71 @@ function normalizeDeliverable(value: unknown): DeliverableManifest | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
+function displayNameFromId(id: string): string {
+  return id
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function ringServerFromPeer(peer: { name: string; url: string; token: string; tool?: string }): RingConnectedServer {
+  return {
+    id: peer.name.trim().toLowerCase(),
+    endpoint: peer.url,
+    token: peer.token,
+    displayName: displayNameFromId(peer.name),
+    skillText: "",
+    enabled: true,
+    relayPolicy: "same_channel",
+    tools: { chat: peer.tool ?? "ask_brain" },
+  };
+}
+
+function sanitizeRingServer(server: RingConnectedServer): Record<string, unknown> {
+  return {
+    id: server.id,
+    endpoint: server.endpoint,
+    displayName: server.displayName,
+    skillText: server.skillText,
+    enabled: server.enabled,
+    relayPolicy: server.relayPolicy ?? "same_channel",
+    settingsUrl: server.settingsUrl ?? null,
+    aliases: server.aliases ?? [],
+    tools: server.tools ?? {},
+    hasToken: Boolean(server.token),
+  };
+}
+
+function mediaHandoffContract(): Record<string, unknown> {
+  return {
+    owner: "zenod",
+    ringOwns: ["route_decision", "mailbox_provenance", "media_handle_forwarding"],
+    phylaxOwns: ["channel_pairing", "provider_message_ids", "temporary_media_handles"],
+    zenodOwns: ["drive_archive", "transcription", "ocr", "extraction", "digest", "filing", "memory_receipts"],
+    contract: "Ring and Phylax expose media handles only; Zenod owns durable ingest and interpretation.",
+  };
+}
+
+function phylaxErrorResponse(message: string, code = "unavailable"): Response {
+  return Response.json({ ok: false, code, error: message }, { status: code === "invalid_input" ? 400 : 409 });
+}
+
+function channelHealth(state: string, enabled: boolean): "ok" | "disabled" | "degraded" | "unavailable" {
+  if (!enabled || state === "disabled") return "disabled";
+  if (state === "connected" || state === "cloud") return "ok";
+  if (state === "error") return "degraded";
+  return "unavailable";
+}
+
+function isPhylaxChannel(value: unknown): value is PhylaxChannel {
+  return value === "whatsapp" || value === "telegram";
+}
+
 export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
   const app = new Hono<{ Bindings: HttpBindings }>();
   const { settings } = runtime;
+  const usedHostedEntryNonces = new Set<string>();
   const agent = options.agent ?? runtime.agent;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
 
@@ -166,6 +238,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       // agents) so the Console can display it and backfill agents enabled before
       // it tracked repos.
       repo: agent.backlog ? settings.getRaw("backlog_repo") : settings.get("vault_repo"),
+      hostedMode: hostedRingMode() ? "ring" : null,
     }),
   );
 
@@ -186,12 +259,24 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.get("/api/auth/status", (c) =>
     c.json({
-      needsSetup: !settings.hasAdminPassword(),
+      needsSetup: !hostedRingMode() && !settings.hasAdminPassword(),
       configured: settings.configured(),
+      hostedMode: hostedRingMode() ? "ring" : null,
     }),
   );
 
+  app.get("/api/auth/hosted-entry", (c) => {
+    if (!hostedRingMode()) return c.json({ error: "not found" }, 404);
+    const verified = verifyHostedEntryTicket(settings.apiToken(), c.req.query("ticket") ?? "");
+    if (!verified) return c.json({ error: "invalid or expired hosted entry" }, 401);
+    if (usedHostedEntryNonces.has(verified.nonce)) return c.json({ error: "hosted entry already used" }, 401);
+    usedHostedEntryNonces.add(verified.nonce);
+    issueSession(c, settings);
+    return c.redirect(`/#${verified.surface}`, 303);
+  });
+
   app.post("/api/auth/setup", async (c) => {
+    if (hostedRingMode()) return c.json({ error: "not found" }, 404);
     if (settings.hasAdminPassword()) return c.json({ error: "already set up" }, 403);
     const { password } = await c.req.json<{ password?: string }>();
     if (!password || password.length < 8) return c.json({ error: "password must be at least 8 characters" }, 400);
@@ -704,6 +789,149 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       await syncComposioToOutbound();
     }
     return c.json({ settings: settings.masked(), configured: settings.configured() });
+  });
+
+  const ringProducts = (): RingConnectedServer[] => {
+    const configured = settings.ringConnectedProducts();
+    return configured.length ? configured : settings.peers().map(ringServerFromPeer);
+  };
+
+  const ringRouterConfig = () => {
+    const tenant = settings.ringTenantConfig();
+    const products = ringProducts();
+    const zenodServerId = tenant.zenodServerId ?? products.find((product) => product.id === "zenod")?.id;
+    const defaultServerId =
+      tenant.defaultServerId ??
+      products.find((product) => product.id !== zenodServerId)?.id ??
+      products[0]?.id ??
+      "";
+    return { tenant, products, defaultServerId, zenodServerId };
+  };
+
+  const ringStatusPayload = () => {
+    const { tenant, products, defaultServerId, zenodServerId } = ringRouterConfig();
+    const issues: string[] = [];
+    if (!tenant.enabled) issues.push("ring disabled");
+    if (!products.length) issues.push("no connected products configured");
+    if (defaultServerId && !products.some((product) => product.id === defaultServerId)) {
+      issues.push(`default product "${defaultServerId}" is not connected`);
+    }
+    for (const product of products) {
+      if (product.enabled && (!product.endpoint || !product.token)) {
+        issues.push(`connected product "${product.id}" is missing endpoint or token`);
+      }
+    }
+    const routeLog = settings.ringRouteLog();
+    return {
+      unit: {
+        id: "ring",
+        name: "Ring",
+        tenantSlug: tenant.tenantSlug,
+        tenantName: tenant.tenantName ?? settings.get("instance_name"),
+        agentName: agent.name,
+        agentDisplayName: agent.displayName,
+      },
+      runtime: {
+        mode: tenant.runtimeMode,
+        enabled: tenant.enabled,
+        configured: settings.configured(),
+        settingsUrl: tenant.settingsUrl,
+      },
+      connectedProducts: products.map(sanitizeRingServer),
+      routePolicy: {
+        mode: tenant.routePolicy,
+        defaultServerId: defaultServerId || null,
+        zenodServerId: zenodServerId ?? null,
+        defaultPolicy: "route general turns to the default connected product",
+        mediaPolicy: "route media handles to Zenod when connected; Ring does not archive, transcribe, OCR, digest, or file media",
+      },
+      routeLogs: routeLog,
+      health: {
+        status: issues.length ? "degraded" : "ok",
+        issues,
+        routeLogCount: routeLog.length,
+      },
+      mediaHandoff: mediaHandoffContract(),
+    };
+  };
+
+  app.get("/api/ring/status", (c) => c.json(ringStatusPayload()));
+
+  app.put("/api/ring/config", async (c) => {
+    type RingConfigBody = {
+      enabled?: boolean;
+      tenantSlug?: string | null;
+      tenantName?: string | null;
+      settingsUrl?: string | null;
+      runtimeMode?: "hosted_tenant" | "self_hosted" | "dev";
+      defaultServerId?: string | null;
+      zenodServerId?: string | null;
+      connectedProducts?: unknown[];
+      products?: unknown[];
+      servers?: unknown[];
+    };
+    const body = await c.req
+      .json<RingConfigBody>()
+      .catch(() => ({}) as RingConfigBody);
+    settings.setRingTenantConfig({
+      ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
+      ...(body.tenantSlug !== undefined ? { tenantSlug: body.tenantSlug } : {}),
+      ...(body.tenantName !== undefined ? { tenantName: body.tenantName } : {}),
+      ...(body.settingsUrl !== undefined ? { settingsUrl: body.settingsUrl } : {}),
+      ...(body.runtimeMode === "hosted_tenant" || body.runtimeMode === "self_hosted" || body.runtimeMode === "dev"
+        ? { runtimeMode: body.runtimeMode }
+        : {}),
+      ...(body.defaultServerId !== undefined ? { defaultServerId: body.defaultServerId } : {}),
+      ...(body.zenodServerId !== undefined ? { zenodServerId: body.zenodServerId } : {}),
+    });
+    const products = body.connectedProducts ?? body.products ?? body.servers;
+    if (Array.isArray(products)) settings.setRingConnectedProducts(products);
+    runtime.invalidate();
+    return c.json(ringStatusPayload());
+  });
+
+  app.post("/api/ring/route-test", async (c) => {
+    const body = await c.req
+      .json<Partial<RingInboundMessage>>()
+      .catch(() => ({}) as Partial<RingInboundMessage>);
+    const { tenant, products, defaultServerId, zenodServerId } = ringRouterConfig();
+    if (!tenant.enabled) return c.json({ ok: false, code: "ring_disabled", error: "Ring is disabled." }, 409);
+    if (!products.length) return c.json({ ok: false, code: "ring_unconfigured", error: "No connected Ring products are configured." }, 409);
+    const input: RingInboundMessage = {
+      channel: typeof body.channel === "string" && body.channel.trim() ? body.channel.trim() : "web",
+      chatId: typeof body.chatId === "string" && body.chatId.trim() ? body.chatId.trim() : "route-test",
+      text: typeof body.text === "string" ? body.text : "",
+      ...(Array.isArray(body.media) ? { media: body.media } : {}),
+      ...(typeof body.messageId === "string" ? { messageId: body.messageId } : {}),
+      ...(typeof body.senderTimestamp === "string" ? { senderTimestamp: body.senderTimestamp } : {}),
+    };
+    if (!input.text?.trim() && !(input.media?.length)) {
+      return c.json({ ok: false, code: "invalid_input", error: "text or media is required." }, 400);
+    }
+    const core = new RingRouterCore(
+      { servers: products, defaultServerId, ...(zenodServerId ? { zenodServerId } : {}) },
+      async (call: RingToolCall) => {
+        if (!call.server.endpoint || !call.server.token) {
+          return {
+            content: [{ type: "text", text: `Connected product "${call.server.displayName}" has no live endpoint/token configured.` }],
+            structuredContent: { code: "ring_product_unavailable", productId: call.server.id },
+            isError: true,
+          };
+        }
+        return callPeerTool({ name: call.server.id, url: call.server.endpoint, token: call.server.token }, call.tool, call.arguments);
+      },
+    );
+    const result = await core.route(input);
+    settings.appendRingRouteLog(result.decision);
+    return c.json({
+      ok: result.decision.resultStatus === "ok",
+      mailboxEntry: result.mailboxEntry,
+      decision: result.decision,
+      outbound: result.outbound,
+      toolCall: result.toolCall,
+      toolResult: result.toolResult,
+      mediaHandoff: mediaHandoffContract(),
+    });
   });
 
   // Change THIS agent's working repo in place (authenticated with the agent's own
@@ -1621,6 +1849,215 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
 
   app.get("/api/telegram/status", (c) => c.json(runtime.telegram.status()));
+
+  const phylaxStatusPayload = () => {
+    const whatsapp = runtime.whatsapp.status();
+    const whatsappSettings = settings.whatsappSettings();
+    const telegram = runtime.telegram.status();
+    const whatsappHealth = channelHealth(whatsapp.state, whatsapp.enabled);
+    const telegramHealth = channelHealth(telegram.state, telegram.enabled);
+    const deliveryLogs = runtime.whatsappStore.recentNotifications({ limit: 50 }).map((entry) => ({
+      channel: "whatsapp",
+      id: entry.notificationId,
+      at: entry.at,
+      messageId: entry.messageId,
+      sentMessageId: entry.sentMessageId,
+      chatId: entry.chatId,
+      contactId: entry.contactId,
+      status: entry.status,
+      error: entry.errorText,
+    }));
+    return {
+      unit: {
+        id: "phylax",
+        name: "Phylax",
+        parent: "ring",
+        role: "channel_gateway",
+      },
+      providerMode: whatsappSettings.providerMode,
+      channels: {
+        whatsapp: {
+          enabled: whatsapp.enabled,
+          providerMode: whatsappSettings.providerMode,
+          cloud: {
+            provider: whatsappSettings.cloudProvider,
+            webhookUrl: whatsappSettings.cloudWebhookUrl,
+            phoneNumberId: whatsappSettings.cloudPhoneNumberId,
+            status: whatsappSettings.cloudStatus,
+            testRecipient: whatsappSettings.testRecipient,
+          },
+          pairing: {
+            state: whatsapp.state,
+            linkedNumber: whatsapp.linkedNumber,
+            qrAvailable: Boolean(whatsapp.qr),
+          },
+          health: {
+            status: whatsappHealth,
+            lastActivity: whatsapp.lastActivity,
+            lastError: whatsapp.lastError,
+            diagnostics: whatsapp.diagnostics,
+          },
+          allowlist: {
+            acceptAll: whatsapp.acceptAll,
+            allowedSenders: whatsapp.allowedSenders,
+            groupsEnabled: whatsapp.groupsEnabled,
+          },
+        },
+        telegram: {
+          enabled: telegram.enabled,
+          providerMode: "bot_api",
+          botUsername: telegram.botUsername,
+          hasToken: telegram.hasToken,
+          health: {
+            status: telegramHealth,
+            state: telegram.state,
+            lastActivity: telegram.lastActivity,
+            lastError: telegram.lastError,
+          },
+          allowlist: {
+            acceptAll: telegram.acceptAll,
+            allowedUsers: telegram.allowedUsers,
+          },
+          rich: telegram.rich,
+        },
+      },
+      deliveryLogs,
+      mediaHandoff: mediaHandoffContract(),
+      health: {
+        status: whatsappHealth === "ok" || telegramHealth === "ok" ? "ok" : whatsappHealth === "degraded" || telegramHealth === "degraded" ? "degraded" : "unavailable",
+        issues: [
+          ...(whatsappHealth === "degraded" && whatsapp.lastError ? [`whatsapp: ${whatsapp.lastError}`] : []),
+          ...(telegramHealth === "degraded" && telegram.lastError ? [`telegram: ${telegram.lastError}`] : []),
+        ],
+      },
+    };
+  };
+
+  app.get("/api/phylax/status", (c) => c.json(phylaxStatusPayload()));
+
+  app.put("/api/phylax/config", async (c) => {
+    type PhylaxConfigBody = {
+      whatsapp?: {
+        enabled?: boolean;
+        providerMode?: "cloud" | "self_host_dev";
+        cloudProvider?: string;
+        cloudWebhookUrl?: string;
+        cloudPhoneNumberId?: string;
+        cloudStatus?: "not_configured" | "configured" | "connected" | "error";
+        testRecipient?: string;
+        allowedSenders?: string[] | string;
+        groupsEnabled?: boolean;
+        acceptAll?: boolean;
+      };
+      telegram?: {
+        enabled?: boolean;
+        botToken?: string;
+        allowedUsers?: string[] | string;
+        acceptAll?: boolean;
+        rich?: boolean;
+      };
+    };
+    const body = await c.req
+      .json<PhylaxConfigBody>()
+      .catch(() => ({}) as PhylaxConfigBody);
+    const whatsappBody = body.whatsapp;
+    if (whatsappBody && typeof whatsappBody === "object") {
+      const next = settings.setWhatsAppSettings({
+        ...(typeof whatsappBody.enabled === "boolean" ? { enabled: whatsappBody.enabled } : {}),
+        ...(whatsappBody.providerMode === "cloud" || whatsappBody.providerMode === "self_host_dev"
+          ? { providerMode: whatsappBody.providerMode }
+          : {}),
+        ...(typeof whatsappBody.cloudProvider === "string" ? { cloudProvider: whatsappBody.cloudProvider } : {}),
+        ...(typeof whatsappBody.cloudWebhookUrl === "string" ? { cloudWebhookUrl: whatsappBody.cloudWebhookUrl } : {}),
+        ...(typeof whatsappBody.cloudPhoneNumberId === "string" ? { cloudPhoneNumberId: whatsappBody.cloudPhoneNumberId } : {}),
+        ...(whatsappBody.cloudStatus === "not_configured" ||
+        whatsappBody.cloudStatus === "configured" ||
+        whatsappBody.cloudStatus === "connected" ||
+        whatsappBody.cloudStatus === "error"
+          ? { cloudStatus: whatsappBody.cloudStatus }
+          : {}),
+        ...(typeof whatsappBody.testRecipient === "string" ? { testRecipient: whatsappBody.testRecipient } : {}),
+        ...(whatsappBody.allowedSenders !== undefined ? { allowedSenders: whatsappBody.allowedSenders } : {}),
+        ...(typeof whatsappBody.groupsEnabled === "boolean" ? { groupsEnabled: whatsappBody.groupsEnabled } : {}),
+        ...(typeof whatsappBody.acceptAll === "boolean" ? { acceptAll: whatsappBody.acceptAll } : {}),
+      });
+      if (next.enabled && next.providerMode === "self_host_dev") {
+        await runtime.whatsapp.startIfEnabled();
+        await runtime.whatsapp.refreshAllowedSenderAliases();
+      } else {
+        await runtime.whatsapp.disconnect({ keepEnabled: next.enabled });
+      }
+    }
+    const telegramBody = body.telegram;
+    if (telegramBody && typeof telegramBody === "object") {
+      settings.setTelegramSettings({
+        ...(typeof telegramBody.enabled === "boolean" ? { enabled: telegramBody.enabled } : {}),
+        ...(typeof telegramBody.botToken === "string" && telegramBody.botToken.trim() ? { botToken: telegramBody.botToken.trim() } : {}),
+        ...(telegramBody.allowedUsers !== undefined ? { allowedUsers: telegramBody.allowedUsers } : {}),
+        ...(typeof telegramBody.acceptAll === "boolean" ? { acceptAll: telegramBody.acceptAll } : {}),
+        ...(typeof telegramBody.rich === "boolean" ? { rich: telegramBody.rich } : {}),
+      });
+      await runtime.telegram.close();
+      await runtime.telegram.startIfEnabled();
+    }
+    return c.json(phylaxStatusPayload());
+  });
+
+  app.post("/api/phylax/test-send", async (c) => {
+    const body = await c.req
+      .json<{ channel?: string; text?: string }>()
+      .catch(() => ({}) as { channel?: string; text?: string });
+    const channel = body.channel ?? "whatsapp";
+    if (!isPhylaxChannel(channel)) return phylaxErrorResponse("channel must be whatsapp or telegram", "invalid_input");
+    const text = body.text?.trim() || "Phylax test message";
+    if (channel === "whatsapp") {
+      const status = runtime.whatsapp.status();
+      const whatsappSettings = settings.whatsappSettings();
+      if (!status.enabled) return phylaxErrorResponse("WhatsApp channel is disabled.");
+      if (whatsappSettings.providerMode === "cloud") {
+        return phylaxErrorResponse("Managed-cloud WhatsApp delivery adapter is not connected in this runtime.");
+      }
+      if (status.state !== "connected") return phylaxErrorResponse(`WhatsApp self-host sender is ${status.state}.`);
+      const sent = await runtime.whatsapp.notifyOwner(text);
+      if (sent.sent === 0) return phylaxErrorResponse("WhatsApp sender returned no delivered recipients.");
+      return c.json({ ok: true, channel, status: "sent", sent: sent.sent, recipients: sent.recipients });
+    }
+    const status = runtime.telegram.status();
+    if (!status.enabled) return phylaxErrorResponse("Telegram channel is disabled.");
+    if (status.state !== "connected") return phylaxErrorResponse(`Telegram sender is ${status.state}.`);
+    const sent = await runtime.telegram.notifyOwner(text);
+    if (sent.sent === 0) return phylaxErrorResponse("Telegram sender returned no delivered recipients.");
+    return c.json({ ok: true, channel, status: "sent", sent: sent.sent, recipients: sent.recipients });
+  });
+
+  app.post("/api/phylax/delivery-status", async (c) => {
+    const body = await c.req
+      .json<{ channel?: string; sentMessageId?: string }>()
+      .catch(() => ({}) as { channel?: string; sentMessageId?: string });
+    const channel = body.channel ?? "whatsapp";
+    if (!isPhylaxChannel(channel)) return phylaxErrorResponse("channel must be whatsapp or telegram", "invalid_input");
+    const sentMessageId = body.sentMessageId?.trim();
+    if (!sentMessageId) return phylaxErrorResponse("sentMessageId is required", "invalid_input");
+    if (channel !== "whatsapp") {
+      return phylaxErrorResponse("Telegram delivery-status lookup is not connected in this runtime.");
+    }
+    const found = runtime.whatsappStore
+      .recentTranscript({ limit: 200, sinceMs: 30 * 24 * 60 * 60 * 1000 })
+      .find((entry) => entry.sentMessageId === sentMessageId);
+    if (!found) {
+      return c.json({ ok: false, code: "not_found", error: "delivery receipt not found", sentMessageId }, 404);
+    }
+    return c.json({
+      ok: true,
+      channel,
+      sentMessageId,
+      status: found.status,
+      messageId: found.messageId,
+      chatId: found.chatId,
+      contactId: found.contactId,
+      at: found.at,
+    });
+  });
 
   app.put("/api/telegram/settings", async (c) => {
     const body = await c.req

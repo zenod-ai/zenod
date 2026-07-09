@@ -14,6 +14,7 @@ import {
   type TelegramSettings,
 } from "./telegramConfig.js";
 import type { PeerConfig } from "./peerClient.js";
+import type { RingConnectedServer, RingRelayPolicy, RingRouteLogEntry } from "./ringRouter.js";
 
 /** Runtime settings persisted in SQLite; env vars seed them on first boot. */
 export const SETTING_KEYS = [
@@ -57,6 +58,17 @@ export const SETTING_KEYS = [
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
+
+export interface RingTenantConfig {
+  enabled: boolean;
+  tenantSlug: string | null;
+  tenantName: string | null;
+  settingsUrl: string | null;
+  runtimeMode: "hosted_tenant" | "self_hosted" | "dev";
+  routePolicy: "deterministic_fast_path";
+  defaultServerId: string | null;
+  zenodServerId: string | null;
+}
 
 /** The settings key holding each provider's API key. */
 export const PROVIDER_KEY: Record<Provider, SettingKey> = {
@@ -230,6 +242,72 @@ export class Settings {
 
   setPeers(peers: PeerConfig[]): void {
     this.setRaw("peers", JSON.stringify(peers));
+  }
+
+  ringTenantConfig(): RingTenantConfig {
+    const mode = this.getRaw("ring_runtime_mode");
+    const runtimeMode = mode === "self_hosted" || mode === "dev" ? mode : "hosted_tenant";
+    return {
+      enabled: this.getRaw("ring_enabled") !== "false",
+      tenantSlug: normalizeOptionalConfigString(this.getRaw("ring_tenant_slug")),
+      tenantName: normalizeOptionalConfigString(this.getRaw("ring_tenant_name")),
+      settingsUrl: normalizeOptionalConfigString(this.getRaw("ring_settings_url")),
+      runtimeMode,
+      routePolicy: "deterministic_fast_path",
+      defaultServerId: normalizeOptionalConfigString(this.getRaw("ring_default_server_id")),
+      zenodServerId: normalizeOptionalConfigString(this.getRaw("ring_zenod_server_id")),
+    };
+  }
+
+  setRingTenantConfig(input: Partial<RingTenantConfig>): RingTenantConfig {
+    if (input.enabled !== undefined) this.setRaw("ring_enabled", input.enabled ? "true" : "false");
+    if (input.tenantSlug !== undefined) this.setRaw("ring_tenant_slug", input.tenantSlug ?? "");
+    if (input.tenantName !== undefined) this.setRaw("ring_tenant_name", input.tenantName ?? "");
+    if (input.settingsUrl !== undefined) this.setRaw("ring_settings_url", input.settingsUrl ?? "");
+    if (input.runtimeMode !== undefined) this.setRaw("ring_runtime_mode", input.runtimeMode);
+    if (input.defaultServerId !== undefined) this.setRaw("ring_default_server_id", input.defaultServerId ?? "");
+    if (input.zenodServerId !== undefined) this.setRaw("ring_zenod_server_id", input.zenodServerId ?? "");
+    return this.ringTenantConfig();
+  }
+
+  ringConnectedProducts(): RingConnectedServer[] {
+    const raw = this.getRaw("ring_connected_products");
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((item) => normalizeRingConnectedProduct(item))
+        .filter((item): item is RingConnectedServer => item !== null);
+    } catch {
+      return [];
+    }
+  }
+
+  setRingConnectedProducts(products: unknown[]): RingConnectedServer[] {
+    const existing = new Map(this.ringConnectedProducts().map((product) => [product.id, product]));
+    const next = products
+      .map((item) => normalizeRingConnectedProduct(item, existing))
+      .filter((item): item is RingConnectedServer => item !== null);
+    this.setRaw("ring_connected_products", JSON.stringify(next));
+    return next;
+  }
+
+  ringRouteLog(): RingRouteLogEntry[] {
+    const raw = this.getRaw("ring_route_log");
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? (parsed as RingRouteLogEntry[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  appendRingRouteLog(entry: RingRouteLogEntry): RingRouteLogEntry[] {
+    const next = [entry, ...this.ringRouteLog()].slice(0, 50);
+    this.setRaw("ring_route_log", JSON.stringify(next));
+    return next;
   }
 
   /**
@@ -526,4 +604,57 @@ export class Settings {
 
 function mask(value: string): string {
   return value.length <= 4 ? "••••" : `••••${value.slice(-4)}`;
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[,\n]/) : [];
+  return [...new Set(raw.map((item) => normalizeString(item)).filter(Boolean))];
+}
+
+function normalizeRelayPolicy(value: unknown): RingRelayPolicy {
+  return value === "silent" ? "silent" : "same_channel";
+}
+
+function normalizeTools(value: unknown): RingConnectedServer["tools"] {
+  if (!value || typeof value !== "object") return undefined;
+  const input = value as Record<string, unknown>;
+  const tools: RingConnectedServer["tools"] = {};
+  for (const key of ["chat", "askMemory", "storeMemory", "ingestMemory"] as const) {
+    const v = normalizeString(input[key]);
+    if (v) tools[key] = v;
+  }
+  return Object.keys(tools).length ? tools : undefined;
+}
+
+function normalizeRingConnectedProduct(
+  value: unknown,
+  existing: Map<string, RingConnectedServer> = new Map(),
+): RingConnectedServer | null {
+  if (!value || typeof value !== "object") return null;
+  const input = value as Record<string, unknown>;
+  const id = normalizeString(input.id).toLowerCase();
+  if (!id) return null;
+  const current = existing.get(id);
+  const token = normalizeString(input.token);
+  const endpoint = normalizeString(input.endpoint) || current?.endpoint || "";
+  const displayName = normalizeString(input.displayName) || normalizeString(input.name) || current?.displayName || id;
+  const skillText = normalizeString(input.skillText) || current?.skillText || "";
+  return {
+    id,
+    endpoint,
+    token: token && !token.includes("••••") ? token : current?.token ?? "",
+    displayName,
+    skillText,
+    enabled: typeof input.enabled === "boolean" ? input.enabled : current?.enabled ?? true,
+    relayPolicy: normalizeRelayPolicy(input.relayPolicy ?? current?.relayPolicy),
+    ...(normalizeString(input.settingsUrl) || current?.settingsUrl
+      ? { settingsUrl: normalizeString(input.settingsUrl) || current?.settingsUrl }
+      : {}),
+    aliases: normalizeStringArray(input.aliases ?? current?.aliases),
+    ...(normalizeTools(input.tools ?? current?.tools) ? { tools: normalizeTools(input.tools ?? current?.tools) } : {}),
+  };
 }

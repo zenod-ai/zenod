@@ -72,6 +72,7 @@ export async function api<T>(
 export type AuthStatus = {
   needsSetup: boolean
   configured: boolean
+  hostedMode: "ring" | null
 }
 
 /** One row of the /api/usage breakdown — aggregated per operation or per model. */

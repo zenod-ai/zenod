@@ -1,18 +1,27 @@
 # EPIC 2.5 · THE ATOMIC SUITE — the ring, the guys, the units
 
-> **▶ NEXT ITERATION (worker: start here). SPEC ONLY — no code this pass.**
-> Rewrite the Ring spec to Jordi's **Ring = Council** decision (2026-07-08): the Ring and the Council
-> collapse into ONE instance — a gateway *with* an LLM brain that has visibility of every connected
-> MCP tool and routes by mostly **passing the prompt through** (thin thinking for a named guy like
-> Herald). This deletes the separate deterministic-ring / brain-council split and supersedes the
-> current "no LLM in the ring's relay path" rule.
-> **Do:** (1) rewrite the unit model — the Ring owns the channels (WhatsApp, Telegram, Google Drive),
-> holds the LLM brain, exposes a UI to **connect MCP servers** (each added *with a skill* teaching
-> when to use it) and to set a **default route**; (2) reconcile the exit criterion (drop "council guy
-> connected as default") and SEAM-SPEC, and mark RD-2 (council-guy name) likely **moot**; (3) produce
-> the **delta vs current docs + a fresh ticket list** to build it.
-> **Discipline:** worktree `wt/ring-spec`, edit only `docs/EPIC-2.5-ATOMIC-UNITS.md` + `docs/SEAM-SPEC.md`,
-> handback inline on `main`. **Build waits** until Zenod is green and Callisthenes has its funnel — spec now, code later. — planner/Epic-Zero, 2026-07-08
+> **▶ CURRENT ITERATION (EpicSpine board active, 2026-07-09).**
+> Final boundary from Jordi: **Epic 2.5 builds the cloud Ring router/control surface**. It is the
+> cloud version of the quasi-working deployed Console/Council experience, but configurable through
+> modular MCP servers. **Phylax is one simple channel gateway**: inbound messages go to Ring;
+> outbound responses come from Ring; it does not decide, remember, summarize, archive, transcribe,
+> or digest. **Zenod 2.3 owns memory media handling**: audio, screenshots/images, PDFs, Drive
+> sources/archive, transcription/OCR/extraction, digest, filing, and receipts. Ring routes
+> memory-bound things to Zenod's public seam.
+> **Hosted/cloud implementation boundary:** `zenod-ai/zenod` is the runtime/product monorepo for
+> Ring, Phylax, Zenod, guys, unit images, and in-tenant UI. The private `zenod-ai/cloud` repo is the
+> hosted control plane for all cloud products, not only Zenod: public hosted surfaces, Stripe
+> checkout/webhooks, deployment requests, tenant registry, Dokploy provisioning, tenant URLs,
+> watchdog registration, and success/config landing live there. Epic 2.5's hosted buyer path must
+> therefore be delivered across both repos: runtime changes in `zenod`; purchase→cloud deployment
+> orchestration in `cloud`.
+> **Billing environment rule (Jordi, 2026-07-09):** all Ring Stripe TEST checkout/provisioning
+> drills move to `cloud-test.zenod.dev` with `STRIPE_MODE=test`; production customers use
+> `cloud.zenod.dev` with `STRIPE_MODE=live`. Do not keep using `cloud.zenod.dev` as the test
+> checkout surface once `cloud-test` is bound. Canonical decision: Epic 2 D-6A and Epic 2.3 ZD-12.
+> **Active GitHub board:** #665–#672 (R-series ledger below). Dispatch work from the spine first,
+> then the issue. Every worker updates this spine with receipts; GitHub issues are executable board
+> rows, not the full project memory. — planner/EpicSpine, 2026-07-09
 
 Owner: **Ring-Fable** (planner; fresh session, bootstrapped 2026-07-04 night) · Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md)
 Origin: Jordi × Story-Fable design session 2026-07-04 (SD-4/SD-5 in [EPIC-0-STORY.md](EPIC-0-STORY.md); promo v4 = the product this serves)
@@ -749,7 +758,7 @@ is untouched — the connect-UI skill lives *inside* the Ring, never on the wire
   brain composes/summarizes freely; (b) always verbatim + attribution; (c) **per-connection
   setting** (verbatim for voice-guys like Herald, composed for utility tools). Rec **(c)**.
 
-#### C · FRESH TICKET LIST — Iteration 0, new topology (states = PROPOSED, pending RP calls)
+#### C · FRESH TICKET LIST — Iteration 0, new topology (states = SUPERSEDED 2026-07-09 by §D R-series board)
 
 | ID | Lane | Deliverable | Depends | Budget |
 |---|---|---|---|---|
@@ -786,3 +795,402 @@ setting must be exercised in both directions (N-3).
 ticket list (§C). No code written. Next action is Jordi's: call RP-1..RP-5 (and confirm Council is
 withdrawn). On the calls, N-8 rewrites the sections above in place and Iteration 0 dispatches
 N-1..N-7 (order: W-I → N-1 → N-2/N-5 parallel → N-3/N-4/N-6 → N-7). Pen holds with Ring-Fable.
+
+#### D · FINAL BACKLOG LEDGER — EpicSpine board (2026-07-09, after Jordi media-boundary call)
+
+**Final architecture boundary.**
+- **Ring (Epic 2.5):** cloud router/control surface, borrowing the useful behavior from the
+  deployed Console/Council path. Owns channel/product UI, connected-server registry, skill text,
+  route/default policy, relay policy, settings links, route logs, mailbox/provenance, and the
+  hosted purchase→config entry point.
+- **Phylax (Epic 2.5):** one simple gateway. Inbound → Ring. Outbound ← Ring. It exposes channel
+  health, delivery receipts, provider/session status, allowed-sender/group controls, and media
+  handles. It does **not** decide, summarize, remember, archive, transcribe, OCR, digest, or file.
+- **Zenod (Epic 2.3):** memory intake. Callers pass Zenod the thing that should become memory:
+  text, audio, screenshots/images, PDFs, Drive files, or media handles. Zenod archives raw
+  evidence, extracts/transcribes/OCRs, digests, files meaning, and returns receipts.
+- **Connected products:** each guy/product owns its own cloud settings page. Ring shows status,
+  route/relay policy, skill text, health/test-call, and a **settings link**.
+
+**Hosted repo boundary (clarified by Jordi, 2026-07-09).**
+- `zenod-ai/zenod` remains the runtime/product repo: Ring and Phylax code, in-tenant settings UI,
+  unit surfaces, public product-site assets where already present, compose templates, and tests.
+- `zenod-ai/cloud` is the private hosted control-plane repo for **all** cloud products. It should
+  host the cloud versions of Ring/Phylax, Zenod, Herald, Callisthenes, Archus, Epaminon as hosted
+  SKUs or tenant templates where applicable.
+- Therefore #671 is not a pure `zenod` ticket. The acceptance path is cross-repo:
+  public hosted Ring surface → Stripe test buy → cloud deployment request → tenant stack provision
+  with watchdog/meter/tokens → success landing in the Ring config UI → Phylax/channel setup → use.
+  The cloud repo owns checkout/provisioning/tenant registry; the zenod repo owns the runtime that
+  the provisioned tenant runs.
+- **Billing env rule:** Stripe TEST buy/provisioning for Ring should target `cloud-test.zenod.dev`
+  once it is bound; `cloud.zenod.dev` is the LIVE customer surface. Existing 2026-07-09 receipts
+  against `cloud.zenod.dev` are pre-split smoke receipts and should not be treated as the durable
+  test endpoint. See Epic 2 D-6A and Epic 2.3 ZD-12.
+
+**Issue ledger (GitHub issues are the board; this spine remains source of truth).**
+
+| Issue | Role | Title | Status | Depends On | PR/Branch | Acceptance | Latest Evidence | Next Action |
+|---|---|---|---|---|---|---|---|---|
+| [#665](https://github.com/zenod-ai/zenod/issues/665) | Planner | R-0 spine/spec reconcile to final Ring/Phylax/Zenod boundary | patch ready for review | — | local spine edit | Spine no longer assigns Drive/media/transcription to Ring in active state; R-series ledger is canonical; cross-spine updates proposed | 2026-07-09 planner: current-state note + R-series ledger + worker dispatch receipts | Review alongside worker patches |
+| [#666](https://github.com/zenod-ai/zenod/issues/666) | Worker | R-1 Ring router core — cloud Console/Council behavior with modular MCP servers | patch ready for tester | #665 | local patch | Route general turns, memory/media to Zenod, named pass-through, disabled server refusal, same-channel provenance | 2026-07-09 worker: `npm run test -w @zenod/server -- ringRouter.test.ts`; `npm run typecheck -w @zenod/server`; no Ring-owned Drive/archive/transcription/OCR grep passed | Wire router core into live runtime/Phylax/web path |
+| [#667](https://github.com/zenod-ai/zenod/issues/667) | Worker | R-2 Phylax gateway — inbound to Ring, outbound from Ring, no memory logic | patch ready for tester | #665 | local patch | Inbound/outbound seam receipts; cloud vs self-host channel modes; no memory/archive/transcription ownership | 2026-07-09 worker: `npm run typecheck -w @zenod/server`; `npm run test -w @zenod/server -- phylaxGateway.test.ts whatsapp.test.ts`; no-memory grep passed | Tester/reviewer should wire this seam into the live MCP server/router path |
+| [#668](https://github.com/zenod-ai/zenod/issues/668) | Worker | R-3 Ring cloud UI — router control surface with settings links | patch ready for tester | #665 | local patch | Ring UI has channels, connected servers, routing, inbox, billing/logs; each guy row links to its own settings | 2026-07-09 worker: `npm --workspace apps/web run build`; focused eslint passed; full lint blocked by pre-existing `KeysTab.tsx` hook lint | Capture UI screenshots after local server/API fixture is available |
+| [#669](https://github.com/zenod-ai/zenod/issues/669) | Worker | R-4 Phylax channel UI — provider, delivery log, media handoff | patch ready for tester | #665 | local patch | Channel-health screen; managed-cloud vs self-host mode; media handoff says Zenod owns ingest | 2026-07-09 worker: `npm run build -w web` passed | Tester/reviewer should run UI capture against live config |
+| [#670](https://github.com/zenod-ai/zenod/issues/670) | Worker | Epic 2.3 / 2.5 seam: Zenod first-class media ingest | patch ready for tester | Epic 2.3 planner acceptance | commits `c360f0d`, `4125f7f` | Zenod exposes media ingest/digest seam for audio/screenshots/PDFs/Drive and returns raw/extracted/digest/commit receipts | 2026-07-09 worker: `npm --prefix packages/server test -- taskJobMediaIngestArchive.test.ts`; `npm --prefix packages/server test -- mcp.test.ts -t "ingest_memory"`; `npm --prefix packages/server test -- mcp.test.ts`; `npm --prefix packages/server run build` | Live hosted audio+screenshot tenant verification remains |
+| [#671](https://github.com/zenod-ai/zenod/issues/671) | Planner/parent | R-5 cloud purchase → deployed Ring config UI | decomposed/running | #665 #666 #667 #668 | cross-repo: `zenod-ai/zenod` + `zenod-ai/cloud` | Stripe→deployment→Ring config UI with tokens, watchdog, meter, default connections | 2026-07-09 decomposed into #674-#679 and #681 after hosted/cloud/public-site boundary clarification | Coordinate child tickets until ready for tester |
+| [#674](https://github.com/zenod-ai/zenod/issues/674) | Worker | R-5A Ring hosted checkout/status in `zenod-ai/cloud` | deployed smoke green pre-payment | #671 | `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) | `/buy/ring`, `unit=ring` Checkout metadata, webhook queue/account persistence, Ring status/setup landing | 2026-07-09: pre-split `https://cloud.zenod.dev/buy/ring` returned 303 to Stripe TEST Checkout; `/api/ring/status?session_id=cs_test_...` returned `payment_pending` for `unit=ring`; future TEST receipts should move to `cloud-test.zenod.dev` per Epic 2 D-6A / 2.3 ZD-12 | Needs completed Stripe TEST checkout receipt on `cloud-test.zenod.dev` once bound |
+| [#675](https://github.com/zenod-ai/zenod/issues/675) | Worker | R-5B Ring hosted provisioner + watchdog receipts | patch ready for review | #671 #674 | `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) | `provision-ring.mjs`, tenant URL/config URL/token/compose/watchdog receipts, loud failure path | 2026-07-09: `node --check scripts/provision-ring.mjs`; `node scripts/provision-ring.mjs --name ringdry --dry-run`; webhook typecheck/build; cloud branch deployed manually to Dokploy compose `17QoMFRgvmZ0Y2n19DINT` | Needs post-payment live provision receipt |
+| [#676](https://github.com/zenod-ai/zenod/issues/676) | Worker | R-5C hosted Ring config UI in cloud control plane | patch ready for review | #671 #674 #677 | `zenod-ai/cloud` | Buyer lands in cloud Ring config UI; Phylax/channel status; connected products with settings links; honest placeholders | 2026-07-09: cloud console build; webhook typecheck/build after `/api/console/ring` coordinator bridge | Needs integration review; authenticated screenshot pending |
+| [#677](https://github.com/zenod-ai/zenod/issues/677) | Worker | R-5D tenant runtime APIs for hosted Ring/Phylax config | patch ready for review | #666 #667 #668 #669 | `zenod-ai/zenod` | Token-gated Ring/Phylax status/config APIs for the cloud UI; no Ring-owned media ingest | 2026-07-09: `npm run test -w @zenod/server -- ringRouter.test.ts phylaxGateway.test.ts`; `npm run typecheck -w @zenod/server` | Needs integration review; managed-cloud WhatsApp provider send adapter still absent |
+| [#678](https://github.com/zenod-ai/zenod/issues/678) | Worker | R-5E Ring public hosted landing page + self-host distinction | patch ready for review | #671 #674 | `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) | Public Ring page points to cloud buy route, explains hosted vs self-host, no cloud QR promise | 2026-07-09: `python3` html parser; worker Nokogiri HTML5 parse; `git diff --check`; targeted content checks | Content ready; public site deployment tracked by #681 |
+| [#679](https://github.com/zenod-ai/zenod/issues/679) | Coordinator | R-5F integration branch, cloud deploy, Stripe TEST Ring smoke | red on tenant provisioning | #674 #675 #676 #677 #678 #681 | `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) + `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) | Deployable branches/PRs; `PRICE_RING`; `cloud-test` Stripe TEST smoke or exact blocker; live switch remains `cloud.zenod.dev` with `STRIPE_MODE=live` | 2026-07-09: pre-split public Ring -> Stripe TEST paid; cloud status paid+queued; tenant deployment failed with no containers | #691 owns provisioning/runtime-image blocker |
+| [#681](https://github.com/zenod-ai/zenod/issues/681) | Worker | R-5G public Ring website front door deployment | live/needs review | #678 #679 | `zenod-ai/zenod` commit `4256612` | `ring.zenod.dev` or agreed URL serves Ring page and CTA reaches hosted checkout | 2026-07-09: `https://ring.zenod.dev/` -> 200; CTA -> `https://cloud.zenod.dev/buy/ring`; checkout -> 303 Stripe TEST; route added via SSH/Traefik dynamic config | Merge `4256612` and preserve/add `ring.zenod.dev` route in Dokploy for durability |
+| [#691](https://github.com/zenod-ai/zenod/issues/691) | Worker | R-5H Ring tenant provisioning deploy + runtime image blocker | running | #679 #681 | `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) + `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) | Paid Ring checkout reaches running tenant with config URL, Phylax URL, token receipt, compose id, watchdog target | 2026-07-09: paid session `cs_test_a1Ex...`; Dokploy compose `qvxRcJxBvWqYp-AYPLS3t` created; no containers; `compose.deploy` no-op; `compose.redeploy` hung; GHCR `latest` stale vs Ring branch | Worker Bohr dispatched to recover session or return minimal infra/image-publish blocker |
+| [#672](https://github.com/zenod-ai/zenod/issues/672) | Tester | R-T tester battery for Ring, Phylax, Zenod handoff, cloud deploy | draft/blocked by #691 | #666 #667 #668 #669 #670 #674 #675 #676 #677 #678 #679 #681 #691 | — | Fresh-evidence scoreboard; every red maps to follow-up issue | Created 2026-07-09; public-start/payment green; tenant provisioning red | Dispatch after #691 produces running tenant or exact unrecoverable blocker |
+
+**Parallel dispatch plan.**
+- First worker batch completed local patches for **#666 Ring router core**, **#667 Phylax gateway**,
+  **#668 Ring UI**, **#669 Phylax UI**, and **#670 Zenod media seam**; those rows are ready for
+  review/integration.
+- R-5 child batch status: **#674 cloud checkout/status**, **#675 Ring provisioner/watchdog**,
+  **#676 hosted Ring config UI**, **#677 tenant runtime APIs**, and **#678 public Ring landing
+  page** are patch-ready. The cloud buy route is now live in TEST mode, but the completed-payment
+  provisioning smoke is still pending.
+- Active integration lane: **#679**. Branches: `codex/epic25-ring-hosted` in `zenod-ai/zenod`
+  and `codex/epic25-ring-cloud` in `zenod-ai/cloud`; PRs are
+  [zenod #680](https://github.com/zenod-ai/zenod/pull/680) and
+  [cloud #49](https://github.com/zenod-ai/cloud/pull/49).
+- Public-front-door lane **#681** is live: `https://ring.zenod.dev/` serves the Ring page and its
+  CTA reaches Stripe TEST checkout. Durability note: the route was added through SSH/Traefik
+  dynamic config and should be preserved in Dokploy.
+- Tenant provisioning lane **#691** is active. Hold **#672 tester** until #691 recovers the paid
+  Ring session to a running tenant or returns an exact infra/runtime-image blocker.
+
+**Proposed cross-spine updates.**
+
+| Date | Target Spine | Proposed Change | Evidence | Suggested Owner | Status |
+|---|---|---|---|---|---|
+| 2026-07-09 | [EPIC-2.3-ZENOD-MOVE-0.md](EPIC-2.3-ZENOD-MOVE-0.md) | Record Zenod as owner of memory media ingest: audio, screenshots/images, PDFs, Drive sources/archive, transcription/OCR/extraction, digest, filing, receipts. Link #670. | Jordi call in this thread; `units/zenod/SEAM-SURFACE.md` already names ingest/digest | Zenod-Fable | proposed |
+| 2026-07-09 | [EPIC-0-STORY.md](EPIC-0-STORY.md) | Story language: Zenod is the memory intake philosophy, not just text memory; you pass it the thing that wants to become memory. | Jordi call in this thread | Story-Fable | proposed |
+
+### 2026-07-09 · [planner/EpicSpine] Final boundary folded + GitHub board minted (#665–#672)
+
+Current-state top note rewritten to the final boundary: Epic 2.5 = cloud Ring router/control
+surface; Phylax = simple channel gateway; Zenod 2.3 = memory media ingest owner. The July 8
+N-series list is explicitly superseded by the R-series board above. GitHub issues minted as the
+execution board:
+
+| Issue | Purpose |
+|---|---|
+| [#665](https://github.com/zenod-ai/zenod/issues/665) | R-0 spine/spec reconciliation |
+| [#666](https://github.com/zenod-ai/zenod/issues/666) | R-1 Ring router core |
+| [#667](https://github.com/zenod-ai/zenod/issues/667) | R-2 Phylax gateway |
+| [#668](https://github.com/zenod-ai/zenod/issues/668) | R-3 Ring cloud UI |
+| [#669](https://github.com/zenod-ai/zenod/issues/669) | R-4 Phylax channel UI |
+| [#670](https://github.com/zenod-ai/zenod/issues/670) | Cross-spine Zenod media ingest seam |
+| [#671](https://github.com/zenod-ai/zenod/issues/671) | R-5 cloud purchase→deployment→config UI |
+| [#672](https://github.com/zenod-ai/zenod/issues/672) | R-T tester battery |
+
+Parallel dispatch authorized for #666/#667/#668/#669/#670 after #665's spine reconciliation;
+#671 waits for contracts; #672 waits for worker outputs. Dispatch receipts:
+
+| Issue | Worker |
+|---|---|
+| [#666](https://github.com/zenod-ai/zenod/issues/666) | Gibbs (`019f4756-1565-7d62-85e1-a0a856c8acf5`) |
+| [#667](https://github.com/zenod-ai/zenod/issues/667) | Godel (`019f4756-3e13-7d42-aff2-7f25dedfde03`) |
+| [#668](https://github.com/zenod-ai/zenod/issues/668) | Anscombe (`019f4756-6390-7e23-938c-fdf7d5c0ad1e`) |
+| [#669](https://github.com/zenod-ai/zenod/issues/669) | Locke (`019f4756-8e22-7c11-889c-8654e1a4e207`) |
+| [#670](https://github.com/zenod-ai/zenod/issues/670) | Confucius (`019f4756-b896-7c50-8070-60917d07bb36`) |
+
+The deck
+[EPIC-2.5-RING-SPEC-DECK.html](EPIC-2.5-RING-SPEC-DECK.html) is a discussion artifact, not the
+source of truth. Pen stays with EpicSpine planner until worker handoffs land.
+
+### 2026-07-09 · [planner/EpicSpine] R-5 decomposed and cloud/control-plane workers dispatched
+
+Jordi clarified the durable hosted pattern: the open runtime repo is the self-hostable product/API,
+and the private `zenod-ai/cloud` repo is the hosted control plane that buys, deploys, meters,
+watches, and configures customer instances. #671 is therefore a cross-repo parent, not one
+implementation ticket. It was decomposed into four executable child issues:
+
+| Issue | Worker | Write Scope |
+|---|---|---|
+| [#674](https://github.com/zenod-ai/zenod/issues/674) | Dalton (`019f4778-066e-70c2-9c6e-b2597bb63dbb`) | Cloud webhook checkout/status/account/queue config for `unit=ring` |
+| [#675](https://github.com/zenod-ai/zenod/issues/675) | Dirac (`019f4778-8b4e-7f30-a247-f5f9fbf0b77b`) | Cloud `provision-ring.mjs` and Dockerfile spawn support |
+| [#676](https://github.com/zenod-ai/zenod/issues/676) | Kierkegaard (`019f4778-b9af-7fc0-bf26-b79c9c7531d0`) | Cloud console hosted Ring config UI |
+| [#677](https://github.com/zenod-ai/zenod/issues/677) | Curie (`019f4778-ec27-7d03-84a2-43e4bc7d9165`) | Tenant-side Ring/Phylax status/config APIs in `zenod-ai/zenod` |
+| [#678](https://github.com/zenod-ai/zenod/issues/678) | Ohm (`019f477c-949b-79c1-9c9d-9c8f203f772d`) | Public Ring hosted landing page and self-host distinction |
+
+Coordinator note: workers were told not to edit this spine directly to avoid parallel doc
+conflicts; the coordinator will fold handoffs back here and update issue states.
+
+### 2026-07-09 · [coordinator/R-5A-R-5B] #674/#675 integrated to patch-ready
+
+#674 added Ring as a hosted cloud checkout/status unit in `zenod-ai/cloud`: `PRICE_RING`,
+`/buy/ring`, JSON checkout support for `unit=ring`, Checkout metadata, webhook queue/account
+persistence, Ring success/setup redirects, `/api/ring/status`, and `/ring/status`. #675 added
+`scripts/provision-ring.mjs` and Dockerfile spawn support. The provisioner uses the proven
+deployable fused tenant stack as hosted Ring v0 and explicitly reports that
+`units/ring/docker-compose.ring.yml` remains a blueprint, not the deployed template.
+
+Coordinator follow-up folded the two lanes together: `PRICE_RING` now passes through
+`docker-compose.cloud.yml`, and `autoProvision` dispatches `unit=ring` to `provision-ring.mjs`.
+Receipts:
+- `npm run typecheck` in `/Users/jordi/Documents/GitHub/cloud/services/webhook` -> pass.
+- `npm run build` in `/Users/jordi/Documents/GitHub/cloud/services/webhook` -> pass.
+- `node --check scripts/provision-ring.mjs` -> pass.
+- `node scripts/provision-ring.mjs --name ringdry --dry-run` -> pass, emitting Ring URL, Config
+  URL, MCP/API token, compose, and watchdog target receipts.
+- `git diff --check` on the touched cloud files -> pass.
+
+Residual: no live Stripe Ring test session or live Dokploy Ring deployment was executed in this
+pass; the current fused runtime does not yet enforce the generated Ring token until #677/template
+follow-up lands.
+
+### 2026-07-09 · [coordinator/R-5C-R-5E] #676/#678 integrated to patch-ready
+
+#676 added the hosted Ring config surface in `zenod-ai/cloud/services/console`: route `/ring`,
+provision/tenant URL display, Phylax cloud-vs-self-host channel states, connected product rows
+with settings links, route policy, Zenod media ownership, watchdog/meter summaries, and receipt
+empty states. Coordinator added `/api/console/ring` in the cloud webhook so the UI has a real
+cloud-owned backend route now, and can later prefer tenant `/api/ring/status` when #677 lands.
+
+#678 updated `sites/ring/index.html`: primary CTA points to the cloud Ring buy route; copy
+explains hosted vs self-host; cloud WhatsApp uses managed provider/business-number connection;
+QR pairing is scoped to self-host/dev; Ring/Phylax/Zenod boundaries and connected-product
+settings links are explicit.
+
+Receipts:
+- `npm run build` in `/Users/jordi/Documents/GitHub/cloud/services/console` -> pass.
+- `npm run typecheck && npm run build` in `/Users/jordi/Documents/GitHub/cloud/services/webhook`
+  -> pass after `/api/console/ring`.
+- `python3` `html.parser` on `sites/ring/index.html` -> pass.
+- `git diff --check` on touched cloud and Ring-site files -> pass.
+
+Residual: authenticated cloud UI screenshot not captured; `cloud.zenod.dev/buy/ring` still needs
+deployment plus `PRICE_RING`; #677 remains the active runtime API lane.
+
+### 2026-07-09 · [coordinator/R-5D] #677 tenant runtime APIs patch-ready
+
+#677 added tenant-side APIs in `zenod-ai/zenod` for the hosted cloud control plane:
+`GET /api/ring/status`, `PUT /api/ring/config`, `POST /api/ring/route-test`,
+`GET /api/phylax/status`, `PUT /api/phylax/config`, `POST /api/phylax/test-send`, and
+`POST /api/phylax/delivery-status`. They use the existing `/api/*` bearer-token gate.
+
+The payloads expose Ring identity, tenant metadata, connected products without leaking tokens,
+default/Zenod route policy, route logs, health, Phylax provider/channel/allowlist/delivery state,
+and the Zenod-owned media handoff. Test-send and route-test return real receipts when configured
+and explicit errors when no live provider/peer is wired.
+
+Receipts:
+- `npm run test -w @zenod/server -- ringRouter.test.ts phylaxGateway.test.ts` -> pass.
+- `npm run typecheck -w @zenod/server` -> pass.
+
+Residual: managed-cloud WhatsApp delivery is not wired to a real provider adapter yet; route tests
+need cloud-provided connected-product endpoint/token config for live MCP success receipts.
+
+### 2026-07-09 · [coordinator/R-5F] Local integration validation passed; deploy/test lane opened
+
+#679 opened as the final bridge from patch-ready to Jordi-testable. Dedicated branches created:
+`codex/epic25-ring-hosted` in `zenod-ai/zenod` and `codex/epic25-ring-cloud` in
+`zenod-ai/cloud`.
+
+Local validation bundle:
+- `npm run test -w @zenod/server -- ringRouter.test.ts phylaxGateway.test.ts whatsapp.test.ts`
+  -> pass, 42 tests.
+- `npm run typecheck -w @zenod/server` -> pass.
+- `npm --workspace apps/web run build` -> pass.
+- `npm run typecheck && npm run build` in `/Users/jordi/Documents/GitHub/cloud/services/webhook`
+  -> pass.
+- `npm run build` in `/Users/jordi/Documents/GitHub/cloud/services/console` -> pass.
+- `python3` `html.parser` on `sites/ring/index.html` and `docs/EPIC-2.5-RING-SPEC-DECK.html`
+  -> pass.
+- `node --check /Users/jordi/Documents/GitHub/cloud/scripts/provision-ring.mjs` -> pass.
+- `node /Users/jordi/Documents/GitHub/cloud/scripts/provision-ring.mjs --name ringdry --dry-run`
+  -> pass, emits Ring URL, Config URL, MCP/API token, compose, and watchdog target.
+
+Remaining before #672 tester dispatch: push/PR or otherwise deploy the cloud branch, configure
+`PRICE_RING` in the cloud-test environment, run a Stripe TEST checkout against
+`https://cloud-test.zenod.dev/buy/ring` once bound, and capture the status/config landing receipts.
+
+### 2026-07-09 · [coordinator/R-5F-R-5G] Cloud buy route live; public Ring site deployment split out
+
+PRs are open for the integrated patch set:
+- `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) from
+  `codex/epic25-ring-hosted`.
+- `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) from
+  `codex/epic25-ring-cloud`.
+
+Cloud deploy receipt: `zenod-ai/cloud` branch `codex/epic25-ring-cloud` at commit `2178215` was
+manually deployed to Dokploy compose `17QoMFRgvmZ0Y2n19DINT` after the Dokploy compose redeploy
+API left the old route live. `PRICE_RING` is configured in the VPS/cloud environment as Stripe
+TEST price `price_1TrKAF76yJ3p1J6XPWCmyDJG`.
+
+Live smoke receipts:
+- Pre-split `GET https://cloud.zenod.dev/healthz` -> HTTP 200, `{"ok":true}`.
+- Pre-split `GET https://cloud.zenod.dev/buy/ring` -> HTTP 303 to Stripe TEST Checkout (`cs_test_...`).
+- Pre-split `GET https://cloud.zenod.dev/api/ring/status?session_id=cs_test_...` -> `ok: true`,
+  `unit: "ring"`, `status: "payment_pending"`, `paid: false`, `queued: false`.
+
+Post-decision correction: future Stripe TEST Ring receipts belong on `cloud-test.zenod.dev`
+(`STRIPE_MODE=test`), while `cloud.zenod.dev` is reserved for LIVE Stripe (`STRIPE_MODE=live`).
+This follows Epic 2 D-6A and Epic 2.3 ZD-12.
+
+### 2026-07-09 · [planner/cloud-billing] Ring adopts cloud-test for Stripe TEST
+
+Cross-epic billing note folded after Jordi's decision: Ring/R-5 workers should run Stripe TEST
+checkout and disposable provisioning on `cloud-test.zenod.dev`, not the live customer Cloud host.
+`cloud.zenod.dev` remains the LIVE Stripe target. Existing smoke receipts against
+`cloud.zenod.dev` are retained as pre-split evidence only; the next #674/#679/#672 receipts should
+use `cloud-test` or record the exact binding blocker.
+
+Authority: canonical billing decision lives in Epic 2 D-6A and Epic 2.3 ZD-12; this spine consumes
+that shared hosted-control-plane rule for Ring.
+
+Updated live public-site receipt: #681 is now live/needs-review. `https://ring.zenod.dev/`
+returns 200 with the Ring page; its CTA points to `https://cloud.zenod.dev/buy/ring`, which
+returns 303 to Stripe TEST Checkout. Commit `4256612` updates `apps/site/Dockerfile` so the
+main site image can serve `/ring/index.html`; the current live route was added through
+SSH/Traefik dynamic config, so Dokploy route durability remains a review item.
+
+Remaining before #672 tester dispatch:
+- Resolve #691 so a paid Ring checkout produces a running tenant, or record the exact
+  infrastructure/runtime-image blocker.
+- Update #672 with the exact public URL, checkout session, status URL, tenant/config URL, and
+  known red items.
+
+### 2026-07-09 · [coordinator/R-5F-R-5H] Public/payment green; tenant provisioning red
+
+Additional cloud commits on `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49):
+`49c961b` adds Ring status reconciliation for paid sessions whose webhook/queue write is absent;
+`3846e58` changes the Ring provisioner from Dokploy `compose.deploy` to `compose.redeploy` per
+`docs/DOKPLOY-DEPLOY.md`.
+
+End-to-end smoke on the pre-split TEST cloud route:
+- Public page: `GET https://ring.zenod.dev/` -> HTTP 200.
+- Buy route: `GET https://cloud.zenod.dev/buy/ring` -> HTTP 303 to Stripe TEST Checkout.
+- Completed Stripe TEST checkout: `cs_test_a1ExWtiUgXZ2KcoPaCtEhC8R8bYTYyWy1mUFJ3x45z7MeiEdSnKK8uIw3s`,
+  synthetic email `ring-test-20260709@zenod.dev`.
+- Cloud status after reconciliation: paid true, queued true, then failed with a recoverable
+  provisioning error.
+
+Provisioning blocker isolated into
+[#691](https://github.com/zenod-ai/zenod/issues/691): the Ring provisioner created Dokploy compose
+`qvxRcJxBvWqYp-AYPLS3t` / appName `compose-parse-mobile-port-nz5tru` for
+`r-ringtest20260709-8uiw3s.zenod.dev`, but no tenant containers were created. `compose.deploy`
+returned 200/no-op; `compose.redeploy` hung and still left composeStatus `idle`. A second blocker
+must also be resolved before "ready to test use/config": the tenant template pulls
+`ghcr.io/zenod-ai/zenod:latest`, while the Epic 2.5 Ring runtime/API/UI changes live on
+`zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) and need a published
+Ring-capable image/tag or merge.
+
+Worker Bohr (`019f47c4-4ec4-7b02-b3c2-54723c9d66aa`) is dispatched on #691. Tester #672 remains
+draft/blocked until #691 returns a running tenant or exact unrecoverable blocker.
+
+### 2026-07-09 · [worker/R-3] #668 Ring cloud UI control surface patch ready
+
+Implemented a Ring-mode control surface in `apps/web/src/components/ring-control-surface.tsx`
+and mounted it from `apps/web/src/views/settings/ConnectionsTab.tsx` when `/api/agent` reports a
+vaultless Console/Ring identity. The surface covers channel status, connected product rows, skill
+text, relay policy, endpoint/token status, health links, synthetic route-test calls, route-log
+receipts from `/api/test/chat`, billing/config entry points, and outward settings links derived
+from each connected peer endpoint. In Ring mode, the Google Drive connector is hidden from the
+Ring Connections tab so Drive archive/transcription does not appear Ring-owned; the surface states
+that Zenod owns memory plus media ingest.
+
+Validation receipts:
+- `npm --workspace apps/web run build` passed.
+- `npx eslint apps/web/src/components/ring-control-surface.tsx apps/web/src/views/settings/ConnectionsTab.tsx` passed.
+- `npm --workspace apps/web run lint` still fails on pre-existing `apps/web/src/views/settings/KeysTab.tsx:145` (`react-hooks/set-state-in-effect`), outside #668 scope.
+- Screenshot attempt: built assets served through a local mock API on `127.0.0.1:4177`; in-app browser tab attach timed out twice, and local Playwright is not installed (`ERR_MODULE_NOT_FOUND`), so screenshot evidence was not feasible in this workspace.
+
+Residual UX/API questions for planner/router-core follow-up: the UI derives settings/health links
+from peer MCP URLs until the cloud controller exposes canonical per-product settings URLs; route
+logs currently use the existing synthetic chat audit endpoint until #666 lands first-class Ring
+router decision logs.
+
+### 2026-07-09 · [worker/Locke] #669 Phylax channel UI patch ready
+
+Patch scope: `apps/web/src/components/whatsapp-connect.tsx` and
+`apps/web/src/components/telegram-connect.tsx` only. Existing channel cards now present Phylax as
+the gateway: inbound to Ring, outbound from Ring, no memory/archive/transcription/digest logic.
+WhatsApp distinguishes managed-cloud mode from current self-host/dev QR mode, shows provider/session
+health, existing outbound/inbound audit counts, last outbound status, allowed senders/groups, media
+handoff to Zenod, and a channel test send through existing `/api/notify` with
+`surface: "whatsapp"`. Telegram has the equivalent provider/session shell, Ring handoff, Zenod media
+handoff, allowed sender controls, explicit delivery-log gap, and `surface: "telegram"` test send.
+
+Validation receipt: `npm run build -w web` passed on 2026-07-09. Screenshot not captured in this
+worker pass because no live web server/API fixture was started; tester should capture desktop/mobile
+with configured channel status.
+
+Open risks: managed-cloud WhatsApp provider/webhook fields are UI-only until the Phylax gateway
+contract exposes them; Telegram has no live delivery receipt feed yet, so the UI states that gap and
+only records the latest test-send result in component state. The current backend still contains
+legacy WhatsApp media processing paths; this UI states the target Epic 2.5 boundary that Zenod owns
+memory media ingest.
+
+### 2026-07-09 · [worker/Godel] #667 Phylax gateway seam patch ready
+
+Patch scope: `packages/server/src/phylaxGateway.ts`,
+`packages/server/src/whatsappConfig.ts`, `packages/server/src/whatsappGateway.ts`,
+`packages/server/src/settings.ts`, `packages/server/src/app.ts`,
+`packages/server/test/phylaxGateway.test.ts`, and
+`packages/server/test/whatsapp.test.ts`. Added a focused Phylax seam module for inbound
+`receiveInbound` → Ring receipt, outbound `sendToUser` / `sendTestMessage` delivery receipts,
+`getMedia` handles, delivery status, allowlist/group enforcement, and explicit cloud vs
+self-host/dev pairing status. Existing WhatsApp config/status now exposes provider mode, cloud
+provider/webhook/phone-number/status, and test recipient; QR pairing remains self-host/dev only.
+
+Validation receipts: `npm run typecheck -w @zenod/server` passed; `npm run test -w @zenod/server
+-- phylaxGateway.test.ts whatsapp.test.ts` passed (27 tests). No-memory grep passed with no
+matches:
+`rg -n "from \"zenod\"|from './(voiceArchive|channelAudio|drive|ingest|artifact|transcribe)|from \"\\./(voiceArchive|channelAudio|drive|ingest|artifact|transcribe)|storeMemory|digest|archiveVoice|archiveImage|transcribe" packages/server/src/phylaxGateway.ts packages/server/test/phylaxGateway.test.ts`.
+
+Open risks: the new seam is a testable contract module and config/status surface, not yet mounted
+as a live MCP endpoint or wired into the Ring router worker's mailbox. The legacy fused
+`whatsappGateway.ts` still contains current media/tasking behavior for the existing product; this
+patch does not move or delete that logic to avoid colliding with Ring router, Ring UI, Phylax UI,
+and Zenod media workers.
+
+### 2026-07-09 · [worker/Gibbs] #666 Ring router core patch ready
+
+Patch scope: `packages/server/src/ringRouter.ts` and
+`packages/server/test/ringRouter.test.ts`. Added a focused `RingRouterCore` with connected MCP
+server registry metadata, mailbox/provenance entries, route logs with input digest/chosen
+server/status, named pass-through, Zenod memory/media routing, disabled-server refusal,
+same-channel outbound envelopes, and injected MCP caller. The router sends memory-bound media to
+Zenod's seam and does not implement Drive/archive/transcription/OCR itself.
+
+Validation receipts: `npm run test -w @zenod/server -- ringRouter.test.ts` passed (7 tests);
+`npm run typecheck -w @zenod/server` passed; `rg -n "drive|archive|transcri|ocr|whisper|groq|google"
+packages/server/src/ringRouter.ts -S` returned no matches.
+
+Open risks: the router core is not yet wired into `runtime.ts`, Phylax ingress, or web chat; route
+logs and mailbox are in-memory for this slice. If an enum-constrained LLM classifier remains
+desired, it should be added behind this route-selection boundary rather than replacing it.
+
+### 2026-07-09 · [worker/Confucius] #670 Zenod media ingest seam patch ready (cross-spine)
+
+Patch scope lives primarily in Epic 2.3 / Zenod: commits `c360f0d` (media memory ingest
+integration) and `4125f7f` (Epic 2.3 seam handoff docs) on the current branch. Changed code spans
+`packages/server/src/taskJobQueue.ts`, `taskJobStore.ts`, `mcp.ts`, `mcpToolSchemas.ts`,
+`artifactArchive.ts`, `artifactExtraction.ts`, `driveTools.ts`, `ingestQueue.ts`,
+`ingestStore.ts`, and `settings.ts`, with tests `artifactArchive.test.ts`, `drive.test.ts`,
+`mcp.test.ts`, and `taskJobMediaIngestArchive.test.ts`. Docs updated:
+[EPIC-2.3-ZENOD-MOVE-0.md](EPIC-2.3-ZENOD-MOVE-0.md),
+[../units/zenod/README.md](../units/zenod/README.md), and
+[../units/zenod/SEAM-SURFACE.md](../units/zenod/SEAM-SURFACE.md).
+
+Validation receipts: `npm --prefix packages/server test -- taskJobMediaIngestArchive.test.ts`
+passed; `npm --prefix packages/server test -- mcp.test.ts -t "ingest_memory"` passed;
+`npm --prefix packages/server test -- mcp.test.ts` passed; `npm --prefix packages/server run build`
+passed. Issue [#670](https://github.com/zenod-ai/zenod/issues/670) is already
+`status:needs-review`.
+
+Open risks for Epic 2.5 integration: live hosted verification still needs audio + screenshot
+through a real tenant, then `search_memory` / `ask_brain` citation checks. Scanned/no-text PDF OCR
+is still a loud follow-up; embedded-text PDF is covered. Ring must pass `artifactUrl`, `data:`
+bytes, or a Zenod-configured Drive ref; bare `ring://media/...` handles still return
+`media_ingest_processor_unavailable` until Zenod has a resolver.

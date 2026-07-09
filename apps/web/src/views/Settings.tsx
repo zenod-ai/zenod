@@ -40,6 +40,22 @@ export function Settings({
       .then((r) => setIdentity({ displayName: r.displayName, tagline: r.tagline, vaultless: r.vaultless ?? false }))
       .catch(() => {})
   }, [])
+  React.useEffect(() => {
+    if (initialTab !== "connections" || !window.location.hash) return
+    const targetId = window.location.hash.slice(1)
+    const scrollToTarget = () => {
+      const target = document.getElementById(targetId)
+      if (!target) return false
+      target.scrollIntoView()
+      return true
+    }
+    if (scrollToTarget()) return
+    const observer = new MutationObserver(() => {
+      if (scrollToTarget()) observer.disconnect()
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [initialTab])
   // Vaultless agents (the Console shell) have no vault, so the vault-specific
   // tabs (Vault, Transcription — which files Drive transcripts into the vault)
   // are hidden. This is the per-capability tab model in miniature.

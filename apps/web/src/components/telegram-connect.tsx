@@ -1,9 +1,13 @@
 import * as React from "react"
 import {
+  BotIcon,
   CheckIcon,
+  FileCheckIcon,
   EyeIcon,
   EyeOffIcon,
+  ListChecksIcon,
   RefreshCwIcon,
+  RouteIcon,
   SaveIcon,
   SendIcon,
   TriangleAlertIcon,
@@ -33,6 +37,11 @@ import {
 } from "@/components/ui/input-group"
 import { Spinner } from "@/components/ui/spinner"
 
+type NotifyReceipt = {
+  sent: number
+  recipients: string[]
+}
+
 function statusLabel(status: TelegramStatus | null): string {
   if (!status) return "Loading"
   if (!status.enabled) return "Disabled"
@@ -60,6 +69,33 @@ function timeAgo(epochMs: number | null): string {
   return `${days} day${days === 1 ? "" : "s"} ago`
 }
 
+function statusBadgeVariant(
+  status: TelegramStatus | null
+): React.ComponentProps<typeof Badge>["variant"] {
+  if (!status || !status.enabled) return "outline"
+  if (status.state === "connected") return "secondary"
+  if (status.state === "error") return "destructive"
+  return "outline"
+}
+
+function FieldValue({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: React.ReactNode
+  detail?: React.ReactNode
+}) {
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <p className="text-sm text-muted-foreground">{value}</p>
+      {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
+    </Field>
+  )
+}
+
 export function TelegramConnect() {
   const [status, setStatus] = React.useState<TelegramStatus | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
@@ -70,6 +106,10 @@ export function TelegramConnect() {
   const [acceptAll, setAcceptAll] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [disconnecting, setDisconnecting] = React.useState(false)
+  const [testing, setTesting] = React.useState(false)
+  const [testReceipt, setTestReceipt] = React.useState<NotifyReceipt | null>(
+    null
+  )
 
   const loadStatus = React.useCallback(() => {
     return api<TelegramStatus>("/api/telegram/status")
@@ -136,8 +176,38 @@ export function TelegramConnect() {
     }
   }
 
+  async function handleTestMessage() {
+    setTesting(true)
+    try {
+      const result = await api<NotifyReceipt>("/api/notify", {
+        method: "POST",
+        body: {
+          surface: "telegram",
+          eventType: "phylax.channel_test",
+          severity: "info",
+          text: "Phylax Telegram channel test: Ring outbound delivery path is reachable.",
+        },
+      })
+      setTestReceipt(result)
+      toast.success("Telegram test sent", {
+        description:
+          result.sent > 0
+            ? `Delivered to ${result.sent} recipient${result.sent === 1 ? "" : "s"}.`
+            : "No Telegram recipient was available.",
+      })
+      void loadStatus()
+    } catch (err) {
+      toast.error("Could not send Telegram test", {
+        description: errorMessage(err),
+      })
+    } finally {
+      setTesting(false)
+    }
+  }
+
   const connected = status?.state === "connected"
-  const canConnect = handle.trim().length > 0 && (status?.hasToken || botToken.trim().length > 0)
+  const canConnect =
+    handle.trim().length > 0 && (status?.hasToken || botToken.trim().length > 0)
 
   return (
     <Card>
@@ -145,16 +215,15 @@ export function TelegramConnect() {
         <SendIcon className="size-5 text-muted-foreground" />
         <CardTitle className="flex items-center gap-2">
           Telegram
-          <Badge variant={connected ? "secondary" : "outline"}>
+          <Badge variant={statusBadgeVariant(status)}>
             {connected && <CheckIcon />}
             {statusLabel(status)}
           </Badge>
         </CardTitle>
         <CardDescription>
-          Talk to Zeno from a Telegram bot. Create one with{" "}
-          <span className="font-mono">@BotFather</span>, paste its token below,
-          and add your handle so only you can message it. Replies use Telegram&apos;s
-          rich formatting (tables, lists, headings).
+          Phylax handles Telegram transport for the Ring: inbound bot updates go
+          to Ring, outbound responses come from Ring. It does not decide,
+          remember, transcribe, archive, or digest.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -174,19 +243,82 @@ export function TelegramConnect() {
           </Alert>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field>
-            <FieldLabel>Bot</FieldLabel>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <FieldValue
+            label="Provider"
+            value="Telegram Bot API"
+            detail="bot token held by Phylax"
+          />
+          <FieldValue
+            label="Bot"
+            value={
+              status?.botUsername ? `@${status.botUsername}` : "not connected"
+            }
+          />
+          <FieldValue
+            label="Session health"
+            value={statusLabel(status)}
+            detail={status?.rich ? "rich replies enabled" : "plain replies"}
+          />
+          <FieldValue
+            label="Last activity"
+            value={timeAgo(status?.lastActivity ?? null)}
+            detail={status?.hasToken ? "token saved" : "no token saved"}
+          />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div className="rounded-lg border p-3">
+            <div className="mb-2 flex items-center gap-2 font-medium">
+              <RouteIcon className="size-4 text-muted-foreground" />
+              Ring handoff
+            </div>
             <p className="text-sm text-muted-foreground">
-              {status?.botUsername ? `@${status.botUsername}` : "not connected"}
+              Telegram updates are handed to Ring. Ring replies through Phylax
+              using the same channel and chat provenance.
             </p>
-          </Field>
-          <Field>
-            <FieldLabel>Last activity</FieldLabel>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="mb-2 flex items-center gap-2 font-medium">
+              <FileCheckIcon className="size-4 text-muted-foreground" />
+              Media handoff
+            </div>
             <p className="text-sm text-muted-foreground">
-              {timeAgo(status?.lastActivity ?? null)}
+              Phylax exposes Telegram file handles to Ring. Zenod owns ingest,
+              archive, transcription, OCR, digest, filing, and receipts.
             </p>
-          </Field>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="mb-2 flex items-center gap-2 font-medium">
+              <ListChecksIcon className="size-4 text-muted-foreground" />
+              Delivery log
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Telegram delivery receipts are not exposed as a live feed yet.
+            </p>
+            {testReceipt ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Last test sent to {testReceipt.sent} recipient
+                {testReceipt.sent === 1 ? "" : "s"}.
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use Send test after the bot has seen an allowed numeric chat.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border p-3">
+          <div className="mb-2 flex items-center gap-2 font-medium">
+            <BotIcon className="size-4 text-muted-foreground" />
+            Telegram setup shell
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Create a bot with <span className="font-mono">@BotFather</span>,
+            paste its token below, and add allowed handles or numeric IDs so
+            Phylax can accept only approved senders.
+          </p>
         </div>
 
         <Field>
@@ -196,7 +328,9 @@ export function TelegramConnect() {
               id="telegram-token"
               type={showToken ? "text" : "password"}
               placeholder={
-                status?.hasToken ? "•••• saved — paste a new token to replace" : "123456789:ABCdef…"
+                status?.hasToken
+                  ? "•••• saved — paste a new token to replace"
+                  : "123456789:ABCdef…"
               }
               value={botToken}
               onChange={(event) => setBotToken(event.target.value)}
@@ -212,8 +346,9 @@ export function TelegramConnect() {
             </InputGroupAddon>
           </InputGroup>
           <FieldDescription>
-            From <span className="font-mono">@BotFather</span> → <span className="font-mono">/newbot</span>.
-            Stored encrypted; never shown again after saving.
+            From <span className="font-mono">@BotFather</span> →{" "}
+            <span className="font-mono">/newbot</span>. Stored encrypted; never
+            shown again after saving.
           </FieldDescription>
         </Field>
 
@@ -227,8 +362,8 @@ export function TelegramConnect() {
             disabled={acceptAll}
           />
           <FieldDescription>
-            Your Telegram @handle (or numeric ID). One per line for more than one.
-            Only these can trigger Zeno.
+            Your Telegram @handle (or numeric ID). One per line for more than
+            one. Only these can trigger Phylax handoff to Ring.
           </FieldDescription>
         </Field>
 
@@ -264,6 +399,15 @@ export function TelegramConnect() {
           <RefreshCwIcon data-icon="inline-start" />
           Refresh
         </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={!connected || testing}
+          onClick={() => void handleTestMessage()}
+        >
+          {testing ? <Spinner /> : <SendIcon data-icon="inline-start" />}
+          Send test
+        </Button>
 
         {status?.enabled && (
           <Button
@@ -272,7 +416,11 @@ export function TelegramConnect() {
             disabled={disconnecting}
             onClick={() => void handleDisconnect()}
           >
-            {disconnecting ? <Spinner /> : <UnplugIcon data-icon="inline-start" />}
+            {disconnecting ? (
+              <Spinner />
+            ) : (
+              <UnplugIcon data-icon="inline-start" />
+            )}
             Disconnect
           </Button>
         )}
