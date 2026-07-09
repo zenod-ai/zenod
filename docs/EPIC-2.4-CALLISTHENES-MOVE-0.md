@@ -536,3 +536,31 @@ shared cloud service, not just prepared locally.
   OAuth step still requires `X_OAUTH2_CLIENT_ID` and `X_OAUTH2_CLIENT_SECRET` to be installed for the
   hosted Callisthenes runtime and callbacks. Python `pytest` remains unavailable locally, so Python
   unit tests were not rerun. — [worker]
+
+### 2026-07-09 · [worker] C-3/C-5 paid hosted demo reached running
+End-to-end hosted test path completed with a Stripe TEST checkout and live tenant status page.
+
+- **Paid test session:** completed a Stripe TEST checkout with a non-personal test email and Stripe
+  test card. The browser redirected to
+  `https://cloud.zenod.dev/callisthenes/status?session_id=...` as intended.
+- **Cloud fix:** `zenod-ai/cloud@23414cb` adds idempotent status-page reconciliation for paid
+  Callisthenes sessions. Stripe webhook signing is still misconfigured in the deployed cloud runtime,
+  but the callback/status page now self-heals by verifying the paid Checkout Session with Stripe,
+  queueing exactly once, and firing the Callisthenes provisioner.
+- **Unit fix:** `zenod-ai/zenod@81f4e69` changes the Callisthenes upstream OAuth1 patch so missing
+  X OAuth1 credentials are non-fatal at boot. The unit now serves `/connect` with inert X signing
+  placeholders and logs that X API calls remain disabled until credentials are configured.
+- **Live evidence:** final status API for the paid test session returned
+  `status:"running"`, `paid:true`, `queued:true`, `tenant_slug:"callisthenestest-vn6wnb"`,
+  `mcp_url:"https://c-callisthenestest-vn6wnb.zenod.dev/mcp"`,
+  `connect_url:"https://c-callisthenestest-vn6wnb.zenod.dev/connect"`, `connect_ok:true`,
+  and `mcp_token_set:true`. The status page and `/connect` both returned HTTP 200.
+- **Operational note:** Dokploy created the compose record for the tenant but did not materialize the
+  checkout/container through `compose.deploy` during this test. I recovered the tenant by running the
+  same Callisthenes compose from `zenod@81f4e69` with the compose record's env and Traefik labels,
+  plus a `dokploy-network` attachment required for routing. Follow-up should fold that network
+  override/materialization behavior back into `scripts/provision-callisthenes.mjs`.
+- **Remaining boundary:** X OAuth2 client credentials are still absent in cloud env, so the Connect X
+  button will show the hosted surface but cannot complete the final X OAuth callback until
+  `X_OAUTH2_CLIENT_ID` and `X_OAUTH2_CLIENT_SECRET` are installed and the callback is registered with
+  X. — [worker]
