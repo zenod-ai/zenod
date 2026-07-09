@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Epic 2.4 Callisthenes</title>
+<style>
+  :root {
+    --bg: #111315;
+    --band: #171a1d;
+    --panel: #202428;
+    --panel-2: #272c31;
+    --ink: #f3f0ea;
+    --muted: #b8b1a7;
+    --line: #3a4046;
+    --gold: #d7ad62;
+    --green: #74b38a;
+    --blue: #7aa9c9;
+    --red: #d07469;
+    --violet: #a58ad5;
+    --shadow: rgba(0, 0, 0, .26);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body { overflow: hidden; }
+  .deck { height: 100vh; position: relative; }
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    padding: 5.4vh 6.2vw;
+    overflow: auto;
+  }
+  .slide.active {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 26px;
+  }
+  .eyebrow {
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 760;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  h1, h2 {
+    margin: 10px 0 0;
+    letter-spacing: 0;
+    line-height: 1.04;
+    font-weight: 760;
+  }
+  h1 { font-size: clamp(44px, 6.6vw, 86px); max-width: 1040px; }
+  h2 { font-size: clamp(34px, 5vw, 64px); max-width: 1080px; }
+  h3 {
+    margin: 0 0 10px;
+    font-size: clamp(19px, 1.75vw, 27px);
+    letter-spacing: 0;
+  }
+  p {
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(20px, 2.05vw, 30px);
+    line-height: 1.34;
+    max-width: 1010px;
+  }
+  .small {
+    color: var(--muted);
+    font-size: clamp(14px, 1.18vw, 18px);
+    line-height: 1.45;
+  }
+  .body {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 24px;
+  }
+  .two {
+    display: grid;
+    grid-template-columns: minmax(0, .92fr) minmax(360px, 1.08fr);
+    gap: 34px;
+    align-items: center;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .grid.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 16px 45px var(--shadow);
+    padding: 22px;
+  }
+  .card p, .card li {
+    color: var(--muted);
+    font-size: clamp(14px, 1.18vw, 18px);
+    line-height: 1.45;
+  }
+  .card ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+  }
+  .tagrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 760;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .tag.gold { color: var(--gold); border-color: rgba(215, 173, 98, .58); }
+  .tag.green { color: var(--green); border-color: rgba(116, 179, 138, .58); }
+  .tag.blue { color: var(--blue); border-color: rgba(122, 169, 201, .58); }
+  .tag.red { color: var(--red); border-color: rgba(208, 116, 105, .58); }
+  .tag.violet { color: var(--violet); border-color: rgba(165, 138, 213, .58); }
+
+  .screen {
+    background: #121518;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 22px 60px var(--shadow);
+  }
+  .screen-bar {
+    height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--line);
+  }
+  .dot:nth-child(1) { background: var(--red); }
+  .dot:nth-child(2) { background: var(--gold); }
+  .dot:nth-child(3) { background: var(--green); }
+  .screen-body {
+    padding: 26px;
+    display: grid;
+    gap: 18px;
+  }
+  .brandline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 780;
+    font-size: 22px;
+  }
+  .mark {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    color: #121518;
+    background: var(--gold);
+    font-weight: 900;
+  }
+  .connector {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 16px;
+  }
+  .connector strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 18px;
+  }
+  .connector span {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.35;
+  }
+  .button, .copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: var(--gold);
+    color: #151311;
+    font-weight: 780;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .copy {
+    background: var(--panel-2);
+    border-color: var(--line);
+    color: var(--ink);
+  }
+  .field {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #15181b;
+    padding: 10px;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    min-width: 0;
+  }
+  .field span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+    align-items: stretch;
+  }
+  .step, .box {
+    min-height: 128px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+  }
+  .step b, .box b {
+    font-size: clamp(17px, 1.45vw, 24px);
+    line-height: 1.15;
+  }
+  .step span, .box span {
+    color: var(--muted);
+    font-size: clamp(13px, 1.05vw, 16px);
+    line-height: 1.36;
+  }
+  .num {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--gold);
+    font-weight: 780;
+    font-size: 13px;
+  }
+  .arch {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: stretch;
+  }
+  .lane {
+    border: 1px solid var(--line);
+    background: var(--band);
+    border-radius: 8px;
+    padding: 18px;
+    display: grid;
+    gap: 12px;
+  }
+  .lane h3 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0;
+  }
+  .pipe {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .chip {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.35;
+  }
+  .chip em {
+    display: block;
+    color: var(--muted);
+    font-style: normal;
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  .compare {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+  .compare .card {
+    min-height: 430px;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 14px;
+  }
+  .table {
+    display: grid;
+    gap: 10px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 170px 1fr;
+    gap: 14px;
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+  }
+  .row:first-child { border-top: 0; }
+  .row b { color: var(--ink); font-size: 15px; }
+  .row span { color: var(--muted); font-size: 15px; line-height: 1.38; }
+  .nav {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    z-index: 20;
+  }
+  .nav button {
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+  }
+  .nav button.active {
+    width: 28px;
+    background: var(--gold);
+    border-color: var(--gold);
+  }
+  .counter {
+    position: fixed;
+    right: 22px;
+    bottom: 16px;
+    color: var(--muted);
+    font-size: 13px;
+    z-index: 20;
+  }
+
+  @media (max-width: 920px) {
+    body { overflow: auto; }
+    .deck { height: auto; min-height: 100vh; }
+    .slide {
+      position: relative;
+      min-height: 100vh;
+      padding: 44px 22px 82px;
+    }
+    .two, .arch, .compare, .grid, .grid.two-col, .grid.four, .flow {
+      grid-template-columns: 1fr;
+    }
+    .row { grid-template-columns: 1fr; gap: 4px; }
+    .connector { grid-template-columns: 1fr; }
+    .brandline { align-items: flex-start; flex-direction: column; }
+    .counter { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="deck" aria-live="polite">
+  <section class="slide active">
+    <header>
+      <div class="eyebrow">Epic 2.4 / Callisthenes</div>
+      <h1>The outbound identity broker.</h1>
+    </header>
+    <div class="body two">
+      <div>
+        <p>Callisthenes is the always-on MCP unit that holds outbound credentials once, then lets Claude, Cursor, the Ring, scripts, and future agents send through one guarded endpoint.</p>
+        <div class="tagrow">
+          <a class="button" href="https://cloud.zenod.dev/buy/callisthenes">Buy hosted in Stripe test</a>
+          <a class="copy" href="../sites/callisthenes/index.html">Open Callisthenes page</a>
+        </div>
+        <div class="tagrow">
+          <span class="tag gold">X first</span>
+          <span class="tag blue">Reddit next</span>
+          <span class="tag green">Receipts always</span>
+          <span class="tag red">Drafts never send</span>
+        </div>
+      </div>
+      <div class="grid two-col">
+        <div class="card">
+          <h3>Product promise</h3>
+          <p>Authorize each platform once. Every agent can use the outbound identity without holding the platform secret.</p>
+        </div>
+        <div class="card">
+          <h3>Evidence promise</h3>
+          <p>A mutating tool returns a concrete ID or URL, or fails loudly. No assistant can claim a send without a receipt.</p>
+        </div>
+        <div class="card">
+          <h3>Guardrail promise</h3>
+          <p>Every send is blocked until explicitly approved, then counted against a conservative hourly throttle.</p>
+        </div>
+        <div class="card">
+          <h3>Packaging promise</h3>
+          <p>Hosted gets checkout, one connect screen, metering, and watchdog. Self-host gets the same unit as Docker compose.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Hosted UI</div>
+      <h2>One screen, not a dashboard.</h2>
+    </header>
+    <div class="body two">
+      <div>
+        <p>The hosted tier has a minimal connect page because OAuth2 needs a callback and users need a place to copy the MCP URL and token.</p>
+        <div class="tagrow">
+          <span class="tag blue">/connect</span>
+          <span class="tag gold">/oauth/callback</span>
+          <span class="tag green">MCP URL + token</span>
+        </div>
+      </div>
+      <div class="screen" aria-label="Hosted Callisthenes connect UI mockup">
+        <div class="screen-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>callisthenes.zenod.dev/connect</span></div>
+        <div class="screen-body">
+          <div class="brandline">
+            <div class="logo"><span class="mark">C</span><span>Callisthenes</span></div>
+            <span class="tag green">Hosted instance</span>
+          </div>
+          <div class="connector">
+            <div><strong>X (Twitter)</strong><span>Post, delete, media. OAuth2 PKCE; canonical x.com authorize URL only.</span></div>
+            <button class="button">Connect X</button>
+          </div>
+          <div class="connector">
+            <div><strong>Reddit</strong><span>Submit posts through Composio. Paste the connected user id or token.</span></div>
+            <button class="copy">Save token</button>
+          </div>
+          <div class="field"><span>https://c-yourname.zenod.dev/mcp</span><button class="copy">Copy URL</button></div>
+          <div class="field"><span>mcp_live_************************</span><button class="copy">Copy token</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">User Journey</div>
+      <h2>From checkout to a public receipt.</h2>
+    </header>
+    <div class="body">
+      <div class="flow">
+        <div class="step"><span class="num">1</span><b>Buy hosted</b><span>Cloud creates a Callisthenes Stripe test Checkout Session, EUR 5/month, livemode:false.</span></div>
+        <div class="step"><span class="num">2</span><b>Connect accounts</b><span>Click Connect X, complete OAuth2, paste Reddit/Composio token when needed.</span></div>
+        <div class="step"><span class="num">3</span><b>Copy MCP config</b><span>The page exposes the public MCP URL and access token.</span></div>
+        <div class="step"><span class="num">4</span><b>Ask an agent</b><span>Claude, Cursor, Ring, or a script calls Callisthenes to prepare a send.</span></div>
+        <div class="step"><span class="num">5</span><b>Approve and post</b><span>Draft guard requires approval; successful sends return a permalink or concrete ID.</span></div>
+      </div>
+      <div class="grid two-col">
+        <div class="card">
+          <h3>What becomes possible</h3>
+          <p>A user can delegate outbound posting to any agent without copying platform credentials into every agent environment.</p>
+        </div>
+        <div class="card">
+          <h3>What stays impossible</h3>
+          <p>An unapproved draft, over-throttle send, revoked connection, or missing connector returns an explicit error instead of quietly sending.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Backend Containers</div>
+      <h2>Hosted maintains a small control plane around one Callisthenes container.</h2>
+    </header>
+    <div class="body arch">
+      <div class="lane">
+        <h3>Ingress <span class="tag blue">public</span></h3>
+        <div class="pipe">
+          <div class="chip">Landing page + cloud Checkout Session<em>C-3: customer starts here</em></div>
+          <div class="chip">Stripe webhook<em>Creates one instance and injects env</em></div>
+          <div class="chip">Traefik / Dokploy domain<em>Routes /connect and /mcp to the unit</em></div>
+        </div>
+      </div>
+      <div class="lane">
+        <h3>Callisthenes <span class="tag gold">one container</span></h3>
+        <div class="pipe">
+          <div class="chip">FastMCP wrapper<em>xdevplatform/xmcp pinned and patched</em></div>
+          <div class="chip">Connect routes<em>/connect, /connect/&lt;id&gt;/start, /oauth/callback</em></div>
+          <div class="chip">Auth + token store<em>OAuth2 PKCE, bearer-derived tenant identity</em></div>
+          <div class="chip">Guard middleware<em>drafts-never-send plus hourly throttle</em></div>
+          <div class="chip">Connectors<em>X write tools and post_reddit via Composio</em></div>
+        </div>
+      </div>
+      <div class="lane">
+        <h3>Ops <span class="tag green">maintained</span></h3>
+        <div class="pipe">
+          <div class="chip">usage.sqlite<em>usage() reads calls and cost; sends remain a dedicated seam</em></div>
+          <div class="chip">Token volume<em>unit-local per-instance custody</em></div>
+          <div class="chip">Fleet watchdog<em>C-5 registers container and health URL</em></div>
+          <div class="chip">Restore runbook<em>recreate container, preserve receipts, fail loudly</em></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Self-Hosted</div>
+      <h2>Self-hosted is the same sender, without the hosted funnel.</h2>
+    </header>
+    <div class="body two">
+      <div>
+        <p>Self-host users bring their own X app credentials, run Docker compose, and point their MCP client at the local HTTP endpoint. The connect page is not the product surface here.</p>
+        <div class="tagrow">
+          <span class="tag gold">Docker compose</span>
+          <span class="tag blue">localhost:8000/mcp</span>
+          <span class="tag red">same guardrails</span>
+        </div>
+      </div>
+      <div class="grid two-col">
+        <div class="card">
+          <h3>Runs</h3>
+          <p>One `callisthenes` container exposing Streamable HTTP on port 8000, with read and write tools on one endpoint.</p>
+        </div>
+        <div class="card">
+          <h3>Requires</h3>
+          <p>X app values in `.env`: consumer key, consumer secret, bearer token, access token, access token secret.</p>
+        </div>
+        <div class="card">
+          <h3>Protects</h3>
+          <p>`createPosts`, `deletePosts`, `mediaUpload`, and `post_reddit` are guarded by approval and throttle middleware.</p>
+        </div>
+        <div class="card">
+          <h3>Returns</h3>
+          <p>Concrete tool receipts: IDs, permalinks, or explicit errors. No hidden dashboard state is needed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Hosted vs Self-Hosted</div>
+      <h2>Different onboarding, same outbound contract.</h2>
+    </header>
+    <div class="body compare">
+      <div class="card">
+        <h3>Hosted Callisthenes</h3>
+        <div class="table">
+          <div class="row"><b>Who runs it</b><span>Zenod infrastructure via Dokploy, per paid user.</span></div>
+          <div class="row"><b>How auth works</b><span>One connect screen: X OAuth2 PKCE callback plus Reddit token row.</span></div>
+          <div class="row"><b>What user copies</b><span>MCP URL and access token after checkout/provisioning.</span></div>
+          <div class="row"><b>Ops included</b><span>Stripe provisioning, usage ledger, watchdog registration, restore path.</span></div>
+          <div class="row"><b>Best for</b><span>People who want outbound identity without running servers or handling X app secrets.</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Self-Hosted Callisthenes</h3>
+        <div class="table">
+          <div class="row"><b>Who runs it</b><span>The user, from `units/callisthenes/docker-compose.callisthenes.yml`.</span></div>
+          <div class="row"><b>How auth works</b><span>Owner-provided X app credentials in `.env`; hosted UI is optional plumbing, not the main path.</span></div>
+          <div class="row"><b>What user copies</b><span>Local MCP endpoint, usually `http://localhost:8000/mcp`.</span></div>
+          <div class="row"><b>Ops included</b><span>Container restart policy and local logs; no Stripe, provisioner, or fleet watchdog.</span></div>
+          <div class="row"><b>Best for</b><span>Dogfood, developers, and users who already own the platform app credentials.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Epic Output</div>
+      <h2>What Epic 2.4 introduces and maintains.</h2>
+    </header>
+    <div class="body">
+      <div class="grid four">
+        <div class="card">
+          <span class="tag gold">Introduces</span>
+          <h3>Callisthenes unit</h3>
+          <p>Standalone Dockerized MCP server wrapping self-hosted xmcp, with X writes enabled behind unit guardrails.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">Introduces</span>
+          <h3>Hosted connect UI</h3>
+          <p>A one-screen setup surface for X, Reddit, and MCP client credentials, mounted on the same container.</p>
+        </div>
+        <div class="card">
+          <span class="tag green">Maintains</span>
+          <h3>Credential custody</h3>
+          <p>Platform tokens live in the Callisthenes instance; agents hold only the MCP token.</p>
+        </div>
+        <div class="card">
+          <span class="tag red">Maintains</span>
+          <h3>Receipt discipline</h3>
+          <p>Every send is approved, throttled, and tied to a returned platform handle or a loud error.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Exit shape</h3>
+        <p>Jordi can buy hosted Callisthenes, connect X, point his own agent at the provisioned MCP endpoint, post through that paid instance, receive a permalink receipt, inspect usage, and rely on watchdog-backed operations.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="nav" aria-label="Slides"></nav>
+<div class="counter" aria-hidden="true"></div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const nav = document.querySelector(".nav");
+  const counter = document.querySelector(".counter");
+  let index = 0;
+
+  slides.forEach((_, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("aria-label", `Slide ${i + 1}`);
+    b.addEventListener("click", () => show(i));
+    nav.appendChild(b);
+  });
+
+  function show(next) {
+    index = Math.max(0, Math.min(slides.length - 1, next));
+    slides.forEach((s, i) => s.classList.toggle("active", i === index));
+    Array.from(nav.children).forEach((b, i) => b.classList.toggle("active", i === index));
+    counter.textContent = `${index + 1} / ${slides.length}`;
+  }
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") show(index + 1);
+    if (event.key === "ArrowLeft" || event.key === "PageUp") show(index - 1);
+    if (event.key === "Home") show(0);
+    if (event.key === "End") show(slides.length - 1);
+  });
+
+  show(0);
+</script>
+</body>
+</html>

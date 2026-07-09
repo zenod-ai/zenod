@@ -1,10 +1,11 @@
 # EPIC 2.4 · CALLISTHENES MOVE 0 — the second unit product: the voice, console-less
 
-> **▶ NEXT ITERATION (worker: start here).** Do **#645 — tenant isolation**: inject the
-> authenticated bearer as the tenant key; stop trusting the client-supplied `mcp_token`. Full spec
-> (task · 4 acceptance checks · discipline) is in the `2026-07-08 [planner/Epic-Zero]` entry at the
-> bottom. Worktree `wt/callisthenes-645`, edit only `units/callisthenes/` + this doc, handback inline
-> on `main`. — planner/Epic-Zero, 2026-07-08
+> **▶ CURRENT STATE (worker: start here).** #645 / C-2R is landed on `main`; the stale
+> client-supplied `mcp_token` path is no longer the next lane. Current push is C-3 demo fidelity:
+> first-class Callisthenes Stripe TEST buy surface + clear hosted/self-hosted demo path, then
+> Callisthenes-specific provision/watchdog once cloud env and deploy are ready. Bound spine:
+> this document only; referenced parent/sibling spines are read-only unless Jordi widens scope.
+> — worker, 2026-07-09
 
 Owner: **Zenod-Fable** (recommended: same planner as 2.3 — the unit-product playbook repeats; see
 CD-0) · Parent: [LAUNCH-CONTROL.md](LAUNCH-CONTROL.md)
@@ -417,3 +418,96 @@ content) is an optional layer on top. This is the suite's "Outbound" concept, pr
 **Parallelizable NOW (dispatched):** C-2R (#648) ∥ C-8 (#650) — disjoint files, worktree-isolated.
 **Blocked on Jordi grants:** C-3/C-5 (zenod-ai/cloud access + LIVE Stripe). **Sequenced:** C-7 after
 C-2R's callback contract; C-4 reconciliation + C-6 once a real instance provisions. — [planner]
+
+### 2026-07-09 · [worker] C-3 test-buy surface wired — Stripe TEST only, not live
+EpicSpine discipline: document first, then code, then write-back here.
+
+- **Goal clarified:** hosted Callisthenes needs a public buy path, but Jordi requested **Stripe TEST**
+  for this pass. I did not create or wire a live Stripe object.
+- **Stripe evidence:** the connected Stripe MCP account currently reads live objects (`livemode:true`),
+  so I avoided write calls there. The deployed cloud route
+  `https://cloud.zenod.dev/buy?tier=starter` was probed and returned a Stripe Checkout redirect whose
+  session id starts with `cs_test_`; the JSON variant
+  `POST https://cloud.zenod.dev/create-checkout-session {"tier":"starter"}` also returned a
+  `cs_test_...` checkout URL.
+- **Repo changes:** `sites/callisthenes/index.html` now has a primary
+  "Buy hosted in Stripe test" CTA pointing to `https://cloud.zenod.dev/buy?tier=starter`, plus
+  self-host fallback copy. `docs/EPIC-2.4-CALLISTHENES-DECK.html` now includes the same test-buy CTA
+  and names the test checkout in the user journey.
+- **Honest boundary:** this is **test checkout surface wiring only**. It does not prove
+  Callisthenes-specific auto-provisioning, the C-5 watchdog registration, or the final C-6 live X
+  exit run. C-3 LIVE remains a later lane once the Callisthenes-specific cloud provisioner and live
+  Stripe mode are explicitly authorized. — [worker]
+
+### 2026-07-09 · [worker] C-3 correction — first-class Callisthenes TEST Payment Link
+Correction to the previous test-buy handoff: `cloud.zenod.dev/buy?tier=starter` proved the TEST
+checkout plumbing, but it was Zenod Starter plumbing, not a Callisthenes SKU. That would make the demo
+look better than the product state. Replaced it with a dedicated Callisthenes TEST Payment Link.
+
+- **Stripe TEST objects created with the deployed cloud test key; all `livemode:false`:**
+  - Product `prod_Ur1Fy2LbfikhGs` — `Callisthenes — hosted outbound identity broker (TEST)`.
+  - Price `price_1TrJDA76yJ3p1J6XMbHBRiII` — EUR 500/month.
+  - Payment Link `plink_1TrJDB76yJ3p1J6X0fV4yITR` →
+    `https://buy.stripe.com/test_dRm3co4f6ftweUgc95dwc00`.
+- **Repo changes:** `sites/callisthenes/index.html` and
+  `docs/EPIC-2.4-CALLISTHENES-DECK.html` now point at that dedicated test link and explicitly describe
+  the link as Stripe TEST / `livemode:false`.
+- **Remaining C-3 gap:** the Payment Link confirms the buy leg, but it is not yet wired through the
+  cloud webhook to provision a Callisthenes container. Next clean lane is cloud support for
+  `PRICE_CALLISTHENES` / Callisthenes product metadata → queued/provisioned Callisthenes instance →
+  watchdog target. Do not claim full C-3/C-5/C-6 until that path is tested. — [worker]
+
+### 2026-07-09 · [worker] C-3/C-5 demo fidelity pass — UI clear, webhook patch local
+Bound EpicSpine write-back for the "deliver 2.4 as far as possible" pass.
+
+- **Demo UI:** `docs/EPIC-2.4-CALLISTHENES-DECK.html` is now a 7-slide local HTML deck covering the
+  Epic 2.4 goal, hosted connect UI, user journey, backend containers, self-hosted path,
+  hosted-vs-self-hosted comparison, and exit outcome. `sites/callisthenes/index.html` exposes the same
+  Stripe TEST CTA plus a self-host CTA.
+- **Stripe TEST:** dedicated Callisthenes test link remains
+  `https://buy.stripe.com/test_dRm3co4f6ftweUgc95dwc00`; product `prod_Ur1Fy2LbfikhGs`, price
+  `price_1TrJDA76yJ3p1J6XMbHBRiII`, payment link `plink_1TrJDB76yJ3p1J6X0fV4yITR`, all
+  `livemode:false`.
+- **Cloud patch prepared in `/Users/jordi/Documents/GitHub/cloud`:** added `PRICE_CALLISTHENES`,
+  `GET /buy/callisthenes`, unit-aware `/buy` and `/create-checkout-session`, queue field `unit`, and
+  webhook behavior that queues `unit=callisthenes` without invoking the existing Zenod
+  `maybeAutoProvision` path. This is intentionally not represented as deployed until Jordi approves or
+  a cloud PR/deploy lane is opened.
+- **Verification:** local deck/page HTML parser OK, ASCII clean, browser preview OK via temporary local
+  HTTP server (7 slides, test CTA, user journey, backend containers, hosted-vs-self-hosted, no console
+  errors). Cloud webhook `npm run typecheck` OK in `services/webhook`.
+- **Blocker / ask:** a completed Callisthenes Payment Link checkout should not be treated as safe
+  end-to-end until the cloud webhook patch is deployed with `PRICE_CALLISTHENES` set to
+  `price_1TrJDA76yJ3p1J6XMbHBRiII`. Without that, the existing deployed test webhook can still see a
+  checkout and run the Zenod provisioner rather than a Callisthenes provisioner. — [worker]
+
+### 2026-07-09 · [worker] C-3/C-5 cloud callback/status lane prepared
+Jordi clarified this worker is Epic 2.4; Epic 2.3 is reference only. I reread the `epic-spine`
+skill, stayed bound to this spine, and cloned the proven 2.3 cloud funnel shape for Callisthenes
+instead of extending the Zenod workspace UI.
+
+- **Cloud callback/status:** `/success.html` now detects `unit=callisthenes` checkout sessions and
+  redirects to `/callisthenes/status?session_id=...`. That page polls
+  `/api/callisthenes/status` and visibly advances through paid -> queued -> provisioning -> running,
+  then links to the provisioned instance `/connect` page and shows the MCP endpoint.
+- **Unit-aware cloud provisioning:** `/buy/callisthenes` creates the Stripe Checkout Session with
+  `metadata.unit=callisthenes`; webhook persists `unit`, queue/provision status, payer email, and
+  fires `scripts/provision-callisthenes.mjs` when auto-provision is enabled. The old Zenod
+  provisioner path remains `unit=zenod`.
+- **New Callisthenes provisioner:** `/Users/jordi/Documents/GitHub/cloud/scripts/provision-callisthenes.mjs`
+  mirrors the 2.3 Dokploy pattern but deploys `units/callisthenes/docker-compose.callisthenes.yml`
+  at `https://c-<slug>.zenod.dev`, injects `CALLISTHENES_MCP_URL`, `CALLISTHENES_MCP_TOKEN`,
+  `CALLISTHENES_OWNER_TENANT`, OAuth2 callback env, and waits for `/connect`.
+- **Unit compose support:** `units/callisthenes/docker-compose.callisthenes.yml` now accepts the
+  provisioner-injected MCP/auth env and mounts `/data` so OAuth connection custody survives restarts.
+- **Demo surfaces updated:** the deck and landing page now point to
+  `https://cloud.zenod.dev/buy/callisthenes`, not the standalone Payment Link, because the cloud
+  Checkout Session is what can return to the status page with `session_id`.
+- **Verification:** cloud webhook `npm run typecheck` and `npm run build` pass; Callisthenes
+  provisioner `node --check` and `--dry-run` pass; Callisthenes compose YAML parses via Ruby; deck
+  and landing page parse as HTML and browser-preview cleanly with the cloud checkout CTA and no console
+  errors.
+- **Not verified / blocker:** live deploy not executed. The available Dokploy key returns 200 for
+  `project.all` but 403 for `compose.one`, so this session cannot read/update the cloud compose env or
+  redeploy `cloud.zenod.dev`. Python `pytest` is also absent locally, so the Callisthenes Python tests
+  were not rerun in this turn. — [worker]

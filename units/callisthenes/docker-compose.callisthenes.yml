@@ -18,6 +18,9 @@ networks:
   zenod-x-net:
     name: zenod-x-net
 
+volumes:
+  callisthenes-data:
+
 services:
   callisthenes:
     build:
@@ -26,10 +29,28 @@ services:
       args:
         XMCP_REF: "63d34362d88ed9f94d54ccd5ecd5bb4d12e11759"
     image: zenod-callisthenes
-    container_name: callisthenes
+    container_name: ${CALLISTHENES_CONTAINER_NAME:-callisthenes}
+    volumes:
+      - callisthenes-data:/data
     environment:
       MCP_HOST: "0.0.0.0"
       MCP_PORT: "8000"
+      CALLISTHENES_DATA_DIR: ${CALLISTHENES_DATA_DIR:-/data}
+
+      # --- Hosted provisioner handoff ---
+      # Injected by zenod-cloud. /connect displays the MCP URL/token and uses the
+      # owner tenant for connector custody.
+      CALLISTHENES_MCP_URL: ${CALLISTHENES_MCP_URL:-}
+      CALLISTHENES_MCP_TOKEN: ${CALLISTHENES_MCP_TOKEN:-}
+      CALLISTHENES_OWNER_TENANT: ${CALLISTHENES_OWNER_TENANT:-}
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
+
+      # --- X OAuth2 hosted connect flow ---
+      # The cloud provisioner sets the redirect URI to https://c-<slug>.zenod.dev/oauth/callback.
+      X_OAUTH2_CLIENT_ID: ${X_OAUTH2_CLIENT_ID:-}
+      X_OAUTH2_CLIENT_SECRET: ${X_OAUTH2_CLIENT_SECRET:-}
+      X_OAUTH2_REDIRECT_URI: ${X_OAUTH2_REDIRECT_URI:-}
+      X_OAUTH2_SCOPES: ${X_OAUTH2_SCOPES:-tweet.read tweet.write users.read offline.access}
 
       # --- X app + single-owner OAuth1 (dogfood; C-2 PIN chat-auth supersedes for hosted) ---
       X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY}
