@@ -511,3 +511,28 @@ instead of extending the Zenod workspace UI.
   `project.all` but 403 for `compose.one`, so this session cannot read/update the cloud compose env or
   redeploy `cloud.zenod.dev`. Python `pytest` is also absent locally, so the Callisthenes Python tests
   were not rerun in this turn. — [worker]
+
+### 2026-07-09 · [worker] C-3/C-5 hosted lane deployed to cloud.zenod.dev
+Follow-up to the callback/status lane: the Callisthenes hosted demo path is now deployed on the
+shared cloud service, not just prepared locally.
+
+- **Zenod demo repo:** pushed `34fce674fa89fd499b85a273644209516ad5a5ef` to `zenod-ai/zenod@main`
+  with the Callisthenes deck, landing CTA, hosted compose env support, and this spine update.
+- **Cloud repo:** pushed `153acef18c136514d1d1c6af2dd0513c4fbcc700` to `zenod-ai/cloud@main`
+  with `/buy/callisthenes`, `/success.html` callback routing, `/callisthenes/status`,
+  `/api/callisthenes/status`, unit-aware account/provision state, and
+  `scripts/provision-callisthenes.mjs`.
+- **Deploy:** updated the VPS checkout used by Dokploy, rebuilt and recreated the cloud webhook
+  container with its existing Traefik labels preserved, then set the Callisthenes test price env on
+  the deployed cloud runtime.
+- **Live verification:** `https://cloud.zenod.dev/healthz` returns OK; `GET
+  https://cloud.zenod.dev/buy/callisthenes` returns HTTP 303 to a Stripe `cs_test_...` Checkout
+  Session; `/api/callisthenes/status?session_id=<unpaid test session>` returns
+  `status:"payment_pending"` with `unit:"callisthenes"`; `/callisthenes/status?...` renders the
+  deployment progress UI with polling.
+- **Residual boundary:** the cloud env currently has the Callisthenes price and provisioner defaults,
+  but it does not yet expose X OAuth2 client credentials. A paid test checkout should therefore reach
+  the status/provisioning lane and deploy a `/connect` page, but completing the final "Connect X"
+  OAuth step still requires `X_OAUTH2_CLIENT_ID` and `X_OAUTH2_CLIENT_SECRET` to be installed for the
+  hosted Callisthenes runtime and callbacks. Python `pytest` remains unavailable locally, so Python
+  unit tests were not rerun. — [worker]
