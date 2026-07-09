@@ -6,8 +6,8 @@ import type { Settings } from "./settings.js";
 
 /**
  * The Drive half of the chat/MCP tool surface: list what the service account
- * can see in the inbox, and *enqueue* a file for transcription. The actual work —
- * download → transcribe → file → archive — runs in the background queue
+ * can see in the inbox, and *enqueue* a file for ingestion. The actual work —
+ * download → extract/transcribe → file → archive — runs in the background queue
  * (ingestQueue.ts), so a long transcription survives the user navigating away,
  * refreshing, even a redeploy. The tool returns immediately with the job id;
  * progress is watched in the Transcription panel (GET /api/ingest/jobs).
@@ -52,9 +52,9 @@ export function buildDriveTools(settings: Settings, queue: IngestQueue): DriveSo
       const name = file?.name ?? fileId;
       const job = queue.enqueue(fileId, name, hints ?? []);
       return [
-        `Queued "${name}" for transcription (job ${job.id}, status: ${job.status}).`,
-        "It downloads, transcribes audio with the configured provider, files the transcript into the vault, and archives the original — in the background.",
-        "Tell the user it's processing and that live progress is in the Transcription panel; the result lands in the vault when done.",
+        `Queued "${name}" for media/document ingestion (job ${job.id}, status: ${job.status}).`,
+        "It downloads, extracts text or visual facts for images/PDFs, transcribes audio with the configured provider, files the evidence into the vault, and archives the original — in the background.",
+        "Tell the user it's processing and that live progress is in the ingest panel; the result lands in the vault when done.",
       ].join("\n");
     },
   };

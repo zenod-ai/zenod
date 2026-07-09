@@ -2,8 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
 import type { CreateGithubIssueInput, CreateGithubIssueResult, EditGithubIssueInput, EditGithubIssueResult } from "zenod";
+import type { IngestJob } from "./ingestStore.js";
 import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
-import type { TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
+import type { MediaIngestReceipt, TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
 import type { ExecutionTicket } from "./executionQueue.js";
 import {
   formatConversationTranscript,
@@ -22,8 +23,10 @@ import {
   EDIT_GITHUB_ISSUE_SHAPE,
   EXECUTION_STATUS_SHAPE,
   GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+  GET_INGEST_RESULT_SHAPE,
   READ_LLM_TIMELINE_SHAPE,
   GET_MEMORY_SHAPE,
+  INGEST_MEMORY_SHAPE,
   SEARCH_MEMORY_SHAPE,
   V4_FIND_ISSUE_SHAPE,
   V4_EXECUTION_STATUS_SHAPE,
@@ -48,6 +51,17 @@ import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./to
 export interface TaskJobs {
   enqueue(kind: TaskJobKind, input: TaskJobInput): TaskJob;
   get(id: string): TaskJob | null;
+}
+
+export interface MediaIngestJobs {
+  enqueueAudio(input: {
+    bytesRef: string;
+    filename?: string;
+    hints?: string[];
+    contentHint?: string;
+    sourceHint?: string;
+  }): Promise<IngestJob>;
+  get(id: string): IngestJob | null;
 }
 
 export type GithubIssueEditor = (input: EditGithubIssueInput) => Promise<EditGithubIssueResult>;
@@ -274,6 +288,65 @@ function formatStoreResult(result: StoreResult): string {
   ].join("\n");
 }
 
+function ingestReceipt(job: IngestJob): Record<string, unknown> {
+  return {
+    jobId: job.id,
+    status: job.status,
+    rawArtifact: {
+      kind: "drive_file",
+      handle: job.driveFileId,
+      filename: job.fileName,
+      url: job.sourceLink,
+      archived: job.archived,
+    },
+    transcript: job.evidenceRef
+      ? {
+          evidenceRef: job.evidenceRef,
+          provider: job.transcribedBy,
+        }
+      : null,
+    pagesTouched: job.pages,
+    commitSha: job.commitSha,
+    githubUrls: job.githubUrls,
+    backlog: job.backlog,
+  };
+}
+
+function formatIngestResult(job: IngestJob): string {
+  if (job.status === "error") return `ERROR: ${job.error ?? "audio ingest failed"}`;
+  if (job.status === "interrupted") return `INTERRUPTED: ${job.error ?? job.step ?? "audio ingest was interrupted"} — retry the ingest.`;
+  if (job.status !== "done") {
+    return `Status: ${job.status}${job.step ? ` — ${job.step}` : ""}${job.progress ? ` (${job.progress}%)` : ""}.`;
+  }
+  return [
+    "Audio ingest complete.",
+    `raw artifact: ${job.driveFileId}${job.sourceLink ? ` (${job.sourceLink})` : ""}`,
+    `archived: ${job.archived ? "yes" : "no"}`,
+    `transcript evidence: ${job.evidenceRef ?? "(missing)"}`,
+    job.transcribedBy ? `transcribed by: ${job.transcribedBy}` : null,
+    `pages: ${job.pages.join(", ")}`,
+    `commit: ${job.commitSha ?? "(missing)"}`,
+    ...job.githubUrls,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
+function formatMediaIngestResult(result: MediaIngestReceipt): string {
+  return [
+    result.status === "error" ? `ERROR: ${result.code}` : "Media ingest complete.",
+    result.message,
+    `mediaType: ${result.mediaType}`,
+    `rawArtifact: ${result.rawArtifact.handle ?? "none"}`,
+    `archiveUrl: ${result.rawArtifact.archiveUrl ?? "none"}`,
+    `extraction: ${result.extraction.handle ?? "none"}`,
+    `evidence: ${result.digest.evidenceRef ?? "none"}`,
+    `pages: ${result.digest.pagesTouched.join(", ") || "none"}`,
+    `commit: ${result.digest.commitSha ?? "none"}`,
+    ...result.digest.githubUrls,
+  ].join("\n");
+}
+
 /** Human-facing text for a finished run_task job — mirrors the old reply. */
 function formatWorkResult(result: WorkResult): string {
   const lines =
@@ -312,6 +385,7 @@ export function buildMcpServer(
   // User-set display name for THIS instance (settings.instance_name). Lets a user
   // run several memories and tell them apart in their client. Empty → default.
   serverName: string = "",
+  mediaIngest?: MediaIngestJobs,
 ): McpServer {
   const server = new McpServer({ name: serverName.trim() || "zenod-mcp-server", version: VERSION });
 
@@ -695,6 +769,119 @@ export function buildMcpServer(
   );
 
   server.registerTool(
+    "ingest_memory",
+    {
+      title: "Ingest memory artifact",
+      description:
+        "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, Drive file refs, or staged transport handles that the user wants remembered. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, commit SHA, and GitHub/archive URLs. Opaque transport handles that Zenod cannot resolve fail loudly with media_ingest_processor_unavailable.",
+      inputSchema: INGEST_MEMORY_SHAPE,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ mediaType, artifactUrl, bytesRef, filename, sourceHint, contentHint, senderTimestamp, hints }) => {
+      if (!artifactUrl && !bytesRef) {
+        return {
+          content: [{ type: "text", text: "Invalid media ingest input: provide artifactUrl or bytesRef." }],
+          structuredContent: {
+            code: "invalid_input",
+            message: "ingest_memory requires either artifactUrl or bytesRef.",
+          },
+          isError: true,
+        };
+      }
+      if (mediaType === "audio" && bytesRef && mediaIngest) {
+        try {
+          const job = await mediaIngest.enqueueAudio({ bytesRef, filename, hints, contentHint, sourceHint });
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Queued audio ingest job ${job.id} (status: ${job.status}). Poll get_ingest_result with this jobId until status is done or error.`,
+              },
+            ],
+            structuredContent: { jobId: job.id, status: job.status, mediaType: "audio" },
+          };
+        } catch (err) {
+          return {
+            content: [{ type: "text", text: `ERROR: ${(err as Error).message}` }],
+            structuredContent: {
+              status: "error",
+              code: "audio_ingest_enqueue_failed",
+              message: (err as Error).message,
+            },
+            isError: true,
+          };
+        }
+      }
+      const input: TaskJobInput = {
+        mediaType,
+        ...(artifactUrl ? { artifactUrl } : {}),
+        ...(bytesRef ? { bytesRef } : {}),
+        ...(filename ? { filename } : {}),
+        ...(sourceHint ? { sourceHint } : {}),
+        ...(contentHint ? { contentHint } : {}),
+        ...(senderTimestamp ? { senderTimestamp } : {}),
+        ...(hints ? { mediaHints: hints } : {}),
+      };
+      if (taskJobs) {
+        const job = taskJobs.enqueue("media_ingest", input);
+        return enqueuedResponse(job);
+      }
+      const result: MediaIngestReceipt = {
+        status: "error",
+        code: "media_ingest_processor_unavailable",
+        message: "Media ingest queue is not configured for this embedding; wire taskJobs and the #660-#662 processors before using ingest_memory.",
+        mediaType,
+        source: {
+          ...(artifactUrl ? { artifactUrl } : {}),
+          ...(bytesRef ? { bytesRef } : {}),
+          ...(filename ? { filename } : {}),
+          ...(sourceHint ? { sourceHint } : {}),
+          ...(senderTimestamp ? { senderTimestamp } : {}),
+          ...(contentHint ? { contentHint } : {}),
+          ...(hints ? { hints } : {}),
+        },
+        rawArtifact: { handle: null, archiveUrl: null },
+        extraction: {
+          handle: null,
+          transcriptHandle: mediaType === "audio" ? null : undefined,
+          ocrHandle: mediaType === "screenshot" || mediaType === "image" ? null : undefined,
+          provider: null,
+        },
+        digest: { evidenceRef: null, pagesTouched: [], commitSha: null, githubUrls: [] },
+        nextAdapterIssues: ["https://github.com/zenod-ai/zenod/issues/660", "https://github.com/zenod-ai/zenod/issues/661", "https://github.com/zenod-ai/zenod/issues/662"],
+      };
+      return { content: [{ type: "text", text: formatMediaIngestResult(result) }], structuredContent: { ...result }, isError: true };
+    },
+  );
+
+  server.registerTool(
+    "get_ingest_result",
+    {
+      title: "Get ingest result",
+      description:
+        "Poll an ingest_memory background job. Returns queued/running progress, a terminal receipt with raw artifact handle + transcript evidence + pages + commit + URLs, or a loud structured error.",
+      inputSchema: GET_INGEST_RESULT_SHAPE,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ jobId }) => {
+      const job = mediaIngest?.get(jobId) ?? null;
+      if (!job) {
+        return {
+          content: [{ type: "text", text: `No ingest job found for id ${jobId}.` }],
+          structuredContent: { found: false, jobId },
+          isError: true,
+        };
+      }
+      const receipt = ingestReceipt(job);
+      return {
+        content: [{ type: "text", text: formatIngestResult(job) }],
+        structuredContent: { found: true, ...receipt, error: job.error },
+        isError: job.status === "error",
+      };
+    },
+  );
+
+  server.registerTool(
     "ask_brain",
     {
       title: "Ask the brain",
@@ -774,8 +961,8 @@ export function buildMcpServer(
       {
         title: "Get task result",
         description:
-          "Poll a background job started by task_brain, run_task, or store_memory, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, the plan/execution result for a run_task job, or the evidence ref + pages + commit for a store_memory job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
-        inputSchema: { jobId: z.string().min(1).describe("The jobId returned by task_brain, run_task, or store_memory") },
+          "Poll a background job started by task_brain, run_task, store_memory, or ingest_memory, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, the plan/execution result for a run_task job, the evidence ref + pages + commit for a store_memory job, or the media ingest receipt/error contract for an ingest_memory job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
+        inputSchema: { jobId: z.string().min(1).describe("The jobId returned by task_brain, run_task, store_memory, or ingest_memory") },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
       async ({ jobId }) => {
@@ -789,11 +976,13 @@ export function buildMcpServer(
         }
         const resultText =
           job.status === "done" && job.result
-            ? job.kind === "task"
-              ? formatTaskingReply(job.result as TaskingReply)
-              : job.kind === "store"
-                ? formatStoreResult(job.result as StoreResult)
-                : formatWorkResult(job.result as WorkResult)
+              ? job.kind === "task"
+                ? formatTaskingReply(job.result as TaskingReply)
+                : job.kind === "store"
+                  ? formatStoreResult(job.result as StoreResult)
+                  : job.kind === "media_ingest"
+                    ? formatMediaIngestResult(job.result as MediaIngestReceipt)
+                    : formatWorkResult(job.result as WorkResult)
             : job.status === "error"
               ? `ERROR: ${job.error ?? "unknown error"}`
               : job.status === "interrupted"
@@ -960,7 +1149,7 @@ export function buildMcpServer(
       {
         title: "Ingest a Google Drive file",
         description:
-          "Queue one Google Drive file (by ID) for background transcription: it downloads, transcribes audio with the configured provider (Groq when set, otherwise local whisper.cpp), files the transcript into the vault as evidence + meaning, commits, and archives the original — in a background worker. Returns immediately with the job id/status; it does not wait for completion. Queue one file per call.",
+          "Queue one Google Drive file (by ID) for background memory ingest: it downloads the raw artifact, extracts text/visual facts for images and PDFs, transcribes audio with the configured provider, files the extraction/transcript into the vault as evidence + meaning, commits, and archives the original — in a background worker. Unsupported media and extraction failures become loud job errors. Returns immediately with the job id/status; it does not wait for completion. Queue one file per call.",
         inputSchema: {
           fileId: z.string().min(1).describe("The Drive file ID from list_drive_files"),
           hints: z.array(z.string()).optional().describe("Optional filing hints"),

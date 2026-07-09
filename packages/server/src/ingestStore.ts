@@ -15,6 +15,7 @@ import type { BacklogDigestResult } from "zenod";
 export type IngestStatus =
   | "queued"
   | "downloading"
+  | "extracting"
   | "transcribing"
   | "filing"
   | "done"
@@ -22,8 +23,8 @@ export type IngestStatus =
   | "interrupted";
 
 /** Non-terminal states a boot-time restart should reset. */
-const ACTIVE_STATES = ["queued", "downloading", "transcribing", "filing"] as const;
-const IN_FLIGHT_STATES = ["downloading", "transcribing", "filing"] as const;
+const ACTIVE_STATES = ["queued", "downloading", "extracting", "transcribing", "filing"] as const;
+const IN_FLIGHT_STATES = ["downloading", "extracting", "transcribing", "filing"] as const;
 
 export interface IngestJob {
   id: string;
@@ -37,11 +38,15 @@ export interface IngestJob {
   step: string | null;
   error: string | null;
   evidenceRef: string | null;
+  sourceLink: string | null;
+  transcribedBy: string | null;
   pages: string[];
   commitSha: string | null;
+  githubUrls: string[];
   backlog: BacklogDigestResult | null;
   archived: boolean;
   cached: boolean;
+  extractionProvider: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -58,6 +63,7 @@ interface Row {
   evidence_ref: string | null;
   pages: string | null;
   commit_sha: string | null;
+  github_urls: string | null;
   backlog_json: string | null;
   archived: number;
   cached_body: string | null;
@@ -78,11 +84,15 @@ function rowToJob(row: Row): IngestJob {
     step: row.step,
     error: row.error,
     evidenceRef: row.evidence_ref,
+    sourceLink: row.cached_source_link,
+    transcribedBy: row.cached_provider,
     pages: JSON.parse(row.pages || "[]") as string[],
     commitSha: row.commit_sha,
+    githubUrls: JSON.parse((row as Row & { github_urls?: string | null }).github_urls || "[]") as string[],
     backlog: row.backlog_json ? (JSON.parse(row.backlog_json) as BacklogDigestResult) : null,
     archived: row.archived === 1,
     cached: row.cached_body !== null,
+    extractionProvider: row.cached_provider,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -102,6 +112,7 @@ export interface JobPatch {
   evidenceRef?: string | null;
   pages?: string[];
   commitSha?: string | null;
+  githubUrls?: string[];
   backlog?: BacklogDigestResult | null;
   archived?: boolean;
   cachedBody?: string | null;
@@ -154,6 +165,7 @@ export class IngestStore {
       `ALTER TABLE ingest_jobs ADD COLUMN cached_provider TEXT`,
       `ALTER TABLE ingest_jobs ADD COLUMN cached_source_link TEXT`,
       `ALTER TABLE ingest_jobs ADD COLUMN backlog_json TEXT`,
+      `ALTER TABLE ingest_jobs ADD COLUMN github_urls TEXT`,
     ]) {
       try {
         this.db.exec(statement);
@@ -243,6 +255,7 @@ export class IngestStore {
     if (patch.evidenceRef !== undefined) push("evidence_ref", patch.evidenceRef);
     if (patch.pages !== undefined) push("pages", JSON.stringify(patch.pages));
     if (patch.commitSha !== undefined) push("commit_sha", patch.commitSha);
+    if (patch.githubUrls !== undefined) push("github_urls", JSON.stringify(patch.githubUrls));
     if (patch.backlog !== undefined) push("backlog_json", patch.backlog ? JSON.stringify(patch.backlog) : null);
     if (patch.archived !== undefined) push("archived", patch.archived ? 1 : 0);
     if (patch.cachedBody !== undefined) push("cached_body", patch.cachedBody);

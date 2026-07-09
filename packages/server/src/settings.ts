@@ -1,8 +1,11 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { SqliteStateStore } from "zenod";
 import {
+  normalizeOptionalConfigString,
   normalizeAllowedSenders,
+  normalizeWhatsAppCloudStatus,
   parseStoredAllowedSenders,
+  normalizeWhatsAppProviderMode,
   type WhatsAppSettings,
 } from "./whatsappConfig.js";
 import {
@@ -32,6 +35,9 @@ export const SETTING_KEYS = [
   "google_oauth_client_id",
   "google_oauth_client_secret",
   "google_drive_folder_id",
+  "artifact_archive_provider",
+  "artifact_archive_local_dir",
+  "artifact_archive_drive_folder_id",
   "groq_api_key",
   "openai_long_transcription",
   "long_transcription_provider",
@@ -89,6 +95,9 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   google_oauth_client_id: "GOOGLE_OAUTH_CLIENT_ID",
   google_oauth_client_secret: "GOOGLE_OAUTH_CLIENT_SECRET",
   google_drive_folder_id: "GOOGLE_DRIVE_FOLDER_ID",
+  artifact_archive_provider: "ZENOD_ARTIFACT_ARCHIVE_PROVIDER",
+  artifact_archive_local_dir: "ZENOD_ARTIFACT_ARCHIVE_LOCAL_DIR",
+  artifact_archive_drive_folder_id: "ZENOD_ARTIFACT_ARCHIVE_DRIVE_FOLDER_ID",
   groq_api_key: "GROQ_API_KEY",
   openai_long_transcription: "ZENOD_OPENAI_LONG_TRANSCRIPTION",
   long_transcription_provider: "ZENOD_LONG_TRANSCRIPTION_PROVIDER",
@@ -349,6 +358,12 @@ export class Settings {
   whatsappSettings(): WhatsAppSettings {
     return {
       enabled: this.getRaw("whatsapp_enabled") === "true",
+      providerMode: normalizeWhatsAppProviderMode(this.getRaw("whatsapp_provider_mode")),
+      cloudProvider: normalizeOptionalConfigString(this.getRaw("whatsapp_cloud_provider")),
+      cloudWebhookUrl: normalizeOptionalConfigString(this.getRaw("whatsapp_cloud_webhook_url")),
+      cloudPhoneNumberId: normalizeOptionalConfigString(this.getRaw("whatsapp_cloud_phone_number_id")),
+      cloudStatus: normalizeWhatsAppCloudStatus(this.getRaw("whatsapp_cloud_status")),
+      testRecipient: normalizeOptionalConfigString(this.getRaw("whatsapp_test_recipient")),
       allowedSenders: parseStoredAllowedSenders(this.getRaw("whatsapp_allowed_senders")),
       groupsEnabled: this.getRaw("whatsapp_groups_enabled") === "true",
       acceptAll: this.getRaw("whatsapp_accept_all") === "true",
@@ -361,12 +376,36 @@ export class Settings {
     const current = this.whatsappSettings();
     const next: WhatsAppSettings = {
       enabled: input.enabled ?? current.enabled,
+      providerMode:
+        input.providerMode === undefined ? current.providerMode : normalizeWhatsAppProviderMode(input.providerMode),
+      cloudProvider:
+        input.cloudProvider === undefined ? current.cloudProvider : normalizeOptionalConfigString(input.cloudProvider),
+      cloudWebhookUrl:
+        input.cloudWebhookUrl === undefined
+          ? current.cloudWebhookUrl
+          : normalizeOptionalConfigString(input.cloudWebhookUrl),
+      cloudPhoneNumberId:
+        input.cloudPhoneNumberId === undefined
+          ? current.cloudPhoneNumberId
+          : normalizeOptionalConfigString(input.cloudPhoneNumberId),
+      cloudStatus:
+        input.cloudStatus === undefined ? current.cloudStatus : normalizeWhatsAppCloudStatus(input.cloudStatus),
+      testRecipient:
+        input.testRecipient === undefined
+          ? current.testRecipient
+          : normalizeOptionalConfigString(input.testRecipient),
       allowedSenders:
         input.allowedSenders === undefined ? current.allowedSenders : normalizeAllowedSenders(input.allowedSenders),
       groupsEnabled: input.groupsEnabled ?? current.groupsEnabled,
       acceptAll: input.acceptAll ?? current.acceptAll,
     };
     this.setRaw("whatsapp_enabled", next.enabled ? "true" : "false");
+    this.setRaw("whatsapp_provider_mode", next.providerMode);
+    this.setRaw("whatsapp_cloud_provider", next.cloudProvider ?? "");
+    this.setRaw("whatsapp_cloud_webhook_url", next.cloudWebhookUrl ?? "");
+    this.setRaw("whatsapp_cloud_phone_number_id", next.cloudPhoneNumberId ?? "");
+    this.setRaw("whatsapp_cloud_status", next.cloudStatus);
+    this.setRaw("whatsapp_test_recipient", next.testRecipient ?? "");
     this.setRaw("whatsapp_allowed_senders", JSON.stringify(next.allowedSenders));
     this.setRaw("whatsapp_groups_enabled", next.groupsEnabled ? "true" : "false");
     this.setRaw("whatsapp_accept_all", next.acceptAll ? "true" : "false");

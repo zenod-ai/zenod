@@ -21,6 +21,11 @@ const fakeEngine: BrainEngine = {
       ...(input.content.includes("cryptic") ? { question: "Where does this belong?" } : {}),
     };
   },
+  async describeImage(data, mimeType) {
+    expect(Buffer.from(data).toString("utf8")).toBe("fake screenshot bytes");
+    expect(mimeType).toBe("image/png");
+    return "Screenshot fact: insurance renewal date is 2026-08-15.";
+  },
   async ask(question) {
     return { text: `Answer to: ${question}`, sources: [{ path: "Areas/Insurance.md", githubUrl: "" }] };
   },
@@ -92,6 +97,8 @@ describe("MCP endpoint", () => {
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), "zenod-mcp-"));
     runtime = new Runtime(dir);
+    runtime.settings.setRaw("artifact_archive_provider", "local");
+    runtime.settings.setRaw("artifact_archive_local_dir", join(dir, "artifacts"));
     runtime.getEngine = async () => fakeEngine;
     token = runtime.settings.apiToken();
     const app = createApp(runtime);
@@ -150,15 +157,114 @@ describe("MCP endpoint", () => {
       "create_issue",
       "digest_backlog",
       "edit_github_issue",
+      "get_ingest_result",
       "get_memory",
       "get_recent_conversation_transcript",
       "get_task_result",
+      "ingest_memory",
       "read_llm_timeline",
       "run_task",
       "search_memory",
       "store_memory",
       "task_brain",
     ]);
+    await client.close();
+  });
+
+  it("ingest_memory exposes the async media seam with loud input and processor errors", async () => {
+    const client = await connect();
+
+    const bad = await client.callTool({ name: "ingest_memory", arguments: { mediaType: "audio" } });
+    expect(bad.isError).toBe(true);
+    expect(bad.structuredContent).toEqual({
+      code: "invalid_input",
+      message: "ingest_memory requires either artifactUrl or bytesRef.",
+    });
+
+    const enqueued = await client.callTool({
+      name: "ingest_memory",
+      arguments: {
+        mediaType: "screenshot",
+        bytesRef: "ring://media/screenshot-1",
+        filename: "screen.png",
+        sourceHint: "mcp fixture",
+        contentHint: "remember the renewal date visible in the screenshot",
+        senderTimestamp: "2026-07-09T12:00:00Z",
+        hints: ["insurance"],
+      },
+    });
+    const queued = enqueued.structuredContent as { jobId: string; kind: string; status: string };
+    expect(queued.jobId).toBeTruthy();
+    expect(queued.kind).toBe("media_ingest");
+    expect(queued.status).toBe("queued");
+
+    let terminal: { status: string; result: Record<string, unknown> | null } | null = null;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const poll = await client.callTool({ name: "get_task_result", arguments: { jobId: queued.jobId } });
+      const job = poll.structuredContent as { status: string; result: Record<string, unknown> | null };
+      if (job.status === "done") {
+        terminal = job;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(terminal).not.toBeNull();
+    const receipt = terminal!.result as {
+      status: string;
+      code: string;
+      mediaType: string;
+      rawArtifact: { handle: string | null; archiveUrl: string | null };
+      extraction: { handle: string | null; ocrHandle?: string | null };
+      digest: { evidenceRef: string | null; pagesTouched: string[]; commitSha: string | null; githubUrls: string[] };
+      nextAdapterIssues: string[];
+    };
+    expect(receipt.status).toBe("error");
+    expect(receipt.code).toBe("media_ingest_processor_unavailable");
+    expect(receipt.mediaType).toBe("screenshot");
+    expect(receipt.rawArtifact.handle).toMatch(/^file:\/\//);
+    expect(receipt.rawArtifact.archiveUrl).toBe(receipt.rawArtifact.handle);
+    expect(receipt.extraction).toEqual({ handle: null, ocrHandle: null, provider: null });
+    expect(receipt.digest).toEqual({ evidenceRef: null, pagesTouched: [], commitSha: null, githubUrls: [] });
+    expect(receipt.nextAdapterIssues).toEqual(
+      expect.arrayContaining([
+        "https://github.com/zenod-ai/zenod/issues/660",
+        "https://github.com/zenod-ai/zenod/issues/662",
+      ]),
+    );
+
+    await client.close();
+  });
+
+  it("ingest_memory returns archive, extraction, digest, commit, and GitHub receipts for screenshot bytes", async () => {
+    const client = await connect();
+    const receipt = await runAsyncTool(client, "ingest_memory", {
+      mediaType: "screenshot",
+      bytesRef: `data:image/png;base64,${Buffer.from("fake screenshot bytes").toString("base64")}`,
+      filename: "insurance-screen.png",
+      sourceHint: "mcp fixture",
+      contentHint: "remember the visible renewal date",
+      hints: ["insurance"],
+    });
+
+    expect(receipt.status).toBe("done");
+    expect(receipt.mediaType).toBe("screenshot");
+    expect(receipt.rawArtifact).toMatchObject({
+      handle: expect.stringMatching(/^file:\/\//),
+      archiveUrl: expect.stringMatching(/^file:\/\//),
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(receipt.extraction).toMatchObject({
+      handle: expect.stringMatching(/^file:\/\//),
+      ocrHandle: expect.stringMatching(/^file:\/\//),
+      provider: "vision model",
+    });
+    expect(receipt.digest).toEqual({
+      evidenceRef: "Log/2026-06-11.md#^e-abc123",
+      pagesTouched: ["Areas/Insurance.md"],
+      commitSha: "0".repeat(40),
+      githubUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
+    });
+
     await client.close();
   });
 

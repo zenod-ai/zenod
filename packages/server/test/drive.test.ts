@@ -28,7 +28,37 @@ const FILES = [
     webViewLink: "https://drive.google.com/file/d/file-1/view",
     parents: ["folder-9"],
   },
+  {
+    id: "image-1",
+    name: "Launch metrics screenshot.png",
+    mimeType: "image/png",
+    size: "2000",
+    modifiedTime: "2026-06-12T10:05:00Z",
+    webViewLink: "https://drive.google.com/file/d/image-1/view",
+    parents: ["folder-9"],
+  },
+  {
+    id: "pdf-1",
+    name: "Axa policy.pdf",
+    mimeType: "application/pdf",
+    size: "3000",
+    modifiedTime: "2026-06-12T10:10:00Z",
+    webViewLink: "https://drive.google.com/file/d/pdf-1/view",
+    parents: ["folder-9"],
+  },
+  {
+    id: "scanned-pdf-1",
+    name: "Scanned receipt.pdf",
+    mimeType: "application/pdf",
+    size: "3000",
+    modifiedTime: "2026-06-12T10:15:00Z",
+    webViewLink: "https://drive.google.com/file/d/scanned-pdf-1/view",
+    parents: ["folder-9"],
+  },
 ];
+
+const TEXT_PDF = Buffer.from("%PDF-1.4\nBT\n/F1 12 Tf\n(Renewal date: 2026-08-15) Tj\n(Policy holder: Jordi) Tj\nET\n%%EOF");
+const SCANNED_PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<< /Type /XObject /Subtype /Image >>\nendobj\n%%EOF");
 
 async function waitFor<T>(read: () => T, done: (value: T) => boolean): Promise<T> {
   const started = Date.now();
@@ -73,18 +103,28 @@ function stubFetch(moves: string[] = []): typeof fetch {
       const q = new URL(url).searchParams.get("q") ?? "";
       return Response.json({ files: q.includes(`mimeType = '`) ? [] : FILES }); // no Archive/ yet
     }
-    if (url.includes("/drive/v3/files/file-1") && method === "PATCH") {
+    const file = FILES.find((f) => url.includes(`/drive/v3/files/${f.id}`));
+    if (file && method === "PATCH") {
       moves.push(new URL(url).searchParams.get("addParents") ?? "");
-      return Response.json({ id: "file-1" });
+      return Response.json({ id: file.id });
     }
     if (url.includes("/drive/v3/files/file-1") && url.includes("alt=media")) {
       return new Response(Buffer.from("fake-audio-bytes"));
     }
-    if (url.includes("/drive/v3/files/file-1") && url.includes("fields=parents")) {
+    if (url.includes("/drive/v3/files/image-1") && url.includes("alt=media")) {
+      return new Response(Buffer.from("fake-png-bytes"));
+    }
+    if (url.includes("/drive/v3/files/pdf-1") && url.includes("alt=media")) {
+      return new Response(TEXT_PDF);
+    }
+    if (url.includes("/drive/v3/files/scanned-pdf-1") && url.includes("alt=media")) {
+      return new Response(SCANNED_PDF);
+    }
+    if (file && url.includes("fields=parents")) {
       return Response.json({ parents: ["folder-9"] });
     }
-    if (url.includes("/drive/v3/files/file-1")) {
-      return Response.json(FILES[0]);
+    if (file) {
+      return Response.json(file);
     }
     if (url.includes("audio/transcriptions")) {
       return Response.json({ text: "remember to renew the travel insurance" });
@@ -103,8 +143,7 @@ describe("drive client", () => {
     vi.stubGlobal("fetch", stubFetch());
     const client = new DriveClient(SA_JSON);
     const files = await client.listFiles({ folderId: "folder-9" });
-    expect(files).toHaveLength(1);
-    expect(files[0]!.name).toBe("Zenod voice note.m4a");
+    expect(files.map((file) => file.name)).toContain("Zenod voice note.m4a");
     vi.unstubAllGlobals();
   });
 
@@ -307,8 +346,11 @@ describe("drive tools + API", () => {
         return {
           evidenceRef: "Log/2026-06-12.md#^e-abc123",
           pagesTouched: ["Areas/Insurance.md"],
-          commitSha: "0".repeat(40),
-          githubUrls: [],
+            commitSha: "0".repeat(40),
+          githubUrls: [
+            "https://github.com/o/r/blob/main/Log/2026-06-12.md",
+            "https://github.com/o/r/blob/main/Areas/Insurance.md",
+          ],
           backlog: {
             candidates: [
               {
@@ -342,14 +384,20 @@ describe("drive tools + API", () => {
     expect(listing).toContain("id: file-1");
 
     const report = await tools.ingestDriveFile("file-1", ["insurance"]);
-    expect(report).toContain('Queued "Zenod voice note.m4a" for transcription');
+    expect(report).toContain('Queued "Zenod voice note.m4a" for media/document ingestion');
 
     const done = await waitFor(
       () => runtime.ingestStore.recent(1)[0],
       (job) => job?.status === "done",
     );
     expect(done?.evidenceRef).toBe("Log/2026-06-12.md#^e-abc123");
+    expect(done?.sourceLink).toBe("https://drive.google.com/file/d/file-1/view");
+    expect(done?.transcribedBy).toBe("whisper.cpp large-v3-turbo");
     expect(done?.pages).toEqual(["Areas/Insurance.md"]);
+    expect(done?.githubUrls).toEqual([
+      "https://github.com/o/r/blob/main/Log/2026-06-12.md",
+      "https://github.com/o/r/blob/main/Areas/Insurance.md",
+    ]);
     expect(done?.backlog?.candidates[0]?.title).toBe("Renew travel insurance");
     expect(done?.backlog?.written[0]?.path).toBe("Backlog/renew-travel-insurance.md");
     expect(done?.archived).toBe(true);
@@ -361,6 +409,35 @@ describe("drive tools + API", () => {
     expect(stored[0]!.hints).toEqual(["insurance"]);
     expect(stored[0]!.content).toContain("remember to renew the travel insurance");
     expect(stored[0]!.content).toContain("https://drive.google.com/file/d/file-1/view");
+  });
+
+  it("returns a loud terminal error when audio transcription fails and does not fake a commit", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "you";
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
+
+    const stored: StoreInput[] = [];
+    const fakeEngine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        throw new Error("store should not be called after transcription failure");
+      },
+    } as unknown as BrainEngine;
+
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
+    await tools.ingestDriveFile("file-1", ["insurance"]);
+
+    const failed = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "error",
+    );
+    expect(failed?.error).toMatch(/transcription failed/i);
+    expect(failed?.commitSha).toBeNull();
+    expect(failed?.evidenceRef).toBeNull();
+    expect(failed?.githubUrls).toEqual([]);
+    expect(stored).toHaveLength(0);
   });
 
   it("uses the configured Groq key for Drive audio ingestion", async () => {
@@ -395,6 +472,122 @@ describe("drive tools + API", () => {
 
     expect(stored).toHaveLength(1);
     expect(stored[0]!.content).toContain("Transcribed by groq whisper-large-v3-turbo.");
+  });
+
+  it("ingests an image: vision extraction, vault evidence, commit receipt, and Drive archive", async () => {
+    const moves: string[] = [];
+    vi.stubGlobal("fetch", stubFetch(moves));
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
+
+    const stored: StoreInput[] = [];
+    const fakeEngine = {
+      async describeImage(data: Uint8Array, mimeType: string, prompt?: string) {
+        expect(Buffer.from(data).toString("utf8")).toBe("fake-png-bytes");
+        expect(mimeType).toBe("image/png");
+        expect(prompt).toContain("visible text");
+        return "Screenshot fact: launch revenue is EUR 500 and owner is Jordi.";
+      },
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-06-12.md#^e-img123",
+          pagesTouched: ["Projects/Launch.md"],
+          commitSha: "1".repeat(40),
+          githubUrls: ["https://github.com/owner/vault/blob/111/Projects/Launch.md"],
+        };
+      },
+    } as unknown as BrainEngine;
+
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
+
+    const report = await tools.ingestDriveFile("image-1", ["launch"]);
+    expect(report).toContain('Queued "Launch metrics screenshot.png" for media/document ingestion');
+
+    const done = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "done",
+    );
+    expect(done?.evidenceRef).toBe("Log/2026-06-12.md#^e-img123");
+    expect(done?.pages).toEqual(["Projects/Launch.md"]);
+    expect(done?.commitSha).toBe("1".repeat(40));
+    expect(done?.archived).toBe(true);
+    expect(done?.cached).toBe(true);
+    expect(done?.extractionProvider).toBe("vision model");
+    expect(done?.sourceLink).toBe("https://drive.google.com/file/d/image-1/view");
+    expect(moves).toEqual(["archive-folder-1"]);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.source).toBe("drive");
+    expect(stored[0]!.verbatim).toBe(true);
+    expect(stored[0]!.hints).toEqual(["launch"]);
+    expect(stored[0]!.content).toContain('Media artifact "Launch metrics screenshot.png" ingested from Google Drive.');
+    expect(stored[0]!.content).toContain("Original: https://drive.google.com/file/d/image-1/view");
+    expect(stored[0]!.content).toContain("Extracted by vision model.");
+    expect(stored[0]!.content).toContain("launch revenue is EUR 500");
+  });
+
+  it("ingests an embedded-text PDF through the same evidence and archive path", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
+
+    const stored: StoreInput[] = [];
+    const fakeEngine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-06-12.md#^e-pdf123",
+          pagesTouched: ["Areas/Insurance.md"],
+          commitSha: "2".repeat(40),
+          githubUrls: ["https://github.com/owner/vault/blob/222/Areas/Insurance.md"],
+        };
+      },
+    } as unknown as BrainEngine;
+
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
+
+    await tools.ingestDriveFile("pdf-1", ["insurance"]);
+    const done = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "done",
+    );
+    expect(done?.evidenceRef).toBe("Log/2026-06-12.md#^e-pdf123");
+    expect(done?.pages).toEqual(["Areas/Insurance.md"]);
+    expect(done?.commitSha).toBe("2".repeat(40));
+    expect(done?.extractionProvider).toBe("embedded PDF text");
+    expect(done?.sourceLink).toBe("https://drive.google.com/file/d/pdf-1/view");
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.content).toContain('Media artifact "Axa policy.pdf" ingested from Google Drive.');
+    expect(stored[0]!.content).toContain("Extracted by embedded PDF text.");
+    expect(stored[0]!.content).toContain("Renewal date: 2026-08-15");
+    expect(stored[0]!.content).toContain("Policy holder: Jordi");
+  });
+
+  it("fails loudly for scanned PDFs when OCR/vision extraction cannot read text", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
+
+    const fakeEngine = {
+      async store() {
+        throw new Error("store should not run after extraction failure");
+      },
+    } as unknown as BrainEngine;
+
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
+
+    await tools.ingestDriveFile("scanned-pdf-1", ["receipts"]);
+    const failed = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "error",
+    );
+    expect(failed?.error).toContain("PDF extraction failed");
+    expect(failed?.error).toContain("scanned PDFs need OCR/vision extraction configured");
+    expect(failed?.evidenceRef).toBeNull();
+    expect(failed?.commitSha).toBeNull();
   });
 
   it("retries filing from the cached transcript without transcribing again", async () => {

@@ -17,7 +17,7 @@ import type { StoreResult, TaskingReply, WorkResult } from "zenod";
  * marks in-flight jobs "interrupted" (not stuck "running") so they're visible.
  */
 
-export type TaskJobKind = "task" | "work" | "store";
+export type TaskJobKind = "task" | "work" | "store" | "media_ingest";
 
 export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupted";
 
@@ -45,9 +45,60 @@ export interface TaskJobInput {
   hints?: string[];
   /** store: force verbatim evidence recording. */
   verbatim?: boolean;
+  /** media_ingest: artifact class. */
+  mediaType?: "audio" | "screenshot" | "image" | "pdf" | "document" | "link";
+  /** media_ingest: fetchable raw artifact URL. */
+  artifactUrl?: string;
+  /** media_ingest: opaque staged-bytes reference from a transport/archive. */
+  bytesRef?: string;
+  /** media_ingest: original filename if known. */
+  filename?: string;
+  /** media_ingest: caller/source context. */
+  sourceHint?: string;
+  /** media_ingest: user filing/digest context. */
+  contentHint?: string;
+  /** media_ingest: original sender/source timestamp. */
+  senderTimestamp?: string;
+  /** media_ingest: optional filing hints. */
+  mediaHints?: string[];
 }
 
-export type TaskJobResult = TaskingReply | WorkResult | StoreResult;
+export interface MediaIngestReceipt {
+  status: "done" | "error";
+  code?: "media_ingest_processor_unavailable" | "unsupported_media_type";
+  message: string;
+  mediaType: string;
+  source: {
+    artifactUrl?: string;
+    bytesRef?: string;
+    filename?: string;
+    sourceHint?: string;
+    senderTimestamp?: string;
+    contentHint?: string;
+    hints?: string[];
+  };
+  rawArtifact: {
+    handle: string | null;
+    archiveUrl: string | null;
+    sha256?: string;
+  };
+  extraction: {
+    handle: string | null;
+    transcriptHandle?: string | null;
+    ocrHandle?: string | null;
+    archiveUrl?: string | null;
+    provider: string | null;
+  };
+  digest: {
+    evidenceRef: string | null;
+    pagesTouched: string[];
+    commitSha: string | null;
+    githubUrls: string[];
+  };
+  nextAdapterIssues?: string[];
+}
+
+export type TaskJobResult = TaskingReply | WorkResult | StoreResult | MediaIngestReceipt;
 
 export interface TaskJob {
   id: string;

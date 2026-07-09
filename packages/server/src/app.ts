@@ -35,6 +35,7 @@ import { buildMcpServer } from "./mcp.js";
 import { buildMeshGatewayServer, type ConsoleChatRequest } from "./meshGateway.js";
 import {
   driveAuthFromSettings,
+  driveClientFromSettings,
   exchangeGoogleDriveOAuthCode,
   googleDriveOAuthUrl,
   parseServiceAccount,
@@ -1650,22 +1651,55 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const body = await c.req
       .json<{
         enabled?: boolean;
+        providerMode?: "cloud" | "self_host_dev";
+        cloudProvider?: string;
+        cloudWebhookUrl?: string;
+        cloudPhoneNumberId?: string;
+        cloudStatus?: "not_configured" | "configured" | "connected" | "error";
+        testRecipient?: string;
         allowedSenders?: string[] | string;
         groupsEnabled?: boolean;
         acceptAll?: boolean;
       }>()
-      .catch(() => ({} as { enabled?: boolean; allowedSenders?: string[] | string; groupsEnabled?: boolean; acceptAll?: boolean }));
+      .catch(
+        () =>
+          ({}) as {
+            enabled?: boolean;
+            providerMode?: "cloud" | "self_host_dev";
+            cloudProvider?: string;
+            cloudWebhookUrl?: string;
+            cloudPhoneNumberId?: string;
+            cloudStatus?: "not_configured" | "configured" | "connected" | "error";
+            testRecipient?: string;
+            allowedSenders?: string[] | string;
+            groupsEnabled?: boolean;
+            acceptAll?: boolean;
+          },
+      );
     const next = settings.setWhatsAppSettings({
       ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
+      ...(body.providerMode === "cloud" || body.providerMode === "self_host_dev"
+        ? { providerMode: body.providerMode }
+        : {}),
+      ...(typeof body.cloudProvider === "string" ? { cloudProvider: body.cloudProvider } : {}),
+      ...(typeof body.cloudWebhookUrl === "string" ? { cloudWebhookUrl: body.cloudWebhookUrl } : {}),
+      ...(typeof body.cloudPhoneNumberId === "string" ? { cloudPhoneNumberId: body.cloudPhoneNumberId } : {}),
+      ...(body.cloudStatus === "not_configured" ||
+      body.cloudStatus === "configured" ||
+      body.cloudStatus === "connected" ||
+      body.cloudStatus === "error"
+        ? { cloudStatus: body.cloudStatus }
+        : {}),
+      ...(typeof body.testRecipient === "string" ? { testRecipient: body.testRecipient } : {}),
       ...(body.allowedSenders !== undefined ? { allowedSenders: body.allowedSenders } : {}),
       ...(typeof body.groupsEnabled === "boolean" ? { groupsEnabled: body.groupsEnabled } : {}),
       ...(typeof body.acceptAll === "boolean" ? { acceptAll: body.acceptAll } : {}),
     });
-    if (next.enabled) {
+    if (next.enabled && next.providerMode === "self_host_dev") {
       await runtime.whatsapp.startIfEnabled();
       await runtime.whatsapp.refreshAllowedSenderAliases();
     } else {
-      await runtime.whatsapp.disconnect();
+      await runtime.whatsapp.disconnect({ keepEnabled: next.enabled });
     }
     return c.json(runtime.whatsapp.status());
   });
@@ -2195,6 +2229,20 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
             : undefined,
           (query) => runtime.usageStore.timeline(query),
           settings.get("instance_name") ?? "", // user-set display name for this memory
+          {
+            async enqueueAudio({ bytesRef, filename, hints, contentHint, sourceHint }) {
+              const client = driveClientFromSettings(settings);
+              if (!client) throw new Error("Google Drive evidence archive is not connected");
+              const file = await client.getFile(bytesRef);
+              const filingHints = [
+                ...(hints ?? []),
+                ...(contentHint ? [`content hint: ${contentHint}`] : []),
+                ...(sourceHint ? [`source: ${sourceHint}`] : []),
+              ];
+              return runtime.ingestQueue.enqueue(bytesRef, filename ?? file.name, filingHints);
+            },
+            get: (id) => runtime.ingestStore.get(id),
+          },
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

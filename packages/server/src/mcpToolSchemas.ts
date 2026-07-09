@@ -26,8 +26,29 @@ export const STORE_MEMORY_SHAPE = {
   verbatim: z.boolean().optional().describe("Force verbatim evidence recording (exact words preserved)"),
 };
 
+export const INGEST_MEMORY_SHAPE = {
+  mediaType: z
+    .enum(["audio", "screenshot", "image", "pdf", "document", "link"])
+    .describe("Artifact class. Z-10 v0 requires audio and screenshot/image; pdf/document/link are reserved by the same contract."),
+  artifactUrl: z.string().url().optional().describe("Fetchable URL for the raw artifact. The URL is treated as evidence, not as memory text."),
+  bytesRef: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Opaque reference to bytes already staged by the caller/transport, e.g. a Drive id, object-store key, or Ring media handle."),
+  filename: z.string().min(1).optional().describe("Original filename, if known."),
+  sourceHint: z.string().min(1).optional().describe("Where this came from, e.g. 'Claude upload', 'WhatsApp', 'Ring', or 'Drive'."),
+  contentHint: z.string().min(1).optional().describe("User-provided context for filing/digesting, e.g. 'remember the renewal date shown here'."),
+  senderTimestamp: z.string().min(1).optional().describe("Original sender/source timestamp, preferably ISO-8601."),
+  hints: z.array(z.string().min(1)).optional().describe("Optional filing hints for the eventual memory digest."),
+};
+
 export const GET_TASK_RESULT_SHAPE = {
   jobId: z.string().min(1).describe("The jobId returned by an async tool such as store_memory"),
+};
+
+export const GET_INGEST_RESULT_SHAPE = {
+  jobId: z.string().min(1).describe("The jobId returned by ingest_memory"),
 };
 
 export const GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE = {
