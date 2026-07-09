@@ -42,7 +42,7 @@ jobs:
         with:
           images: ghcr.io/zenod-ai/zenod
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=sha-,format=short
 
       - name: Set up Buildx
