@@ -15,6 +15,10 @@
 > watchdog registration, and success/config landing live there. Epic 2.5's hosted buyer path must
 > therefore be delivered across both repos: runtime changes in `zenod`; purchase→cloud deployment
 > orchestration in `cloud`.
+> **Billing environment rule (Jordi, 2026-07-09):** all Ring Stripe TEST checkout/provisioning
+> drills move to `cloud-test.zenod.dev` with `STRIPE_MODE=test`; production customers use
+> `cloud.zenod.dev` with `STRIPE_MODE=live`. Do not keep using `cloud.zenod.dev` as the test
+> checkout surface once `cloud-test` is bound. Canonical decision: Epic 2 D-6A and Epic 2.3 ZD-12.
 > **Active GitHub board:** #665–#672 (R-series ledger below). Dispatch work from the spine first,
 > then the issue. Every worker updates this spine with receipts; GitHub issues are executable board
 > rows, not the full project memory. — planner/EpicSpine, 2026-07-09
@@ -819,6 +823,10 @@ N-1..N-7 (order: W-I → N-1 → N-2/N-5 parallel → N-3/N-4/N-6 → N-7). Pen 
   with watchdog/meter/tokens → success landing in the Ring config UI → Phylax/channel setup → use.
   The cloud repo owns checkout/provisioning/tenant registry; the zenod repo owns the runtime that
   the provisioned tenant runs.
+- **Billing env rule:** Stripe TEST buy/provisioning for Ring should target `cloud-test.zenod.dev`
+  once it is bound; `cloud.zenod.dev` is the LIVE customer surface. Existing 2026-07-09 receipts
+  against `cloud.zenod.dev` are pre-split smoke receipts and should not be treated as the durable
+  test endpoint. See Epic 2 D-6A and Epic 2.3 ZD-12.
 
 **Issue ledger (GitHub issues are the board; this spine remains source of truth).**
 
@@ -830,14 +838,16 @@ N-1..N-7 (order: W-I → N-1 → N-2/N-5 parallel → N-3/N-4/N-6 → N-7). Pen 
 | [#668](https://github.com/zenod-ai/zenod/issues/668) | Worker | R-3 Ring cloud UI — router control surface with settings links | patch ready for tester | #665 | local patch | Ring UI has channels, connected servers, routing, inbox, billing/logs; each guy row links to its own settings | 2026-07-09 worker: `npm --workspace apps/web run build`; focused eslint passed; full lint blocked by pre-existing `KeysTab.tsx` hook lint | Capture UI screenshots after local server/API fixture is available |
 | [#669](https://github.com/zenod-ai/zenod/issues/669) | Worker | R-4 Phylax channel UI — provider, delivery log, media handoff | patch ready for tester | #665 | local patch | Channel-health screen; managed-cloud vs self-host mode; media handoff says Zenod owns ingest | 2026-07-09 worker: `npm run build -w web` passed | Tester/reviewer should run UI capture against live config |
 | [#670](https://github.com/zenod-ai/zenod/issues/670) | Worker | Epic 2.3 / 2.5 seam: Zenod first-class media ingest | patch ready for tester | Epic 2.3 planner acceptance | commits `c360f0d`, `4125f7f` | Zenod exposes media ingest/digest seam for audio/screenshots/PDFs/Drive and returns raw/extracted/digest/commit receipts | 2026-07-09 worker: `npm --prefix packages/server test -- taskJobMediaIngestArchive.test.ts`; `npm --prefix packages/server test -- mcp.test.ts -t "ingest_memory"`; `npm --prefix packages/server test -- mcp.test.ts`; `npm --prefix packages/server run build` | Live hosted audio+screenshot tenant verification remains |
-| [#671](https://github.com/zenod-ai/zenod/issues/671) | Planner/parent | R-5 cloud purchase → deployed Ring config UI | decomposed/running | #665 #666 #667 #668 | cross-repo: `zenod-ai/zenod` + `zenod-ai/cloud` | Stripe→deployment→Ring config UI with tokens, watchdog, meter, default connections | 2026-07-09 decomposed into #674-#677 after hosted/cloud boundary clarification | Coordinate child tickets until ready for tester |
-| [#674](https://github.com/zenod-ai/zenod/issues/674) | Worker | R-5A Ring hosted checkout/status in `zenod-ai/cloud` | patch ready for review | #671 | `zenod-ai/cloud` | `/buy/ring`, `unit=ring` Checkout metadata, webhook queue/account persistence, Ring status/setup landing | 2026-07-09: `npm run typecheck`; `npm run build`; Ring missing-price route check; coordinator wired compose env + autoProvision integration | Needs integration review; no live Stripe session yet |
-| [#675](https://github.com/zenod-ai/zenod/issues/675) | Worker | R-5B Ring hosted provisioner + watchdog receipts | patch ready for review | #671 #674 | `zenod-ai/cloud` + deployable runtime template in `zenod-ai/zenod` | `provision-ring.mjs`, tenant URL/config URL/token/compose/watchdog receipts, loud failure path | 2026-07-09: `node --check scripts/provision-ring.mjs`; `node scripts/provision-ring.mjs --name ringdry --dry-run`; webhook typecheck/build | Needs integration review; live Dokploy deploy not executed |
+| [#671](https://github.com/zenod-ai/zenod/issues/671) | Planner/parent | R-5 cloud purchase → deployed Ring config UI | decomposed/running | #665 #666 #667 #668 | cross-repo: `zenod-ai/zenod` + `zenod-ai/cloud` | Stripe→deployment→Ring config UI with tokens, watchdog, meter, default connections | 2026-07-09 decomposed into #674-#679 and #681 after hosted/cloud/public-site boundary clarification | Coordinate child tickets until ready for tester |
+| [#674](https://github.com/zenod-ai/zenod/issues/674) | Worker | R-5A Ring hosted checkout/status in `zenod-ai/cloud` | deployed smoke green pre-payment | #671 | `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) | `/buy/ring`, `unit=ring` Checkout metadata, webhook queue/account persistence, Ring status/setup landing | 2026-07-09: pre-split `https://cloud.zenod.dev/buy/ring` returned 303 to Stripe TEST Checkout; `/api/ring/status?session_id=cs_test_...` returned `payment_pending` for `unit=ring`; future TEST receipts should move to `cloud-test.zenod.dev` per Epic 2 D-6A / 2.3 ZD-12 | Needs completed Stripe TEST checkout receipt on `cloud-test.zenod.dev` once bound |
+| [#675](https://github.com/zenod-ai/zenod/issues/675) | Worker | R-5B Ring hosted provisioner + watchdog receipts | patch ready for review | #671 #674 | `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) | `provision-ring.mjs`, tenant URL/config URL/token/compose/watchdog receipts, loud failure path | 2026-07-09: `node --check scripts/provision-ring.mjs`; `node scripts/provision-ring.mjs --name ringdry --dry-run`; webhook typecheck/build; cloud branch deployed manually to Dokploy compose `17QoMFRgvmZ0Y2n19DINT` | Needs post-payment live provision receipt |
 | [#676](https://github.com/zenod-ai/zenod/issues/676) | Worker | R-5C hosted Ring config UI in cloud control plane | patch ready for review | #671 #674 #677 | `zenod-ai/cloud` | Buyer lands in cloud Ring config UI; Phylax/channel status; connected products with settings links; honest placeholders | 2026-07-09: cloud console build; webhook typecheck/build after `/api/console/ring` coordinator bridge | Needs integration review; authenticated screenshot pending |
 | [#677](https://github.com/zenod-ai/zenod/issues/677) | Worker | R-5D tenant runtime APIs for hosted Ring/Phylax config | patch ready for review | #666 #667 #668 #669 | `zenod-ai/zenod` | Token-gated Ring/Phylax status/config APIs for the cloud UI; no Ring-owned media ingest | 2026-07-09: `npm run test -w @zenod/server -- ringRouter.test.ts phylaxGateway.test.ts`; `npm run typecheck -w @zenod/server` | Needs integration review; managed-cloud WhatsApp provider send adapter still absent |
-| [#678](https://github.com/zenod-ai/zenod/issues/678) | Worker | R-5E Ring public hosted landing page + self-host distinction | patch ready for review | #671 #674 | `zenod-ai/zenod` public site | Public Ring page points to cloud buy route, explains hosted vs self-host, no cloud QR promise | 2026-07-09: `python3` html parser; worker Nokogiri HTML5 parse; `git diff --check`; targeted content checks | Needs integration review; cloud route deployment depends on #674 |
-| [#679](https://github.com/zenod-ai/zenod/issues/679) | Coordinator | R-5F integration branch, cloud deploy, Stripe TEST Ring smoke | running | #674 #675 #676 #677 #678 | `codex/epic25-ring-hosted` + `codex/epic25-ring-cloud` | Deployable branches/PRs; `PRICE_RING`; live cloud route and Stripe TEST smoke or exact blocker | 2026-07-09 local validation bundle passed; branches created | Prepare PRs/deploy, then hand to tester |
-| [#672](https://github.com/zenod-ai/zenod/issues/672) | Tester | R-T tester battery for Ring, Phylax, Zenod handoff, cloud deploy | draft | #666 #667 #668 #669 #670 #674 #675 #676 #677 #678 #679 | — | Fresh-evidence scoreboard; every red maps to follow-up issue | Created 2026-07-09; updated for hosted buyer flow | Dispatch after #679 produces deployed/testable candidate |
+| [#678](https://github.com/zenod-ai/zenod/issues/678) | Worker | R-5E Ring public hosted landing page + self-host distinction | patch ready for review | #671 #674 | `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) | Public Ring page points to cloud buy route, explains hosted vs self-host, no cloud QR promise | 2026-07-09: `python3` html parser; worker Nokogiri HTML5 parse; `git diff --check`; targeted content checks | Content ready; public site deployment tracked by #681 |
+| [#679](https://github.com/zenod-ai/zenod/issues/679) | Coordinator | R-5F integration branch, cloud deploy, Stripe TEST Ring smoke | red on tenant provisioning | #674 #675 #676 #677 #678 #681 | `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) + `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) | Deployable branches/PRs; `PRICE_RING`; `cloud-test` Stripe TEST smoke or exact blocker; live switch remains `cloud.zenod.dev` with `STRIPE_MODE=live` | 2026-07-09: pre-split public Ring -> Stripe TEST paid; cloud status paid+queued; tenant deployment failed with no containers | #691 owns provisioning/runtime-image blocker |
+| [#681](https://github.com/zenod-ai/zenod/issues/681) | Worker | R-5G public Ring website front door deployment | live/needs review | #678 #679 | `zenod-ai/zenod` commit `4256612` | `ring.zenod.dev` or agreed URL serves Ring page and CTA reaches hosted checkout | 2026-07-09: `https://ring.zenod.dev/` -> 200; CTA -> `https://cloud.zenod.dev/buy/ring`; checkout -> 303 Stripe TEST; route added via SSH/Traefik dynamic config | Merge `4256612` and preserve/add `ring.zenod.dev` route in Dokploy for durability |
+| [#691](https://github.com/zenod-ai/zenod/issues/691) | Worker | R-5H Ring tenant provisioning deploy + runtime image blocker | running | #679 #681 | `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) + `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) | Paid Ring checkout reaches running tenant with config URL, Phylax URL, token receipt, compose id, watchdog target | 2026-07-09: paid session `cs_test_a1Ex...`; Dokploy compose `qvxRcJxBvWqYp-AYPLS3t` created; no containers; `compose.deploy` no-op; `compose.redeploy` hung; GHCR `latest` stale vs Ring branch | Worker Bohr dispatched to recover session or return minimal infra/image-publish blocker |
+| [#672](https://github.com/zenod-ai/zenod/issues/672) | Tester | R-T tester battery for Ring, Phylax, Zenod handoff, cloud deploy | draft/blocked by #691 | #666 #667 #668 #669 #670 #674 #675 #676 #677 #678 #679 #681 #691 | — | Fresh-evidence scoreboard; every red maps to follow-up issue | Created 2026-07-09; public-start/payment green; tenant provisioning red | Dispatch after #691 produces running tenant or exact unrecoverable blocker |
 
 **Parallel dispatch plan.**
 - First worker batch completed local patches for **#666 Ring router core**, **#667 Phylax gateway**,
@@ -845,13 +855,17 @@ N-1..N-7 (order: W-I → N-1 → N-2/N-5 parallel → N-3/N-4/N-6 → N-7). Pen 
   review/integration.
 - R-5 child batch status: **#674 cloud checkout/status**, **#675 Ring provisioner/watchdog**,
   **#676 hosted Ring config UI**, **#677 tenant runtime APIs**, and **#678 public Ring landing
-  page** are patch-ready and awaiting integration/deploy review. The remaining gate to Jordi
-  testing is deployment of the cloud control-plane changes with `PRICE_RING` plus a Stripe TEST
-  checkout/provisioning smoke.
+  page** are patch-ready. The cloud buy route is now live in TEST mode, but the completed-payment
+  provisioning smoke is still pending.
 - Active integration lane: **#679**. Branches: `codex/epic25-ring-hosted` in `zenod-ai/zenod`
-  and `codex/epic25-ring-cloud` in `zenod-ai/cloud`.
-- Hold **#672 tester** until the R-5 child tickets hand back and a single integration candidate is
-  ready.
+  and `codex/epic25-ring-cloud` in `zenod-ai/cloud`; PRs are
+  [zenod #680](https://github.com/zenod-ai/zenod/pull/680) and
+  [cloud #49](https://github.com/zenod-ai/cloud/pull/49).
+- Public-front-door lane **#681** is live: `https://ring.zenod.dev/` serves the Ring page and its
+  CTA reaches Stripe TEST checkout. Durability note: the route was added through SSH/Traefik
+  dynamic config and should be preserved in Dokploy.
+- Tenant provisioning lane **#691** is active. Hold **#672 tester** until #691 recovers the paid
+  Ring session to a running tenant or returns an exact infra/runtime-image blocker.
 
 **Proposed cross-spine updates.**
 
@@ -997,8 +1011,82 @@ Local validation bundle:
   -> pass, emits Ring URL, Config URL, MCP/API token, compose, and watchdog target.
 
 Remaining before #672 tester dispatch: push/PR or otherwise deploy the cloud branch, configure
-`PRICE_RING` in the cloud environment, run a Stripe TEST checkout against
-`https://cloud.zenod.dev/buy/ring`, and capture the status/config landing receipts.
+`PRICE_RING` in the cloud-test environment, run a Stripe TEST checkout against
+`https://cloud-test.zenod.dev/buy/ring` once bound, and capture the status/config landing receipts.
+
+### 2026-07-09 · [coordinator/R-5F-R-5G] Cloud buy route live; public Ring site deployment split out
+
+PRs are open for the integrated patch set:
+- `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) from
+  `codex/epic25-ring-hosted`.
+- `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) from
+  `codex/epic25-ring-cloud`.
+
+Cloud deploy receipt: `zenod-ai/cloud` branch `codex/epic25-ring-cloud` at commit `2178215` was
+manually deployed to Dokploy compose `17QoMFRgvmZ0Y2n19DINT` after the Dokploy compose redeploy
+API left the old route live. `PRICE_RING` is configured in the VPS/cloud environment as Stripe
+TEST price `price_1TrKAF76yJ3p1J6XPWCmyDJG`.
+
+Live smoke receipts:
+- Pre-split `GET https://cloud.zenod.dev/healthz` -> HTTP 200, `{"ok":true}`.
+- Pre-split `GET https://cloud.zenod.dev/buy/ring` -> HTTP 303 to Stripe TEST Checkout (`cs_test_...`).
+- Pre-split `GET https://cloud.zenod.dev/api/ring/status?session_id=cs_test_...` -> `ok: true`,
+  `unit: "ring"`, `status: "payment_pending"`, `paid: false`, `queued: false`.
+
+Post-decision correction: future Stripe TEST Ring receipts belong on `cloud-test.zenod.dev`
+(`STRIPE_MODE=test`), while `cloud.zenod.dev` is reserved for LIVE Stripe (`STRIPE_MODE=live`).
+This follows Epic 2 D-6A and Epic 2.3 ZD-12.
+
+### 2026-07-09 · [planner/cloud-billing] Ring adopts cloud-test for Stripe TEST
+
+Cross-epic billing note folded after Jordi's decision: Ring/R-5 workers should run Stripe TEST
+checkout and disposable provisioning on `cloud-test.zenod.dev`, not the live customer Cloud host.
+`cloud.zenod.dev` remains the LIVE Stripe target. Existing smoke receipts against
+`cloud.zenod.dev` are retained as pre-split evidence only; the next #674/#679/#672 receipts should
+use `cloud-test` or record the exact binding blocker.
+
+Authority: canonical billing decision lives in Epic 2 D-6A and Epic 2.3 ZD-12; this spine consumes
+that shared hosted-control-plane rule for Ring.
+
+Updated live public-site receipt: #681 is now live/needs-review. `https://ring.zenod.dev/`
+returns 200 with the Ring page; its CTA points to `https://cloud.zenod.dev/buy/ring`, which
+returns 303 to Stripe TEST Checkout. Commit `4256612` updates `apps/site/Dockerfile` so the
+main site image can serve `/ring/index.html`; the current live route was added through
+SSH/Traefik dynamic config, so Dokploy route durability remains a review item.
+
+Remaining before #672 tester dispatch:
+- Resolve #691 so a paid Ring checkout produces a running tenant, or record the exact
+  infrastructure/runtime-image blocker.
+- Update #672 with the exact public URL, checkout session, status URL, tenant/config URL, and
+  known red items.
+
+### 2026-07-09 · [coordinator/R-5F-R-5H] Public/payment green; tenant provisioning red
+
+Additional cloud commits on `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49):
+`49c961b` adds Ring status reconciliation for paid sessions whose webhook/queue write is absent;
+`3846e58` changes the Ring provisioner from Dokploy `compose.deploy` to `compose.redeploy` per
+`docs/DOKPLOY-DEPLOY.md`.
+
+End-to-end smoke on the pre-split TEST cloud route:
+- Public page: `GET https://ring.zenod.dev/` -> HTTP 200.
+- Buy route: `GET https://cloud.zenod.dev/buy/ring` -> HTTP 303 to Stripe TEST Checkout.
+- Completed Stripe TEST checkout: `cs_test_a1ExWtiUgXZ2KcoPaCtEhC8R8bYTYyWy1mUFJ3x45z7MeiEdSnKK8uIw3s`,
+  synthetic email `ring-test-20260709@zenod.dev`.
+- Cloud status after reconciliation: paid true, queued true, then failed with a recoverable
+  provisioning error.
+
+Provisioning blocker isolated into
+[#691](https://github.com/zenod-ai/zenod/issues/691): the Ring provisioner created Dokploy compose
+`qvxRcJxBvWqYp-AYPLS3t` / appName `compose-parse-mobile-port-nz5tru` for
+`r-ringtest20260709-8uiw3s.zenod.dev`, but no tenant containers were created. `compose.deploy`
+returned 200/no-op; `compose.redeploy` hung and still left composeStatus `idle`. A second blocker
+must also be resolved before "ready to test use/config": the tenant template pulls
+`ghcr.io/zenod-ai/zenod:latest`, while the Epic 2.5 Ring runtime/API/UI changes live on
+`zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) and need a published
+Ring-capable image/tag or merge.
+
+Worker Bohr (`019f47c4-4ec4-7b02-b3c2-54723c9d66aa`) is dispatched on #691. Tester #672 remains
+draft/blocked until #691 returns a running tenant or exact unrecoverable blocker.
 
 ### 2026-07-09 · [worker/R-3] #668 Ring cloud UI control surface patch ready
 
