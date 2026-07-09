@@ -813,3 +813,6 @@ bad credential or webhook requirement.
   masked suffixes, one transient `pin` input, zero Access Token inputs, no raw provider XML, and no
   horizontal overflow at 1280px or 390px. The current human gate is the one-time X PIN followed by
   the first approved post. — [worker]
+- **Integration receipt:** implementation commit `98f418b`; PR
+  [#700](https://github.com/zenod-ai/zenod/pull/700); CI run
+  [29051077445](https://github.com/zenod-ai/zenod/actions/runs/29051077445) passed in 2m6s. — [worker]
