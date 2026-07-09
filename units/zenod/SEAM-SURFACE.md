@@ -86,37 +86,35 @@ PDF/document, link, or a staged transport reference from Ring/Drive/object stora
 - **Terminal receipt shape:** on terminal poll, `result` carries the media contract:
   ```jsonc
   {
-    "status": "error",                  // until #660-#662 processors are wired
-    "code": "media_ingest_processor_unavailable",
-    "message": "...",
+    "status": "done",
+    "message": "Media artifact archived, extracted, digested, filed, and committed.",
     "mediaType": "screenshot",
     "source": { "artifactUrl": "https://...", "filename": "screen.png" },
     "rawArtifact": {
-      "handle": null,                   // e.g. drive://... or local-artifact://...
-      "archiveUrl": null
+      "handle": "file:///.../screen.png",   // or drive://file/<id>
+      "archiveUrl": "file:///.../screen.png",
+      "sha256": "..."
     },
     "extraction": {
-      "handle": null,                   // transcript/OCR/vision evidence handle
-      "transcriptHandle": null,         // audio when applicable
-      "ocrHandle": null,                // screenshot/image when applicable
-      "provider": null
+      "handle": "file:///.../screen.extraction.txt",
+      "transcriptHandle": null,         // audio uses the transcript archive handle
+      "ocrHandle": "file:///.../screen.extraction.txt",
+      "archiveUrl": "file:///.../screen.extraction.txt",
+      "provider": "vision model"
     },
     "digest": {
-      "evidenceRef": null,
-      "pagesTouched": [],
-      "commitSha": null,
-      "githubUrls": []
-    },
-    "nextAdapterIssues": [
-      "https://github.com/zenod-ai/zenod/issues/660",
-      "https://github.com/zenod-ai/zenod/issues/661",
-      "https://github.com/zenod-ai/zenod/issues/662"
-    ]
+      "evidenceRef": "Log/2026-07-09.md#^e-...",
+      "pagesTouched": ["Areas/Insurance.md"],
+      "commitSha": "...",
+      "githubUrls": ["https://github.com/..."]
+    }
   }
   ```
-  This is deliberately loud: Z-10A defines the public async contract, but it does not fake
-  raw archive, transcription/OCR, or digest success. #660-#662 replace the null fields with
-  real handles and commit receipts.
+  Resolvable bytes (`artifactUrl`, `data:` refs, and configured Drive refs such as
+  `drive://file/<id>`) run the full pipeline: raw archive first, transcription/OCR/extraction
+  archive second, then digest/file/commit. Opaque transport handles that Zenod cannot resolve
+  are still archived as references and return a loud `media_ingest_processor_unavailable`
+  receipt rather than a success-shaped fake.
 
 Existing Google Drive folder intake (`list_drive_files` / `ingest_drive_file`) remains an
 optional configured source tool. `ingest_memory` is the generic public contract for plain MCP

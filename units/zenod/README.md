@@ -141,9 +141,15 @@ Open the `githubUrls` link — the memory is a committed file in **your** repo.
 
 // tools/call get_task_result
 { "jobId": "..." }
-// -> Z-10A seam receipt today: a loud media_ingest_processor_unavailable result
-//    with the required rawArtifact / extraction / digest fields present.
-//    #660-#662 wire those fields to real archive, transcript/OCR, and commit receipts.
+// -> when done, result includes:
+// {
+//   status: "done",
+//   rawArtifact: { handle, archiveUrl, sha256 },
+//   extraction: { handle, ocrHandle, transcriptHandle, archiveUrl, provider },
+//   digest: { evidenceRef, pagesTouched, commitSha, githubUrls }
+// }
+// Opaque handles that Zenod cannot resolve still return a loud
+// media_ingest_processor_unavailable receipt instead of fake success.
 ```
 
 **Search** (read, fast, no LLM):
@@ -175,10 +181,9 @@ synthesized answer with cited sources.
   `tools/call` is all a caller needs to know. See [../../docs/SEAM-SPEC.md](../../docs/SEAM-SPEC.md).
 - **Every write returns a receipt.** `store_memory` gives you a `commitSha` + GitHub
   URL (via `get_task_result`). `ingest_memory` gives an async media receipt with
-  raw artifact, extraction/transcript, digest, commit, and archive fields; until the
-  #660-#662 processors are wired, those fields are present with a loud
-  `media_ingest_processor_unavailable` status. A read returns data or an explicit
-  "none". No silent acks; failures error loudly with `{ code, message }`.
+  raw artifact, extraction/transcript archive, digest, commit, and archive fields.
+  A read returns data or an explicit "none". No silent acks; failures error loudly
+  with `{ code, message }`.
 - **Only Zenod holds your repo token.** It is supplied to this one box (env or
   `/api/provision`) and read in exactly one place internally. Nothing else in the
   suite can write your repo. Any write attempt down another path fails loudly.

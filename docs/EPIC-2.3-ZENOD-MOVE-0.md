@@ -157,6 +157,7 @@ relitigate decided items without new evidence.
 | [#662](https://github.com/zenod-ai/zenod/issues/662) | Z-10D · Screenshot/image/PDF ingest | integrated locally · tests green | worker | consumes #659/#660 receipt/archive shapes | Raw image/PDF archive, vision/PDF extraction, digest receipts wired; scanned/no-text PDFs fail loudly |
 | [#663](https://github.com/zenod-ai/zenod/issues/663) | Z-10E · Hosted memory UI | integrated locally · cloud builds green | worker | uses honest cloud placeholders until tenant status APIs are deployed | Cloud UI controls for Drive/archive, transcription, extraction, ingest receipts, retention |
 | [#664](https://github.com/zenod-ai/zenod/issues/664) | Final validation scorecard | ready for tester dispatch | tester | after integration commit/deploy candidate | Stranger/customer funnel, text+media memory, dashboard, watchdog, restore, log trace |
+| [#670](https://github.com/zenod-ai/zenod/issues/670) | Cross-spine Zenod media ingest seam | patch ready for tester | worker | reconciles #659-#662 outputs; Epic 2.5 routes only | Public `ingest_memory` seam handles audio, screenshots/images, PDFs, and Drive/data/URL refs with raw/extraction/digest/commit receipts |
 
 Dispatch receipts, 2026-07-09:
 - #659 -> worker `Heisenberg` (`019f4751-cf2f-7582-88bd-5eccbfbaa044`)
@@ -1692,3 +1693,47 @@ Residual risks / next owners:
 - Real Google Drive OAuth/archive connection, STT provider config, extraction provider config, queue health,
   and retention writes remain backend follow-ups; this pass deliberately marks them configure/unavailable
   rather than pretending they are connected.
+
+### 2026-07-09 · [worker/#670] HANDBACK — public Zenod media ingest seam reconciled for Ring handoff
+
+Scope honored: Zenod media ingest seam only. No Ring router or Phylax gateway code edited. This worker built on the
+parallel #659-#663 outputs already present in the working tree rather than reverting or replacing them.
+
+Implemented / advanced:
+- Generic MCP `ingest_memory` / `media_ingest` jobs now run the real Zenod evidence-to-memory pipeline for
+  resolvable media bytes: raw artifact archive -> audio transcription or screenshot/image/PDF/text extraction ->
+  extracted transcript/text archive -> `engine.store` digest/filing -> terminal `MediaIngestReceipt` with raw
+  handle/archive URL/SHA-256, extraction/transcript handle, provider, evidence ref, pages touched, commit SHA,
+  and GitHub URLs.
+- Supported resolvers: `artifactUrl`, `data:` bytes refs, and configured Drive refs (`drive://file/<id>`,
+  `drive:<id>`, `google-drive:<id>`, `gdrive:<id>`). Google Docs refs export text through the existing Drive
+  client. Opaque transport refs such as unresolved `ring://...` handles still archive the reference and return
+  the loud `media_ingest_processor_unavailable` receipt; Ring must pass a resolvable bytes ref or a Drive ref
+  until a Ring media resolver is wired inside Zenod.
+- Audio path uses the same `transcribeAudio` provider cascade/settings as the Drive ingest queue. Screenshot/image
+  and PDF paths use `artifactExtraction.ts`; embedded-text PDFs are supported, scanned/no-text PDFs remain a loud
+  OCR follow-up.
+- `units/zenod/SEAM-SURFACE.md` and `units/zenod/README.md` now describe the real receipt shape instead of the
+  earlier stub/null-field contract.
+
+Validation receipts:
+- ✅ `npm --prefix packages/server test -- taskJobMediaIngestArchive.test.ts` — 3 passed; covers audio transcript
+  receipt, screenshot extraction receipt, and embedded-text PDF digest receipt.
+- ✅ `npm --prefix packages/server test -- mcp.test.ts -t "ingest_memory"` — 2 passed; covers invalid input,
+  unresolved opaque handle loud error, and successful screenshot `data:` ingest through the MCP seam.
+- ✅ `npm --prefix packages/server test -- mcp.test.ts` — 23 passed.
+- ✅ `npm --prefix packages/server run build` — schema bundle check + `tsc` passed.
+
+Open risks / tester targets:
+- Live hosted validation still needs a fresh `ingest_memory` audio clip and screenshot through a real tenant, then
+  `search_memory`/`ask_brain` verification against committed vault pages.
+- Real OCR for scanned PDFs is not green; current behavior is intentionally loud.
+- Ring handoff contract: Ring should route memory-bound media to Zenod by passing `artifactUrl`, `data:` bytes,
+  or a Zenod-configured Drive ref. Passing only an opaque `ring://media/...` handle remains insufficient unless
+  Zenod gets a resolver for that handle.
+
+Cross-spine update needed (read-only referenced spine):
+- `docs/EPIC-2.5-ATOMIC-UNITS.md` row #670 should move from `ready (cross-spine)` to `patch ready for tester`
+  with evidence: `taskJobMediaIngestArchive.test.ts`, `mcp.test.ts -t "ingest_memory"`, full `mcp.test.ts`, and
+  server build passed on 2026-07-09. Epic 2.5 should keep Ring/Phylax ownership unchanged: Ring routes; Phylax
+  transports; Zenod owns archive/transcription/OCR/extraction/digest/filing/receipts.
