@@ -653,3 +653,22 @@ deployment.
   callback registration. C-3T payment -> callback -> status -> tenant `/connect` is green on
   `cloud-test`; the no-human-touch provisioner path should be retested on the next checkout after
   the `compose.redeploy` fix. — [worker]
+
+### 2026-07-09 · [worker] C-3T front-door routing and Callisthenes visual fixed
+Jordi caught that `https://callisthenes.zenod.dev` was showing the Zenod Console sign-in/product page
+instead of the Callisthenes buy surface.
+
+- **Root cause:** an old crash-looping `callisthenes` container from
+  `compose-back-up-optical-transmitter-kqinqv` still had Traefik labels for
+  `callisthenes.zenod.dev`, competing with the `zenod-cloud-test` router. After removing that stale
+  container, the cloud-test checkout was still serving the Console SPA because the VPS checkout had
+  dirty/stale `services/webhook/src/server.ts` content despite `HEAD=7015d00`.
+- **Fix:** disabled/removed the stale container, reset the `zenod-cloud-test` checkout tracked files
+  to the committed cloud source while preserving `.env` and Traefik override, rebuilt with
+  `--no-cache`, and redeployed. Then `zenod-ai/cloud@ce16fcf` added a public-domain Callisthenes
+  portrait to the landing page.
+- **Verification:** `https://callisthenes.zenod.dev/?bust=pic` returns HTTP 200 with
+  `title="Callisthenes - hosted outbound identity broker"`, the Callisthenes portrait image, and
+  `https://cloud-test.zenod.dev/buy/callisthenes`; the page no longer contains the Zenod GitHub
+  sign-in surface. `https://cloud-test.zenod.dev/buy/callisthenes` returns HTTP 303 to a Stripe
+  `cs_test_...` Checkout Session. — [worker]
