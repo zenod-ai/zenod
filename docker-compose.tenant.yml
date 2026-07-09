@@ -89,6 +89,9 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Hosted Ring provisioning pins the Console bearer to the buyer's token.
       ZENOD_API_TOKEN: ${ZENOD_API_TOKEN:-}
+      # Hosted mode replaces self-host first-run with signed cloud entry tickets.
+      # Unset preserves the self-host wizard and local channel pairing controls.
+      ZENOD_HOSTED_MODE: ${ZENOD_HOSTED_MODE:-}
     expose:
       - "8080"
 

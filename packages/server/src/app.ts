@@ -8,7 +8,14 @@ import { serveStatic, type ServeStaticOptions } from "@hono/node-server/serve-st
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { conversationId, NoteNotFoundError, VERSION, type CleanSlateResult } from "zenod";
-import { clearSession, issueSession, requireAuth, requireMcpAuth } from "./auth.js";
+import {
+  clearSession,
+  hostedRingMode,
+  issueSession,
+  requireAuth,
+  requireMcpAuth,
+  verifyHostedEntryTicket,
+} from "./auth.js";
 import {
   authServerMetadata,
   handleAuthorizeDecision,
@@ -179,6 +186,7 @@ function isPhylaxChannel(value: unknown): value is PhylaxChannel {
 export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
   const app = new Hono<{ Bindings: HttpBindings }>();
   const { settings } = runtime;
+  const usedHostedEntryNonces = new Set<string>();
   const agent = options.agent ?? runtime.agent;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
 
@@ -229,6 +237,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       // agents) so the Console can display it and backfill agents enabled before
       // it tracked repos.
       repo: agent.backlog ? settings.getRaw("backlog_repo") : settings.get("vault_repo"),
+      hostedMode: hostedRingMode() ? "ring" : null,
     }),
   );
 
@@ -249,12 +258,24 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.get("/api/auth/status", (c) =>
     c.json({
-      needsSetup: !settings.hasAdminPassword(),
+      needsSetup: !hostedRingMode() && !settings.hasAdminPassword(),
       configured: settings.configured(),
+      hostedMode: hostedRingMode() ? "ring" : null,
     }),
   );
 
+  app.get("/api/auth/hosted-entry", (c) => {
+    if (!hostedRingMode()) return c.json({ error: "not found" }, 404);
+    const verified = verifyHostedEntryTicket(settings.apiToken(), c.req.query("ticket") ?? "");
+    if (!verified) return c.json({ error: "invalid or expired hosted entry" }, 401);
+    if (usedHostedEntryNonces.has(verified.nonce)) return c.json({ error: "hosted entry already used" }, 401);
+    usedHostedEntryNonces.add(verified.nonce);
+    issueSession(c, settings);
+    return c.redirect(`/#${verified.surface}`, 303);
+  });
+
   app.post("/api/auth/setup", async (c) => {
+    if (hostedRingMode()) return c.json({ error: "not found" }, 404);
     if (settings.hasAdminPassword()) return c.json({ error: "already set up" }, 403);
     const { password } = await c.req.json<{ password?: string }>();
     if (!password || password.length < 8) return c.json({ error: "password must be at least 8 characters" }, 400);
