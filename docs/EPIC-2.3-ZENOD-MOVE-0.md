@@ -1790,3 +1790,47 @@ Live media receipts:
   `Zenod owns media ingest archive extraction digest receipts`, and `Raw artifact: file:///data/artifacts`.
 - ◐ `ask_brain` proof: cited `Log/2026-07-09.md` but did not restate the exact synthetic markers, so final
   exact-answer quality remains a follow-up for retrieval/synthesis tuning, not an ingest/archive failure.
+
+### 2026-07-09 · [Epic 2.3 auth correction] cloud-test now reuses the proven production repository flow
+
+This entry supersedes any implementation note that describes customer repository authority as broad GitHub
+OAuth or proposes creating another GitHub App for `cloud-test`. Production Cloud is the authority:
+
+- **Identity:** the environment's GitHub OAuth App signs the customer in and binds the paid Stripe session to
+  their GitHub identity (`read:user user:email`). OAuth does not receive broad `repo` scope and is not retained
+  as a vault credential.
+- **Repository authority:** the one existing operator-owned GitHub App, `zenod-memory-v01a` (App id `4233611`),
+  presents GitHub's repository picker and grants Contents read/write only on the repositories the customer
+  selects. This integration is shared by live and test; it is not recreated per environment or per customer.
+- **Customer contract:** the customer only completes OAuth and GitHub's repository-selection screen. They never
+  create a GitHub App, generate a PAT, paste a token, or disclose a private key to Zenod.
+
+Root cause and repair:
+
+- `cloud-test` was missing the durable `/data/vault-app.json` configuration for the existing App, while live
+  Cloud already had it. That configuration drift, not a missing architecture, caused the broken test flow.
+- The live App configuration was copied into the test control-plane data volume without printing its private
+  key. The accidentally-created test-only App `Zenod Memory a72b` was removed.
+- GitHub Apps expose one Setup URL. The shared App now targets
+  `https://cloud-test.zenod.dev/github/setup-broker`: test-signed state/session stays on `cloud-test`; other
+  callbacks are forwarded unchanged to the existing live `/github/setup`, where live state is verified. This
+  preserves one repository integration across the two billing environments.
+- The payment-success CTA now enters OAuth directly; legacy `/claim` links redirect to OAuth, removing the two
+  visually-duplicated claim screens.
+
+Fresh `cloud-test` evidence (real browser plus real tenant, not a mocked route):
+
+- Test Checkout session `cs_test_a1u6…PTjqj` completed, GitHub OAuth returned to the test console, and the existing
+  `zenod-memory-v01a` installation (`145038075`) showed GitHub's picker. The disposable repository
+  `AlfaBlok/zenod-cloud-test-vault-4ptjqj` was selected without disturbing the existing production brain repo.
+- The test console returned with `connected=1` and displayed that repository as **Your memory repo**.
+- Tenant `jorditestzenod0000-4ptjqj` then completed `store_memory` -> task completion -> `search_memory` ->
+  `get_memory` against the selected repo. Commit
+  `4c287be20a82843042c93389b7f7d1adb25def23` wrote the receipt; search returned two hits and `get_memory`
+  contained marker `epic23-shared-app-v01a-20260709`.
+- MCP bearer rotation was verified after that write: the old bearer returned HTTP `401`, the newly persisted
+  bearer returned HTTP `200` from `tools/list`.
+
+Operational guardrail: do not create another repository GitHub App or replace this with OAuth `repo` scope.
+Diagnose future test/live failures as environment configuration or callback-routing drift against the known-good
+live design first.

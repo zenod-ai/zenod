@@ -159,14 +159,14 @@ class OAuth1PinFlow:
         self.http = http or RequestsHttpClient()
 
     # Leg 1 -------------------------------------------------------------------
-    def request_token(self) -> RequestToken:
-        """POST oauth/request_token with oauth_callback=oob (PIN flow)."""
+    def request_token(self, callback: str = "oob") -> RequestToken:
+        """POST oauth/request_token for a callback or the legacy oob PIN flow."""
         header = _auth_header(
             "POST",
             REQUEST_TOKEN_URL,
             self.consumer_key,
             self.consumer_secret,
-            extra_oauth={"oauth_callback": "oob"},
+            extra_oauth={"oauth_callback": callback or "oob"},
         )
         resp = self.http.post_form(REQUEST_TOKEN_URL, {"Authorization": header})
         if resp.status_code != 200:
