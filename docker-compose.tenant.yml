@@ -87,6 +87,8 @@ services:
       # Zero-touch model setup (I2-2, §8-safe — see &agent-env note).
       ZENOD_PROVIDER: ${ZENOD_PROVIDER:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # Hosted Ring provisioning pins the Console bearer to the buyer's token.
+      ZENOD_API_TOKEN: ${ZENOD_API_TOKEN:-}
     expose:
       - "8080"
 
