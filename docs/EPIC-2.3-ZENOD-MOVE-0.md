@@ -1362,3 +1362,67 @@ tenant `ask_brain`-cites-sources verification — **retry the tenant re-pin firs
 scratch tenant on `sha-e3daf6c`); do NOT score Z-9 live against a tenant still on `sha-4d5bcfc`.
 
 HANDBACK — pen returns to Zenod-Fable.
+
+### 2026-07-09 · [worker/final-test] Live MCP + spend + watchdog receipts on customer #1 tenant
+
+Context: Jordi clarified this is a test environment attached to a real durable brain repo; live spend
+tests and VPS/Dokploy operations are permitted during testing. Target tenant:
+`https://z-jordi-f2c7a6.zenod.dev/mcp`, bearer from `ZENOD_MCP_TOKEN`.
+
+**Z-9 live verification — ✅ GREEN on `sha-e3daf6c`.**
+- Health receipt: `GET https://z-jordi-f2c7a6.zenod.dev/api/health` -> 200 with
+  `sha=e3daf6c3952522039bdbd7022fca263404f86b10`.
+- No-bearer auth receipt: unauthenticated `POST /mcp initialize` -> HTTP 401 `{"error":"unauthorized"}`.
+- MCP `tools/list` receipt: 14 tools exposed, including `store_memory`, `search_memory`, `get_memory`,
+  `ask_brain`, `get_task_result`, `read_llm_timeline`.
+- Live store receipt: `store_memory` marker
+  `EPIC-2.3 FINAL TEST epic23-final-2026-07-09T14-19-11-722Z` -> job
+  `250c3f86-3efc-4ce2-8fab-e8db063170c4` -> done with evidence
+  `Log/2026-07-09.md#^e-bef674`, pages touched
+  `Projects/Zenod/Epic 2.3 · Zenod Move 0 Launch — 2026-07-05 Snapshot.md`, commit
+  `7bfd5dd6eaecfa344fdcf5e61896c372992baeae`, URLs:
+  `https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-09.md` and
+  `https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Zenod/Epic%202.3%20%C2%B7%20Zenod%20Move%200%20Launch%20%E2%80%94%202026-07-05%20Snapshot.md`.
+- Search/get receipt: `search_memory` for `SABLE-FINAL-23 epic23-final-2026-07-09T14-19-11-722Z`
+  returned hits in `Log/2026-07-09.md` and the Epic 2.3 project note; `get_memory` on the log path
+  returned a body containing `SABLE-FINAL-23`.
+- `ask_brain` receipt: asking for the validation code and owner returned `SABLE-FINAL-23` and owner
+  attribution, with non-empty structured `sources` pointing at the Epic 2.3 project note. This proves
+  the Z-9 source-shape fix live on the tenant.
+
+**Z-4 spend / usage evidence — ◐ tenant ledger GREEN; operator dashboard gap remains.**
+- `read_llm_timeline` over 120 minutes after the test returned 13 calls, including this run's
+  `classify`, `compose`, and `answer` operations on OpenRouter `deepseek/deepseek-chat`; newest call:
+  `operation=answer`, `inputTokens=24861`, `outputTokens=282`, `costUsd=0.005197800000000001`.
+- `cloud.zenod.dev/dashboard` without a `session_id` returns 503
+  `Operator dashboard disabled (DASHBOARD_TOKEN unset)`. This does not disprove the customer dashboard
+  (Jordi showed it logged in), but the operator-wide dashboard remains disabled in this environment.
+
+**Z-5 watchdog live drill — ✅ alert and recovery path proven; full volume-loss restore NOT executed.**
+- Dokploy receipt: target compose `zenod-jordi-f2c7a6`, composeId `xDxfVYs0_4M09naWuCl66`, status `done`,
+  domain `z-jordi-f2c7a6.zenod.dev`, env includes `ZENOD_IMAGE_TAG=sha-e3daf6c`. Finding:
+  `autoDeploy=false`, so this tenant is pinned, not auto-redeploying from main.
+- Watchdog registration receipt from `/etc/zenod-watchdog.env`: containers include
+  `zenod-jordi-f2c7a6`; health URLs include
+  `https://z-jordi-f2c7a6.zenod.dev/api/health`. Timer state: `zenod-watchdog.timer` enabled+active.
+- Baseline watchdog pass: `2026-07-09T14:21:48Z all healthy`.
+- Fault injection: repeated `docker kill zenod-jordi-f2c7a6` left the container `exited`
+  (`RestartCount=0`, restart policy `unless-stopped`) instead of forming a Docker restart-count
+  crash loop. Watchdog still caught the tenant outage through the health URL.
+- Alert receipt: `2026-07-09T14:22:19Z ALERT[page/healthhttps---z-jordi-f2c7a6-zenod-dev-api-health-]
+  Endpoint https://z-jordi-f2c7a6.zenod.dev/api/health returned 404000 (expected 200)`, followed by
+  `delivery=phylax` at `2026-07-09T14:22:20Z`.
+- Recovery receipt: `docker start zenod-jordi-f2c7a6`; public health progressed
+  `attempt=1 status=running health=404`, `attempt=2 status=running health=502`,
+  `attempt=3 status=running health=200`; forced watchdog pass at `2026-07-09T14:23:08Z all healthy`.
+- Post-recovery memory receipt: MCP `search_memory` for the same `SABLE-FINAL-23` marker returned the
+  same log/project-note hits, proving the brain repo/read path survived the tenant outage.
+- Container log-forensics receipt: `docker logs --since 2026-07-09T14:18:00Z zenod-jordi-f2c7a6`
+  contained `[task-job] 250c3f86-3efc-4ce2-8fab-e8db063170c4 done: store`, but did NOT expose the full
+  classify -> compose -> validate -> commit trace required by the exit bar. Behavior passed; log
+  granularity remains a gap.
+
+**Current honest score from this worker pass:** Z-9 live MCP/source verification GREEN; tenant ledger
+spend evidence GREEN; watchdog registration+alert+recovery GREEN; full destructive restore-from-empty
+volume not run; operator dashboard disabled without `DASHBOARD_TOKEN`; target tenant is pinned with
+`autoDeploy=false`, contrary to the expected "auto redeploy main" operating model.
