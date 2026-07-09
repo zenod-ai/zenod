@@ -385,6 +385,7 @@ function launchFanout(target, execNumber, extraEnv = {}, options = {}) {
     "--workdir", targetWorkdir, "--draft-pr", "--github-status",
     "--concurrency", String(CONCURRENCY),
   ];
+  if (options.effort) args.push("--effort", normalizeExecutionEffort(options.effort));
   const startedAt = Date.now();
   const child = spawn("zenod-fanout-codex", args, { stdio: ["ignore", fd, fd], detached: true, env: { ...process.env, ...extraEnv } });
   // Belt-and-suspenders: catch any late async spawn error so it can never become an
@@ -772,6 +773,44 @@ function dispatchedOutcome(status, prUrl) {
     return prUrl ? { kind: "outcome", outward: true, evidenceUrl: prUrl } : { kind: "outcome", outward: false, evidenceUrl: "" };
   }
   return { kind: "none" }; // queued / running / unknown — not terminal
+}
+
+function normalizeExecutionEffort(value, fallback = "medium") {
+  return value === "low" || value === "medium" || value === "high" || value === "max" ? value : fallback;
+}
+
+function selectedWorkerEngine(env = process.env) {
+  return String(env.ZENOD_WORKER_ENGINE || "claude").toLowerCase() === "codex" ? "codex" : "claude";
+}
+
+function claudeConfigHasAuth(configDir) {
+  if (!configDir) return false;
+  try {
+    const names = ["auth.json", "credentials.json", ".credentials.json", "oauth.json"];
+    return names.some((name) => existsSync(join(configDir, name)));
+  } catch {
+    return false;
+  }
+}
+
+function runnerAuthProblems({ engine = selectedWorkerEngine(), commandRunner = spawnSync, env = process.env } = {}) {
+  const problems = [];
+  const run = (cmd, args) => commandRunner(cmd, args, { encoding: "utf8", stdio: "pipe" });
+  const ghStatus = run("gh", ["auth", "status"]);
+  if (ghStatus.error || ghStatus.status !== 0) problems.push("GitHub auth missing in runner (gh auth status failed)");
+  const bin = engine === "codex" ? "codex" : "claude";
+  const version = run(bin, ["--version"]);
+  if (version.error) {
+    problems.push(`${bin} CLI missing in runner (${version.error.code || version.error.message})`);
+  } else if (engine === "codex") {
+    const status = run("codex", ["login", "status"]);
+    if (status.status !== 0 && !env.CODEX_API_KEY && !env.OPENAI_API_KEY) {
+      problems.push("Codex auth missing in runner (codex login status failed)");
+    }
+  } else if (!env.CLAUDE_CODE_OAUTH_TOKEN && !env.ANTHROPIC_API_KEY && !claudeConfigHasAuth(env.CLAUDE_CONFIG_DIR)) {
+    problems.push("Claude auth missing in runner (CLAUDE_CODE_OAUTH_TOKEN or persisted Claude auth required)");
+  }
+  return problems;
 }
 
 // Fetch the cross-provisioned lane secret from the Console (with the runner's Console
@@ -1762,7 +1801,7 @@ async function sweepHeartbeats(state, now = Date.now()) {
   }
 }
 
-function launchEphemeral(executionId, target, context, state) {
+function launchEphemeral(executionId, target, context, state, options = {}) {
   const existing = state.ephemeral?.[executionId];
   if (existing?.pid && !existing.reportedStatus) return { ok: true, duplicate: true };
   const paths = ephemeralRunPaths(executionId);
@@ -1772,6 +1811,7 @@ function launchEphemeral(executionId, target, context, state) {
   // run's history survives a redeploy and the resume path can see it.
   appendRecord(paths.journalPath, { kind: "launch", runId: executionId, attempt: (existing?.attempts ?? 0) + 1, at: new Date().toISOString() });
   const primaryEngine = String(process.env.ZENOD_WORKER_ENGINE || "codex").toLowerCase() === "claude" ? "claude" : "codex";
+  const effort = normalizeExecutionEffort(existing?.effort || options.effort || process.env.ZENOD_WORKER_EFFORT || "medium");
 
   // Run one attempt on the given engine. The prompt + report-back flow is engine-agnostic
   // (same as fanout), so a quota death on one engine can be replayed verbatim on the other.
@@ -1780,7 +1820,12 @@ function launchEphemeral(executionId, target, context, state) {
     // Reuse the fanout lane's spawn builder so both lanes agree on per-engine args.
     // (codex writes the final message to finalPath; claude's final text is recovered
     // from the events stream by reportEphemeralFinished's existing finalText handling.)
-    const spec = buildWorkerSpawn({ engine, worktree: paths.scratch, finalPath: paths.finalPath });
+    const spec = buildWorkerSpawn({
+      engine,
+      worktree: paths.scratch,
+      finalPath: paths.finalPath,
+      ...(engine === "claude" ? { effort } : { thinking: effort }),
+    });
     const child = spawn(spec.bin, spec.args, {
       cwd: paths.scratch,
       stdio: ["pipe", fd, fd],
@@ -1852,6 +1897,7 @@ function launchEphemeral(executionId, target, context, state) {
     eventsPath: paths.eventsPath,
     scratch: paths.scratch,
     engine: primaryEngine,
+    effort,
     pid: child.pid ?? null,
     launchedAt: new Date().toISOString(),
     reportedStatus: null,
@@ -1877,8 +1923,9 @@ function launchEphemeral(executionId, target, context, state) {
 
 // Launch an Epaminon-dispatched ticket: work its target work-ticket directly (no
 // central materialize — the dispatched target IS the issue).
-function launchDispatched(executionId, target, context, state) {
-  if (parseEphemeralTarget(target)) return launchEphemeral(executionId, target, context, state);
+function launchDispatched(executionId, target, context, state, options = {}) {
+  const effort = normalizeExecutionEffort(options.effort || "medium");
+  if (parseEphemeralTarget(target)) return launchEphemeral(executionId, target, context, state, { effort });
 
   const t = parseTarget(target);
   if (!t) {
@@ -1899,7 +1946,9 @@ function launchDispatched(executionId, target, context, state) {
     ZENOD_EXECUTION_CONTEXT: String(context || ""),
     ...(LANE_SECRET ? { ZENOD_EXEC_LANE_SECRET: LANE_SECRET } : {}),
     ZENOD_EPAMINON_URL: EPAMINON_URL,
+    ZENOD_WORKER_EFFORT: effort,
   }, {
+    effort,
     onEarlyExit: (note) => markDispatchedLaunchBlocked(executionId, target, note),
   });
   state.dispatched[executionId] = {
@@ -1908,6 +1957,7 @@ function launchDispatched(executionId, target, context, state) {
     target,
     executionId, // for heartbeat milestone keying
     context: String(context || ""),
+    effort,
     workdir: workdirForRepo(t.repo),
     pid: launch.pid ?? null,
     launchLogPath: launch.logPath,
@@ -1929,14 +1979,17 @@ async function reportDispatched(state) {
     if (d.reportedStatus === status) continue; // already reported this state
     let ok = false;
     let manifest = null;
+    const transcriptUrl = await uploadTranscript(executionId, d.eventsPath || d.launchLogPath);
     if (o.kind === "blocked") {
-      ok = await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: (lastComment || "").slice(0, 280) });
+      const note = `${(lastComment || "").slice(0, 280)}${transcriptUrl ? `\nFull transcript: ${transcriptUrl}` : ""}`;
+      ok = await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note });
     } else {
       manifest = deliverableManifest(d.repo, d.issueN, o.evidenceUrl || prUrl, lastComment);
       ok = await reportToEpaminon("/api/exec/outcome", {
         execution_id: executionId,
         outward: o.outward,
         ...(o.evidenceUrl ? { evidence_url: o.evidenceUrl } : {}),
+        ...(transcriptUrl ? { note: `Full transcript: ${transcriptUrl}` } : {}),
         deliverable: manifest,
       });
     }
@@ -2546,10 +2599,17 @@ async function handleRun(req, res) {
     if ((req.headers["x-lane-secret"] || "") !== secret) return void res.writeHead(401).end("unauthorized\n");
     const executionId = body.execution_id != null ? String(body.execution_id) : "";
     if (!executionId || !body.target) return void res.writeHead(400).end("execution_id and target required\n");
+    const effort = normalizeExecutionEffort(body.effort || process.env.ZENOD_WORKER_EFFORT || "medium");
+    const authProblems = runnerAuthProblems({ engine: selectedWorkerEngine(process.env), env: process.env });
+    if (authProblems.length) {
+      const note = `runner auth preflight failed: ${authProblems.join("; ")}`;
+      await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note });
+      return void res.writeHead(422).end(`${note}\n`);
+    }
     const state = loadState();
     const target = String(body.target);
     const context = String(body.context || "");
-    const result = launchDispatched(executionId, target, context, state);
+    const result = launchDispatched(executionId, target, context, state, { effort });
     if (!result.ok) {
       await reportToEpaminon("/api/exec/blocked", { execution_id: executionId, note: result.note });
     } else if (shouldNotifyOnExecutionStart(body)) {
@@ -2652,6 +2712,9 @@ export {
   earlyLaunchFailureNote,
   launchLogPath,
   shouldNotifyOnExecutionStart,
+  normalizeExecutionEffort,
+  selectedWorkerEngine,
+  runnerAuthProblems,
   formatElapsed,
   derivePhase,
   phaseSummary,

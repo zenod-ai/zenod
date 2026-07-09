@@ -127,10 +127,11 @@ FastMCP's HTTP app is Starlette-based and exposes `@mcp.custom_route(...)`.
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/connect` | GET | The one screen: connector list + MCP URL/token with copy buttons. |
-| `/connect/<id>/start` | GET | Begin OAuth2 (C-2R) → 302 to the **canonical x.com** authorize URL. |
+| `/connect` | GET | Guided X credential setup, connector list, and MCP URL/token. |
+| `/connect/<id>/start` | GET | Legacy/internal OAuth2 (C-2R) route; not shown in the hosted UI. |
 | `/oauth/callback` | GET | The OAuth2 landing: exchanges `?code&state` via C-2R, shows "connected". |
 | `/connect/<id>/token` | POST | Store a token-kind connector's value (e.g. Reddit's Composio user id). |
+| `/connect/x/config` | POST | Store four X OAuth1 sender credentials, verify `/2/users/me`, and show the bound `@handle`. |
 
 **Connectors are data, not hardcoded.** `connect_page.default_connectors()` returns `[X (oauth2),
 Reddit (token)]`; add Instagram/email as one `Connector(...)` row (or pass `connectors=` to
@@ -139,6 +140,31 @@ Reddit (token)]`; add Instagram/email as one `Connector(...)` row (or pass `conn
 **Shared engine.** `callisthenes_server.py` builds one `ChatAuth` engine and hands the same instance
 to both `auth.register(engine=...)` and `connect_page.register(engine=...)`, so a Connect-X started
 on the page completes at the page's `/oauth/callback` (shared pending PKCE state + token store).
+
+**Hosted X setup is runtime-configurable.** `/connect` links to the official X Developer Console,
+guides the owner through enabling OAuth 1.0a with **Read and write**, and presents one secret field
+for each credential the actual posting client requires:
+
+```dotenv
+X_OAUTH_CONSUMER_KEY=...
+X_OAUTH_CONSUMER_SECRET=...
+X_OAUTH_ACCESS_TOKEN=...
+X_OAUTH_ACCESS_TOKEN_SECRET=...
+```
+
+X's initial **Application Created Successfully** modal shows Consumer Key, Secret Key, and Bearer
+Token. Map Consumer Key to `X_OAUTH_CONSUMER_KEY`, map Secret Key to
+`X_OAUTH_CONSUMER_SECRET`, and do not enter the Bearer Token: it is app-only and does not identify
+the posting user. After enabling OAuth 1.0a Read and write, open **Keys and tokens** and generate the
+separate Access Token + Access Token Secret pair for the app owner's account. Credentials exposed in
+screenshots/chat must be regenerated before use.
+
+The values are stored in `/data/x-config.json` by default (`CALLISTHENES_X_CONFIG_PATH` overrides),
+chmodded best-effort to `0600`, and applied to the process immediately. Saving verifies the four
+values against X's `GET /2/users/me`; only a successful response records and displays the bound
+`@handle`. The upstream X request hook rebuilds its OAuth1 signer from current process config for
+each request, so a credential change applies without restarting the container. Secret values are
+never rendered back into the page.
 
 ### ## CLOUD SEAM (what the provisioner injects)
 
@@ -158,13 +184,11 @@ naming the env var the provisioner would set. This is the exact wiring point for
 
 ### Real-creds gap (honest)
 
-The connect page is verified live end-to-end **except the real X token exchange**: the
-authorize→callback→connected round-trip past `/oauth/callback` calls X's `/2/oauth2/token`, which
-needs a real registered X OAuth2 app (`X_OAUTH2_CLIENT_ID` + the pre-registered `redirect_uri`) and a
-real user click. Tests mock that exchange (injected `HttpClient`); the **canonical authorize URL,
-callback wiring, token storage, and loud-failure paths are proven** on the running container. Jordi
-runs the real X round-trip once an app + account are provisioned. Same for Reddit: the field stores
-the Composio user id; the actual send is C-8's `post_reddit` with a real `COMPOSIO_API_KEY`.
+Automated tests inject a verifier and never use real X credentials. Human acceptance still requires
+an owner to create/open an X app, enable OAuth 1.0a Read and write, generate the API Key/Secret plus
+Access Token/Secret, and submit them on the hosted page. The page then verifies the account identity
+with X before showing it connected. Reddit remains separate: its field stores the Composio user id;
+the actual send is C-8's `post_reddit` with a real `COMPOSIO_API_KEY`.
 
 ## Upgrading the pin
 

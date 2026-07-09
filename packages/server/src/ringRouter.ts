@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-export type RingRouteReason = "named" | "memory_write" | "memory_read" | "media_ingest" | "default";
+export type RingRouteReason = "named" | "memory_write" | "memory_read" | "media_ingest" | "execution_task" | "default";
 export type RingRouteStatus = "ok" | "error" | "refused";
 export type RingRelayPolicy = "same_channel" | "silent";
 
@@ -9,6 +9,7 @@ export interface RingConnectedServerTools {
   askMemory?: string;
   storeMemory?: string;
   ingestMemory?: string;
+  runTask?: string;
 }
 
 export interface RingConnectedServer {
@@ -186,6 +187,10 @@ function memoryTool(server: RingConnectedServer, reason: RingRouteReason): strin
   return server.tools?.askMemory ?? "ask_brain";
 }
 
+function executionTool(server: RingConnectedServer): string {
+  return server.tools?.runTask ?? "epaminon.run_task";
+}
+
 function buildMediaArguments(input: RingInboundMessage, media: RingMediaHandle): Record<string, unknown> {
   return {
     mediaType: media.mediaType,
@@ -199,11 +204,53 @@ function buildMediaArguments(input: RingInboundMessage, media: RingMediaHandle):
   };
 }
 
-function buildArguments(input: RingInboundMessage, payload: string, reason: RingRouteReason, media?: RingMediaHandle): Record<string, unknown> {
+function effortFromText(text: string): "low" | "medium" | "high" | "max" | undefined {
+  const match = text.match(/\beffort\s*[:=]?\s*(low|medium|high|max)\b/i) ?? text.match(/\b(low|medium|high|max)\s+effort\b/i);
+  const value = match?.[1]?.toLowerCase();
+  return value === "low" || value === "medium" || value === "high" || value === "max" ? value : undefined;
+}
+
+function repoFromText(text: string): string | undefined {
+  return text.match(/\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\b/)?.[1];
+}
+
+function outputTargetFromText(text: string): string | undefined {
+  return text.match(/\b(?:output|artifact)\s+target\s*[:=]\s*([^\n]+)/i)?.[1]?.trim().replace(/[.;]\s*$/, "");
+}
+
+function originInstruction(input: RingInboundMessage, mailboxEntry: RingMailboxEntry): string {
+  return [
+    `Origin: Ring ${input.channel} chat ${input.chatId}`,
+    input.messageId ? `provider message ${input.messageId}` : "",
+    `ring mailbox ${mailboxEntry.id}`,
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+function buildArguments(
+  input: RingInboundMessage,
+  mailboxEntry: RingMailboxEntry,
+  payload: string,
+  reason: RingRouteReason,
+  media?: RingMediaHandle,
+): Record<string, unknown> {
   if (reason === "media_ingest" && media) return buildMediaArguments(input, media);
   if (reason === "memory_write") return { content: payload, verbatim: true };
   if (reason === "memory_read") return { question: payload };
-  return { message: payload, conversationKey: `${input.channel}:${input.chatId}` };
+  if (reason === "execution_task") {
+    const effort = effortFromText(payload);
+    const repo = repoFromText(payload);
+    const outputTarget = outputTargetFromText(payload);
+    return {
+      prompt: payload,
+      ...(effort ? { effort } : {}),
+      ...(repo ? { repo } : {}),
+      ...(outputTarget ? { outputTarget } : {}),
+      instructions: originInstruction(input, mailboxEntry),
+    };
+  }
+  return { message: payload, conversationKey: `${input.channel}:${input.chatId}`, origin_ticket_id: mailboxEntry.id };
 }
 
 export class RingRouterCore {
@@ -253,7 +300,7 @@ export class RingRouterCore {
       );
     }
 
-    const args = buildArguments(input, route.payload, route.reason, route.media);
+    const args = buildArguments(input, mailboxEntry, route.payload, route.reason, route.media);
     const toolCall = { server: route.server, tool: route.tool, arguments: args };
     const result = await this.callMcp(toolCall).catch((err: unknown): RingToolResult => {
       const message = err instanceof Error ? err.message : String(err);
@@ -299,6 +346,14 @@ export class RingRouterCore {
     const named = findNamedRoute(text, this.config.servers);
     if (named) {
       const reason = this.memoryReason(named.server, named.payload, media) ?? "named";
+      if (reason === "named" && this.isEpaminon(named.server) && this.isExecutionTask(named.payload)) {
+        return {
+          server: named.server,
+          reason: "execution_task",
+          payload: named.payload,
+          tool: executionTool(named.server),
+        };
+      }
       return {
         server: named.server,
         reason,
@@ -342,6 +397,14 @@ export class RingRouterCore {
 
   private isZenod(server: RingConnectedServer): boolean {
     return this.config.zenodServerId ? server.id === this.config.zenodServerId : serverMatches(server, "zenod");
+  }
+
+  private isEpaminon(server: RingConnectedServer): boolean {
+    return serverMatches(server, "epaminon");
+  }
+
+  private isExecutionTask(text: string): boolean {
+    return /\b(run|execute|dispatch|worker|codex|epaminon|research|investigate)\b/i.test(text);
   }
 
   private serverById(id: string): RingConnectedServer | null {

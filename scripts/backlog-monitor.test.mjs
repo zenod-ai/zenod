@@ -30,6 +30,9 @@ import {
   dispatchedOutcome,
   shouldReportEarlyLaunchExit,
   shouldNotifyOnExecutionStart,
+  normalizeExecutionEffort,
+  selectedWorkerEngine,
+  runnerAuthProblems,
   earlyLaunchFailureNote,
   launchLogPath,
   targetBootstrapLabels,
@@ -798,6 +801,65 @@ test("early launch failure note includes target and runner log path", () => {
     earlyLaunchFailureNote("zenod-ai/zenod", 296, 1, null, logPath),
     /fanout launcher for zenod-ai\/zenod#296 stopped immediately with exit code 1; see runner log .*296\.log/,
   );
+});
+
+test("execution effort normalizes to the runner-supported vocabulary", () => {
+  assert.equal(normalizeExecutionEffort("low"), "low");
+  assert.equal(normalizeExecutionEffort("high"), "high");
+  assert.equal(normalizeExecutionEffort("max"), "max");
+  assert.equal(normalizeExecutionEffort("xhigh"), "medium");
+  assert.equal(normalizeExecutionEffort(undefined, "low"), "low");
+});
+
+test("runner auth preflight reports missing GitHub and selected CLI auth loudly", () => {
+  const calls = [];
+  const commandRunner = (cmd, args) => {
+    calls.push([cmd, ...args]);
+    if (cmd === "gh") return { status: 1, stdout: "", stderr: "not logged in" };
+    if (cmd === "claude") return { status: 0, stdout: "1.0.0", stderr: "" };
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  const problems = runnerAuthProblems({ engine: "claude", commandRunner, env: {} });
+  assert.deepEqual(problems, [
+    "GitHub auth missing in runner (gh auth status failed)",
+    "Claude auth missing in runner (CLAUDE_CODE_OAUTH_TOKEN or persisted Claude auth required)",
+  ]);
+  assert.deepEqual(calls, [
+    ["gh", "auth", "status"],
+    ["claude", "--version"],
+  ]);
+});
+
+test("runner auth preflight checks Codex login status unless an API key is present", () => {
+  const noKey = runnerAuthProblems({
+    engine: "codex",
+    env: {},
+    commandRunner: (cmd, args) => {
+      if (cmd === "gh") return { status: 0, stdout: "", stderr: "" };
+      if (cmd === "codex" && args[0] === "--version") return { status: 0, stdout: "codex", stderr: "" };
+      if (cmd === "codex" && args[0] === "login") return { status: 1, stdout: "", stderr: "not logged in" };
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+  assert.deepEqual(noKey, ["Codex auth missing in runner (codex login status failed)"]);
+
+  const withKey = runnerAuthProblems({
+    engine: "codex",
+    env: { CODEX_API_KEY: "test" },
+    commandRunner: (cmd, args) => {
+      if (cmd === "gh") return { status: 0, stdout: "", stderr: "" };
+      if (cmd === "codex" && args[0] === "--version") return { status: 0, stdout: "codex", stderr: "" };
+      if (cmd === "codex" && args[0] === "login") return { status: 1, stdout: "", stderr: "not logged in" };
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+  assert.deepEqual(withKey, []);
+});
+
+test("selectedWorkerEngine defaults to Claude and accepts Codex override", () => {
+  assert.equal(selectedWorkerEngine({}), "claude");
+  assert.equal(selectedWorkerEngine({ ZENOD_WORKER_ENGINE: "codex" }), "codex");
+  assert.equal(selectedWorkerEngine({ ZENOD_WORKER_ENGINE: "bogus" }), "claude");
 });
 
 // --- E-2: engine quota fallback ported to the ephemeral spawn path (mirrors W0) ---

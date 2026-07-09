@@ -1,8 +1,8 @@
 diff --git a/server.py b/server.py
-index 7930e87..51ea0e6 100644
+index 7930e87..af67e33 100644
 --- a/server.py
 +++ b/server.py
-@@ -304,10 +304,22 @@ def build_oauth1_client() -> OAuth1Client:
+@@ -304,14 +304,26 @@ def build_oauth1_client() -> OAuth1Client:
      consumer_key = os.getenv("X_OAUTH_CONSUMER_KEY")
      consumer_secret = os.getenv("X_OAUTH_CONSUMER_SECRET")
      if not consumer_key or not consumer_secret:
@@ -28,3 +28,20 @@ index 7930e87..51ea0e6 100644
      if is_truthy(os.getenv("X_OAUTH_PRINT_TOKENS", "0")):
          print("OAuth1 access token:", access_token)
          print("OAuth1 access token secret:", access_secret)
+-    LOGGER.info("OAuth1 access token: %s", access_token)
++    LOGGER.info("OAuth1 access token configured: %s", bool(access_token))
+     return OAuth1Client(
+         client_key=consumer_key,
+         client_secret=consumer_secret,
+@@ -399,7 +411,8 @@ def create_mcp() -> FastMCP:
+             body_bytes = request.content or b""
+             body = body_bytes.decode("utf-8")
+-        signed_url, signed_headers, _ = oauth1_client.sign(
++        # Rebuild from current env so credentials saved by /connect apply immediately.
++        signed_url, signed_headers, _ = build_oauth1_client().sign(
+             str(request.url),
+             http_method=request.method,
+             body=body,
+             headers=headers,
+         )
+         request.url = httpx.URL(signed_url)

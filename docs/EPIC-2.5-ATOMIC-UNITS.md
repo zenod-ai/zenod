@@ -1,6 +1,8 @@
 # EPIC 2.5 · THE ATOMIC SUITE — the ring, the guys, the units
 
 > **▶ CURRENT ITERATION (EpicSpine board active, 2026-07-09).**
+> **TEST HANDOFF: READY FOR JORDI — 8/8 independent acceptance checks pass on cloud-test tenant
+> SHA `cd25678`; see #672.** Production LIVE host rebinding remains a separate human gate.
 > Final boundary from Jordi: **Epic 2.5 builds the cloud Ring router/control surface**. It is the
 > cloud version of the quasi-working deployed Console/Council experience, but configurable through
 > modular MCP servers. **Phylax is one simple channel gateway**: inbound messages go to Ring;
@@ -845,9 +847,11 @@ N-1..N-7 (order: W-I → N-1 → N-2/N-5 parallel → N-3/N-4/N-6 → N-7). Pen 
 | [#677](https://github.com/zenod-ai/zenod/issues/677) | Worker | R-5D tenant runtime APIs for hosted Ring/Phylax config | patch ready for review | #666 #667 #668 #669 | `zenod-ai/zenod` | Token-gated Ring/Phylax status/config APIs for the cloud UI; no Ring-owned media ingest | 2026-07-09: `npm run test -w @zenod/server -- ringRouter.test.ts phylaxGateway.test.ts`; `npm run typecheck -w @zenod/server` | Needs integration review; managed-cloud WhatsApp provider send adapter still absent |
 | [#678](https://github.com/zenod-ai/zenod/issues/678) | Worker | R-5E Ring public hosted landing page + self-host distinction | patch ready for review | #671 #674 | `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) | Public Ring page points to cloud buy route, explains hosted vs self-host, no cloud QR promise | 2026-07-09: `python3` html parser; worker Nokogiri HTML5 parse; `git diff --check`; targeted content checks | Content ready; public site deployment tracked by #681 |
 | [#679](https://github.com/zenod-ai/zenod/issues/679) | Coordinator | R-5F integration branch, cloud deploy, Stripe TEST Ring smoke | red on tenant provisioning | #674 #675 #676 #677 #678 #681 | `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) + `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) | Deployable branches/PRs; `PRICE_RING`; `cloud-test` Stripe TEST smoke or exact blocker; live switch remains `cloud.zenod.dev` with `STRIPE_MODE=live` | 2026-07-09: pre-split public Ring -> Stripe TEST paid; cloud status paid+queued; tenant deployment failed with no containers | #691 owns provisioning/runtime-image blocker |
-| [#681](https://github.com/zenod-ai/zenod/issues/681) | Worker | R-5G public Ring website front door deployment | live/needs review | #678 #679 | `zenod-ai/zenod` commit `4256612` | `ring.zenod.dev` or agreed URL serves Ring page and CTA reaches hosted checkout | 2026-07-09: `https://ring.zenod.dev/` -> 200; CTA -> `https://cloud.zenod.dev/buy/ring`; checkout -> 303 Stripe TEST; route added via SSH/Traefik dynamic config | Merge `4256612` and preserve/add `ring.zenod.dev` route in Dokploy for durability |
-| [#691](https://github.com/zenod-ai/zenod/issues/691) | Worker | R-5H Ring tenant provisioning deploy + runtime image blocker | running | #679 #681 | `zenod-ai/cloud` PR [#49](https://github.com/zenod-ai/cloud/pull/49) + `zenod-ai/zenod` PR [#680](https://github.com/zenod-ai/zenod/pull/680) | Paid Ring checkout reaches running tenant with config URL, Phylax URL, token receipt, compose id, watchdog target | 2026-07-09: paid session `cs_test_a1Ex...`; Dokploy compose `qvxRcJxBvWqYp-AYPLS3t` created; no containers; `compose.deploy` no-op; `compose.redeploy` hung; GHCR `latest` stale vs Ring branch | Worker Bohr dispatched to recover session or return minimal infra/image-publish blocker |
-| [#672](https://github.com/zenod-ai/zenod/issues/672) | Tester | R-T tester battery for Ring, Phylax, Zenod handoff, cloud deploy | draft/blocked by #691 | #666 #667 #668 #669 #670 #674 #675 #676 #677 #678 #679 #681 #691 | — | Fresh-evidence scoreboard; every red maps to follow-up issue | Created 2026-07-09; public-start/payment green; tenant provisioning red | Dispatch after #691 produces running tenant or exact unrecoverable blocker |
+| [#681](https://github.com/zenod-ai/zenod/issues/681) | Worker | R-5G public Ring website front door deployment | live/identity verified | #678 #679 | host-aware Nginx from PR [#696](https://github.com/zenod-ai/zenod/pull/696); Dokploy app branch `codex/epic25-ring-hosted` | `ring.zenod.dev` serves Ring page and TEST CTA reaches `cloud-test` checkout; `zenod.dev` remains Zenod | 2026-07-09 correction after Jordi screenshot: HTTP 200 had served Zenod on both hosts; stale Dokploy build context lacked Nginx host config. Rebuilt image now returns Ring title/copy/CTA on Ring host and Zenod title on Zenod host | Future tests must assert page identity and CTA, not only HTTP status |
+| [#691](https://github.com/zenod-ai/zenod/issues/691) | Worker | R-5H Ring tenant provisioning deploy + runtime image blocker | review/testing | #679 #681 | PR [#695](https://github.com/zenod-ai/zenod/pull/695) merged into PR [#680](https://github.com/zenod-ai/zenod/pull/680); immutable image `sha-7db473c` | Paid Ring checkout reaches running tenant with config URL, Phylax URL, token receipt, compose id, watchdog target | 2026-07-09: PR #680 CI green; branch publisher emitted immutable `sha-7db473c`; cloud-test paid tenant runs all six services and health SHA matches `7db473c...` | Runtime/image blocker cleared; hosted entry acceptance moved to #698 |
+| [#693](https://github.com/zenod-ai/zenod/issues/693) | Worker | R-5I move Ring TEST checkout/provisioning to `cloud-test` | review/testing | #674 #679 | cloud PR [#50](https://github.com/zenod-ai/cloud/pull/50), commit `34d26a7`; public site merged through PR [#696](https://github.com/zenod-ai/zenod/pull/696) | `cloud-test.zenod.dev` serves TEST Ring checkout/status; `cloud.zenod.dev` remains LIVE-only; public test CTA reaches cloud-test | 2026-07-09: `cloud-test` TEST checkout completed, paid/queued/running status green; public CTA green; legacy `cloud.zenod.dev` still reaches a separate TEST-configured service | Test lane accepted; production hostname needs separate LIVE service/human gate |
+| [#698](https://github.com/zenod-ai/zenod/issues/698) | Worker | R-5J hosted Ring entry bypasses Zenod self-hosted wizard | review/browser green | #691 #693 | runtime PR [#699](https://github.com/zenod-ai/zenod/pull/699) + cloud PR [#51](https://github.com/zenod-ai/cloud/pull/51), both integrated into epic branches | Paid hosted buyer lands directly on authenticated Ring/Phylax config; self-hosted first-run remains unchanged | 2026-07-09: paid tenant upgraded to SHA `cd25678`; signed one-time cloud entry opens Ring control surface; Phylax entry shows managed channels and zero QR text; runtime/cloud tests green | Final independent scoreboard in #672 |
+| [#672](https://github.com/zenod-ai/zenod/issues/672) | Tester | R-T tester battery for Ring, Phylax, Zenod handoff, cloud deploy | **fresh no-touch E2E PASS — ready for Jordi test** | #666 #667 #668 #669 #670 #674 #675 #676 #677 #678 #679 #681 #691 #693 #698 | fresh session `cs_test_a1jx...`; tenant `r-ringnotouch20260709-wl3hhm`; runtime SHA `cd25678` | Public button → Stripe TEST payment → automatic deploy → Ring settings → managed Phylax settings; every red maps to follow-up | 2026-07-09 correction after Jordi found a failed purchase: fixed first-deploy API and stale duplicate cloud-test source; repeated full journey with a new paid session and clicked both settings links | Jordi runs experiential test; keep LIVE rebinding and live-media drill as named residuals |
 
 **Parallel dispatch plan.**
 - First worker batch completed local patches for **#666 Ring router core**, **#667 Phylax gateway**,
@@ -861,11 +865,17 @@ N-1..N-7 (order: W-I → N-1 → N-2/N-5 parallel → N-3/N-4/N-6 → N-7). Pen 
   and `codex/epic25-ring-cloud` in `zenod-ai/cloud`; PRs are
   [zenod #680](https://github.com/zenod-ai/zenod/pull/680) and
   [cloud #49](https://github.com/zenod-ai/cloud/pull/49).
-- Public-front-door lane **#681** is live: `https://ring.zenod.dev/` serves the Ring page and its
-  CTA reaches Stripe TEST checkout. Durability note: the route was added through SSH/Traefik
-  dynamic config and should be preserved in Dokploy.
-- Tenant provisioning lane **#691** is active. Hold **#672 tester** until #691 recovers the paid
-  Ring session to a running tenant or returns an exact infra/runtime-image blocker.
+- Public-front-door lane **#681** regressed to nginx 404 after its ad hoc Traefik route disappeared.
+  Worker Carson owns a durable Dokploy-backed restore and the cloud-test CTA.
+- Tenant provisioning lane **#691** recovered the paid tenant; the remaining work is PR #680 CI
+  and a Ring-capable runtime image. Worker Euclid owns that isolated fix.
+- Billing-lane correction **#693** is active with worker Mill: Ring TEST acceptance moves to
+  `cloud-test.zenod.dev`; `cloud.zenod.dev` remains LIVE-only.
+- Hold **#672 tester** until #691 supplies the Ring runtime commit/image and #693 supplies the
+  cloud-test checkout receipts.
+- Browser acceptance exposed **#698**, now fixed and green on tenant SHA `cd25678`: Ring and Phylax
+  use signed one-time cloud entry links, self-host setup remains disabled only in hosted Ring mode,
+  and managed Phylax shows no QR flow. **#672 final tester is dispatched.**
 
 **Proposed cross-spine updates.**
 
@@ -1042,8 +1052,9 @@ This follows Epic 2 D-6A and Epic 2.3 ZD-12.
 Cross-epic billing note folded after Jordi's decision: Ring/R-5 workers should run Stripe TEST
 checkout and disposable provisioning on `cloud-test.zenod.dev`, not the live customer Cloud host.
 `cloud.zenod.dev` remains the LIVE Stripe target. Existing smoke receipts against
-`cloud.zenod.dev` are retained as pre-split evidence only; the next #674/#679/#672 receipts should
-use `cloud-test` or record the exact binding blocker.
+`cloud.zenod.dev` are retained as pre-split evidence only. `cloud-test.zenod.dev` is now bound and
+smoke-green: `/healthz` reports `{"ok":true,"stripe_mode":"test"}` and `/buy/ring` returns 303 to
+Stripe `cs_test_...`. The next #674/#679/#672 receipts should use `cloud-test` for paid test drills.
 
 Authority: canonical billing decision lives in Epic 2 D-6A and Epic 2.3 ZD-12; this spine consumes
 that shared hosted-control-plane rule for Ring.
@@ -1194,3 +1205,108 @@ through a real tenant, then `search_memory` / `ask_brain` citation checks. Scann
 is still a loud follow-up; embedded-text PDF is covered. Ring must pass `artifactUrl`, `data:`
 bytes, or a Zenod-configured Drive ref; bare `ring://media/...` handles still return
 `media_ingest_processor_unavailable` until Zenod has a resolver.
+
+### 2026-07-09 · [epic-worker/Epic-2.5] Runtime recovery reconciled; cloud-test lane dispatched
+
+Bohr recovered the paid Ring tenant for session `cs_test_a1Ex...`: Dokploy compose
+`qvxRcJxBvWqYp-AYPLS3t` is running, the tenant health endpoint is green, and the cloud buyer status
+is `running` with config and Phylax URLs. This proves the deployment mechanism after changing the
+provisioner from Dokploy `compose.deploy` to `compose.redeploy`. It does not close hosted runtime
+acceptance because the tenant still runs stale GHCR `latest` at SHA `d8f158e`; PR #680 currently
+fails CI on duplicate helper declarations in `packages/server/src/settings.ts`.
+
+Issue [#693](https://github.com/zenod-ai/zenod/issues/693) now owns the missing billing-environment
+delivery work. Worker Euclid (`019f4805-a08a-7803-bb83-f181b6ea3880`) owns #691's PR #680 CI and
+Ring-image readiness on an isolated branch. Worker Mill (`019f4805-a030-7a42-a322-2abe49ece7be`)
+owns #693's `cloud-test.zenod.dev` Ring checkout/status path and test CTA. Tester #672 remains held
+until both lanes return exact commit and environment receipts.
+
+Fresh coordinator verification at 2026-07-09 19:57 Europe/Paris found
+`https://cloud-test.zenod.dev/healthz` green with `stripe_mode:test` and
+`https://cloud-test.zenod.dev/buy/ring` redirecting to `cs_test_...`. The same check found
+`https://ring.zenod.dev/` regressed to nginx 404. Worker Carson
+(`019f4807-0c36-76a0-ac33-7d50a7e38ba7`) was dispatched on #681 to restore the public site through
+durable deployment configuration and point its TEST CTA at `cloud-test`.
+
+### 2026-07-09 · [epic-worker/browser-acceptance] Cloud-test paid Ring runs; hosted entry fails
+
+Fresh Stripe TEST purchase `cs_test_a1fba6...` completed on `cloud-test.zenod.dev` for
+`ring-cloud-test-20260709@zenod.dev`. The recovered Dokploy tenant
+`r-ringcloudtest2026070-yfnwxy.zenod.dev` runs all six services from immutable image
+`ghcr.io/zenod-ai/zenod:sha-7db473c`; `/api/health` reports exact SHA
+`7db473c1960a69777cd79c85b3cc45662996f1c8`. Cloud status is `running`, paid and queued, with
+Ring and Phylax links. `ring.zenod.dev` is again HTTP 200 and its TEST CTA reaches cloud-test.
+
+The browser then found a new red acceptance item: both hosted configuration links enter the generic
+Zenod first-run wizard headed "Set up your self-hosted memory agent" and require creation of an
+admin password. Issue [#698](https://github.com/zenod-ai/zenod/issues/698) owns the fix. Worker
+Rawls (`019f4823-8c1f-73f3-acaa-c752123e6e09`) is dispatched; tester #672 remains held until a
+hosted tenant opens the actual Ring and managed-cloud Phylax screens without weakening auth.
+
+### 2026-07-09 · [epic-worker/browser-acceptance] Hosted Ring and Phylax entry green
+
+Runtime PR [#699](https://github.com/zenod-ai/zenod/pull/699) and cloud PR
+[#51](https://github.com/zenod-ai/cloud/pull/51) were integrated into the Epic 2.5 branches. The
+paid cloud-test tenant was upgraded to immutable `sha-cd25678`; health reports exact SHA
+`cd2567812f7e0aa5a205d62ff2485cd053cce9cc` and `ZENOD_HOSTED_MODE=ring` is set only for the hosted
+Console service. Cloud status now emits short-lived signed entry links instead of raw tenant hash
+links. Browser verification passed: Ring entry opened the authenticated Ring control surface on
+Connections, Phylax entry opened `#phylax-channels`, the managed-cloud card was present, and QR
+pairing text was absent. Tester Plato (`019f4835-7074-77c0-90d0-e0d4097fed75`) is dispatched on
+[#672](https://github.com/zenod-ai/zenod/issues/672) for the final independent scoreboard.
+
+### 2026-07-09 · [tester/Plato] Final Epic 2.5 scoreboard 8/8 PASS
+
+Tester Plato returned **READY-FOR-JORDI-TEST** against paid cloud-test session `cs_test_a1fba6...`,
+tenant `r-ringcloudtest2026070-yfnwxy.zenod.dev`, exact runtime SHA
+`cd2567812f7e0aa5a205d62ff2485cd053cce9cc`, and immutable image `sha-cd25678`. The independent
+scoreboard passed public Ring/TEST checkout, paid/running buyer status, authenticated Ring entry,
+managed Phylax entry without QR, outward product-settings ownership, exact image/SHA across all six
+tenant services, Zenod-owned media boundary using #670 receipts, and cloud-test billing mode.
+
+Residuals are explicit rather than hidden: no fresh live audio/image upload was performed in this
+tester pass; the tenant has zero configured connected products, so external settings navigation is
+proved by controls/copy rather than a configured target; PR #680 and cloud PR #50 remain open at the
+exact deployed/tested heads. Production `cloud.zenod.dev` still reports TEST mode and must be rebound
+to a separately configured `STRIPE_MODE=live` service, or removed until that service exists, before
+LIVE acceptance. This production action is a human gate and was not required for the cloud-test
+handoff.
+
+### 2026-07-09 · [epic-worker/correction] Ring public identity false-positive fixed
+
+Jordi's browser screenshot proved `ring.zenod.dev` was serving the Zenod librarian page despite
+the final tester's HTTP-200 result. Root cause: the Dokploy `zenod-site` application owns both
+`zenod.dev` and `ring.zenod.dev`; its source branch had been deleted and the fallback image used
+default Nginx, so both hosts returned `/index.html`. The application now targets durable branch
+`codex/epic25-ring-hosted`, and its generated build context was refreshed with the reviewed
+host-aware `apps/site/nginx.conf`, Dockerfile, and Ring page from PR #696 before redeployment.
+
+Fresh content assertions now pass: `ring.zenod.dev` returns title "The Ring - hosted router for your
+AI suite", visible Ring copy, and CTA `https://cloud-test.zenod.dev/buy/ring`; `zenod.dev` continues
+to return the Zenod librarian title. #681 and #672 record the correction. Acceptance is tightened:
+public-site tests must assert product identity and destination URL, never HTTP 200 alone.
+
+### 2026-07-09 · [epic-worker/correction] Fresh no-touch buyer journey rerun end to end
+
+Jordi completed a new Stripe TEST purchase and showed a real `Provisioner exited 1` page, proving
+the prior scoreboard had reused a recovered tenant instead of validating a new no-touch deployment.
+The root provisioning defect was deterministic: `provision-ring.mjs` called Dokploy
+`compose.redeploy` for a newly created compose, but that operation assumes the source checkout
+already exists. Ring now uses `compose.deploy` for the first deployment, matching the working
+standalone Zenod provisioner. Cloud-test also pins `RING_BRANCH=codex/epic25-ring-hosted` and
+`RING_IMAGE_TAG=sha-cd25678`, so fresh tenants receive the hosted compose contract and exact tested
+runtime.
+
+A second infrastructure conflict caused fixes to appear and then revert: a temporary
+`/tmp/zenod-cloud-test-*` Compose directory and Dokploy's durable
+`/etc/dokploy/compose/zenod-cloud-test` directory shared the same project/container name. The
+Dokploy-owned source was refreshed with the cloud-test branch and its image was pinned to
+`zenod-cloud-test-webhook:epic25-94b417e`. Four checks over five minutes confirmed the same container
+creation time/image and authenticated `/ring/enter` route remained present.
+
+Fresh no-touch receipt: from `ring.zenod.dev`, the agent clicked **Buy hosted Ring**, completed
+Stripe TEST session `cs_test_a1jx...`, observed all four status steps green without concierge repair,
+opened tenant `r-ringnotouch20260709-wl3hhm.zenod.dev/#ring-router-products` with the Ring control
+surface and no self-host wizard, then opened `#phylax-channels` with the managed-cloud card and zero
+QR text. Jordi's failed session `cs_test_a1KZ...` was separately upgraded and reconciled to
+`running`; its Chrome status page is left open on the repaired result.

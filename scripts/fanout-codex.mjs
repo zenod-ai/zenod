@@ -990,7 +990,7 @@ function resolveModel(engine, opts = {}) {
 // fast worker runs unless overridden (--effort, ZENOD_WORKER_EFFORT). Codex uses its
 // own `thinking`/-c mechanism, so effort stays null there.
 function resolveEffort(engine, opts = {}) {
-  if (engine !== "claude") return opts.thinking ? String(opts.thinking) : null;
+  if (engine !== "claude") return opts.thinking || opts.effort ? String(opts.thinking || opts.effort) : null;
   return String(opts.effort || opts.thinking || process.env.ZENOD_WORKER_EFFORT || "low");
 }
 

@@ -77,7 +77,8 @@ def _page(**cfg) -> cp.ConnectPage:
 
 def test_page_renders_connector_list_and_mcp_block():
     html = _page().render_page()
-    assert "X (Twitter)" in html
+    assert "Connect your X account" in html
+    assert "Connect X (Twitter)" not in html
     assert "Reddit" in html
     # MCP URL + token both shown with copy affordance.
     assert "https://calli.example/mcp" in html
@@ -175,11 +176,75 @@ def test_mcp_block_flags_missing_provisioner_values():
     assert "CALLISTHENES_MCP_TOKEN" in html
 
 
+def test_missing_x_oauth_config_is_page_error_not_exception(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    page = cp.ConnectPage(
+        engine=ChatAuth(store=InMemoryTokenStore()),
+        config=cp.ConnectPageConfig(owner_tenant=OWNER),
+    )
+    res = page.start_oauth("x")
+    assert res["ok"] is False
+    assert "Missing X_OAUTH2_CLIENT_ID" in res["error"]["message"]
+
+
+def test_x_config_form_saves_redacted_values_and_updates_engine(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    engine = ChatAuth(store=InMemoryTokenStore())
+    page = cp.ConnectPage(engine=engine, config=cp.ConnectPageConfig(owner_tenant=OWNER))
+    res = page.save_x_config(
+        """
+        X_OAUTH2_CLIENT_ID=cid-live
+        X_OAUTH2_CLIENT_SECRET=super-secret
+        X_OAUTH2_REDIRECT_URI=https://c.example/oauth/callback
+        X_OAUTH_CONSUMER_KEY=consumer-key
+        X_OAUTH_CONSUMER_SECRET=consumer-secret
+        X_BEARER_TOKEN=bearer-token
+        X_OAUTH_ACCESS_TOKEN=access-token
+        X_OAUTH_ACCESS_TOKEN_SECRET=access-secret
+        """
+    )
+    assert res["ok"] is True
+    assert res["sender_ready"] is True
+    assert engine._client_id == "cid-live"  # noqa: SLF001
+    assert engine._redirect_uri == "https://c.example/oauth/callback"  # noqa: SLF001
+    rendered = page.render_page()
+    assert "API Key" in rendered
+    assert "Credentials saved, verification needed" in rendered
+    assert "super-secret" not in rendered
+    assert "access-secret" not in rendered
+
+
+def test_x_setup_guides_user_to_official_console_and_has_one_field_per_sender_credential(
+    monkeypatch, tmp_path
+):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    rendered = _page().render_page()
+    assert 'href="https://console.x.com/"' in rendered
+    assert 'href="https://docs.x.com/x-api/getting-started/getting-access"' in rendered
+    assert "There is no user-ID field" in rendered
+    assert "Read and write" in rendered
+    assert "Application Created Successfully" in rendered
+    assert "The three values X showed you" in rendered
+    assert "Consumer Key / API Key field" in rendered
+    assert "Secret Key / API Key Secret field" in rendered
+    assert "Do not enter it here" in rendered
+    assert "Credentials shown in screenshots or chat are exposed" in rendered
+    for key in cp.X_SENDER_REQUIRED:
+        assert f'name="{key}"' in rendered
+    assert 'name="x_config"' not in rendered
+
+
 # --------------------------------------------------------------------------- #
 # Live HTTP layer — real FastMCP + Starlette TestClient
 # --------------------------------------------------------------------------- #
 
-def _live_client():
+def _live_client(x_verifier=None):
     pytest.importorskip("fastmcp")
     from fastmcp import FastMCP
     from starlette.testclient import TestClient
@@ -194,6 +259,7 @@ def _live_client():
             mcp_token="MCP-ACCESS-TOKEN-xyz",
             owner_tenant=OWNER,
         ),
+        x_verifier=x_verifier,
     )
     app = mcp.http_app()
     return TestClient(app), engine
@@ -203,7 +269,8 @@ def test_live_get_connect_renders():
     client, _ = _live_client()
     r = client.get("/connect")
     assert r.status_code == 200
-    assert "X (Twitter)" in r.text and "Reddit" in r.text
+    assert "Connect your X account" in r.text and "Reddit" in r.text
+    assert "Connect X (Twitter)" not in r.text
     assert "MCP-ACCESS-TOKEN-xyz" in r.text
 
 
@@ -242,3 +309,31 @@ def test_live_post_reddit_token_stores_it():
     r = client.post("/connect/reddit/token", data={"token": "usr_live_reddit"}, follow_redirects=False)
     assert r.status_code == 303
     assert engine.store.get(OWNER, "reddit").access_token == "usr_live_reddit"
+
+
+def test_live_post_x_config_saves_without_redirecting_secrets(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    client, _engine = _live_client(
+        x_verifier=lambda _cfg: {
+            "ok": True,
+            "user_id": "12345",
+            "username": "calli_test",
+            "name": "Calli Test",
+        }
+    )
+    r = client.post(
+        "/connect/x/config",
+        data={
+            "X_OAUTH_CONSUMER_KEY": "consumer-key",
+            "X_OAUTH_CONSUMER_SECRET": "consumer-secret",
+            "X_OAUTH_ACCESS_TOKEN": "access-token",
+            "X_OAUTH_ACCESS_TOKEN_SECRET": "access-secret",
+        },
+    )
+    assert r.status_code == 200
+    assert "X connected and verified as @calli_test" in r.text
+    assert "Connected as @calli_test" in r.text
+    assert "consumer-secret" not in r.text
+    assert "access-secret" not in r.text

@@ -99,6 +99,28 @@ whether top-ups land at launch or post-launch. Planner note on record: the $29 e
 tool-competitors (Postiz $49) rather than agency-replacement ($300–1k, alpha deck) — accepted as a
 funnel tier; the $499 tier carries the team-you-hired story.
 
+## D-6A · Billing environments — DECIDED 2026-07-09 (Jordi): cloud-test = Stripe test, cloud = Stripe live
+
+The hosted control plane must not be manually flipped between Stripe TEST and LIVE values. Use two
+stable Cloud services/profiles instead:
+
+- `cloud-test.zenod.dev`: `STRIPE_MODE=test`, test secret key, test `PRICE_*` values, test webhook
+  signing secret. This is the place for test-card drills, including "add three test users and verify
+  three deployments." Test checkouts may provision real disposable Dokploy tenants, but they must be
+  visibly test-scoped.
+- `cloud.zenod.dev`: `STRIPE_MODE=live`, live secret key, live `PRICE_*` values, live webhook signing
+  secret. This is the production customer surface.
+
+The Cloud webhook service now has runtime guards for this discipline: it exposes `stripe_mode` on
+`/healthz`, echoes it from `/create-checkout-session`, refuses keys whose prefix does not match
+`STRIPE_MODE`, and rejects Stripe webhooks whose `event.livemode` does not match the configured mode.
+Receipt: `zenod-ai/cloud` edits to `services/webhook/src/server.ts`, `docker-compose.cloud.yml`,
+`.env.example`, `docs/DOKPLOY-DEPLOY.md`, and `docs/AGENTS.md`; `npm run typecheck` and
+`npm run build` passed in `services/webhook`. VPS smoke 2026-07-09:
+`cloud-test.zenod.dev/healthz` -> `{"ok":true,"stripe_mode":"test"}`, `/buy/ring` -> 303 to
+Stripe `cs_test_...`; `cloud.zenod.dev/healthz` also reports `stripe_mode:"test"` because live
+Stripe credentials are not installed there yet.
+
 ## Engine requirements → stability track (Jordi carries; we never dispatch into their lane)
 
 - **R-1 · `MeterProvider` seam** in the model-call path: interface + no-op default + config-flag
@@ -1000,3 +1022,17 @@ Start: **https://zenod.dev/#pricing**. Persona: *"you're a stranger with a GitHu
 `4242 4242 4242 4242`."* Buy a tier → Stripe checkout → success → **Claim your workspace with GitHub** →
 (consent + first grant is yours). The in-console **vault connect is still the raw flow** until I3-2 lands.
 Did NOT walk the journey (binding rule). No secrets in doc.
+
+### 2026-07-09 · [worker/cloud-billing] D-6A added — hosted Stripe mode split is now canonical
+
+Jordi approved the hosted billing environment split: `cloud-test.zenod.dev` remains Stripe TEST mode,
+`cloud.zenod.dev` remains Stripe LIVE mode. This removes the unsafe "toggle production env vars" pattern
+and gives Epic 2 / child epics a repeatable place to create test users, run test-card checkouts, and
+verify provisioning fan-out without touching live billing objects.
+
+Current implementation state: Cloud code/docs updated and deployed to both VPS Cloud services with
+`STRIPE_MODE`, key-prefix validation, webhook `livemode` validation, `/healthz` mode visibility,
+compose env passthrough, and Dokploy runbook updates. `cloud-test.zenod.dev` is bound and smoke-green
+for Stripe TEST. Not yet completed: the three-test-user deployment drill, dedicated TEST webhook
+registration confirmation, and the production `cloud.zenod.dev` live flip after live Stripe key,
+live `PRICE_*`, and live webhook secret are installed.

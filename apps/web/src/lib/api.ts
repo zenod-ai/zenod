@@ -328,6 +328,38 @@ export type ConnectionsResponse = {
   grants: OAuthGrant[]
 }
 
+export type ExecutorEffort = "low" | "medium" | "high"
+
+export type ExecutorCliProvider = "auto" | "codex" | "claude"
+
+export type ExecutorMcpServer = {
+  name: string
+  url: string
+  enabled: boolean
+  hasToken: boolean
+}
+
+export type ExecutorSettingsResponse = {
+  defaultEffort: ExecutorEffort
+  workerInstructions: string
+  cliProvider: ExecutorCliProvider
+  mcpServers: ExecutorMcpServer[]
+  skills: string[]
+  status: {
+    githubAuth: "configured" | "missing"
+    providerAuth: "configured" | "missing"
+    cliAuth: "configured" | "missing"
+    provider: Provider
+    hasGithubToken: boolean
+    hasGithubApp: boolean
+    hasProviderKey: boolean
+    hasCodexCliAuth: boolean
+    hasClaudeCliAuth: boolean
+    executionLaneConfigured: boolean
+    archusPeerUrl: string | null
+  }
+}
+
 export type VaultStatus = {
   repo: string | null
   branch: string | null
