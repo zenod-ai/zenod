@@ -16,6 +16,7 @@
  */
 
 export type ExecState = "queued" | "running" | "needs-review" | "approved" | "done" | "blocked" | "failed";
+export type ExecutionEffort = "low" | "medium" | "high" | "max";
 
 /** The states Epaminon reports to Archus (his edges). `queued`/`approved` are Archus's. */
 export type ReportedState = "running" | "needs-review" | "done" | "blocked" | "failed";
@@ -53,6 +54,8 @@ export interface ExecutionTicket {
   target: string;
   /** Run context Archus handed over (objective/scope/done-condition + goal). */
   context: string;
+  /** Worker effort budget requested by the caller/controller. */
+  effort?: ExecutionEffort;
   state: ExecState;
   /** PR/commit URL (code) or the artifact/draft ref (non-code), once there is one. */
   evidenceUrl?: string;
@@ -203,12 +206,13 @@ export class ExecutionQueue {
    * and start it if there's a slot. Idempotent: a duplicate id is ignored (so a
    * re-dispatch after a retry never double-runs).
    */
-  async enqueue(input: { executionId: string; target: string; context: string; notifyOnStart?: boolean }): Promise<void> {
+  async enqueue(input: { executionId: string; target: string; context: string; effort?: ExecutionEffort; notifyOnStart?: boolean }): Promise<void> {
     if (this.tickets.has(input.executionId)) return;
     const ticket: ExecutionTicket = {
       executionId: input.executionId,
       target: input.target,
       context: input.context,
+      ...(input.effort ? { effort: input.effort } : {}),
       state: "queued",
       ...(input.notifyOnStart === false ? { notifyOnStart: false } : {}),
       updatedAt: this.opts.now(),

@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EpicSpine</title>
+<style>
+  :root {
+    --bg: #101214;
+    --panel: #191d20;
+    --panel-2: #23282d;
+    --ink: #f2eee7;
+    --muted: #b8b0a5;
+    --line: #363d43;
+    --gold: #d9ad62;
+    --green: #78b58c;
+    --blue: #7da9c7;
+    --red: #d2776d;
+    --violet: #a891d7;
+    --shadow: rgba(0, 0, 0, .28);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body { overflow: hidden; }
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 5;
+    height: 3px;
+    width: 0;
+    background: var(--gold);
+    transition: width .18s ease;
+  }
+  .deck { height: 100vh; position: relative; }
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    padding: 5.2vh 6vw;
+    overflow: auto;
+  }
+  .slide.active {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 28px;
+  }
+  .eyebrow {
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 760;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  h1, h2 {
+    margin: 10px 0 0;
+    letter-spacing: 0;
+    line-height: 1.04;
+    font-weight: 780;
+  }
+  h1 { font-size: clamp(48px, 7.2vw, 94px); max-width: 1120px; }
+  h2 { font-size: clamp(36px, 5vw, 66px); max-width: 1120px; }
+  h3 {
+    margin: 0 0 10px;
+    font-size: clamp(19px, 1.7vw, 26px);
+    letter-spacing: 0;
+  }
+  p {
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(20px, 2.05vw, 30px);
+    line-height: 1.34;
+    max-width: 1080px;
+  }
+  .body {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 24px;
+  }
+  .two {
+    display: grid;
+    grid-template-columns: minmax(0, .95fr) minmax(380px, 1.05fr);
+    gap: 34px;
+    align-items: center;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .grid.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card, .box, .screen {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 16px 45px var(--shadow);
+  }
+  .card {
+    padding: 22px;
+  }
+  .card p, .card li, .box span {
+    color: var(--muted);
+    font-size: clamp(14px, 1.16vw, 18px);
+    line-height: 1.45;
+  }
+  .card ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 760;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    margin-bottom: 12px;
+  }
+  .tag.gold { color: var(--gold); border-color: rgba(217, 173, 98, .58); }
+  .tag.green { color: var(--green); border-color: rgba(120, 181, 140, .58); }
+  .tag.blue { color: var(--blue); border-color: rgba(125, 169, 199, .58); }
+  .tag.red { color: var(--red); border-color: rgba(210, 119, 109, .58); }
+  .tag.violet { color: var(--violet); border-color: rgba(168, 145, 215, .58); }
+  .screen {
+    overflow: hidden;
+  }
+  .bar {
+    height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--line);
+  }
+  .dot:nth-child(1) { background: var(--red); }
+  .dot:nth-child(2) { background: var(--gold); }
+  .dot:nth-child(3) { background: var(--green); }
+  .screen-body {
+    display: grid;
+    gap: 12px;
+    padding: 20px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 150px 1fr 100px;
+    gap: 12px;
+    align-items: center;
+    min-height: 46px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel-2);
+    padding: 12px 14px;
+  }
+  .row strong {
+    font-size: 15px;
+  }
+  .row span {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.35;
+  }
+  .pill {
+    justify-self: end;
+    border: 1px solid rgba(217, 173, 98, .55);
+    border-radius: 999px;
+    color: var(--gold);
+    padding: 4px 9px;
+    font-size: 12px;
+    font-weight: 760;
+    text-transform: uppercase;
+  }
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    align-items: center;
+    gap: 14px;
+  }
+  .stack {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .tree {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 28px;
+    align-items: center;
+  }
+  .branches {
+    display: grid;
+    gap: 14px;
+  }
+  .lane {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 14px;
+    align-items: center;
+  }
+  .box {
+    min-height: 118px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+  }
+  .box strong {
+    font-size: clamp(20px, 1.55vw, 26px);
+  }
+  .arrow {
+    color: var(--gold);
+    font-size: 30px;
+    line-height: 1;
+  }
+  .ledger {
+    width: 100%;
+    border-collapse: collapse;
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: 0 16px 45px var(--shadow);
+  }
+  .ledger th, .ledger td {
+    border-bottom: 1px solid var(--line);
+    padding: 13px 14px;
+    text-align: left;
+    vertical-align: top;
+    font-size: clamp(13px, 1.02vw, 16px);
+    line-height: 1.35;
+  }
+  .ledger th {
+    color: var(--ink);
+    background: var(--panel-2);
+    font-weight: 760;
+  }
+  .ledger td { color: var(--muted); }
+  .ledger tr:last-child td { border-bottom: 0; }
+  .callout {
+    border-left: 4px solid var(--gold);
+    background: rgba(217, 173, 98, .08);
+    padding: 18px 20px;
+  }
+  .callout p {
+    font-size: clamp(18px, 1.55vw, 24px);
+    color: var(--ink);
+  }
+  .controls {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 10;
+  }
+  .controls span {
+    color: var(--muted);
+    font-size: 13px;
+    min-width: 52px;
+    text-align: right;
+  }
+  button {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  button:hover { border-color: rgba(217, 173, 98, .65); }
+
+  @media (max-width: 860px) {
+    body { overflow: auto; }
+    .deck { height: auto; min-height: 100vh; }
+    .slide {
+      position: static;
+      min-height: 100vh;
+      padding: 36px 20px 82px;
+    }
+    .slide.active { display: grid; }
+    .two, .grid, .grid.two-col, .flow {
+      grid-template-columns: 1fr;
+    }
+    .tree, .lane {
+      grid-template-columns: 1fr;
+    }
+    .arrow { display: none; }
+    .row { grid-template-columns: 1fr; }
+    .pill { justify-self: start; }
+    .ledger { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<main class="deck">
+  <section class="slide active">
+    <header>
+      <div class="eyebrow">Document-centered agent delivery</div>
+      <h1>EpicSpine</h1>
+    </header>
+    <div class="body two">
+      <div>
+        <p>A living epic document that lets AI agents keep intent, context, state, GitHub work, decisions, and handoffs coherent across long-running projects.</p>
+      </div>
+      <div class="screen">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>EPIC-0.md</span></div>
+        <div class="screen-body">
+          <div class="row"><strong>Why</strong><span>What this project wants to make true.</span><b class="pill">intent</b></div>
+          <div class="row"><strong>State</strong><span>What is true now, what is blocked, what is next.</span><b class="pill">now</b></div>
+          <div class="row"><strong>Map</strong><span>Child spines, issues, PRs, dependencies, owners.</span><b class="pill">fit</b></div>
+          <div class="row"><strong>Handoffs</strong><span>Evidence and decisions future agents can trust.</span><b class="pill">memory</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Why it exists</div>
+      <h2>Agents need more than chat and tickets.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <span class="tag red">Chat fades</span>
+          <h3>Intent disappears</h3>
+          <p>Long projects drift when the only memory is a transcript or a thread that future agents will not read completely.</p>
+        </div>
+        <div class="card">
+          <span class="tag red">Issues are local</span>
+          <h3>Tickets go deep</h3>
+          <p>GitHub issues are excellent for a step, but they are too narrow to carry the whole epic, its dependencies, and its direction.</p>
+        </div>
+        <div class="card">
+          <span class="tag red">Roles blur</span>
+          <h3>Agents overreach</h3>
+          <p>A worker starts planning, a tester starts rewriting, a parent agent mutates child docs. The system needs boundaries.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Meta spine diagram</div>
+      <h2>Epic 0 is the root spine for the project.</h2>
+    </header>
+    <div class="body">
+      <div class="tree">
+        <div class="box">
+          <strong>Epic 0 spine</strong>
+          <span>Root intent, project thrust, child-spine map, cross-epic dependencies, health, and decisions needed.</span>
+        </div>
+        <div class="branches">
+          <div class="lane">
+            <div class="box"><strong>Epic 2.3 spine</strong><span>Zenod delivery surface.</span></div>
+            <div class="arrow">›</div>
+            <div class="box"><strong>Epic worker</strong><span>Bound to 2.3 and responsible for delivery.</span></div>
+          </div>
+          <div class="lane">
+            <div class="box"><strong>Epic 2.4 spine</strong><span>Callisthenes delivery surface.</span></div>
+            <div class="arrow">›</div>
+            <div class="box"><strong>Epic worker</strong><span>Creates issues and dispatches ticket workers.</span></div>
+          </div>
+          <div class="lane">
+            <div class="box"><strong>Epic 2.5 spine</strong><span>Ring delivery surface.</span></div>
+            <div class="arrow">›</div>
+            <div class="box"><strong>Epic worker</strong><span>Reports clean state back up.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">The root concept</div>
+      <h2>Epic 0 holds the whole project together.</h2>
+    </header>
+    <div class="body">
+      <div class="flow">
+        <div class="box">
+          <strong>Epic 0 spine</strong>
+          <span>The root context: why the project exists, child-spine map, project state, cross-epic decisions.</span>
+        </div>
+        <div class="arrow">›</div>
+        <div class="box">
+          <strong>Child spines</strong>
+          <span>Bounded delivery surfaces for Epic 2.3, 2.4, 2.5, or any other major track.</span>
+        </div>
+        <div class="arrow">›</div>
+        <div class="box">
+          <strong>GitHub issues</strong>
+          <span>Executable tickets where one step can go deep into blockers, code, logs, and validation.</span>
+        </div>
+      </div>
+      <div class="callout">
+        <p>Epic 0 is why the project exists and how the moving parts fit. It is the root spine, not a giant ticket.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Delivery loop diagram</div>
+      <h2>Epic workers manage execution without dirtying the spine.</h2>
+    </header>
+    <div class="body">
+      <div class="flow">
+        <div class="box">
+          <strong>Bound child spine</strong>
+          <span>Clean intent, state, acceptance, issue ledger, blockers, and handoff journal.</span>
+        </div>
+        <div class="arrow">›</div>
+        <div class="box">
+          <strong>GitHub issues</strong>
+          <span>Executable ticket backlog with deep technical detail and subagent comments.</span>
+        </div>
+        <div class="arrow">›</div>
+        <div class="box">
+          <strong>Ticket workers</strong>
+          <span>Implement one issue, write detail into the issue, and return PR/evidence.</span>
+        </div>
+      </div>
+      <div class="callout">
+        <p>The epic worker loops across this system until ready for human test, tester handoff, or a precise blocker.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Spine versus issues</div>
+      <h2>The spine stays clean. Issues go deep.</h2>
+    </header>
+    <div class="body">
+      <div class="grid two-col">
+        <div class="card">
+          <span class="tag gold">EpicSpine</span>
+          <h3>Intent, desire, context, fit, state</h3>
+          <p>Mission, current state, child-spine map, decisions, dependencies, issue ledger, evidence links, and next action.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">GitHub issue</span>
+          <h3>Deep detail for one step</h3>
+          <p>Code paths, implementation notes, blocker investigation, logs, stack traces, review discussion, and ticket-level validation.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <p>If it only helps the current ticket worker, keep it in the issue. If it changes how future agents understand the epic, summarize it in the spine.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Authority map</div>
+      <h2>Different artifacts own different kinds of truth.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <span class="tag gold">EpicSpine</span>
+          <h3>Intent and coordination</h3>
+          <p>Scope, epic acceptance, dependencies, decisions, and rollup state.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">Issue + code</span>
+          <h3>Execution and implementation</h3>
+          <p>The issue owns ticket detail. The branch, PR, and code show what actually exists.</p>
+        </div>
+        <div class="card">
+          <span class="tag green">Evidence</span>
+          <h3>What has been proved</h3>
+          <p>Validation names the exact commit, environment, method, result, and residual risk.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <p>One active spine steward reconciles contradictions. A stale document never overrides observable code or test evidence.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">The skill</div>
+      <h2>The skill teaches agents the operating discipline.</h2>
+    </header>
+    <div class="body two">
+      <div>
+        <p>The public repo includes a Codex skill plus templates. The skill defines role binding, write scope, clean-spine discipline, GitHub issue flow, and goal-seeking persistence.</p>
+      </div>
+      <div class="screen">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>skill/</span></div>
+        <div class="screen-body">
+          <div class="row"><strong>SKILL.md</strong><span>Main trigger and operating rules.</span><b class="pill">core</b></div>
+          <div class="row"><strong>operating-model.md</strong><span>Deeper role, scope, GitHub, and persistence model.</span><b class="pill">ref</b></div>
+          <div class="row"><strong>epic template</strong><span>Starting point for root and child spines.</span><b class="pill">asset</b></div>
+          <div class="row"><strong>issue template</strong><span>Ticket shape for GitHub execution.</span><b class="pill">asset</b></div>
+          <div class="row"><strong>validate_spine.py</strong><span>Local structural contract checker.</span><b class="pill">tool</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Role binding</div>
+      <h2>Agents become useful when they know who they are.</h2>
+    </header>
+    <div class="body">
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>Identity</th>
+            <th>Owns</th>
+            <th>Writes</th>
+            <th>Stops When</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Epic 0 worker</td>
+            <td>Full project picture</td>
+            <td>Root spine, child-spine map, rollups</td>
+            <td>Human decision or next actions are clear</td>
+          </tr>
+          <tr>
+            <td>Epic worker</td>
+            <td>One child epic as delivery lead</td>
+            <td>Bound spine as steward, issues, dispatch state</td>
+            <td>Ready for human test or tester handoff</td>
+          </tr>
+          <tr>
+            <td>Ticket worker</td>
+            <td>One GitHub issue</td>
+            <td>Issue detail, dedicated branch, PR, handoff</td>
+            <td>Ready for testing or precisely blocked</td>
+          </tr>
+          <tr>
+            <td>Tester</td>
+            <td>Acceptance evidence</td>
+            <td>Issue evidence, exact commit, risk</td>
+            <td>Pass, evidenced fail, or planner decision</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Goal seeking</div>
+      <h2>Do not do one pass. Work toward a terminal state.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <span class="tag green">Epic 0</span>
+          <h3>Keep the project coherent</h3>
+          <p>Read child spines, roll up state, create child spines, bind workers, and keep pushing until the next human decision is explicit.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">Epic worker</span>
+          <h3>Deliver the scoped epic</h3>
+          <p>Create issues, dispatch ticket workers, reconcile outputs, and loop until the epic is ready for human test.</p>
+        </div>
+        <div class="card">
+          <span class="tag violet">Tester</span>
+          <h3>Prove pass or fail</h3>
+          <p>Run checks, record evidence, use bounded fix loops for small failures, and escalate scope changes to the planner.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Integration discipline</div>
+      <h2>Dedicated branches. Protected main. Verified merges.</h2>
+    </header>
+    <div class="body">
+      <div class="flow">
+        <div class="box">
+          <strong>issue branch + worktree</strong>
+          <span>Every ticket has a dedicated branch. Concurrent agents use separate worktrees for filesystem isolation.</span>
+        </div>
+        <div class="arrow">›</div>
+        <div class="box">
+          <strong>review gate</strong>
+          <span>Implementation complete, PR open, and required automated checks passing.</span>
+        </div>
+        <div class="arrow">›</div>
+        <div class="box">
+          <strong>integration + test</strong>
+          <span>Merge small reviewed work, then test an exact commit on a named surface before acceptance.</span>
+        </div>
+      </div>
+      <div class="callout">
+        <p>Integrate frequently, but never blindly. New agents start from the freshest validated base; unmerged state remains explicit in the issue and spine.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Write scope</div>
+      <h2>Read broadly. Write narrowly.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card">
+          <span class="tag gold">One steward</span>
+          <h3>One active reconciler</h3>
+          <p>The root worker stewards Epic 0; the epic worker normally stewards its child spine.</p>
+        </div>
+        <div class="card">
+          <span class="tag blue">Ticket workers</span>
+          <h3>Issue-first handoffs</h3>
+          <p>Workers and testers write detail to their issue unless a narrow spine section is explicitly delegated.</p>
+        </div>
+        <div class="card">
+          <span class="tag red">Cross-spine drift</span>
+          <h3>Propose, do not mutate</h3>
+          <p>Record proposed changes in the bound spine, then route them to the owner of the target spine.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Recovery and human gates</div>
+      <h2>The system remains resumable when an agent stops.</h2>
+    </header>
+    <div class="body">
+      <div class="flow">
+        <div class="box">
+          <strong>resumable assignment</strong>
+          <span>Stable identity, issue, branch, base and latest commit, last verified time, blocker, next action.</span>
+        </div>
+        <div class="arrow">›</div>
+        <div class="box">
+          <strong>explicit takeover</strong>
+          <span>Preserve old history, mark it superseded, name the new owner and starting commit.</span>
+        </div>
+        <div class="arrow">›</div>
+        <div class="box">
+          <strong>named human gate</strong>
+          <span>State the decision, owner, evidence, exact input required, and work that may continue.</span>
+        </div>
+      </div>
+      <div class="callout">
+        <p>&ldquo;Human required&rdquo; is not a blocker description. Product changes, production actions, secrets, destructive work, and irreversible actions need precise approval gates.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Bootstrap prompt</div>
+      <h2>Bind the agent, then let the document orient it.</h2>
+    </header>
+    <div class="body">
+      <div class="screen">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>prompt.txt</span></div>
+        <div class="screen-body">
+          <div class="row"><strong>Use</strong><span>$epic-spine</span><b class="pill">skill</b></div>
+          <div class="row"><strong>Identity</strong><span>Epic 0 worker</span><b class="pill">role</b></div>
+          <div class="row"><strong>Bound spine</strong><span>docs/EPIC-0.md</span><b class="pill">scope</b></div>
+          <div class="row"><strong>Steward</strong><span>task / thread / agent identity</span><b class="pill">write</b></div>
+          <div class="row"><strong>Goal</strong><span>Keep the full project picture, create child spines, bind workers, and loop until clear next actions or human input.</span><b class="pill">drive</b></div>
+        </div>
+      </div>
+      <div class="callout">
+        <p>The public package now includes the skill, templates, operating model, HTML deck, and a local spine validator.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="controls">
+  <span id="counter">1 / 14</span>
+  <button type="button" id="prev" aria-label="Previous slide">‹</button>
+  <button type="button" id="next" aria-label="Next slide">›</button>
+</div>
+<script>
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const counter = document.getElementById("counter");
+  const progress = document.getElementById("progress");
+  let index = 0;
+
+  function show(nextIndex) {
+    index = Math.max(0, Math.min(slides.length - 1, nextIndex));
+    slides.forEach((slide, i) => slide.classList.toggle("active", i === index));
+    counter.textContent = `${index + 1} / ${slides.length}`;
+    progress.style.width = `${((index + 1) / slides.length) * 100}%`;
+  }
+
+  document.getElementById("prev").addEventListener("click", () => show(index - 1));
+  document.getElementById("next").addEventListener("click", () => show(index + 1));
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") show(index + 1);
+    if (event.key === "ArrowLeft" || event.key === "PageUp") show(index - 1);
+  });
+  show(0);
+</script>
+</body>
+</html>

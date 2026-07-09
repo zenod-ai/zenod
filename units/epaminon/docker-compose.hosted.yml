@@ -1,0 +1,39 @@
+# Hosted Epaminon unit template.
+#
+# This is the cloud-test/provisioner-safe variant of the headless Epaminon compose.
+# It routes the public domain directly to an AGENT=epaminon instance so the buyer's
+# instance UI shows Epaminon executor settings, MCP URL/token, and task-dispatch
+# controls. The project name and optional EPAMINON_CONTAINER_NAME are set by the
+# Cloud provisioner, keeping containers collision-safe across hosted customers.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  epaminon-data:
+
+services:
+  epaminon:
+    image: ghcr.io/zenod-ai/zenod:${ZENOD_IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    networks: [dokploy-network]
+    container_name: ${EPAMINON_CONTAINER_NAME:-epaminon-hosted}
+    volumes:
+      - epaminon-data:/data
+    environment:
+      AGENT: epaminon
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      ZENOD_API_TOKEN: ${ZENOD_API_TOKEN:-}
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
+      ZENOD_PROVIDER: ${ZENOD_PROVIDER:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      ZENOD_RUNNER_POKE_URL: ${ZENOD_RUNNER_POKE_URL:-}
+    expose:
+      - "8080"

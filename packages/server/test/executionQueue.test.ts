@@ -246,6 +246,25 @@ describe("ExecutionQueue — durable state seam", () => {
     }
   });
 
+  it("persists requested worker effort through the durable store", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-exec-store-"));
+    const path = join(dir, "execution.sqlite");
+    const store = new ExecutionStore(path, () => 1);
+    try {
+      store.upsert({ executionId: "a", target: "o/r#a", context: "do a", effort: "high", state: "queued", updatedAt: 1 });
+      store.close();
+
+      const reopened = new ExecutionStore(path, () => 2);
+      try {
+        expect(reopened.get("a")).toMatchObject({ executionId: "a", effort: "high" });
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("marks running tickets blocked on restart instead of losing them", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-exec-store-"));
     const path = join(dir, "execution.sqlite");

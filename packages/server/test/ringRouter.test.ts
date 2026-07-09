@@ -42,6 +42,17 @@ function servers(overrides: Partial<RingConnectedServer>[] = []): RingConnectedS
       settingsUrl: "https://herald.example.test/settings",
       tools: { chat: "chat_with_herald" },
     },
+    {
+      id: "epaminon",
+      endpoint: "https://epaminon.example.test/mcp",
+      token: "epaminon-token",
+      displayName: "Epaminon",
+      skillText: "Cloud worker harness for prompt-first execution.",
+      enabled: true,
+      relayPolicy: "same_channel",
+      settingsUrl: "https://epaminon.example.test/settings",
+      tools: { chat: "chat_with_epaminon", runTask: "epaminon.run_task" },
+    },
   ];
   return base.map((server) => ({ ...server, ...overrides.find((override) => override.id === server.id) }));
 }
@@ -64,7 +75,7 @@ describe("RingRouterCore", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].server.id).toBe("mentor");
     expect(calls[0].tool).toBe("chat_with_mentor");
-    expect(calls[0].arguments).toEqual({ message: "hello, what is next?", conversationKey: "whatsapp:chat-1" });
+    expect(calls[0].arguments).toEqual({ message: "hello, what is next?", conversationKey: "whatsapp:chat-1", origin_ticket_id: result.mailboxEntry.id });
     expect(result.outbound).toMatchObject({
       channel: "whatsapp",
       chatId: "chat-1",
@@ -148,7 +159,7 @@ describe("RingRouterCore", () => {
     const calls: RingToolCall[] = [];
     const core = router(calls);
 
-    await core.route({ channel: "web", chatId: "thread-b", text: "for Herald: draft a tweet about the Ring launch" });
+    const result = await core.route({ channel: "web", chatId: "thread-b", text: "for Herald: draft a tweet about the Ring launch" });
 
     expect(calls).toHaveLength(1);
     expect(calls[0].server.id).toBe("herald");
@@ -156,8 +167,45 @@ describe("RingRouterCore", () => {
     expect(calls[0].arguments).toEqual({
       message: "draft a tweet about the Ring launch",
       conversationKey: "web:thread-b",
+      origin_ticket_id: result.mailboxEntry.id,
     });
     expect(core.routeLog()[0]).toMatchObject({ chosenServerId: "herald", reason: "named", resultStatus: "ok" });
+  });
+
+  it("routes named Epaminon execution from WhatsApp to run_task with provenance and run context", async () => {
+    const calls: RingToolCall[] = [];
+    const core = router(calls);
+
+    const result = await core.route({
+      channel: "whatsapp",
+      chatId: "chat-exec",
+      messageId: "wa-exec-1",
+      text: "Epaminon: research the Council seam. effort: high. repo zenod-ai/zenod. output target: docs/council-seam.md",
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].server.id).toBe("epaminon");
+    expect(calls[0].tool).toBe("epaminon.run_task");
+    expect(calls[0].arguments).toEqual({
+      prompt: "research the Council seam. effort: high. repo zenod-ai/zenod. output target: docs/council-seam.md",
+      effort: "high",
+      repo: "zenod-ai/zenod",
+      outputTarget: "docs/council-seam.md",
+      instructions: `Origin: Ring whatsapp chat chat-exec; provider message wa-exec-1; ring mailbox ${result.mailboxEntry.id}`,
+    });
+    expect(result.outbound).toMatchObject({
+      channel: "whatsapp",
+      chatId: "chat-exec",
+      inReplyToMailboxId: result.mailboxEntry.id,
+    });
+    expect(result.decision).toMatchObject({
+      chosenServerId: "epaminon",
+      reason: "execution_task",
+      tool: "epaminon.run_task",
+      resultStatus: "ok",
+      channel: "whatsapp",
+      chatId: "chat-exec",
+    });
   });
 
   it("refuses a disabled named server loudly and does not call MCP", async () => {

@@ -72,7 +72,7 @@ Built from shadcn primitives (Field/FieldGroup forms, Card, Tabs, Alert, sonner 
 1. **Setup wizard** (first boot): create admin password → GitHub PAT + vault repo (`owner/name`, with "create for me" deferred — M0 assumes the vault repo exists) → Anthropic API key → clone & validate → done, here's your MCP URL + token.
 2. **Vault** — repo, branch, workdir status, last sync, re-clone button, lint report view.
 3. **Keys & models** — GitHub PAT, Anthropic key (masked, test buttons), ask/classify model pickers.
-4. **Connections** — MCP endpoint URL, bearer token (show/regenerate), copy-paste snippets for Claude Code / Claude.ai connector setup.
+4. **Connections** — MCP endpoint URL, bearer token (show/regenerate), copy-paste snippets for Claude Code / Claude.ai connector setup, plus Codex CLI/Desktop guidance: Desktop's `Bearer token env var` field takes an environment variable name such as `ZENOD_MCP_TOKEN`, while the actual token must already exist in the Codex process environment.
 
 ## Out of scope for M0
 

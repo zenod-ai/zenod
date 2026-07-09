@@ -133,10 +133,10 @@ const PRODUCT_DEFINITIONS: ProductDefinition[] = [
     key: "epaminon",
     peerName: "epaminon",
     displayName: "Epaminon",
-    job: "Execution runner",
+    job: "Cloud worker harness",
     skillText:
-      "Use for running approved tickets, execution status, branch/PR policy, and completion receipts.",
-    relayPolicy: "Relay ticket status and outward outcomes with provenance.",
+      "Use for prompt-first Codex/Claude-style execution, research tasks, repo/output targets, effort hints, and status/evidence receipts.",
+    relayPolicy: "Relay execution ids, status, transcripts, artifacts, and outward outcomes with Ring provenance.",
   },
 ]
 

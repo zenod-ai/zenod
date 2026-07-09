@@ -1,0 +1,28 @@
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  zenod-epaminon-data:
+
+services:
+  zenod-epaminon:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zenod-epaminon:dokploy
+    container_name: zenod-epaminon
+    restart: unless-stopped
+    networks: [dokploy-network]
+    volumes:
+      - zenod-epaminon-data:/data
+    environment:
+      AGENT: epaminon
+      ZENOD_AWAIT_PROVISION: "1"
+      ZENOD_DATA_DIR: /data
+      PORT: "8080"
+      ZENOD_RUNNER_POKE_URL: http://zenod-agent-runner:8787
+    expose:
+      - "8080"

@@ -38,6 +38,7 @@ import {
   BACKLOG_EDIT_SHAPE,
   BACKLOG_CLOSE_SHAPE,
   BACKLOG_COMMENT_SHAPE,
+  EPAMINON_RUN_TASK_SHAPE,
 } from "./mcpToolSchemas.js";
 import { getToolOutputSchema } from "./toolOutput.js";
 
@@ -539,6 +540,24 @@ const GATEWAY_TOOLS: GatewayTool[] = [
       "Ask Phylax about notification handling, quiet hours, batching, urgency, or whether an event should interrupt Jordi. For advice/control, not direct delivery.",
     inputSchema: INTENT_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "epaminon.run_task",
+    owner: "epaminon",
+    title: "Run task",
+    description:
+      "Owner: Epaminon. Start one prompt-first cloud worker run without requiring a pre-created GitHub issue. Use for research, code, or ops tasks where the caller provides a prompt plus optional effort, repo/path, output target, MCP servers, skills, and instructions. Returns an executionId/ticket; read status, transcript, and evidence through execution_status or epaminon.execution_status.",
+    inputSchema: EPAMINON_RUN_TASK_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: "epaminon.dispatch_worker",
+    owner: "epaminon",
+    title: "Dispatch worker",
+    description:
+      "Owner: Epaminon. Alias for epaminon.run_task for clients that model Epaminon as a cloud Codex/Claude-style worker harness. Starts one durable prompt-first execution and returns an executionId/ticket readable through execution_status or epaminon.execution_status.",
+    inputSchema: EPAMINON_RUN_TASK_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   },
   {
     name: "epaminon.run_existing_issue",

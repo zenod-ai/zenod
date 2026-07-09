@@ -549,12 +549,14 @@ describe("server API", () => {
       expect(archus?.tools?.map((tool) => tool.as)).not.toEqual(
         expect.arrayContaining(["archus_get_issue", "archus_find_issue", "archus_list_issues"]),
       );
-      // #stab: the issue-less epaminon_run_ephemeral_task is retired from the Console
-      // surface; one-offs are ticket-backed via console_run_ephemeral_task.
       expect(epaminon?.tools?.map((tool) => tool.as)).toEqual([
+        "epaminon_run_task",
+        "epaminon_dispatch_worker",
         "epaminon_run_existing_issue",
         "epaminon_read_issue_execution_status",
       ]);
+      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_task")?.description).toContain("Prompt-first cloud worker harness");
+      expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_dispatch_worker")?.description).toContain("cloud Codex/Claude-style worker dispatcher");
       expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_run_existing_issue")?.description).toContain("Start execution");
       expect(epaminon?.tools?.map((tool) => tool.as)).not.toContain("epaminon_run_ephemeral_task");
       expect(epaminon?.tools?.find((tool) => tool.as === "epaminon_read_issue_execution_status")?.description).toContain("did it run");

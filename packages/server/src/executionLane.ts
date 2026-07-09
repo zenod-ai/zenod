@@ -111,30 +111,37 @@ async function reportToArchus(settings: Settings, e: ExecutionEvent): Promise<vo
   if (!res.ok) throw new Error(`Archus rejected apply_execution_event (HTTP ${res.status})`);
 }
 
-/** STUB (#194): re-point the runner to run this ticket on command, reporting back. */
+function launchPreflightProblems(settings: Settings, ticket: ExecutionTicket, runnerUrl: string | undefined): string[] {
+  const problems: string[] = [];
+  if (!runnerUrl) problems.push("runner URL missing (ZENOD_RUNNER_POKE_URL)");
+  const needsGithub = !ticket.target.startsWith("ephemeral:") || /\bTarget repo:/i.test(ticket.context);
+  if (needsGithub && !settings.get("github_token") && !settings.hasGithubApp()) {
+    problems.push("GitHub auth missing (github_token or GitHub App installation required)");
+  }
+  return problems;
+}
+
+/** Launch the runner on command, reporting loudly when the runner/auth path is absent. */
 async function launchExecution(settings: Settings, t: ExecutionTicket): Promise<void> {
   const base = process.env.ZENOD_RUNNER_POKE_URL?.trim();
-  if (!base) {
-    console.warn(`[exec-lane] no runner (ZENOD_RUNNER_POKE_URL unset) — ${t.executionId} stays running, not launched (#194)`);
-    return;
-  }
+  const problems = launchPreflightProblems(settings, t, base);
+  if (problems.length) throw new Error(`execution auth preflight failed: ${problems.join("; ")}`);
   const secret = settings.getRaw("exec_lane_secret") ?? "";
-  try {
-    const res = await fetch(`${base.replace(/\/$/, "")}/run`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(secret ? { "X-Lane-Secret": secret } : {}) },
-      body: JSON.stringify({
-        execution_id: t.executionId,
-        target: t.target,
-        context: t.context,
-        ...(t.notifyOnStart === false ? { notify_on_start: false } : {}),
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) console.warn(`[exec-lane] runner refused /run for ${t.executionId} (HTTP ${res.status}) — awaiting runner #194`);
-  } catch (err) {
-    console.warn(`[exec-lane] runner /run unreachable for ${t.executionId}: ${(err as Error).message} — awaiting runner #194`);
-  }
+  const res = await fetch(`${base!.replace(/\/$/, "")}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(secret ? { "X-Lane-Secret": secret } : {}) },
+    body: JSON.stringify({
+      execution_id: t.executionId,
+      target: t.target,
+      context: t.context,
+      ...(t.effort ? { effort: t.effort } : {}),
+      ...(t.notifyOnStart === false ? { notify_on_start: false } : {}),
+    }),
+    signal: AbortSignal.timeout(10_000),
+  }).catch((err: unknown) => {
+    throw new Error(`runner /run unreachable: ${(err as Error).message}`);
+  });
+  if (!res.ok) throw new Error(`runner refused /run for ${t.executionId} (HTTP ${res.status}): ${await res.text()}`);
 }
 
 /**

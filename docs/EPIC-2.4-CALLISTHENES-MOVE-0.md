@@ -1,9 +1,11 @@
 # EPIC 2.4 · CALLISTHENES MOVE 0 — the second unit product: the voice, console-less
 
 > **▶ CURRENT STATE (worker: start here).** #645 / C-2R is landed on `main`; the stale
-> client-supplied `mcp_token` path is no longer the next lane. Current push is C-3 demo fidelity:
-> first-class Callisthenes Stripe TEST buy surface is deployed on `cloud-test.zenod.dev` + clear
-> hosted/self-hosted demo path. `cloud.zenod.dev` is reserved for the later Stripe LIVE lane.
+> client-supplied `mcp_token` path is no longer the next lane. C-3 Stripe TEST checkout/provision is
+> green on `cloud-test.zenod.dev`; current push is C-7 human acceptance. The active hosted tenant now
+> has one guided bring-your-own-X-app setup, verifies the four OAuth1 sender credentials against
+> X, and displays the bound `@handle`. Human gate: rotate screenshot-exposed app credentials, then
+> generate the separate user Access Token pair. `cloud.zenod.dev` remains reserved for Stripe LIVE.
 > Bound spine:
 > this document only; referenced parent/sibling spines are read-only unless Jordi widens scope.
 > — worker, 2026-07-09
@@ -672,3 +674,92 @@ instead of the Callisthenes buy surface.
   `https://cloud-test.zenod.dev/buy/callisthenes`; the page no longer contains the Zenod GitHub
   sign-in surface. `https://cloud-test.zenod.dev/buy/callisthenes` returns HTTP 303 to a Stripe
   `cs_test_...` Checkout Session. — [worker]
+### 2026-07-09 · [worker] C-7 hosted X setup UI added; current tenant unblocked from 500
+Jordi hit `Internal Server Error` at
+`https://c-jordikalitest-godu15.zenod.dev/connect/x/start` during the fresh cloud-test tenant run.
+
+- **Root cause:** the running hosted tenant had no `X_OAUTH2_CLIENT_ID` /
+  `X_OAUTH2_CLIENT_SECRET`; `ChatAuth.connect()` raised while building the OAuth2 PKCE flow and the
+  page route did not catch it. The existing council X containers (`x-mcp-postread`,
+  `x-mcp-readonly`) contain OAuth1/bearer X credentials, but no OAuth2 client id/secret was present
+  in running VPS containers.
+- **Unit fix:** `units/callisthenes/connect_page.py` now renders an X setup panel on `/connect`,
+  accepts pasted X `.env` lines at `POST /connect/x/config`, stores them tenant-locally in
+  `/data/x-config.json` (override: `CALLISTHENES_X_CONFIG_PATH`), reloads the shared `ChatAuth`
+  engine, and displays only `set`/`missing` status. `/connect/x/start` now returns a setup error page
+  instead of a 500 when OAuth2 config is incomplete. `headless-oauth1.patch` also now redacts the
+  upstream boot log from `OAuth1 access token: <value>` to a boolean configured/not-configured line.
+  Tests were extended for missing-config behavior, save/reload, and no-secret rendering.
+- **Current tenant recovery:** copied the existing council OAuth1/bearer values from
+  `x-mcp-postread` into the current tenant env without printing secret values, rebuilt/recreated
+  `callisthenes-jordikalitest-godu15`, and restored its Dokploy/Traefik labels and `dokploy-network`
+  attachment after the manual compose recreate stripped them.
+- **Verification:** `python3 -m py_compile units/callisthenes/connect_page.py
+  units/callisthenes/test_connect_page.py` passed; direct controller probes passed for
+  missing-config, config save, no-secret rendering, and authorize URL generation after config. The
+  regenerated OAuth1 patch applies cleanly against upstream `xmcp@63d3436` and was rebuilt with
+  `--no-cache` on the tenant. Local `pytest` remains unavailable (`No module named pytest`). Live
+  `https://c-jordikalitest-godu15.zenod.dev/connect` now shows the X setup panel, OAuth1 sender
+  status set, OAuth2 missing, and the MCP block; `/connect/x/start` returns HTTP 400 with the setup
+  page rather than HTTP 500. Fresh boot logs show only the redacted OAuth1 configured boolean.
+- **Remaining blocker:** to complete the click-through X OAuth2 flow, paste or provision a real
+  `X_OAUTH2_CLIENT_ID` and matching callback registration for
+  `https://c-jordikalitest-godu15.zenod.dev/oauth/callback` (plus client secret if the X app requires
+  it). The old council OAuth1/bearer keys are available via VPS env on `x-mcp-postread` /
+  `x-mcp-readonly` and have been copied to this tenant for sender compatibility. — [worker]
+
+### 2026-07-09 · [worker] C-7 X setup corrected to one real sender-binding journey
+Jordi rejected the recovery UI because it showed two unrelated concepts as one flow: a blue OAuth2
+"Connect X" button plus a bulk X-app env panel. Code inspection confirmed the product bug: the
+OAuth2 callback stored tokens in the per-tenant auth store, while the actual upstream posting client
+signed X requests with a separate OAuth1 client. The page therefore could claim "connected" without
+changing the account used to post.
+
+- **Decision / UX:** hosted `/connect` now has one X section. It links to
+  `https://console.x.com/` and X's official getting-access guide, explains OAuth 1.0a + **Read and
+  write**, states that no user-id field is needed because the Access Token is the account binding,
+  and provides one masked field for each required sender credential: API Key, API Key Secret,
+  Access Token, and Access Token Secret. The old blue button, OAuth2 status badges, and bulk `.env`
+  textarea are absent from the user journey.
+- **Trust contract:** POST `/connect/x/config` saves the four credentials tenant-locally, calls
+  signed `GET https://api.x.com/2/users/me`, and only shows connected after X returns an id and
+  username; success renders `Connected as @handle`. Values are never rendered back. The OAuth1
+  request hook rebuilds its signer from current process config so a newly verified account applies
+  to subsequent MCP X calls without a container restart.
+- **Custody correction:** removed the four OAuth1 sender values and bearer value previously copied
+  from `x-mcp-postread` into tenant `jordikalitest-godu15`. The live tenant now starts honestly at
+  **Not connected** and contains no inherited sender credentials; only the non-secret default scope
+  remains configured.
+- **Evidence:** remote image rebuilt from the pinned xmcp commit; both patches apply cleanly. Hosted
+  `test_connect_page.py`: **17 passed** (one Starlette/httpx deprecation warning). Live HTTP 200 at
+  `https://c-jordikalitest-godu15.zenod.dev/connect`; DOM checks prove the two official links, four
+  fields, Save-and-verify command, absent old button/textarea, and initial Not-connected state.
+  Browser layout has no horizontal overflow at 1280px or 390px.
+- **Integration:** branch `codex/epic2.4-c7-guided-x`, first implementation commit `6710067`, draft
+  PR [#700](https://github.com/zenod-ai/zenod/pull/700) against `main`; C-7 ticket
+  [#649](https://github.com/zenod-ai/zenod/issues/649) retitled and updated with the same evidence.
+  Repository CI passed on PR head `d320792` in 2m21s; PR remains draft for the real-account gate.
+- **Human gate:** Jordi must create/open his X app, enable OAuth1 Read and write, generate the four
+  values for the account he wants to post as, and submit them. Real-account verification and first
+  tweet remain acceptance evidence, not self-certified. — [worker]
+
+### 2026-07-09 · [worker] C-7 initial X credential screen mapped explicitly
+Jordi's first real X app creation exposed a stranger-grade ambiguity: X's creation modal shows three
+values (Consumer Key, Secret Key, Bearer Token), while the OAuth1 user-context sender requires four
+different roles. Official X docs confirm that Consumer/API Key + Secret identify the app, Access
+Token + Secret identify the posting user, and Bearer Token is app-only rather than user context.
+
+- **Live UX correction:** `/connect` now mirrors the exact **Application Created Successfully**
+  modal: Consumer Key maps to the first field, Secret Key to the second, and Bearer Token is marked
+  **Do not enter it here**. The next instructions say to close the modal, enable OAuth 1.0a Read and
+  write, then use **Keys and tokens → Access Token and Secret → Generate** for the remaining pair.
+  Field labels now include both X names (`Consumer Key / API Key`, `Secret Key / API Key Secret`).
+- **Security gate:** the page now warns that credentials shown in screenshots/chat are exposed and
+  must be regenerated before use. Jordi's screenshot contained live app credentials, so those exact
+  values must not be submitted to Callisthenes.
+- **Evidence:** cached remote image rebuild + tenant recreate succeeded; hosted focused suite remains
+  **17 passed** (one Starlette/httpx deprecation warning). Live page returns HTTP 200 and DOM proves
+  all three mappings, the separate Access Token generation step, the exposure warning, and absence
+  of a Bearer Token field. No horizontal overflow at 1280px or 390px. Changes continue on draft PR
+  [#700](https://github.com/zenod-ai/zenod/pull/700) / C-7 [#649](https://github.com/zenod-ai/zenod/issues/649).
+  — [worker]

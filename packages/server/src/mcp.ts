@@ -37,6 +37,7 @@ import {
   BACKLOG_CLOSE_SHAPE,
   BACKLOG_COMMENT_SHAPE,
   BACKLOG_LIST_SHAPE,
+  EPAMINON_RUN_TASK_SHAPE,
   RUN_ISSUE_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
 } from "./mcpToolSchemas.js";
@@ -72,14 +73,19 @@ export type ExistingIssueRunner = (input: {
   target: string;
   instructions?: string;
   repo?: string;
+  effort?: "low" | "medium" | "high" | "max";
   notifyOnStart?: boolean;
 }) => Promise<ExecutionTicket>;
 export type EphemeralTaskRunner = (input: {
   objective: string;
   instructions?: string;
   artifactPolicy?: string;
+  effort?: "low" | "medium" | "high" | "max";
   repo?: string;
   path?: string;
+  outputTarget?: string;
+  mcpServers?: string[];
+  skills?: string[];
 }) => Promise<ExecutionTicket>;
 export interface BacklogIssueReader {
   getIssue(input: { target: string }): Promise<ToolResponse>;
@@ -275,6 +281,35 @@ function v4ExecutionStatusResponse(
     text: formatExecutionStatus(filteredTickets),
     evidence: filteredTickets.map(executionStatusEvidence),
   });
+}
+
+type PublicEpaminonTaskInput = {
+  prompt: string;
+  effort?: "low" | "medium" | "high" | "max";
+  repo?: string;
+  path?: string;
+  outputTarget?: string;
+  mcpServers?: string[];
+  skills?: string[];
+  instructions?: string;
+};
+
+function publicExecutionResponse(toolName: string, ticket: ExecutionTicket) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: `Queued execution ${ticket.executionId}: ${ticket.state}. Poll execution_status with executionId ${ticket.executionId}.`,
+      },
+    ],
+    structuredContent: {
+      executionId: ticket.executionId,
+      statusTool: "execution_status",
+      typedStatusTool: "epaminon.execution_status",
+      tool: toolName,
+      ticket,
+    },
+  };
 }
 
 /** Human-facing text for a finished store_memory job — mirrors the old reply. */
@@ -498,12 +533,50 @@ export function buildMcpServer(
     }
 
     if (runEphemeralTask) {
+      const runPublicTask = async (toolName: string, input: PublicEpaminonTaskInput) => {
+        const ticket = await runEphemeralTask({
+          objective: input.prompt,
+          ...(input.instructions ? { instructions: input.instructions } : {}),
+          ...(input.outputTarget ? { artifactPolicy: input.outputTarget, outputTarget: input.outputTarget } : {}),
+          ...(input.effort ? { effort: input.effort } : {}),
+          ...(input.repo ? { repo: input.repo } : {}),
+          ...(input.path ? { path: input.path } : {}),
+          ...(input.mcpServers ? { mcpServers: input.mcpServers } : {}),
+          ...(input.skills ? { skills: input.skills } : {}),
+        });
+        return publicExecutionResponse(toolName, ticket);
+      };
+
+      server.registerTool(
+        "epaminon.run_task",
+        {
+          title: "Run task",
+          description:
+            "Owner: Epaminon. Public prompt-first durable task dispatch. Starts one execution from a prompt; a caller does not need to pre-create a GitHub issue. Accepts effort, repo/path, output target, MCP servers, skills, and instructions. Returns an executionId/ticket; poll execution_status or epaminon.execution_status for status, transcript, and evidence.",
+          inputSchema: EPAMINON_RUN_TASK_SHAPE,
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+        },
+        async (input) => runPublicTask("epaminon.run_task", input),
+      );
+
+      server.registerTool(
+        "epaminon.dispatch_worker",
+        {
+          title: "Dispatch worker",
+          description:
+            "Owner: Epaminon. Alias for epaminon.run_task for clients that model Epaminon as a cloud worker dispatcher. Starts one durable prompt-first execution and returns an executionId/ticket readable through execution_status or epaminon.execution_status.",
+          inputSchema: EPAMINON_RUN_TASK_SHAPE,
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+        },
+        async (input) => runPublicTask("epaminon.dispatch_worker", input),
+      );
+
       server.registerTool(
         "epaminon.run_ephemeral_task",
         {
-          title: "Run ephemeral task",
+          title: "Run one-off task",
           description:
-            "Owner: Epaminon. Start one one-off execution task tracked in the execution queue/journey without creating a GitHub backlog issue by default. Use for ephemeral research or operational work when the user did not ask for a durable ticket.",
+            "Owner: Epaminon. Backward-compatible legacy name for direct prompt-first one-off execution. Prefer epaminon.run_task or epaminon.dispatch_worker. This starts a durable execution queue entry without requiring the caller to pre-create a GitHub issue; status is read through execution_status or epaminon.execution_status.",
           inputSchema: RUN_EPHEMERAL_TASK_SHAPE,
           annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
         },

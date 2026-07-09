@@ -31,12 +31,14 @@ zenod-x-net zenod-agent-runner`.
 ```sh
 docker volume create zenod-agent-work
 docker volume create zenod-agent-codex-home
+docker volume create zenod-agent-claude-home
 docker volume create zenod-agent-gh
 
 docker run -d --name zenod-agent-runner \
   --network zenod-x-net \
   -v zenod-agent-work:/runner/work \
   -v zenod-agent-codex-home:/runner/codex-home \
+  -v zenod-agent-claude-home:/runner/claude-home \
   -v zenod-agent-gh:/runner/gh \
   zenod-agent-runner
 ```
@@ -45,7 +47,7 @@ The image's entrypoint (`scripts/agent-runner-entrypoint.sh`) idempotently write
 
 ## Auth
 
-Codex auth is runner-scoped. Do not rely on `/root/.codex` from the VPS host inside this container.
+Codex, Claude, and GitHub auth are runner-scoped. Do not rely on host auth from the VPS inside this container. Epaminon now treats missing runner auth as a launch blocker: `/run` reports `blocked` instead of allowing an execution to sit in fake `running` state.
 
 Authenticate Codex inside the runner:
 
@@ -61,7 +63,14 @@ docker exec -it zenod-agent-runner gh auth login
 docker exec zenod-agent-runner gh auth status
 ```
 
-For automation, seed `/runner/codex-home/auth.json` and `/runner/gh` from a trusted secret store or a one-time login, then let those volumes persist. Use one Codex auth volume per serialized runner stream; do not share one `auth.json` across multiple concurrently refreshing containers.
+Authenticate Claude Code either with the hosted OAuth token in `CLAUDE_CODE_OAUTH_TOKEN` or by doing a one-time Claude login with `CLAUDE_CONFIG_DIR=/runner/claude-home` persisted:
+
+```sh
+docker exec -it zenod-agent-runner claude
+docker exec zenod-agent-runner claude --version
+```
+
+For automation, seed `/runner/codex-home/auth.json`, `/runner/claude-home`, and `/runner/gh` from a trusted secret store or a one-time login, then let those volumes persist. Use one Codex auth volume per serialized runner stream; do not share one `auth.json` across multiple concurrently refreshing containers.
 
 ## Smoke Test
 
@@ -166,6 +175,7 @@ docker run -d --name zenod-agent-runner \
   --network zenod-x-net \
   -v zenod-agent-work:/runner/work \
   -v zenod-agent-codex-home:/runner/codex-home \
+  -v zenod-agent-claude-home:/runner/claude-home \
   -v zenod-agent-gh:/runner/gh \
   zenod-agent-runner
 ```

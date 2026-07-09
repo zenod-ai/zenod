@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Epic 2.9 Epaminon Deliverables</title>
+<style>
+  :root {
+    --bg: #101214;
+    --panel: #191d20;
+    --panel-2: #23282c;
+    --ink: #f2eee7;
+    --muted: #b9b1a6;
+    --line: #384047;
+    --gold: #d8ad61;
+    --green: #79b58a;
+    --blue: #7aa8c7;
+    --red: #cf776d;
+    --violet: #a891d7;
+    --shadow: rgba(0, 0, 0, .28);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body { overflow: hidden; }
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 4;
+    width: 0;
+    height: 3px;
+    background: var(--gold);
+    transition: width .18s ease;
+  }
+  .deck {
+    position: relative;
+    height: 100vh;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    overflow: auto;
+    padding: 54px 72px 72px;
+  }
+  .slide.active {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 28px;
+  }
+  .eyebrow {
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 760;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+  h1, h2, h3, p { letter-spacing: 0; }
+  h1, h2 {
+    margin: 10px 0 0;
+    line-height: 1.04;
+    font-weight: 760;
+  }
+  h1 {
+    max-width: 1060px;
+    font-size: 72px;
+  }
+  h2 {
+    max-width: 1080px;
+    font-size: 54px;
+  }
+  h3 {
+    margin: 0 0 10px;
+    font-size: 23px;
+    line-height: 1.16;
+  }
+  p {
+    margin: 0;
+    max-width: 1030px;
+    color: var(--muted);
+    font-size: 25px;
+    line-height: 1.34;
+  }
+  ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+  }
+  li {
+    margin: 6px 0;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.44;
+  }
+  .body {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 22px;
+  }
+  .two {
+    display: grid;
+    grid-template-columns: minmax(0, .95fr) minmax(370px, 1.05fr);
+    gap: 34px;
+    align-items: center;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .grid.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card, .diagram, .flowbox {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 16px 45px var(--shadow);
+  }
+  .card {
+    min-height: 164px;
+    padding: 22px;
+  }
+  .card p {
+    color: var(--muted);
+    font-size: 17px;
+    line-height: 1.45;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    margin-bottom: 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 760;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .tag.gold { color: var(--gold); border-color: rgba(216, 173, 97, .58); }
+  .tag.green { color: var(--green); border-color: rgba(121, 181, 138, .58); }
+  .tag.blue { color: var(--blue); border-color: rgba(122, 168, 199, .58); }
+  .tag.red { color: var(--red); border-color: rgba(207, 119, 109, .58); }
+  .tag.violet { color: var(--violet); border-color: rgba(168, 145, 215, .58); }
+  .tagrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .diagram {
+    padding: 24px;
+  }
+  .nodeflow {
+    display: grid;
+    grid-template-columns: 1fr 42px 1fr 42px 1fr;
+    align-items: center;
+    gap: 12px;
+  }
+  .node {
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel-2);
+    padding: 16px;
+  }
+  .node strong {
+    font-size: 22px;
+    line-height: 1.16;
+  }
+  .node span {
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.36;
+  }
+  .arrow {
+    display: grid;
+    place-items: center;
+    color: var(--gold);
+    font-size: 30px;
+  }
+  .lanes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .lane {
+    min-height: 360px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 20px;
+  }
+  .lane h3 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .stack {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .chip {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel-2);
+    padding: 13px;
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.34;
+  }
+  .chip em {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-style: normal;
+    font-size: 13px;
+  }
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .state {
+    min-height: 126px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 14px;
+  }
+  .state strong {
+    display: block;
+    color: var(--ink);
+    font-size: 17px;
+    line-height: 1.2;
+  }
+  .state span {
+    display: block;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .table {
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 16px 45px var(--shadow);
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 130px 1fr 120px;
+    gap: 14px;
+    align-items: center;
+    min-height: 62px;
+    border-bottom: 1px solid var(--line);
+    padding: 13px 16px;
+  }
+  .row:last-child { border-bottom: 0; }
+  .row b {
+    font-size: 15px;
+  }
+  .row span {
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.36;
+  }
+  .status {
+    justify-self: end;
+    border: 1px solid rgba(216, 173, 97, .55);
+    border-radius: 999px;
+    padding: 4px 9px;
+    color: var(--gold);
+    font-size: 12px;
+    font-weight: 760;
+    text-transform: uppercase;
+  }
+  .callout {
+    border-left: 4px solid var(--gold);
+    background: rgba(216, 173, 97, .08);
+    padding: 18px 20px;
+  }
+  .callout p {
+    max-width: none;
+    font-size: 20px;
+  }
+  .nav {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nav button {
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 760;
+    cursor: pointer;
+  }
+  .nav button:hover { border-color: var(--gold); }
+  .counter {
+    min-width: 54px;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  @media (max-width: 960px) {
+    body { overflow: auto; }
+    .deck { height: auto; min-height: 100vh; }
+    .slide {
+      position: relative;
+      min-height: 100vh;
+      padding: 34px 20px 82px;
+    }
+    .slide.active { display: grid; }
+    h1 { font-size: 44px; }
+    h2 { font-size: 34px; }
+    p { font-size: 20px; }
+    .two, .grid, .grid.two-col, .grid.four, .lanes, .timeline, .nodeflow {
+      grid-template-columns: 1fr;
+    }
+    .arrow { transform: rotate(90deg); }
+    .row {
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+    .status { justify-self: start; }
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<main class="deck">
+  <section class="slide active">
+    <header>
+      <div class="eyebrow">Epic 2.9</div>
+      <h1>Epaminon cloud worker Move 0.</h1>
+    </header>
+    <div class="body two">
+      <div>
+        <p>Ship Epaminon as a standalone MCP server: buy a cloud worker, connect Claude or Codex, send text plus effort level, and get a durable result back in the repo or artifact target.</p>
+        <div class="tagrow">
+          <span class="tag gold">Public page</span>
+          <span class="tag blue">MCP server</span>
+          <span class="tag green">Cloud harness</span>
+          <span class="tag red">Ring connected</span>
+        </div>
+      </div>
+      <div class="diagram">
+        <div class="nodeflow">
+          <div class="node"><strong>User or Ring</strong><span>Submits prompt, effort, repo, and output target.</span></div>
+          <div class="arrow">&gt;</div>
+          <div class="node"><strong>Epaminon MCP</strong><span>Queues, authenticates, launches, and tracks the run.</span></div>
+          <div class="arrow">&gt;</div>
+          <div class="node"><strong>Worker container</strong><span>Runs Codex or Claude with prewired MCP and skills.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">What gets delivered</div>
+      <h2>The issue board is EPM-1 through EPM-8.</h2>
+    </header>
+    <div class="body">
+      <div class="grid">
+        <div class="card"><span class="tag gold">EPM-1</span><h3>Unit surface</h3><p>`units/epaminon/` with README, seam contract, Docker story, auth remit, and current code map.</p></div>
+        <div class="card"><span class="tag red">EPM-2</span><h3>Public page</h3><p>A product page with Stripe TEST checkout on cloud-test.zenod.dev and purchase-to-instance handoff.</p></div>
+        <div class="card"><span class="tag blue">EPM-3</span><h3>Instance UI</h3><p>MCP URL, token, Claude/Codex commands, auth status, worker settings, MCP servers, and skills.</p></div>
+        <div class="card"><span class="tag violet">EPM-4</span><h3>MCP task contract</h3><p>Prompt-first `run_task` or equivalent with effort, repo, output target, MCP context, and instructions.</p></div>
+        <div class="card"><span class="tag green">EPM-5</span><h3>Harness lifecycle</h3><p>Containerized worker dispatch, queueing, transcript, status, artifacts, and restart-safe evidence.</p></div>
+        <div class="card"><span class="tag gold">EPM-6</span><h3>Auth and receipts</h3><p>GitHub, model/CLI, MCP peer tokens, private lanes, and durable receipts.</p></div>
+        <div class="card"><span class="tag green">EPM-7</span><h3>Ring/Council path</h3><p>WhatsApp to Council to Epaminon, leaving research output in the requested repo or artifact target.</p></div>
+        <div class="card"><span class="tag blue">EPM-8</span><h3>E2E acceptance</h3><p>Purchase, instance UI, direct MCP run, WhatsApp run, persistence, and private-tool negative test.</p></div>
+        <div class="card"><span class="tag red">Guardrail</span><h3>No scope drift</h3><p>Epaminon executes. Zenod remembers, Callisthenes sends, Archus curates, Ring routes.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Product flow</div>
+      <h2>The first run starts with a purchase and ends inside the cloud worker UI.</h2>
+    </header>
+    <div class="body two">
+      <div>
+        <p>Move 0 should prove the user journey on cloud-test.zenod.dev: public page, Stripe TEST checkout, hosted Epaminon worker landing, MCP address, token, and copyable client setup. cloud.zenod.dev remains the separate live Stripe surface.</p>
+      </div>
+      <div class="table">
+        <div class="row"><b>Buy</b><span>Epaminon public page explains the cloud worker offer and starts Stripe TEST checkout on cloud-test.zenod.dev.</span><span class="status">EPM-2</span></div>
+        <div class="row"><b>Land</b><span>Success lands on the user's cloud-test instance UI or a documented test-mode provisioning receipt.</span><span class="status">EPM-2/3</span></div>
+        <div class="row"><b>Connect</b><span>UI exposes MCP URL/token and Claude/Codex setup commands.</span><span class="status">EPM-3</span></div>
+        <div class="row"><b>Run</b><span>Direct MCP or Council dispatch submits text plus effort and gets status/evidence.</span><span class="status">EPM-4/7</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Public surface</div>
+      <h2>The main tool is prompt-first, not ticket-first.</h2>
+    </header>
+    <div class="body">
+      <div class="lanes">
+        <div class="lane">
+          <h3>Public MCP <span class="tag blue">allowed</span></h3>
+          <div class="stack">
+            <div class="chip">`run_task`<em>Text prompt, effort, repo/path, output target, MCP context, skills.</em></div>
+            <div class="chip">`execution_status`<em>State, elapsed, phase, evidence, transcript, blockers.</em></div>
+            <div class="chip">`run_existing_issue`<em>Compatibility path for explicit GitHub work issues.</em></div>
+          </div>
+        </div>
+        <div class="lane">
+          <h3>Suite lane <span class="tag red">private</span></h3>
+          <div class="stack">
+            <div class="chip">`enqueue_execution`<em>Archus to Epaminon only, not the public UX.</em></div>
+            <div class="chip">`approve_execution`<em>Suite approval leg for irreversible outcomes.</em></div>
+            <div class="chip">`apply_execution_event`<em>Epaminon to Archus fact reporting.</em></div>
+          </div>
+        </div>
+        <div class="lane">
+          <h3>Worker profile <span class="tag green">configured</span></h3>
+          <div class="stack">
+            <div class="chip">Instructions<em>General worker policy and project-specific guidance.</em></div>
+            <div class="chip">MCP servers<em>Memory, outbound, repo, or custom servers prewired into the run.</em></div>
+            <div class="chip">Skills<em>Named behavior packs available to the harness.</em></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Execution path</div>
+      <h2>The main flow should be orderly and inspectable.</h2>
+    </header>
+    <div class="body">
+      <div class="timeline">
+        <div class="state"><strong>accepted</strong><span>MCP call returns an execution id immediately.</span></div>
+        <div class="state"><strong>queued</strong><span>Concurrency and worker profile are resolved.</span></div>
+        <div class="state"><strong>running</strong><span>Harness starts with effort level and prewired MCP.</span></div>
+        <div class="state"><strong>artifact</strong><span>Result lands in repo, PR, file, issue, or artifact store.</span></div>
+        <div class="state"><strong>review</strong><span>Irreversible outcomes wait for approval.</span></div>
+        <div class="state"><strong>done</strong><span>Status, evidence, transcript, and receipt persist.</span></div>
+      </div>
+      <div class="callout">
+        <p>GitHub issues are useful receipts and targets, but they are not the prerequisite UX for every run.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Authentication</div>
+      <h2>The harness needs four auth buckets, kept visible but not leaked.</h2>
+    </header>
+    <div class="body">
+      <div class="grid four">
+        <div class="card"><span class="tag green">GitHub</span><h3>Repo work</h3><p>Clone, branch, issue, PR, commit, and artifact writes where the task requires them.</p></div>
+        <div class="card"><span class="tag blue">Model/CLI</span><h3>Codex or Claude</h3><p>Provider keys or CLI login required before the worker can honestly start.</p></div>
+        <div class="card"><span class="tag gold">MCP peers</span><h3>Prewired tools</h3><p>Memory, outbound, repo, and custom servers passed into the worker profile.</p></div>
+        <div class="card"><span class="tag violet">Lane secrets</span><h3>Private suite control</h3><p>Archus/Epaminon callbacks stay identity-gated and off public MCP.</p></div>
+      </div>
+      <div class="table">
+        <div class="row"><b>Visible</b><span>UI shows auth status and setup commands without exposing secrets.</span><span class="status">EPM-3</span></div>
+        <div class="row"><b>Enforced</b><span>Missing GitHub/model/CLI auth fails loudly before fake execution.</span><span class="status">EPM-5/6</span></div>
+        <div class="row"><b>Private</b><span>Aggregate gateway does not expose lane tools.</span><span class="status">EPM-6/8</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Ring connection</div>
+      <h2>2.5 connects to Epaminon; Epaminon does not become Ring.</h2>
+    </header>
+    <div class="body two">
+      <div>
+        <p>Ring/Council should treat Epaminon as a connected product: route a WhatsApp research task to it, preserve provenance, and relay the resulting evidence.</p>
+      </div>
+      <div class="grid two-col">
+        <div class="card"><span class="tag gold">Console</span><h3>Connected product</h3><p>Endpoint, token, skill text, relay policy, settings link, and health test.</p></div>
+        <div class="card"><span class="tag blue">Council</span><h3>Delegation</h3><p>Default brain can dispatch a research/execution task without rewriting the user's intent.</p></div>
+        <div class="card"><span class="tag green">WhatsApp</span><h3>Phone path</h3><p>Phylax/Ring delivers the request and later relays status and final evidence.</p></div>
+        <div class="card"><span class="tag red">Boundary</span><h3>No takeover</h3><p>Epaminon executes; Zenod remembers, Callisthenes sends, Archus curates, Ring routes.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <header>
+      <div class="eyebrow">Acceptance</div>
+      <h2>Ready means one complete end-to-end run.</h2>
+    </header>
+    <div class="body">
+      <div class="grid two-col">
+        <div class="card"><span class="tag gold">Purchase</span><h3>Test checkout</h3><p>Public page starts the flow and produces an instance handoff receipt.</p></div>
+        <div class="card"><span class="tag red">Connect</span><h3>Claude or Codex</h3><p>User can copy MCP setup from the instance UI and connect a client.</p></div>
+        <div class="card"><span class="tag blue">Run</span><h3>Prompt plus effort</h3><p>Task dispatch reaches terminal status with transcript and evidence.</p></div>
+        <div class="card"><span class="tag violet">Route</span><h3>WhatsApp to Council</h3><p>Phone request reaches Epaminon and leaves a research result in the requested target.</p></div>
+      </div>
+      <div class="callout">
+        <p>EPM-8 is the verdict: purchase → instance UI → direct MCP and WhatsApp/Council task → durable artifact.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="nav" aria-label="Slides">
+  <button type="button" id="prev" aria-label="Previous slide">&lt;</button>
+  <span class="counter" id="counter">1 / 8</span>
+  <button type="button" id="next" aria-label="Next slide">&gt;</button>
+</div>
+<script>
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const counter = document.getElementById("counter");
+  const progress = document.getElementById("progress");
+  let index = 0;
+
+  function show(nextIndex) {
+    index = Math.max(0, Math.min(slides.length - 1, nextIndex));
+    slides.forEach((slide, i) => slide.classList.toggle("active", i === index));
+    counter.textContent = `${index + 1} / ${slides.length}`;
+    progress.style.width = `${((index + 1) / slides.length) * 100}%`;
+  }
+
+  document.getElementById("prev").addEventListener("click", () => show(index - 1));
+  document.getElementById("next").addEventListener("click", () => show(index + 1));
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") show(index + 1);
+    if (event.key === "ArrowLeft" || event.key === "PageUp") show(index - 1);
+    if (event.key === "Home") show(0);
+    if (event.key === "End") show(slides.length - 1);
+  });
+
+  show(0);
+</script>
+</body>
+</html>

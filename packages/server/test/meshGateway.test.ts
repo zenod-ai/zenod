@@ -24,9 +24,19 @@ describe("Console mesh gateway contract", () => {
   let epaminonDir: string;
   let epaminonRuntime: Runtime;
   let epaminonServer: ServerType;
+  let runnerServer: ServerType;
   let epaminonUrl: string;
+  let oldRunnerUrl: string | undefined;
 
   beforeAll(async () => {
+    oldRunnerUrl = process.env.ZENOD_RUNNER_POKE_URL;
+    runnerServer = serve({
+      fetch: (request) => (new URL(request.url).pathname === "/run" ? Response.json({ ok: true }) : new Response("not found", { status: 404 })),
+      port: 0,
+    });
+    const runnerPort = (runnerServer.address() as AddressInfo).port;
+    process.env.ZENOD_RUNNER_POKE_URL = `http://127.0.0.1:${runnerPort}`;
+
     archusDir = await mkdtemp(join(tmpdir(), "zenod-mesh-archus-"));
     archusRuntime = new Runtime(archusDir, ARCHUS_AGENT);
     archusRuntime.getEngine = async () =>
@@ -42,6 +52,8 @@ describe("Console mesh gateway contract", () => {
 
     epaminonDir = await mkdtemp(join(tmpdir(), "zenod-mesh-epaminon-"));
     epaminonRuntime = new Runtime(epaminonDir, EPAMINON_AGENT);
+    epaminonRuntime.settings.set("github_token", "test-token");
+    epaminonRuntime.settings.setRaw("epaminon_codex_cli_auth", "test-cli");
     await epaminonRuntime.executionQueue!.enqueue({
       executionId: "104",
       target: "AlfaBlok/obsidian-brain#103",
@@ -74,6 +86,9 @@ describe("Console mesh gateway contract", () => {
     archusServer.close();
     archusRuntime.close();
     epaminonServer.close();
+    runnerServer.close();
+    if (oldRunnerUrl === undefined) delete process.env.ZENOD_RUNNER_POKE_URL;
+    else process.env.ZENOD_RUNNER_POKE_URL = oldRunnerUrl;
     epaminonRuntime.close();
     await rm(dir, { recursive: true, force: true });
     await rm(archusDir, { recursive: true, force: true });
@@ -140,8 +155,10 @@ describe("Console mesh gateway contract", () => {
       "close_issue",
       "create_issue",
       "edit_issue",
+      "epaminon.dispatch_worker",
       "epaminon.run_ephemeral_task",
       "epaminon.run_existing_issue",
+      "epaminon.run_task",
       "execution_status",
       "fetch_execution_deliverable",
       "get_memory",
@@ -515,21 +532,56 @@ describe("Console mesh gateway contract", () => {
     try {
       const result = await client.callTool({
         name: "epaminon.run_existing_issue",
-        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch.", notifyOnStart: false },
+        arguments: { target: "zenod-ai/zenod#270", instructions: "Use the current branch.", effort: "high", notifyOnStart: false },
       });
       const structured = result.structuredContent as {
-        ticket: { executionId: string; target: string; state: string; context: string; notifyOnStart?: boolean };
+        ticket: { executionId: string; target: string; state: string; context: string; effort?: string; note?: string; notifyOnStart?: boolean };
       };
       expect(structured.ticket).toMatchObject({
         target: "zenod-ai/zenod#270",
-        state: "running",
+        effort: "high",
         notifyOnStart: false,
       });
+      expect(["queued", "running"]).toContain(structured.ticket.state);
       expect(structured.ticket.executionId).toMatch(/^direct-/);
       expect(structured.ticket.context).toContain("Use the current branch.");
+      expect(structured.ticket.context).toContain("Effort: high");
       expect(epaminonRuntime.executionQueue!.snapshot()).toEqual(
         expect.arrayContaining([expect.objectContaining({ executionId: structured.ticket.executionId, target: "zenod-ai/zenod#270" })]),
       );
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("routes prompt-first worker requests to Epaminon's native run_task tool", async () => {
+    const client = await connectGateway();
+    try {
+      const result = await client.callTool({
+        name: "epaminon.run_task",
+        arguments: {
+          prompt: "Research the Ring route evidence path.",
+          effort: "high",
+          repo: "zenod-ai/zenod",
+          outputTarget: "write docs/ring-evidence.md",
+          mcpServers: ["github"],
+          skills: ["epic-spine"],
+          instructions: "Preserve WhatsApp provenance.",
+        },
+      });
+      const structured = result.structuredContent as {
+        executionId: string;
+        ticket: { executionId: string; target: string; context: string; effort?: string };
+      };
+      expect(structured.executionId).toBe(structured.ticket.executionId);
+      expect(structured.ticket.target).toBe(`ephemeral:${structured.executionId}`);
+      expect(structured.ticket.effort).toBe("high");
+      expect(structured.ticket.context).toContain("Research the Ring route evidence path.");
+      expect(structured.ticket.context).toContain("Target repo: zenod-ai/zenod");
+      expect(structured.ticket.context).toContain("Output target: write docs/ring-evidence.md");
+      expect(structured.ticket.context).toContain("MCP servers/context: github");
+      expect(structured.ticket.context).toContain("Skills: epic-spine");
+      expect(structured.ticket.context).toContain("Preserve WhatsApp provenance.");
     } finally {
       await client.close();
     }
@@ -561,15 +613,17 @@ describe("Console mesh gateway contract", () => {
     try {
       const result = await client.callTool({
         name: "epaminon.run_ephemeral_task",
-        arguments: { objective: "Research one thing without filing a ticket.", instructions: "Keep it short." },
+        arguments: { objective: "Research one thing without filing a ticket.", instructions: "Keep it short.", effort: "high" },
       });
-      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string } };
+      const structured = result.structuredContent as { ticket: { executionId: string; target: string; state: string; context: string; effort?: string; note?: string } };
       expect(structured.ticket).toMatchObject({
         target: `ephemeral:${structured.ticket.executionId}`,
-        state: "running",
+        effort: "high",
       });
+      expect(["queued", "running"]).toContain(structured.ticket.state);
       expect(structured.ticket.executionId).toMatch(/^ephemeral-/);
       expect(structured.ticket.context).toContain("Research one thing");
+      expect(structured.ticket.context).toContain("Effort: high");
       expect(epaminonRuntime.executionQueue!.snapshot()).toEqual(
         expect.arrayContaining([expect.objectContaining({ executionId: structured.ticket.executionId, target: structured.ticket.target })]),
       );
