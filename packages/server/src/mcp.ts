@@ -788,30 +788,6 @@ export function buildMcpServer(
           isError: true,
         };
       }
-      if (mediaType === "audio" && bytesRef && mediaIngest) {
-        try {
-          const job = await mediaIngest.enqueueAudio({ bytesRef, filename, hints, contentHint, sourceHint });
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Queued audio ingest job ${job.id} (status: ${job.status}). Poll get_ingest_result with this jobId until status is done or error.`,
-              },
-            ],
-            structuredContent: { jobId: job.id, status: job.status, mediaType: "audio" },
-          };
-        } catch (err) {
-          return {
-            content: [{ type: "text", text: `ERROR: ${(err as Error).message}` }],
-            structuredContent: {
-              status: "error",
-              code: "audio_ingest_enqueue_failed",
-              message: (err as Error).message,
-            },
-            isError: true,
-          };
-        }
-      }
       const input: TaskJobInput = {
         mediaType,
         ...(artifactUrl ? { artifactUrl } : {}),
