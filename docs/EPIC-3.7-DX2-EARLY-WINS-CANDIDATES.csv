@@ -1,0 +1,6 @@
+slug,classification,kind,dokploy_id,domain_ids,container_names,volume_names,bind_paths,watchdog_tokens,notes
+tenant-testco,PLACEHOLDER_REQUIRES_DX1_AND_JORDI_APPROVAL,,,,,,,Candidate named in DX-1 bootstrap only; do not execute until classified test/dead/duplicate.
+zenod-jorditest-PLACEHOLDER,PLACEHOLDER_REQUIRES_DX1_AND_JORDI_APPROVAL,,,,,,,Candidate family named in DX-1 bootstrap only; replace with exact DX-1 row.
+zenod-jordizenodtest-PLACEHOLDER,PLACEHOLDER_REQUIRES_DX1_AND_JORDI_APPROVAL,,,,,,,Candidate family named in DX-1 bootstrap only; replace with exact DX-1 row.
+callisthenes-test-PLACEHOLDER,PLACEHOLDER_REQUIRES_DX1_AND_JORDI_APPROVAL,,,,,,,Candidate family named in DX-1 bootstrap only; replace with exact DX-1 row.
+ring-test-PLACEHOLDER,PLACEHOLDER_REQUIRES_DX1_AND_JORDI_APPROVAL,,,,,,,Candidate family named in DX-1 bootstrap only; replace with exact DX-1 row.
