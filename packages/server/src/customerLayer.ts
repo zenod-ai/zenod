@@ -119,7 +119,7 @@ export function createCustomerLayer(runtime: Runtime, options: CustomerLayerOpti
   app.get("/api/console/account", async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
-    const account = accounts.resolveForUser(session.github_id, session.login);
+    const account = accounts.resolveForUser(session.github_id);
     if (!account) return c.json({ error: "no_account" }, 404);
     const summary = runtime.usageStore.summary(Date.now() - 7 * 24 * 60 * 60_000);
     const metering = await customerMetering(summary, env.OPENROUTER_PROVISIONING_KEY, account.tenant_slug);

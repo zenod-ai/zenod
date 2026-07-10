@@ -89,10 +89,8 @@ export class CustomerAccountStore {
     return next;
   }
 
-  resolveForUser(githubId: number, login: string): CustomerAccount | null {
-    const accounts = Object.values(this.load()).filter(
-      (account) => account.github_id === githubId || account.github_login.toLowerCase() === login.toLowerCase(),
-    );
+  resolveForUser(githubId: number): CustomerAccount | null {
+    const accounts = Object.values(this.load()).filter((account) => account.github_id === githubId);
     return accounts.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
   }
 

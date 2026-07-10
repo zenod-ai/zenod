@@ -90,14 +90,14 @@ describe("hosted customer layer", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  function customerApp() {
+  function customerApp(identityUser = { id: 42, login: "octocat", email: "customer@example.com" }) {
     return createApp(runtime, {
       customer: {
         env,
         stripe,
         identity: {
           authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
-          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+          exchangeAndGetUser: async () => identityUser,
         },
         onCheckoutCompleted: (account) => {
           completed.push(account.session_id);
@@ -211,6 +211,29 @@ describe("hosted customer layer", () => {
 
     const persisted = await readFile(join(dir, "customer-accounts.json"), "utf8");
     expect(persisted).not.toMatch(/dokploy|watchdog|claim_url|domain_host|console_password/i);
+  });
+
+  it("does not resolve a paid account through a reused GitHub login", async () => {
+    const ownerApp = customerApp();
+    const ownerCookie = await signInCookie(ownerApp);
+    await ownerApp.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie: ownerCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    await ownerApp.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+
+    const reusedLoginApp = customerApp({ id: 99, login: "octocat", email: "other@example.com" });
+    const reusedLoginCookie = await signInCookie(reusedLoginApp);
+    const account = await reusedLoginApp.request("/api/console/account", {
+      headers: { cookie: reusedLoginCookie },
+    });
+    expect(account.status).toBe(404);
+    expect(await account.json()).toEqual({ error: "no_account" });
   });
 
   it("keeps OpenRouter gateway credit as balance truth and local usage as the ledger", async () => {
