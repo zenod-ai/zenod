@@ -20,7 +20,7 @@ Tester: unassigned
 |---|---|---|---|---|
 | Epic 0 worker | Epic 0 Foundation planner | Root scope | Reads for rollups. | Root state reconciled. |
 | Planner | Epic 3.0 planner | Callisthenes conformance scope | Shape acceptance and tickets until an epic worker is bound. | Executable ledger. |
-| Epic worker | unassigned | This spine | Delivery lead: make Callisthenes SEAM-SPEC vNext conformant. | Spine, issues, integration state current. |
+| Epic worker | unassigned | This spine | Delivery lead and MANAGER (parent D8): mint issues, dispatch ticket workers and testers, run fix loops, iterate until Definition of Done or a named Human Gate; never stop for questions the spine or code answers. | Spine, issues, integration state current. |
 | Ticket worker | unassigned | Future GitHub issue | Execute one issue branch. | PR, commit, evidence, blocker, next action. |
 | Tester | unassigned | Future validation issue | Validate exact commits against acceptance. | Commit, environment, pass/fail, risk. |
 
@@ -65,7 +65,8 @@ Make Callisthenes the first multi-tenant unit and the proof of the pattern — i
 - [ ] `POST /api/tenants` + rotate/suspend, guarded by `CONTROL_PLANE_TOKEN`; Stripe webhook path verified end to end on `cloud-test`.
 - [ ] Throttle (per-hour send cap), draft guard, and usage ledger keyed by tenant; one tenant's cap never starves another.
 - [ ] X OAuth2 PKCE credentials stored per tenant; `/connect` flow binds keys to the requesting tenant only.
-- [ ] Two-tenant smoke test: two tokens, two X accounts, cross-tenant send/read provably fails, per-tenant permalink receipts.
+- [ ] Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants provisioned, each connects its own X account through the UI, sends land with per-tenant receipts, cross-tenant send/read provably fails, throttle isolation holds — executed autonomously with screenshots in evidence.
+- [ ] Tenant-scoped UI (connect, throttle, drafts/receipts, usage) served from the unit container per the UI Surface section.
 - [ ] Self-host parity: same image, env-seeded single tenant, connect UI included.
 - [ ] `calli.zenod.dev` (single hostname) serves all tenants; per-tenant instances retired.
 
@@ -81,8 +82,8 @@ Phase: planning
 Last verified: 2026-07-10 00:19 CEST
 Integration target: main
 Fresh base commit: `f1edc8c`
-Next action: SEAM-SPEC vNext draft (3.1 C-8) reviewed; then dispatch CA-MT-1. May start before full chassis lands — only the contract is needed.
-Blockers: SEAM-SPEC vNext not yet written.
+Next action: Phase 2 (parent D6) — dispatch after the Zenod pilot gate passes and SEAM-SPEC vNext (3.1 C-8) exists.
+Blockers: pilot gate not yet passed; SEAM-SPEC vNext not yet written.
 
 ## Role Goals
 
@@ -100,6 +101,7 @@ Read in this order:
 | Priority | Link | Why It Matters | When To Read |
 |---|---|---|---|
 | 1 | `docs/EPIC-3.1-MCP-CHASSIS.md` (C-8 SEAM-SPEC vNext) | The contract to satisfy. | Always |
+| 1 | `docs/final-container-map-deck.html` | CANONICAL target picture (parent D11): the callisthenes box — MCP, connect UI, X PKCE OAuth, own Stripe webhook. | Always |
 | 2 | `units/callisthenes/callisthenes_server.py` | Server bootstrap + middleware seam. | Worker |
 | 3 | `units/callisthenes/auth/token_store.py`, `auth/oauth2_pkce.py` | Where tenants table and per-tenant keys land. | Worker |
 | 4 | `docs/EPIC-2.4-CALLISTHENES-MOVE-0.md` | Product rules (drafts-never-send, throttle, receipts). | Always |
@@ -108,7 +110,32 @@ Read in this order:
 
 Callisthenes: Python 3.12, FastMCP via upstream `xmcp` (pinned commit + 2 patches), Streamable HTTP `/mcp` port 8000, SQLite `callisthenes-auth.sqlite` on `/data`. It already reads the bearer from request headers as tenant identity — the suite-wide pattern originated here. Work is additive: tenants table + provisioning endpoints; key rows, throttle counters, draft store, and ledger gain a `tenant_id` column; connect UI reads the session's tenant. `/data` stays one volume (rows tenant-keyed rather than path-prefixed, since state is already SQLite).
 
-Ticket sketch: CA-MT-1 tenants table + 401 hardening; CA-MT-2 provisioning API + env single-tenant boot; CA-MT-3 tenant-key throttle/draft-guard/ledger; CA-MT-4 per-tenant OAuth custody + connect UI scoping; CA-MT-5 two-tenant smoke + self-host parity; CA-MT-6 hostname cutover.
+Ticket sketch: CA-MT-1 tenants table + 401 hardening; CA-MT-2 provisioning API + env single-tenant boot; CA-MT-3 tenant-key throttle/draft-guard/ledger; CA-MT-4 per-tenant OAuth custody + connect UI scoping; CA-MT-5 three-tenant browser E2E + self-host parity; CA-MT-6 hostname cutover.
+
+### UI Surface (PORT the existing `connect_page.py` — D7; stay Python, stay server-rendered)
+
+Callisthenes' UI already exists: `units/callisthenes/connect_page.py` (Starlette routes on the FastMCP app, server-rendered HTML — `GET /connect`, the X config/app/authorize/pin POST flows, `GET /oauth/callback`, legacy connector start/token routes). Do NOT rebuild it in React and do NOT redesign it. The work is tenant-scoping plus small additions in the same style:
+
+- Tenant-scope every existing route: a `/login` (paste-token → session cookie) gate in front; `/connect` shows THIS tenant's connectors/status only; callbacks bind credentials to the session's tenant.
+- Add, as new server-rendered pages in the existing template style: **Throttle** (per-hour cap + pacing state), **Drafts & receipts** (drafts-never-send queue, send history with permalinks), **Usage** (sends · calls · cost from the tenant-keyed ledger), **Token** (masked view + rotate).
+- Same guarantees as the chassis shell, by SEAM-SPEC contract: tenant A's session can never render tenant B's accounts, drafts, receipts, or caps.
+
+### Container And Deploy
+
+- One image (`units/callisthenes`), one container, port 8000, hostname `calli.zenod.dev`, `VOLUME /data` (tenant-keyed rows in `callisthenes-auth.sqlite` + ledger).
+- One Dokploy application; deploy = rebuild it. Client URL: `https://calli.zenod.dev/mcp/<token>`.
+
+### Autonomous Validation Protocol (three-tenant browser E2E)
+
+The epic worker validates WITHOUT human help, via browser automation against a fresh local container (X test accounts or a mocked X API for CI):
+
+1. Boot fresh; provision T1, T2, T3 via `POST /api/tenants`.
+2. Per tenant: browser-login; run `/connect` (test account or mock); assert the connected account shows for THIS tenant only.
+3. Per tenant: MCP call over `/mcp/<token>` to create a draft, then send; assert receipt/permalink lands in that tenant's history only.
+4. Throttle isolation: exhaust T1's hourly cap; assert T2 and T3 send unaffected; assert T1 blocked with clear error.
+5. Negative: T1 session direct-URL access to T2 pages fails; MCP send with T1 token can never use T2's keys (assert key custody lookup is tenant-bound); mutated token 401s.
+6. Self-host parity: env-seeded single tenant; connect + send + receipts work identically.
+7. Record commands, screenshots, receipts in Validation Evidence with exact commit.
 
 ## Decisions
 

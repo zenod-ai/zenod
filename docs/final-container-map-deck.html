@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zenod — final container map (chassis replatform)</title>
+<style>
+  :root{--bg:#0e1116;--card:#161b22;--ink:#e6edf3;--dim:#8b949e;--accent:#4ec9b0;--warn:#e5c07b;--bad:#e06c75;--good:#98c379;--line:#30363d;--blue:#61afef;--purple:#c678dd}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  .slide{display:none;width:100vw;height:100vh;padding:40px 56px;flex-direction:column;overflow-y:auto}
+  .slide.active{display:flex}
+  h1{font-size:2.2em;margin-bottom:12px}
+  h2{font-size:1.6em;margin-bottom:14px;color:var(--accent)}
+  p,li{font-size:1em;line-height:1.5}
+  .dim{color:var(--dim)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px}
+  .box{background:var(--card);border-radius:10px;padding:14px 16px;border:1px solid var(--line)}
+  .box h3{font-size:1.05em;margin-bottom:8px}
+  .box ul{margin-left:18px}
+  .box li{font-size:.88em;margin-bottom:4px;color:var(--dim)}
+  .box li b{color:var(--ink)}
+  .tag{display:inline-block;font-size:.72em;border-radius:12px;padding:1px 10px;margin-left:6px;vertical-align:middle}
+  .t-mcp{background:#0d3b34;color:var(--accent)}
+  .t-ui{background:#1c3a5e;color:var(--blue)}
+  .t-eph{background:#4a2229;color:var(--bad)}
+  .t-db{background:#3a2f4e;color:var(--purple)}
+  .t-oauth{background:#4a3a1d;color:var(--warn)}
+  .t-pay{background:#2c4a2a;color:var(--good)}
+  code{background:#21262d;border-radius:4px;padding:1px 5px;font-size:.85em;color:var(--warn)}
+  .nav{position:fixed;bottom:16px;right:22px;display:flex;gap:10px;align-items:center;z-index:10}
+  .nav button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 15px;cursor:pointer;font-size:1em}
+  .counter{color:var(--dim);font-size:.9em}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);transition:width .25s}
+  table{border-collapse:collapse;width:100%;font-size:.92em}
+  th,td{border:1px solid var(--line);padding:7px 11px;text-align:left}
+  th{background:#1c2128;color:var(--accent)}
+  .accent{color:var(--accent)}.good{color:var(--good)}.bad{color:var(--bad)}.blue{color:var(--blue)}.warn{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<!-- 1: THE FLEET (CANONICAL v2 — includes OAuth + billing per container) -->
+<section class="slide active">
+  <h1>CANONICAL · The final fleet: <span class="accent">6 always-on containers</span></h1>
+  <p class="dim" style="margin-bottom:14px">Each character container = MCP + UI + billing callback + tenant SQLite (WAL), same anatomy from the chassis. Legend: <span class="tag t-mcp">MCP</span> <span class="tag t-ui">UI</span> <span class="tag t-oauth">OAuth</span> <span class="tag t-pay">Stripe</span> <span class="tag t-db">data</span> <span class="tag t-eph">ephemeral</span></p>
+  <div class="grid">
+    <div class="box" style="border-color:var(--blue)">
+      <h3>1 · proxy <span class="tag t-ui">routing</span></h3>
+      <ul>
+        <li>Traefik/Caddy (Dokploy's own)</li>
+        <li>TLS + fixed hostnames, <b>one per unit</b></li>
+        <li>Never changes when customers join</li>
+      </ul>
+    </div>
+    <div class="box" style="border-color:var(--accent)">
+      <h3>2 · zenod <span class="tag t-mcp">MCP</span><span class="tag t-ui">UI</span><span class="tag t-oauth">OAuth</span><span class="tag t-pay">Stripe</span></h3>
+      <ul>
+        <li><code>zenod.zenod.dev/mcp/&lt;token&gt;</code> — all tenants</li>
+        <li><b>Does:</b> wiki-brain ingest/digest, <b>transcription</b> (audio — SKIPPED when a transcript arrives with the media, D18 one-transcription rule), OCR/vision, <b>file backup/archive</b> (Drive artifacts), git commit receipts</li>
+        <li><b>UI:</b> ported console — wizard, Chat, Vault, Keys, Transcription, Connections, Costs</li>
+        <li><b>User OAuth via UI:</b> GitHub App (vault repo) · Google Drive · MCP-client sign-in (Claude.ai / Claude Code, chassis OAuth server)</li>
+        <li><b>Stripe:</b> <code>/api/billing/webhook</code> → tenant row (chassis)</li>
+        <li><b>Data:</b> <code>/data/&lt;tenant&gt;/</code> vault + sqlite set</li>
+      </ul>
+    </div>
+    <div class="box" style="border-color:var(--warn)">
+      <h3>3 · callisthenes <span class="tag t-mcp">MCP</span><span class="tag t-ui">UI</span><span class="tag t-oauth">OAuth</span><span class="tag t-pay">Stripe</span></h3>
+      <ul>
+        <li><code>calli.zenod.dev/mcp/&lt;token&gt;</code> — all tenants</li>
+        <li><b>Does:</b> outbound sends, throttle/pacing, drafts-never-send, permalink receipts. Only holder of outbound world keys</li>
+        <li><b>UI:</b> existing Python <code>/connect</code> + throttle/receipts/usage, tenant-scoped</li>
+        <li><b>User OAuth via UI:</b> X (OAuth2 PKCE) · Reddit (token) · later email — callbacks bind to session tenant</li>
+        <li><b>Stripe:</b> webhook per SEAM-SPEC (same contract as chassis)</li>
+      </ul>
+    </div>
+    <div class="box" style="border-color:var(--bad)">
+      <h3>4 · epaminon-api <span class="tag t-mcp">MCP</span><span class="tag t-ui">UI</span><span class="tag t-oauth">OAuth</span><span class="tag t-pay">Stripe</span></h3>
+      <ul>
+        <li><code>epaminon.zenod.dev/mcp/&lt;token&gt;</code> — all tenants</li>
+        <li><b>Does:</b> task queue → dispatch CLI agent per job → transcript/artifact/evidence</li>
+        <li><b>UI:</b> ported executor settings + jobs console</li>
+        <li><b>User OAuth via UI:</b> GitHub (job repo access) · MCP-client sign-in · worker-CLI credential setup</li>
+        <li><b>Stripe:</b> chassis webhook → tenant row</li>
+        <li>Spawns → <span class="bad">job sandboxes</span> <span class="tag t-eph">per job</span> (born, run, persist, destroyed)</li>
+      </ul>
+    </div>
+    <div class="box" style="border-color:var(--blue)">
+      <h3>5 · ring <span class="tag t-mcp">MCP</span><span class="tag t-ui">UI</span><span class="tag t-oauth">OAuth</span><span class="tag t-pay">Stripe</span></h3>
+      <ul>
+        <li><code>ring.zenod.dev</code> — all tenants; the human front door</li>
+        <li><b>Does:</b> AGGREGATION + INTELLIGENCE — a guy authenticated to all the other guys; maps sender→tenant, routes to the tenant's units via wallet tokens. <b>NO channel code</b> (D14): inbound arrives as MCP calls from Phylax</li>
+        <li><b>UI:</b> My Units wallet (Phylax listed like any other unit), routing / chief-of-staff, usage, <b>web chat = the Council console chat, ported — and it's just another CHANNEL into the same inbound pipeline (D15)</b></li>
+        <li><b>Skills:</b> one per wired unit, auto-imported from the unit's published skill manifest (D16)</li>
+        <li><b>User OAuth via UI:</b> web login / MCP-client sign-in</li>
+        <li><b>Stripe:</b> chassis webhook → tenant row</li>
+        <li><b>Data:</b> pairing table + wallets (vault), per tenant</li>
+      </ul>
+    </div>
+    <div class="box" style="border-color:var(--good)">
+      <h3>6 · phylax <span class="tag t-mcp">MCP</span><span class="tag t-ui">UI</span></h3>
+      <ul>
+        <li><b>The channels guy</b> — ALL WhatsApp + Telegram config lives HERE (D14), not in the ring. <b>One per PHONE NUMBER</b>; users are whitelist rows</li>
+        <li><b>MCP server face:</b> <code>send_message</code> / <code>notify</code> / <code>channel_status</code> with delivery receipts — any tokened agent can post notifications. Standalone-sellable</li>
+        <li><b>MCP client face:</b> inbound → standard MCP call to ONE configured downstream (default: ring), <b>pre-transcribed at the edge (D18)</b>: binary + transcript + cost ride the payload. Zero ROUTING intelligence, no funky protocol</li>
+        <li><b>UI:</b> "message this number" reveal, Telegram bot setup, per-user channel settings, downstream wiring; operator <code>/admin</code> (Baileys health, re-pair QR)</li>
+        <li><b>Data:</b> own volume (Baileys session, whitelist)</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3 class="dim">+ site / cloud (not units)</h3>
+      <ul>
+        <li>marketing site (nginx) with buy links</li>
+        <li>cloud shrinks to: catalog/checkout composition + claim links; Stripe events land <b>on each unit's own webhook</b></li>
+        <li>No per-unit settings, no provisioner</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3 class="good">Chassis gives every box for free</h3>
+      <ul>
+        <li>tenants table + token auth + tenant SQLite (WAL)</li>
+        <li><b>OAuth kit:</b> OAuth SERVER for MCP clients + OAuth CLIENT framework for world connections (per-tenant callback binding, vault custody) — written once</li>
+        <li><b>Billing:</b> Stripe webhook receiver → tenant row, checkout return pages</li>
+        <li><b>Conduct kit:</b> SEAM receipt discipline (evidence handle or loud error, never silent ack), reply gate, ticket-id propagation, standing directives (council-installable) + Operating Rules / MCP-config / skill-settings UI panels</li>
+        <li>metering, /healthz, tenant-scoped console shell</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3 class="good">What no longer exists</h3>
+      <ul>
+        <li>Per-user containers &amp; subdomains</li>
+        <li>Dokploy provisioner per customer</li>
+        <li>Watchdog fleet (~6 static /healthz checks)</li>
+        <li>Central shared DB (D4: SQLite/WAL per unit)</li>
+      </ul>
+    </div>
+  </div>
+  <p class="dim">1,000 customers later: still this exact picture. Only the rows grow. (This slide is the canonical target every Epic 3.x worker builds toward.)</p>
+</section>
+
+<!-- 2: SELF-HOSTED = SAME IMAGE -->
+<section class="slide">
+  <h2>Self-hosted vs hosted: literally the same image</h2>
+  <div class="card">
+    <p>One repo per unit, one Dockerfile, one image on the registry. <b>There is no self-hosted build.</b> The difference is boot-time configuration only:</p>
+  </div>
+  <table style="margin-bottom:14px">
+    <tr><th></th><th>Hosted (your VPS)</th><th>Self-hosted (customer's box)</th></tr>
+    <tr><td><b>Image</b></td><td colspan="2" style="text-align:center" class="accent"><b>IDENTICAL — same registry tag</b></td></tr>
+    <tr><td><b>Boot</b></td><td>Empty; waits for tenants</td><td><code>ZENOD_API_TOKEN</code> env → chassis auto-inserts ONE tenant row at startup</td></tr>
+    <tr><td><b>New user</b></td><td>Stripe webhook → <code>POST /api/tenants</code> (needs <code>CONTROL_PLANE_TOKEN</code>)</td><td>n/a — endpoint dead because no control-plane token is configured</td></tr>
+    <tr><td><b>Metering</b></td><td>Same code, enforced per row against plan; block-at-zero</td><td class="good">Same code, plan = <code>unlimited</code> — meter still records, never blocks. Costs tab works for free</td></tr>
+    <tr><td><b>UI</b></td><td>Full console, tenant-scoped login</td><td class="good">Same full console — wizard, settings, everything. Not a stripped product</td></tr>
+    <tr><td><b>DB</b></td><td>Shared DB / per-unit store, N rows</td><td>Same store, 1 row (SQLite on the volume — zero extra infra)</td></tr>
+    <tr><td><b>Run it</b></td><td>Dokploy app</td><td><code>docker run -e ZENOD_API_TOKEN=… -v data:/data zenod-ai/zenod</code></td></tr>
+  </table>
+  <div class="card">
+    <p><span class="accent">Why this matters:</span> every self-hoster QAs the exact code your paying tenants run. No fork, no drift, no "community edition." And the public repo stays honest — the multi-tenancy is invisible at N=1 because it's just a table with one row.</p>
+  </div>
+</section>
+
+<!-- 3: SUITES -->
+<section class="slide">
+  <h2>Suites (Herald, Council…): UI + DB containers that "inject a user"</h2>
+  <div class="card">
+    <p>A suite ships <b>no MCP characters of its own</b>. It is a thin container — UI + its own small DB — that holds <b>machine-tenant tokens</b> into the base characters. Buying Herald = the control plane provisions a tenant row in each composed unit and hands the tokens to Herald's wallet. Your words, now law (D3): <i>"one Zenod container ever — literally the same container; suite users are just more tenant rows."</i></p>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(2,1fr)">
+    <div class="box" style="border-color:var(--purple)">
+      <h3>herald <span class="tag t-ui">UI</span><span class="tag t-db">db</span></h3>
+      <ul>
+        <li><b>Inside:</b> Herald's product UI + suite config DB + wallet of agent→unit tokens. That's all.</li>
+        <li>Configures Zenod/Callisthenes/Epaminon for its users by calling THEIR APIs with ITS tokens</li>
+        <li>Own users, own pricing, own metering rollup — units just see another tenant</li>
+      </ul>
+    </div>
+    <div class="box" style="border-color:var(--purple)">
+      <h3>council / future combos <span class="tag t-ui">UI</span><span class="tag t-db">db</span></h3>
+      <ul>
+        <li>Same recipe: thin UI+DB container, machine tenants into base characters</li>
+        <li>New product = new thin container + N tenant rows. <b>Never</b> a new copy of a character</li>
+        <li>Kill a suite → delete its container + revoke its tenant rows. Characters untouched</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card">
+    <p class="dim">So the fleet's growth law: base characters stay at ~7 containers forever; each new PRODUCT adds exactly one thin UI+DB container. Users never add containers anywhere — anyone's users, any product, are rows.</p>
+  </div>
+</section>
+
+<div class="nav">
+  <span class="counter" id="counter">1 / 3</span>
+  <button onclick="go(-1)">←</button>
+  <button onclick="go(1)">→</button>
+</div>
+<script>
+const slides=[...document.querySelectorAll('.slide')];let i=0;
+function show(){slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+document.getElementById('counter').textContent=(i+1)+' / '+slides.length;
+document.getElementById('progress').style.width=((i+1)/slides.length*100)+'%';}
+function go(d){i=Math.max(0,Math.min(slides.length-1,i+d));show();}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')go(1);if(e.key==='ArrowLeft')go(-1);});
+show();
+</script>
+</body>
+</html>
