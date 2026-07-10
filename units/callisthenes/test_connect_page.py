@@ -292,12 +292,61 @@ def test_x_config_form_saves_redacted_values_and_updates_engine(monkeypatch, tmp
     )
     assert res["ok"] is True
     assert res["sender_ready"] is True
-    assert engine._client_id == "cid-live"  # noqa: SLF001
-    assert engine._redirect_uri == "https://c.example/oauth/callback"  # noqa: SLF001
+    # Tenant config is consumed directly by the OAuth1 callback/PIN flow and
+    # request-local signer. It must not mutate the shared OAuth2 engine.
+    assert engine._client_id == ""  # noqa: SLF001
+    assert engine._redirect_uri == ""  # noqa: SLF001
     rendered = page.render_page()
     assert "X account connected" in rendered
     assert "super-secret" not in rendered
     assert "access-secret" not in rendered
+
+
+def test_x_app_and_sender_credentials_are_tenant_isolated(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    tenant_a = cp.ConnectPage(
+        engine=_engine(),
+        config=cp.ConnectPageConfig(owner_tenant="tenant-a"),
+    )
+    tenant_b = cp.ConnectPage(
+        engine=_engine(),
+        config=cp.ConnectPageConfig(owner_tenant="tenant-b"),
+    )
+    saved = tenant_a.save_x_config(
+        {
+            "X_OAUTH_CONSUMER_KEY": "app-a",
+            "X_OAUTH_CONSUMER_SECRET": "secret-a",
+            "X_OAUTH_ACCESS_TOKEN": "user-a",
+            "X_OAUTH_ACCESS_TOKEN_SECRET": "user-secret-a",
+        }
+    )
+    assert saved["ok"] is True
+    assert tenant_a.x_config()["X_OAUTH_ACCESS_TOKEN"] == "user-a"
+    assert tenant_b.x_config() == {}
+    assert cp._x_config_path("tenant-a") != cp._x_config_path("tenant-b")
+    assert "tenant-a" not in cp._x_config_path("tenant-a").name
+
+
+def test_tenant_config_does_not_mutate_shared_auth_engine(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    engine = ChatAuth(store=InMemoryTokenStore(), client_id="bootstrap-client")
+    tenant_a = cp.ConnectPage(
+        engine=engine,
+        config=cp.ConnectPageConfig(owner_tenant="tenant-a"),
+    )
+    tenant_b = cp.ConnectPage(
+        engine=engine,
+        config=cp.ConnectPageConfig(owner_tenant="tenant-b"),
+    )
+    tenant_a.save_x_config({"X_OAUTH_CONSUMER_KEY": "tenant-a-app"})
+    tenant_b.save_x_config({"X_OAUTH_CONSUMER_KEY": "tenant-b-app"})
+    assert tenant_a.x_config()["X_OAUTH_CONSUMER_KEY"] == "tenant-a-app"
+    assert tenant_b.x_config()["X_OAUTH_CONSUMER_KEY"] == "tenant-b-app"
+    assert engine._client_id == "bootstrap-client"  # noqa: SLF001
 
 
 def test_x_setup_has_exactly_the_three_fields_x_shows_at_app_creation(

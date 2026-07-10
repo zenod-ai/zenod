@@ -28,6 +28,7 @@ import server as xmcp_server  # upstream xdevplatform/xmcp, pinned + patched
 
 from throttle import build_throttle_middleware
 from draft_guard import build_draft_guard_middleware
+from tenant_context import build_tenant_context_middleware
 
 
 def log(msg: str) -> None:
@@ -41,9 +42,10 @@ def build_app():
     # Order matters: draft-guard first (refuse unapproved sends before we spend a
     # throttle token), then throttle (cap approved sends per hour). Both are on by
     # default and configured from env inside their builders.
+    mcp.add_middleware(build_tenant_context_middleware())
     mcp.add_middleware(build_draft_guard_middleware())
     mcp.add_middleware(build_throttle_middleware())
-    log("installed middleware: draft-guard (C-22) + throttle")
+    log("installed middleware: tenant-context + draft-guard (C-22) + throttle")
 
     # SHARED CONTRACT with C-2 — auth package is optional at this stage.
     # We build ONE ChatAuth engine here and hand the SAME instance to both the MCP

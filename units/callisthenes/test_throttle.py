@@ -3,6 +3,7 @@
 from throttle import (
     DEFAULT_PER_HOUR,
     RateLimiter,
+    TenantRateLimiters,
     _parse_per_hour,
     _parse_send_tools,
     limiter_from_env,
@@ -71,6 +72,29 @@ def test_send_tools_default_and_override():
     assert _parse_send_tools(None) == frozenset(
         ("createPosts", "deletePosts", "mediaUpload", "post_reddit")
     )
+
+
+def test_tenant_limits_are_isolated():
+    clock = FakeClock()
+    limits = TenantRateLimiters(per_hour=1, clock=clock)
+    assert limits.for_tenant("tenant-a").allow() is True
+    assert limits.for_tenant("tenant-a").allow() is False
+    assert limits.for_tenant("tenant-b").allow() is True
+
+
+def test_tenant_limiters_preserve_injected_window_and_clock():
+    clock = FakeClock()
+    configured = RateLimiter(per_hour=1, window_seconds=5, clock=clock)
+    limits = TenantRateLimiters(
+        per_hour=configured.per_hour,
+        window_seconds=configured.window_seconds,
+        clock=configured._clock,
+    )
+    tenant = limits.for_tenant("tenant-a")
+    assert tenant.allow() is True
+    assert tenant.allow() is False
+    clock.advance(6)
+    assert tenant.allow() is True
     assert send_tools_from_env({"CALLISTHENES_SEND_TOOLS": "createPosts, foo"}) == (
         frozenset(("createPosts", "foo"))
     )

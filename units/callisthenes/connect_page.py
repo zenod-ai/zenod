@@ -42,6 +42,7 @@ secret material is written to logs or rendered back into the page.
 from __future__ import annotations
 
 import html
+import hashlib
 import json
 import os
 from dataclasses import dataclass
@@ -236,6 +237,10 @@ class ConnectPage:
         tenant paste credentials after provisioning without rebuilding the image.
         """
         cfg = self.x_config()
+        # Multi-tenant hosted instances read this saved config through the
+        # request-local signer hook. Never copy one tenant's keys into process env.
+        if self.tenant():
+            return cfg
         for key, value in cfg.items():
             if value:
                 os.environ[key] = value
@@ -253,7 +258,12 @@ class ConnectPage:
     def x_config(self) -> Dict[str, str]:
         """Effective X config. Env provides defaults; /data overrides non-empty keys."""
         cfg = {key: os.getenv(key, "").strip() for key in X_CONFIG_KEYS if os.getenv(key, "").strip()}
-        cfg.update(_read_x_config_file())
+        if self.tenant():
+            # App-level defaults may be shared, but a process-level user token must
+            # never become another tenant's posting identity.
+            cfg.pop("X_OAUTH_ACCESS_TOKEN", None)
+            cfg.pop("X_OAUTH_ACCESS_TOKEN_SECRET", None)
+        cfg.update(_read_x_config_file(tenant=self.tenant()))
         return cfg
 
     def x_config_status(self) -> Dict[str, Any]:
@@ -262,7 +272,7 @@ class ConnectPage:
         missing_oauth2 = [key for key in X_OAUTH2_REQUIRED if not present.get(key)]
         missing_app = [key for key in X_APP_REQUIRED if not present.get(key)]
         missing_sender = [key for key in X_SENDER_REQUIRED if not present.get(key)]
-        saved = _read_x_config_file(include_metadata=True, include_internal=True)
+        saved = _read_x_config_file(include_metadata=True, include_internal=True, tenant=self.tenant())
         pending_token = saved.get("X_PENDING_OAUTH_TOKEN", "")
         pending_mode = saved.get("X_PENDING_OAUTH_MODE", "")
         return {
@@ -287,7 +297,7 @@ class ConnectPage:
             ),
             "callback_url": self.x_callback_url(),
             "redirect_uri": cfg.get("X_OAUTH2_REDIRECT_URI", ""),
-            "config_path": str(_x_config_path()),
+            "config_path": str(_x_config_path(self.tenant())),
         }
 
     def x_callback_url(self) -> str:
@@ -315,11 +325,11 @@ class ConnectPage:
                 "ok": False,
                 "error": "Enter at least one X credential to save.",
             }
-        existing = _read_x_config_file()
+        existing = _read_x_config_file(tenant=self.tenant())
         existing.update(parsed)
         for key in X_CONFIG_METADATA_KEYS:
             existing.pop(key, None)
-        _write_x_config_file(existing)
+        _write_x_config_file(existing, tenant=self.tenant())
         cfg = self.apply_x_runtime_config()
         missing = [key for key in X_SENDER_REQUIRED if not cfg.get(key)]
         return {
@@ -335,7 +345,7 @@ class ConnectPage:
             for key in X_APP_REQUIRED
             if str(values.get(key, "")).strip().strip("\"'").strip()
         }
-        existing = _read_x_config_file(include_metadata=True, include_internal=True)
+        existing = _read_x_config_file(include_metadata=True, include_internal=True, tenant=self.tenant())
         effective = self.x_config()
         effective.update(parsed)
         missing = [key for key in X_APP_REQUIRED if not effective.get(key)]
@@ -354,7 +364,7 @@ class ConnectPage:
                 *X_CONFIG_INTERNAL_KEYS,
             ):
                 existing.pop(key, None)
-            _write_x_config_file(existing)
+            _write_x_config_file(existing, tenant=self.tenant())
             self.apply_x_runtime_config()
         return {"ok": True, "app_ready": True}
 
@@ -392,11 +402,11 @@ class ConnectPage:
             except Exception as pin_exc:  # noqa: BLE001 - provider failure is user-facing
                 return {"ok": False, "error": _oauth1_error_message(pin_exc)}
         authorize_url = flow.authorize_url(request_token.oauth_token)
-        saved = _read_x_config_file(include_metadata=True, include_internal=True)
+        saved = _read_x_config_file(include_metadata=True, include_internal=True, tenant=self.tenant())
         saved["X_PENDING_OAUTH_TOKEN"] = request_token.oauth_token
         saved["X_PENDING_OAUTH_TOKEN_SECRET"] = request_token.oauth_token_secret
         saved["X_PENDING_OAUTH_MODE"] = mode
-        _write_x_config_file(saved)
+        _write_x_config_file(saved, tenant=self.tenant())
         return {
             "ok": True,
             "authorize_url": authorize_url,
@@ -404,7 +414,7 @@ class ConnectPage:
         }
 
     def complete_x_oauth1(self, oauth_token: str, verifier: str) -> Dict[str, Any]:
-        saved = _read_x_config_file(include_metadata=True, include_internal=True)
+        saved = _read_x_config_file(include_metadata=True, include_internal=True, tenant=self.tenant())
         pending_token = saved.get("X_PENDING_OAUTH_TOKEN", "")
         pending_secret = saved.get("X_PENDING_OAUTH_TOKEN_SECRET", "")
         if not pending_token or not pending_secret or oauth_token != pending_token:
@@ -424,7 +434,7 @@ class ConnectPage:
         saved["X_VERIFIED_USERNAME"] = str(access.screen_name or "")
         for key in X_CONFIG_INTERNAL_KEYS:
             saved.pop(key, None)
-        _write_x_config_file(saved)
+        _write_x_config_file(saved, tenant=self.tenant())
         self.apply_x_runtime_config()
         return {
             "ok": True,
@@ -435,7 +445,7 @@ class ConnectPage:
         }
 
     def complete_x_oauth1_pin(self, verifier: str) -> Dict[str, Any]:
-        saved = _read_x_config_file(include_metadata=True, include_internal=True)
+        saved = _read_x_config_file(include_metadata=True, include_internal=True, tenant=self.tenant())
         if saved.get("X_PENDING_OAUTH_MODE") != "pin":
             return {"ok": False, "error": "There is no X PIN authorization waiting to finish."}
         return self.complete_x_oauth1(saved.get("X_PENDING_OAUTH_TOKEN", ""), verifier)
@@ -452,10 +462,10 @@ class ConnectPage:
         result = self.x_verifier(cfg)
         if not result.get("ok"):
             return result
-        saved = _read_x_config_file(include_metadata=True)
+        saved = _read_x_config_file(include_metadata=True, tenant=self.tenant())
         saved["X_VERIFIED_USER_ID"] = str(result.get("user_id", "")).strip()
         saved["X_VERIFIED_USERNAME"] = str(result.get("username", "")).strip()
-        _write_x_config_file(saved)
+        _write_x_config_file(saved, tenant=self.tenant())
         return result
 
     # -- connection status (generic over connector kind) -----------------------
@@ -604,18 +614,22 @@ def _render_flash(flash: Optional[str], kind: str) -> str:
     return f'<div class="flash {html.escape(kind)}">{html.escape(flash)}</div>'
 
 
-def _x_config_path() -> Path:
+def _x_config_path(tenant: Optional[str] = None) -> Path:
     explicit = os.getenv("CALLISTHENES_X_CONFIG_PATH", "").strip()
-    if explicit:
+    if explicit and not tenant:
         return Path(explicit)
-    data_dir = os.getenv("CALLISTHENES_DATA_DIR", "/data")
-    return Path(data_dir) / "x-config.json"
+    base = Path(explicit) if explicit else Path(os.getenv("CALLISTHENES_DATA_DIR", "/data")) / "x-config.json"
+    if not tenant:
+        return base
+    tenant_hash = hashlib.sha256(tenant.encode("utf-8")).hexdigest()
+    return base.with_name(f"{base.stem}-{tenant_hash}{base.suffix}")
 
 
 def _read_x_config_file(
-    *, include_metadata: bool = False, include_internal: bool = False
+    *, include_metadata: bool = False, include_internal: bool = False,
+    tenant: Optional[str] = None,
 ) -> Dict[str, str]:
-    path = _x_config_path()
+    path = _x_config_path(tenant)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -641,8 +655,8 @@ def _read_x_config_metadata() -> Dict[str, str]:
     return {key: saved.get(key, "") for key in X_CONFIG_METADATA_KEYS if saved.get(key)}
 
 
-def _write_x_config_file(config: Dict[str, str]) -> None:
-    path = _x_config_path()
+def _write_x_config_file(config: Dict[str, str], tenant: Optional[str] = None) -> None:
+    path = _x_config_path(tenant)
     path.parent.mkdir(parents=True, exist_ok=True)
     allowed = X_CONFIG_KEYS + X_CONFIG_METADATA_KEYS + X_CONFIG_INTERNAL_KEYS
     safe = {
