@@ -7,9 +7,9 @@ Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-C-CALLISTHENES-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
-Active spine steward: Callisthenes delivery manager (bind on dispatch)
-Steward since: on dispatch
-Last reconciled commit: bind on dispatch
+Active spine steward: Callisthenes delivery manager
+Steward since: 2026-07-11T01:40:00+02:00
+Last reconciled commit: 28904a1939f0cbfaa2733a525cbb15e244c14b06
 Planner: Jordi + Epic 3.0 planner
 Worker: Callisthenes delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -81,11 +81,11 @@ HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via 
 
 ## Current State
 
-Phase: dispatch-ready
-Last verified: 2026-07-11
+Phase: wave 1 dispatched
+Last verified: 2026-07-11T01:40:00+02:00
 Integration target: main
-Fresh base commit: current `main` at dispatch — PIN IT; no rebases until the journey passes (D19c)
-Next action: manager pulls main, binds as steward, mints tickets C-S1..C-S5, dispatches wave 1 in parallel worktrees.
+Fresh base commit: `28904a1939f0cbfaa2733a525cbb15e244c14b06` — pinned; no rebases until the journey passes (D19c)
+Next action: C-S1 and C-S2 execute in parallel worktrees; manager monitors, integrates passing PRs, then dispatches wave 2.
 Blockers: none — decisions pre-answered below; inputs have absence-rules.
 
 ## Role Goals
@@ -142,11 +142,11 @@ Pre-answered; the manager invents nothing:
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| mint | Ticket worker | assign | C-S1 front duplicate (DUPLICATE zenod customer layer + landing) | ready | - | worktree | pinned main | SHIP 1–4 render/flow | - | dispatch | wave 1 |
-| mint | Ticket worker | assign | C-S2 engine port (PORT units/callisthenes, behavior frozen) | ready | - | worktree | pinned main | connect/draft/send/receipt work per tenant | - | dispatch | wave 1 |
-| mint | Ticket worker | assign | C-S3 dashboard panels (PORT connect_page + DUPLICATE MCP-first panel) | ready | C-S1, C-S2 | worktree | pinned main | SHIP 5–6 | - | dispatch | wave 2 |
-| mint | Ticket worker | assign | C-S4 billing + domain (DUPLICATE Z-N3/Z-N5 recipe) | ready | C-S1 | worktree | pinned main | SHIP 2, 4; calli.zenod.dev live, guarded | - | dispatch | wave 2 |
-| mint | Epic worker | manager | C-S5 journey loop + two-tenant isolation + test package | ready | C-S1..4 | - | pinned main | SHIP 1–9 | - | dispatch | last |
+| [#821](https://github.com/zenod-ai/zenod/issues/821) | Ticket worker | C-S1-worker | C-S1 front duplicate (DUPLICATE zenod customer layer + landing) | in progress | - | `codex/c-s1-front-duplicate` / `../wt-c-s1` | `28904a1` | SHIP 1–4 render/flow | dispatched | 2026-07-11T01:40:00+02:00 | implement, validate, PR |
+| [#823](https://github.com/zenod-ai/zenod/issues/823) | Ticket worker | C-S2-worker | C-S2 engine port (PORT units/callisthenes, behavior frozen) | in progress | - | `codex/c-s2-engine-port` / `../wt-c-s2` | `28904a1` | connect/draft/send/receipt work per tenant | dispatched | 2026-07-11T01:40:00+02:00 | implement, validate, PR |
+| [#825](https://github.com/zenod-ai/zenod/issues/825) | Ticket worker | C-S3-worker | C-S3 dashboard panels (PORT connect_page + DUPLICATE MCP-first panel) | ready | #821, #823 | `codex/c-s3-dashboard` / `../wt-c-s3` | `28904a1` | SHIP 5–6 | - | 2026-07-11T01:40:00+02:00 | wave 2 after dependencies |
+| [#824](https://github.com/zenod-ai/zenod/issues/824) | Ticket worker | C-S4-worker | C-S4 billing + domain (DUPLICATE Z-N3/Z-N5 recipe) | ready | #821 | `codex/c-s4-billing-domain` / `../wt-c-s4` | `28904a1` | SHIP 2, 4; calli.zenod.dev live, guarded | - | 2026-07-11T01:40:00+02:00 | wave 2 after dependency |
+| [#822](https://github.com/zenod-ai/zenod/issues/822) | Epic worker | Callisthenes delivery manager | C-S5 journey loop + two-tenant isolation + test package | ready | #821, #823, #825, #824 | - | `28904a1` | SHIP 1–9 | - | 2026-07-11T01:40:00+02:00 | last |
 
 ## Branch And Integration
 
@@ -192,6 +192,12 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | pending | SHIP journey clean pass | - | calli.zenod.dev live | real browser walk, screenshots per step | pending | test package |
 
 ## Handoff Journal
+
+### 2026-07-11T01:40:00+02:00 - Callisthenes delivery manager - Steward bound and wave 1 dispatched
+
+Context: stewardship transferred from the planner to the Callisthenes delivery manager before concurrent ticket writing began. `main` and `origin/main` are aligned at pinned base `28904a1939f0cbfaa2733a525cbb15e244c14b06`; the shared checkout's unrelated pre-existing edits to `docs/EPIC-4.0-HERALD.md` and `docs/EPIC-4.2-POC-LOOP-CORE.md` remain untouched. C-S1..C-S5 were minted as issues #821, #823, #825, #824, and #822.
+Assignments: C-S1-worker / `codex/c-s1-front-duplicate` / `../wt-c-s1`; C-S2-worker / `codex/c-s2-engine-port` / `../wt-c-s2`.
+Next: monitor the 90-minute budgets, integrate passing PRs, dispatch C-S3/C-S4 from the integrated pinned wave-2 base, deploy the one Callisthenes app, then walk C-S5 from the public landing.
 
 ### 2026-07-11 - Planner - Callisthenes sprint spine created
 
