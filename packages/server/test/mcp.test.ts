@@ -193,10 +193,18 @@ describe("MCP endpoint", () => {
         hints: ["insurance"],
       },
     });
-    const queued = enqueued.structuredContent as { jobId: string; kind: string; status: string };
+    const queued = enqueued.structuredContent as {
+      jobId: string;
+      kind: string;
+      status: string;
+      evidence: Array<{ kind: string; id: string }>;
+    };
     expect(queued.jobId).toBeTruthy();
     expect(queued.kind).toBe("media_ingest");
     expect(queued.status).toBe("queued");
+    expect(queued.evidence).toEqual([
+      { kind: "job_queued", id: queued.jobId },
+    ]);
 
     let terminal: { status: string; result: Record<string, unknown> | null } | null = null;
     for (let attempt = 0; attempt < 50; attempt++) {

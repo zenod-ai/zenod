@@ -123,7 +123,12 @@ function enqueuedResponse(job: TaskJob) {
         text: `Queued job ${job.id} (status: ${job.status}). This runs in the background — poll get_task_result with this jobId until status is 'done'.`,
       },
     ],
-    structuredContent: { jobId: job.id, kind: job.kind, status: job.status },
+    structuredContent: {
+      jobId: job.id,
+      kind: job.kind,
+      status: job.status,
+      evidence: [{ kind: "job_queued", id: job.id }],
+    },
   };
 }
 
