@@ -18,7 +18,6 @@ import {
 import { cn } from "@/lib/utils"
 import { CodeSnippet, CopyButton } from "@/components/copy-button"
 import { GithubConnect } from "@/components/github-connect"
-import { WhatsAppConnect } from "@/components/whatsapp-connect"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -47,7 +46,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 
-const STEPS = ["Password", "Vault", "Model", "WhatsApp", "Connect"] as const
+const STEPS = ["Password", "Vault", "Model", "Connect"] as const
 
 const KEY_LABEL: Record<Provider, string> = {
   anthropic: "Anthropic API key",
@@ -345,7 +344,9 @@ function VaultStep({ onDone }: { onDone: () => void }) {
           </>
         )}
       </CardContent>
-      <CardFooter className={cn(appRepoPicked ? "justify-end" : "justify-between")}>
+      <CardFooter
+        className={cn(appRepoPicked ? "justify-end" : "justify-between")}
+      >
         {!appRepoPicked && (
           <Button
             type="button"
@@ -473,30 +474,6 @@ function ModelStep({ onDone }: { onDone: () => void }) {
   )
 }
 
-function WhatsAppStep({ onDone }: { onDone: () => void }) {
-  return (
-    <div className="flex w-full max-w-2xl flex-col gap-4">
-      <div className="flex flex-col items-center gap-1 text-center">
-        <h2 className="text-lg font-semibold">Connect WhatsApp</h2>
-        <p className="text-sm text-muted-foreground">
-          Pair your dedicated number, then chat with your agent on WhatsApp.
-          You can also do this later from Settings.
-        </p>
-      </div>
-      <WhatsAppConnect />
-      <div className="flex items-center justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={onDone}>
-          Skip for now
-        </Button>
-        <Button type="button" onClick={onDone}>
-          Continue
-          <ArrowRightIcon data-icon="inline-end" />
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 function DoneStep({ onDone }: { onDone: () => void }) {
   const [tokenInfo, setTokenInfo] = React.useState<TokenResponse | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -598,16 +575,12 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
         </p>
       </div>
       <Stepper current={step} />
-      {step === 3 ? (
-        <WhatsAppStep onDone={() => setStep(4)} />
-      ) : (
-        <Card className="w-full max-w-lg">
-          {step === 0 && <PasswordStep onDone={() => setStep(1)} />}
-          {step === 1 && <VaultStep onDone={() => setStep(2)} />}
-          {step === 2 && <ModelStep onDone={() => setStep(3)} />}
-          {step === 4 && <DoneStep onDone={onComplete} />}
-        </Card>
-      )}
+      <Card className="w-full max-w-lg">
+        {step === 0 && <PasswordStep onDone={() => setStep(1)} />}
+        {step === 1 && <VaultStep onDone={() => setStep(2)} />}
+        {step === 2 && <ModelStep onDone={() => setStep(3)} />}
+        {step === 3 && <DoneStep onDone={onComplete} />}
+      </Card>
     </div>
   )
 }
