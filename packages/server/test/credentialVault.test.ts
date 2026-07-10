@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChassisStorage } from "@zenod/mcp-chassis";
 import { SqliteStateStore } from "zenod";
@@ -9,6 +10,7 @@ import { ChassisCredentialVault, isCredentialHandle } from "../src/credentialVau
 import { Runtime } from "../src/runtime.js";
 
 const dirs: string[] = [];
+const CHASSIS_VAULT_MASTER_KEY = "22".repeat(32);
 
 async function runtimeFor(tenantId: string): Promise<Runtime> {
   const dataDir = await tempDir(tenantId);
@@ -23,6 +25,16 @@ async function tempDir(label: string): Promise<string> {
   const dataDir = await mkdtemp(join(tmpdir(), `zenod-credentials-${label}-`));
   dirs.push(dataDir);
   return dataDir;
+}
+
+async function regularFiles(root: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) files.push(...(await regularFiles(path)));
+    else if (entry.isFile()) files.push(path);
+  }
+  return files;
 }
 
 afterEach(async () => {
@@ -116,7 +128,10 @@ describe("tenant credential custody", () => {
 
   it("implements hosted chassis custody with tenant, key, and handle binding", async () => {
     const dataRoot = await tempDir("chassis");
-    const storage = new ChassisStorage({ dataDir: dataRoot });
+    const storage = new ChassisStorage({
+      dataDir: dataRoot,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    });
     const alphaStorage = storage.forTenant({ id: "tenant-alpha" });
     const betaStorage = storage.forTenant({ id: "tenant-beta" });
     const alphaCredentials = new ChassisCredentialVault(alphaStorage);
@@ -203,7 +218,10 @@ describe("tenant credential custody", () => {
 
   it("supports hosted put, update, list, delete, and close without exposing values", async () => {
     const dataRoot = await tempDir("chassis-lifecycle");
-    const storage = new ChassisStorage({ dataDir: dataRoot }).forTenant({ id: "tenant-lifecycle" });
+    const storage = new ChassisStorage({
+      dataDir: dataRoot,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    }).forTenant({ id: "tenant-lifecycle" });
     const credentials = new ChassisCredentialVault(storage, { vaultName: "credentials.sqlite" });
 
     const firstHandle = credentials.put("github_token", "ghp_first");
@@ -221,6 +239,268 @@ describe("tenant credential custody", () => {
     expect(credentials.list()).toEqual([]);
     credentials.close();
     expect(() => credentials.list()).toThrow("credential vault is closed");
+  });
+
+  it("imports real standalone credentials into chassis custody without changing handles", async () => {
+    const dataRoot = await tempDir("legacy-import");
+    const tenantRoot = join(dataRoot, "tenant-imported");
+    await mkdir(tenantRoot);
+    const standalone = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "legacy-user",
+    });
+    standalone.settings.set("github_token", "ghp_legacy_import_secret");
+    standalone.settings.set("openrouter_api_key", "sk-or-legacy-import-secret");
+    const githubHandle = standalone.state.getSetting("github_token")!;
+    const modelHandle = standalone.state.getSetting("openrouter_api_key")!;
+    standalone.close();
+    const legacyKey = await readFile(join(tenantRoot, ".zenod-vault-key"));
+
+    const storage = new ChassisStorage({
+      dataDir: dataRoot,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    }).forTenant({ id: "tenant-imported" });
+    const migrated = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "tenant-imported",
+      credentialVault: new ChassisCredentialVault(storage),
+    });
+    try {
+      expect(migrated.state.getSetting("github_token")).toBe(githubHandle);
+      expect(migrated.state.getSetting("openrouter_api_key")).toBe(modelHandle);
+      expect(migrated.settings.get("github_token")).toBe("ghp_legacy_import_secret");
+      expect(migrated.settings.get("openrouter_api_key")).toBe("sk-or-legacy-import-secret");
+    } finally {
+      migrated.close();
+    }
+
+    await expect(stat(join(tenantRoot, ".zenod-vault-key"))).rejects.toMatchObject({ code: "ENOENT" });
+    const database = new DatabaseSync(join(tenantRoot, "vault.sqlite"), { readOnly: true });
+    try {
+      expect(
+        database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'credential_entries'").get(),
+      ).toBeUndefined();
+      expect(database.prepare("SELECT COUNT(*) AS count FROM vault_entries").get()).toMatchObject({ count: 3 });
+    } finally {
+      database.close();
+    }
+
+    const interrupted = storage.vault();
+    interrupted.set(
+      "zenod.credential-migration.v1",
+      JSON.stringify({
+        version: 1,
+        state: "pending_scrub",
+        credentials: [
+          { key: "github_token", handle: githubHandle },
+          { key: "openrouter_api_key", handle: modelHandle },
+        ],
+      }),
+    );
+    interrupted.close();
+    await writeFile(join(tenantRoot, ".zenod-vault-key"), legacyKey, { mode: 0o600 });
+
+    const restarted = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "tenant-imported",
+      credentialVault: new ChassisCredentialVault(storage),
+    });
+    try {
+      expect(restarted.state.getSetting("github_token")).toBe(githubHandle);
+      expect(restarted.state.getSetting("openrouter_api_key")).toBe(modelHandle);
+      expect(restarted.settings.get("github_token")).toBe("ghp_legacy_import_secret");
+      expect(restarted.settings.get("openrouter_api_key")).toBe("sk-or-legacy-import-secret");
+    } finally {
+      restarted.close();
+    }
+    await expect(stat(join(tenantRoot, ".zenod-vault-key"))).rejects.toMatchObject({ code: "ENOENT" });
+    const completed = storage.vault();
+    try {
+      expect(JSON.parse(completed.get("zenod.credential-migration.v1")!)).toMatchObject({
+        version: 1,
+        state: "complete",
+        credentials: [
+          { key: "github_token", handle: githubHandle },
+          { key: "openrouter_api_key", handle: modelHandle },
+        ],
+      });
+    } finally {
+      completed.close();
+    }
+    for (const path of await regularFiles(tenantRoot)) {
+      const bytes = await readFile(path);
+      expect(bytes.includes(Buffer.from("ghp_legacy_import_secret")), path).toBe(false);
+      expect(bytes.includes(Buffer.from("sk-or-legacy-import-secret")), path).toBe(false);
+      expect(bytes.includes(legacyKey), path).toBe(false);
+    }
+  });
+
+  it("fails before mutation when a master-key-only standalone vault receives the wrong key", async () => {
+    const dataRoot = await tempDir("legacy-master-key");
+    const tenantRoot = join(dataRoot, "tenant-master-key");
+    await mkdir(tenantRoot);
+    const standalone = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "legacy-master-user",
+      credentialMasterKey: "correct-legacy-master-key",
+    });
+    standalone.settings.set("github_token", "ghp_master_key_secret");
+    const handle = standalone.state.getSetting("github_token")!;
+    standalone.close();
+    await expect(stat(join(tenantRoot, ".zenod-vault-key"))).rejects.toMatchObject({ code: "ENOENT" });
+    const beforeVault = await readFile(join(tenantRoot, "vault.sqlite"));
+    const beforeSettings = await readFile(join(tenantRoot, "zenod.sqlite"));
+
+    const storage = new ChassisStorage({
+      dataDir: dataRoot,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    }).forTenant({ id: "tenant-master-key" });
+    expect(() => new ChassisCredentialVault(storage)).toThrow(
+      "requires its local key or ZENOD_CREDENTIAL_MASTER_KEY",
+    );
+    expect(
+      () => new ChassisCredentialVault(storage, { legacyMasterKey: "wrong-legacy-master-key" }),
+    ).toThrow("could not identify exactly one valid encryption key");
+    expect(await readFile(join(tenantRoot, "vault.sqlite"))).toEqual(beforeVault);
+    expect(await readFile(join(tenantRoot, "zenod.sqlite"))).toEqual(beforeSettings);
+
+    const migrated = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "tenant-master-key",
+      credentialVault: new ChassisCredentialVault(storage, {
+        legacyMasterKey: "correct-legacy-master-key",
+      }),
+    });
+    try {
+      expect(migrated.state.getSetting("github_token")).toBe(handle);
+      expect(migrated.settings.get("github_token")).toBe("ghp_master_key_secret");
+    } finally {
+      migrated.close();
+    }
+  });
+
+  it("scrubs an empty standalone credential table and removes its unused local key", async () => {
+    const dataRoot = await tempDir("legacy-empty");
+    const tenantRoot = join(dataRoot, "tenant-empty");
+    await mkdir(tenantRoot);
+    const standalone = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "legacy-empty-user",
+    });
+    standalone.close();
+    expect(await stat(join(tenantRoot, ".zenod-vault-key"))).toMatchObject({ size: 32 });
+
+    const storage = new ChassisStorage({
+      dataDir: dataRoot,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    }).forTenant({ id: "tenant-empty" });
+    const migrated = new ChassisCredentialVault(storage);
+    migrated.close();
+
+    await expect(stat(join(tenantRoot, ".zenod-vault-key"))).rejects.toMatchObject({ code: "ENOENT" });
+    const database = new DatabaseSync(join(tenantRoot, "vault.sqlite"), { readOnly: true });
+    try {
+      expect(
+        database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'credential_entries'").get(),
+      ).toBeUndefined();
+    } finally {
+      database.close();
+    }
+  });
+
+  it("keeps the local key when pending-scrub metadata cannot verify the complete imported set", async () => {
+    const dataRoot = await tempDir("legacy-pending-incomplete");
+    const tenantRoot = join(dataRoot, "tenant-pending-incomplete");
+    const firstHandle = `zenod-secret:v1:${"ab".repeat(24)}`;
+    const missingHandle = `zenod-secret:v1:${"cd".repeat(24)}`;
+    const storage = new ChassisStorage({
+      dataDir: dataRoot,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    }).forTenant({ id: "tenant-pending-incomplete" });
+    const raw = storage.vault();
+    raw.set(
+      "zenod.credential.github_token",
+      JSON.stringify({
+        version: 1,
+        owner: "zenod",
+        tenantId: "tenant-pending-incomplete",
+        key: "github_token",
+        handle: firstHandle,
+        value: "ghp_imported",
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    );
+    raw.set(
+      "zenod.credential-migration.v1",
+      JSON.stringify({
+        version: 1,
+        state: "pending_scrub",
+        credentials: [
+          { key: "github_token", handle: firstHandle },
+          { key: "openrouter_api_key", handle: missingHandle },
+        ],
+      }),
+    );
+    raw.close();
+    await writeFile(join(tenantRoot, ".zenod-vault-key"), Buffer.alloc(32, 7), { mode: 0o600 });
+
+    expect(() => new ChassisCredentialVault(storage)).toThrow(
+      `credential handle ${missingHandle} cannot be materialized`,
+    );
+    expect(await stat(join(tenantRoot, ".zenod-vault-key"))).toMatchObject({ size: 32 });
+    const reopened = storage.vault();
+    reopened.close();
+  });
+
+  it("refuses a conflicting chassis record without deleting recoverable legacy state", async () => {
+    const dataRoot = await tempDir("legacy-conflict");
+    const tenantRoot = join(dataRoot, "tenant-conflict");
+    await mkdir(tenantRoot);
+    const standalone = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "legacy-conflict-user",
+    });
+    standalone.settings.set("github_token", "ghp_conflict_secret");
+    const handle = standalone.state.getSetting("github_token")!;
+    standalone.close();
+
+    const storage = new ChassisStorage({
+      dataDir: dataRoot,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    }).forTenant({ id: "tenant-conflict" });
+    const target = storage.vault();
+    target.set(
+      "zenod.credential.github_token",
+      JSON.stringify({
+        version: 1,
+        owner: "zenod",
+        tenantId: "tenant-conflict",
+        key: "github_token",
+        handle,
+        value: "different-secret",
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    );
+    target.close();
+
+    expect(() => new ChassisCredentialVault(storage)).toThrow(
+      "conflicts with chassis record github_token",
+    );
+    expect(await stat(join(tenantRoot, ".zenod-vault-key"))).toMatchObject({ size: 32 });
+    const database = new DatabaseSync(join(tenantRoot, "vault.sqlite"), { readOnly: true });
+    try {
+      expect(database.prepare("SELECT COUNT(*) AS count FROM credential_entries").get()).toMatchObject({ count: 1 });
+    } finally {
+      database.close();
+    }
+    const correction = storage.vault();
+    correction.delete("zenod.credential.github_token");
+    correction.close();
+    const retried = new ChassisCredentialVault(storage);
+    expect(retried.materialize("github_token", handle)).toBe("ghp_conflict_secret");
+    retried.close();
   });
 
   it("returns only masked credential metadata and does not log submitted values", async () => {
