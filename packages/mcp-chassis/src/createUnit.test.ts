@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto";
 import type { ServerType } from "@hono/node-server";
 import { serve } from "@hono/node-server";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ChassisUsageStore, createMemoryTenantStore, createUnit, hashToken, type UnitContext } from "./index.js";
+import { ChassisStorage, ChassisUsageStore, createMemoryTenantStore, createUnit, hashToken, type UnitContext } from "./index.js";
 
 const servers: ServerType[] = [];
 const tempDirs: string[] = [];
@@ -110,6 +111,16 @@ async function tempWebDist(): Promise<string> {
   );
   await writeFile(join(dir, "asset.txt"), "asset");
   return dir;
+}
+
+function pkceChallenge(verifier: string): string {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+
+function formBody(input: Record<string, string>): URLSearchParams {
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) body.set(key, value);
+  return body;
 }
 
 describe("createUnit", () => {
@@ -531,6 +542,166 @@ describe("createUnit", () => {
       headers: { authorization: "Bearer zenod_self_host_seed_token" },
     });
     expect(response.status).toBe(200);
+  });
+
+  it("maps MCP OAuth sign-in grants back to the approving tenant", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-oauth-server-"));
+    tempDirs.push(dataDir);
+    const seenTenants: Array<string | null> = [];
+    const tenants = createMemoryTenantStore([{ token: "tenant-one-token", tenant: { id: "tenant-one" } }]);
+    const unit = createUnit({
+      name: "demo",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      oauth: { server: true },
+      tools(_server, context) {
+        seenTenants.push(context.tenant?.id ?? null);
+      },
+    });
+    const base = await listen(unit.app);
+
+    const unauthenticated = await initialize(base);
+    expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.headers.get("www-authenticate")).toContain(
+      `${base}/.well-known/oauth-protected-resource`,
+    );
+
+    const registered = (await fetch(`${base}/oauth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        client_name: "Claude Desktop",
+        redirect_uris: ["https://client.example/callback"],
+      }),
+    }).then((r) => r.json())) as { client_id: string };
+    const verifier = "deterministic-test-verifier";
+    const authorizeParams = {
+      client_id: registered.client_id,
+      redirect_uri: "https://client.example/callback",
+      state: "client-state",
+      code_challenge: pkceChallenge(verifier),
+      code_challenge_method: "S256",
+      resource: `${base}/mcp`,
+      scope: "mcp",
+    };
+
+    const decision = await fetch(`${base}/oauth/authorize/decision`, {
+      method: "POST",
+      redirect: "manual",
+      body: formBody({ ...authorizeParams, token: "tenant-one-token", decision: "approve" }),
+    });
+    expect(decision.status).toBe(302);
+    const location = decision.headers.get("location");
+    expect(location).toBeTruthy();
+    const code = new URL(location!).searchParams.get("code");
+    expect(code).toBeTruthy();
+
+    const tokenResponse = await fetch(`${base}/oauth/token`, {
+      method: "POST",
+      body: formBody({
+        grant_type: "authorization_code",
+        code: code!,
+        redirect_uri: authorizeParams.redirect_uri,
+        code_verifier: verifier,
+      }),
+    });
+    expect(tokenResponse.status).toBe(200);
+    const tokenBody = (await tokenResponse.json()) as { access_token: string };
+
+    const mcp = await initialize(base, { headers: { authorization: `Bearer ${tokenBody.access_token}` } });
+    expect(mcp.status).toBe(200);
+    expect(seenTenants).toEqual(["tenant-one"]);
+  });
+
+  it("binds provider OAuth state to one tenant and stores tokens in that tenant vault", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-oauth-"));
+    tempDirs.push(dataDir);
+    const storage = new ChassisStorage({ dataDir });
+    const tenants = createMemoryTenantStore([
+      { token: "tenant-one-token", tenant: { id: "tenant-one" } },
+      { token: "tenant-two-token", tenant: { id: "tenant-two" } },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      storage,
+      oauth: {
+        providers: [
+          {
+            id: "demo",
+            displayName: "Demo Provider",
+            clientId: "demo-client",
+            authorizationUrl: "https://provider.example/oauth",
+            scopes: ["read"],
+            exchangeCode: ({ code, tenant }) => ({
+              accessToken: `access-${tenant.id}-${code}`,
+              refreshToken: `refresh-${tenant.id}`,
+            }),
+          },
+        ],
+      },
+    });
+    const base = await listen(unit.app);
+
+    const start = await fetch(`${base}/api/oauth/providers/demo/start`, {
+      redirect: "manual",
+      headers: { authorization: "Bearer tenant-one-token" },
+    });
+    expect(start.status).toBe(302);
+    const authorizeUrl = new URL(start.headers.get("location")!);
+    const state = authorizeUrl.searchParams.get("state");
+    const redirectUri = authorizeUrl.searchParams.get("redirect_uri");
+    expect(authorizeUrl.origin).toBe("https://provider.example");
+    expect(authorizeUrl.searchParams.get("client_id")).toBe("demo-client");
+    expect(authorizeUrl.searchParams.get("scope")).toBe("read");
+    expect(state).toBeTruthy();
+    expect(new URL(redirectUri!).searchParams.get("tenant_id")).toBe("tenant-one");
+
+    const mismatched = new URL(redirectUri!);
+    mismatched.searchParams.set("tenant_id", "tenant-two");
+    mismatched.searchParams.set("code", "wrong-tenant-code");
+    mismatched.searchParams.set("state", state!);
+    const mismatchResponse = await fetch(mismatched);
+    expect(mismatchResponse.status).toBe(400);
+    await expect(mismatchResponse.json()).resolves.toEqual({ error: "tenant_state_mismatch" });
+
+    const replayed = new URL(redirectUri!);
+    replayed.searchParams.set("code", "valid-code-after-replay");
+    replayed.searchParams.set("state", state!);
+    const replayResponse = await fetch(replayed);
+    expect(replayResponse.status).toBe(400);
+    await expect(replayResponse.json()).resolves.toEqual({ error: "invalid_oauth_state" });
+
+    const secondStart = await fetch(`${base}/api/oauth/providers/demo/start`, {
+      redirect: "manual",
+      headers: { authorization: "Bearer tenant-one-token" },
+    });
+    const secondAuthorizeUrl = new URL(secondStart.headers.get("location")!);
+    const secondState = secondAuthorizeUrl.searchParams.get("state");
+    const secondCallback = new URL(secondAuthorizeUrl.searchParams.get("redirect_uri")!);
+    secondCallback.searchParams.set("code", "valid-code");
+    secondCallback.searchParams.set("state", secondState!);
+
+    const callback = await fetch(secondCallback);
+    expect(callback.status).toBe(200);
+    await expect(callback.json()).resolves.toEqual({ ok: true, provider: "demo", tenant: { id: "tenant-one" } });
+
+    const tenantOneVault = storage.forTenant({ id: "tenant-one" }).vault();
+    const tenantTwoVault = storage.forTenant({ id: "tenant-two" }).vault();
+    try {
+      expect(JSON.parse(tenantOneVault.get("oauth:demo")!)).toMatchObject({
+        providerId: "demo",
+        tenantId: "tenant-one",
+        tokens: {
+          accessToken: "access-tenant-one-valid-code",
+          refreshToken: "refresh-tenant-one",
+        },
+      });
+      expect(tenantTwoVault.get("oauth:demo")).toBeNull();
+    } finally {
+      tenantOneVault.close();
+      tenantTwoVault.close();
+    }
   });
 
   it("binds storage to the trusted tenant resolved by auth, not client-supplied tenant ids", async () => {

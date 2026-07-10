@@ -41,5 +41,22 @@ tenant-scoped session cookie; `/api/overview`, `/api/keys`, `/api/settings`,
 bearer token and never accept a client-supplied tenant id. `panels` selects which
 existing console tabs the unit exposes.
 
-Storage, metering, OAuth, billing, and conduct middleware are delivered by the
+Storage, metering, billing, and conduct middleware are delivered by the
 following Epic 3.1 tickets.
+
+## OAuth kit
+
+`createUnit({ oauth })` can enable both chassis-owned OAuth surfaces:
+
+- `oauth.server: true` installs the MCP-client sign-in server routes:
+  `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`,
+  `/oauth/register`, `/oauth/authorize`, and `/oauth/token`. Consent authenticates
+  with a tenant token, so issued MCP access tokens resolve back to that tenant.
+- `oauth.providers` declares outbound/world OAuth providers. The chassis installs
+  `/api/oauth/providers/<id>/start` and `/api/oauth/providers/<id>/callback`.
+  Start is tenant-authenticated, state is bound to that tenant, callback rejects
+  tenant/state mismatches, and exchanged tokens are stored in the tenant vault
+  under `oauth:<id>` by default.
+
+Unit tests use a deterministic fake provider, so no external credentials are
+needed to prove the framework.
