@@ -15,7 +15,7 @@ This artifact is sanitized. It contains no environment values, bearer tokens, AP
 
 | Evidence | Method | Result |
 |---|---|---|
-| `/tmp/zenod-dokploy-inventory-sanitized.json` | Existing local Dokploy API inventory | 48 total Dokploy rows; 35 rows in project `zenod` are inventoried below. |
+| `/tmp/zenod-dokploy-inventory-sanitized.json` | Existing local Dokploy API inventory | 48 total Dokploy rows; 34 rows in project `zenod` are inventoried below. |
 | `/tmp/zenod-docker-inventory-sanitized.json` | Existing local Docker inspect inventory | 100 containers; joined by compose project/app name and service. |
 | `/tmp/zenod-docker-stats.jsonl` | Existing local Docker stats snapshot | Used for live container names and memory presence; not copied wholesale. |
 | `/tmp/zenod-docker-volumes.jsonl` | Existing local Docker volume list | 81 total volumes; 68 relevant Zenod/compose volumes; 63 mounted, 5 orphan candidates. |
@@ -46,7 +46,7 @@ Public probe receipts:
 
 | Scope | Count | Notes |
 |---|---:|---|
-| Dokploy rows in project `zenod` | 35 | 2 application rows, 33 compose rows. |
+| Dokploy rows in project `zenod` | 34 | 2 application rows, 32 compose rows. |
 | Running 2.x candidate rows | 16 | 1 live-paying, 13 test, 2 unknown. |
 | Failed duplicate Dokploy rows | 4 | No active Docker containers for their compose projects. |
 | Dead rows | 0 | No row is dead by health/container evidence. |
@@ -54,6 +54,47 @@ Public probe receipts:
 | Relevant volumes | 68 | 63 mounted to containers; 5 unmounted/orphan candidates. |
 
 DX-2 can safely start with test rows only after snapshots are defined. Do not remove `live-paying` or `unknown` rows without the human gate in the spine.
+
+## Dokploy Identifier Map
+
+This map binds every same-name row to its opaque Dokploy identifier. It is the disambiguation source for review; DX-2 additionally binds domain IDs, containers, volumes, watchdog tokens, and an approved CSV digest and then reconciles all of them against live state before any stop.
+
+| Kind | Row | Runtime App/Compose | Dokploy ID | Status |
+|---|---|---|---|---|
+| `application` | `zenod` | `zenod-uqe3bx` | `Cfs2myovKQhu6r6DcN8g-` | `done` |
+| `application` | `zenod-site` | `zenod-site-zxvcqp` | `bSGHEi-7-i9VdjP3QQSDi` | `done` |
+| `compose` | `callisthenes` | `compose-back-up-optical-transmitter-kqinqv` | `oN6m6iGwRkDgc0C0WYvbD` | `done` |
+| `compose` | `archus` | `compose-override-online-interface-jfl3ny` | `cMOFbal1eP64frpBqPWkN` | `idle` |
+| `compose` | `ring-jordiring-fkegkz` | `compose-quantify-open-source-pixel-siik6w` | `a5BbpChW5PKgXUJFZSUNo` | `done` |
+| `compose` | `ring-ringe2emain202607092-lw5wat` | `compose-compress-cross-platform-circuit-ewdmj5` | `epsGDOO6tkTQ6i9B_HnRt` | `done` |
+| `compose` | `tenant-testco` | `compose-override-auxiliary-hard-drive-bavq21` | `u8EwwHmyykYv1qbv2sPmP` | `done` |
+| `compose` | `phylax` | `compose-index-auxiliary-panel-3empwt` | `uCoS_Zr0qKZyQHu4UDVjx` | `done` |
+| `compose` | `outbound` | `compose-back-up-solid-state-interface-x933zj` | `m9lceZf789T5ML8jznm79` | `done` |
+| `compose` | `epaminon` | `compose-calculate-cross-platform-capacitor-vkqk6x` | `x9WtBYq_vcUFPW2WADcQP` | `done` |
+| `compose` | `c1` | `compose-parse-primary-transmitter-4r9o44` | `Lq8w9IQ0KTlHu0QPp9CQ7` | `done` |
+| `compose` | `callisthenes-callisthenestest-vn6wnb` | `compose-synthesize-1080p-system-v1v7gx` | `87fpHWO3Qvf9xXrR-04Nn` | `done` |
+| `compose` | `zenod-jordi-f2c7a6` | `compose-quantify-multi-byte-firewall-r3b7ka` | `xDxfVYs0_4M09naWuCl66` | `done` |
+| `compose` | `zenod-jorditest-od45rm` | `compose-navigate-neural-bus-xiqw66` | `ciBRPRrxi65xgi9mc3zal` | `done` |
+| `compose` | `zenod-cloud` | `compose-override-virtual-matrix-s9ua9g` | `17QoMFRgvmZ0Y2n19DINT` | `done` |
+| `compose` | `ring-ringtest20260709-8uiw3s` | `compose-parse-mobile-port-nz5tru` | `qvxRcJxBvWqYp-AYPLS3t` | `done` |
+| `compose` | `zenod-cloud-test` | `compose-hack-optical-driver-mu9tyb` | `wP2PWUnRL1VnKUMfwHDPj` | `done` |
+| `compose` | `z2-zenod` | `compose-parse-cross-platform-capacitor-cf4xa8` | `j1xrAJJ5o7yq3bRH1iTau` | `done` |
+| `compose` | `callisthenes-jordicallifresh33087-muhmxp` | `compose-reboot-neural-hard-drive-z8o9gy` | `NR_px8Ul2L2w_RaM4-DWe` | `done` |
+| `compose` | `ring-jorditestring-0ce4bp` | `compose-reboot-cross-platform-application-yqru5e` | `SFLkR6HA_TZUXP9qEv4r6` | `error` |
+| `compose` | `archus2` | `compose-reboot-cross-platform-array-bwps4g` | `vHEIfpjU0Xwi-V-UZRZsn` | `done` |
+| `compose` | `callisthenes-jorditest2-qmapvn` | `compose-bypass-back-end-protocol-9guvht` | `e-YFn3suCCKIol9w3akW7` | `done` |
+| `compose` | `ring-jordiring-fkegkz` | `compose-index-primary-alarm-k4vw2k` | `ksmrenJOsbUyHuS45tIcK` | `error` |
+| `compose` | `zenod-jordizenodtest33-gmcxem` | `compose-program-cross-platform-monitor-g4f7e8` | `NDFqSn6r-YraEGSQ_KcJJ` | `done` |
+| `compose` | `callisthenes-jordikalitest-godu15` | `compose-synthesize-primary-panel-9xgjg8` | `mifThmov_r3lO6GYr3gi2` | `done` |
+| `compose` | `zenod-jordizenodtest33-gmcxem` | `compose-program-primary-hard-drive-p3psql` | `bfQI30e1AobdUhmoV5ETo` | `error` |
+| `compose` | `zenod-jordizenodtest33-gmcxem` | `compose-parse-neural-panel-zdjqpz` | `af7VR4e4H-4HdfDS1xnG8` | `error` |
+| `compose` | `zenod-jordizenodtest-ccnzay` | `compose-parse-online-array-y5wp4v` | `3nUSkSxl-6eWBCosCN5RD` | `done` |
+| `compose` | `ring-ringcloudtest2026070-yfnwxy` | `compose-back-up-bluetooth-bandwidth-xht4be` | `gl-REbqCb5mIzVM7D_4DI` | `done` |
+| `compose` | `zenod-jorditestzenod0000-4ptjqj` | `compose-synthesize-optical-panel-rpo4zh` | `YdOtLxxT1MVk0SYrVE7qO` | `done` |
+| `compose` | `ring-ringnotouch20260709-wl3hhm` | `compose-quantify-redundant-protocol-15cwae` | `HL8JfN2zVmkuM5mhaCBQS` | `done` |
+| `compose` | `ring-jorditestring-0ce4bp` | `compose-navigate-multi-byte-panel-t2b3ik` | `1xcTXFoe8xVjsih1LC5c9` | `done` |
+| `compose` | `x-mcp` | `compose-program-bluetooth-protocol-e2xsfm` | `NYUUcRopSdjmfRGoEWzHL` | `done` |
+| `compose` | `zenod-runner` | `compose-parse-redundant-bus-gwvpd9` | `OOozR35khVR5wJsHpUy9f` | `error` |
 
 ## Dokploy Project `zenod` Inventory
 
