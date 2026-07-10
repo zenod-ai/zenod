@@ -75,6 +75,84 @@ export type AuthStatus = {
   hostedMode: "ring" | null
 }
 
+export type TenantInfo = {
+  id: string
+  name?: string
+  plan?: string
+  quota?: number | null
+}
+
+export type OperatingDirective = {
+  id: string
+  text: string
+  source: string
+  active: boolean
+  version: number
+  updatedAt: string
+}
+
+export type ConductReceipt = {
+  id: string
+  kind: string
+  status: string
+  summary: string
+  evidence: unknown[]
+  at: string
+}
+
+export type OperatingRulesResponse = {
+  tenant: TenantInfo
+  seam: {
+    status: "conformant"
+    receiptDiscipline: "enabled"
+    turnPreamble: "active-directives-re-read"
+    tenantIsolation: "tenant-scoped"
+    dispatchDepth: "depth<=1"
+  }
+  directives: OperatingDirective[]
+  conductReceipts: ConductReceipt[]
+  turnPreamble: {
+    tenantId: string
+    directives: OperatingDirective[]
+    text: string
+  }
+}
+
+export type McpConfigResponse = {
+  tenant: TenantInfo
+  unit: {
+    name: string
+    version: string
+  }
+  endpoint: string
+  tokenedEndpoint: string
+  auth: {
+    bearer: boolean
+    tokenedUrl: boolean
+    oauth: boolean
+  }
+  routes: string[]
+}
+
+export type UnitSkillManifest = {
+  id: string
+  name: string
+  version?: string
+  description?: string
+  tools?: string[]
+  receiptExpectations?: string[]
+}
+
+export type SkillSettingsResponse = {
+  tenant: TenantInfo
+  unit: {
+    name: string
+    version: string
+  }
+  published: UnitSkillManifest | null
+  installed: UnitSkillManifest[]
+}
+
 /** One row of the /api/usage breakdown — aggregated per operation or per model. */
 export type UsageBucket = {
   key: string
