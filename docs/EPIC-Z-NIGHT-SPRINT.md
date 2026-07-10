@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Night-sprint delivery manager (bind on dispatch)
 Steward since: 2026-07-10T20:19:03+02:00
-Last reconciled commit: 2632e8f68122a7e05a178020bb0601813de36704
+Last reconciled commit: 43a38a0b551e13d9205455bf09e740fa745799b9
 Planner: Jordi + Epic 3.0 planner
 Worker: Night-sprint delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -78,11 +78,12 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 
 ## Current State
 
-Phase: wave 1 active
-Last verified: 2026-07-10T20:35:35+02:00
+Phase: wave 2 active
+Last verified: 2026-07-10T21:13:00+02:00
 Integration target: main
-Fresh base commit: `2632e8f68122a7e05a178020bb0601813de36704` — pinned; no rebases until the journey passes (D19c)
-Next action: manager monitors Z-N1/Z-N2/Z-N4, integrates passing PRs, then dispatches Z-N3/Z-N5.
+Wave 1 base commit: `2632e8f68122a7e05a178020bb0601813de36704` — pinned; no rebases were performed (D19c)
+Wave 2 base commit: `43a38a0b551e13d9205455bf09e740fa745799b9` — integrated wave 1, pinned
+Next action: manager monitors Z-N3/Z-N5, integrates passing PRs, deploys one container, then starts Z-N6.
 Blockers: none — every decision is pre-answered below. Inputs from Jordi are non-blocking (decision rules given).
 
 ## Role Goals
@@ -139,12 +140,12 @@ Every decision pre-answered; the manager invents nothing:
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#802](https://github.com/zenod-ai/zenod/issues/802) | Ticket worker | Z-N1-worker / Jason | Z-N1 landing + pricing served from the container | in progress | - | `codex/z-n1-landing-pricing` | `2632e8f` | Journey steps 1–2 render | dispatched | 2026-07-10T20:35:35+02:00 | implement + targeted tests + PR |
-| [#806](https://github.com/zenod-ai/zenod/issues/806) | Ticket worker | Z-N2-worker / Feynman | Z-N2 total cloud customer-layer transplant | in progress | - | `codex/z-n2-auth-transplant` | `2632e8f` | Auth/accounts/billing/UI/metering ported; four corpses excluded | clean source `6bdb318`; dispatched | 2026-07-10T20:35:35+02:00 | transplant + targeted tests + PR |
-| [#801](https://github.com/zenod-ai/zenod/issues/801) | Ticket worker | Z-N4-worker / Arendt | Z-N4 dashboard reshape: MCP-first, vault, credit; delete non-Zenod tabs | in progress | - | `codex/z-n4-dashboard` | `2632e8f` | Journey step 5 | dispatched | 2026-07-10T20:35:35+02:00 | implement + targeted tests + PR |
-| [#804](https://github.com/zenod-ai/zenod/issues/804) | Ticket worker | Z-N3-worker (wave 2) | Z-N3 adapt transplanted Stripe billing to local tenant rows | ready | [#806](https://github.com/zenod-ai/zenod/issues/806) | worktree on dispatch | `2632e8f` | Journey steps 4, 7b | contract reconciled | 2026-07-10T20:35:35+02:00 | wait for Z-N2 |
-| [#803](https://github.com/zenod-ai/zenod/issues/803) | Ticket worker | Z-N5-worker (wave 2) | Z-N5 one domain family; re-mint MCP URLs; 301 mind host | ready | domain rule | worktree on dispatch | `2632e8f` | One container serves 1–7; cloud runs nothing | contract reconciled | 2026-07-10T20:35:35+02:00 | wave 2 |
-| [#805](https://github.com/zenod-ai/zenod/issues/805) | Epic worker | Night-sprint delivery manager | Z-N6 journey loop to one clean pass + morning package | ready | Z-N1..5 | manager | `2632e8f` | SHIP items 1–8 | contract reconciled | 2026-07-10T20:35:35+02:00 | last |
+| [#802](https://github.com/zenod-ai/zenod/issues/802) | Ticket worker | Z-N1-takeover / Hegel | Z-N1 landing + pricing served from the container | done | - | [#810](https://github.com/zenod-ai/zenod/pull/810) / `codex/z-n1-landing-pricing` | `2632e8f` | Journey steps 1–2 render | targeted tests/build/typecheck; merged `43a38a0` | 2026-07-10T21:12:00+02:00 | integrated |
+| [#806](https://github.com/zenod-ai/zenod/issues/806) | Ticket worker | Z-N2-worker / Feynman | Z-N2 total cloud customer-layer transplant | done | - | [#809](https://github.com/zenod-ai/zenod/pull/809) / `codex/z-n2-auth-transplant` | `2632e8f` | Auth/accounts/billing/UI/metering ported; four corpses excluded | 43 targeted tests + builds; merged `b248687` | 2026-07-10T21:11:00+02:00 | integrated |
+| [#801](https://github.com/zenod-ai/zenod/issues/801) | Ticket worker | Z-N4-worker / Arendt | Z-N4 dashboard reshape: MCP-first, vault, credit; delete non-Zenod tabs | done | - | [#808](https://github.com/zenod-ai/zenod/pull/808) / `codex/z-n4-dashboard` | `2632e8f` | Journey step 5 | 5 tests + build/browser checks; merged `f5c2cf0` | 2026-07-10T21:04:00+02:00 | integrated |
+| [#804](https://github.com/zenod-ai/zenod/issues/804) | Ticket worker | Z-N3-worker / Archimedes | Z-N3 adapt transplanted Stripe billing to local tenant rows | in progress | [#806](https://github.com/zenod-ai/zenod/issues/806) done | `codex/z-n3-billing` | `43a38a0` | Journey steps 4, 7b | dispatched with TEST prices | 2026-07-10T21:13:00+02:00 | local tenant binding + tests + PR |
+| [#803](https://github.com/zenod-ai/zenod/issues/803) | Ticket worker | Z-N5-worker / Turing | Z-N5 one domain family; re-mint MCP URLs; 301 mind host | in progress | domain rule resolved | `codex/z-n5-domain` | `43a38a0` | One container serves 1–7; cloud runs nothing | live map + rollback inputs recorded | 2026-07-10T21:13:00+02:00 | cutover path + tests + PR |
+| [#805](https://github.com/zenod-ai/zenod/issues/805) | Epic worker | Night-sprint delivery manager | Z-N6 journey loop to one clean pass + morning package | ready | Z-N3, Z-N5 | manager | `43a38a0` | SHIP items 1–8 | browser route prepared | 2026-07-10T21:13:00+02:00 | deploy, then walk from step 1 |
 
 ## Branch And Integration
 
@@ -168,7 +169,7 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 | Issue | Previous Assignment | Takeover Assignment | Starting Commit | Unverified Work | Recorded At |
 |---|---|---|---|---|---|
-| none | - | - | - | - | - |
+| [#802](https://github.com/zenod-ai/zenod/issues/802) | Z-N1-worker / Jason | Z-N1-takeover / Hegel | `2632e8f` | landing/static-routing worktree changes | 2026-07-10T21:03:00+02:00 |
 
 ## Planner Queue
 
@@ -189,6 +190,13 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | pending | SHIP journey clean pass | - | live product domain | real browser walk, screenshots per step | pending | morning package |
 
 ## Handoff Journal
+
+### 2026-07-10T21:13:00+02:00 - Night-sprint delivery manager - Wave 1 integrated; wave 2 dispatched
+
+Context: Z-N4 merged as `f5c2cf0`, Z-N2 as `b248687`, and Z-N1 as `43a38a0`. Z-N1 was recovered in-place after worker model capacity; no work was discarded. Wave 2 launched from integrated commit `43a38a0b551e13d9205455bf09e740fa745799b9`.
+External state: the existing OAuth app remains app `3718758` / client `Ov23lihBhL9ceTqYWKSP`, renamed `Zenod Cloud`; its registered callback is now `https://cloud.zenod.dev/auth/github/callback`. `cloud-test.zenod.dev` is retired. Stripe TEST product `prod_UrSJ9kf45jilIE` uses monthly `price_1TrjPC76yJ3p1J6XqXl1QwN8` and yearly `price_1TrjPD76yJ3p1J6XZGkcIQ56`.
+Assignments: Z-N3-worker / Archimedes / `codex/z-n3-billing`; Z-N5-worker / Turing / `codex/z-n5-domain`.
+Next: integrate Z-N3/Z-N5, publish the immutable image, cut over the recorded Dokploy target, then start Z-N6 from the public landing.
 
 ### 2026-07-10T20:35:35+02:00 - Night-sprint delivery manager - Wave 1 dispatched
 
