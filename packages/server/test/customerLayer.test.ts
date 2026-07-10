@@ -170,6 +170,23 @@ describe("hosted customer layer", () => {
     expect((await app.request("/auth/github?session_id=cs_old")).status).toBe(404);
   });
 
+  it("logs the hosted dashboard out through its API route", async () => {
+    const app = customerApp();
+    const cookie = await signInCookie(app);
+    const logout = await app.request("/api/auth/logout", {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(logout.status).toBe(200);
+    const clearedCookie = logout.headers.get("set-cookie")!;
+    expect(clearedCookie).toContain("zenod_customer_session=");
+    expect(clearedCookie).toContain("Max-Age=0");
+    const me = await app.request("/api/me", {
+      headers: { cookie: clearedCookie.split(";")[0]! },
+    });
+    expect(me.status).toBe(401);
+  });
+
   it("returns apex sign-in to the landing and direct cloud sign-in to the app", async () => {
     const app = customerApp();
     await signInCookie(app, "zenod.dev", "https://zenod.dev/");
