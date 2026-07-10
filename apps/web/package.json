@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "test": "node --experimental-strip-types --test src/lib/media-ingest-receipt.test.ts",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
