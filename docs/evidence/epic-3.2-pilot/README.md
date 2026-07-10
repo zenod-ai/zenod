@@ -13,10 +13,11 @@ Chassis implementation: `ba533b3987c13a6e1c3a136bc7bab08beb00abf9`
 Environment: macOS, Node 22, fresh local hosted, self-hosted, and migrated
 data roots; production web build; in-app Chromium browser at 1280x720.
 
-Status: **blocked**. The product, tenancy, restart, migration, browser, and D18
-checks passed. The final custody scan found a raw synthetic GitHub credential in
-the chassis-owned tenant `vault.sqlite-wal`. That cross-spine defect is tracked
-by #789, anchored to #780. Epic 3.2 did not edit `packages/mcp-chassis/**`.
+Status: **acceptance failed / blocked**. This is contract-mode checkpoint
+evidence, not the Epic 3.2 acceptance set. The final custody scan found a raw
+synthetic GitHub credential in the chassis-owned tenant `vault.sqlite-wal`.
+That cross-spine defect is tracked by #789, anchored to #780. Epic 3.2 did not
+edit `packages/mcp-chassis/**`.
 
 ### Automated gates
 
@@ -64,6 +65,11 @@ The fake repositories intentionally fail clone authentication; the screenshots
 make the owning tenant path and repository visible without using a real world
 credential. No raw credentials occur in the evidence tree.
 
+These captures do not satisfy final acceptance: all three vault clones failed,
+Transcription was captured instead of tenant-specific Ingest history, Costs was
+empty, and no durable commit or marker receipt exists. The files are `.jpg`
+because the browser emitted JPEG bitstreams.
+
 ### Release blocker
 
 The synthetic world credential with SHA-256
@@ -73,5 +79,22 @@ was found verbatim in
 not found. #789 requires chassis-owned encrypted vault storage plus DB/WAL/SHM
 regression scans and a plaintext compatibility decision.
 
-The next definitive run must start from the exact main SHA returned by the 3.1
-steward after #789 merges, use fresh data roots, and repeat all evidence above.
+### Independent acceptance audit
+
+Epic 3.7 independently audited branch `3688410` / product `2d8509e` and rejected
+#736 readiness. In addition to #789, the final rerun must provide:
+
+- exact merged main SHA and immutable image digest;
+- fresh `--mode full` using `AlfaBlok/test_evals`, `AlfaBlok/react_test1`, and
+  `AlfaBlok/zenod-cloud-test-vault-4ptjqj`;
+- durable per-tenant commit receipts, planted marker searches, and foreign-marker
+  negatives;
+- browser Repo, Ingest history, and non-empty Usage captures for T1/T2/T3;
+- self-host ingest and commit-receipt parity;
+- migration plan/apply/verify/idempotency/rollback receipts, full-prefix state,
+  and Z-5 restore evidence;
+- zero raw world-key matches in DB, WAL, and SHM files.
+
+The repository writes and a capped non-production OpenRouter key require two
+separate explicit Jordi approvals. No production key may be reused, and neither
+approval authorizes production migration, DNS, Dokploy, archive, or retirement.
