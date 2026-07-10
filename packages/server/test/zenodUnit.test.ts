@@ -54,6 +54,12 @@ describe("Zenod chassis unit", () => {
       expect(alpha.dataDir).not.toBe(beta.dataDir);
       expect(alpha.settings.getRaw("api_token")).toBeNull();
       expect(beta.settings.getRaw("api_token")).toBeNull();
+      alpha.settings.set("github_token", "ghp_alpha_secret");
+      const alphaHandle = alpha.state.getSetting("github_token");
+      expect(alphaHandle).toMatch(/^zenod-secret:v1:/);
+      expect(alphaHandle).not.toContain("ghp_alpha_secret");
+      expect(alpha.settings.get("github_token")).toBe("ghp_alpha_secret");
+      expect(beta.credentialVault.materialize("github_token", alphaHandle!)).toBeNull();
     } finally {
       pool.close();
     }
