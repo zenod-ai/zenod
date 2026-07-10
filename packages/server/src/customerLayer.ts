@@ -139,6 +139,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   );
   app.all("/api/auth/login", (c) => c.json({ error: "not found" }, 404));
   app.all("/api/auth/setup", (c) => c.json({ error: "not found" }, 404));
+  app.post("/api/auth/logout", (c) => {
+    clearCustomerSession(c, env);
+    return c.json({ ok: true });
+  });
   app.all("/api/auth/logout", (c) => c.json({ error: "not found" }, 404));
 
   app.get("/api/console/account", async (c) => {
