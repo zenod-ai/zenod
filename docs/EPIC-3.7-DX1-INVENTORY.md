@@ -253,10 +253,12 @@ different compose and domain ID. It is isolated in
 `docs/EPIC-3.7-DX1B-CALLISTHENES-DUPLICATE-CANDIDATE.json`; it is not folded
 into the materialized DX-4 candidate and is not covered by an older approval.
 
-Cloud recovery defect [#62](https://github.com/zenod-ai/cloud/issues/62) tracks
-the causal investigation. The status probe may have coincided with periodic
-legacy provisioning recovery. Direct GET mutation is not established by the
-available evidence.
+The cloud #62 [causation audit](https://github.com/zenod-ai/cloud/issues/62#issuecomment-4931765367)
+established the path: duplicate cross-environment Traefik ownership sent the
+cloud-test status GET to live. The deployed live `status-reconcile` GET directly
+wrote the account and queue, spawned the provisioner, created the compose and
+domain, then falsely accepted the original shared hostname. The recovery timer
+was not deployed and was not causal. This finding does not authorize cleanup.
 
 ## Acceptance Coverage
 

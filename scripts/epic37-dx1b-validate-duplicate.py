@@ -18,6 +18,13 @@ EXPECTED_CANDIDATE_ID = "Us9aDVdhvlObXLDfDwW0I"
 EXPECTED_DUPLICATE_OF = "NR_px8Ul2L2w_RaM4-DWe"
 EXPECTED_RUNTIME_PROJECT = "compose-hack-redundant-driver-nu1cex"
 EXPECTED_DOMAIN_ID = "injtaVSszHyvNqLDEmJ88"
+CAUSATION_EVIDENCE_REF = "https://github.com/zenod-ai/cloud/issues/62#issuecomment-4931765367"
+CAUSATION_STATEMENT = (
+    "Duplicate cross-environment Traefik ownership sent the cloud-test status GET to live. "
+    "The deployed live status-reconcile GET directly wrote the account and queue, spawned the provisioner, "
+    "created the compose and domain, then falsely accepted the original shared hostname. "
+    "The recovery timer was not deployed and was not causal."
+)
 
 
 class ValidationError(Exception):
@@ -82,6 +89,8 @@ def validate_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     require(candidate.get("watchdog_tokens") == [], "record-only candidate must have zero watchdog tokens")
     text(candidate, "classification_evidence_ref", "candidate")
     require(candidate.get("recovery_defect_ref") == "https://github.com/zenod-ai/cloud/issues/62", "candidate must link cloud recovery defect #62")
+    require(candidate.get("causation_evidence_ref") == CAUSATION_EVIDENCE_REF, "candidate must link the conclusive cloud #62 causation audit")
+    require(manifest.get("causation_statement") == CAUSATION_STATEMENT, "manifest causation statement must preserve the established live GET path")
     return candidate
 
 

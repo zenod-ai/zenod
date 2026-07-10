@@ -53,10 +53,13 @@ review-only plan after a fresh zero-materialization recheck, compose/domain
 metadata export, rollback reference, exact manifest digest, maintenance window,
 and new Jordi approval. No cleanup was performed.
 
-Cloud recovery defect [#62](https://github.com/zenod-ai/cloud/issues/62) tracks
-the duplicate creation path. The observed status probe may have coincided with
-periodic legacy recovery; the available evidence does not prove direct GET
-mutation.
+The cloud #62 [causation audit](https://github.com/zenod-ai/cloud/issues/62#issuecomment-4931765367)
+established the duplicate creation path. Cross-environment Traefik ownership
+sent the cloud-test status GET to live. The deployed live `status-reconcile` GET
+directly wrote the account and queue, spawned the provisioner, created the
+compose and domain, then falsely accepted the original shared hostname. The
+recovery timer was not deployed and was not causal. This does not weaken the
+separate digest-bound cleanup gate.
 
 ## Blocking Gates
 

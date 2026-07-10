@@ -26,7 +26,8 @@
       "volume_names": [],
       "watchdog_tokens": [],
       "classification_evidence_ref": "docs/EPIC-3.7-DX1B-CURRENT-STATE.json",
-      "recovery_defect_ref": "https://github.com/zenod-ai/cloud/issues/62"
+      "recovery_defect_ref": "https://github.com/zenod-ai/cloud/issues/62",
+      "causation_evidence_ref": "https://github.com/zenod-ai/cloud/issues/62#issuecomment-4931765367"
     }
   ],
   "approval_requirements": {
@@ -38,6 +39,6 @@
     "rollback_plan": true,
     "fresh_zero_materialization_recheck": true
   },
-  "causation_statement": "The status probe may have coincided with periodic legacy provisioning recovery; direct GET mutation is unproven.",
+  "causation_statement": "Duplicate cross-environment Traefik ownership sent the cloud-test status GET to live. The deployed live status-reconcile GET directly wrote the account and queue, spawned the provisioner, created the compose and domain, then falsely accepted the original shared hostname. The recovery timer was not deployed and was not causal.",
   "apply_path_present": false
 }

@@ -149,9 +149,11 @@
       "cleanup_authorized": false
     }
   ],
-  "recovery_observation": {
+  "causation_audit": {
+    "status": "established",
     "defect_issue": "https://github.com/zenod-ai/cloud/issues/62",
-    "statement": "The status probe may have coincided with periodic legacy provisioning recovery. Direct GET mutation is not established by the available evidence."
+    "evidence_ref": "https://github.com/zenod-ai/cloud/issues/62#issuecomment-4931765367",
+    "statement": "Duplicate cross-environment Traefik ownership sent the cloud-test status GET to live. The deployed live status-reconcile GET directly wrote the account and queue, spawned the provisioner, created the compose and domain, then falsely accepted the original shared hostname. The recovery timer was not deployed and was not causal."
   },
   "secrets_excluded": true,
   "production_mutation_performed": false

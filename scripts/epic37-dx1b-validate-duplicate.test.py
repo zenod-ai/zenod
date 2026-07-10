@@ -14,7 +14,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "epic37-dx1b-validate-duplicate.py"
 MANIFEST = ROOT / "docs" / "EPIC-3.7-DX1B-CALLISTHENES-DUPLICATE-CANDIDATE.json"
+CURRENT_STATE = ROOT / "docs" / "EPIC-3.7-DX1B-CURRENT-STATE.json"
 CANDIDATE_ID = "Us9aDVdhvlObXLDfDwW0I"
+CAUSATION_REF = "https://github.com/zenod-ai/cloud/issues/62#issuecomment-4931765367"
 
 
 def digest(path: Path) -> str:
@@ -79,6 +81,15 @@ class DuplicateCandidateTest(unittest.TestCase):
         self.assertEqual(candidate["deployment_count"], 0)
         self.assertEqual(candidate["container_names"], [])
         self.assertEqual(candidate["volume_names"], [])
+        self.assertEqual(candidate["causation_evidence_ref"], CAUSATION_REF)
+        self.assertIn("status-reconcile GET directly wrote", manifest["causation_statement"])
+        self.assertIn("recovery timer was not deployed and was not causal", manifest["causation_statement"])
+
+        current_state = json.loads(CURRENT_STATE.read_text(encoding="utf-8"))
+        audit = current_state["causation_audit"]
+        self.assertEqual(audit["status"], "established")
+        self.assertEqual(audit["evidence_ref"], CAUSATION_REF)
+        self.assertIn("status-reconcile GET directly wrote", audit["statement"])
 
     def test_missing_approval_fails_closed(self) -> None:
         result, output = self.run_validator(MANIFEST, {})
@@ -115,6 +126,14 @@ class DuplicateCandidateTest(unittest.TestCase):
                 write_json(path, manifest)
                 result, output = self.run_validator(path, valid_approval(digest(path)))
                 self.assert_refused(result, output, message)
+
+    def test_incorrect_causation_fails_closed(self) -> None:
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        manifest["causation_statement"] = "Causation pending."
+        path = self.tmp / "manifest-causation.json"
+        write_json(path, manifest)
+        result, output = self.run_validator(path, valid_approval(digest(path)))
+        self.assert_refused(result, output, "must preserve the established live GET path")
 
     def test_valid_approval_emits_review_only_plan(self) -> None:
         result, output = self.run_validator(MANIFEST, valid_approval(digest(MANIFEST)))
