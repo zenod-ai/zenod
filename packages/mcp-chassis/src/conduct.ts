@@ -367,7 +367,10 @@ export function completionEvent(input: LongToolCompletion): LongToolCompletion {
 
 function ticketIdFromInput(input: unknown): string | null {
   const record = asRecord(input);
-  return nonEmptyString(record?.ticket_id) ? record.ticket_id : null;
+  if (nonEmptyString(record?.ticket_id)) return record.ticket_id;
+  // Compatibility for pre-SEAM async tools. New receipts publish ticket_id,
+  // but existing clients may still poll with the historical jobId field.
+  return nonEmptyString(record?.jobId) ? record.jobId : null;
 }
 
 function assertTicketMatchesInput(payload: ConductPayload, input: unknown): void {

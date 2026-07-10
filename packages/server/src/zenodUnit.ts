@@ -162,6 +162,13 @@ export const ZENOD_READ_TOOLS = [
   "search_memory",
 ] as const;
 
+export const ZENOD_LONG_TOOLS = {
+  store_memory: { pollTool: "get_task_result" },
+  ingest_memory: { pollTool: "get_task_result" },
+  task_brain: { pollTool: "get_task_result" },
+  run_task: { pollTool: "get_task_result" },
+} as const;
+
 export function createZenodUnit(options: CreateZenodUnitOptions) {
   const env = options.env ?? process.env;
   const storage = new ChassisStorage({
@@ -179,7 +186,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const unit = createUnit({
     name: "zenod",
     version: VERSION,
-    conduct: { toolKinds: { read: ZENOD_READ_TOOLS } },
+    conduct: {
+      toolKinds: { read: ZENOD_READ_TOOLS },
+      longTools: ZENOD_LONG_TOOLS,
+    },
     tenantAuth: { store: tenantStore },
     controlPlane: {
       ...options.controlPlane,

@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { AddressInfo } from "node:net";
 import {
   ChassisStorage,
@@ -488,6 +490,24 @@ describe("Zenod chassis unit", () => {
       });
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ jsonrpc: "2.0", id: 1, result: { serverInfo: { name: "zenod" } } });
+
+      const mcpUrl = new URL(`http://127.0.0.1:${address.port}/mcp/path-token`);
+      const client = new Client({ name: "receipt-test", version: "1" });
+      await client.connect(new StreamableHTTPClientTransport(mcpUrl));
+      const accepted = await client.callTool({
+        name: "store_memory",
+        arguments: { content: "conduct receipt test", verbatim: true },
+      });
+      expect(accepted.isError).not.toBe(true);
+      expect(accepted.structuredContent).toMatchObject({
+        status: "queued",
+        state: "accepted",
+        poll: { name: "get_task_result", inputField: "ticket_id" },
+      });
+      const receipt = accepted.structuredContent as { ticket_id: string; jobId: string };
+      expect(receipt.ticket_id).toBeTruthy();
+      expect(receipt.jobId).toBe(receipt.ticket_id);
+      await client.close();
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       unit.close();
