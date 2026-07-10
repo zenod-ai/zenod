@@ -261,61 +261,102 @@ export type OpenRouterTranscriptionModelsResponse = {
   fallback: boolean
 }
 
-export type IngestStatus =
+export type TaskJobStatus =
   | "queued"
-  | "downloading"
-  | "transcribing"
-  | "filing"
+  | "running"
   | "done"
   | "error"
   | "interrupted"
 
-export type IngestJob = {
+export type MediaIngestTaskInput = {
+  mediaType?: "audio" | "screenshot" | "image" | "pdf" | "document" | "link"
+  artifactUrl?: string
+  bytesRef?: string
+  filename?: string
+  sourceHint?: string
+  contentHint?: string
+  senderTimestamp?: string
+  mediaHints?: string[]
+  transcript?: {
+    text: string
+    source: string
+    version: string
+  }
+}
+
+export type MediaIngestReceipt = {
+  status: "done" | "error"
+  code?: "media_ingest_processor_unavailable" | "unsupported_media_type"
+  message: string
+  mediaType: string
+  source: {
+    artifactUrl?: string
+    bytesRef?: string
+    filename?: string
+    sourceHint?: string
+    senderTimestamp?: string
+    contentHint?: string
+    hints?: string[]
+    transcript?: {
+      source: string
+      version: string
+    }
+  }
+  rawArtifact: {
+    handle: string | null
+    archiveUrl: string | null
+    sha256?: string
+  }
+  extraction: {
+    handle: string | null
+    transcriptHandle?: string | null
+    ocrHandle?: string | null
+    archiveUrl?: string | null
+    provider: string | null
+  }
+  digest: {
+    evidenceRef: string | null
+    pagesTouched: string[]
+    commitSha: string | null
+    githubUrls: string[]
+  }
+  transcription?: "provided" | "performed"
+  nextAdapterIssues?: string[]
+}
+
+type TaskJobBase = {
   id: string
-  driveFileId: string
-  fileName: string
-  hints: string[]
-  status: IngestStatus
-  progress: number
-  step: string | null
+  status: TaskJobStatus
   error: string | null
-  evidenceRef: string | null
-  pages: string[]
-  commitSha: string | null
-  backlog: BacklogDigestResult | null
-  archived: boolean
-  cached: boolean
+  attempts: number
   createdAt: number
   updatedAt: number
 }
 
-export type BacklogDigestResult = {
-  candidates: Array<{
-    title: string
-    type: string
-    owner: string
-    priority: string
-    status: string
-    summary: string
-    open_questions: string[]
-  }>
-  written: Array<{ path: string; githubUrl: string; title: string }>
-  skipped: Array<{ title?: string; reason: string }>
-  source_refs: Array<{ path: string; githubUrl: string }>
+export type MediaIngestTaskJob = TaskJobBase & {
+  kind: "media_ingest"
+  input: MediaIngestTaskInput
+  result: MediaIngestReceipt | null
 }
 
-export type IngestJobsResponse = {
-  jobs: IngestJob[]
+export type TaskJob =
+  | MediaIngestTaskJob
+  | (TaskJobBase & {
+      kind: "task" | "work" | "store"
+      input: unknown
+      result: unknown
+    })
+
+export type TaskJobsResponse = {
+  jobs: TaskJob[]
 }
 
-/** A job is still moving — used to decide whether to keep polling. */
-export function isActiveIngest(status: IngestStatus): boolean {
-  return (
-    status === "queued" ||
-    status === "downloading" ||
-    status === "transcribing" ||
-    status === "filing"
-  )
+export function isMediaIngestTaskJob(job: TaskJob): job is MediaIngestTaskJob {
+  return job.kind === "media_ingest"
+}
+
+export function isActiveTaskJob(status: TaskJobStatus): boolean {
+  return status === "queued" || status === "running"
 }
 
 export type WhatsAppStatus = {
