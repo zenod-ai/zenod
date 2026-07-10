@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
 Steward since: 2026-07-10 01:32 CEST
-Last reconciled commit: `8e12ebab64140f227f9c19d5a72e5d191de8d251`
+Last reconciled commit: `151ec44b750f06c04bc12d36229afa392f28ebd7`
 Planner: Epic 3.0 planner
 Worker: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
 Tester: unassigned
@@ -82,10 +82,10 @@ Create `packages/mcp-chassis` (`@zenod/mcp-chassis`): the reusable scaffold ever
 ## Current State
 
 Phase: execution
-Last verified: 2026-07-10 01:56 CEST
+Last verified: 2026-07-10 02:46 CEST
 Integration target: main
-Fresh base commit: `8e12ebab64140f227f9c19d5a72e5d191de8d251`
-Next action: monitor CI for PR #744, review draft PRs #740/#739/#742/#743/#750/#744, and monitor running #719 C-5 + #720 C-6.
+Fresh base commit: `151ec44b750f06c04bc12d36229afa392f28ebd7`
+Next action: integrate fresh-main C-6/C-9/C-10 branches, resume C-12 in `/Users/jordi/Documents/GitHub/wt-727`, then dispatch C-7 browser E2E from a new main worktree.
 Blockers: none.
 
 ## Role Goals
@@ -159,23 +159,24 @@ The epic worker validates WITHOUT human help, using browser automation (Playwrig
 |---|---|---|---|
 | 2026-07-10 | Extract from `packages/server` rather than greenfield. | The transport/auth/storage code is proven in production. | Code survey in parent appendix |
 | 2026-07-10 | Tokens stored as hashes only; raw token shown once at mint. | Standard credential hygiene; matches #645 tenant-from-bearer rule. | `docs/MCP-CHASSIS-SPEC.md` |
+| 2026-07-10 | Branch isolation law: every ticket's first Git action is `git worktree add ../wt-<issue> -b <branch> main`; work stays there. The shared clone remains pinned to `main`, receives fast-forward pulls only, and is never switched. | Parallel workers previously shared long-lived stacked worktrees; fresh-main isolation makes integration state observable and prevents one worker from hijacking another's checkout. | Jordi priority shift; issues #715-#727 worktree records |
 
 ## Issue Ledger
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#715](https://github.com/zenod-ai/zenod/issues/715) | Ticket worker | Steward takeover after Dirac tool failure | C-1 scaffold `packages/mcp-chassis`, lift transport | needs-review | D4 resolved | PR [#740](https://github.com/zenod-ai/zenod/pull/740) / `codex/epic31-c1-chassis-transport` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Demo boots, `/mcp` answers initialize. | Commit `2d22583`; `npm run build -w @zenod/mcp-chassis`; `npm run test -w @zenod/mcp-chassis`; `git diff --check` | 2026-07-10 01:37 CEST | Review/merge after checks. |
-| [#716](https://github.com/zenod-ai/zenod/issues/716) | Ticket worker | Linnaeus / `epic31-c2-tenant-auth-worker` | C-2 tenants table + bearer→tenant auth | needs-review | C-1 | PR [#743](https://github.com/zenod-ai/zenod/pull/743) / `codex/epic31-c2-tenant-auth` | `2d22583` | Two tokens resolve to two tenants; unknown token 401. | Commit `6c4829b`; typecheck/test/build passed; 5 tests. | 2026-07-10 01:44 CEST | Review/merge after #740. |
-| [#717](https://github.com/zenod-ai/zenod/issues/717) | Ticket worker | Kierkegaard / `epic31-c3-provisioning-worker` | C-3 provisioning API + single-tenant env boot | needs-review | C-2 | PR [#750](https://github.com/zenod-ai/zenod/pull/750) / `codex/epic31-c3-provisioning` | `6c4829b` | `POST /api/tenants` mints; env token seeds tenant 1. | Commit `e6cab43`; local test/typecheck/build passed, 9 tests; GitHub CI passed. | 2026-07-10 01:57 CEST | Review/merge after #743. |
-| [#718](https://github.com/zenod-ai/zenod/issues/718) | Ticket worker | Goodall / steward rebase | C-4 tenant-scoped storage + vault handles | needs-review | C-3 provisioning + tenant context shape | PR [#744](https://github.com/zenod-ai/zenod/pull/744) / `codex/epic31-c4-storage-vault` | `e6cab43` | `/data/<tenant>/` layout; vault rows tenant-keyed. | Rebased commit `9e4c34a`; build/typecheck/test passed after C-3 restack, 13 tests; GitHub CI in progress. | 2026-07-10 01:56 CEST | Review/merge after #750 and CI. |
-| [#719](https://github.com/zenod-ai/zenod/issues/719) | Ticket worker | Fermat / `epic31-c5-metering-quota-worker` | C-5 metering + quota middleware | running | C-4 | `codex/epic31-c5-metering-quota` | `9e4c34a` | Per-tenant usage rows; block-at-zero works. | worker notified to rebase from old `875affd` to updated C-4 `9e4c34a` | 2026-07-10 01:56 CEST | Worker rebase, patch, and handoff. |
-| [#720](https://github.com/zenod-ai/zenod/issues/720) | Ticket worker | Aquinas / `epic31-c6-ui-shell-worker` | C-6 tenant-scoped settings-UI shell | running | C-3 | `codex/epic31-c6-ui-shell` | `e6cab43` | Login with token shows only that tenant's pages. | worker dispatched from C-3; may rebase to C-4 only if storage is required | 2026-07-10 01:58 CEST | Worker patch and handoff. |
-| [#721](https://github.com/zenod-ai/zenod/issues/721) | Tester | unassigned | C-7 demo unit + three-tenant browser E2E | queued | C-1..C-6 | `codex/epic31-c7-demo-e2e` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Cross-tenant access provably fails; self-host parity run. | issue minted | 2026-07-10 01:32 CEST | Dispatch when demo surface exists. |
-| [#723](https://github.com/zenod-ai/zenod/issues/723) | Ticket worker | Schrodinger / `epic31-c8-seam-spec-vnext-worker` | C-8 SEAM-SPEC vNext document | needs-review | C-2 for final auth details | PR [#739](https://github.com/zenod-ai/zenod/pull/739) / `codex/epic31-c8-seam-spec-vnext` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Contract table complete (incl. billing webhook + OAuth rows); Callisthenes gap list included. | Commit `97992d6`; steward amended D4/three-tenant wording; term scan + strict spine validation passed. | 2026-07-10 01:40 CEST | Review/merge; revisit after C-2 proves exact auth surface. |
-| [#724](https://github.com/zenod-ai/zenod/issues/724) | Ticket worker | unassigned | C-9 OAuth kit (server for MCP clients + client framework for world connections) | queued | C-2 | `codex/epic31-c9-oauth-kit` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Demo unit declares one provider and completes a full per-tenant OAuth round-trip; MCP-client sign-in maps to a tenant. | issue minted | 2026-07-10 01:32 CEST | Dispatch after C-2. |
-| [#725](https://github.com/zenod-ai/zenod/issues/725) | Ticket worker | unassigned | C-10 billing module (Stripe webhook → tenant row + return pages) | queued | C-3 | `codex/epic31-c10-billing` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Stripe CLI test event provisions a tenant on the demo unit; bad signature rejected. | issue minted | 2026-07-10 01:32 CEST | Dispatch after C-3. |
-| [#726](https://github.com/zenod-ai/zenod/issues/726) | Ticket worker | Kant / steward rebase | C-11 conduct kit (receipt middleware, reply gate, toolKinds, origin_ticket_id/depth) | needs-review | C-1 | PR [#742](https://github.com/zenod-ai/zenod/pull/742) / `codex/epic31-c11-conduct-kit` | `2d22583` | Demo unit: silent-ack mutation is impossible (middleware rejects); dispatch carries origin_ticket_id + depth; receiptDiscipline-style tests pass. | Rebased commit `f7f48cc`; `npm run build/typecheck/test -w @zenod/mcp-chassis` passed, 13 tests. | 2026-07-10 01:45 CEST | Review/merge after #740. |
-| [#727](https://github.com/zenod-ai/zenod/issues/727) | Ticket worker | unassigned | C-12 directives + rules UI (install-directives seam tool, Operating Rules panel, MCP/skill settings components) | queued | C-6, C-11 | `codex/epic31-c12-directives-rules-ui` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Directive installed via seam tool appears in the unit's turn-preamble AND renders in the Operating Rules panel per tenant. | issue minted | 2026-07-10 01:32 CEST | Dispatch after C-6/C-11. |
+| [#715](https://github.com/zenod-ai/zenod/issues/715) | Ticket worker | Steward takeover | C-1 scaffold `packages/mcp-chassis`, lift transport | done | D4 resolved | PR [#740](https://github.com/zenod-ai/zenod/pull/740) | `de1effe` | Demo boots, `/mcp` answers initialize. | Merged `4fb93c9`; CI passed. | 2026-07-10 02:25 CEST | None. |
+| [#716](https://github.com/zenod-ai/zenod/issues/716) | Ticket worker | Steward fresh-main replay | C-2 tenants table + bearer→tenant auth | done | C-1 | PR [#743](https://github.com/zenod-ai/zenod/pull/743) / `/Users/jordi/Documents/GitHub/wt-716` | `e80596a` | Two tokens resolve to two tenants; unknown token 401. | Merged `d1f566a`; 16 tests; both CI checks passed. | 2026-07-10 02:33 CEST | None. |
+| [#717](https://github.com/zenod-ai/zenod/issues/717) | Ticket worker | Steward fresh-main replay | C-3 provisioning API + single-tenant env boot | done | C-2 | PR [#750](https://github.com/zenod-ai/zenod/pull/750) / `/Users/jordi/Documents/GitHub/wt-717` | `d1f566a` | `POST /api/tenants` mints; env token seeds tenant 1. | Merged `6025f47`; 20 tests; both CI checks passed. | 2026-07-10 02:37 CEST | None. |
+| [#718](https://github.com/zenod-ai/zenod/issues/718) | Ticket worker | Steward fresh-main replay | C-4 tenant-scoped storage + vault handles | done | C-3 | PR [#744](https://github.com/zenod-ai/zenod/pull/744) / `/Users/jordi/Documents/GitHub/wt-718` | `6025f47` | `/data/<tenant>/` layout; vault rows tenant-keyed. | Merged `7e93740`; 24 tests; both CI checks passed. | 2026-07-10 02:41 CEST | None. |
+| [#719](https://github.com/zenod-ai/zenod/issues/719) | Ticket worker | Steward fresh-main replay | C-5 metering + quota middleware | done | C-4 | PR [#751](https://github.com/zenod-ai/zenod/pull/751) / `/Users/jordi/Documents/GitHub/wt-719` | `7e93740` | Per-tenant usage rows; block-at-zero works. | Merged `151ec44`; 29 tests; both CI checks passed. | 2026-07-10 02:44 CEST | None. |
+| [#720](https://github.com/zenod-ai/zenod/issues/720) | Ticket worker | Pascal `019f497d-0610-7061-abc0-23e7104c5b8c` | C-6 tenant-scoped settings-UI shell | running | C-5 | PR [#752](https://github.com/zenod-ai/zenod/pull/752) / `/Users/jordi/Documents/GitHub/wt-720` | `151ec44` | Login with token shows only that tenant's pages. | Fresh-main replay dispatched. | 2026-07-10 02:45 CEST | Validate and hand off PR; steward integrates first. |
+| [#721](https://github.com/zenod-ai/zenod/issues/721) | Tester | unassigned | C-7 demo unit + three-tenant browser E2E | queued | C-1..C-6 | planned `/Users/jordi/Documents/GitHub/wt-721` | `151ec44` | Cross-tenant access provably fails; self-host parity run. | Awaiting integrated C-6/C-9/C-10/C-12 surface. | 2026-07-10 02:46 CEST | Dispatch browser tester from fresh main after C-12. |
+| [#723](https://github.com/zenod-ai/zenod/issues/723) | Ticket worker | Schrodinger / steward | C-8 SEAM-SPEC vNext document | done | C-2 final auth review | PR [#739](https://github.com/zenod-ai/zenod/pull/739) | `de1effe` | Contract table complete; Callisthenes gap list included. | Merged `df0ae3b`; CI passed. | 2026-07-10 02:26 CEST | Reconcile D16/D18 additions before API freeze. |
+| [#724](https://github.com/zenod-ai/zenod/issues/724) | Ticket worker | Kuhn `019f497d-06a3-73f2-b3bb-e5268d4df761` | C-9 OAuth kit | running | C-2 | PR [#754](https://github.com/zenod-ai/zenod/pull/754) / `/Users/jordi/Documents/GitHub/wt-724` | `151ec44` | Per-tenant OAuth round-trip; MCP-client sign-in maps to tenant. | Fresh-main replay dispatched. | 2026-07-10 02:45 CEST | Validate and hand off; integrate after C-6. |
+| [#725](https://github.com/zenod-ai/zenod/issues/725) | Ticket worker | Dalton `019f497d-074a-7401-aa54-35f60459d642` | C-10 billing module | running | C-3 | PR [#753](https://github.com/zenod-ai/zenod/pull/753) / `/Users/jordi/Documents/GitHub/wt-725` | `151ec44` | Signed webhook provisions/suspends tenant; bad signature rejected. | Fresh-main replay dispatched. | 2026-07-10 02:45 CEST | Validate and hand off; integrate after C-9. |
+| [#726](https://github.com/zenod-ai/zenod/issues/726) | Ticket worker | Steward fresh-main replay | C-11 conduct kit | done | C-1 | PR [#742](https://github.com/zenod-ai/zenod/pull/742) / `/Users/jordi/Documents/GitHub/wt-726` | `df0ae3b` | Silent-ack mutation rejected; ticket origin/depth enforced. | Merged `e80596a`; 13 tests; both CI checks passed. | 2026-07-10 02:29 CEST | None. |
+| [#727](https://github.com/zenod-ai/zenod/issues/727) | Ticket worker | Rawls `019f4960-9b88-7cd3-b7b0-388a4cab5a09` | C-12 directives + rules UI | queued | C-6, C-11, C-9 | planned `/Users/jordi/Documents/GitHub/wt-727` | next integrated main | Directive appears in turn preamble and per-tenant Operating Rules UI. | Old-worktree patch inventoried; worker paused under isolation law. | 2026-07-10 02:24 CEST | Resume after C-6/C-9/C-10; first action creates fresh worktree. |
 
 ## Branch And Integration
 
@@ -212,13 +213,13 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 
 ## Worker Queue
 
-- Running: #719 C-5 metering/quota (Fermat), #720 C-6 UI shell (Aquinas).
-- Needs review/integration: #715 / PR #740 C-1 transport scaffold, #716 / PR #743 tenant auth, #717 / PR #750 provisioning/single-tenant boot, #718 / PR #744 storage/vault, #723 / PR #739 SEAM-SPEC vNext, #726 / PR #742 conduct kit.
-- Queued: #724, #725, #727.
+- Running in fresh worktrees from `151ec44`: #720 C-6 (Pascal), #724 C-9 (Kuhn), #725 C-10 (Dalton).
+- Queued: #727 C-12 (Rawls), after C-6/C-9/C-10 integrate.
+- Complete on `main`: #715, #716, #717, #718, #719, #723, #726.
 
 ## Tester Queue
 
-- Queued: #721 three-tenant browser E2E + single-tenant parity, dispatch after C-1..C-6 produce a runnable demo surface.
+- Queued: #721 three-tenant browser E2E + single-tenant parity, dispatch from fresh `main` after C-12 so the final surface is tested.
 
 ## Validation Evidence
 
@@ -231,6 +232,7 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 | 2026-07-10 | C-2 tenant auth | `6c4829b` | `/Users/jordi/Documents/GitHub/zenod-epic31-c2-tenant-auth` | `npm run typecheck -w @zenod/mcp-chassis`; `npm run test -w @zenod/mcp-chassis`; `npm run build -w @zenod/mcp-chassis`; `git diff --check -- packages/mcp-chassis` | pass, 5 tests | #716 / PR #743 |
 | 2026-07-10 | C-3 provisioning/single-tenant boot | `e6cab43` | `/Users/jordi/Documents/GitHub/zenod-epic31-c3-provisioning` | `npm run test -w @zenod/mcp-chassis`; `npm run typecheck -w @zenod/mcp-chassis`; `npm run build -w @zenod/mcp-chassis`; GitHub Actions CI | pass, 9 tests; GitHub CI passed | #717 / PR #750 |
 | 2026-07-10 | C-4 storage/vault | `9e4c34a` | `/Users/jordi/Documents/GitHub/zenod-epic31-c4-storage-vault` | `npm run test -w @zenod/mcp-chassis`; `npm run typecheck -w @zenod/mcp-chassis`; `npm run build -w @zenod/mcp-chassis`; `git diff --check` | pass after rebase onto #717, 13 tests; GitHub CI in progress | #718 / PR #744 |
+| 2026-07-10 | Integrated C-1/C-8/C-11/C-2/C-3/C-4/C-5 merge train | `151ec44b750f06c04bc12d36229afa392f28ebd7` | `/Users/jordi/Documents/GitHub/wt-epic31-merge-train` | `npm run test -w @zenod/mcp-chassis`; `npm run typecheck -w @zenod/mcp-chassis`; `npm run build -w @zenod/mcp-chassis` | pass, 29 tests; every replayed PR had two successful CI checks | PRs #740, #739, #742, #743, #750, #744, #751 |
 
 ## Handoff Journal
 
@@ -259,6 +261,19 @@ Links:
 - #715 C-1 transport scaffold
 - #723 C-8 SEAM-SPEC vNext
 - #726 C-11 conduct kit
+
+### 2026-07-10 - Epic worker - Fresh-main merge train landed
+
+Context: Priority shifted to integration. PRs #740, #739, #742, #743, #750, #744, and #751 were replayed as needed onto successive fresh `main` commits and merged in the requested dependency order. The shared clone stayed on `main`; issue work happened in `/Users/jordi/Documents/GitHub/wt-<issue>` worktrees.
+Next: integrate C-6/C-9/C-10 from fresh-main worker handoffs, resume C-12 in `wt-727`, then dispatch C-7 browser E2E from fresh `main` and pair its proof with the 3.2 Zenod pilot evidence.
+Risks: C-6/C-9/C-10 share chassis export/config surfaces and must be integrated serially even though their replay work runs in parallel. Epic 3.2 must report chassis friction rather than edit `packages/mcp-chassis`.
+Assignment identity: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
+Branch / latest commit: `main` / `151ec44b750f06c04bc12d36229afa392f28ebd7`
+Last verified: 2026-07-10 02:46 CEST
+Links:
+
+- PRs #740, #739, #742, #743, #750, #744, #751
+- Issues #720, #724, #725 dispatched from `151ec44`
 
 ## Open Questions
 
