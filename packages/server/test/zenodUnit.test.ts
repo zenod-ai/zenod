@@ -53,6 +53,13 @@ describe("Zenod chassis unit", () => {
       expect(alpha.dataDir).toBe(join(dataDir, "tenant-alpha"));
       expect(beta.dataDir).toBe(join(dataDir, "tenant-beta"));
       expect(alpha.dataDir).not.toBe(beta.dataDir);
+      expect(alpha.settings.get("artifact_archive_provider")).toBe("local");
+      expect(alpha.settings.get("artifact_archive_local_dir")).toBe(
+        join(dataDir, "tenant-alpha", "media"),
+      );
+      expect(beta.settings.get("artifact_archive_local_dir")).toBe(
+        join(dataDir, "tenant-beta", "media"),
+      );
       expect(alpha.settings.getRaw("api_token")).toBeNull();
       expect(beta.settings.getRaw("api_token")).toBeNull();
       alpha.settings.set("github_token", "ghp_alpha_secret");
