@@ -73,6 +73,8 @@ export type AuthStatus = {
   needsSetup: boolean
   configured: boolean
   hostedMode: "ring" | null
+  customerAuth?: boolean
+  authMethod?: "github" | "admin"
 }
 
 export type TenantInfo = {
