@@ -1,17 +1,62 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import {
   ProofFailure,
   assertNoForeignMarker,
   assertFullModePrerequisites,
+  createRecorder,
   extractProvisionedToken,
   parseArgs,
   parseMcpPayload,
   redact,
   requiredCustodyRelativePaths,
+  verifyStorage,
 } from "./epic32-joint-proof.mjs";
+
+const STORAGE_TENANTS = ["t1", "t2", "t3"].map((tenantId, index) => ({
+  tenantId,
+  label: `T${index + 1}`,
+  issuedTokens: [`fixture-bearer-${index + 1}`],
+}));
+
+async function createStorageFixture() {
+  const root = await mkdtemp(join(tmpdir(), "epic32-custody-"));
+  const databases = [];
+  for (const relative of requiredCustodyRelativePaths(STORAGE_TENANTS).filter((path) => path.endsWith(".sqlite"))) {
+    const path = join(root, relative);
+    await mkdir(dirname(path), { recursive: true });
+    const db = new DatabaseSync(path);
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA wal_autocheckpoint = 0; CREATE TABLE smoke (value TEXT); INSERT INTO smoke VALUES ('fixture')");
+    databases.push(db);
+  }
+  for (const tenant of STORAGE_TENANTS) {
+    await Promise.all([
+      mkdir(join(root, tenant.tenantId, "transcripts"), { recursive: true }),
+      mkdir(join(root, tenant.tenantId, "media"), { recursive: true }),
+      mkdir(join(root, tenant.tenantId, "vault"), { recursive: true }),
+    ]);
+  }
+  let closed = false;
+  return {
+    root,
+    close() {
+      if (closed) return;
+      closed = true;
+      for (const db of databases) db.close();
+    },
+    async destroy() {
+      this.close();
+      await rm(root, { recursive: true, force: true });
+    },
+  };
+}
 
 test("parseArgs accepts CLI overrides without reading secrets into defaults", () => {
   const options = parseArgs(
@@ -102,6 +147,64 @@ test("custody inventory declares exact chassis and per-tenant DB/WAL/SHM paths",
   assert.ok(paths.includes("t3/notifications.sqlite"));
   assert.equal(paths.length, 96);
   assert.equal(new Set(paths).size, paths.length);
+});
+
+test("verifyStorage emits exact zero-match DB/WAL/SHM and recursive custody receipts", async () => {
+  const fixture = await createStorageFixture();
+  try {
+    const receipt = await verifyStorage(fixture.root, STORAGE_TENANTS, "full", [
+      { label: "test world credential", value: "fixture-world-secret" },
+    ]);
+    assert.equal(receipt.custodyPaths.length, 96);
+    assert.deepEqual(new Set(receipt.custodyPaths.map((entry) => entry.kind)), new Set(["database", "wal", "shm"]));
+    assert.ok(receipt.custodyPaths.every((entry) => entry.rawMatches === 0 && entry.scannedSecrets === 4));
+    assert.equal(receipt.recursiveScan.scannedSecrets, 4);
+    assert.equal(receipt.recursiveScan.rawMatches, 0);
+    assert.ok(receipt.recursiveScan.scannedPaths >= 96);
+  } finally {
+    await fixture.destroy();
+  }
+});
+
+test("verifyStorage fails when declared WAL/SHM custody paths are absent", async () => {
+  const fixture = await createStorageFixture();
+  fixture.close();
+  try {
+    await assert.rejects(
+      verifyStorage(fixture.root, STORAGE_TENANTS, "full"),
+      (error) =>
+        error instanceof ProofFailure &&
+        error.detail.violations.some((violation) => violation.includes("custody scan missing required DB/WAL/SHM path")),
+    );
+  } finally {
+    await fixture.destroy();
+  }
+});
+
+test("verifyStorage fails on an injected raw world credential", async () => {
+  const fixture = await createStorageFixture();
+  const secret = "fixture-injected-world-secret";
+  try {
+    await writeFile(join(fixture.root, "t1", "media", "injected.bin"), secret, "utf8");
+    await assert.rejects(
+      verifyStorage(fixture.root, STORAGE_TENANTS, "full", [{ label: "injected world credential", value: secret }]),
+      (error) =>
+        error instanceof ProofFailure &&
+        error.detail.violations.some((violation) => violation.includes("raw injected world credential persisted")),
+    );
+  } finally {
+    await fixture.destroy();
+  }
+});
+
+test("proof summaries retain exact commit and immutable image digest", () => {
+  const metadata = {
+    commit: "c".repeat(40),
+    imageDigest: `sha256:${"d".repeat(64)}`,
+  };
+  const summary = createRecorder(metadata).summary("pass");
+  assert.equal(summary.commit, metadata.commit);
+  assert.equal(summary.imageDigest, metadata.imageDigest);
 });
 
 test("full mode accepts only the three approved repos and complete parity inputs", () => {

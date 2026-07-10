@@ -55,6 +55,7 @@ jobs:
           context: .
           load: true
           tags: zenod-runtime-smoke:${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
           build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -71,6 +72,9 @@ jobs:
             docker rm -fv "$name" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
+
+          test "$(docker image inspect "$IMAGE" --format \
+            '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$EXPECTED_SHA"
 
           docker run -d --name "$name" -p 127.0.0.1:18080:8080 \
             -e CONTROL_PLANE_TOKEN=epic32-publish-smoke \

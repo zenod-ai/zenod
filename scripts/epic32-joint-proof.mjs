@@ -249,7 +249,7 @@ export function assertFullModePrerequisites(options, tenants, env) {
   }
 }
 
-function createRecorder(metadata) {
+export function createRecorder(metadata) {
   const steps = [];
   return {
     pass(name, detail = {}) {
@@ -878,7 +878,7 @@ export function requiredCustodyRelativePaths(tenants) {
   return databasePaths.flatMap((path) => [path, `${path}-wal`, `${path}-shm`]);
 }
 
-async function verifyStorage(dataRoot, tenants, mode, worldSecrets = []) {
+export async function verifyStorage(dataRoot, tenants, mode, worldSecrets = []) {
   const violations = [];
   for (const forbidden of FORBIDDEN_ROOT_STATE) {
     if (await pathExists(join(dataRoot, forbidden))) {
