@@ -421,8 +421,14 @@ export function buildMcpServer(
   // run several memories and tell them apart in their client. Empty → default.
   serverName: string = "",
   mediaIngest?: MediaIngestJobs,
+  existingServer?: McpServer,
 ): McpServer {
-  const server = new McpServer({ name: serverName.trim() || "zenod-mcp-server", version: VERSION });
+  const server =
+    existingServer ??
+    new McpServer({
+      name: serverName.trim() || "zenod-mcp-server",
+      version: VERSION,
+    });
 
   // This agent's chat-brain tool: a full engine.chat turn (the agent reasons with
   // its own tools and replies). Named per-agent — chat_with_zenod, chat_with_archus

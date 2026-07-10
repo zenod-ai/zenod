@@ -1,7 +1,6 @@
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { LlmUsageReport } from "zenod";
+import { openZenodSqlite } from "./sqlite.js";
 
 /**
  * Durable, append-only log of real (provider-billed) LLM token usage — its own
@@ -137,8 +136,7 @@ export class UsageStore {
   private readonly db: DatabaseSync;
 
   constructor(path: string) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.db = new DatabaseSync(path);
+    this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS llm_usage (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
