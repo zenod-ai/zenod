@@ -121,7 +121,7 @@ function enqueuedResponse(job: TaskJob) {
     content: [
       {
         type: "text" as const,
-        text: `Accepted job ${job.id} (queue status: ${job.status}). This runs in the background — poll get_task_result with this ticket_id until state is 'done'.`,
+        text: `Queued job ${job.id} (status: ${job.status}). This runs in the background — poll get_task_result with this ticket_id until state is 'done'.`,
       },
     ],
     structuredContent: {
