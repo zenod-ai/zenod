@@ -3,7 +3,10 @@
 Owner: Epic 3.1 ([EPIC-3.1-MCP-CHASSIS.md](EPIC-3.1-MCP-CHASSIS.md), ticket C-8).
 Status: draft for Epic 3.1 review, 2026-07-10. Extends
 [SEAM-SPEC v1](SEAM-SPEC.md) and the chassis architecture in
-[MCP-CHASSIS-SPEC.md](MCP-CHASSIS-SPEC.md).
+[MCP-CHASSIS-SPEC.md](MCP-CHASSIS-SPEC.md). Parent decisions D16
+(skill-per-connected-MCP) and D18 (transcription at the edge, once) in
+[EPIC-3.0-CHASSIS-REPLATFORM.md](EPIC-3.0-CHASSIS-REPLATFORM.md) are normative
+through the rows and checks below.
 
 This document is language-agnostic. Node units can satisfy it by using
 `@zenod/mcp-chassis`; non-Node units, especially Callisthenes, satisfy the same
@@ -26,6 +29,10 @@ OAuth, billing, and unit-UI obligations. It does not weaken any v1 receipt law:
   propagation.
 - Per-unit bearer auth still gates the MCP surface. vNext defines how that
   bearer resolves to a tenant.
+- Published skill metadata supplements MCP `tools/list`; it never replaces the
+  standard MCP discovery or tool-schema surface and never grants authority.
+- Media hand-off remains a standard MCP tool call. An `artifact_ref` is a data
+  handle, not a second command, dispatch, or receipt protocol.
 
 If this document and v1 appear to conflict, choose the stricter requirement and
 record the ambiguity in the bound Epic 3.1 issue.
@@ -65,6 +72,9 @@ tokens. Units stay suite-agnostic.
 | OAuth client kit | User/world connections, such as GitHub, Google Drive, X, Reddit, email, or worker CLI credentials, are connected inside the tenant-scoped UI or chat-auth surface. Callback state binds to the tenant session. Stored world credentials live in tenant vault/custody and are never returned in tool receipts or logs. | Mutating connect/revoke flows return non-secret evidence: connected service, granted scope, account handle, or revocation count. | Callisthenes has a per-tenant chat-auth package and `/connect` surface; vNext requires it to bind into the shared tenant identity and custody model. |
 | Billing webhook | A unit MAY expose `/api/billing/webhook` or receive provisioning calls from a control-plane billing service. In either shape, signed Stripe events resolve to explicit tenant create/update/suspend/quota actions. Invalid signatures and mode mismatches fail loudly. | Billing mutation receipts name the tenant/action and never report success before the row is durable. | The final fleet target has each unit able to receive the chassis billing contract; the control plane may still orchestrate calls to `/api/tenants`. |
 | Conduct and directives UI | Every unit UI includes or plugs into tenant-scoped panels for operating rules, MCP/client config, skill/settings, standing directives, keys/connections, usage, and costs as applicable. Conduct settings are data, not image-baked behavior, and tool behavior must still obey v1 receipts, reply gates, ticket propagation, and loud errors. | The UI cannot authorize silent acks or hidden side effects. Directives that cause mutations still need evidence handles. | Chassis provides the shell; each unit contributes domain panels, such as Callisthenes throttle/receipts/connection status or Zenod vault/transcription panels. |
+| Published skill manifest (D16) | Every unit MUST publish a tenant-neutral JSON usage card at `GET /.well-known/atomic-unit-skill.json`. The card MUST contain a schema version, stable skill ID, unit name and version, purpose, when-to-route guidance, MCP tool identifiers, tool etiquette, and receipt expectations. It MUST contain no tenant data, tokens, connector credentials, or tenant-installed directives. Wiring a unit into a wallet imports this card; consumers refresh it when its unit or schema version changes and MAY retain tenant-local edits as an installed copy without mutating the publisher. | The card is advisory discovery only: `tools/list` and each live MCP tool schema remain authoritative, bearer auth still gates calls, and every listed tool remains subject to v1 receipts, tickets, dispatch depth, and loud errors. A manifest is never an authority grant or evidence that a mutation occurred. | Node units declare the card through `createUnit({ skill })`; non-Node units serve the same JSON semantics directly. The skill-settings UI renders the published card and the tenant's installed copies. Publishing a new card is part of a unit code deploy, not tenant provisioning. |
+| Channel media forward (D18) | A channel unit that receives media MUST attempt transcription at the edge before forwarding a standard MCP tool call. Its forward arguments use `{ sender, artifact_ref, text_transcript?, transcription_usage?, transcription_failed? }`. `sender` is channel identity, never `tenant_id`. `artifact_ref` is an HTTPS URL for the immutable media, fetchable from the owning unit with a standard per-unit bearer that resolves to the same tenant rules as MCP; cross-tenant fetches MUST fail. On success, `text_transcript` is non-empty and `transcription_usage` carries non-secret structured metering data sufficient for downstream tenant attribution. The receiver derives the transcribing unit and version from the authenticated connection plus its published D16 card; caller-supplied `sender` MUST NOT override that provenance. If the STT provider fails, the unit MUST forward immediately with `transcription_failed: { code, message }` and the artifact reference; it MUST NOT queue the conversation behind provider recovery. Successful edge transcription and `transcription_failed` are mutually exclusive. Inline base64 MUST NOT be used for channel media; other media tools MAY advertise and enforce a finite small-payload limit, above which `artifact_ref` is mandatory. | The forward is an ordinary MCP tool call, not a bespoke envelope or side-channel dispatch. A mutating forward still returns evidence or a `ticket_id`; `transcription_failed` reports degraded input and does not permit a silent ack or success-shaped tool failure. Any async archive retains the same ticket/receipt discipline, `origin_ticket_id`, and depth <= 1. | Phylax owns channel-media expertise and its tenant-scoped transcription key, but no routing intelligence. The Ring maps `sender` to its tenant, books `transcription_usage` there, and routes from the received text. Artifact bytes may be fetched over authenticated HTTPS, but all control and routing remain standard MCP. |
+| Pre-transcribed media ingest (D18) | Any unit that can invoke STT for received media MUST also accept the media with an optional pre-made transcript and source unit/version provenance. When a transcript is present, it MUST bypass its own STT, persist the supplied text, and record provenance such as `transcribed by phylax@<version>`. The transcript and provenance MUST travel with the artifact on every later hand-off. When media arrives without a transcript, or with `transcription_failed`, the receiving unit MAY transcribe with its own configured provider. It MUST NOT transcribe twice. Tool-specific schemas MAY map the channel fields into a documented transcript object, but MUST preserve `text_transcript`, source/version, `artifact_ref`, usage, and failure semantics without a bespoke transport wrapper. | Ingest and archive mutations still return concrete evidence or a ticket. The final receipt MUST state whether transcription was `provided`, `performed`, or `failed`, so duplicate STT is observable and testable. Provenance and usage are tenant-scoped metadata and never replace the evidence handle. | Node units use the shared chassis transcription seam with per-unit tenant custody; other stacks implement the same behavior directly. Zenod retains STT for direct/Drive media that has no transcript and skips it for Phylax-provided text. |
 
 ## 3. Self-host parity
 
@@ -79,6 +89,8 @@ Self-hosting is not a separate edition:
 | UI | Full tenant-scoped UI. | Same full UI. |
 | Storage | `/data/<tenant_id>/...` or tenant-keyed rows. | Same layout with one tenant. |
 | Metering | Enforced by plan/quota. | Same ledger; quota may be unlimited but usage remains visible. |
+| Skill manifest | Same versioned tenant-neutral usage card. | Same card from the same image; no tenant-specific fork. |
+| Media/STT | Tenant-scoped artifact access, usage, and provenance. | Same one-transcription and artifact-reference rules when the unit has media/STT capability. |
 
 ## 4. Conformance checklist delta
 
@@ -111,6 +123,24 @@ A vNext tester first runs the SEAM-SPEC v1 checklist, then adds these checks:
 13. **[conduct-ui]** Tenant directives/settings change behavior only after a
     receipted save and are visible only to that tenant.
 14. **[deploy]** Adding a tenant requires no container, DNS, or watchdog change.
+15. **[skill/D16]** `GET /.well-known/atomic-unit-skill.json` returns the
+    versioned purpose, routing guidance, tool identifiers, etiquette, and
+    receipt expectations, with no tenant data or secrets.
+16. **[skill/D16]** Wiring the unit imports its published skill, while an MCP
+    client can still drive the unit from `tools/list`; changing a tenant's
+    installed copy does not mutate the published card or another tenant's copy.
+17. **[media/D18]** A channel media forward uses the canonical sender,
+    `artifact_ref`, transcript/usage/failure fields inside a standard MCP tool
+    call; an artifact fetched with another tenant's bearer is refused.
+18. **[media/D18]** A successful edge transcript causes zero downstream STT
+    provider calls, records source-unit/version provenance, and remains attached
+    on the next hand-off.
+19. **[media/D18]** A forced edge-STT failure forwards immediately with
+    `transcription_failed` plus `artifact_ref`; a downstream unit may transcribe
+    once and the receipt makes the performed branch explicit.
+20. **[receipt/D18]** Forward/ingest/archive mutations still return evidence or
+    `{ ticket_id }`, preserve `origin_ticket_id` and depth <= 1, and never treat
+    a transcription marker as a silent success receipt.
 
 ## 5. Callisthenes conformance gaps
 
@@ -130,6 +160,12 @@ work. The remaining vNext gaps are:
 | OAuth client custody | X/Reddit connection flows bind callback state to the resolved tenant, store secrets in tenant custody, and return only non-secret account/scope receipts. | `auth/README.md` defines PKCE/chat-auth and hashed token custody; live hosted integration still needs end-to-end proof against the request tenant. | Epic 3.3 |
 | Single-tenant self-host | Seed env creates one tenant row and the same UI/MCP paths work. | Current Callisthenes supports single-owner env OAuth fallback; it is not yet the same tenant-table path as hosted. | Epic 3.3 |
 | Conduct/directives UI | Tenant UI exposes throttle, receipts, usage, connection state, operating rules, and send directives without image-baked tenant data. | `/connect` covers connections; throttle/receipts exist in tool behavior; no complete vNext tenant settings shell is documented. | Epic 3.3 |
+| Published skill manifest (D16) | Serve `/.well-known/atomic-unit-skill.json` with the same required version, purpose, routing, tools, etiquette, and receipt fields as a Node unit; keep `tools/list` authoritative. | Callisthenes does not inherit `createUnit({ skill })`; conformance therefore requires an explicit FastMCP/Starlette route and a captured JSON response, not a Node-package assertion. | Epic 3.3 |
+| Media transcription profile (D18) | If Callisthenes exposes a channel-ingress or STT-capable media tool, it implements the canonical forward/pre-transcribed-ingest behavior and proves the zero-double-STT path. If it exposes neither capability, the D18 checks are N/A only with captured `tools/list` and tool-schema evidence. Ordinary social-media send attachments alone do not imply STT capability. | No Callisthenes channel-ingress or STT seam is established in the current contract evidence. Stack or language is not an exemption when the capability exists. | Epic 3.3 |
+
+The Callisthenes tester MUST run the same wire-level checks with a plain MCP and
+HTTP client. Python types, FastMCP decorators, or the absence of the Node chassis
+are not conformance evidence by themselves.
 
 ## 6. Nonconformance examples
 
@@ -142,11 +178,20 @@ These are vNext failures even if the unit still responds over MCP:
 - A world OAuth callback stores credentials without tenant-bound state validation.
 - A self-host image omits the hosted UI or uses a different code path.
 - A unit logs raw bearer tokens, OAuth refresh tokens, or world credentials.
+- A wallet relies on hand-maintained skill prose when the connected unit has no
+  versioned published manifest, or treats that manifest as an authority grant.
+- A channel forwards media as inline base64, drops a successful transcript, or
+  waits indefinitely after its edge STT provider fails.
+- A receiving unit invokes STT when a pre-made transcript is present, or drops
+  the transcript/source provenance on a later artifact hand-off.
+- An artifact URL can be fetched with another tenant's bearer or without the
+  owning unit's normal bearer validation.
 
 ## 7. Adoption notes
 
 - `@zenod/mcp-chassis` is the reference implementation for Node units.
 - Callisthenes is the first non-Node proof. Passing vNext means the contract is
-  truly language-agnostic.
+  truly language-agnostic; its skill route and every applicable D18 behavior are
+  validated at the wire, not inferred from framework internals.
 - Until Epic 3.1 freezes the chassis API, vNext should be treated as the
   acceptance target for 3.2-3.6 tickets, not as a deployed runtime claim.
