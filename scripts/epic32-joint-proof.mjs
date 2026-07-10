@@ -353,6 +353,17 @@ async function verifyMcpIsolation(baseUrl, tenants, mode) {
       content: `${tenant.marker}\nJoint Epic 3.1 and 3.2 tenant isolation proof for ${tenant.label}.`,
       source: "epic32-joint-proof",
     });
+    const queued = stored?.structuredContent ?? stored;
+    if (
+      !Array.isArray(queued?.evidence) ||
+      !queued.evidence.some(
+        (item) => item?.kind === "job_queued" && item?.id === queued.jobId,
+      )
+    ) {
+      throw new ProofFailure(`${tenant.label} store_memory omitted its C-16 queue receipt`, {
+        detail: redact(queued),
+      });
+    }
     const receipt = await terminalToolResult(baseUrl, tenant.token, stored);
     const receiptText = JSON.stringify(receipt);
     if (!/[a-f0-9]{40}/i.test(receiptText)) throw new ProofFailure(`${tenant.label} store receipt omitted a commit SHA`);
