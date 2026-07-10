@@ -16,7 +16,7 @@ import {
   editGithubIssue,
 } from "zenod";
 import { ZENOD_AGENT } from "./agent.js";
-import { createApp } from "./app.js";
+import { createApp, resolvedGitSha } from "./app.js";
 import { ChassisCredentialVault } from "./credentialVault.js";
 import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
@@ -234,6 +234,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     { ...options.customer, env, tenantStore },
   );
   const app = new Hono<{ Bindings: HttpBindings }>();
+  app.get("/api/health", (c) =>
+    c.json({ status: "ok", name: ZENOD_AGENT.name, version: VERSION, sha: resolvedGitSha() }),
+  );
   app.route("/", customer.app);
   mountStaticSurfaces(app, { webDist: options.webDist, siteDist: options.siteDist });
   app.all("*", async (c) => {

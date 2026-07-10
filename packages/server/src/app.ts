@@ -77,7 +77,7 @@ import type { PhylaxChannel } from "./phylaxGateway.js";
 // #532/#548 — the running commit SHA for /api/health. Prefer an explicit GIT_SHA env
 // (GHCR/CI builds pass it); otherwise fall back to the `.gitsha` file the Docker build
 // bakes from the checked-out .git (the Dokploy source-build path).
-function resolvedGitSha(): string {
+export function resolvedGitSha(): string {
   const env = process.env.GIT_SHA?.trim();
   if (env && env !== "unknown") return env;
   try {
