@@ -22,6 +22,7 @@ export class TaskJobQueue {
     private readonly store: TaskJobStore,
     private readonly getEngine: () => Promise<BrainEngine>,
     private readonly settings?: Settings,
+    private readonly mediaTranscriber: MediaTranscriber = transcribeMedia,
   ) {}
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
@@ -82,7 +83,13 @@ export class TaskJobQueue {
           this.store.update(job.id, { status: "done", result: mediaIngestUnavailableReceipt(job.input, null) });
         } else {
           const archived = await archiveMediaInput(this.settings, job.input);
-          const result = await processMediaIngest(this.settings, job.input, archived, () => this.getEngine());
+          const result = await processMediaIngest(
+            this.settings,
+            job.input,
+            archived,
+            () => this.getEngine(),
+            this.mediaTranscriber,
+          );
           this.store.update(job.id, { status: "done", result });
         }
       } else {
@@ -109,6 +116,19 @@ interface ArchivedMediaInput {
   sourceLink?: string;
   sourceKind: "mcp" | "url" | "drive";
 }
+
+interface AudioExtraction {
+  body: string;
+  provider: string;
+  kind: "audio";
+  filename: string;
+  label: string;
+}
+
+export type MediaTranscriber = (
+  settings: Settings,
+  archived: ArchivedMediaInput,
+) => Promise<AudioExtraction>;
 
 function parseDataUrl(bytesRef: string): { data: Buffer; mediaType: string } {
   const match = /^data:([^;,]+)?(?:;base64)?,(.*)$/s.exec(bytesRef);
@@ -225,6 +245,7 @@ async function processMediaIngest(
   input: TaskJobInput,
   archived: ArchivedMediaInput,
   getEngine: () => Promise<BrainEngine>,
+  mediaTranscriber: MediaTranscriber,
 ): Promise<MediaIngestReceipt> {
   const canTranscribe = input.mediaType === "audio" || isAudioMimeType(archived.mediaType);
   const canExtractArtifact =
@@ -237,10 +258,20 @@ async function processMediaIngest(
   if (!canTranscribe && !canExtractArtifact && !canReadText) {
     return mediaIngestUnavailableReceipt(input, archived.handle);
   }
+  if (input.transcript && !canTranscribe) {
+    throw new Error("provided transcripts are accepted only for audio media");
+  }
 
   const engine = await getEngine();
+  const transcription = canTranscribe
+    ? input.transcript
+      ? "provided"
+      : "performed"
+    : undefined;
   const extraction = canTranscribe
-    ? await transcribeMedia(settings, archived)
+    ? input.transcript
+      ? providedTranscriptExtraction(input.transcript, archived)
+      : await mediaTranscriber(settings, archived)
     : canExtractArtifact
       ? await extractVisualMedia(engine, archived)
       : extractTextMedia(archived);
@@ -257,6 +288,12 @@ async function processMediaIngest(
       rawArtifact: archived.handle.uri,
       sourceLink: archived.sourceLink,
       contentHint: input.contentHint,
+      ...(input.transcript
+        ? {
+            transcriptSource: input.transcript.source,
+            transcriptVersion: input.transcript.version,
+          }
+        : {}),
     },
   });
 
@@ -298,13 +335,27 @@ async function processMediaIngest(
       commitSha: stored.commitSha,
       githubUrls: stored.githubUrls,
     },
+    ...(transcription ? { transcription } : {}),
+  };
+}
+
+function providedTranscriptExtraction(
+  transcript: NonNullable<TaskJobInput["transcript"]>,
+  archived: ArchivedMediaInput,
+): AudioExtraction {
+  return {
+    body: transcript.text,
+    provider: `${transcript.source}@${transcript.version}`,
+    kind: "audio",
+    filename: `${stripKnownExtension(archived.filename)}.transcript.txt`,
+    label: "Voice note",
   };
 }
 
 async function transcribeMedia(
   settings: Settings,
   archived: ArchivedMediaInput,
-): Promise<{ body: string; provider: string; kind: "audio"; filename: string; label: string }> {
+): Promise<AudioExtraction> {
   const result = await transcribeAudio(archived.data, archived.filename, {
     model: settings.whisperModel(),
     groqApiKey: settings.get("groq_api_key"),
@@ -364,6 +415,14 @@ function receiptSource(input: TaskJobInput): MediaIngestReceipt["source"] {
     ...(input.senderTimestamp ? { senderTimestamp: input.senderTimestamp } : {}),
     ...(input.contentHint ? { contentHint: input.contentHint } : {}),
     ...(input.mediaHints ? { hints: input.mediaHints } : {}),
+    ...(input.transcript
+      ? {
+          transcript: {
+            source: input.transcript.source,
+            version: input.transcript.version,
+          },
+        }
+      : {}),
   };
 }
 

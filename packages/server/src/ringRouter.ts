@@ -34,6 +34,11 @@ export interface RingMediaHandle {
   sourceHint?: string;
   contentHint?: string;
   hints?: string[];
+  transcript?: {
+    text: string;
+    source: string;
+    version: string;
+  };
 }
 
 export interface RingInboundMessage {
@@ -201,6 +206,7 @@ function buildMediaArguments(input: RingInboundMessage, media: RingMediaHandle):
     ...(media.contentHint ?? input.text ? { contentHint: media.contentHint ?? input.text } : {}),
     ...(input.senderTimestamp ? { senderTimestamp: input.senderTimestamp } : {}),
     ...(media.hints ? { hints: media.hints } : {}),
+    ...(media.transcript ? { transcript: media.transcript } : {}),
   };
 }
 
