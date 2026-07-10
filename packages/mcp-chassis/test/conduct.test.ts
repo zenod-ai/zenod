@@ -57,6 +57,7 @@ describe("conduct long-running tool contract", () => {
       ticket_id: "council-1",
       state: "done",
       origin_ticket_id: "ring-mailbox-9",
+      depth: 0,
       evidence: [evidence("memory_stored", { commitSha: "abc1234" })],
     });
 
@@ -85,6 +86,26 @@ describe("conduct long-running tool contract", () => {
 
   it("rejects done completions without terminal evidence", () => {
     expect(() => completionEvent({ ticket_id: "job-1", state: "done", evidence: [] })).toThrow(/evidence/);
+  });
+
+  it("rejects completion events that lose the accepted origin", () => {
+    expect(() =>
+      assertLongToolContract({
+        accepted: acceptedTicket({
+          ticket_id: "job-1",
+          origin_ticket_id: "origin-1",
+          depth: 0,
+        }),
+        completion: completionEvent({
+          ticket_id: "job-1",
+          state: "done",
+          origin_ticket_id: "origin-2",
+          depth: 0,
+          evidence: [evidence("job_completed", { id: "job-1" })],
+        }),
+        poll: { name: "get_job_result" },
+      }),
+    ).toThrow(/origin_ticket_id/);
   });
 });
 

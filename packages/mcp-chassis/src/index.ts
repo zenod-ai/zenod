@@ -52,6 +52,17 @@ import {
   type TenantUsageMeter,
 } from "./usage.js";
 import { SqliteTenantSettingsStore } from "./settings.js";
+import {
+  assertRegisteredToolResult,
+  ConductContractError,
+  conductErrorResult,
+  isStructuredConductErrorResult,
+  registeredToolConductProfile,
+  type ConductPayload,
+  type ConductOptions,
+  type McpLikeToolResult,
+  type RegisteredToolConductProfile,
+} from "./conduct.js";
 export type { BillingOptions } from "./billing.js";
 export type { ChassisLoggingOptions } from "./logging.js";
 export {
@@ -308,6 +319,8 @@ export interface CreateUnitOptions {
   skill?: UnitSkillManifest;
   /** Tenant-installed skill cards rendered by the chassis skill settings panel. */
   skills?: UnitSkillManifest[];
+  /** Always-on receipt/ticket enforcement declarations for this unit's tools. */
+  conduct?: ConductOptions;
 }
 
 export interface UnitApp {
@@ -869,6 +882,206 @@ function publishSkillManifest(
   };
 }
 
+type RuntimeToolCallback = (...args: unknown[]) => unknown;
+
+interface RuntimeToolAnnotations {
+  readOnlyHint?: boolean;
+}
+
+interface RuntimeToolConfig {
+  annotations?: RuntimeToolAnnotations;
+  [key: string]: unknown;
+}
+
+interface RuntimeToolUpdate {
+  annotations?: RuntimeToolAnnotations;
+  callback?: RuntimeToolCallback;
+  [key: string]: unknown;
+}
+
+interface RuntimeRegisteredTool {
+  update(updates: RuntimeToolUpdate): void;
+  remove(): void;
+}
+
+interface RuntimeMcpServer {
+  registerTool(
+    name: string,
+    config: RuntimeToolConfig,
+    callback: RuntimeToolCallback,
+  ): RuntimeRegisteredTool;
+  tool(name: string, ...args: unknown[]): RuntimeRegisteredTool;
+}
+
+interface RuntimeTaskRegistration {
+  registerToolTask(
+    name: string,
+    config: unknown,
+    handler: unknown,
+  ): RuntimeRegisteredTool;
+}
+
+interface ConductRegistration {
+  name: string;
+  profile: RegisteredToolConductProfile;
+  active: boolean;
+}
+
+function normalizedConductToolName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function mcpErrorResult(result: unknown): unknown {
+  if (!isStructuredConductErrorResult(result)) return result;
+  if (!result || typeof result !== "object" || Array.isArray(result)) return result;
+  return { ...result, isError: true };
+}
+
+function legacyReadOnlyHint(args: readonly unknown[]): boolean | undefined {
+  for (const value of args) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const hint = (value as RuntimeToolAnnotations).readOnlyHint;
+    if (typeof hint === "boolean") return hint;
+  }
+  return undefined;
+}
+
+/**
+ * Intercept both SDK registration APIs before a unit registrar sees the server.
+ * The callback wrapper remains attached when RegisteredTool.update replaces a handler.
+ */
+function installConductToolRegistration(
+  server: McpServer,
+  options: ConductOptions = {},
+): () => void {
+  const runtime = server as unknown as RuntimeMcpServer;
+  const taskRegistration = server.experimental
+    .tasks as unknown as RuntimeTaskRegistration;
+  const registerTool = runtime.registerTool.bind(runtime);
+  const legacyTool = runtime.tool.bind(runtime);
+  const registrations: ConductRegistration[] = [];
+
+  const wrapCallback = (
+    registration: ConductRegistration,
+    callback: RuntimeToolCallback,
+  ): RuntimeToolCallback =>
+    async (...args: unknown[]) => {
+      const input = args.length > 1 ? args[0] : undefined;
+      try {
+        const result = await callback(...args);
+        assertRegisteredToolResult(
+          registration.name,
+          input,
+          result as ConductPayload | McpLikeToolResult,
+          registration.profile,
+        );
+        return mcpErrorResult(result);
+      } catch (error) {
+        return conductErrorResult(error);
+      }
+    };
+
+  const instrumentRegisteredTool = (
+    registered: RuntimeRegisteredTool,
+    registration: ConductRegistration,
+  ): RuntimeRegisteredTool => {
+    const update = registered.update.bind(registered);
+    const remove = registered.remove.bind(registered);
+    registered.update = (updates) => {
+      if (updates.annotations) {
+        registration.profile = registeredToolConductProfile(
+          registration.name,
+          updates.annotations.readOnlyHint,
+          options,
+        );
+      }
+      const next = { ...updates };
+      if (updates.callback)
+        next.callback = wrapCallback(registration, updates.callback);
+      update(next);
+    };
+    registered.remove = () => {
+      registration.active = false;
+      remove();
+    };
+    return registered;
+  };
+
+  runtime.registerTool = (name, config, callback) => {
+    const registration: ConductRegistration = {
+      name,
+      profile: registeredToolConductProfile(
+        name,
+        config.annotations?.readOnlyHint,
+        options,
+      ),
+      active: true,
+    };
+    const registered = registerTool(
+      name,
+      config,
+      wrapCallback(registration, callback),
+    );
+    registrations.push(registration);
+    return instrumentRegisteredTool(registered, registration);
+  };
+
+  runtime.tool = (name, ...args) => {
+    const callback = args.at(-1);
+    if (typeof callback !== "function")
+      throw new Error(`Tool ${name} requires a callback`);
+    const registration: ConductRegistration = {
+      name,
+      profile: registeredToolConductProfile(
+        name,
+        legacyReadOnlyHint(args.slice(0, -1)),
+        options,
+      ),
+      active: true,
+    };
+    const guarded = [...args];
+    guarded[guarded.length - 1] = wrapCallback(
+      registration,
+      callback as RuntimeToolCallback,
+    );
+    const registered = legacyTool(name, ...guarded);
+    registrations.push(registration);
+    return instrumentRegisteredTool(registered, registration);
+  };
+
+  taskRegistration.registerToolTask = (name) => {
+    throw new ConductContractError(
+      "unsupported_task_registration",
+      `Experimental task tool "${name}" bypasses the SEAM ticket contract; use registerTool with conduct.longTools instead.`,
+    );
+  };
+
+  return () => {
+    for (const registration of registrations) {
+      if (!registration.active || !registration.profile.longTool) continue;
+      const pollName = registration.profile.longTool.pollTool;
+      const poll = registrations.find(
+        (candidate) =>
+          candidate.active &&
+          normalizedConductToolName(candidate.name) ===
+            normalizedConductToolName(pollName),
+      );
+      if (!poll) {
+        throw new ConductContractError(
+          "missing_poll_tool",
+          `Long-running tool "${registration.name}" requires registered poll tool "${pollName}".`,
+        );
+      }
+      if (poll.profile.kind !== "read") {
+        throw new ConductContractError(
+          "poll_tool_not_read_only",
+          `Poll tool "${poll.name}" must be declared read-only.`,
+        );
+      }
+    }
+  };
+}
+
 export function createUnit(options: CreateUnitOptions): UnitApp {
   const name = options.name.trim();
   if (!name) throw new Error("createUnit requires a non-empty name");
@@ -1250,6 +1463,10 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const handleMcp = async (c: Context<UnitHonoEnv>) => {
     const { incoming, outgoing } = nodeBindings(c);
     const server = new McpServer({ name, version });
+    const assertConductRegistrations = installConductToolRegistration(
+      server,
+      options.conduct,
+    );
     const tenant = c.get("tenant") ?? null;
     const usage = tenant ? (getUsageStore()?.forTenant(tenant) ?? null) : null;
     if (tenant && usage) {
@@ -1273,6 +1490,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       usage,
       operatingRules: turnPreamble,
     });
+    assertConductRegistrations();
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

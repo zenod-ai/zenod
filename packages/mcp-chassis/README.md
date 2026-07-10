@@ -8,6 +8,7 @@ import { createMemoryTenantStore, createUnit } from "@zenod/mcp-chassis";
 const unit = createUnit({
   name: "demo",
   version: "0.0.1",
+  conduct: { toolKinds: { read: ["ping"] } },
   tenantAuth: {
     store: createMemoryTenantStore([
       { token: "raw-token-shown-once", tenant: { id: "tenant_1" } },
@@ -20,9 +21,18 @@ const unit = createUnit({
     panels: ["keys", "connections", "costs"],
   },
   tools(server) {
-    server.tool("ping", "Return pong", {}, async () => ({
-      content: [{ type: "text", text: "pong" }],
-    }));
+    server.registerTool(
+      "ping",
+      {
+        description: "Return pong",
+        inputSchema: {},
+        annotations: { readOnlyHint: true },
+      },
+      async () => ({
+        content: [{ type: "text", text: "pong" }],
+        structuredContent: { value: "pong" },
+      }),
+    );
   },
 });
 
@@ -304,3 +314,41 @@ channel profile. Both preserve transcript, usage, failure, and original source
 provenance. These are media metadata, not mutation evidence: the surrounding
 MCP tool must still return an ID/URL/SHA or `{ ticket_id }` under the conduct
 receipt rules.
+
+## Conduct enforcement
+
+`createUnit` guards every handler registered through `registerTool` or the
+legacy `tool` API. Mutating tools must return a concrete `evidence[]` handle or
+a structured `{ code, message }` error. Read tools must be declared in
+`conduct.toolKinds` (the built-in suite registry supplies known shared tools);
+`readOnlyHint` is checked for consistency but cannot make an unknown tool a
+read. Unknown tools therefore fail safe to mutate. Handler exceptions become
+structured MCP errors instead of text-only success-shaped replies.
+
+Long-running tools must be declared with their poll tool. Accepted results must
+carry the same poll contract, and terminal poll results must carry the requested
+`ticket_id` plus evidence or a structured error:
+
+```ts
+createUnit({
+  name: "my-unit",
+  conduct: {
+    toolKinds: { read: ["get_job_result"] },
+    longTools: {
+      run_job: { pollTool: "get_job_result" },
+      dispatch_job: { pollTool: "get_job_result", dispatch: true },
+    },
+  },
+  tools(server) {
+    // Register run_job, dispatch_job, and read-only get_job_result here.
+  },
+});
+```
+
+Dispatch declarations additionally require unchanged `origin_ticket_id`
+propagation and an exact depth increment, with depth limited to `0..1`.
+
+The SDK's experimental `registerToolTask` wire shape does not expose the SEAM
+accepted-ticket and named poll-tool contract, so `createUnit` rejects it. Use
+guarded `registerTool` plus `conduct.longTools` until that experimental protocol
+can represent the same contract without an unguarded registration path.

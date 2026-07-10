@@ -102,6 +102,12 @@ export function createDemoUnit(env: NodeJS.ProcessEnv = process.env) {
   const unit = createUnit({
     name: "mcp-chassis-demo",
     version: "3.1.0",
+    conduct: {
+      toolKinds: {
+        read: ["get_tenant_marker"],
+        mutate: ["set_tenant_marker"],
+      },
+    },
     tenantAuth: { store: tenants },
     controlPlane: {
       store: tenants,
