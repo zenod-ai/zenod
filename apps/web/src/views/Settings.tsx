@@ -44,6 +44,10 @@ export function Settings({
   // Source of truth for settings: lives here so it survives tab switches (Radix
   // unmounts inactive TabsContent). KeysTab re-seeds from this on remount.
   const [settings, setSettings] = React.useState(initialSettings)
+  const [overview, setOverview] = React.useState<{
+    tenant: { id: string; name?: string }
+    usage: { units: number } | null
+  } | null>(null)
   // Agent identity (title/subtitle) from the backend so the same shell renders
   // per-agent. Defaults to Zenod's values until the fetch resolves.
   const [identity, setIdentity] = React.useState({
@@ -83,6 +87,14 @@ export function Settings({
             : null,
         })
       )
+      .catch(() => {})
+  }, [])
+  React.useEffect(() => {
+    api<{
+      tenant: { id: string; name?: string }
+      usage: { units: number } | null
+    }>("/api/overview")
+      .then(setOverview)
       .catch(() => {})
   }, [])
   React.useEffect(() => {
@@ -158,6 +170,15 @@ export function Settings({
               {identity.displayName}
             </h1>
             <p className="text-sm text-muted-foreground">{identity.tagline}</p>
+            {overview && (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="tenant-overview"
+              >
+                {overview.tenant.name ?? overview.tenant.id} ·{" "}
+                {overview.usage?.units ?? 0} usage units
+              </p>
+            )}
           </div>
         </div>
         <Button
