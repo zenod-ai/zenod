@@ -6,6 +6,7 @@ import type { HttpBindings } from "@hono/node-server";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { ChassisStorage, type ChassisStorageOptions, type TenantStorage } from "./storage.js";
 
 export type TenantStatus = "active" | "suspended" | "deleted";
 
@@ -18,6 +19,8 @@ export interface TenantContext {
 export interface UnitContext {
   unitName: string;
   tenant: TenantContext | null;
+  /** Tenant-bound storage handles. Unit tools must not accept tenant ids from client payloads. */
+  storage: TenantStorage | null;
 }
 
 type UnitHonoEnv = {
@@ -113,6 +116,8 @@ export interface CreateUnitOptions {
   controlPlane?: ControlPlaneOptions;
   /** Optional same-image self-host seed tenant. */
   singleTenant?: SingleTenantOptions;
+  /** Tenant storage seam. Defaults to DATA_DIR or /data and is only materialized after tenant resolution. */
+  storage?: ChassisStorage | ChassisStorageOptions;
 }
 
 export interface UnitApp {
@@ -325,6 +330,10 @@ function nodeBindings(c: Context<UnitHonoEnv>): {
   return { incoming, outgoing };
 }
 
+function storageFromOptions(storage: CreateUnitOptions["storage"]): ChassisStorage {
+  return storage instanceof ChassisStorage ? storage : new ChassisStorage(storage);
+}
+
 export function createUnit(options: CreateUnitOptions): UnitApp {
   const name = options.name.trim();
   if (!name) throw new Error("createUnit requires a non-empty name");
@@ -332,6 +341,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const version = options.version?.trim() || "0.0.0";
   const app = new Hono<UnitHonoEnv>();
   const auth = options.tenantAuth ? requireTenantAuth(options.tenantAuth) : noopAuth();
+  const storage = storageFromOptions(options.storage);
   const defaultProvisioningStore = isTenantProvisioningStore(options.tenantAuth?.store)
     ? options.tenantAuth.store
     : null;
@@ -377,7 +387,12 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const handleMcp = async (c: Context<UnitHonoEnv>) => {
     const { incoming, outgoing } = nodeBindings(c);
     const server = new McpServer({ name, version });
-    await options.tools?.(server, { unitName: name, tenant: c.get("tenant") ?? null });
+    const tenant = c.get("tenant") ?? null;
+    await options.tools?.(server, {
+      unitName: name,
+      tenant,
+      storage: tenant ? storage.forTenant(tenant) : null,
+    });
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -446,3 +461,5 @@ function toProvisionTenantResponse(result: ProvisionTenantResult): {
 }
 
 export * from "./conduct.js";
+export { ChassisStorage, TenantVault, openSqlite } from "./storage.js";
+export type { ChassisStorageOptions, TenantStorage, UnitTenant } from "./storage.js";

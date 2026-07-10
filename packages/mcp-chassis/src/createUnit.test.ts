@@ -1,9 +1,13 @@
 import type { ServerType } from "@hono/node-server";
 import { serve } from "@hono/node-server";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createMemoryTenantStore, createUnit, hashToken } from "./index.js";
+import { createMemoryTenantStore, createUnit, hashToken, type UnitContext } from "./index.js";
 
 const servers: ServerType[] = [];
+const tempDirs: string[] = [];
 
 async function listen(app: ReturnType<typeof createUnit>["app"]): Promise<string> {
   const info = await new Promise<{ port: number }>((resolve) => {
@@ -24,9 +28,10 @@ afterEach(async () => {
         }),
     ),
   );
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-function initializeBody(id = 1): string {
+function initializeBody(id = 1, params: Record<string, unknown> = {}): string {
   return JSON.stringify({
     jsonrpc: "2.0",
     id,
@@ -35,11 +40,17 @@ function initializeBody(id = 1): string {
       protocolVersion: "2025-06-18",
       capabilities: {},
       clientInfo: { name: "mcp-chassis-test", version: "0.0.0" },
+      ...params,
     },
   });
 }
 
-async function initialize(base: string, init?: RequestInit, path = "/mcp"): Promise<Response> {
+async function initialize(
+  base: string,
+  init?: RequestInit,
+  path = "/mcp",
+  params: Record<string, unknown> = {},
+): Promise<Response> {
   const { headers, ...rest } = init ?? {};
   return fetch(`${base}${path}`, {
     method: "POST",
@@ -48,7 +59,7 @@ async function initialize(base: string, init?: RequestInit, path = "/mcp"): Prom
       accept: "application/json, text/event-stream",
       ...headers,
     },
-    body: initializeBody(),
+    body: initializeBody(1, params),
     ...rest,
   });
 }
@@ -115,6 +126,8 @@ describe("createUnit", () => {
   });
 
   it("resolves bearer and tokened MCP URL auth to tenant context for tools", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-auth-storage-"));
+    tempDirs.push(dataDir);
     const seenTenants: Array<string | null> = [];
     const tenants = createMemoryTenantStore([
       { token: "tenant-one-token", tenant: { id: "tenant-one", name: "Tenant One" } },
@@ -123,6 +136,7 @@ describe("createUnit", () => {
     const unit = createUnit({
       name: "demo",
       version: "1.2.3",
+      storage: { dataDir },
       tenantAuth: { store: tenants },
       tools(_server, context) {
         seenTenants.push(context.tenant?.id ?? null);
@@ -294,5 +308,34 @@ describe("createUnit", () => {
     ]);
     const response = await initialize(base, { headers: { authorization: "Bearer zenod_self_host_seed_token" } });
     expect(response.status).toBe(200);
+  });
+
+  it("binds storage to the trusted tenant resolved by auth, not client-supplied tenant ids", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-create-unit-"));
+    tempDirs.push(dataDir);
+    let captured: UnitContext | undefined;
+    const tenants = createMemoryTenantStore([{ token: "tenant-alpha-token", tenant: { id: "tenant_alpha" } }]);
+    const unit = createUnit({
+      name: "demo",
+      version: "1.2.3",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      tools(_server, context) {
+        captured = context;
+      },
+    });
+    const base = await listen(unit.app);
+
+    const response = await initialize(
+      base,
+      { headers: { authorization: "Bearer tenant-alpha-token" } },
+      "/mcp",
+      { tenant_id: "tenant_beta" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(captured?.tenant).toEqual({ id: "tenant_alpha" });
+    expect(captured?.storage?.rootDir).toBe(join(dataDir, "tenant_alpha"));
+    expect(captured?.storage?.dir("unit")).toBe(join(dataDir, "tenant_alpha", "unit"));
   });
 });
