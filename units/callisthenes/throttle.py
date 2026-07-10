@@ -21,7 +21,7 @@ import os
 import time
 from collections import deque
 from threading import Lock
-from typing import Callable, Deque, Iterable
+from typing import Callable, Deque, Dict, Iterable
 
 DEFAULT_PER_HOUR = 10
 DEFAULT_SEND_TOOLS = ("createPosts", "deletePosts", "mediaUpload", "post_reddit")
@@ -78,6 +78,32 @@ class RateLimiter:
             return max(0, self.per_hour - len(self._events))
 
 
+class TenantRateLimiters:
+    """One unchanged sliding-window limiter per authenticated tenant."""
+
+    def __init__(
+        self,
+        per_hour: int = DEFAULT_PER_HOUR,
+        window_seconds: float = WINDOW_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.per_hour = per_hour
+        self.window_seconds = window_seconds
+        self.clock = clock
+        self._limiters: Dict[str, RateLimiter] = {}
+        self._lock = Lock()
+
+    def for_tenant(self, tenant: str) -> RateLimiter:
+        if not tenant:
+            raise ValueError("authenticated tenant is required for throttling")
+        with self._lock:
+            limiter = self._limiters.get(tenant)
+            if limiter is None:
+                limiter = RateLimiter(self.per_hour, self.window_seconds, self.clock)
+                self._limiters[tenant] = limiter
+            return limiter
+
+
 def _parse_per_hour(raw: str | None) -> int:
     if raw is None or raw.strip() == "":
         return DEFAULT_PER_HOUR
@@ -107,6 +133,7 @@ def send_tools_from_env(env: dict | None = None) -> frozenset[str]:
 def build_throttle_middleware(
     limiter: RateLimiter | None = None,
     send_tools: Iterable[str] | None = None,
+    tenant_resolver: Callable[[], str] | None = None,
 ):
     """Construct the FastMCP throttle middleware. Imports fastmcp lazily so the
     pure `RateLimiter` above stays importable in a network/fastmcp-free test.
@@ -114,19 +141,26 @@ def build_throttle_middleware(
     from fastmcp.server.middleware import Middleware  # noqa: WPS433
     from fastmcp.exceptions import ToolError  # noqa: WPS433
 
-    limiter = limiter or limiter_from_env()
+    configured = limiter or limiter_from_env()
+    tenant_limiters = TenantRateLimiters(per_hour=configured.per_hour)
     tools = frozenset(send_tools) if send_tools is not None else send_tools_from_env()
+
+    if tenant_resolver is None:
+        from auth import _default_tenant_resolver  # type: ignore
+
+        tenant_resolver = _default_tenant_resolver
 
     class ThrottleMiddleware(Middleware):
         async def on_call_tool(self, context, call_next):
             name = getattr(context.message, "name", None)
             if name in tools:
-                if not limiter.allow():
+                tenant_limiter = tenant_limiters.for_tenant(tenant_resolver())
+                if not tenant_limiter.allow():
                     # Stable machine-checkable code prefix (SEAM-SPEC §5, item 15):
                     # ToolError carries only a message, so we prefix "[code] ".
                     raise ToolError(
                         f"[throttle_exceeded] callisthenes throttle: send rate "
-                        f"limit reached ({limiter.per_hour}/hour). Refusing '{name}'. "
+                        f"limit reached ({tenant_limiter.per_hour}/hour). Refusing '{name}'. "
                         f"Try again later or raise CALLISTHENES_THROTTLE_PER_HOUR."
                     )
             return await call_next(context)

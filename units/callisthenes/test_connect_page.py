@@ -300,6 +300,33 @@ def test_x_config_form_saves_redacted_values_and_updates_engine(monkeypatch, tmp
     assert "access-secret" not in rendered
 
 
+def test_x_app_and_sender_credentials_are_tenant_isolated(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    tenant_a = cp.ConnectPage(
+        engine=_engine(),
+        config=cp.ConnectPageConfig(owner_tenant="tenant-a"),
+    )
+    tenant_b = cp.ConnectPage(
+        engine=_engine(),
+        config=cp.ConnectPageConfig(owner_tenant="tenant-b"),
+    )
+    saved = tenant_a.save_x_config(
+        {
+            "X_OAUTH_CONSUMER_KEY": "app-a",
+            "X_OAUTH_CONSUMER_SECRET": "secret-a",
+            "X_OAUTH_ACCESS_TOKEN": "user-a",
+            "X_OAUTH_ACCESS_TOKEN_SECRET": "user-secret-a",
+        }
+    )
+    assert saved["ok"] is True
+    assert tenant_a.x_config()["X_OAUTH_ACCESS_TOKEN"] == "user-a"
+    assert tenant_b.x_config() == {}
+    assert cp._x_config_path("tenant-a") != cp._x_config_path("tenant-b")
+    assert "tenant-a" not in cp._x_config_path("tenant-a").name
+
+
 def test_x_setup_has_exactly_the_three_fields_x_shows_at_app_creation(
     monkeypatch, tmp_path
 ):
