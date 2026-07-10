@@ -132,7 +132,14 @@ export function createDemoUnit(env: NodeJS.ProcessEnv = process.env) {
       id: "mcp-chassis-demo",
       name: "MCP Chassis Demo",
       version: "3.1.0",
+      purpose: "Prove tenant-isolated MCP chassis behavior.",
+      whenToRoute: [
+        "Use for tenant marker isolation and chassis integration checks.",
+      ],
       tools: ["set_tenant_marker", "get_tenant_marker"],
+      etiquette: [
+        "Resolve tenant identity only from the authenticated request.",
+      ],
       receiptExpectations: ["mutations return evidence[]"],
     },
     tools: registerDemoTools,

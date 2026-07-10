@@ -119,6 +119,39 @@ At boot the chassis reads `<UNIT>_API_TOKEN` (falling back to
 `ZENOD_API_TOKEN`) and idempotently upserts the `self-host` tenant, so the same
 token and tenant survive SQLite reopen/restart.
 
+## Published skill manifest
+
+Declare deployment-owned routing metadata with `skill`:
+
+```ts
+createUnit({
+  name: "zenod",
+  version: "3.2.0",
+  skill: {
+    id: "zenod.knowledge",
+    name: "Zenod Knowledge",
+    purpose: "File and retrieve durable knowledge.",
+    whenToRoute: ["Use when information should survive the current session."],
+    tools: ["ingest", "search"],
+    etiquette: ["Treat tools/list as authoritative for live tool schemas."],
+    receiptExpectations: ["Writes return a commit SHA or a ticket_id."],
+  },
+});
+```
+
+The chassis publishes the normalized card at public, tenant-neutral
+`GET /.well-known/atomic-unit-skill.json`. It generates `schemaVersion` and the
+unit `name`/`version` from `createUnit`, and copies only the declared D16
+metadata fields; tenant data, credentials, tokens, and installed directives are
+never read into this response. The authenticated `/api/skills` response keeps
+the same published card under `published` and tenant-installed copies under
+`installed`.
+
+The manifest is advisory discovery metadata. MCP `tools/list` and each live
+tool schema remain authoritative, and publishing a card grants no authority to
+call the unit. A unit without `skill` returns `404` with
+`{"error":"skill manifest not configured"}`.
+
 When billing is enabled, the unit serves:
 
 - `POST /api/billing/webhook`
