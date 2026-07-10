@@ -44,7 +44,19 @@ import {
   type ChassisUsageStoreOptions,
   type TenantUsageMeter,
 } from "./usage.js";
+import { SqliteTenantSettingsStore } from "./settings.js";
 export type { BillingOptions } from "./billing.js";
+export {
+  defaultTenantSettingsValues,
+  SqliteTenantSettingsStore,
+  TENANT_SECRET_SETTING_KEYS,
+  TENANT_SETTING_KEYS,
+  type TenantKeyMetadata,
+  type TenantSecretSettingKey,
+  type TenantSettingKey,
+  type TenantSettingsSnapshot,
+  type TenantSettingsValues,
+} from "./settings.js";
 export {
   createSqliteTenantStore,
   SqliteTenantStore,
@@ -632,32 +644,6 @@ function displayNameFromId(id: string): string {
     .join(" ");
 }
 
-function defaultSettingsValues(): Record<string, string | null> {
-  return {
-    vault_repo: null,
-    vault_branch: null,
-    github_token: null,
-    provider: "anthropic",
-    anthropic_api_key: null,
-    openai_api_key: null,
-    openrouter_api_key: null,
-    model_ask: null,
-    model_classify: null,
-    model_vision: null,
-    model_max_steps: null,
-    google_service_account_json: null,
-    google_oauth_client_id: null,
-    google_oauth_client_secret: null,
-    google_drive_folder_id: null,
-    groq_api_key: null,
-    openai_long_transcription: null,
-    long_transcription_provider: null,
-    openrouter_transcription_model: null,
-    composio_api_key: null,
-    composio_user_id: null,
-  };
-}
-
 export function seedSingleTenantFromEnv(
   store: TenantProvisioningStore,
   options: SingleTenantOptions & { unitName?: string } = {},
@@ -850,6 +836,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     : null;
   const installedSkills = (options.skills ?? []).map(normalizeSkillManifest);
   const ui = options.ui ? normalizeUiOptions(name, options.ui) : null;
+  const tenantSettings = new SqliteTenantSettingsStore();
   const defaultProvisioningStore = isTenantProvisioningStore(
     options.tenantAuth?.store,
   )
@@ -992,28 +979,40 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       }),
     );
 
-    productRoutes.get("/api/keys", requireUiTenant, (c) =>
-      c.json({
-        tenant: c.get("tenant"),
-        keys: [],
-      }),
-    );
+    productRoutes.get("/api/keys", requireUiTenant, (c) => {
+      const tenant = c.get("tenant");
+      if (!tenant) return c.json({ error: "unauthorized" }, 401);
+      return c.json({
+        tenant,
+        keys: tenantSettings.keyMetadata(storage.forTenant(tenant)),
+      });
+    });
 
-    productRoutes.get("/api/settings", requireUiTenant, (c) =>
-      c.json({
-        tenant: c.get("tenant"),
-        settings: defaultSettingsValues(),
-        configured: true,
-      }),
-    );
+    productRoutes.get("/api/settings", requireUiTenant, (c) => {
+      const tenant = c.get("tenant");
+      if (!tenant) return c.json({ error: "unauthorized" }, 401);
+      return c.json({
+        tenant,
+        ...tenantSettings.snapshot(storage.forTenant(tenant)),
+      });
+    });
 
-    productRoutes.put("/api/settings", requireUiTenant, (c) =>
-      c.json({
-        tenant: c.get("tenant"),
-        settings: defaultSettingsValues(),
-        configured: true,
-      }),
-    );
+    productRoutes.put("/api/settings", requireUiTenant, async (c) => {
+      const tenant = c.get("tenant");
+      if (!tenant) return c.json({ error: "unauthorized" }, 401);
+      const body = await c.req.json().catch(() => null);
+      try {
+        return c.json({
+          tenant,
+          ...tenantSettings.update(storage.forTenant(tenant), body),
+        });
+      } catch (error) {
+        if (error instanceof TypeError) {
+          return c.json({ error: error.message }, 400);
+        }
+        throw error;
+      }
+    });
 
     productRoutes.get("/api/token", requireUiTenant, (c) =>
       c.json({

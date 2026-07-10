@@ -41,6 +41,12 @@ tenant-scoped session cookie; `/api/overview`, `/api/keys`, `/api/settings`,
 bearer token and never accept a client-supplied tenant id. `panels` selects which
 existing console tabs the unit exposes.
 
+The default settings shell persists `/api/settings` in each tenant's storage
+directory. Secret fields are masked on every response, masked values posted back
+by the Console leave the stored secret unchanged, and `/api/keys` exposes only
+safe metadata for configured secrets. Settings and key metadata survive process
+restart without sharing rows or paths between tenants.
+
 Control-plane provisioning is exposed through `POST /api/tenants`,
 `PATCH /api/tenants/:tenantId`, `DELETE /api/tenants/:tenantId`, and
 `POST /api/tenants/:tenantId/token/rotate` when `controlPlane` is configured.
