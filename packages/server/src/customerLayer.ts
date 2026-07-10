@@ -9,6 +9,7 @@ import {
   loadCustomerBillingConfig,
   resolveCheckoutTier,
   type CustomerStripeClient,
+  type CustomerProductConfig,
 } from "./customerBilling.js";
 import { GithubIdentityProvider, signState, verifyState, type IdentityProvider } from "./customerIdentity.js";
 import { customerMetering } from "./customerMetering.js";
@@ -27,6 +28,7 @@ export interface CustomerLayerOptions {
   stripe?: CustomerStripeClient;
   tenantStore?: import("@zenod/mcp-chassis").TenantProvisioningStore;
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
+  product?: CustomerProductConfig;
 }
 
 export interface CustomerLayerHost {
@@ -48,25 +50,33 @@ function trustedReturnHost(value: string | undefined): string | null {
   return host && (host === "zenod.dev" || /^[a-z0-9.-]+\.zenod\.dev$/.test(host)) ? host : null;
 }
 
-function customerDestination(env: NodeJS.ProcessEnv): string {
-  return (env.CUSTOMER_APP_URL || env.DOMAIN || "https://cloud.zenod.dev").replace(/\/$/, "");
+function customerDestination(env: NodeJS.ProcessEnv, defaultDomain = "https://cloud.zenod.dev"): string {
+  return (env.CUSTOMER_APP_URL || env.DOMAIN || defaultDomain).replace(/\/$/, "");
 }
 
-function callbackUrl(env: NodeJS.ProcessEnv): string {
-  return env.GITHUB_OAUTH_CALLBACK_URL || `${customerDestination(env)}/auth/github/callback`;
+function callbackUrl(env: NodeJS.ProcessEnv, defaultDomain?: string): string {
+  return env.GITHUB_OAUTH_CALLBACK_URL || `${customerDestination(env, defaultDomain)}/auth/github/callback`;
 }
 
-function signedReturnDestination(returnHost: string | undefined, env: NodeJS.ProcessEnv): string {
+function signedReturnDestination(
+  returnHost: string | undefined,
+  env: NodeJS.ProcessEnv,
+  product: CustomerProductConfig,
+): string {
   const trusted = trustedReturnHost(returnHost);
   if (trusted === "zenod.dev") return "https://zenod.dev/";
+  if (trusted && product.signInToLanding && trusted === new URL(product.defaultDomain).hostname) {
+    return `${product.defaultDomain.replace(/\/$/, "")}/`;
+  }
   if (trusted) return `https://${trusted}/app`;
-  return `${customerDestination(env)}/app`;
+  return `${customerDestination(env, product.defaultDomain)}/app`;
 }
 
 export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLayerOptions = {}) {
   const env = options.env ?? process.env;
-  const accounts = new CustomerAccountStore(host.dataDir);
-  const billing = loadCustomerBillingConfig(env);
+  const product = options.product ?? { product: "zenod", unit: "zenod", defaultDomain: "https://cloud.zenod.dev" };
+  const accounts = new CustomerAccountStore(host.dataDir, product.product);
+  const billing = loadCustomerBillingConfig(env, product);
   const tokenVault = new CustomerTokenVault(host.dataDir, customerStateSecret(env));
   if (env.STRIPE_SECRET_KEY) {
     const expectedMarker = billing.stripeMode === "live" ? "_live_" : "_test_";
@@ -77,13 +87,13 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   const identity =
     options.identity ??
     (env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET
-      ? new GithubIdentityProvider(env.GITHUB_OAUTH_CLIENT_ID, env.GITHUB_OAUTH_CLIENT_SECRET, callbackUrl(env))
+      ? new GithubIdentityProvider(env.GITHUB_OAUTH_CLIENT_ID, env.GITHUB_OAUTH_CLIENT_SECRET, callbackUrl(env, product.defaultDomain))
       : null);
   const stripe =
     options.stripe ??
     (env.STRIPE_SECRET_KEY
       ? (new Stripe(env.STRIPE_SECRET_KEY, {
-          appInfo: { name: "zenod/customer-layer", version: "0.1.0" },
+          appInfo: { name: `${product.product}/customer-layer`, version: "0.1.0" },
         }) as CustomerStripeClient)
       : null);
   const onCheckoutCompleted =
@@ -115,7 +125,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const githubId = typeof user.id === "number" ? user.id : Number(user.id);
       if (!Number.isSafeInteger(githubId) || githubId <= 0) throw new Error("GitHub returned an invalid user id");
       issueCustomerSession(c, { id: githubId, login: user.login }, env);
-      return c.redirect(signedReturnDestination(state.rh, env), 302);
+      return c.redirect(signedReturnDestination(state.rh, env, product), 302);
     } catch (error) {
       console.error("github callback failed:", error);
       return c.text("Could not complete GitHub sign-in. Please retry.", 502);
@@ -283,8 +293,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (!stripe) return c.json({ error: "checkout is not configured" }, 503);
     const resolved = resolveCheckoutTier(tierInput, billing);
     if ("error" in resolved) return c.json({ error: resolved.error }, 400);
-    const session = await createCustomerCheckout(stripe, accounts, billing, owner, resolved);
-    return c.json({ id: session.id, url: session.url, product: "zenod", tier: resolved.tier });
+    const session = await createCustomerCheckout(stripe, accounts, billing, owner, resolved, product);
+    return c.json({ id: session.id, url: session.url, product: product.product, tier: resolved.tier });
   }
 
   app.get("/buy", async (c) => {
@@ -317,8 +327,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (session.payment_status !== "paid" && session.status !== "complete") {
       return c.text("Checkout is not complete.", 409);
     }
-    await completeCustomerCheckout(session, accounts, onCheckoutCompleted);
-    return c.redirect(`${customerDestination(env)}/app`, 303);
+    await completeCustomerCheckout(session, accounts, onCheckoutCompleted, product.product);
+    return c.redirect(`${customerDestination(env, product.defaultDomain)}/app`, 303);
   });
 
   app.post("/webhook", async (c) => {
@@ -337,6 +347,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       event.data.object as Stripe.Checkout.Session,
       accounts,
       onCheckoutCompleted,
+      product.product,
     );
     return c.json({ received: true, result });
   });
