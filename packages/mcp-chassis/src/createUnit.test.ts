@@ -608,6 +608,36 @@ describe("createUnit", () => {
     ).toThrow("createUnit({ routes }) requires tenantAuth");
   });
 
+  it("gives authenticated unit product routes precedence over UI placeholders", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-route-precedence-"));
+    tempDirs.push(dataDir);
+    const tenants = createMemoryTenantStore([
+      { token: "known-token", tenant: { id: "tenant-a" } },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      ui: { sessionSecret: "route-precedence-secret" },
+      routes(routes) {
+        routes.get("/api/settings", (c) =>
+          c.json({ source: "unit", tenant: c.get("unitContext").tenant }),
+        );
+      },
+    });
+    const base = await listen(unit.app);
+
+    const response = await fetch(`${base}/api/settings`, {
+      headers: { authorization: "Bearer known-token" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      source: "unit",
+      tenant: { id: "tenant-a" },
+    });
+  });
+
   it("installs tenant directives through the seam tool and re-reads the turn preamble", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-rules-"));
     tempDirs.push(dataDir);
@@ -862,6 +892,43 @@ describe("createUnit", () => {
       headers: { authorization: "Bearer zenod_self_host_seed_token" },
     });
     expect(response.status).toBe(200);
+  });
+
+  it("idempotently seeds a durable self-host tenant across restarts", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-self-host-"));
+    tempDirs.push(dataDir);
+    const env = { DEMO_API_TOKEN: "zenod_durable_self_host_token" };
+
+    const firstStore = createSqliteTenantStore({ dataDir });
+    createUnit({
+      name: "demo",
+      tenantAuth: { store: firstStore },
+      singleTenant: { store: firstStore, env },
+    });
+    firstStore.close();
+
+    const restartedStore = createSqliteTenantStore({ dataDir });
+    const restarted = createUnit({
+      name: "demo",
+      tenantAuth: { store: restartedStore },
+      singleTenant: { store: restartedStore, env },
+    });
+    const base = await listen(restarted.app);
+
+    expect(restartedStore.snapshot()).toEqual([
+      {
+        tokenHash: hashToken("zenod_durable_self_host_token"),
+        tenant: { id: "self-host", name: "Self-host", plan: "self-host" },
+        status: "active",
+        expiresAt: null,
+      },
+    ]);
+    await expect(
+      initialize(base, {
+        headers: { authorization: "Bearer zenod_durable_self_host_token" },
+      }),
+    ).resolves.toHaveProperty("status", 200);
+    restartedStore.close();
   });
 
   it("maps MCP OAuth sign-in grants back to the approving tenant", async () => {
