@@ -16,6 +16,7 @@ import { clearCustomerSession, issueCustomerSession, readCustomerSession } from 
 import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
 import { hashToken } from "@zenod/mcp-chassis";
+import type { SharedGithubApp } from "./sharedGithubApp.js";
 
 // Customer HTTP layer transplanted from zenod-ai/cloud services/webhook/src/server.ts
 // and services/console/src/api.ts @ 6bdb318.
@@ -31,6 +32,7 @@ export interface CustomerLayerOptions {
 export interface CustomerLayerHost {
   dataDir: string;
   runtimeForAccount?: (account: CustomerAccount) => Runtime | null;
+  sharedGithubApp?: SharedGithubApp | null;
 }
 
 export function customerAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -144,6 +146,66 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     return c.json({ ok: true });
   });
   app.all("/api/auth/logout", (c) => c.json({ error: "not found" }, 404));
+
+  app.get("/api/github/app/start", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.github_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const sharedApp = host.sharedGithubApp;
+    if (!sharedApp) return c.json({ error: "GitHub repository connection is not configured" }, 503);
+    const state = signState(
+      { mode: "connect_repo", gid: session.github_id, login: session.login },
+      customerStateSecret(env),
+    );
+    return c.json({
+      url: `https://github.com/apps/${encodeURIComponent(sharedApp.slug)}/installations/new?state=${encodeURIComponent(state)}`,
+    });
+  });
+
+  // The existing Zenod Memory GitHub App is configured to return here after the
+  // customer grants it access to their brain repository.
+  app.get("/github/setup", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.redirect("/auth/signin", 302);
+    const stateRaw = c.req.query("state") ?? "";
+    if (stateRaw) {
+      const state = verifyState(stateRaw, customerStateSecret(env));
+      if (state?.mode !== "connect_repo" || state.gid !== session.github_id) {
+        return c.text("This repository connection link is invalid or expired.", 400);
+      }
+    }
+    const installationId = c.req.query("installation_id");
+    if (!installationId || !/^\d+$/.test(installationId)) return c.redirect("/app", 302);
+    const query = new URLSearchParams({
+      installation_id: installationId,
+      setup_action: c.req.query("setup_action") ?? "install",
+      return_to: "/app",
+    });
+    return c.redirect(`/api/github/app/setup?${query.toString()}`, 302);
+  });
+
+  app.put("/api/vault/repository", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.github_id);
+    const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
+    if (!account?.tenant_id || !runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const body = await c.req
+      .json<{ repo?: string; branch?: string }>()
+      .catch((): { repo?: string; branch?: string } => ({}));
+    const repo = body.repo?.trim() ?? "";
+    const branch = body.branch?.trim() || "main";
+    if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) return c.json({ error: "invalid repository" }, 400);
+    runtime.settings.set("vault_repo", repo);
+    runtime.settings.set("vault_branch", branch);
+    runtime.invalidate();
+    accounts.upsert(account.session_id, {
+      vault_repo: repo,
+      vault_repo_url: `https://github.com/${repo}`,
+    });
+    return c.json({ repo, branch });
+  });
 
   app.get("/api/console/account", async (c) => {
     const session = readCustomerSession(c, env);

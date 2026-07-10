@@ -112,11 +112,11 @@ function RepoPickerDialog({
   async function handlePick(repo: GithubRepo) {
     setSavingRepo(repo.fullName)
     try {
-      await api("/api/settings", {
+      await api("/api/vault/repository", {
         method: "PUT",
         body: {
-          vault_repo: repo.fullName,
-          vault_branch: repo.defaultBranch,
+          repo: repo.fullName,
+          branch: repo.defaultBranch,
         },
       })
       toast.success("Vault repo saved", {

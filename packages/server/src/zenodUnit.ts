@@ -26,12 +26,16 @@ import type { ChatTestAuditStore } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
 import { readCustomerSession } from "./customerSession.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
+import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly apps = new Map<string, ReturnType<typeof createApp>>();
 
-  constructor(private readonly env: NodeJS.ProcessEnv = process.env) {}
+  constructor(
+    private readonly env: NodeJS.ProcessEnv = process.env,
+    private readonly sharedGithubApp: SharedGithubApp | null = null,
+  ) {}
 
   forContext(context: UnitContext): Runtime {
     if (!context.tenant || !context.storage) {
@@ -51,6 +55,7 @@ export class ZenodRuntimePool {
       credentialVault: new ChassisCredentialVault(context.storage, {
         legacyMasterKey: this.env.ZENOD_CREDENTIAL_MASTER_KEY,
       }),
+      settingFallbacks: sharedGithubSettingFallbacks(this.sharedGithubApp),
     });
     runtime.settings.set("artifact_archive_provider", "local");
     runtime.settings.set(
@@ -169,7 +174,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       dataDir: storage.dataDir,
       busyTimeoutMs: 30_000,
     });
-  const runtimes = new ZenodRuntimePool(env);
+  const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
+  const runtimes = new ZenodRuntimePool(env, sharedGithubApp);
   const unit = createUnit({
     name: "zenod",
     version: VERSION,
@@ -230,6 +236,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     {
       dataDir: storage.dataDir,
       runtimeForAccount: (account) => (account.tenant_id ? runtimes.get(account.tenant_id) : null),
+      sharedGithubApp,
     },
     { ...options.customer, env, tenantStore },
   );

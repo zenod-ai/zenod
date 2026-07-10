@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appJwt, appStatus, buildManifest, createGithubIssue, disconnectApp, editGithubIssue, installationToken } from "zenod";
+import { appJwt, appStatus, createGithubIssue, disconnectApp, editGithubIssue, githubAppInstallationUrl, installationToken } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -20,15 +20,6 @@ describe("GitHub App flow", () => {
     vi.restoreAllMocks();
     runtime.close();
     await rm(dir, { recursive: true, force: true });
-  });
-
-  it("builds a manifest with the instance callbacks", () => {
-    const { action, manifest } = buildManifest("https://c1.zenod.dev");
-    expect(action).toBe("https://github.com/settings/apps/new");
-    expect(manifest.redirect_url).toBe("https://c1.zenod.dev/api/github/app/callback");
-    expect(manifest.setup_url).toBe("https://c1.zenod.dev/api/github/app/setup");
-    expect(manifest.default_permissions).toEqual({ contents: "write", issues: "write", pull_requests: "read", metadata: "read" });
-    expect(String(manifest.name)).toMatch(/^zenod-[0-9a-f]{4}$/);
   });
 
   it("signs a verifiable RS256 app JWT", () => {
@@ -82,6 +73,13 @@ describe("GitHub App flow", () => {
     settings.set("vault_repo", "owner/vault");
     settings.set("anthropic_api_key", "sk-ant-x");
     expect(settings.configured()).toBe(true); // no PAT needed
+  });
+
+  it("builds only the existing app installation URL for customer repository access", () => {
+    runtime.settings.setRaw("github_app_slug", "zenod-memory-v01a");
+    expect(githubAppInstallationUrl(runtime.settings)).toBe(
+      "https://github.com/apps/zenod-memory-v01a/installations/new",
+    );
   });
 
   it("falls back to the configured PAT when a repo-scoped app token gets a 403", async () => {
@@ -212,8 +210,9 @@ describe("GitHub App flow", () => {
     expect(runtime.settings.getRaw("github_app_installation_id")).toBe("4242");
   });
 
-  it("start endpoint derives the base URL from forwarded headers", async () => {
+  it("start endpoint returns the existing app installation URL and never a manifest", async () => {
     const app = createApp(runtime);
+    runtime.settings.setRaw("github_app_slug", "zenod-memory-v01a");
     const res = await app.request("/api/github/app/start", {
       headers: {
         Authorization: `Bearer ${runtime.settings.apiToken()}`,
@@ -222,7 +221,8 @@ describe("GitHub App flow", () => {
       },
     });
     const body = await res.json();
-    expect(body.manifest.redirect_url).toBe("https://c1.zenod.dev/api/github/app/callback");
+    expect(body).toEqual({ url: "https://github.com/apps/zenod-memory-v01a/installations/new" });
+    expect(JSON.stringify(body)).not.toContain("manifest");
   });
 
   it("edits issue fields, labels, status, assignees, and comments through GitHub", async () => {

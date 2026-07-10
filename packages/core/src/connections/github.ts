@@ -1,4 +1,4 @@
-import { createSign, randomBytes } from "node:crypto";
+import { createSign } from "node:crypto";
 /**
  * The minimal settings surface the connections layer needs — decoupled from the
  * concrete server Settings class so this logic can move to a shared package and
@@ -11,13 +11,7 @@ export interface ConnectionSettings {
   hasGithubApp(): boolean;
 }
 
-/**
- * GitHub App manifest flow — the "Connect GitHub" button. The instance walks
- * the user through creating their OWN GitHub App (one click on GitHub's side),
- * stores its credentials, and from then on mints short-lived installation
- * tokens scoped to exactly the repos the user granted. No PAT.
- * https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest
- */
+/** GitHub App credentials plus the tenant-specific installation selection. */
 
 export interface GithubAppStatus {
   created: boolean;
@@ -37,49 +31,10 @@ export function appStatus(settings: ConnectionSettings): GithubAppStatus {
   };
 }
 
-/** The manifest the UI form-POSTs to https://github.com/settings/apps/new. */
-export function buildManifest(baseUrl: string): { action: string; manifest: Record<string, unknown> } {
-  const suffix = randomBytes(2).toString("hex");
-  return {
-    action: "https://github.com/settings/apps/new",
-    manifest: {
-      name: `zenod-${suffix}`,
-      url: baseUrl,
-      redirect_url: `${baseUrl}/api/github/app/callback`,
-      setup_url: `${baseUrl}/api/github/app/setup`,
-      setup_on_update: true,
-      public: false,
-      // contents: commit the vault. issues: manage Zenod's own central backlog
-      // (create/label/queue issues on its own repo — #61). Zenod never needs
-      // write to other repos; Codex (broad VPS access) handles those.
-      default_permissions: { contents: "write", issues: "write", pull_requests: "read", metadata: "read" },
-      default_events: [],
-      hook_attributes: { url: `${baseUrl}/api/github/app/hook`, active: false },
-    },
-  };
-}
-
-interface ManifestConversion {
-  id: number;
-  slug: string;
-  pem: string;
-  html_url: string;
-}
-
-/** Exchange the one-time manifest code for the new app's credentials. */
-export async function exchangeManifestCode(code: string, settings: ConnectionSettings): Promise<ManifestConversion> {
-  const response = await fetch(`https://api.github.com/app-manifests/${encodeURIComponent(code)}/conversions`, {
-    method: "POST",
-    headers: { Accept: "application/vnd.github+json", "User-Agent": "zenod" },
-  });
-  if (!response.ok) {
-    throw new Error(`GitHub manifest conversion failed: ${response.status} ${await response.text()}`);
-  }
-  const app = (await response.json()) as ManifestConversion;
-  settings.setRaw("github_app_id", String(app.id));
-  settings.setRaw("github_app_slug", app.slug);
-  settings.setRaw("github_app_private_key", app.pem);
-  return app;
+/** Existing GitHub App installation URL. Customers grant it repo access; they never create an app. */
+export function githubAppInstallationUrl(settings: ConnectionSettings): string | null {
+  const slug = settings.getRaw("github_app_slug");
+  return slug ? `https://github.com/apps/${encodeURIComponent(slug)}/installations/new` : null;
 }
 
 /** Compact RS256 JWT for app-level API calls — no extra dependencies. */

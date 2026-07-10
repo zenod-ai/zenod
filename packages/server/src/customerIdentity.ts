@@ -14,8 +14,10 @@ export interface IdentityProvider {
 }
 
 export interface StatePayload {
-  mode?: "signin";
+  mode?: "signin" | "connect_repo";
   rh?: string;
+  gid?: number;
+  login?: string;
   exp?: number;
 }
 

@@ -167,6 +167,7 @@ export class Settings {
   constructor(
     private readonly store: SqliteStateStore,
     private readonly credentialVault?: CredentialVault,
+    private readonly rawFallbacks: Readonly<Record<string, string>> = {},
   ) {
     this.migrateCredentialSecrets();
   }
@@ -259,7 +260,7 @@ export class Settings {
 
   /** Internal keys (e.g. GitHub App credentials) — not part of the UI-editable set. */
   getRaw(key: string): string | null {
-    return this.getStoredValue(key);
+    return this.getStoredValue(key) ?? this.rawFallbacks[key] ?? null;
   }
 
   setRaw(key: string, value: string): void {
