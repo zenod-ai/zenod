@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { BacklogDigestResult } from "zenod";
+import { openZenodSqlite } from "./sqlite.js";
 
 /**
  * Durable queue for Drive ingestion jobs — its own SQLite file on the /data
@@ -124,8 +123,7 @@ export class IngestStore {
   private readonly db: DatabaseSync;
 
   constructor(path: string, now: () => number = Date.now) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.db = new DatabaseSync(path);
+    this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS ingest_jobs (
         id TEXT PRIMARY KEY,
