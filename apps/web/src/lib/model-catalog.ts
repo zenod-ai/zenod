@@ -79,6 +79,12 @@ export const MODEL_CATALOG: Record<Provider, ModelInfo[]> = {
   ],
 }
 
+export function normalizeProvider(
+  provider: Provider | null | undefined
+): Provider {
+  return provider && provider in MODEL_CATALOG ? provider : "openrouter"
+}
+
 /**
  * Per-provider default models used when the stored value is empty. Mirrors
  * PROVIDER_DEFAULTS in packages/core so the UI can label the default option.

@@ -48,6 +48,7 @@ import {
   costLong,
   costShort,
   findModel,
+  normalizeProvider,
 } from "@/lib/model-catalog"
 
 type ApiKeyField =
@@ -80,7 +81,7 @@ function toFormState(settings: SettingsValues): FormState {
     vault_repo: settings.vault_repo ?? "",
     vault_branch: settings.vault_branch ?? "",
     github_token: settings.github_token ?? "",
-    provider: settings.provider,
+    provider: normalizeProvider(settings.provider),
     anthropic_api_key: settings.anthropic_api_key ?? "",
     openai_api_key: settings.openai_api_key ?? "",
     openrouter_api_key: settings.openrouter_api_key ?? "",

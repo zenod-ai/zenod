@@ -188,7 +188,7 @@ export type SettingsValues = {
   vault_repo: string | null
   vault_branch: string | null
   github_token: string | null
-  provider: Provider
+  provider: Provider | null
   anthropic_api_key: string | null
   openai_api_key: string | null
   openrouter_api_key: string | null
