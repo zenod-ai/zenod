@@ -16,9 +16,15 @@ import {
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { z } from "zod";
 import { isBillingEnabled, registerBillingRoutes, type BillingOptions } from "./billing.js";
 import type { OAuthKitOptions } from "./oauth.js";
 import { installOAuthRoutes, oauthWwwAuthenticate, publicBaseUrl, resolveOAuthKit } from "./oauth.js";
+import {
+  MemoryOperatingRulesStore,
+  type OperatingRulesStore,
+  type TurnPreamble,
+} from "./rules.js";
 import { ChassisStorage, type ChassisStorageOptions, type TenantStorage } from "./storage.js";
 import { ChassisUsageStore, type ChassisUsageStoreOptions, type TenantUsageMeter } from "./usage.js";
 export type { BillingOptions } from "./billing.js";
@@ -39,6 +45,8 @@ export interface UnitContext {
   storage: TenantStorage | null;
   /** Tenant-bound usage meter. Unit tools must never query usage for a client-supplied tenant id. */
   usage: TenantUsageMeter | null;
+  /** Freshly read active operating directives for this MCP turn. */
+  operatingRules: TurnPreamble | null;
 }
 
 export type UnitHonoEnv = {
@@ -151,6 +159,9 @@ export type UnitUiPanel =
   | "transcription"
   | "connections"
   | "costs"
+  | "rules"
+  | "mcp"
+  | "skills"
   | "test"
   | string;
 
@@ -167,6 +178,19 @@ export interface UnitUiOptions {
   sessionSecret?: string;
   /** Session cookie name. Defaults to zenod_session for console compatibility. */
   sessionCookieName?: string;
+}
+
+export interface UnitSkillManifest {
+  id: string;
+  name: string;
+  version?: string;
+  description?: string;
+  tools?: string[];
+  receiptExpectations?: string[];
+}
+
+export interface OperatingRulesOptions {
+  store?: OperatingRulesStore;
 }
 
 export type UnitAuthMiddleware = (
@@ -202,6 +226,12 @@ export interface CreateUnitOptions {
   oauth?: OAuthKitOptions;
   /** Optional unit-local billing webhook and checkout return handlers. */
   billing?: BillingOptions;
+  /** Tenant-scoped standing directives and conduct receipt feed. */
+  operatingRules?: OperatingRulesOptions;
+  /** Unit-published skill card rendered by the chassis skill settings panel. */
+  skill?: UnitSkillManifest;
+  /** Tenant-installed skill cards rendered by the chassis skill settings panel. */
+  skills?: UnitSkillManifest[];
 }
 
 export interface UnitApp {
@@ -423,6 +453,9 @@ export function requireTenantAuth(
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_UI_PANELS: UnitUiPanel[] = [
   "chat",
+  "rules",
+  "mcp",
+  "skills",
   "keys",
   "connections",
   "costs",
@@ -640,6 +673,81 @@ function quotaExceededResponse(c: Context<UnitHonoEnv>, decision: ReturnType<Ten
   );
 }
 
+const INSTALL_DIRECTIVE_SCHEMA = {
+  id: z.string().trim().min(1).optional(),
+  text: z.string().trim().min(1),
+  source: z.string().trim().min(1).optional(),
+  active: z.boolean().optional(),
+};
+
+async function installOperatingRulesTools(
+  server: McpServer,
+  tenant: TenantContext | null,
+  store: OperatingRulesStore,
+): Promise<void> {
+  if (!tenant) return;
+  server.registerTool(
+    "install_operating_directive",
+    {
+      title: "Install operating directive",
+      description:
+        "Install or update an active tenant-scoped operating directive. The unit re-reads active directives at the start of each MCP turn.",
+      inputSchema: INSTALL_DIRECTIVE_SCHEMA,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ id, text, source, active }) => {
+      const directive = await store.upsertDirective(tenant, {
+        ...(id ? { id } : {}),
+        text,
+        ...(source ? { source } : {}),
+        ...(active !== undefined ? { active } : {}),
+      });
+      const turnPreamble = await store.turnPreamble(tenant);
+      const receipt = await store.appendConductReceipt(tenant, {
+        kind: "operating_directive.install",
+        status: "ok",
+        summary: `Installed operating directive ${directive.id}`,
+        evidence: [{ kind: "operating_directive", id: directive.id }],
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Installed operating directive ${directive.id}`,
+          },
+        ],
+        structuredContent: {
+          tenant,
+          directive,
+          turnPreamble,
+          receipt,
+          evidence: [{ kind: "operating_directive", id: directive.id }],
+        },
+      };
+    },
+  );
+}
+
+function normalizeSkillManifest(skill: UnitSkillManifest): UnitSkillManifest {
+  return {
+    id: skill.id.trim(),
+    name: skill.name.trim(),
+    ...(skill.version?.trim() ? { version: skill.version.trim() } : {}),
+    ...(skill.description?.trim()
+      ? { description: skill.description.trim() }
+      : {}),
+    ...(skill.tools?.length ? { tools: [...skill.tools] } : {}),
+    ...(skill.receiptExpectations?.length
+      ? { receiptExpectations: [...skill.receiptExpectations] }
+      : {}),
+  };
+}
+
 export function createUnit(options: CreateUnitOptions): UnitApp {
   const name = options.name.trim();
   if (!name) throw new Error("createUnit requires a non-empty name");
@@ -660,6 +768,10 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     storage,
     options.storage !== undefined || Boolean(process.env.DATA_DIR?.trim()),
   );
+  const operatingRules =
+    options.operatingRules?.store ?? new MemoryOperatingRulesStore();
+  const unitSkill = options.skill ? normalizeSkillManifest(options.skill) : null;
+  const installedSkills = (options.skills ?? []).map(normalizeSkillManifest);
   const ui = options.ui ? normalizeUiOptions(name, options.ui) : null;
   const defaultProvisioningStore = isTenantProvisioningStore(
     options.tenantAuth?.store,
@@ -744,6 +856,47 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       const tenant = c.get("tenant");
       return c.json({ tenant, unit: { name, version }, panels: ui.panels });
     });
+
+    app.get("/api/operating-rules", requireUiTenant, async (c) => {
+      const tenant = c.get("tenant");
+      if (!tenant) return c.json({ error: "unauthorized" }, 401);
+      return c.json(await operatingRules.snapshot(tenant));
+    });
+
+    app.get("/api/mcp-config", requireUiTenant, (c) =>
+      c.json({
+        tenant: c.get("tenant"),
+        unit: { name, version },
+        endpoint: "/mcp",
+        tokenedEndpoint: "/mcp/<token>",
+        auth: {
+          bearer: true,
+          tokenedUrl: true,
+          oauth: Boolean(oauth?.serverEnabled),
+        },
+        routes: [
+          "/mcp",
+          "/mcp/<token>",
+          ...(oauth?.serverEnabled
+            ? [
+                "/.well-known/oauth-protected-resource",
+                "/.well-known/oauth-authorization-server",
+                "/oauth/authorize",
+                "/oauth/token",
+              ]
+            : []),
+        ],
+      }),
+    );
+
+    app.get("/api/skills", requireUiTenant, (c) =>
+      c.json({
+        tenant: c.get("tenant"),
+        unit: { name, version },
+        published: unitSkill,
+        installed: installedSkills,
+      }),
+    );
 
     app.get("/api/keys", requireUiTenant, (c) =>
       c.json({
@@ -880,11 +1033,16 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       if (!decision.allowed) return quotaExceededResponse(c, decision);
       usage.record({ kind: "mcp.request", units: 1 });
     }
+    const turnPreamble = tenant
+      ? await operatingRules.turnPreamble(tenant)
+      : null;
+    await installOperatingRulesTools(server, tenant, operatingRules);
     await options.tools?.(server, {
       unitName: name,
       tenant,
       storage: tenant ? storage.forTenant(tenant) : null,
       usage,
+      operatingRules: turnPreamble,
     });
 
     const transport = new StreamableHTTPServerTransport({
@@ -1003,5 +1161,6 @@ export type {
   UsageQuery,
   UsageRecordInput,
 } from "./usage.js";
+export * from "./rules.js";
 export { MemoryOAuthStore } from "./oauth.js";
 export type { OAuthKitOptions, OAuthProvider, OAuthStore, OAuthTokenSet } from "./oauth.js";

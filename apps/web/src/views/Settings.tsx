@@ -12,6 +12,9 @@ import { ConnectionsTab } from "@/views/settings/ConnectionsTab"
 import { CostsTab } from "@/views/settings/CostsTab"
 import { TranscriptionTab } from "@/views/settings/TranscriptionTab"
 import { KeysTab } from "@/views/settings/KeysTab"
+import { McpConfigTab } from "@/views/settings/McpConfigTab"
+import { OperatingRulesTab } from "@/views/settings/OperatingRulesTab"
+import { SkillSettingsTab } from "@/views/settings/SkillSettingsTab"
 import { TestTab } from "@/views/settings/TestTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 
@@ -23,6 +26,9 @@ type SettingsTab =
   | "transcription"
   | "connections"
   | "costs"
+  | "rules"
+  | "mcp"
+  | "skills"
   | "test"
 
 export function Settings({
@@ -68,6 +74,9 @@ export function Settings({
                   "transcription",
                   "connections",
                   "costs",
+                  "rules",
+                  "mcp",
+                  "skills",
                   "test",
                 ].includes(panel)
               )
@@ -104,11 +113,17 @@ export function Settings({
   const showTranscription = panelSet?.has("transcription") ?? true
   const showConnections = panelSet?.has("connections") ?? true
   const showCosts = panelSet?.has("costs") ?? true
+  const showRules = panelSet?.has("rules") ?? true
+  const showMcp = panelSet?.has("mcp") ?? true
+  const showSkills = panelSet?.has("skills") ?? true
   const showTest = panelSet?.has("test") ?? true
   const visibleTabs: SettingsTab[] = [
     ...(showChat ? (["chat"] as const) : []),
     ...(showTeam ? (["team"] as const) : []),
     ...(showVault ? (["vault"] as const) : []),
+    ...(showRules ? (["rules"] as const) : []),
+    ...(showMcp ? (["mcp"] as const) : []),
+    ...(showSkills ? (["skills"] as const) : []),
     ...(showKeys ? (["keys"] as const) : []),
     ...(showTranscription ? (["transcription"] as const) : []),
     ...(showConnections ? (["connections"] as const) : []),
@@ -161,6 +176,9 @@ export function Settings({
           {showChat && <TabsTrigger value="chat">Chat</TabsTrigger>}
           {showTeam && <TabsTrigger value="team">Team</TabsTrigger>}
           {showVault && <TabsTrigger value="vault">Vault</TabsTrigger>}
+          {showRules && <TabsTrigger value="rules">Rules</TabsTrigger>}
+          {showMcp && <TabsTrigger value="mcp">MCP</TabsTrigger>}
+          {showSkills && <TabsTrigger value="skills">Skills</TabsTrigger>}
           {showKeys && (
             <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>
           )}
@@ -186,6 +204,21 @@ export function Settings({
         {showVault && (
           <TabsContent value="vault" className="mt-4">
             <VaultTab />
+          </TabsContent>
+        )}
+        {showRules && (
+          <TabsContent value="rules" className="mt-4">
+            <OperatingRulesTab />
+          </TabsContent>
+        )}
+        {showMcp && (
+          <TabsContent value="mcp" className="mt-4">
+            <McpConfigTab />
+          </TabsContent>
+        )}
+        {showSkills && (
+          <TabsContent value="skills" className="mt-4">
+            <SkillSettingsTab />
           </TabsContent>
         )}
         {showKeys && (

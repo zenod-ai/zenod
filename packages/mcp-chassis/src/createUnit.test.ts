@@ -72,6 +72,31 @@ async function initialize(
   });
 }
 
+async function callTool(
+  base: string,
+  name: string,
+  args: Record<string, unknown>,
+  init?: RequestInit,
+  path = "/mcp",
+): Promise<Response> {
+  const { headers, ...rest } = init ?? {};
+  return fetch(`${base}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      ...headers,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
+    ...rest,
+  });
+}
+
 function controlPlaneHeaders(token = "control-secret"): Record<string, string> {
   return {
     authorization: `Bearer ${token}`,
@@ -466,6 +491,170 @@ describe("createUnit", () => {
     await expect(bearer.json()).resolves.toMatchObject({
       tenant: { id: "tenant-a" },
     });
+  });
+
+  it("installs tenant directives through the seam tool and re-reads the turn preamble", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-rules-"));
+    tempDirs.push(dataDir);
+    const seenPreambles: Array<string | null> = [];
+    const tenants = createMemoryTenantStore([
+      { token: "tenant-one-token", tenant: { id: "tenant-one" } },
+      { token: "tenant-two-token", tenant: { id: "tenant-two" } },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      tools(_server, context) {
+        seenPreambles.push(context.operatingRules?.text ?? null);
+      },
+    });
+    const base = await listen(unit.app);
+
+    const installed = await callTool(
+      base,
+      "install_operating_directive",
+      {
+        id: "reply-with-receipts",
+        text: "Reply only with receipt-grounded actions.",
+        source: "council",
+      },
+      { headers: { authorization: "Bearer tenant-one-token" } },
+    );
+    expect(installed.status).toBe(200);
+    const installedBody = await installed.json();
+    expect(installedBody).toMatchObject({
+      result: {
+        structuredContent: {
+          tenant: { id: "tenant-one" },
+          directive: {
+            id: "reply-with-receipts",
+            source: "council",
+            active: true,
+          },
+          evidence: [{ kind: "operating_directive", id: "reply-with-receipts" }],
+        },
+      },
+    });
+
+    await expect(
+      initialize(base, {
+        headers: { authorization: "Bearer tenant-one-token" },
+      }),
+    ).resolves.toHaveProperty("status", 200);
+    await expect(
+      initialize(base, {
+        headers: { authorization: "Bearer tenant-two-token" },
+      }),
+    ).resolves.toHaveProperty("status", 200);
+
+    expect(seenPreambles).toEqual([
+      "No active operating directives for tenant-one.",
+      expect.stringContaining("Reply only with receipt-grounded actions."),
+      "No active operating directives for tenant-two.",
+    ]);
+  });
+
+  it("renders operating rules, MCP config, and skills from the logged-in tenant only", async () => {
+    const tenants = createMemoryTenantStore([
+      {
+        token: "tenant-one-token",
+        tenant: { id: "tenant-one", name: "Tenant One" },
+      },
+      {
+        token: "tenant-two-token",
+        tenant: { id: "tenant-two", name: "Tenant Two" },
+      },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      version: "1.2.3",
+      tenantAuth: { store: tenants },
+      ui: { sessionSecret: "test-session-secret" },
+      oauth: { server: true },
+      skill: {
+        id: "demo.skill",
+        name: "Demo Skill",
+        version: "1.0.0",
+        tools: ["install_operating_directive"],
+        receiptExpectations: ["mutations return evidence[]"],
+      },
+    });
+    const base = await listen(unit.app);
+    const tenantOneCookie = await login(base, "tenant-one-token");
+    const tenantTwoCookie = await login(base, "tenant-two-token");
+
+    const installed = await callTool(
+      base,
+      "install_operating_directive",
+      {
+        id: "tenant-one-rule",
+        text: "Tenant One rule marker.",
+        source: "user",
+      },
+      { headers: { authorization: "Bearer tenant-one-token" } },
+    );
+    expect(installed.status).toBe(200);
+
+    const tenantOneRules = await fetch(`${base}/api/operating-rules`, {
+      headers: { cookie: tenantOneCookie },
+    }).then((r) => r.json());
+    const tenantTwoRules = await fetch(`${base}/api/operating-rules?tenantId=tenant-one`, {
+      headers: { cookie: tenantTwoCookie },
+    }).then((r) => r.json());
+    const mcpConfig = await fetch(`${base}/api/mcp-config`, {
+      headers: { cookie: tenantOneCookie },
+    }).then((r) => r.json());
+    const skills = await fetch(`${base}/api/skills`, {
+      headers: { cookie: tenantOneCookie },
+    }).then((r) => r.json());
+    const agent = await fetch(`${base}/api/agent`).then((r) => r.json());
+
+    expect(tenantOneRules).toMatchObject({
+      tenant: { id: "tenant-one", name: "Tenant One" },
+      seam: {
+        status: "conformant",
+        receiptDiscipline: "enabled",
+        tenantIsolation: "tenant-scoped",
+      },
+      directives: [{ id: "tenant-one-rule", text: "Tenant One rule marker." }],
+      conductReceipts: [
+        {
+          kind: "operating_directive.install",
+          status: "ok",
+        },
+      ],
+    });
+    expect(JSON.stringify(tenantOneRules)).not.toContain("tenant-two");
+    expect(tenantTwoRules).toMatchObject({
+      tenant: { id: "tenant-two", name: "Tenant Two" },
+      directives: [],
+      conductReceipts: [],
+    });
+    expect(JSON.stringify(tenantTwoRules)).not.toContain("Tenant One rule marker");
+    expect(mcpConfig).toMatchObject({
+      tenant: { id: "tenant-one" },
+      unit: { name: "demo", version: "1.2.3" },
+      endpoint: "/mcp",
+      auth: { bearer: true, tokenedUrl: true, oauth: true },
+    });
+    expect(skills).toMatchObject({
+      tenant: { id: "tenant-one" },
+      published: {
+        id: "demo.skill",
+        name: "Demo Skill",
+        tools: ["install_operating_directive"],
+      },
+    });
+    expect(agent.panels).toEqual([
+      "chat",
+      "rules",
+      "mcp",
+      "skills",
+      "keys",
+      "connections",
+      "costs",
+    ]);
   });
 
   it("rotates the logged-in tenant token from the UI and invalidates the old MCP token", async () => {
