@@ -61,14 +61,12 @@ Run every hosted Zenod tenant from ONE container on the chassis. Tenant-prefix a
 
 ## Definition Of Done
 
-- [ ] Zenod boots via `createUnit` on the chassis; `AGENT=zenod` path retired.
-- [ ] All state tenant-prefixed: `zenod.sqlite`, `ingest.sqlite`, `usage.sqlite`, `vault/` clone, `transcripts/`, media store under `/data/<tenant>/`.
-- [ ] Per-tenant repo token custody in the chassis vault; only Zenod code may read it (Law 6).
-- [ ] Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three provisioned tenants, each logging into the UI sees only its repo/ingest/usage, cross-tenant reads provably fail, per-tenant commit receipts intact — executed autonomously with screenshots in evidence.
-- [ ] Zenod UI panels (Repo, Ingest, Usage) served from the unit container per the UI Surface section.
-- [ ] Self-host parity: public image, env token, single tenant, UI included; restore-from-repo runbook (Z-5) re-verified.
-- [ ] Existing hosted tenants migrated by script from per-user volumes to tenant prefixes, with rollback documented.
-- [ ] `zenod.zenod.dev` serves all tenants; per-tenant subdomains retired after migration window.
+SHIP — the ONLY definition of done; nothing below may be traded for anything not on this list (planner + Jordi, 2026-07-10):
+
+- [ ] THE USER JOURNEY works, walked manually by the worker in a real browser on the LIVE site, one uninterrupted clean pass, screenshots per step: open `zenod.zenod.dev` logged out → Sign in with GitHub → Subscribe → Stripe TEST checkout (session created server-side, `client_reference_id` = logged-in account; NO email matching, NO claim links, NO token paste) → land in my provisioned dashboard → every tab renders (Keys & models, Vault, Connections, Transcription, Costs, Chat) → OpenRouter key entered through the UI → ingest a note → receipt visible → logout/login persists.
+- [ ] The worker has personally clicked, in the deployed build, every element it asks Jordi to click. Then Jordi repeats the journey with his own GitHub account and a test card, and it works.
+
+HARDEN — only after Jordi approves SHIP, as separate tickets: 2.x tenant migration + rollback (Z-MT-4), subdomain retirement (Z-MT-6 → 3.7 wave), self-host parity re-verification (Z-5 runbook), full isolation/rotation re-certification, repo-token vault custody polish (Z-MT-2).
 
 ## Non-Goals
 

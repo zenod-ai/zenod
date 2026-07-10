@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EPIC 3 — The Target</title>
+<style>
+  :root{--bg:#0e1116;--card:#161b22;--ink:#e6edf3;--dim:#8b949e;--accent:#4ec9b0;--warn:#e5c07b;--bad:#e06c75;--good:#98c379;--line:#30363d;--blue:#61afef}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  .slide{display:none;width:100vw;height:100vh;padding:52px 72px;flex-direction:column;overflow-y:auto}
+  .slide.active{display:flex}
+  h1{font-size:2.6em;margin-bottom:18px;line-height:1.15}
+  h2{font-size:1.9em;margin-bottom:22px;color:var(--accent)}
+  p,li,td,th{font-size:1.08em;line-height:1.55}
+  .dim{color:var(--dim)} .good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)} .blue{color:var(--blue)} .accent{color:var(--accent)}
+  .big{font-size:1.35em}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 26px;margin-bottom:16px}
+  code{background:#21262d;border-radius:4px;padding:2px 7px;color:var(--warn);font-size:.95em}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid var(--line);padding:10px 14px;text-align:left}
+  th{background:#1c2128;color:var(--accent)}
+  .nav{position:fixed;bottom:18px;right:26px;display:flex;gap:10px;align-items:center;z-index:10}
+  .nav button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 17px;font-size:1em;cursor:pointer}
+  .counter{color:var(--dim)}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);transition:width .25s}
+  .steps{display:flex;gap:10px;align-items:stretch;margin:14px 0}
+  .step{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center}
+  .step b{display:block;margin-bottom:6px;color:var(--accent)}
+  .step span{font-size:.9em;color:var(--dim)}
+  .arrow{align-self:center;color:var(--dim);font-size:1.4em}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<!-- 1: THE TARGET -->
+<section class="slide active">
+  <p class="dim" style="letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px">Epic 3 · the whole point, one page</p>
+  <h1>A few containers. Services live on them.<br>Strangers pay and use them.</h1>
+  <div class="card" style="max-width:900px">
+    <p class="big">The target: <b>each product is ONE container on the VPS, serving ALL its customers.</b> A stranger opens the site, signs in with GitHub, pays, lands in a working dashboard, uses the product. Adding a customer is a database row. Adding a product is one more container.</p>
+  </div>
+  <div class="card" style="max-width:900px">
+    <p><span class="accent">Login and payment are built ONCE</span> — in the chassis — and every product inherits them. GitHub sign-in → account. Subscribe → Stripe checkout stamped with your user ID → tenant created on that account → dashboard. No unit ever writes auth or billing code again. No claim links, no token-paste logins, no email matching — ever.</p>
+  </div>
+  <p class="dim" style="margin-top:auto">→ to advance</p>
+</section>
+
+<!-- 2: THE CONTAINERS -->
+<section class="slide">
+  <h2>The containers — this is the entire fleet</h2>
+  <table style="margin-bottom:18px">
+    <tr><th>Container</th><th>What lives inside</th><th>Status today</th></tr>
+    <tr><td><b>zenod</b> · <code>zenod.zenod.dev</code></td><td>Memory product: MCP + dashboard + login/billing (chassis) + all tenants' vaults, transcription, receipts</td><td class="warn">LIVE — journey loop closing the last two bugs you found</td></tr>
+    <tr><td><b>callisthenes</b> · <code>calli.zenod.dev</code></td><td>Outbound product: MCP + X connect (3 inputs + PIN, as built in 2.4) + drafts/receipts + login/billing (chassis front)</td><td class="warn">NEXT — starts after the accounts hoist</td></tr>
+    <tr><td><b>epaminon</b> · <code>epaminon.zenod.dev</code></td><td>Executor product: MCP + jobs console; spawns throwaway containers per job</td><td class="dim">later</td></tr>
+    <tr><td><b>ring</b> · <code>ring.zenod.dev</code></td><td>The front door: web chat (old Council chat), wallet of unit tokens, routing</td><td class="dim">last</td></tr>
+    <tr><td><b>phylax</b></td><td>Channels: WhatsApp + Telegram, one per phone number, forwards pre-transcribed to the ring</td><td class="dim">later</td></tr>
+    <tr><td><b>proxy / site</b></td><td>Traefik + marketing pages</td><td class="good">exists</td></tr>
+  </table>
+  <div class="card">
+    <p><b>That's it.</b> Six-ish containers, forever. The old per-customer fleet is already dead (43 containers deleted, ~940&nbsp;MB reclaimed, snapshots kept). Customers are rows. Deploys are one rebuild per product.</p>
+  </div>
+</section>
+
+<!-- 3: THE JOURNEY IS THE TEST -->
+<section class="slide">
+  <h2>One test decides "done": the customer journey, in a browser</h2>
+  <div class="steps">
+    <div class="step"><b>1 · Visit</b><span>open the product site, logged out</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>2 · Sign in</b><span>GitHub — that IS the account</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>3 · Pay</b><span>Stripe checkout, bound to your user ID</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>4 · Dashboard</b><span>provisioned, every tab renders</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>5 · Use it</b><span>core action → real receipt</span></div>
+  </div>
+  <div class="card">
+    <p><b>Step 5 per product:</b> <span class="accent">Zenod</span> — enter model key, ingest a note, see the commit receipt. <span class="warn">Callisthenes</span> — connect X (3 credentials + PIN), your agent drafts via MCP, you approve, real permalink on X. <span class="blue">Epaminon</span> — submit a task, watch the transcript, download the artifact.</p>
+  </div>
+  <div class="card">
+    <p>The worker walks this journey in a real browser on the live site, fixes what breaks, walks it again from step 1 — until one clean pass with screenshots. <b>Then Jordi walks the identical journey.</b> Nobody asks Jordi to click anything they haven't clicked. No test suite, however green, means anything while this journey is broken.</p>
+  </div>
+</section>
+
+<!-- 4: THE ORDER -->
+<section class="slide">
+  <h2>The order — three moves, no detours</h2>
+  <div class="card">
+    <p><b>1 · Finish the Zenod journey</b> <span class="dim">(in flight now)</span> — fix the blank Keys page + wire checkout→tenant, walk the journey clean, hand Jordi the URL. Zenod is then a live product taking signups.</p>
+  </div>
+  <div class="card">
+    <p><b>2 · Hoist accounts+billing into the chassis</b> — the login/subscribe/user↔tenant code the pilot debugged moves into <code>packages/mcp-chassis</code> as the <code>accounts</code> module. Built once. Every unit inherits it from here on. This is the ONLY infra work left that isn't a product journey.</p>
+  </div>
+  <div class="card">
+    <p><b>3 · Stand up Callisthenes</b> — one atomic unit: chassis front (inherited login/billing/dashboard, zero new auth code) + the Python X engine that already works (three-input connect, PIN, drafts-never-send, permalink receipts). Walk its journey clean, hand Jordi the URL. Then Epaminon, then Ring — same recipe, same test, each cheaper than the last.</p>
+  </div>
+  <div class="card" style="border-color:var(--accent)">
+    <p class="big"><span class="accent">Success =</span> Jordi buys each product on its public site with a test card and uses it, start to finish, without anyone explaining anything. Everything that does not move a journey toward passing does not get worked on.</p>
+  </div>
+</section>
+
+<div class="nav">
+  <span class="counter" id="counter">1 / 4</span>
+  <button onclick="go(-1)">←</button>
+  <button onclick="go(1)">→</button>
+</div>
+<script>
+const s=[...document.querySelectorAll('.slide')];let i=0;
+function show(){s.forEach((x,k)=>x.classList.toggle('active',k===i));
+document.getElementById('counter').textContent=(i+1)+' / '+s.length;
+document.getElementById('progress').style.width=((i+1)/s.length*100)+'%';}
+function go(d){i=Math.max(0,Math.min(s.length-1,i+d));show();}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')go(1);if(e.key==='ArrowLeft')go(-1);});
+show();
+</script>
+</body>
+</html>
