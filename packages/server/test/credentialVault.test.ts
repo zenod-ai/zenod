@@ -2,12 +2,11 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ChassisStorage } from "@zenod/mcp-chassis";
 import { SqliteStateStore } from "zenod";
-import { ZENOD_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { isCredentialHandle } from "../src/credentialVault.js";
 import { Runtime } from "../src/runtime.js";
-import { TenantRuntimeManager } from "../src/tenantRuntime.js";
 
 const dirs: string[] = [];
 
@@ -115,33 +114,37 @@ describe("tenant credential custody", () => {
     }
   });
 
-  it("binds provisioned credentials to the authenticated tenant runtime", async () => {
-    const dataRoot = await tempDir("manager");
-    const manager = new TenantRuntimeManager(dataRoot, ZENOD_AGENT);
+  it("binds provisioned credentials to chassis tenant storage roots", async () => {
+    const dataRoot = await tempDir("chassis");
+    const storage = new ChassisStorage({ dataDir: dataRoot });
+    const alphaStorage = storage.forTenant({ id: "tenant-alpha" });
+    const betaStorage = storage.forTenant({ id: "tenant-beta" });
+    const alpha = new Runtime(alphaStorage.rootDir, undefined, {
+      seedFromEnv: false,
+      tenantId: alphaStorage.tenant.id,
+      credentialMasterKey: "test-only-master-key",
+    });
+    const beta = new Runtime(betaStorage.rootDir, undefined, {
+      seedFromEnv: false,
+      tenantId: betaStorage.tenant.id,
+      credentialMasterKey: "test-only-master-key",
+    });
     try {
-      manager.provision({
-        tenantId: "tenant-alpha",
+      alpha.settings.applyProvision({
         token: "token-alpha",
-        settings: {
-          provider: "anthropic",
-          api_key: "sk-ant-alpha",
-          github_token: "ghp_alpha",
-          vault_repo: "owner/alpha",
-        },
+        provider: "anthropic",
+        api_key: "sk-ant-alpha",
+        github_token: "ghp_alpha",
+        vault_repo: "owner/alpha",
       });
-      manager.provision({
-        tenantId: "tenant-beta",
+      beta.settings.applyProvision({
         token: "token-beta",
-        settings: {
-          provider: "anthropic",
-          api_key: "sk-ant-beta",
-          github_token: "ghp_beta",
-          vault_repo: "owner/beta",
-        },
+        provider: "anthropic",
+        api_key: "sk-ant-beta",
+        github_token: "ghp_beta",
+        vault_repo: "owner/beta",
       });
 
-      const alpha = manager.resolveToken("token-alpha")!.runtime;
-      const beta = manager.resolveToken("token-beta")!.runtime;
       expect(alpha.dataDir).toBe(join(dataRoot, "tenant-alpha"));
       expect(beta.dataDir).toBe(join(dataRoot, "tenant-beta"));
       expect(alpha.settings.get("github_token")).toBe("ghp_alpha");
@@ -150,7 +153,8 @@ describe("tenant credential custody", () => {
       expect(isCredentialHandle(beta.state.getSetting("github_token")!)).toBe(true);
       expect(alpha.credentialVault.materialize("github_token", beta.state.getSetting("github_token")!)).toBeNull();
     } finally {
-      manager.close();
+      alpha.close();
+      beta.close();
     }
   });
 
