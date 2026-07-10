@@ -1,6 +1,6 @@
 # EPIC Z · Zenod Night Sprint — the complete atomic unit, testable by Jordi in the morning
 
-Status: active
+Status: shipped
 Created: 2026-07-11
 Updated: 2026-07-11
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Night-sprint delivery manager (bind on dispatch)
 Steward since: 2026-07-10T20:19:03+02:00
-Last reconciled commit: 43a38a0b551e13d9205455bf09e740fa745799b9
+Last reconciled commit: 35f7cd8cb300b772e5ffca6dec70d37eef5752c1
 Planner: Jordi + Epic 3.0 planner
 Worker: Night-sprint delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -58,14 +58,14 @@ Ship Zenod as ONE self-contained container that is the entire business: public l
 
 SHIP — the journey, nothing else counts. The manager walks it in a REAL BROWSER on the LIVE deployment, in a loop (walk → first breakage → fix → deploy → walk again from step 1), until ONE uninterrupted clean pass, screenshots per step:
 
-- [ ] 1. Open the product domain logged out → a NORMAL LANDING PAGE: what Zenod is, "Get started", "Pricing", "Sign in". No console, no token field anywhere public.
-- [ ] 2. Pricing page: exactly three options — Self-hosted (free, links to README/one-liner), Monthly, Yearly. Stripe TEST for the paid two.
-- [ ] 3. Sign in with GitHub — the ONLY sign-in method tonight, and it already works on the deployed pilot; reuse that exact flow. Signing in returns you to the landing page, now showing your name + a "Dashboard" link. Registration IS sign-in. No Google button anywhere (future thing, not tonight).
-- [ ] 4. Subscribe (monthly, TEST card): checkout session created server-side with `client_reference_id` = account id; webhook inserts the tenant row bound to that account; return lands in the dashboard.
-- [ ] 5. Dashboard (`/app` or app subdomain, with a clear link back to the landing): MCP URL + token FRONT AND CENTER with copy button and Claude/Codex snippets; Connect-your-vault (GitHub repo authorize + pick — repo identity may differ from login identity); credit/usage; settings. Tabs REMOVED for Zenod: Transcription, WhatsApp, Telegram, Ring — gone, not hidden behind flags that might flip back.
-- [ ] 6. Connect a test vault repo through the UI; MCP `initialize` + one tool call against the minted URL succeeds.
-- [ ] 7. Log out, log back in: everything persists. An unsubscribed signed-in account sees the dashboard replaced by an upgrade prompt.
-- [ ] 8. Morning package posted: "I walked the full journey myself and it works" + landing URL + per-step screenshots. Every element Jordi will click was clicked by the manager in the same deployed build.
+- [x] 1. Open the product domain logged out → a NORMAL LANDING PAGE: what Zenod is, "Get started", "Pricing", "Sign in". No console, no token field anywhere public.
+- [x] 2. Pricing page: exactly three options — Self-hosted (free, links to README/one-liner), Monthly, Yearly. Stripe TEST for the paid two.
+- [x] 3. Sign in with GitHub — the ONLY sign-in method tonight, and it already works on the deployed pilot; reuse that exact flow. Signing in returns you to the landing page, now showing your name + a "Dashboard" link. Registration IS sign-in. No Google button anywhere (future thing, not tonight).
+- [x] 4. Subscribe (monthly, TEST card): checkout session created server-side with `client_reference_id` = account id; webhook inserts the tenant row bound to that account; return lands in the dashboard.
+- [x] 5. Dashboard (`/app` or app subdomain, with a clear link back to the landing): MCP URL + token FRONT AND CENTER with copy button and Claude/Codex snippets; Connect-your-vault (GitHub repo authorize + pick — repo identity may differ from login identity); credit/usage; settings. Tabs REMOVED for Zenod: Transcription, WhatsApp, Telegram, Ring — gone, not hidden behind flags that might flip back.
+- [x] 6. Connect a test vault repo through the UI; MCP `initialize` + one tool call against the minted URL succeeds.
+- [x] 7. Log out, log back in: everything persists. An unsubscribed signed-in account sees the dashboard replaced by an upgrade prompt.
+- [x] 8. Morning package posted: "I walked the full journey myself and it works" + landing URL + per-step screenshots. Every element Jordi will click was clicked by the manager in the same deployed build.
 
 HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07-11), transcription relocation to Phylax, old-tenant migration, mind.zenod.dev/cloud cleanup beyond what step 5 requires, self-host README polish.
 
@@ -78,12 +78,12 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 
 ## Current State
 
-Phase: wave 2 active
-Last verified: 2026-07-10T21:13:00+02:00
+Phase: shipped - clean live journey complete
+Last verified: 2026-07-10T23:16:00+02:00
 Integration target: main
 Wave 1 base commit: `2632e8f68122a7e05a178020bb0601813de36704` — pinned; no rebases were performed (D19c)
 Wave 2 base commit: `43a38a0b551e13d9205455bf09e740fa745799b9` — integrated wave 1, pinned
-Next action: manager monitors Z-N3/Z-N5, integrates passing PRs, deploys one container, then starts Z-N6.
+Next action: Jordi tests the shipped journey from `https://zenod.dev/`.
 Blockers: none — every decision is pre-answered below. Inputs from Jordi are non-blocking (decision rules given).
 
 ## Role Goals
@@ -143,9 +143,9 @@ Every decision pre-answered; the manager invents nothing:
 | [#802](https://github.com/zenod-ai/zenod/issues/802) | Ticket worker | Z-N1-takeover / Hegel | Z-N1 landing + pricing served from the container | done | - | [#810](https://github.com/zenod-ai/zenod/pull/810) / `codex/z-n1-landing-pricing` | `2632e8f` | Journey steps 1–2 render | targeted tests/build/typecheck; merged `43a38a0` | 2026-07-10T21:12:00+02:00 | integrated |
 | [#806](https://github.com/zenod-ai/zenod/issues/806) | Ticket worker | Z-N2-worker / Feynman | Z-N2 total cloud customer-layer transplant | done | - | [#809](https://github.com/zenod-ai/zenod/pull/809) / `codex/z-n2-auth-transplant` | `2632e8f` | Auth/accounts/billing/UI/metering ported; four corpses excluded | 43 targeted tests + builds; merged `b248687` | 2026-07-10T21:11:00+02:00 | integrated |
 | [#801](https://github.com/zenod-ai/zenod/issues/801) | Ticket worker | Z-N4-worker / Arendt | Z-N4 dashboard reshape: MCP-first, vault, credit; delete non-Zenod tabs | done | - | [#808](https://github.com/zenod-ai/zenod/pull/808) / `codex/z-n4-dashboard` | `2632e8f` | Journey step 5 | 5 tests + build/browser checks; merged `f5c2cf0` | 2026-07-10T21:04:00+02:00 | integrated |
-| [#804](https://github.com/zenod-ai/zenod/issues/804) | Ticket worker | Z-N3-worker / Archimedes | Z-N3 adapt transplanted Stripe billing to local tenant rows | in progress | [#806](https://github.com/zenod-ai/zenod/issues/806) done | `codex/z-n3-billing` | `43a38a0` | Journey steps 4, 7b | dispatched with TEST prices | 2026-07-10T21:13:00+02:00 | local tenant binding + tests + PR |
-| [#803](https://github.com/zenod-ai/zenod/issues/803) | Ticket worker | Z-N5-worker / Turing | Z-N5 one domain family; re-mint MCP URLs; 301 mind host | in progress | domain rule resolved | `codex/z-n5-domain` | `43a38a0` | One container serves 1–7; cloud runs nothing | live map + rollback inputs recorded | 2026-07-10T21:13:00+02:00 | cutover path + tests + PR |
-| [#805](https://github.com/zenod-ai/zenod/issues/805) | Epic worker | Night-sprint delivery manager | Z-N6 journey loop to one clean pass + morning package | ready | Z-N3, Z-N5 | manager | `43a38a0` | SHIP items 1–8 | browser route prepared | 2026-07-10T21:13:00+02:00 | deploy, then walk from step 1 |
+| [#804](https://github.com/zenod-ai/zenod/issues/804) | Ticket worker | Z-N3-worker / Archimedes | Z-N3 adapt transplanted Stripe billing to local tenant rows | done | [#806](https://github.com/zenod-ai/zenod/issues/806) done | [#813](https://github.com/zenod-ai/zenod/pull/813) / `codex/z-n3-billing` | `43a38a0` | Journey steps 4, 7b | merged `1e76bde`; live TEST checkout inserted tenant | 2026-07-10T23:16:00+02:00 | integrated |
+| [#803](https://github.com/zenod-ai/zenod/issues/803) | Ticket worker | Z-N5-worker / Turing | Z-N5 one domain family; re-mint MCP URLs; 301 mind host | done | domain rule resolved | [#812](https://github.com/zenod-ai/zenod/pull/812) / `codex/z-n5-domain` | `43a38a0` | One container serves 1–7; cloud runs nothing | cloud canonical; retired hosts 404; mind path-preserving 301 | 2026-07-10T23:16:00+02:00 | integrated |
+| [#805](https://github.com/zenod-ai/zenod/issues/805) | Epic worker | Night-sprint delivery manager | Z-N6 journey loop to one clean pass + morning package | done | Z-N3, Z-N5 | [#814](https://github.com/zenod-ai/zenod/pull/814), [#815](https://github.com/zenod-ai/zenod/pull/815), [#816](https://github.com/zenod-ai/zenod/pull/816), [#817](https://github.com/zenod-ai/zenod/pull/817) | `43a38a0` | SHIP items 1–8 | uninterrupted Chrome pass on `35f7cd8`; seven screenshots; MCP initialize + tool call | 2026-07-10T23:16:00+02:00 | morning package |
 
 ## Branch And Integration
 
@@ -187,9 +187,16 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
-| pending | SHIP journey clean pass | - | live product domain | real browser walk, screenshots per step | pending | morning package |
+| 2026-07-10 | SHIP journey clean pass | `35f7cd8` | `zenod.dev` + `cloud.zenod.dev` | Chrome stranger journey, Stripe TEST card, existing GitHub App repo picker, MCP JSON-RPC, logout/login | PASS | `docs/evidence/night-sprint-2026-07-10/` |
 
 ## Handoff Journal
+
+### 2026-07-10T23:16:00+02:00 - Night-sprint delivery manager - SHIP journey clean
+
+Deployed: `35f7cd8cb300b772e5ffca6dec70d37eef5752c1` on the one `zenod-mt` service with the existing `/data` volume. `zenod.dev` serves the public landing/pricing; `cloud.zenod.dev` serves GitHub auth, checkout, dashboard, and MCP. `mind.zenod.dev` is a path-preserving 301; `cloud-test.zenod.dev` and `zenod.zenod.dev` return 404; both old cloud composes are stopped with records/volumes retained for rollback.
+Journey: one uninterrupted Chrome pass opened the logged-out landing, verified exactly three plans, signed in through the existing GitHub OAuth app, completed a monthly Stripe TEST subscription, landed in the MCP-first dashboard, selected and cloned `AlfaBlok/zenod-cloud-test-vault-4ptjqj` through the transplanted existing GitHub App, completed MCP `initialize` plus a successful tool call, logged out to the GitHub-only login page, and logged back in with the same token/vault persisted.
+Evidence: `docs/evidence/night-sprint-2026-07-10/`. The bearer credential visible in screenshots was rotated after capture and proved invalid; the replacement credential passed initialize/tool-call smoke and is not recorded.
+Next: Jordi starts at `https://zenod.dev/` and tests the same journey.
 
 ### 2026-07-10T21:13:00+02:00 - Night-sprint delivery manager - Wave 1 integrated; wave 2 dispatched
 
