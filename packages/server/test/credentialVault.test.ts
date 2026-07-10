@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChassisStorage } from "@zenod/mcp-chassis";
 import { SqliteStateStore } from "zenod";
 import { createApp } from "../src/app.js";
-import { isCredentialHandle } from "../src/credentialVault.js";
+import { ChassisCredentialVault, isCredentialHandle } from "../src/credentialVault.js";
 import { Runtime } from "../src/runtime.js";
 
 const dirs: string[] = [];
@@ -114,20 +114,22 @@ describe("tenant credential custody", () => {
     }
   });
 
-  it("binds provisioned credentials to chassis tenant storage roots", async () => {
+  it("implements hosted chassis custody with tenant, key, and handle binding", async () => {
     const dataRoot = await tempDir("chassis");
     const storage = new ChassisStorage({ dataDir: dataRoot });
     const alphaStorage = storage.forTenant({ id: "tenant-alpha" });
     const betaStorage = storage.forTenant({ id: "tenant-beta" });
+    const alphaCredentials = new ChassisCredentialVault(alphaStorage);
+    const betaCredentials = new ChassisCredentialVault(betaStorage);
     const alpha = new Runtime(alphaStorage.rootDir, undefined, {
       seedFromEnv: false,
       tenantId: alphaStorage.tenant.id,
-      credentialMasterKey: "test-only-master-key",
+      credentialVault: alphaCredentials,
     });
     const beta = new Runtime(betaStorage.rootDir, undefined, {
       seedFromEnv: false,
       tenantId: betaStorage.tenant.id,
-      credentialMasterKey: "test-only-master-key",
+      credentialVault: betaCredentials,
     });
     try {
       alpha.settings.applyProvision({
@@ -149,13 +151,76 @@ describe("tenant credential custody", () => {
       expect(beta.dataDir).toBe(join(dataRoot, "tenant-beta"));
       expect(alpha.settings.get("github_token")).toBe("ghp_alpha");
       expect(beta.settings.get("github_token")).toBe("ghp_beta");
-      expect(isCredentialHandle(alpha.state.getSetting("github_token")!)).toBe(true);
-      expect(isCredentialHandle(beta.state.getSetting("github_token")!)).toBe(true);
-      expect(alpha.credentialVault.materialize("github_token", beta.state.getSetting("github_token")!)).toBeNull();
+      const alphaHandle = alpha.state.getSetting("github_token")!;
+      const betaHandle = beta.state.getSetting("github_token")!;
+      expect(isCredentialHandle(alphaHandle)).toBe(true);
+      expect(isCredentialHandle(betaHandle)).toBe(true);
+      expect(alphaHandle).not.toBe(betaHandle);
+      expect(alphaCredentials.materialize("github_token", betaHandle)).toBeNull();
+      expect(betaCredentials.materialize("github_token", alphaHandle)).toBeNull();
+      expect(alphaCredentials.materialize("anthropic_api_key", alphaHandle)).toBeNull();
+      expect(alphaCredentials.list().map((entry) => entry.key)).toEqual([
+        "anthropic_api_key",
+        "github_token",
+      ]);
+
+      const alphaRawVault = alphaStorage.vault();
+      const betaRawVault = betaStorage.vault();
+      try {
+        const recordKey = alphaRawVault.listKeys().find((key) => key.endsWith(".github_token"))!;
+        betaRawVault.set(recordKey, alphaRawVault.get(recordKey)!);
+      } finally {
+        alphaRawVault.close();
+        betaRawVault.close();
+      }
+      expect(betaCredentials.materialize("github_token", alphaHandle)).toBeNull();
+
+      beta.state.setSetting("github_token", alphaHandle);
+      expect(beta.settings.get("github_token")).toBeNull();
+      expect(betaCredentials.delete("github_token", alphaHandle)).toBe(false);
+      expect(alphaCredentials.delete("github_token", alphaHandle)).toBe(true);
+      expect(alphaCredentials.materialize("github_token", alphaHandle)).toBeNull();
+
+      const alphaSettingsDb = alphaStorage.db("zenod.sqlite");
+      try {
+        const rows = alphaSettingsDb
+          .prepare("SELECT key, value FROM settings WHERE key IN ('github_token', 'anthropic_api_key') ORDER BY key")
+          .all();
+        const serialized = JSON.stringify(rows);
+        expect(serialized).not.toContain("ghp_alpha");
+        expect(serialized).not.toContain("sk-ant-alpha");
+        expect(serialized).toContain("zenod-secret:v1:");
+      } finally {
+        alphaSettingsDb.close();
+      }
+
+      await expect(stat(join(alphaStorage.rootDir, ".zenod-vault-key"))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       alpha.close();
       beta.close();
     }
+  });
+
+  it("supports hosted put, update, list, delete, and close without exposing values", async () => {
+    const dataRoot = await tempDir("chassis-lifecycle");
+    const storage = new ChassisStorage({ dataDir: dataRoot }).forTenant({ id: "tenant-lifecycle" });
+    const credentials = new ChassisCredentialVault(storage, { vaultName: "credentials.sqlite" });
+
+    const firstHandle = credentials.put("github_token", "ghp_first");
+    const secondHandle = credentials.put("github_token", "ghp_second");
+    expect(secondHandle).toBe(firstHandle);
+    expect(credentials.materialize("github_token", firstHandle)).toBe("ghp_second");
+    expect(credentials.materialize("openai_api_key", firstHandle)).toBeNull();
+    expect(credentials.list()).toEqual([
+      expect.objectContaining({ key: "github_token", handle: firstHandle }),
+    ]);
+    expect(JSON.stringify(credentials.list())).not.toContain("ghp_second");
+    const wrongHandle = `${firstHandle.slice(0, -1)}${firstHandle.endsWith("0") ? "1" : "0"}`;
+    expect(credentials.delete("github_token", wrongHandle)).toBe(false);
+    expect(credentials.delete("github_token", firstHandle)).toBe(true);
+    expect(credentials.list()).toEqual([]);
+    credentials.close();
+    expect(() => credentials.list()).toThrow("credential vault is closed");
   });
 
   it("returns only masked credential metadata and does not log submitted values", async () => {

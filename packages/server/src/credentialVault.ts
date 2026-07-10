@@ -2,10 +2,13 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openSqlite } from "@zenod/mcp-chassis";
+import { openSqlite, type TenantStorage, type TenantVault } from "@zenod/mcp-chassis";
 
 const HANDLE_PREFIX = "zenod-secret:v1:";
+const HANDLE_RE = /^zenod-secret:v1:[a-f0-9]{48}$/;
 const LOCAL_KEY_FILE = ".zenod-vault-key";
+const CHASSIS_RECORD_PREFIX = "zenod.credential.";
+const CHASSIS_RECORD_OWNER = "zenod";
 
 export interface CredentialMetadata {
   key: string;
@@ -29,6 +32,120 @@ export interface SqliteCredentialVaultOptions {
   dataDir: string;
   tenantId: string;
   masterKey?: string;
+}
+
+interface ChassisCredentialEnvelope {
+  version: 1;
+  owner: typeof CHASSIS_RECORD_OWNER;
+  tenantId: string;
+  key: string;
+  handle: string;
+  value: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChassisCredentialVaultOptions {
+  vaultName?: string;
+}
+
+/**
+ * Hosted adapter over the vault handle supplied by an authenticated chassis
+ * UnitContext. Tenant identity is accepted only from TenantStorage, never input.
+ */
+export class ChassisCredentialVault implements CredentialVault {
+  private readonly tenantId: string;
+  private readonly vault: TenantVault;
+  private closed = false;
+
+  constructor(storage: TenantStorage, options: ChassisCredentialVaultOptions = {}) {
+    this.tenantId = storage.tenant.id;
+    assertTenantId(this.tenantId);
+    this.vault = options.vaultName ? storage.vault(options.vaultName) : storage.vault();
+  }
+
+  put(key: string, value: string): string {
+    this.assertOpen();
+    const safeKey = assertCredentialKey(key);
+    if (!value) throw new Error("credential value must not be empty");
+    const existing = this.readEnvelope(safeKey);
+    const now = Date.now();
+    const envelope: ChassisCredentialEnvelope = {
+      version: 1,
+      owner: CHASSIS_RECORD_OWNER,
+      tenantId: this.tenantId,
+      key: safeKey,
+      handle: existing?.handle ?? newCredentialHandle(),
+      value,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.vault.set(chassisRecordKey(safeKey), JSON.stringify(envelope));
+    return envelope.handle;
+  }
+
+  materialize(key: string, handle: string): string | null {
+    this.assertOpen();
+    if (!isCredentialHandle(handle)) return null;
+    const envelope = this.readEnvelope(assertCredentialKey(key));
+    return envelope?.handle === handle ? envelope.value : null;
+  }
+
+  delete(key: string, handle: string): boolean {
+    this.assertOpen();
+    const safeKey = assertCredentialKey(key);
+    const envelope = this.readEnvelope(safeKey);
+    if (!envelope || envelope.handle !== handle) return false;
+    return this.vault.delete(chassisRecordKey(safeKey)) > 0;
+  }
+
+  list(): CredentialMetadata[] {
+    this.assertOpen();
+    return this.vault
+      .listKeys()
+      .filter((key) => key.startsWith(CHASSIS_RECORD_PREFIX))
+      .map((key) => this.readEnvelope(key.slice(CHASSIS_RECORD_PREFIX.length)))
+      .filter((entry): entry is ChassisCredentialEnvelope => entry !== null)
+      .map((entry) => ({ key: entry.key, handle: entry.handle, updatedAt: entry.updatedAt }));
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.vault.close();
+  }
+
+  private readEnvelope(key: string): ChassisCredentialEnvelope | null {
+    const safeKey = assertCredentialKey(key);
+    const stored = this.vault.get(chassisRecordKey(safeKey));
+    if (!stored) return null;
+    try {
+      const parsed = JSON.parse(stored) as Partial<ChassisCredentialEnvelope>;
+      if (
+        parsed.version !== 1 ||
+        parsed.owner !== CHASSIS_RECORD_OWNER ||
+        parsed.tenantId !== this.tenantId ||
+        parsed.key !== safeKey ||
+        typeof parsed.handle !== "string" ||
+        !isCredentialHandle(parsed.handle) ||
+        typeof parsed.value !== "string" ||
+        !parsed.value ||
+        typeof parsed.createdAt !== "number" ||
+        !Number.isFinite(parsed.createdAt) ||
+        typeof parsed.updatedAt !== "number" ||
+        !Number.isFinite(parsed.updatedAt)
+      ) {
+        return null;
+      }
+      return parsed as ChassisCredentialEnvelope;
+    } catch {
+      return null;
+    }
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error("credential vault is closed");
+  }
 }
 
 /**
@@ -67,7 +184,7 @@ export class SqliteCredentialVault implements CredentialVault {
     const existing = this.db
       .prepare("SELECT handle, created_at FROM credential_entries WHERE tenant_id = ? AND key_name = ?")
       .get(this.options.tenantId, safeKey) as { handle: string; created_at: number } | undefined;
-    const handle = existing?.handle ?? `${HANDLE_PREFIX}${randomBytes(24).toString("hex")}`;
+    const handle = existing?.handle ?? newCredentialHandle();
     const encrypted = encrypt(value, this.encryptionKey, aad(this.options.tenantId, safeKey, handle));
     const now = Date.now();
     this.db
@@ -142,7 +259,15 @@ export class SqliteCredentialVault implements CredentialVault {
 }
 
 export function isCredentialHandle(value: string): boolean {
-  return value.startsWith(HANDLE_PREFIX) && value.length === HANDLE_PREFIX.length + 48;
+  return HANDLE_RE.test(value);
+}
+
+function newCredentialHandle(): string {
+  return `${HANDLE_PREFIX}${randomBytes(24).toString("hex")}`;
+}
+
+function chassisRecordKey(key: string): string {
+  return `${CHASSIS_RECORD_PREFIX}${key}`;
 }
 
 function assertTenantId(tenantId: string): void {
