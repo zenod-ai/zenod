@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "wave": "DX-5",
+  "mode": "preparation-baseline",
+  "generated_at": "2026-07-10T05:20:00+02:00",
+  "bound_issue": "https://github.com/zenod-ai/zenod/issues/730",
+  "basis": {
+    "dx1_inventory": "docs/EPIC-3.7-DX1-INVENTORY.md",
+    "dx1_inventory_commit": "69bee3a",
+    "dx2_execution_issue": "https://github.com/zenod-ai/zenod/issues/722",
+    "dx2_package_commit": "cd9c21f",
+    "dx2_approval_receipt": "https://github.com/zenod-ai/zenod/issues/722#issuecomment-4931281736",
+    "dx2_acceptance_receipt": "https://github.com/zenod-ai/zenod/issues/722#issuecomment-4931408431"
+  },
+  "scope_rules": {
+    "retirement_topologies": [
+      "separate-per-user",
+      "suite-bundled"
+    ],
+    "excluded_topologies": [
+      "canonical-shared",
+      "ephemeral-sandbox"
+    ],
+    "separate_row_name_patterns": [
+      "e-*",
+      "epaminon-<tenant>*"
+    ],
+    "suite_service_names": [
+      "zenod-epaminon"
+    ]
+  },
+  "zero_instance_proof": {
+    "status": "baseline-only",
+    "assertion": "DX-1 classified zero separate live per-user Epaminon rows. This is not a current-fleet or zero-suite-executor proof.",
+    "separate_per_user_rows": 0,
+    "basis_refs": [
+      "docs/EPIC-3.7-DX1-INVENTORY.md#dokploy-project-zenod-inventory",
+      "docs/EPIC-3.7-DX1-INVENTORY.md#ring-suite-container-expansion"
+    ],
+    "operational_requirement": "Replace baseline-only with proven only after a fresh re-inventory finds no separate-per-user or suite-bundled retirement row."
+  },
+  "canonical_exclusions": [
+    {
+      "row_id": "x9WtBYq_vcUFPW2WADcQP",
+      "name": "epaminon",
+      "topology": "canonical-shared",
+      "container": "zenod-epaminon",
+      "reason": "DX-1 classified this as the named shared unit row, not a per-user retirement target. E-MT-7 must replace it with epaminon-api rather than retire it as a tenant row."
+    }
+  ],
+  "dx2_retired_suite_executors": [
+    {
+      "row_id": "1xcTXFoe8xVjsih1LC5c9",
+      "name": "ring-jorditestring-0ce4bp",
+      "classification": "test",
+      "service": "zenod-epaminon"
+    },
+    {
+      "row_id": "gl-REbqCb5mIzVM7D_4DI",
+      "name": "ring-ringcloudtest2026070-yfnwxy",
+      "classification": "test",
+      "service": "zenod-epaminon"
+    },
+    {
+      "row_id": "epsGDOO6tkTQ6i9B_HnRt",
+      "name": "ring-ringe2emain202607092-lw5wat",
+      "classification": "test",
+      "service": "zenod-epaminon"
+    },
+    {
+      "row_id": "HL8JfN2zVmkuM5mhaCBQS",
+      "name": "ring-ringnotouch20260709-wl3hhm",
+      "classification": "test",
+      "service": "zenod-epaminon"
+    },
+    {
+      "row_id": "qvxRcJxBvWqYp-AYPLS3t",
+      "name": "ring-ringtest20260709-8uiw3s",
+      "classification": "test",
+      "service": "zenod-epaminon"
+    },
+    {
+      "row_id": "u8EwwHmyykYv1qbv2sPmP",
+      "name": "tenant-testco",
+      "classification": "test",
+      "service": "zenod-epaminon"
+    }
+  ],
+  "known_unresolved_scope": [
+    {
+      "row_id": "a5BbpChW5PKgXUJFZSUNo",
+      "name": "ring-jordiring-fkegkz",
+      "classification": "unknown",
+      "topology": "suite-bundled",
+      "container": "compose-quantify-open-source-pixel-siik6w-zenod-epaminon-1",
+      "dx2_disposition": "excluded from DX-2 and retained",
+      "required_action": "A fresh DX-5 inventory must either rediscover this exact row and place it in candidates with tenant/job-history/archive/rollback/removal evidence, or provide evidence that another approved wave already retired it."
+    }
+  ],
+  "candidates": []
+}
