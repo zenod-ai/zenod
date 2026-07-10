@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { configureSqlite } from "./sqlitePragmas.js";
+import { openSqlite } from "@zenod/mcp-chassis";
 
 const HANDLE_PREFIX = "zenod-secret:v1:";
 const LOCAL_KEY_FILE = ".zenod-vault-key";
@@ -43,8 +43,7 @@ export class SqliteCredentialVault implements CredentialVault {
     assertTenantId(options.tenantId);
     mkdirSync(options.dataDir, { recursive: true });
     this.encryptionKey = deriveEncryptionKey(options);
-    this.db = new DatabaseSync(join(options.dataDir, "vault.sqlite"));
-    configureSqlite(this.db);
+    this.db = openSqlite(join(options.dataDir, "vault.sqlite"));
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS credential_entries (
         handle TEXT PRIMARY KEY,
