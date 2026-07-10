@@ -81,11 +81,12 @@ HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via 
 
 ## Current State
 
-Phase: wave 1 dispatched
-Last verified: 2026-07-11T01:40:00+02:00
+Phase: wave 2 dispatched
+Last verified: 2026-07-11T01:54:00+02:00
 Integration target: main
 Fresh base commit: `28904a1939f0cbfaa2733a525cbb15e244c14b06` — pinned; no rebases until the journey passes (D19c)
-Next action: C-S1 and C-S2 execute in parallel worktrees; manager monitors, integrates passing PRs, then dispatches wave 2.
+Wave 2 base commit: `fcd37f89d0e5c6c514dd115ae3ba3dce135f3eaa` — integrated wave 1, pinned.
+Next action: C-S3 and C-S4 execute in parallel worktrees; manager monitors, integrates, deploys, then starts C-S5.
 Blockers: none — decisions pre-answered below; inputs have absence-rules.
 
 ## Role Goals
@@ -142,10 +143,10 @@ Pre-answered; the manager invents nothing:
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#821](https://github.com/zenod-ai/zenod/issues/821) | Ticket worker | C-S1-worker | C-S1 front duplicate (DUPLICATE zenod customer layer + landing) | in progress | - | `codex/c-s1-front-duplicate` / `../wt-c-s1` | `28904a1` | SHIP 1–4 render/flow | dispatched | 2026-07-11T01:40:00+02:00 | implement, validate, PR |
-| [#823](https://github.com/zenod-ai/zenod/issues/823) | Ticket worker | C-S2-worker | C-S2 engine port (PORT units/callisthenes, behavior frozen) | in progress | - | `codex/c-s2-engine-port` / `../wt-c-s2` | `28904a1` | connect/draft/send/receipt work per tenant | dispatched | 2026-07-11T01:40:00+02:00 | implement, validate, PR |
-| [#825](https://github.com/zenod-ai/zenod/issues/825) | Ticket worker | C-S3-worker | C-S3 dashboard panels (PORT connect_page + DUPLICATE MCP-first panel) | ready | #821, #823 | `codex/c-s3-dashboard` / `../wt-c-s3` | `28904a1` | SHIP 5–6 | - | 2026-07-11T01:40:00+02:00 | wave 2 after dependencies |
-| [#824](https://github.com/zenod-ai/zenod/issues/824) | Ticket worker | C-S4-worker | C-S4 billing + domain (DUPLICATE Z-N3/Z-N5 recipe) | ready | #821 | `codex/c-s4-billing-domain` / `../wt-c-s4` | `28904a1` | SHIP 2, 4; calli.zenod.dev live, guarded | - | 2026-07-11T01:40:00+02:00 | wave 2 after dependency |
+| [#821](https://github.com/zenod-ai/zenod/issues/821) | Ticket worker | C-S1-worker | C-S1 front duplicate (DUPLICATE zenod customer layer + landing) | done | - | [#826](https://github.com/zenod-ai/zenod/pull/826) / `codex/c-s1-front-duplicate` | `28904a1` | SHIP 1–4 render/flow | CI + targeted checks; merged `34a1398` | 2026-07-11T01:54:00+02:00 | integrated |
+| [#823](https://github.com/zenod-ai/zenod/issues/823) | Ticket worker | C-S2-worker | C-S2 engine port (PORT units/callisthenes, behavior frozen) | done | - | [#827](https://github.com/zenod-ai/zenod/pull/827) / `codex/c-s2-engine-port` | `28904a1` | connect/draft/send/receipt work per tenant | CI + 98 tests; merged `fcd37f8` | 2026-07-11T01:54:00+02:00 | integrated |
+| [#825](https://github.com/zenod-ai/zenod/issues/825) | Ticket worker | C-S3-worker | C-S3 dashboard panels (PORT connect_page + DUPLICATE MCP-first panel) | in progress | #821, #823 done | `codex/c-s3-dashboard` / `../wt-c-s3` | `fcd37f8` | SHIP 5–6 | dispatched | 2026-07-11T01:54:00+02:00 | implement, validate, PR |
+| [#824](https://github.com/zenod-ai/zenod/issues/824) | Ticket worker | C-S4-worker | C-S4 billing + domain (DUPLICATE Z-N3/Z-N5 recipe) | in progress | #821 done | `codex/c-s4-billing-domain` / `../wt-c-s4` | `fcd37f8` | SHIP 2, 4; calli.zenod.dev live, guarded | dispatched | 2026-07-11T01:54:00+02:00 | implement, validate, PR |
 | [#822](https://github.com/zenod-ai/zenod/issues/822) | Epic worker | Callisthenes delivery manager | C-S5 journey loop + two-tenant isolation + test package | ready | #821, #823, #825, #824 | - | `28904a1` | SHIP 1–9 | - | 2026-07-11T01:40:00+02:00 | last |
 
 ## Branch And Integration
@@ -192,6 +193,12 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | pending | SHIP journey clean pass | - | calli.zenod.dev live | real browser walk, screenshots per step | pending | test package |
 
 ## Handoff Journal
+
+### 2026-07-11T01:54:00+02:00 - Callisthenes delivery manager - Wave 1 integrated; wave 2 dispatched
+
+Context: C-S1 passed CI and merged as `34a1398`; C-S2 passed CI after review closed tenant throttle timing and shared-auth mutation leaks, then merged as `fcd37f8`. Wave 2 is pinned to integrated commit `fcd37f89d0e5c6c514dd115ae3ba3dce135f3eaa` without rebasing the wave-1 workers.
+Assignments: C-S3-worker / `codex/c-s3-dashboard` / `../wt-c-s3`; C-S4-worker / `codex/c-s4-billing-domain` / `../wt-c-s4`.
+Next: integrate C-S3/C-S4, publish and deploy the one Callisthenes unit without touching the old 2.x services, then start the live C-S5 journey at `https://calli.zenod.dev/`.
 
 ### 2026-07-11T01:40:00+02:00 - Callisthenes delivery manager - Steward bound and wave 1 dispatched
 
