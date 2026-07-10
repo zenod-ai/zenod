@@ -321,6 +321,7 @@ export type MediaIngestReceipt = {
     githubUrls: string[]
   }
   transcription?: "provided" | "performed"
+  sttCalls?: number
   nextAdapterIssues?: string[]
 }
 

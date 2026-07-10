@@ -263,6 +263,7 @@ async function processMediaIngest(
   }
 
   const engine = await getEngine();
+  let sttCalls = 0;
   const transcription = canTranscribe
     ? input.transcript
       ? "provided"
@@ -271,7 +272,10 @@ async function processMediaIngest(
   const extraction = canTranscribe
     ? input.transcript
       ? providedTranscriptExtraction(input.transcript, archived)
-      : await mediaTranscriber(settings, archived)
+      : await (async () => {
+          sttCalls += 1;
+          return mediaTranscriber(settings, archived);
+        })()
     : canExtractArtifact
       ? await extractVisualMedia(engine, archived)
       : extractTextMedia(archived);
@@ -335,7 +339,7 @@ async function processMediaIngest(
       commitSha: stored.commitSha,
       githubUrls: stored.githubUrls,
     },
-    ...(transcription ? { transcription } : {}),
+    ...(transcription ? { transcription, sttCalls } : {}),
   };
 }
 

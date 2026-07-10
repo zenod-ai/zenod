@@ -1084,11 +1084,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
           classification.question ?? "Where should this memory be filed? I could not classify it confidently.";
         const stubPath = await writeInboxStub(input.content, question, evidenceRef);
         const sha = await repo.commitAndPush(`memory: (inbox) ${classification.summary}`);
+        const committedLocation = { ...location, branch: sha };
         return {
           evidenceRef,
           pagesTouched: [stubPath],
           commitSha: sha,
-          githubUrls: [githubUrl(location, evidence.logPath), githubUrl(location, stubPath)].filter(Boolean),
+          githubUrls: [githubUrl(committedLocation, evidence.logPath), githubUrl(committedLocation, stubPath)].filter(Boolean),
           question,
         };
       }
@@ -1178,24 +1179,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
         const stubPath = await writeInboxStub(input.content, question, retriedRef);
         const sha = await repo.commitAndPush(`memory: (inbox) ${classification.summary}`);
+        const committedLocation = { ...location, branch: sha };
         return {
           evidenceRef: retriedRef,
           pagesTouched: [stubPath],
           commitSha: sha,
-          githubUrls: [githubUrl(location, retried.logPath), githubUrl(location, stubPath)].filter(Boolean),
+          githubUrls: [githubUrl(committedLocation, retried.logPath), githubUrl(committedLocation, stubPath)].filter(Boolean),
           question,
         };
       }
 
       // 7-8. One commit per store.
       const sha = await repo.commitAndPush(`memory: ${classification.summary}`);
+      const committedLocation = { ...location, branch: sha };
       const result: StoreResult = {
         evidenceRef,
         pagesTouched: touched,
         commitSha: sha,
         githubUrls: [
-          githubUrl(location, evidence.logPath),
-          ...touched.map((p) => githubUrl(location, p)),
+          githubUrl(committedLocation, evidence.logPath),
+          ...touched.map((p) => githubUrl(committedLocation, p)),
         ].filter(Boolean),
       };
       if (shouldDigestForBacklog(input)) {

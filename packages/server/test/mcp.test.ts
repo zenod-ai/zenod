@@ -259,6 +259,7 @@ describe("MCP endpoint", () => {
     expect(receipt).toMatchObject({
       status: "done",
       transcription: "provided",
+      sttCalls: 0,
       source: {
         transcript: {
           source: "phylax",

@@ -107,6 +107,8 @@ export interface MediaIngestReceipt {
     githubUrls: string[];
   };
   transcription?: "provided" | "performed";
+  /** Number of Zenod STT provider invocations for this ingest. */
+  sttCalls?: number;
   nextAdapterIssues?: string[];
 }
 

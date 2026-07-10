@@ -8,6 +8,11 @@ import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 
 const TENANT_COUNT = 3;
+const REQUIRED_FULL_REPOS = [
+  "AlfaBlok/test_evals",
+  "AlfaBlok/react_test1",
+  "AlfaBlok/zenod-cloud-test-vault-4ptjqj",
+];
 const CHASSIS_SQLITE_PATHS = ["chassis-tenants.sqlite", "usage.sqlite"];
 const REQUIRED_TENANT_PATHS = [
   "zenod.sqlite",
@@ -103,15 +108,24 @@ export function redact(value) {
     return Object.fromEntries(
       Object.entries(value).map(([key, child]) => [
         key,
-        /token|secret|password|authorization|cookie|private.?key/i.test(key) ? "[redacted]" : redact(child),
+        isSecretFieldName(key) ? "[redacted]" : redact(child),
       ]),
     );
   }
   if (typeof value !== "string") return value;
   return value
     .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\/mcp\/[^/?#\s]+/gi, "/mcp/[redacted]")
     .replace(/zenod_[A-Za-z0-9_-]{12,}/g, "zenod_[redacted]")
     .replace(/gh[pousr]_[A-Za-z0-9_]+/g, "gh_[redacted]");
+}
+
+function isSecretFieldName(key) {
+  return (
+    /password|authorization|cookie|private.?key|secret/i.test(key) ||
+    /^(?:token|rawToken|apiKey|githubToken|openrouterApiKey)$/i.test(key) ||
+    /(?:^|_)(?:token|api_key|github_token|openrouter_api_key)$/i.test(key)
+  );
 }
 
 export function assertNoForeignMarker(payload, ownMarker, foreignMarkers) {
@@ -137,6 +151,15 @@ function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, "");
 }
 
+function canonicalEndpoint(value) {
+  const parsed = new URL(value);
+  const protocol = parsed.protocol.toLowerCase();
+  const hostname = parsed.hostname.toLowerCase();
+  const port = parsed.port || (protocol === "https:" ? "443" : protocol === "http:" ? "80" : "");
+  const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+  return `${protocol}//${hostname}:${port}${pathname}`;
+}
+
 function tenantFixture(index, runId, env) {
   const label = `T${index + 1}`;
   const lower = label.toLowerCase();
@@ -155,6 +178,67 @@ function tenantFixture(index, runId, env) {
   };
 }
 
+export function assertFullModePrerequisites(options, tenants, env) {
+  if (options.mode !== "full") return;
+  if (!options.dataRoot) {
+    throw new ProofFailure("full mode requires EPIC32_DATA_ROOT or --data-root", {
+      kind: "prerequisite",
+    });
+  }
+  const actualRepos = tenants.map((tenant) => tenant.repo);
+  if (JSON.stringify(actualRepos) !== JSON.stringify(REQUIRED_FULL_REPOS)) {
+    throw new ProofFailure(
+      `full mode requires the exact approved repositories in T1/T2/T3 order: ${REQUIRED_FULL_REPOS.join(", ")}`,
+      { kind: "prerequisite", detail: { actualRepos } },
+    );
+  }
+  if (!env.EPIC32_GITHUB_TOKEN || !env.EPIC32_LLM_API_KEY || !env.CHASSIS_VAULT_MASTER_KEY) {
+    throw new ProofFailure("full mode requires EPIC32_GITHUB_TOKEN, EPIC32_LLM_API_KEY, and CHASSIS_VAULT_MASTER_KEY", {
+      kind: "prerequisite",
+    });
+  }
+  if (tenants.some((tenant) => tenant.githubToken !== env.EPIC32_GITHUB_TOKEN)) {
+    throw new ProofFailure("full mode requires the one approved EPIC32_GITHUB_TOKEN for all three tenants", {
+      kind: "prerequisite",
+    });
+  }
+  for (const [name, value] of [
+    ["self-host URL", options.selfHostUrl],
+    ["self-host token", options.selfHostToken],
+    ["migrated URL", options.migratedUrl],
+    ["migrated token", options.migratedToken],
+    ["self-host repo", env.EPIC32_SELF_HOST_REPO],
+    ["migrated repo", env.EPIC32_MIGRATED_REPO],
+  ]) {
+    if (!value) throw new ProofFailure(`full mode requires ${name}`, { kind: "prerequisite" });
+  }
+  for (const repo of [env.EPIC32_SELF_HOST_REPO, env.EPIC32_MIGRATED_REPO]) {
+    if (!REQUIRED_FULL_REPOS.includes(repo)) {
+      throw new ProofFailure(`full parity repo must be one of the three approved disposable repositories: ${repo}`, {
+        kind: "prerequisite",
+      });
+    }
+  }
+  const endpoints = [options.baseUrl, options.selfHostUrl, options.migratedUrl].map(canonicalEndpoint);
+  if (new Set(endpoints).size !== endpoints.length) {
+    throw new ProofFailure("full mode requires distinct hosted, self-host, and migrated endpoints", {
+      kind: "prerequisite",
+      detail: { endpoints },
+    });
+  }
+  const expectedMigratedTokenHash = env.EPIC32_MIGRATED_EXPECTED_TOKEN_SHA256;
+  if (!/^[a-f0-9]{64}$/i.test(expectedMigratedTokenHash ?? "")) {
+    throw new ProofFailure("full mode requires EPIC32_MIGRATED_EXPECTED_TOKEN_SHA256 from the pre-migration receipt", {
+      kind: "prerequisite",
+    });
+  }
+  if (sha256(options.migratedToken) !== expectedMigratedTokenHash.toLowerCase()) {
+    throw new ProofFailure("migrated token does not match the pre-migration token hash", {
+      kind: "prerequisite",
+    });
+  }
+}
+
 function createRecorder(metadata) {
   const steps = [];
   return {
@@ -164,12 +248,14 @@ function createRecorder(metadata) {
     },
     fail(name, error) {
       const detail = error instanceof ProofFailure ? error.detail : undefined;
-      steps.push({ name, status: "fail", error: String(error?.message ?? error), detail: redact(detail) });
-      process.stderr.write(`FAIL ${name}: ${error?.message ?? error}\n`);
+      const safeError = redact(String(error?.message ?? error));
+      steps.push({ name, status: "fail", error: safeError, detail: redact(detail) });
+      process.stderr.write(`FAIL ${name}: ${safeError}\n`);
     },
     skip(name, reason) {
-      steps.push({ name, status: "skip", reason });
-      process.stdout.write(`SKIP ${name}: ${reason}\n`);
+      const safeReason = redact(String(reason));
+      steps.push({ name, status: "skip", reason: safeReason });
+      process.stdout.write(`SKIP ${name}: ${safeReason}\n`);
     },
     summary(status) {
       return { ...metadata, status, steps };
@@ -182,7 +268,10 @@ async function fetchPayload(url, init = {}) {
   try {
     response = await fetch(url, { redirect: "manual", ...init });
   } catch (error) {
-    throw new ProofFailure(`cannot reach ${url}: ${error.message}`, { kind: "prerequisite" });
+    const safeUrl = url.replace(/\/mcp\/[^/?#]+/g, "/mcp/[redacted]");
+    throw new ProofFailure(`cannot reach ${safeUrl}: ${redact(String(error.message))}`, {
+      kind: "prerequisite",
+    });
   }
   const text = await response.text();
   let body = null;
@@ -255,6 +344,94 @@ async function terminalToolResult(baseUrl, token, initial) {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
   }
   throw new ProofFailure(`job ${first.jobId} did not finish within 30 seconds`);
+}
+
+function commitReceipt(receipt, label, repo) {
+  const digest = receipt?.digest && typeof receipt.digest === "object" ? receipt.digest : receipt;
+  const commitSha = digest?.commitSha;
+  const githubUrls = Array.isArray(digest?.githubUrls) ? digest.githubUrls : [];
+  if (typeof commitSha !== "string" || !/^[a-f0-9]{40}$/i.test(commitSha)) {
+    throw new ProofFailure(`${label} receipt omitted a structured commit SHA`, { detail: redact(receipt) });
+  }
+  const [owner, name] = repo.split("/", 2);
+  const canonicalUrl = githubUrls.some((value) => {
+    if (typeof value !== "string") return false;
+    try {
+      const parsed = new URL(value);
+      const prefix = `/${owner}/${name}/blob/${commitSha}/`.toLowerCase();
+      return parsed.protocol === "https:" && parsed.hostname === "github.com" && parsed.pathname.toLowerCase().startsWith(prefix);
+    } catch {
+      return false;
+    }
+  });
+  if (!canonicalUrl) {
+    throw new ProofFailure(`${label} receipt omitted a commit-pinned GitHub URL for ${repo}`, { detail: redact(receipt) });
+  }
+  return { commitSha, githubUrls };
+}
+
+async function githubApi(path, token) {
+  const result = await fetchPayload(`https://api.github.com${path}`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "epic32-joint-proof",
+    },
+  });
+  expectStatus(result, [200], `GitHub API ${path}`, "prerequisite");
+  return result.body;
+}
+
+async function repositoryTextAtCommit(repo, commitSha, token) {
+  const [owner, name] = repo.split("/", 2);
+  if (!owner || !name) throw new ProofFailure(`invalid repository name: ${repo}`);
+  const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+  const commit = await githubApi(`${base}/git/commits/${commitSha}`, token);
+  if (commit?.sha !== commitSha || typeof commit?.tree?.sha !== "string") {
+    throw new ProofFailure(`${repo} did not resolve receipt commit ${commitSha}`);
+  }
+  const comparison = await githubApi(`${base}/compare/${commitSha}...main`, token);
+  if (
+    !new Set(["ahead", "identical"]).has(comparison?.status) ||
+    comparison?.merge_base_commit?.sha !== commitSha
+  ) {
+    throw new ProofFailure(`${repo} receipt commit ${commitSha} is not reachable from configured main`);
+  }
+  const tree = await githubApi(`${base}/git/trees/${commit.tree.sha}?recursive=1`, token);
+  if (tree?.truncated || !Array.isArray(tree?.tree)) {
+    throw new ProofFailure(`${repo} commit tree is incomplete at ${commitSha}`);
+  }
+  const candidates = tree.tree.filter(
+    (entry) =>
+      entry?.type === "blob" &&
+      typeof entry.sha === "string" &&
+      typeof entry.path === "string" &&
+      Number(entry.size ?? 0) <= 1_000_000 &&
+      /\.(?:md|txt|json|ya?ml)$/i.test(entry.path),
+  );
+  const files = [];
+  for (const entry of candidates) {
+    const blob = await githubApi(`${base}/git/blobs/${entry.sha}`, token);
+    if (blob?.encoding !== "base64" || typeof blob?.content !== "string") continue;
+    files.push({ path: entry.path, text: Buffer.from(blob.content.replace(/\s+/g, ""), "base64").toString("utf8") });
+  }
+  return files;
+}
+
+function assertRepositoryMarkers(files, ownMarkers, foreignMarkers, label) {
+  const ownPaths = [];
+  for (const marker of ownMarkers) {
+    const matched = files.filter((file) => file.text.includes(marker)).map((file) => file.path);
+    if (matched.length === 0) throw new ProofFailure(`${label} commit omitted marker ${marker}`);
+    ownPaths.push({ marker, paths: matched });
+  }
+  for (const marker of foreignMarkers) {
+    if (files.some((file) => file.text.includes(marker))) {
+      throw new ProofFailure(`${label} commit contains foreign marker ${marker}`);
+    }
+  }
+  return ownPaths;
 }
 
 function expectStatus(result, allowed, name, kind = "failure") {
@@ -343,6 +520,7 @@ async function verifyMcpIsolation(baseUrl, tenants, mode) {
   }
 
   if (mode !== "full") return;
+  const receipts = [];
   for (const tenant of tenants) {
     if (!tenant.githubToken || !tenant.apiKey) {
       throw new ProofFailure("full mode requires EPIC32_GITHUB_TOKEN (or per-tenant tokens) and EPIC32_LLM_API_KEY", {
@@ -351,7 +529,6 @@ async function verifyMcpIsolation(baseUrl, tenants, mode) {
     }
     const stored = await callTool(baseUrl, tenant.token, "store_memory", {
       content: `${tenant.marker}\nJoint Epic 3.1 and 3.2 tenant isolation proof for ${tenant.label}.`,
-      source: "epic32-joint-proof",
     });
     const queued = stored?.structuredContent ?? stored;
     if (
@@ -364,22 +541,100 @@ async function verifyMcpIsolation(baseUrl, tenants, mode) {
         detail: redact(queued),
       });
     }
-    const receipt = await terminalToolResult(baseUrl, tenant.token, stored);
-    const receiptText = JSON.stringify(receipt);
-    if (!/[a-f0-9]{40}/i.test(receiptText)) throw new ProofFailure(`${tenant.label} store receipt omitted a commit SHA`);
-    if (!receiptText.toLowerCase().includes(tenant.repo.toLowerCase())) {
-      throw new ProofFailure(`${tenant.label} store receipt did not identify ${tenant.repo}`);
+    const storeResult = await terminalToolResult(baseUrl, tenant.token, stored);
+    const storeReceipt = commitReceipt(storeResult, `${tenant.label} store`, tenant.repo);
+
+    tenant.ingestMarker = `${tenant.marker}_INGEST`;
+    const invalidAudio = Buffer.from(`RIFF-${tenant.label}`);
+    const ingested = await callTool(baseUrl, tenant.token, "ingest_memory", {
+      mediaType: "audio",
+      bytesRef: `data:audio/wav;base64,${invalidAudio.toString("base64")}`,
+      filename: `${tenant.label.toLowerCase()}-provided-transcript.wav`,
+      sourceHint: "epic32-joint-proof",
+      contentHint: `File the supplied transcript marker for ${tenant.label}`,
+      transcript: {
+        text: `${tenant.ingestMarker}\nD18 provided-transcript proof for ${tenant.label}.`,
+        source: "epic32-joint-proof",
+        version: "1",
+      },
+    });
+    const ingestQueued = ingested?.structuredContent ?? ingested;
+    if (
+      !Array.isArray(ingestQueued?.evidence) ||
+      !ingestQueued.evidence.some(
+        (item) => item?.kind === "job_queued" && item?.id === ingestQueued.jobId,
+      )
+    ) {
+      throw new ProofFailure(`${tenant.label} ingest_memory omitted its C-16 queue receipt`, {
+        detail: redact(ingestQueued),
+      });
     }
+    await terminalToolResult(baseUrl, tenant.token, ingested);
+    const polled = await callTool(baseUrl, tenant.token, "get_ingest_result", {
+      jobId: ingestQueued.jobId,
+    });
+    const ingestResult = polled?.structuredContent ?? polled;
+    if (
+      ingestResult?.status !== "done" ||
+      ingestResult?.transcription !== "provided" ||
+      ingestResult?.sttCalls !== 0 ||
+      ingestResult?.extraction?.provider !== "epic32-joint-proof@1" ||
+      ingestResult?.rawArtifact?.sha256 !== sha256(invalidAudio)
+    ) {
+      throw new ProofFailure(`${tenant.label} ingest receipt did not prove the provided-transcript path`, {
+        detail: redact(ingestResult),
+      });
+    }
+    const ingestReceipt = commitReceipt(ingestResult, `${tenant.label} ingest`, tenant.repo);
+    receipts.push({
+      label: tenant.label,
+      repo: tenant.repo,
+      storeMarker: tenant.marker,
+      ingestMarker: tenant.ingestMarker,
+      store: storeReceipt,
+      ingest: ingestReceipt,
+    });
   }
 
   for (const tenant of tenants) {
     const own = await callTool(baseUrl, tenant.token, "search_memory", { query: tenant.marker });
     assertNoForeignMarker(own, tenant.marker, tenants.filter((item) => item !== tenant).map((item) => item.marker));
+    const ownIngest = await callTool(baseUrl, tenant.token, "search_memory", { query: tenant.ingestMarker });
+    assertNoForeignMarker(
+      ownIngest,
+      tenant.ingestMarker,
+      tenants.filter((item) => item !== tenant).flatMap((item) => [item.marker, item.ingestMarker]),
+    );
     for (const foreign of tenants.filter((item) => item !== tenant)) {
-      const negative = await callTool(baseUrl, tenant.token, "search_memory", { query: foreign.marker });
-      assertNoForeignMarker(negative, "", [foreign.marker]);
+      for (const marker of [foreign.marker, foreign.ingestMarker]) {
+        const negative = await callTool(baseUrl, tenant.token, "search_memory", { query: marker });
+        assertNoForeignMarker(negative, "", [marker]);
+      }
     }
   }
+
+  for (const receipt of receipts) {
+    const githubToken = tenants.find((item) => item.label === receipt.label)?.githubToken;
+    if (!githubToken) throw new ProofFailure(`${receipt.label} GitHub verification credential is missing`);
+    const foreignMarkers = receipts
+      .filter((item) => item !== receipt)
+      .flatMap((item) => [item.storeMarker, item.ingestMarker]);
+    const storeFiles = await repositoryTextAtCommit(receipt.repo, receipt.store.commitSha, githubToken);
+    receipt.store.markerPaths = assertRepositoryMarkers(
+      storeFiles,
+      [receipt.storeMarker],
+      foreignMarkers,
+      `${receipt.label} ${receipt.repo}@${receipt.store.commitSha}`,
+    );
+    const ingestFiles = await repositoryTextAtCommit(receipt.repo, receipt.ingest.commitSha, githubToken);
+    receipt.ingest.markerPaths = assertRepositoryMarkers(
+      ingestFiles,
+      [receipt.storeMarker, receipt.ingestMarker],
+      foreignMarkers,
+      `${receipt.label} ${receipt.repo}@${receipt.ingest.commitSha}`,
+    );
+  }
+  return { receipts };
 }
 
 async function verifyAnonymousWeb(baseUrl) {
@@ -450,7 +705,7 @@ async function tenantApiSnapshot(baseUrl, tenant, auth) {
   for (const [name, path] of [
     ["settings", "/api/settings"],
     ["vault", "/api/vault"],
-    ["ingest", "/api/ingest/jobs"],
+    ["ingest", "/api/tasks/jobs"],
     ["usage", "/api/usage"],
   ]) {
     const result = await jsonRequest(baseUrl, path, auth);
@@ -460,7 +715,7 @@ async function tenantApiSnapshot(baseUrl, tenant, auth) {
   return results;
 }
 
-function assertSnapshotIsolation(tenant, snapshot, allTenants) {
+function assertSnapshotIsolation(tenant, snapshot, allTenants, requireActivity) {
   const serialized = JSON.stringify(snapshot);
   if (!serialized.includes(tenant.repo)) throw new ProofFailure(`${tenant.label} API snapshot omitted its repo ${tenant.repo}`);
   const mediaPath = snapshot?.settings?.settings?.artifact_archive_local_dir;
@@ -474,9 +729,37 @@ function assertSnapshotIsolation(tenant, snapshot, allTenants) {
       throw new ProofFailure(`${tenant.label} API snapshot exposed ${foreign.label} data`);
     }
   }
+  if (requireActivity) {
+    const jobs = snapshot?.ingest?.jobs;
+    if (
+      !Array.isArray(jobs) ||
+      !jobs.some(
+        (job) =>
+          job?.kind === "media_ingest" &&
+          job?.status === "done" &&
+          JSON.stringify(job).includes(tenant.ingestMarker),
+      )
+    ) {
+      throw new ProofFailure(`${tenant.label} API snapshot omitted its completed media ingest job`);
+    }
+    const usage = snapshot?.usage?.today;
+    if (
+      !usage ||
+      Number(usage.calls) <= 0 ||
+      Number(usage.inputTokens) + Number(usage.outputTokens) <= 0 ||
+      !Array.isArray(usage.byOperation) ||
+      usage.byOperation.length === 0 ||
+      !Array.isArray(usage.byModel) ||
+      usage.byModel.length === 0
+    ) {
+      throw new ProofFailure(`${tenant.label} usage snapshot is empty after full-mode LLM work`, {
+        detail: { usage },
+      });
+    }
+  }
 }
 
-async function verifyApiAndSessions(baseUrl, tenants) {
+async function verifyApiAndSessions(baseUrl, tenants, mode) {
   const snapshots = new Map();
   const violations = [];
   const checks = [];
@@ -494,7 +777,9 @@ async function verifyApiAndSessions(baseUrl, tenants) {
   for (const tenant of tenants) {
     const bearerSnapshot = await capture(`${tenant.label} bearer API snapshot`, () => tenantApiSnapshot(baseUrl, tenant, { token: tenant.token }));
     if (bearerSnapshot) {
-      await capture(`${tenant.label} bearer settings separation`, async () => assertSnapshotIsolation(tenant, bearerSnapshot, tenants));
+      await capture(`${tenant.label} bearer settings separation`, async () =>
+        assertSnapshotIsolation(tenant, bearerSnapshot, tenants, mode === "full"),
+      );
       snapshots.set(tenant.tenantId, bearerSnapshot);
     }
 
@@ -519,7 +804,9 @@ async function verifyApiAndSessions(baseUrl, tenants) {
 
     const cookieSnapshot = await capture(`${tenant.label} cookie-only API snapshot`, () => tenantApiSnapshot(baseUrl, tenant, { cookie: tenant.sessionCookie }));
     if (cookieSnapshot) {
-      await capture(`${tenant.label} cookie remains tenant-bound`, async () => assertSnapshotIsolation(tenant, cookieSnapshot, tenants));
+      await capture(`${tenant.label} cookie remains tenant-bound`, async () =>
+        assertSnapshotIsolation(tenant, cookieSnapshot, tenants, mode === "full"),
+      );
     }
 
     const foreign = tenants.find((item) => item !== tenant);
@@ -571,7 +858,7 @@ async function walkFiles(root) {
   return output;
 }
 
-async function verifyStorage(dataRoot, tenants, mode) {
+async function verifyStorage(dataRoot, tenants, mode, worldSecrets = []) {
   const violations = [];
   for (const forbidden of FORBIDDEN_ROOT_STATE) {
     if (await pathExists(join(dataRoot, forbidden))) {
@@ -613,14 +900,18 @@ async function verifyStorage(dataRoot, tenants, mode) {
       db.close();
     }
   }
-  for (const tenant of tenants) {
-    for (const issuedToken of tenant.issuedTokens) {
-      const secret = Buffer.from(issuedToken);
-      for (const path of files) {
-        const bytes = await readFile(path);
-        if (bytes.indexOf(secret) !== -1) {
-          violations.push(`raw ${tenant.label} token persisted at ${path.slice(resolve(dataRoot).length + 1)}`);
-        }
+  const secretScans = [
+    ...tenants.flatMap((tenant) =>
+      tenant.issuedTokens.map((value, index) => ({ label: `${tenant.label} bearer ${index + 1}`, value })),
+    ),
+    ...worldSecrets.map((entry) => ({ label: entry.label, value: entry.value })),
+  ].filter((entry, index, all) => entry.value && all.findIndex((item) => item.value === entry.value) === index);
+  for (const secretScan of secretScans) {
+    const secret = Buffer.from(secretScan.value);
+    for (const path of files) {
+      const bytes = await readFile(path);
+      if (bytes.indexOf(secret) !== -1) {
+        violations.push(`raw ${secretScan.label} persisted at ${path.slice(resolve(dataRoot).length + 1)}`);
       }
     }
   }
@@ -632,10 +923,17 @@ async function verifyStorage(dataRoot, tenants, mode) {
       },
     });
   }
-  return { sqliteFiles: sqliteFiles.map((path) => path.slice(resolve(dataRoot).length + 1)) };
+  return {
+    sqliteFiles: sqliteFiles.map((path) => path.slice(resolve(dataRoot).length + 1)),
+    secretScans: secretScans.map((entry) => ({
+      label: entry.label,
+      sha256: sha256(entry.value),
+      rawMatches: 0,
+    })),
+  };
 }
 
-async function verifyParitySurface(name, baseUrl, token) {
+async function verifyParitySurface(name, baseUrl, token, proof = null) {
   if (!baseUrl || !token) {
     throw new ProofFailure(`${name} requires both URL and token`, { kind: "prerequisite" });
   }
@@ -643,6 +941,105 @@ async function verifyParitySurface(name, baseUrl, token) {
   if (!initialized?.serverInfo) throw new ProofFailure(`${name} MCP initialize omitted serverInfo`);
   const settings = await jsonRequest(baseUrl, "/api/settings", { token });
   expectStatus(settings, [200], `${name} settings`, "prerequisite");
+  if (!proof) return { initialize: "pass", settingsStatus: settings.response.status };
+  if (settings.body?.settings?.vault_repo !== proof.repo) {
+    throw new ProofFailure(`${name} is configured for ${String(settings.body?.settings?.vault_repo)} instead of ${proof.repo}`);
+  }
+  const credentialSha256 = sha256(token);
+  if (proof.expectedTokenHash && credentialSha256 !== proof.expectedTokenHash) {
+    throw new ProofFailure(`${name} token hash changed across migration`);
+  }
+
+  const marker = `EPIC32_${proof.runId}_${proof.label}_MARKER_${randomBytes(8).toString("hex")}`;
+  const ingestMarker = `${marker}_INGEST`;
+  const stored = await callTool(baseUrl, token, "store_memory", {
+    content: `${marker}\nEpic 3.2 ${name} mutation parity proof.`,
+  });
+  const storeResult = await terminalToolResult(baseUrl, token, stored);
+  const storeReceipt = commitReceipt(storeResult, `${name} store`, proof.repo);
+
+  const invalidAudio = Buffer.from(`RIFF-${proof.label}`);
+  const ingested = await callTool(baseUrl, token, "ingest_memory", {
+    mediaType: "audio",
+    bytesRef: `data:audio/wav;base64,${invalidAudio.toString("base64")}`,
+    filename: `${proof.label.toLowerCase()}-provided-transcript.wav`,
+    sourceHint: "epic32-joint-proof",
+    transcript: {
+      text: `${ingestMarker}\nD18 provided-transcript parity proof for ${name}.`,
+      source: "epic32-joint-proof",
+      version: "1",
+    },
+  });
+  const queued = ingested?.structuredContent ?? ingested;
+  if (
+    !Array.isArray(queued?.evidence) ||
+    !queued.evidence.some((item) => item?.kind === "job_queued" && item?.id === queued.jobId)
+  ) {
+    throw new ProofFailure(`${name} ingest_memory omitted its C-16 queue receipt`, {
+      detail: redact(queued),
+    });
+  }
+  await terminalToolResult(baseUrl, token, ingested);
+  const polled = await callTool(baseUrl, token, "get_ingest_result", { jobId: queued.jobId });
+  const ingestResult = polled?.structuredContent ?? polled;
+  if (
+    ingestResult?.status !== "done" ||
+    ingestResult?.transcription !== "provided" ||
+    ingestResult?.sttCalls !== 0 ||
+    ingestResult?.extraction?.provider !== "epic32-joint-proof@1" ||
+    ingestResult?.rawArtifact?.sha256 !== sha256(invalidAudio)
+  ) {
+    throw new ProofFailure(`${name} did not complete its provided-transcript ingest`, {
+      detail: redact(ingestResult),
+    });
+  }
+  const ingestReceipt = commitReceipt(ingestResult, `${name} ingest`, proof.repo);
+  const ownStore = await callTool(baseUrl, token, "search_memory", { query: marker });
+  assertNoForeignMarker(ownStore, marker, []);
+  const ownIngest = await callTool(baseUrl, token, "search_memory", { query: ingestMarker });
+  assertNoForeignMarker(ownIngest, ingestMarker, []);
+
+  const snapshot = await tenantApiSnapshot(baseUrl, { label: name }, { token });
+  const jobs = snapshot?.ingest?.jobs;
+  if (!Array.isArray(jobs) || !jobs.some((job) => job?.kind === "media_ingest" && job?.status === "done" && JSON.stringify(job).includes(ingestMarker))) {
+    throw new ProofFailure(`${name} API snapshot omitted its completed media ingest job`);
+  }
+  const usage = snapshot?.usage?.today;
+  if (
+    !usage ||
+    Number(usage.calls) <= 0 ||
+    Number(usage.inputTokens) + Number(usage.outputTokens) <= 0 ||
+    !Array.isArray(usage.byOperation) ||
+    usage.byOperation.length === 0 ||
+    !Array.isArray(usage.byModel) ||
+    usage.byModel.length === 0
+  ) {
+    throw new ProofFailure(`${name} usage snapshot is empty after mutation parity work`, { detail: { usage } });
+  }
+  const storeFiles = await repositoryTextAtCommit(proof.repo, storeReceipt.commitSha, proof.githubToken);
+  storeReceipt.markerPaths = assertRepositoryMarkers(
+    storeFiles,
+    [marker],
+    [],
+    `${name} ${proof.repo}@${storeReceipt.commitSha}`,
+  );
+  const ingestFiles = await repositoryTextAtCommit(proof.repo, ingestReceipt.commitSha, proof.githubToken);
+  ingestReceipt.markerPaths = assertRepositoryMarkers(
+    ingestFiles,
+    [marker, ingestMarker],
+    [],
+    `${name} ${proof.repo}@${ingestReceipt.commitSha}`,
+  );
+  return {
+    repo: proof.repo,
+    credentialSha256,
+    ...(proof.expectedTokenHash ? { expectedTokenSha256: proof.expectedTokenHash } : {}),
+    marker,
+    ingestMarker,
+    store: storeReceipt,
+    ingest: ingestReceipt,
+    usage,
+  };
 }
 
 function helpText() {
@@ -651,8 +1048,10 @@ function helpText() {
     `Optional: --mode contract|full --data-root PATH --evidence-dir PATH\n` +
     `          --self-host-url URL --self-host-token TOKEN\n` +
     `          --migrated-url URL --migrated-token TOKEN --run-id ID\n\n` +
-    `Full mode also requires EPIC32_T1_REPO..EPIC32_T3_REPO, ` +
-    `EPIC32_GITHUB_TOKEN (or per-tenant variants), and EPIC32_LLM_API_KEY.\n`;
+    `Full mode requires the exact approved EPIC32_T1_REPO..EPIC32_T3_REPO set, ` +
+    `EPIC32_GITHUB_TOKEN, EPIC32_LLM_API_KEY, CHASSIS_VAULT_MASTER_KEY, ` +
+    `EPIC32_DATA_ROOT, EPIC32_SELF_HOST_REPO, EPIC32_MIGRATED_REPO, ` +
+    `EPIC32_MIGRATED_EXPECTED_TOKEN_SHA256, and distinct parity URL/token pairs.\n`;
 }
 
 export async function runProof(options, env = process.env) {
@@ -662,6 +1061,7 @@ export async function runProof(options, env = process.env) {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
   const evidenceDir = resolve(options.evidenceDir || join(tmpdir(), "zenod-epic32-proof", runId));
   const tenants = Array.from({ length: TENANT_COUNT }, (_, index) => tenantFixture(index, runId, env));
+  assertFullModePrerequisites(options, tenants, env);
   const metadata = {
     epic: "3.2",
     issue: 736,
@@ -718,19 +1118,65 @@ export async function runProof(options, env = process.env) {
       expectStatus(result, [401], "control token settings negative");
       return { status: result.response.status };
     });
-    await runStep("T1/T2/T3 bearer settings and signed tenant-session isolation", () => verifyApiAndSessions(baseUrl, tenants));
+    await runStep("T1/T2/T3 bearer settings and signed tenant-session isolation", () =>
+      verifyApiAndSessions(baseUrl, tenants, options.mode),
+    );
     await runStep("T2 token rotation, retired-token rejection, and new session", async () => {
       const detail = await rotateTenantToken(baseUrl, options.controlToken, tenants[1]);
       metadata.tokenHashes = tenants.map((tenant) => ({ label: tenant.label, sha256: sha256(tenant.token) }));
       return detail;
     });
     if (options.dataRoot) {
-      await runStep("joint chassis storage layout, persisted WAL, and token-at-rest", () => verifyStorage(resolve(options.dataRoot), tenants, options.mode));
+      await runStep("joint chassis storage layout, persisted WAL, and token-at-rest", () =>
+        verifyStorage(resolve(options.dataRoot), tenants, options.mode, [
+          ...tenants.flatMap((tenant) => [
+            { label: `${tenant.label} GitHub credential`, value: tenant.githubToken },
+            { label: `${tenant.label} ${tenant.provider} credential`, value: tenant.apiKey },
+          ]),
+          { label: "chassis vault master key", value: env.CHASSIS_VAULT_MASTER_KEY },
+        ]),
+      );
     } else {
       recorder.skip("joint chassis storage layout, persisted WAL, and token-at-rest", "EPIC32_DATA_ROOT not provided");
     }
-    await runStep("single-tenant self-host parity", () => verifyParitySurface("single-tenant self-host", options.selfHostUrl, options.selfHostToken), { optional: true });
-    await runStep("same-token migration rehearsal", () => verifyParitySurface("migrated tenant", options.migratedUrl, options.migratedToken), { optional: true });
+    const fullParity = options.mode === "full";
+    await runStep(
+      "single-tenant self-host parity",
+      () =>
+        verifyParitySurface(
+          "single-tenant self-host",
+          options.selfHostUrl,
+          options.selfHostToken,
+          fullParity
+            ? {
+                runId,
+                label: "SELFHOST",
+                repo: env.EPIC32_SELF_HOST_REPO,
+                githubToken: env.EPIC32_GITHUB_TOKEN,
+              }
+            : null,
+        ),
+      { optional: !fullParity },
+    );
+    await runStep(
+      "same-token migration rehearsal",
+      () =>
+        verifyParitySurface(
+          "migrated tenant",
+          options.migratedUrl,
+          options.migratedToken,
+          fullParity
+            ? {
+                runId,
+                label: "MIGRATED",
+                repo: env.EPIC32_MIGRATED_REPO,
+                githubToken: env.EPIC32_GITHUB_TOKEN,
+                expectedTokenHash: env.EPIC32_MIGRATED_EXPECTED_TOKEN_SHA256,
+              }
+            : null,
+        ),
+      { optional: !fullParity },
+    );
   }
 
   await mkdir(evidenceDir, { recursive: true });
@@ -759,7 +1205,7 @@ async function main() {
     const result = await runProof(options);
     process.exitCode = result.status === "pass" ? 0 : result.status === "prerequisite-missing" ? 2 : 1;
   } catch (error) {
-    process.stderr.write(`${error.stack ?? error}\n`);
+    process.stderr.write(`${redact(String(error.stack ?? error))}\n`);
     process.exitCode = error instanceof ProofFailure && error.kind === "usage" ? 64 : 1;
   }
 }

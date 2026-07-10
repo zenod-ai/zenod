@@ -75,6 +75,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     const receipt = done!.result as MediaIngestReceipt;
     expect(receipt.status).toBe("done");
     expect(receipt.transcription).toBe("performed");
+    expect(receipt.sttCalls).toBe(1);
     expect(transcribe).toHaveBeenCalledTimes(1);
     expect(receipt.rawArtifact.handle).toMatch(/^file:\/\//);
     expect(receipt.rawArtifact.archiveUrl).toBe(receipt.rawArtifact.handle);
@@ -144,6 +145,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(transcribe).not.toHaveBeenCalled();
     const receipt = done!.result as MediaIngestReceipt;
     expect(receipt.transcription).toBe("provided");
+    expect(receipt.sttCalls).toBe(0);
     expect(receipt.source.transcript).toEqual({
       source: "phylax",
       version: "v2",
