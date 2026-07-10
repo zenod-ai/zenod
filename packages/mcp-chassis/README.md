@@ -52,10 +52,33 @@ bearer token and never accept a client-supplied tenant id. `panels` selects whic
 existing console tabs the unit exposes.
 
 The default settings shell persists `/api/settings` in each tenant's storage
-directory. Secret fields are masked on every response, masked values posted back
-by the Console leave the stored secret unchanged, and `/api/keys` exposes only
-safe metadata for configured secrets. Settings and key metadata survive process
-restart without sharing rows or paths between tenants.
+directory. Secret fields are encrypted at rest, masked on every response, and
+never returned by `/api/keys`; masked values posted back by the Console leave
+the stored secret unchanged. Settings and key metadata survive process restart
+without sharing rows, keys, or paths between tenants.
+
+## Vault encryption key
+
+Configure `CHASSIS_VAULT_MASTER_KEY` before using tenant vaults, secret settings,
+provider OAuth, or vault-backed transcription credentials. It must be 32 random
+bytes encoded as 64-character hex, base64, or unpadded base64url. For example:
+
+```sh
+openssl rand -base64 32
+```
+
+Keep this key in the deployment secret manager, outside `DATA_DIR` and its
+backups. The chassis never generates or persists it. The same key is required
+after every restart or data restore; losing it makes encrypted tenant secrets
+unrecoverable, and changing it without an explicit migration makes reads fail
+closed. Use a different master key for each deployed unit. Online key rotation
+is not supported in this version.
+
+On first open, legacy plaintext vault entries and secret settings are encrypted,
+then SQLite database and WAL storage are rewritten before migration is marked
+complete. Stop all older unit processes and take a backup before upgrading;
+the migration replaces plaintext value columns so mixed-version writers are
+rejected. Mixed-version operation is not a supported migration mode.
 
 Control-plane provisioning is exposed through `POST /api/tenants`,
 `PATCH /api/tenants/:tenantId`, `DELETE /api/tenants/:tenantId`, and

@@ -1,5 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { TenantStorage } from "./storage.js";
+import {
+  securelyRewriteSqlite,
+  type TenantStorage,
+  type TenantValueCipher,
+} from "./storage.js";
 
 export const TENANT_SETTING_KEYS = [
   "vault_repo",
@@ -56,6 +60,12 @@ export interface TenantSettingsSnapshot {
 }
 
 const SETTINGS_DB_NAME = "chassis-settings.sqlite";
+const SETTINGS_ENCRYPTION_STATE_KEY = "secret_encryption_state";
+const SETTINGS_KEY_VERIFIER_KEY = "secret_key_verifier";
+const SETTINGS_KEY_VERIFIER_CIPHER_KEY = "__chassis_settings_key_verifier__";
+const SETTINGS_KEY_VERIFIER_VALUE = "mcp-chassis-settings-key-verifier:v1";
+const SETTINGS_ENCRYPTION_PENDING = "encrypted_pending_scrub";
+const SETTINGS_ENCRYPTION_V1 = "v1";
 const SETTING_KEY_SET = new Set<string>(TENANT_SETTING_KEYS);
 const SECRET_KEY_SET = new Set<string>(TENANT_SECRET_SETTING_KEYS);
 const PROVIDERS = new Set(["anthropic", "openai", "openrouter", "groq"]);
@@ -73,6 +83,7 @@ const KEY_LABELS: Record<TenantSecretSettingKey, string> = {
 interface SettingRow {
   setting_key: TenantSettingKey;
   value: string;
+  created_at: number;
   updated_at: number;
 }
 
@@ -87,9 +98,8 @@ export class SqliteTenantSettingsStore {
   snapshot(storage: TenantStorage): TenantSettingsSnapshot {
     const db = openSettingsDb(storage);
     try {
-      const values = defaultTenantSettingsValues();
-      for (const row of readRows(db)) values[row.setting_key] = row.value;
-      return { settings: maskSettings(values), configured: true };
+      migrateLegacySecretRows(storage, db);
+      return snapshotFromDb(storage, db);
     } finally {
       db.close();
     }
@@ -99,6 +109,17 @@ export class SqliteTenantSettingsStore {
     const updates = normalizeUpdate(input);
     const db = openSettingsDb(storage);
     try {
+      migrateLegacySecretRows(storage, db);
+      const needsSecretCipher = updates.some(
+        (update) =>
+          SECRET_KEY_SET.has(update.key) &&
+          !update.preserveMaskedSecret &&
+          update.value !== null &&
+          update.value !== "",
+      );
+      const cipher = needsSecretCipher
+        ? storage.encryptedValues(SETTINGS_DB_NAME)
+        : null;
       db.exec("BEGIN IMMEDIATE");
       try {
         const now = Date.now();
@@ -110,23 +131,24 @@ export class SqliteTenantSettingsStore {
             );
             continue;
           }
+          const storedValue = SECRET_KEY_SET.has(update.key)
+            ? requireCipher(cipher).encrypt(update.key, update.value)
+            : update.value;
           db.prepare(
-            `INSERT INTO tenant_settings (setting_key, value, created_at, updated_at)
+            `INSERT INTO tenant_settings
+             (setting_key, stored_value, created_at, updated_at)
              VALUES (?, ?, ?, ?)
              ON CONFLICT(setting_key) DO UPDATE SET
-               value = excluded.value,
+               stored_value = excluded.stored_value,
                updated_at = excluded.updated_at`,
-          ).run(update.key, update.value, now, now);
+          ).run(update.key, storedValue, now, now);
         }
         db.exec("COMMIT");
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;
       }
-
-      const values = defaultTenantSettingsValues();
-      for (const row of readRows(db)) values[row.setting_key] = row.value;
-      return { settings: maskSettings(values), configured: true };
+      return snapshotFromDb(storage, db);
     } finally {
       db.close();
     }
@@ -135,18 +157,22 @@ export class SqliteTenantSettingsStore {
   keyMetadata(storage: TenantStorage): TenantKeyMetadata[] {
     const db = openSettingsDb(storage);
     try {
-      return readRows(db)
-        .filter(
-          (row): row is SettingRow & { setting_key: TenantSecretSettingKey } =>
-            SECRET_KEY_SET.has(row.setting_key),
-        )
-        .map((row) => ({
-          id: row.setting_key,
-          label: KEY_LABELS[row.setting_key],
+      migrateLegacySecretRows(storage, db);
+      const secretRows = readRows(db).filter(isSecretRow);
+      const cipher = secretRows.length
+        ? storage.encryptedValues(SETTINGS_DB_NAME)
+        : null;
+      return secretRows.map((row) => {
+        const key = row.setting_key as TenantSecretSettingKey;
+        const value = requireCipher(cipher).decrypt(key, row.value);
+        return {
+          id: key,
+          label: KEY_LABELS[key],
           configured: true,
-          maskedValue: maskSecret(row.value),
+          maskedValue: maskSecret(value),
           updatedAt: new Date(row.updated_at).toISOString(),
-        }));
+        };
+      });
     } finally {
       db.close();
     }
@@ -184,24 +210,224 @@ function openSettingsDb(storage: TenantStorage): DatabaseSync {
   db.exec(`
     CREATE TABLE IF NOT EXISTS tenant_settings (
       setting_key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
+      stored_value TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS settings_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     );
   `);
   return db;
 }
 
+function snapshotFromDb(
+  storage: TenantStorage,
+  db: DatabaseSync,
+): TenantSettingsSnapshot {
+  const values = defaultTenantSettingsValues();
+  const rows = readRows(db);
+  const hasSecrets = rows.some(isSecretRow);
+  const cipher = hasSecrets ? storage.encryptedValues(SETTINGS_DB_NAME) : null;
+  for (const row of rows) {
+    values[row.setting_key] = isSecretRow(row)
+      ? requireCipher(cipher).decrypt(row.setting_key, row.value)
+      : row.value;
+  }
+  return { settings: maskSettings(values), configured: true };
+}
+
+function migrateLegacySecretRows(
+  storage: TenantStorage,
+  db: DatabaseSync,
+): void {
+  let needsScrub = false;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const state = db
+      .prepare("SELECT value FROM settings_metadata WHERE key = ?")
+      .get(SETTINGS_ENCRYPTION_STATE_KEY) as { value: string } | undefined;
+    if (
+      state &&
+      state.value !== SETTINGS_ENCRYPTION_PENDING &&
+      state.value !== SETTINGS_ENCRYPTION_V1
+    ) {
+      throw new Error(
+        `unsupported tenant settings encryption state ${state.value}`,
+      );
+    }
+    const columns = tableColumns(db, "tenant_settings");
+    if (state?.value === SETTINGS_ENCRYPTION_V1) {
+      assertSettingsV1Schema(columns);
+      ensureSettingsKeyVerifier(storage, db);
+      validateSecretRows(storage, readRows(db));
+      db.exec("COMMIT");
+      return;
+    }
+
+    if (state?.value === SETTINGS_ENCRYPTION_PENDING) {
+      assertSettingsV1Schema(columns);
+      ensureSettingsKeyVerifier(storage, db);
+      validateSecretRows(storage, readRows(db));
+    } else if (columns.has("value")) {
+      const legacyRows = readLegacyRows(db);
+      const hasSecrets = legacyRows.some(isSecretRow);
+      const cipher = hasSecrets
+        ? storage.encryptedValues(SETTINGS_DB_NAME)
+        : null;
+      db.exec(`
+        DROP TABLE IF EXISTS tenant_settings_encrypted_migration;
+        CREATE TABLE tenant_settings_encrypted_migration (
+          setting_key TEXT PRIMARY KEY,
+          stored_value TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      `);
+      const insert = db.prepare(
+        `INSERT INTO tenant_settings_encrypted_migration
+         (setting_key, stored_value, created_at, updated_at)
+         VALUES (?, ?, ?, ?)`,
+      );
+      for (const row of legacyRows) {
+        const storedValue = isSecretRow(row)
+          ? requireCipher(cipher).encrypt(row.setting_key, row.value)
+          : row.value;
+        insert.run(
+          row.setting_key,
+          storedValue,
+          row.created_at,
+          row.updated_at,
+        );
+      }
+      db.exec(`
+        DROP TABLE tenant_settings;
+        ALTER TABLE tenant_settings_encrypted_migration RENAME TO tenant_settings;
+      `);
+    } else {
+      assertSettingsV1Schema(columns);
+      const rows = readRows(db);
+      const secretRows = rows.filter(isSecretRow);
+      if (secretRows.length) {
+        const cipher = storage.encryptedValues(SETTINGS_DB_NAME);
+        const update = db.prepare(
+          "UPDATE tenant_settings SET stored_value = ? WHERE setting_key = ?",
+        );
+        for (const row of secretRows) {
+          update.run(
+            cipher.encrypt(row.setting_key, row.value),
+            row.setting_key,
+          );
+        }
+      }
+    }
+    ensureSettingsKeyVerifier(storage, db);
+    db.prepare(
+      `INSERT INTO settings_metadata (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    ).run(SETTINGS_ENCRYPTION_STATE_KEY, SETTINGS_ENCRYPTION_PENDING);
+    needsScrub = true;
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  if (!needsScrub) return;
+  securelyRewriteSqlite(db);
+  db.prepare(
+    `INSERT INTO settings_metadata (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(SETTINGS_ENCRYPTION_STATE_KEY, SETTINGS_ENCRYPTION_V1);
+  db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+}
+
+function validateSecretRows(storage: TenantStorage, rows: SettingRow[]): void {
+  const secretRows = rows.filter(isSecretRow);
+  if (!secretRows.length) return;
+  const cipher = storage.encryptedValues(SETTINGS_DB_NAME);
+  for (const row of secretRows) cipher.decrypt(row.setting_key, row.value);
+}
+
+function ensureSettingsKeyVerifier(
+  storage: TenantStorage,
+  db: DatabaseSync,
+): void {
+  const row = db
+    .prepare("SELECT value FROM settings_metadata WHERE key = ?")
+    .get(SETTINGS_KEY_VERIFIER_KEY) as { value: string } | undefined;
+  if (row) {
+    const value = storage
+      .encryptedValues(SETTINGS_DB_NAME)
+      .decrypt(SETTINGS_KEY_VERIFIER_CIPHER_KEY, row.value);
+    if (value !== SETTINGS_KEY_VERIFIER_VALUE) {
+      throw new Error("tenant settings key verifier is invalid");
+    }
+    return;
+  }
+  if (!storage.encryptionConfigured) return;
+  const encryptedVerifier = storage
+    .encryptedValues(SETTINGS_DB_NAME)
+    .encrypt(SETTINGS_KEY_VERIFIER_CIPHER_KEY, SETTINGS_KEY_VERIFIER_VALUE);
+  db.prepare(
+    `INSERT INTO settings_metadata (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(SETTINGS_KEY_VERIFIER_KEY, encryptedVerifier);
+}
+
 function readRows(db: DatabaseSync): SettingRow[] {
-  return (
+  return filterKnownRows(
     db
       .prepare(
-        `SELECT setting_key, value, updated_at
+        `SELECT setting_key, stored_value AS value, created_at, updated_at
          FROM tenant_settings
          ORDER BY setting_key`,
       )
-      .all() as unknown as SettingRow[]
-  ).filter((row) => SETTING_KEY_SET.has(row.setting_key));
+      .all() as unknown as SettingRow[],
+  );
+}
+
+function readLegacyRows(db: DatabaseSync): SettingRow[] {
+  return filterKnownRows(
+    db
+      .prepare(
+        `SELECT setting_key, value, created_at, updated_at
+         FROM tenant_settings
+         ORDER BY setting_key`,
+      )
+      .all() as unknown as SettingRow[],
+  );
+}
+
+function filterKnownRows(rows: SettingRow[]): SettingRow[] {
+  return rows.filter((row) => SETTING_KEY_SET.has(row.setting_key));
+}
+
+function isSecretRow(
+  row: SettingRow,
+): row is SettingRow & { setting_key: TenantSecretSettingKey } {
+  return SECRET_KEY_SET.has(row.setting_key);
+}
+
+function tableColumns(db: DatabaseSync, table: string): Set<string> {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+    name: string;
+  }>;
+  return new Set(rows.map((row) => row.name));
+}
+
+function assertSettingsV1Schema(columns: Set<string>): void {
+  if (!columns.has("stored_value") || columns.has("value")) {
+    throw new Error(
+      "tenant settings encryption state does not match its schema",
+    );
+  }
+}
+
+function requireCipher(cipher: TenantValueCipher | null): TenantValueCipher {
+  if (!cipher) throw new Error("tenant settings encryption key is unavailable");
+  return cipher;
 }
 
 function normalizeUpdate(input: unknown): NormalizedUpdate[] {

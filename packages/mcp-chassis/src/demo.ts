@@ -124,7 +124,12 @@ export function createDemoUnit(env: NodeJS.ProcessEnv = process.env) {
         plan: "self-hosted",
       },
     },
-    storage: { dataDir },
+    storage: {
+      dataDir,
+      ...(env.CHASSIS_VAULT_MASTER_KEY?.trim()
+        ? { vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY }
+        : {}),
+    },
     metering: { dataDir },
     ui: {
       webDist,

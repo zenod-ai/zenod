@@ -10,6 +10,7 @@ import { ChassisStorage, ChassisUsageStore, createMemoryTenantStore, createSqlit
 
 const servers: ServerType[] = [];
 const tempDirs: string[] = [];
+const TEST_VAULT_KEY = "11".repeat(32);
 
 async function listen(
   app: ReturnType<typeof createUnit>["app"],
@@ -1045,7 +1046,7 @@ describe("createUnit", () => {
     });
     const firstUnit = createUnit({
       name: "demo",
-      storage: { dataDir },
+      storage: { dataDir, vaultEncryptionKey: TEST_VAULT_KEY },
       tenantAuth: { store: firstTenants },
       ui: { sessionSecret: "durable-settings-session" },
     });
@@ -1177,7 +1178,7 @@ describe("createUnit", () => {
     const restartedTenants = createSqliteTenantStore({ dataDir });
     const restartedUnit = createUnit({
       name: "demo",
-      storage: { dataDir },
+      storage: { dataDir, vaultEncryptionKey: TEST_VAULT_KEY },
       tenantAuth: { store: restartedTenants },
       ui: { sessionSecret: "durable-settings-session" },
     });
@@ -1244,7 +1245,7 @@ describe("createUnit", () => {
     });
     const unit = createUnit({
       name: "demo",
-      storage: { dataDir },
+      storage: { dataDir, vaultEncryptionKey: TEST_VAULT_KEY },
       tenantAuth: { store: tenants },
       controlPlane: { store: tenants, token: "control-secret" },
       ui: {
@@ -1820,7 +1821,10 @@ describe("createUnit", () => {
   it("binds provider OAuth state to one tenant and stores tokens in that tenant vault", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-oauth-"));
     tempDirs.push(dataDir);
-    const storage = new ChassisStorage({ dataDir });
+    const storage = new ChassisStorage({
+      dataDir,
+      vaultEncryptionKey: TEST_VAULT_KEY,
+    });
     const tenants = createMemoryTenantStore([
       { token: "tenant-one-token", tenant: { id: "tenant-one" } },
       { token: "tenant-two-token", tenant: { id: "tenant-two" } },
