@@ -5,7 +5,6 @@ import { toast } from "sonner"
 import {
   api,
   errorMessage,
-  type GithubAppStart,
   type GithubAppStatus,
   type GithubRepo,
   type GithubReposResponse,
@@ -53,17 +52,31 @@ function GithubMarkIcon(props: React.SVGProps<SVGSVGElement>) {
   )
 }
 
-function launchManifestFlow(start: GithubAppStart) {
-  const form = document.createElement("form")
-  form.method = "POST"
-  form.action = start.action
-  const input = document.createElement("input")
-  input.type = "hidden"
-  input.name = "manifest"
-  input.value = JSON.stringify(start.manifest)
-  form.appendChild(input)
-  document.body.appendChild(form)
-  form.submit()
+// Exported for the focused redirect-safety test; this module's runtime export remains stable.
+// eslint-disable-next-line react-refresh/only-export-components
+export function githubAppInstallationUrl(start: unknown): string {
+  if (typeof start !== "object" || start === null) {
+    throw new Error("GitHub did not return a repository connection URL")
+  }
+
+  const payload = start as Record<string, unknown>
+  const candidate = [payload.url, payload.installationUrl, payload.action].find(
+    (value): value is string => typeof value === "string" && value.length > 0
+  )
+  if (candidate === undefined) {
+    throw new Error("GitHub did not return a repository connection URL")
+  }
+
+  const url = new URL(candidate)
+  const isInstallationUrl =
+    url.protocol === "https:" &&
+    url.hostname === "github.com" &&
+    /^\/apps\/[^/]+\/installations\/new\/?$/.test(url.pathname)
+  if (!isInstallationUrl) {
+    throw new Error("GitHub returned an invalid repository connection URL")
+  }
+
+  return url.toString()
 }
 
 function RepoPickerDialog({
@@ -99,11 +112,11 @@ function RepoPickerDialog({
   async function handlePick(repo: GithubRepo) {
     setSavingRepo(repo.fullName)
     try {
-      await api("/api/settings", {
+      await api("/api/vault/repository", {
         method: "PUT",
         body: {
-          vault_repo: repo.fullName,
-          vault_branch: repo.defaultBranch,
+          repo: repo.fullName,
+          branch: repo.defaultBranch,
         },
       })
       toast.success("Vault repo saved", {
@@ -131,9 +144,9 @@ function RepoPickerDialog({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Choose vault repo</DialogTitle>
+          <DialogTitle>Select repository</DialogTitle>
           <DialogDescription>
-            Repositories the GitHub App has been granted access to.
+            Repositories you granted the Zenod GitHub App access to.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -235,9 +248,9 @@ export function GithubConnect({
   async function handleStart() {
     setStarting(true)
     try {
-      const start = await api<GithubAppStart>("/api/github/app/start")
-      launchManifestFlow(start)
-      // The form submit navigates away; keep the button pending until then.
+      const start = await api<unknown>("/api/github/app/start")
+      window.location.href = githubAppInstallationUrl(start)
+      // Navigation leaves this page, so keep the button pending until then.
     } catch (err) {
       toast.error("Could not start GitHub setup", {
         description: errorMessage(err),
@@ -279,7 +292,7 @@ export function GithubConnect({
     return <Skeleton className={cn("w-44", compact ? "h-7" : "h-8")} />
   }
 
-  if (!status.created) {
+  if (!status.installed) {
     return (
       <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-2")}>
         <div>
@@ -294,7 +307,7 @@ export function GithubConnect({
             ) : (
               <GithubMarkIcon data-icon="inline-start" />
             )}
-            Connect GitHub
+            Connect repository
           </Button>
         </div>
         <p
@@ -303,43 +316,8 @@ export function GithubConnect({
             compact ? "text-xs" : "text-sm"
           )}
         >
-          One click creates a private GitHub App for this Zenod instance —
-          access is scoped to only the repos you grant, no token pasting.
-        </p>
-      </div>
-    )
-  }
-
-  if (!status.installed) {
-    const installUrl =
-      status.slug === null
-        ? null
-        : `https://github.com/apps/${status.slug}/installations/new`
-    return (
-      <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-2")}>
-        <div>
-          <Button
-            type="button"
-            size={compact ? "sm" : "default"}
-            disabled={installUrl === null}
-            onClick={() => {
-              if (installUrl !== null) {
-                window.location.href = installUrl
-              }
-            }}
-          >
-            <GithubMarkIcon data-icon="inline-start" />
-            Install on GitHub
-          </Button>
-        </div>
-        <p
-          className={cn(
-            "text-muted-foreground",
-            compact ? "text-xs" : "text-sm"
-          )}
-        >
-          The GitHub App exists but isn&apos;t installed yet. Install it and
-          grant access to your vault repo.
+          Select which repositories Zenod can access through the existing Zenod
+          GitHub App.
         </p>
       </div>
     )
@@ -372,7 +350,7 @@ export function GithubConnect({
             onClick={() => setPickerOpen(true)}
           >
             <FolderGitIcon data-icon="inline-start" />
-            Choose vault repo
+            Select repository
           </Button>
         )}
         {manageUrl !== null && (
@@ -400,9 +378,9 @@ export function GithubConnect({
             <AlertDialogHeader>
               <AlertDialogTitle>Disconnect GitHub?</AlertDialogTitle>
               <AlertDialogDescription>
-                Zenod will forget the GitHub App credentials and stop using
-                them to access your vault. The app itself stays on GitHub —
-                you can delete it there.
+                Zenod will stop using this GitHub installation to access your
+                repository. You can manage the app&apos;s repository access on
+                GitHub.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -418,7 +396,10 @@ export function GithubConnect({
         </AlertDialog>
       </div>
       {pickerOpen && (
-        <RepoPickerDialog onOpenChange={setPickerOpen} onPicked={onRepoPicked} />
+        <RepoPickerDialog
+          onOpenChange={setPickerOpen}
+          onPicked={onRepoPicked}
+        />
       )}
     </div>
   )

@@ -26,11 +26,10 @@ import {
 } from "./oauth.js";
 import {
   appStatus,
-  buildManifest,
   createGithubIssue,
   disconnectApp,
   editGithubIssue,
-  exchangeManifestCode,
+  githubAppInstallationUrl,
   installationToken,
   listInstallationRepos,
   setExecutionState,
@@ -2280,45 +2279,37 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.post("/api/vault/clean-slate", async (c) => c.json(await runtime.cleanSlate()));
 
-  // --- GitHub App connect flow (manifest) ---
+  app.put("/api/vault/repository", async (c) => {
+    const body = await c.req
+      .json<{ repo?: string; branch?: string }>()
+      .catch((): { repo?: string; branch?: string } => ({}));
+    const repo = body.repo?.trim() ?? "";
+    const branch = body.branch?.trim() || "main";
+    if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) return c.json({ error: "invalid repository" }, 400);
+    settings.set("vault_repo", repo);
+    settings.set("vault_branch", branch);
+    runtime.invalidate();
+    return c.json({ repo, branch });
+  });
 
-  /** Public base URL as seen through the reverse proxy. */
-  const baseUrl = (c: { req: { header: (n: string) => string | undefined; url: string } }): string => {
-    const proto = c.req.header("x-forwarded-proto") ?? new URL(c.req.url).protocol.replace(":", "");
-    const host = c.req.header("x-forwarded-host") ?? c.req.header("host") ?? new URL(c.req.url).host;
-    return `${proto}://${host}`;
-  };
+  // --- Existing GitHub App repository connection ---
 
   app.get("/api/github/app/status", (c) => c.json(appStatus(settings)));
 
-  app.get("/api/github/app/start", (c) => c.json(buildManifest(baseUrl(c))));
-
-  // GitHub redirects the user's browser here after creating the app
-  app.get("/api/github/app/callback", async (c) => {
-    const code = c.req.query("code");
-    if (!code) return c.redirect("/?github=error&reason=missing_code");
-    try {
-      const application = await exchangeManifestCode(code, settings);
-      runtime.invalidate();
-      // continue straight into the install step (repo picker on GitHub's side)
-      return c.redirect(`https://github.com/apps/${application.slug}/installations/new`);
-    } catch (err) {
-      // Never bare-500 a connection flow — log it and bounce back to the UI
-      // with a readable reason (e.g. an expired/used manifest code).
-      const reason = err instanceof Error ? err.message : "manifest exchange failed";
-      console.error("[github] manifest callback failed:", reason);
-      return c.redirect(`/?github=error&reason=${encodeURIComponent(reason.slice(0, 200))}`);
-    }
+  app.get("/api/github/app/start", (c) => {
+    const url = githubAppInstallationUrl(settings);
+    return url ? c.json({ url }) : c.json({ error: "GitHub repository connection is not configured" }, 503);
   });
 
-  // ...and here after choosing which repos to grant
+  // Store only the installation selected for this tenant.
   app.get("/api/github/app/setup", (c) => {
     const installationId = c.req.query("installation_id");
     if (installationId) {
       settings.setRaw("github_app_installation_id", installationId);
       runtime.invalidate();
     }
-    return c.redirect("/?github=connected");
+    const returnTo = c.req.query("return_to") === "/app" ? "/app" : "/";
+    return c.redirect(`${returnTo}?github=connected`);
   });
 
   app.get("/api/github/repos", async (c) => c.json({ repositories: await listInstallationRepos(settings) }));

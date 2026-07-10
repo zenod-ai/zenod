@@ -207,6 +207,11 @@ describe("Zenod chassis unit", () => {
 
   it("delegates a signed-in customer browser session to only its bound tenant", async () => {
     const dataDir = await tempDir();
+    await writeFile(
+      join(dataDir, "vault-app.json"),
+      JSON.stringify({ id: "3718758", slug: "zenod-memory-v01a", privateKeyPem: "test-private-key" }),
+      "utf8",
+    );
     const tenants = createMemoryTenantStore([
       { token: "customer-token", tenant: { id: "github-42" } },
       { token: "other-token", tenant: { id: "github-99" } },
@@ -256,6 +261,15 @@ describe("Zenod chassis unit", () => {
       unit.customerTokenVault.put("github-99", "other-token");
       const cookie = await signInCustomer(unit);
 
+      const start = await unit.app.request("/api/github/app/start", { headers: { cookie } });
+      expect(start.status).toBe(200);
+      const startBody = await start.json() as { url: string };
+      const installUrl = new URL(startBody.url);
+      expect(`${installUrl.origin}${installUrl.pathname}`).toBe(
+        "https://github.com/apps/zenod-memory-v01a/installations/new",
+      );
+      expect(startBody.url).not.toContain("settings/apps/new");
+
       const update = await unit.app.request("/api/settings?tenantId=github-99", {
         method: "PUT",
         headers: { cookie, authorization: "Bearer other-token", "content-type": "application/json" },
@@ -265,6 +279,28 @@ describe("Zenod chassis unit", () => {
       expect(await update.json()).toMatchObject({ settings: { vault_repo: "owner/customer-vault" } });
       expect(unit.runtimes.get("github-42")).not.toBeNull();
       expect(unit.runtimes.get("github-99")).toBeNull();
+      expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_id")).toBe("3718758");
+
+      const setup = await unit.app.request(
+        `/github/setup?installation_id=4242&state=${encodeURIComponent(installUrl.searchParams.get("state")!)}`,
+        { headers: { cookie } },
+      );
+      expect(setup.status).toBe(302);
+      const setupLocation = setup.headers.get("location")!;
+      expect(setupLocation).toContain("/api/github/app/setup?installation_id=4242");
+      const finish = await unit.app.request(setupLocation, { headers: { cookie } });
+      expect(finish.status).toBe(302);
+      expect(finish.headers.get("location")).toBe("/app?github=connected");
+      expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_installation_id")).toBe("4242");
+
+      const selectRepo = await unit.app.request("/api/vault/repository", {
+        method: "PUT",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ repo: "octocat/brain", branch: "main" }),
+      });
+      expect(selectRepo.status).toBe(200);
+      expect(unit.runtimes.get("github-42")!.settings.get("vault_repo")).toBe("octocat/brain");
+      expect(unit.customerAccounts.resolveActiveTenantForUser(42)?.vault_repo).toBe("octocat/brain");
       for (const path of ["/api/tenants", "/api/exec/event", "/mcp/customer-token", "/internal/status"]) {
         const forbidden = await unit.app.request(path, {
           method: path === "/api/tenants" || path === "/api/exec/event" ? "POST" : "GET",

@@ -226,6 +226,7 @@ export class Runtime {
       tenantId?: string;
       credentialVault?: CredentialVault;
       credentialMasterKey?: string;
+      settingFallbacks?: Readonly<Record<string, string>>;
     } = {},
   ) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
@@ -237,7 +238,7 @@ export class Runtime {
         tenantId: options.tenantId ?? "standalone",
         masterKey: options.credentialMasterKey,
       });
-    this.settings = new Settings(this.state, this.credentialVault);
+    this.settings = new Settings(this.state, this.credentialVault, options.settingFallbacks);
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
     this.whatsapp = new WhatsAppGateway({
