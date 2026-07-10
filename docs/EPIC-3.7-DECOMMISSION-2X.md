@@ -9,10 +9,10 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Epic 3.7 delivery manager (Codex task `019f4933-a958-79b3-8e16-21841be40c53`)
 Steward since: 2026-07-10 01:30 CEST
-Last reconciled commit: `6025f47`
+Last reconciled commit: `fa49f5c`
 Planner: Epic 3.0 planner
 Worker: Epic 3.7 delivery manager + dispatched ticket workers
-Tester: DX-7 final tester dispatched
+Tester: DX-7 final tester + DX-8A independent acceptance reviewer dispatched
 
 ## Role Bindings
 
@@ -21,8 +21,8 @@ Tester: DX-7 final tester dispatched
 | Epic 0 worker | Epic 0 Foundation planner | Root scope | Reads for rollups. | Root state reconciled. |
 | Planner | Epic 3.0 planner | Decommission scope | Shape acceptance and tickets until an epic worker is bound. | Executable ledger. |
 | Epic worker | Epic 3.7 delivery manager (`019f4933-a958-79b3-8e16-21841be40c53`) | This spine | Delivery lead and MANAGER (parent D8): mint issues, dispatch ticket workers and testers, run fix loops, iterate until Definition of Done or a named Human Gate; never stop for questions the spine or code answers. | Spine, issues, integration state current. |
-| Ticket worker | Dalton (`019f493b-5e40-7bd2-b3d5-98c1d6f8aeb9`), Descartes (`019f493b-5ec9-73c1-bd3a-450ab687796c`), Faraday (`019f493b-5f51-7352-9bf4-9b4ee36888ea`), Franklin (`019f4943-96fe-78b0-89fb-f17df5738be7`), Galileo (`019f4950-33d0-7cb2-b779-1b447e381fab`) | #714, #722, #731, #741, #745 | Execute assigned issue branches. | PR/patch, commit, evidence, blocker, next action. |
-| Tester | Lovelace (`019f493b-5fe8-77e1-85d3-df536f8f2059`), Heisenberg (`019f4950-3452-7863-b296-fe04c2cb2ecf`) | #732; DX-1/DX-2 safety review | Validate runbook and execution-package readiness. | Commit, environment, pass/fail, risk. |
+| Ticket worker | Dalton (`019f493b-5e40-7bd2-b3d5-98c1d6f8aeb9`), Descartes (`019f493b-5ec9-73c1-bd3a-450ab687796c`), Faraday (`019f493b-5f51-7352-9bf4-9b4ee36888ea`), Franklin (`019f4943-96fe-78b0-89fb-f17df5738be7`), Galileo (`019f4950-33d0-7cb2-b779-1b447e381fab`), Ptolemy (`019f497f-29d7-7d73-bb60-582e94da0c6f`) | #714, #722, #731, #741, #745, #756 | Execute assigned issue branches. | PR/patch, commit, evidence, blocker, next action. |
+| Tester | Lovelace (`019f493b-5fe8-77e1-85d3-df536f8f2059`), Heisenberg (`019f4950-3452-7863-b296-fe04c2cb2ecf`), Hypatia (`019f497f-2a30-7eb0-a156-c2ea3075573b`) | #732; DX-1/DX-2 safety review; #756 acceptance review | Validate runbooks, execution-package readiness, and checkout-topology fail-closed behavior. | Commit, environment, pass/fail, risk. |
 
 ## Write Scope
 
@@ -77,11 +77,11 @@ Inventory and retire the entire Epic 2.x per-user container fleet — every per-
 ## Current State
 
 Phase: human gate + dependency execution
-Last verified: 2026-07-10 02:38 CEST
+Last verified: 2026-07-10 03:08 CEST
 Integration target: main
-Fresh base commit: `6025f478593261855937a764d9327d8f68756a80`
-Next action: Jordi approves the exact DX-2 CSV digest and archive target; meanwhile deliver the missing unit `/api/tenants` endpoints through their owning epics. Keep #728/#729/#730 blocked until 3.2/3.3/3.5 cutovers.
-Blockers: DX-2 destructive execution needs Jordi's exact approval of digest `e0e81e0f2546d86034fc79bafb4e7c13abf383830cf9926241f8c7dc67e41c3f` and archive target. DX-8 cannot enable `tenants_api` until Zenod, Callisthenes, and Ring expose deployed HTTPS `/api/tenants` endpoints with control-plane tokens. Live retirement waves remain blocked by 3.2/3.3/3.5 cutovers and per-wave Jordi approval.
+Fresh base commit: `fa49f5c36e0c65f39076c74b42ac970c541bb89c`
+Next action: Jordi reviews the exact DX-2 CSV digest and archive target; unit owners deliver the missing Callisthenes and Ring `/api/tenants` endpoints. Keep #728/#729/#730 blocked until 3.2/3.3/3.5 cutovers.
+Blockers: DX-2 destructive execution needs Jordi's exact approval of digest `e0e81e0f2546d86034fc79bafb4e7c13abf383830cf9926241f8c7dc67e41c3f` and archive target. DX-8 cannot enable `tenants_api` until Zenod, Callisthenes, and Ring expose deployed HTTPS `/api/tenants` endpoints with control-plane tokens; the 2026-07-10 live probe found Zenod auth-gated at HTTP 401 but Callisthenes and Ring absent at HTTP 404. Live retirement waves remain blocked by 3.2/3.3/3.5 cutovers and per-wave Jordi approval.
 
 ## Role Goals
 
@@ -118,6 +118,7 @@ Ticket sketch: DX-1 inventory + classification; DX-2 early-wins wave (dead/test)
 |---|---|---|---|
 | 2026-07-10 | Snapshot before every removal; archives are never deleted in this epic. | Live paying tenants; reversibility is the safety property. | parent D13 |
 | 2026-07-10 | Waves keyed to unit cutovers, not calendar. | Retiring before verified migration risks customer data/URLs. | 3.2/3.3/3.5 spines |
+| 2026-07-10 | A Ring unit checkout provisions exactly one Ring tenant; suite fan-out is a separate product/topology path. | Epic 3.0 defines independently sold units and separately composed suites; the Ring wallet wires enabled downstream units rather than redefining Ring as a suite alias. | Epic 3.0 D3/D10; final container map; Epic 3.4; independent review `019f4979-83ea-71e2-add3-e61f1011fbd6` |
 
 ## Issue Ledger
 
@@ -131,6 +132,7 @@ Ticket sketch: DX-1 inventory + classification; DX-2 early-wins wave (dead/test)
 | [#731](https://github.com/zenod-ai/zenod/issues/731) | Ticket worker | Faraday + steward | DX-6 retire provisioner, watchdog registration, DNS minting | blocked / replacement merged off | DX-3..5 + #745 enablement | [PR #747](https://github.com/zenod-ai/zenod/pull/747) merged as `430c385`; [cloud PR #59](https://github.com/zenod-ai/cloud/pull/59) merged as `09ca15d` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | 2.x provisioning code paths removed with tombstones. | Audits and fail-closed shared-unit client are on both main branches; production mode remains unchanged and legacy removal is still unsafe. | 2026-07-10 02:38 CEST | Deliver/enable unit endpoints; destructive cleanup waits for checkout evidence and retirement waves. |
 | [#741](https://github.com/zenod-ai/zenod/issues/741) | Ticket worker | Franklin (`019f4943-96fe-78b0-89fb-f17df5738be7`) | DX-6C cloud provisioner, DNS, and watchdog minting audit | done | - | [cloud PR #58](https://github.com/zenod-ai/cloud/pull/58) merged as `f21f3f7` | cloud `4300ec34e0a59c4f3689fb789eae460c6d7354d0` | Cloud Dokploy app/domain/watchdog provisioning paths audited and cleanup plan split into now-safe vs gated. | Audit is on cloud main; issue closed `status:complete`. Replacement and removal remain tracked by #745/#731. | 2026-07-10 02:38 CEST | Complete. |
 | [#745](https://github.com/zenod-ai/zenod/issues/745) | Ticket worker | Galileo (`019f4950-33d0-7cb2-b779-1b447e381fab`) | DX-8 cloud `/api/tenants` checkout replacement | blocked / code merged off | deployed Zenod + Callisthenes + Ring endpoints | [cloud PR #59](https://github.com/zenod-ai/cloud/pull/59) merged as `09ca15d` | cloud `4300ec34e0a59c4f3689fb789eae460c6d7354d0` | Stripe checkout provisions unit tenant rows instead of Dokploy compose/domain records. | Fail-closed client is on cloud main; merged-main webhook typecheck/build, 13 tests, and console build pass. Default production behavior is unchanged. | 2026-07-10 02:38 CEST | Enable on cloud-test only after all three endpoints/tokens exist, then run one Stripe TEST checkout per unit. |
+| [#756](https://github.com/zenod-ai/zenod/issues/756) | Ticket worker + tester | Ptolemy (`019f497f-29d7-7d73-bb60-582e94da0c6f`) + Hypatia (`019f497f-2a30-7eb0-a156-c2ea3075573b`) | DX-8A separate checkout product identity from unit provisioning | done | cloud #59 | [cloud PR #60](https://github.com/zenod-ai/cloud/pull/60) merged as `039e2cd` | cloud `09ca15d` | Unit checkout metadata separates product, provisioning kind, and unit; unsupported suite/unknown kinds fail before any tenant API call or executable recovery task; Ring remains singular. | Initial commit failed signed webhook acceptance; fix `28bbd3f` validates before queue admission. Independent re-test passed exact invalid-suite/malformed cases, valid Ring, historical compatibility, metadata propagation, and production-off scope. Fresh merged-main clean installs, 18 tests, typecheck, and both builds pass. Issue closed `status:complete`. | 2026-07-10 03:08 CEST | Complete; #745 remains endpoint/deployment gated. |
 | [#732](https://github.com/zenod-ai/zenod/issues/732) | Tester | Lovelace (`019f493b-5fe8-77e1-85d3-df536f8f2059`) | DX-7 final sweep + restore drill + runbook | blocked / runbook merged | DX-3..6 for final pass | [PR #748](https://github.com/zenod-ai/zenod/pull/748) merged as `e97c259` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Fleet matches canonical slide; one snapshot restored as drill; runbook merged. | Final-sweep and restore-drill runbook is on main; no destructive command executed. | 2026-07-10 02:38 CEST | Execute after waves complete and restore target is approved. |
 
 ## Branch And Integration
@@ -143,7 +145,7 @@ Ticket sketch: DX-1 inventory + classification; DX-2 early-wins wave (dead/test)
 - Done gate: acceptance passed, evidence linked, residual risk recorded, and spine reconciled.
 - Integration rule: merge small reviewed work after required checks pass so new agents bootstrap from the freshest validated base.
 - If not merged, the issue ledger must show branch/PR, blocker, owner, latest commit, and next action.
-- Integrated 2026-07-10: Zenod PRs #746 (`69bee3a`), #747 (`430c385`), #748 (`e97c259`), #749 (`cd9c21f`); cloud PRs #58 (`f21f3f7`), #59 (`09ca15d`).
+- Integrated 2026-07-10: Zenod PRs #746 (`69bee3a`), #747 (`430c385`), #748 (`e97c259`), #749 (`cd9c21f`), #755 (`fa49f5c`); cloud PRs #58 (`f21f3f7`), #59 (`09ca15d`), #60 (`039e2cd`).
 
 ## Human Gates
 
@@ -177,10 +179,12 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 - Faraday (`019f493b-5f51-7352-9bf4-9b4ee36888ea`) owns #731.
 - Franklin (`019f4943-96fe-78b0-89fb-f17df5738be7`) completed #741.
 - Galileo (`019f4950-33d0-7cb2-b779-1b447e381fab`) completed the code slice of #745; endpoint enablement remains blocked.
+- Ptolemy (`019f497f-29d7-7d73-bb60-582e94da0c6f`) completed #756, merged through cloud PR #60.
 
 ## Tester Queue
 
 - Lovelace (`019f493b-5fe8-77e1-85d3-df536f8f2059`) owns #732.
+- Hypatia (`019f497f-2a30-7eb0-a156-c2ea3075573b`) independently rejected #756's first commit and passed the corrected exact commit `28bbd3f`.
 
 ## Validation Evidence
 
@@ -198,6 +202,11 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 | 2026-07-10 | DX-8 cloud shared-unit client | cloud `60114da` | `zenod-ai/cloud` local | webhook typecheck/build; 13 tests/5 suites; console build; health smoke; compose config; `git diff --check`; independent contract review | pass / endpoint gate | C3 contract matched; no fallback after API failure; production default unchanged; PR #59. |
 | 2026-07-10 | GitHub issue board and draft PRs | `zenod-ai/zenod`, `zenod-ai/cloud` | GitHub issues/PRs | `gh issue create`; `gh pr create --draft`; `gh issue list --label epic:3.7` | pass | Issues #714, #722, #728, #729, #730, #731, #732, #741, #745; PRs #746, #747, #748, #749, cloud #58. |
 | 2026-07-10 | Merged integration | Zenod `6025f47`; cloud `09ca15d` | clean worktrees from both `origin/main` refs | strict spine validation; DX-2 guard/rollback tests; webhook `npm ci`, typecheck, 13 tests, build; console `npm ci`, build; `git diff --check` | pass | All six non-destructive PRs merged; C3 provisioning also reached Zenod main; #714 and #741 closed complete; main CI/publish observed separately. |
+| 2026-07-10 | Post-integration spine | Zenod `fa49f5c` | clean detached `origin/main` | strict spine validation; `bash -n` DX-2 script; DX-2 guard/rollback tests; `git diff --check`; PR #755 CI | pass | PR #755 merged; authoritative delivery ledger is on main. |
+| 2026-07-10 | Unit tenant API live readiness | public HTTPS, unauthenticated GET only | `z2.zenod.dev`, `callisthenes.zenod.dev`, `ring.zenod.dev` | `curl --max-time 15 --connect-timeout 5 -sS -o /dev/null -w 'HTTP %{http_code}' https://<unit>/api/tenants` | blocked / partial | Zenod HTTP 401 proves an auth-gated route is deployed; Callisthenes HTTP 404 and Ring HTTP 404 prove those routes are not deployed. No POST, token, secret, or mutation used. |
+| 2026-07-10 | Ring checkout topology review | cloud `09ca15d`; Epic 3.0/3.4 and final map | read-only independent agent review | trace product/unit decisions, cloud checkout metadata, endpoint selection, and tests | pass / follow-up | Ring is a standalone unit and correctly calls one Ring endpoint. #756 owns fail-closed separation of product identity from unit topology before suite SKUs exist. |
+| 2026-07-10 | DX-8A initial checkout topology patch | cloud `1e3538f` | isolated cloud worktree + signed local webhook acceptance | webhook typecheck/16 tests/build; console build; diff check; independent end-to-end queue probe | fail / fixed | Unit API parser and Ring call count passed, but recovery queue accepted suite as Ring and malformed modern metadata as Zenod. PR #60 was held; no production change occurred. |
+| 2026-07-10 | DX-8A corrected checkout topology patch | cloud `28bbd3f`; merged main `039e2cd` | isolated branch plus fresh detached cloud main | steward typecheck/18 tests/webhook build/console build; independent signed webhook suite/malformed/valid/legacy probes; fresh `npm ci`; diff check | pass | Invalid modern sessions create failed evidence with no executable queue entry or API call; Ring calls only Ring; historical sessions remain compatible; session/subscription metadata match; zero npm vulnerabilities; production mode remains off. PR #60 merged and #756 closed complete. |
 
 ## Handoff Journal
 
@@ -302,11 +311,25 @@ Links:
 - https://github.com/zenod-ai/cloud/pull/58
 - https://github.com/zenod-ai/cloud/pull/59
 
+### 2026-07-10 - Delivery Manager - Live readiness and checkout-topology review
+
+Context: PR #755 merged the reconciled Epic 3.7 spine and merged-main validation passed again. Read-only public probes found the Zenod tenant API deployed and auth-gated at HTTP 401, while Callisthenes and Ring returned HTTP 404. An independent architecture review confirmed that a Ring unit checkout correctly provisions one Ring tenant; suite products are a separate composition path. #756 separated product identity from unit topology. Independent signed webhook testing rejected its first commit because the recovery queue still aliased invalid metadata; the fix loop moved validation before queue admission, passed re-test, and merged through cloud PR #60.
+Next: keep `TENANT_PROVISIONING_MODE` off until all three HTTPS endpoints and tokens exist, then use cloud-test for one Stripe TEST checkout per unit. Jordi separately approves the DX-2 digest and archive target before any removal.
+Risks: Callisthenes and Ring endpoint deployments are hard blockers for checkout testing. No production or destructive state changed; legacy cleanup still waits for endpoint enablement and retirement waves.
+Assignment identity: Epic 3.7 delivery manager integration
+Branch / latest commits: Zenod main `fa49f5c`; cloud main `039e2cd`
+Last verified: 2026-07-10 03:08 CEST
+Links:
+
+- https://github.com/zenod-ai/zenod/pull/755
+- https://github.com/zenod-ai/zenod/issues/756
+- https://github.com/zenod-ai/cloud/pull/60
+
 ## Open Questions
 
 - Approve DX-2 digest `e0e81e0f2546d86034fc79bafb4e7c13abf383830cf9926241f8c7dc67e41c3f` and choose archive target. Recommendation: `/srv/zenod-archives/epic37/dx2/YYYYMMDD/`; 45 candidate volumes total ~0.014 GiB and Docker data had 35 GB free, with an off-host mirror after execution. Owner: Jordi. Needed by: DX-2.
 - DX-1 found one live-paying row (`zenod-jordi-f2c7a6`) and two ambiguous active rows (`callisthenes-jordicallifresh33087-muhmxp`, `ring-jordiring-fkegkz`). The DX-2 batch excludes all three; only the failed duplicate record sharing the Ring hostname is included with `still-routed` postcondition. Owner: Jordi/steward. Needed by: later waves, not DX-2 test-row approval.
-- Cloud main `09ca15d` implements #745's fail-closed client and generic C3 provisioning is on Zenod main at `6025f47`; Zenod still needs unit integration/deployment, while Callisthenes and Ring deployed endpoints are absent. Owner: Epic 3.2/3.3/Ring unit workers. Needed by: DX-8 enablement and DX-6 cleanup.
+- Cloud main `039e2cd` implements #745's fail-closed client plus #756's product/topology queue hardening, and generic C3 provisioning is on Zenod main. The 2026-07-10 public probe found Zenod `/api/tenants` deployed and auth-gated at HTTP 401, while Callisthenes and Ring returned HTTP 404. Control-plane token configuration was not inspected or changed. Owner: Epic 3.3/Ring unit workers plus cloud operator. Needed by: DX-8 enablement and DX-6 cleanup.
 
 ## Proposed Cross-Spine Updates
 
@@ -315,6 +338,7 @@ Links:
 | 2026-07-10 | `docs/EPIC-3.2-ZENOD-MULTITENANT.md` | Z-MT-6 completion must notify this spine to unblock DX-3. | this spine | Epic 3.2 worker | proposed |
 | 2026-07-10 | `docs/EPIC-3.3-CALLISTHENES-MULTITENANT.md` | CA-MT-6 completion must notify this spine to unblock DX-4. | this spine | Epic 3.3 worker | proposed |
 | 2026-07-10 | `docs/EPIC-3.5-EPAMINON-MULTITENANT.md` | E-MT-7 completion must notify this spine to unblock DX-5. | this spine | Epic 3.5 worker | proposed |
+| 2026-07-10 | `docs/EPIC-3.4-RING-MULTITENANT.md` | Deploy the Ring HTTPS `/api/tenants` route and notify this spine; preserve Ring-as-unit semantics while suite composition remains separate. | public HTTP 404 probe; independent architecture review | Epic 3.4 worker | proposed |
 
 ## Appendix
 
