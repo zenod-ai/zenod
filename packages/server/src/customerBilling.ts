@@ -31,10 +31,20 @@ export interface CustomerBillingConfig {
   prices: Record<CheckoutTier, string | undefined>;
 }
 
-export function loadCustomerBillingConfig(env: NodeJS.ProcessEnv = process.env): CustomerBillingConfig {
+export interface CustomerProductConfig {
+  product: string;
+  unit: string;
+  defaultDomain: string;
+  signInToLanding?: boolean;
+}
+
+export function loadCustomerBillingConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  product: CustomerProductConfig = { product: "zenod", unit: "zenod", defaultDomain: "https://cloud.zenod.dev" },
+): CustomerBillingConfig {
   const stripeMode = env.STRIPE_MODE === "live" ? "live" : "test";
   return {
-    domain: (env.CUSTOMER_APP_URL || env.DOMAIN || "https://cloud.zenod.dev").replace(/\/$/, ""),
+    domain: (env.CUSTOMER_APP_URL || env.DOMAIN || product.defaultDomain).replace(/\/$/, ""),
     stripeMode,
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || "",
     prices: {
@@ -64,9 +74,10 @@ export async function createCustomerCheckout(
   config: CustomerBillingConfig,
   owner: CheckoutOwner,
   checkout: { tier: CheckoutTier; price: string },
+  product: CustomerProductConfig = { product: "zenod", unit: "zenod", defaultDomain: "https://cloud.zenod.dev" },
 ): Promise<Stripe.Checkout.Session> {
   const accountId = customerAccountId(owner.github_id);
-  const metadata = { product: "zenod", unit: "zenod", tier: checkout.tier, account_id: accountId };
+  const metadata = { product: product.product, unit: product.unit, tier: checkout.tier, account_id: accountId };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items: [{ price: checkout.price, quantity: 1 }],
@@ -78,7 +89,7 @@ export async function createCustomerCheckout(
   });
   accounts.upsert(session.id, {
     account_id: accountId,
-    product: "zenod",
+    product: product.product,
     tier: checkout.tier,
     stripe_client_reference_id: accountId,
     subscription_status: "checkout_pending",
@@ -93,8 +104,9 @@ export async function completeCustomerCheckout(
   session: Stripe.Checkout.Session,
   accounts: CustomerAccountStore,
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void,
+  expectedProduct = "zenod",
 ): Promise<"completed" | "duplicate" | "rejected"> {
-  if (session.metadata?.product !== "zenod") return "rejected";
+  if (session.metadata?.product !== expectedProduct) return "rejected";
   const account = accounts.get(session.id);
   if (!account || !session.client_reference_id || session.client_reference_id !== account.account_id) {
     return "rejected";

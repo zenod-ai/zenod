@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 export interface CustomerAccount {
   session_id: string;
   account_id: string;
-  product: "zenod";
+  product: string;
   tier: string | null;
   stripe_email: string | null;
   stripe_client_reference_id: string | null;
@@ -32,8 +32,12 @@ type Store = Record<string, CustomerAccount>;
 export class CustomerAccountStore {
   readonly path: string;
 
-  constructor(dataDir: string) {
-    this.path = join(dataDir, "customer-accounts.json");
+  constructor(
+    dataDir: string,
+    private readonly product = "zenod",
+  ) {
+    const suffix = product === "zenod" ? "" : `-${product}`;
+    this.path = join(dataDir, `customer-accounts${suffix}.json`);
   }
 
   private load(): Store {
@@ -60,7 +64,7 @@ export class CustomerAccountStore {
     const required = patch as Pick<CustomerAccount, "account_id" | "github_id" | "github_login">;
     const next: CustomerAccount = {
       account_id: existing?.account_id ?? required.account_id,
-      product: "zenod",
+      product: this.product,
       tier: null,
       stripe_email: null,
       stripe_client_reference_id: null,
