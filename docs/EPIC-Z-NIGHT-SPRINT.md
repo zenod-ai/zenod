@@ -8,8 +8,8 @@ Primary document: `docs/EPIC-Z-NIGHT-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Night-sprint delivery manager (bind on dispatch)
-Steward since: on dispatch
-Last reconciled commit: bind on dispatch
+Steward since: 2026-07-10T20:19:03+02:00
+Last reconciled commit: 2962ab90617534db64264fb976498be6e50f16ab
 Planner: Jordi + Epic 3.0 planner
 Worker: Night-sprint delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -78,11 +78,11 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 
 ## Current State
 
-Phase: dispatch-ready
-Last verified: 2026-07-11
+Phase: minting
+Last verified: 2026-07-10T20:19:03+02:00
 Integration target: main
-Fresh base commit: current `main` at dispatch — PIN IT; no rebases until the journey passes (D19c)
-Next action: manager pulls main, binds as steward, mints tickets Z-N1..Z-N6, dispatches Z-N1/Z-N2/Z-N4 in parallel worktrees immediately.
+Fresh base commit: `2962ab90617534db64264fb976498be6e50f16ab` — pinned; no rebases until the journey passes (D19c)
+Next action: manager mints tickets Z-N1..Z-N6, then dispatches Z-N1/Z-N2/Z-N4 in parallel worktrees immediately.
 Blockers: none — every decision is pre-answered below. Inputs from Jordi are non-blocking (decision rules given).
 
 ## Role Goals
@@ -110,10 +110,10 @@ Starting material (all EXISTS and is deployed): multi-tenant Zenod container liv
 Tickets (parallel where no file overlap; each in own worktree):
 
 - **Z-N1 · Landing + pricing** — serve `apps/site` from the Zenod container as `/` of the product domain; add Pricing page (3 options); Sign-in buttons; header shows session state. Surface: static site + routing.
-- **Z-N2 · Auth** — GitHub OAuth ONLY (reuse the pilot's already-working flow — do not rebuild it, re-point it) → account + session; sign-in returns to landing; public token/password login removed from every public route (self-host admin path may remain behind `/admin` only). No Google anything. Surface: auth routes + landing header.
+- **Z-N2 · Auth = TRANSPLANT, not build** — the working GitHub login is the code running cloud.zenod.dev today, in `zenod-ai/cloud` `services/webhook`. PORT THAT CODE INTO THE ZENOD CONTAINER: the OAuth handlers, session issuing, and the existing login page (the one with the Zenod guy picture) move in as-is, adapting only imports/config. Same OAuth app, same client id + secret (read from the cloud app's Dokploy env), same registered callbacks — which keep working because Traefik re-points `cloud.zenod.dev` at the Zenod container (Z-N5), which now serves that hostname itself. Any auth line written that duplicates a line existing in `zenod-ai/cloud` is waste. Sign-in returns to the landing; public token/password login removed from every public route (self-host admin may remain behind `/admin` only). No Google anything. Surface: auth routes + landing header + login page.
 - **Z-N3 · Billing** (after Z-N2) — Pricing → server-side Stripe TEST checkout (`client_reference_id`), webhook → tenant row bound to account, success → dashboard, unsubscribed accounts → upgrade prompt. Surface: billing routes.
 - **Z-N4 · Dashboard** — reshape `/app`: MCP URL + snippets first; vault connect; credit; settings; DELETE Transcription/WhatsApp/Telegram/Ring tabs and their nav entries for the zenod unit; back-link to landing. Surface: `apps/web` views.
-- **Z-N5 · Domain** — one domain family per the Inputs decision rule; landing at root, dashboard at `/app` (or `app.` subdomain), `/mcp` on the same host; re-mint MCP URLs on the canonical host; 301 the old hostname. Surface: proxy/Dokploy config.
+- **Z-N5 · Domain** — Traefik re-points `cloud.zenod.dev` at the ZENOD CONTAINER (the old cloud service is retired from that hostname; Jordi authorized full overwrite). Landing at `zenod.dev` root if DNS confirmed, else at `cloud.zenod.dev` root; dashboard `/app`; `/mcp` same host; direct visit to `cloud.zenod.dev` = the ported login page. Re-mint MCP URLs on the canonical host; 301 `mind.zenod.dev`. `zenod.zenod.dev` is banned. Surface: proxy/Dokploy config.
 - **Z-N6 · Journey loop** (manager, after integration) — walk, fix, re-walk to one clean pass; screenshots; morning package.
 
 Parallel wave 1: Z-N1 ∥ Z-N2 ∥ Z-N4. Wave 2: Z-N3, Z-N5. Then Z-N6 loop. Heartbeat every 30 min: `lap/state | blocker | ETA`. Budget per ticket: 90 min, then report state.
@@ -124,7 +124,8 @@ Every decision pre-answered; the manager invents nothing:
 
 | Date | Decision | Rule |
 |---|---|---|
-| 2026-07-11 | Domain | If `zenod.dev` DNS is confirmed pointed at the VPS by dispatch time (see Inputs), use it: landing `zenod.dev`, dashboard `zenod.dev/app` (or `app.zenod.dev` if routing is simpler), MCP `zenod.dev/mcp/<token>`. If NOT confirmed: build everything on `zenod.zenod.dev` with identical structure and leave a one-line domain-swap note; do not stall. |
+| 2026-07-11 | Domain (Jordi, final) | `zenod.zenod.dev` is BANNED — never use it, never mint anything on it. Layout: landing on `zenod.dev` if its DNS is confirmed; **`cloud.zenod.dev` is the auth + app host** — it already exists, is live ("Zenod Console" login page), holds the REGISTERED GitHub OAuth callback URLs, and may be FULLY OVERWRITTEN. If `zenod.dev` DNS is not ready, the landing also goes on `cloud.zenod.dev` root; do not stall. Direct visit to `cloud.zenod.dev` without passing the landing = the pure login page, reusing the existing design with the Zenod guy picture (it exists today — reuse, don't redesign). |
+| 2026-07-11 | Credentials (Jordi, final — TAKE FROM THE WORKING PLATFORM, create NOTHING new) | Jordi will not re-provide or re-create any GitHub credential. (a) GitHub SIGN-IN OAuth app: already working on cloud.zenod.dev — its client id + secret are in the existing cloud service's environment (Dokploy env of the cloud/webhook application; source `zenod-ai/cloud` `services/webhook`, `docker-compose.cloud.yml`). Read them from Dokploy and reuse the SAME OAuth app — its callback URL already points at cloud.zenod.dev, which is exactly why cloud.zenod.dev is the auth host. (b) GitHub REPO access (vault connect): the existing GitHub App flow in `packages/server/src/githubLinks.ts` (`/api/github/app/start|callback|setup`) with its stored app credentials on the working platform's `/data`/settings — reuse it unchanged for repo selection. Verification is one command from the VPS: request the sign-in URL and read `client_id` + `redirect_uri` off the GitHub authorize redirect. If any credential is genuinely unreadable from Dokploy/env/data, that is the ONLY permitted "BLOCKED ON JORDI" on this topic — with the exact env var name needed. THE METHOD IS TRANSPLANT: the login code itself moves from `zenod-ai/cloud` into the Zenod container (Z-N2), which then serves cloud.zenod.dev directly — one container holds landing, login, billing, dashboard, MCP. Nothing auth-related is written from scratch tonight. |
 | 2026-07-11 | Sign-in method | GitHub ONLY, by Jordi's explicit decision. The flow already works on the deployed pilot — reuse it, don't rebuild it. Google is a future HARDEN item; no Google button, no Google code tonight. |
 | 2026-07-11 | Pricing | Self-hosted (free) / Monthly / Yearly. No pay-as-you-go. TEST prices: create via Stripe TEST API if none exist, any sane placeholder amounts. |
 | 2026-07-11 | Identity binding | Checkout sessions server-side only, `client_reference_id` = account id. Never email matching. Anonymous buy click → sign-in first → straight into checkout. |
@@ -188,6 +189,12 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 ## Handoff Journal
 
+### 2026-07-10T20:19:03+02:00 - Night-sprint delivery manager - Steward bound
+
+Context: stewardship transferred from the planner to the Night-sprint delivery manager before concurrent ticket writing began. Main and origin/main were clean and aligned after pull.
+Current commit: `2962ab90617534db64264fb976498be6e50f16ab`.
+Next: mint Z-N1..Z-N6, create pinned worktrees for wave 1, and dispatch Z-N1/Z-N2/Z-N4.
+
 ### 2026-07-11 - Planner - Night sprint spine created
 
 Context: 24 hours of process failure distilled into this shape: one self-contained Zenod (landing = entry point, pricing 3 options, OAuth sign-in, Stripe → tenant row, MCP-first dashboard, vault connect), journey as the only DoD, all decisions pre-made, parallel worktrees, budgets, heartbeats. Chassis dissolved into Zenod; 3.1 closed; 3.2 superseded by this spine.
@@ -209,8 +216,8 @@ Links: `docs/EPIC-3.0-CHASSIS-REPLATFORM.md` (D19–D21), `apps/site/`, deployed
 
 Inputs Needed from Jordi (post as a comment on the manager's thread before sleeping; all have absence-rules, none block):
 
-1. **zenod.dev DNS**: confirm it points (or will point) at the VPS/proxy. Absent → sprint builds on `zenod.zenod.dev`, swap later.
-2. **GitHub OAuth app**: already works on the pilot — the only sign-in method tonight. If the domain changes, the manager updates its callback URL; if it lacks permission to, it posts BLOCKED ON JORDI with the exact URL to paste into the GitHub OAuth app settings.
+1. **zenod.dev DNS**: confirm it points (or will point) at the VPS/proxy. Absent → landing goes on `cloud.zenod.dev` root, swap later. (`zenod.zenod.dev` is banned.)
+2. **GitHub OAuth app**: REUSE the existing app already working on cloud.zenod.dev — creds in the cloud service's Dokploy env (see Credentials decision). Its callback already points at cloud.zenod.dev, so keeping auth on cloud.zenod.dev means NO GitHub settings changes at all. Nothing needed from Jordi.
 3. Stripe TEST: already working from the pilot. Nothing needed.
 4. OpenRouter key: NOT needed for SHIP (no model-dependent step in the journey). You'll paste it in the Keys tab in the morning if you want to chat/ingest with the model.
 5. Google sign-in: NOT tonight, by decision. Future HARDEN item; creds will be provided when it's scheduled.
