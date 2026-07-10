@@ -100,6 +100,8 @@ export interface AppOptions {
   agent?: AgentDefinition;
   /** Hosted customer-layer dependencies/config. Production defaults come from env. */
   customer?: CustomerLayerOptions;
+  /** Chassis route middleware has already authenticated and bound this tenant. */
+  trustedChassisAuth?: boolean;
 }
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
@@ -203,8 +205,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   const { settings } = runtime;
   const customerEnv = options.customer?.env ?? process.env;
   const hostedCustomerAuth = customerAuthEnabled(customerEnv);
-  const customerLayer = createCustomerLayer(runtime, options.customer);
-  app.route("/", customerLayer.app);
+  if (!options.trustedChassisAuth) {
+    const customerLayer = createCustomerLayer(runtime, options.customer);
+    app.route("/", customerLayer.app);
+  }
   const usedHostedEntryNonces = new Set<string>();
   const agent = options.agent ?? runtime.agent;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
@@ -326,6 +330,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   const auth = requireAuth(settings);
   app.use("/api/*", async (c, next) => {
+    if (options.trustedChassisAuth) return next();
     const path = c.req.path;
     if (path === "/api/health" || path.startsWith("/api/auth/")) return next();
     // /api/provision is open ONLY while the agent is un-provisioned (it has no
