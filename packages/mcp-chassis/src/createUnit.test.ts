@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ChassisStorage, ChassisUsageStore, createMemoryTenantStore, createUnit, hashToken, type UnitContext } from "./index.js";
+import { ChassisStorage, ChassisUsageStore, createMemoryTenantStore, createSqliteTenantStore, createUnit, hashToken, type UnitContext } from "./index.js";
 
 const servers: ServerType[] = [];
 const tempDirs: string[] = [];
@@ -491,6 +491,121 @@ describe("createUnit", () => {
     await expect(bearer.json()).resolves.toMatchObject({
       tenant: { id: "tenant-a" },
     });
+  });
+
+  it("protects unit routes with bearer or session auth and injects tenant-bound context", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-unit-routes-"));
+    tempDirs.push(dataDir);
+    await writeFile(join(dataDir, "index.html"), "<html>SPA fallback</html>");
+    const tenants = createSqliteTenantStore({ dataDir });
+    tenants.importTenantTokenHash({
+      tokenHash: hashToken("tenant-one-token"),
+      tenant: { id: "tenant-one", name: "Tenant One" },
+    });
+    tenants.importTenantTokenHash({
+      tokenHash: hashToken("tenant-two-token"),
+      tenant: { id: "tenant-two", name: "Tenant Two" },
+    });
+    const unit = createUnit({
+      name: "demo",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      controlPlane: { store: tenants, token: "control-secret" },
+      ui: {
+        sessionSecret: "unit-route-session-secret",
+        webDist: dataDir,
+      },
+      routes(routes) {
+        routes.post("/api/unit-marker", async (c) => {
+          const context = c.get("unitContext");
+          const body = await c.req.json<{ marker?: string }>();
+          const vault = context.storage.vault("unit-routes.sqlite");
+          try {
+            vault.set("marker", body.marker ?? "");
+          } finally {
+            vault.close();
+          }
+          return c.json({
+            tenant: context.tenant,
+            storageRoot: context.storage.rootDir,
+            usage: context.usage?.summary() ?? null,
+          });
+        });
+        routes.get("/api/unit-marker", (c) => {
+          const context = c.get("unitContext");
+          const vault = context.storage.vault("unit-routes.sqlite");
+          try {
+            return c.json({
+              tenant: context.tenant,
+              marker: vault.get("marker"),
+              operatingRules: context.operatingRules,
+            });
+          } finally {
+            vault.close();
+          }
+        });
+      },
+    });
+    const base = await listen(unit.app);
+
+    const anonymous = await fetch(`${base}/api/unit-marker`);
+    const written = await fetch(`${base}/api/unit-marker?tenantId=tenant-two`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer tenant-one-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ marker: "tenant-one-only" }),
+    });
+    const tenantTwo = await fetch(`${base}/api/unit-marker`, {
+      headers: { authorization: "Bearer tenant-two-token" },
+    });
+    const tenantOneCookie = await login(base, "tenant-one-token");
+    const sessionRead = await fetch(`${base}/api/unit-marker`, {
+      headers: { cookie: tenantOneCookie },
+    });
+
+    expect(anonymous.status).toBe(401);
+    await expect(written.json()).resolves.toMatchObject({
+      tenant: { id: "tenant-one" },
+      usage: { tenantId: "tenant-one" },
+    });
+    await expect(tenantTwo.json()).resolves.toMatchObject({
+      tenant: { id: "tenant-two" },
+      marker: null,
+    });
+    await expect(sessionRead.json()).resolves.toMatchObject({
+      tenant: { id: "tenant-one" },
+      marker: "tenant-one-only",
+    });
+
+    const rotated = tenants.rotateTenantToken("tenant-one");
+    expect(rotated).not.toBeNull();
+    await expect(
+      fetch(`${base}/api/unit-marker`, {
+        headers: { authorization: "Bearer tenant-one-token" },
+      }),
+    ).resolves.toHaveProperty("status", 401);
+    await expect(
+      fetch(`${base}/api/unit-marker`, {
+        headers: { authorization: `Bearer ${rotated!.token}` },
+      }),
+    ).resolves.toHaveProperty("status", 200);
+    await expect(
+      fetch(`${base}/api/unit-marker`, { headers: { cookie: tenantOneCookie } }),
+    ).resolves.toHaveProperty("status", 200);
+    tenants.close();
+  });
+
+  it("refuses to register unit routes without tenant auth", () => {
+    expect(() =>
+      createUnit({
+        name: "demo",
+        routes(routes) {
+          routes.get("/api/unbound", (c) => c.json({ ok: true }));
+        },
+      }),
+    ).toThrow("createUnit({ routes }) requires tenantAuth");
   });
 
   it("installs tenant directives through the seam tool and re-reads the turn preamble", async () => {

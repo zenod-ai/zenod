@@ -1,0 +1,286 @@
+import { createHash, randomBytes } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import type {
+  ProvisionTenantInput,
+  ProvisionTenantResult,
+  TenantContext,
+  TenantProvisioningStore,
+  TenantStatus,
+  TenantTokenRecord,
+} from "./index.js";
+
+const DEFAULT_DATA_DIR = "/data";
+const DEFAULT_DB_NAME = "chassis-tenants.sqlite";
+const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
+const TOKEN_HASH_RE = /^[a-f0-9]{64}$/;
+
+export interface SqliteTenantStoreOptions {
+  dataDir?: string;
+  path?: string;
+  busyTimeoutMs?: number;
+}
+
+export interface ImportTenantTokenHashInput {
+  tokenHash: string;
+  tenant: TenantContext;
+  status?: TenantStatus;
+  expiresAt?: Date | string | number | null;
+}
+
+export class SqliteTenantStore implements TenantProvisioningStore {
+  readonly path: string;
+  private readonly db: DatabaseSync;
+
+  constructor(options: SqliteTenantStoreOptions = {}) {
+    this.path =
+      options.path ??
+      resolve(
+        options.dataDir ?? process.env.DATA_DIR ?? DEFAULT_DATA_DIR,
+        DEFAULT_DB_NAME,
+      );
+    if (this.path !== ":memory:")
+      mkdirSync(dirname(this.path), { recursive: true });
+    this.db = new DatabaseSync(this.path);
+    const busyTimeoutMs = normalizeBusyTimeout(
+      options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS,
+    );
+    this.db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = ${busyTimeoutMs};
+      CREATE TABLE IF NOT EXISTS tenants (
+        tenant_id TEXT PRIMARY KEY,
+        name TEXT,
+        plan TEXT,
+        quota REAL,
+        token_hash TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL CHECK (status IN ('active', 'suspended', 'deleted')),
+        expires_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_tenants_token_hash ON tenants (token_hash);
+    `);
+  }
+
+  resolveTokenHash(tokenHash: string): TenantTokenRecord | null {
+    const normalized = normalizeTokenHash(tokenHash);
+    const row = this.db
+      .prepare(
+        `SELECT tenant_id, name, plan, quota, token_hash, status, expires_at
+         FROM tenants WHERE token_hash = ?`,
+      )
+      .get(normalized) as TenantRow | undefined;
+    return row ? rowToRecord(row) : null;
+  }
+
+  provisionTenant(input: ProvisionTenantInput = {}): ProvisionTenantResult {
+    const ordinal =
+      Number(
+        (
+          this.db.prepare("SELECT COUNT(*) AS count FROM tenants").get() as {
+            count: number | bigint;
+          }
+        ).count,
+      ) + 1;
+    const tenant = normalizeTenant(input, ordinal);
+    const token = input.token?.trim() || generateTenantToken();
+    const record = this.writeRecord({
+      tokenHash: hashToken(token),
+      tenant,
+      status: input.status ?? "active",
+      expiresAt: input.expiresAt ?? null,
+    });
+    return { token, record };
+  }
+
+  importTenantTokenHash(input: ImportTenantTokenHashInput): TenantTokenRecord {
+    return this.writeRecord({
+      tokenHash: normalizeTokenHash(input.tokenHash),
+      tenant: normalizeTenantContext(input.tenant),
+      status: input.status ?? "active",
+      expiresAt: input.expiresAt ?? null,
+    });
+  }
+
+  rotateTenantToken(tenantId: string): ProvisionTenantResult | null {
+    const existing = this.findTenant(tenantId);
+    if (!existing) return null;
+    const token = generateTenantToken();
+    const record = this.writeRecord({
+      tokenHash: hashToken(token),
+      tenant: existing.tenant,
+      status: "active",
+      expiresAt: existing.expiresAt ?? null,
+    });
+    return { token, record };
+  }
+
+  setTenantStatus(
+    tenantId: string,
+    status: TenantStatus,
+  ): TenantTokenRecord | null {
+    const existing = this.findTenant(tenantId);
+    if (!existing) return null;
+    return this.writeRecord({ ...existing, status });
+  }
+
+  snapshot(): TenantTokenRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT tenant_id, name, plan, quota, token_hash, status, expires_at
+         FROM tenants ORDER BY tenant_id`,
+      )
+      .all() as unknown as TenantRow[];
+    return rows.map(rowToRecord);
+  }
+
+  close(): void {
+    this.db.close();
+  }
+
+  private findTenant(tenantId: string): TenantTokenRecord | null {
+    const id = tenantId.trim();
+    if (!id) return null;
+    const row = this.db
+      .prepare(
+        `SELECT tenant_id, name, plan, quota, token_hash, status, expires_at
+         FROM tenants WHERE tenant_id = ?`,
+      )
+      .get(id) as TenantRow | undefined;
+    return row ? rowToRecord(row) : null;
+  }
+
+  private writeRecord(record: TenantTokenRecord): TenantTokenRecord {
+    const tenant = normalizeTenantContext(record.tenant);
+    const tokenHash = normalizeTokenHash(record.tokenHash);
+    const status = record.status ?? "active";
+    const expiresAt = normalizeExpiresAt(record.expiresAt);
+    const now = Date.now();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO tenants (
+             tenant_id, name, plan, quota, token_hash, status, expires_at, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(tenant_id) DO UPDATE SET
+             name = excluded.name,
+             plan = excluded.plan,
+             quota = excluded.quota,
+             token_hash = excluded.token_hash,
+             status = excluded.status,
+             expires_at = excluded.expires_at,
+             updated_at = excluded.updated_at`,
+        )
+        .run(
+          tenant.id,
+          tenant.name ?? null,
+          tenant.plan ?? null,
+          tenant.quota ?? null,
+          tokenHash,
+          status,
+          expiresAt,
+          now,
+          now,
+        );
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      tokenHash,
+      tenant,
+      status,
+      expiresAt,
+    };
+  }
+}
+
+export function createSqliteTenantStore(
+  options: SqliteTenantStoreOptions = {},
+): SqliteTenantStore {
+  return new SqliteTenantStore(options);
+}
+
+interface TenantRow {
+  tenant_id: string;
+  name: string | null;
+  plan: string | null;
+  quota: number | null;
+  token_hash: string;
+  status: TenantStatus;
+  expires_at: number | null;
+}
+
+function rowToRecord(row: TenantRow): TenantTokenRecord {
+  return {
+    tokenHash: row.token_hash,
+    tenant: {
+      id: row.tenant_id,
+      ...(row.name !== null ? { name: row.name } : {}),
+      ...(row.plan !== null ? { plan: row.plan } : {}),
+      ...(row.quota !== null ? { quota: row.quota } : {}),
+    },
+    status: row.status,
+    expiresAt: row.expires_at,
+  };
+}
+
+function normalizeTenant(
+  input: ProvisionTenantInput,
+  ordinal: number,
+): TenantContext {
+  const tenant = input.tenant ?? {};
+  return normalizeTenantContext({
+    id: input.tenantId ?? tenant.id ?? `tenant-${ordinal}`,
+    name: input.name ?? tenant.name,
+    plan: input.plan ?? tenant.plan,
+    quota: input.quota ?? tenant.quota,
+  });
+}
+
+function normalizeTenantContext(tenant: TenantContext): TenantContext {
+  const id = tenant.id.trim();
+  if (!id) throw new Error("tenant id must be non-empty");
+  return {
+    id,
+    ...(tenant.name?.trim() ? { name: tenant.name.trim() } : {}),
+    ...(tenant.plan?.trim() ? { plan: tenant.plan.trim() } : {}),
+    ...(tenant.quota !== undefined ? { quota: tenant.quota } : {}),
+  };
+}
+
+function normalizeTokenHash(tokenHash: string): string {
+  const normalized = tokenHash.trim().toLowerCase();
+  if (!TOKEN_HASH_RE.test(normalized))
+    throw new Error("token hash must be a SHA-256 hex digest");
+  return normalized;
+}
+
+function normalizeExpiresAt(
+  value: TenantTokenRecord["expiresAt"],
+): number | null {
+  if (value === null || value === undefined) return null;
+  const timestamp =
+    value instanceof Date ? value.getTime() : new Date(value).getTime();
+  if (!Number.isFinite(timestamp))
+    throw new Error("expiresAt must be a valid date or timestamp");
+  return Math.trunc(timestamp);
+}
+
+function normalizeBusyTimeout(value: number): number {
+  if (!Number.isFinite(value) || value < 0)
+    throw new Error("busyTimeoutMs must be a non-negative finite number");
+  return Math.trunc(value);
+}
+
+function hashToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function generateTenantToken(): string {
+  return `zenod_${randomBytes(24).toString("hex")}`;
+}

@@ -45,6 +45,12 @@ import {
   type TenantUsageMeter,
 } from "./usage.js";
 export type { BillingOptions } from "./billing.js";
+export {
+  createSqliteTenantStore,
+  SqliteTenantStore,
+  type ImportTenantTokenHashInput,
+  type SqliteTenantStoreOptions,
+} from "./sqliteTenantStore.js";
 
 export type TenantStatus = "active" | "suspended" | "deleted";
 
@@ -66,10 +72,16 @@ export interface UnitContext {
   operatingRules: TurnPreamble | null;
 }
 
+export interface TenantUnitContext extends UnitContext {
+  tenant: TenantContext;
+  storage: TenantStorage;
+}
+
 export type UnitHonoEnv = {
   Bindings: HttpBindings;
   Variables: {
     tenant: TenantContext | null;
+    unitContext: TenantUnitContext;
   };
 };
 
@@ -220,6 +232,9 @@ export type UnitToolRegistrar = (
   context: UnitContext,
 ) => void | Promise<void>;
 
+/** Register tenant-authenticated HTTP routes before the optional SPA fallback. */
+export type UnitRouteRegistrar = (routes: Hono<UnitHonoEnv>) => void;
+
 export interface CreateUnitOptions {
   /** Machine name used in health responses and as the MCP server id. */
   name: string;
@@ -227,6 +242,8 @@ export interface CreateUnitOptions {
   version?: string;
   /** Register this unit's MCP tools on each stateless request server. */
   tools?: UnitToolRegistrar;
+  /** Register unit product APIs on an automatically tenant-authenticated sub-router. */
+  routes?: UnitRouteRegistrar;
   /** Optional tenant auth. When set, every MCP request resolves a tenant first. */
   tenantAuth?: TenantAuthOptions;
   /** Optional control-plane tenant provisioning API. */
@@ -455,30 +472,35 @@ export function requireTenantAuth(
 ): UnitAuthMiddleware {
   const realm = options.realm?.trim() || "mcp-chassis";
   return async (c, next) => {
-    const token = presentedToken(c);
-    const record = token
-      ? await options.store.resolveTokenHash(hashToken(token))
-      : null;
-
-    if (record && isActive(record)) {
-      c.set("tenant", { ...record.tenant });
-      await next();
-      return;
-    }
-
-    const bearer = bearerToken(c);
-    const oauthToken =
-      bearer && options.oauth
-        ? await options.oauth.resolveOAuthAccessToken(bearer)
-        : null;
-    if (oauthToken && oauthToken.expiresAt > Date.now()) {
-      c.set("tenant", { ...oauthToken.tenant });
+    const tenant = await resolveAuthenticatedTenant(c, options);
+    if (tenant) {
+      c.set("tenant", tenant);
       await next();
       return;
     }
 
     return unauthorized(c, realm, options.oauthChallenge === true);
   };
+}
+
+async function resolveAuthenticatedTenant(
+  c: Context<UnitHonoEnv>,
+  options: TenantAuthOptions,
+): Promise<TenantContext | null> {
+  const token = presentedToken(c);
+  const record = token
+    ? await options.store.resolveTokenHash(hashToken(token))
+    : null;
+  if (record && isActive(record)) return { ...record.tenant };
+
+  const bearer = bearerToken(c);
+  const oauthToken =
+    bearer && options.oauth
+      ? await options.oauth.resolveOAuthAccessToken(bearer)
+      : null;
+  return oauthToken && oauthToken.expiresAt > Date.now()
+    ? { ...oauthToken.tenant }
+    : null;
 }
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -524,6 +546,9 @@ function decodeSessionPayload(encoded: string): UiSessionPayload | null {
           : {}),
         ...(typeof value.tenant.plan === "string"
           ? { plan: value.tenant.plan }
+          : {}),
+        ...(typeof value.tenant.quota === "number" || value.tenant.quota === null
+          ? { quota: value.tenant.quota }
           : {}),
       },
     };
@@ -829,6 +854,14 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const provisioningStore =
     options.controlPlane?.store ?? defaultProvisioningStore;
 
+  const tenantContext = async (tenant: TenantContext): Promise<TenantUnitContext> => ({
+    unitName: name,
+    tenant,
+    storage: storage.forTenant(tenant),
+    usage: getUsageStore()?.forTenant(tenant) ?? null,
+    operatingRules: await operatingRules.turnPreamble(tenant),
+  });
+
   if (options.singleTenant) {
     const store =
       options.singleTenant.store ??
@@ -1122,6 +1155,42 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
 
   app.all("/mcp", auth, handleMcp);
   app.all("/mcp/:token", auth, handleMcp);
+
+  if (options.routes) {
+    const tenantAuth = options.tenantAuth;
+    if (!tenantAuth) {
+      throw new Error("createUnit({ routes }) requires tenantAuth");
+    }
+    const routeApp = new Hono<UnitHonoEnv>();
+    const routeAuth: UnitAuthMiddleware = async (c, next) => {
+      const tenant =
+        (await resolveAuthenticatedTenant(c, {
+          ...tenantAuth,
+          ...(oauth?.serverEnabled
+            ? { oauth: oauth.store, oauthChallenge: true }
+            : {}),
+        })) ?? (ui ? resolveTenantSession(c, ui) : null);
+      if (!tenant) {
+        return unauthorized(
+          c,
+          tenantAuth.realm?.trim() || "mcp-chassis",
+          Boolean(oauth?.serverEnabled || tenantAuth.oauthChallenge),
+        );
+      }
+      c.set("tenant", tenant);
+      const context = await tenantContext(tenant);
+      if (context.usage) {
+        const decision = context.usage.checkQuota(tenant.quota, 1);
+        if (!decision.allowed) return quotaExceededResponse(c, decision);
+        context.usage.record({ kind: "api.request", units: 1 });
+      }
+      c.set("unitContext", context);
+      await next();
+    };
+    routeApp.use("*", routeAuth);
+    options.routes(routeApp);
+    app.route("/", routeApp);
+  }
 
   if (ui?.webDist) {
     const root = ui.webDist;
