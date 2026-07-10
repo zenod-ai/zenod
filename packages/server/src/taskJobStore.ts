@@ -29,6 +29,12 @@ const IN_FLIGHT_STATE = "running" as const;
 // server eventually fails honestly instead of looping forever.
 const MAX_STORE_RESUME_ATTEMPTS = 3;
 
+export interface ProvidedTranscript {
+  text: string;
+  source: string;
+  version: string;
+}
+
 export interface TaskJobInput {
   /** task: the instruction sent through the shared tasking loop. */
   text?: string;
@@ -60,6 +66,8 @@ export interface TaskJobInput {
   senderTimestamp?: string;
   /** media_ingest: optional filing hints. */
   mediaHints?: string[];
+  /** media_ingest: upstream transcript that bypasses Zenod STT. */
+  transcript?: ProvidedTranscript;
 }
 
 export interface MediaIngestReceipt {
@@ -75,6 +83,10 @@ export interface MediaIngestReceipt {
     senderTimestamp?: string;
     contentHint?: string;
     hints?: string[];
+    transcript?: {
+      source: string;
+      version: string;
+    };
   };
   rawArtifact: {
     handle: string | null;
@@ -94,6 +106,7 @@ export interface MediaIngestReceipt {
     commitSha: string | null;
     githubUrls: string[];
   };
+  transcription?: "provided" | "performed";
   nextAdapterIssues?: string[];
 }
 

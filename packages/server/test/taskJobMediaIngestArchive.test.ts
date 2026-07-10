@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrainEngine, StoreInput } from "zenod";
 
 import { Settings } from "../src/settings.js";
@@ -24,7 +24,6 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-media-ingest-"));
     dirs.push(dir);
     const archiveDir = join(dir, "archive");
-    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "Travel insurance renews on 2026-08-15.";
     const settings = {
       get: (key: string) =>
         ({
@@ -49,7 +48,14 @@ describe("TaskJobQueue media_ingest archive integration", () => {
       },
     } as unknown as BrainEngine;
     const store = new TaskJobStore(join(dir, "tasks.sqlite"));
-    const queue = new TaskJobQueue(store, async () => engine, settings);
+    const transcribe = vi.fn(async () => ({
+      body: "Travel insurance renews on 2026-08-15.",
+      provider: "whisper.cpp large-v3-turbo",
+      kind: "audio" as const,
+      filename: "voice.transcript.txt",
+      label: "Voice note",
+    }));
+    const queue = new TaskJobQueue(store, async () => engine, settings, transcribe);
 
     const job = queue.enqueue("media_ingest", {
       mediaType: "audio",
@@ -68,6 +74,8 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(done?.status).toBe("done");
     const receipt = done!.result as MediaIngestReceipt;
     expect(receipt.status).toBe("done");
+    expect(receipt.transcription).toBe("performed");
+    expect(transcribe).toHaveBeenCalledTimes(1);
     expect(receipt.rawArtifact.handle).toMatch(/^file:\/\//);
     expect(receipt.rawArtifact.archiveUrl).toBe(receipt.rawArtifact.handle);
     expect(receipt.rawArtifact.sha256).toMatch(/^[a-f0-9]{64}$/);
@@ -84,6 +92,65 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(stored[0]!.content).toContain("Travel insurance renews on 2026-08-15.");
     expect(stored[0]!.content).toContain("Extraction artifact: file://");
     expect(stored[0]!.verbatim).toBe(true);
+  });
+
+  it("bypasses STT when an upstream transcript is provided and records provenance", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-media-ingest-provided-transcript-"));
+    dirs.push(dir);
+    const archiveDir = join(dir, "archive");
+    const settings = {
+      get: (key: string) =>
+        ({
+          artifact_archive_provider: "local",
+          artifact_archive_local_dir: archiveDir,
+        })[key] ?? null,
+    } as unknown as Settings;
+    const stored: StoreInput[] = [];
+    const engine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-07-10.md#^e-provided",
+          pagesTouched: ["Areas/Insurance.md"],
+          commitSha: "d".repeat(40),
+          githubUrls: [],
+        };
+      },
+    } as unknown as BrainEngine;
+    const transcribe = vi.fn(async () => {
+      throw new Error("STT must not run for a provided transcript");
+    });
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings, transcribe);
+
+    const job = queue.enqueue("media_ingest", {
+      mediaType: "audio",
+      bytesRef: "data:audio/ogg;base64,dm9pY2UgYnl0ZXM=",
+      filename: "voice.ogg",
+      transcript: {
+        text: "The policy renews on 2026-08-15.",
+        source: "phylax",
+        version: "v2",
+      },
+    });
+
+    let done = store.get(job.id);
+    for (let i = 0; i < 50 && done?.status !== "done"; i += 1) {
+      await sleep(10);
+      done = store.get(job.id);
+    }
+
+    expect(done?.status).toBe("done");
+    expect(transcribe).not.toHaveBeenCalled();
+    const receipt = done!.result as MediaIngestReceipt;
+    expect(receipt.transcription).toBe("provided");
+    expect(receipt.source.transcript).toEqual({
+      source: "phylax",
+      version: "v2",
+    });
+    expect(receipt.extraction.provider).toBe("phylax@v2");
+    expect(stored[0]!.content).toContain("Transcribed by phylax@v2.");
+    expect(stored[0]!.content).toContain("The policy renews on 2026-08-15.");
   });
 
   it("extracts an image ingest job, files it through the memory pipeline, and returns terminal receipts", async () => {

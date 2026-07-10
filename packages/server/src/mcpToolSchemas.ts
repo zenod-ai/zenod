@@ -41,6 +41,14 @@ export const INGEST_MEMORY_SHAPE = {
   contentHint: z.string().min(1).optional().describe("User-provided context for filing/digesting, e.g. 'remember the renewal date shown here'."),
   senderTimestamp: z.string().min(1).optional().describe("Original sender/source timestamp, preferably ISO-8601."),
   hints: z.array(z.string().min(1)).optional().describe("Optional filing hints for the eventual memory digest."),
+  transcript: z
+    .object({
+      text: z.string().min(1),
+      source: z.string().min(1),
+      version: z.string().min(1),
+    })
+    .optional()
+    .describe("Optional upstream audio transcript. When supplied, Zenod bypasses STT and records its source/version."),
 };
 
 export const GET_TASK_RESULT_SHAPE = {
