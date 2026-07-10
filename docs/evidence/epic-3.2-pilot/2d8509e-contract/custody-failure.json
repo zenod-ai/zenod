@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "commit": "2d8509e973f10698b01f9922e6ddfdf3cbc4bc67",
+  "status": "fail",
+  "scope": "encrypted world-key custody",
+  "syntheticCredentialSha256": "7bd8123aa2d91adb20869e5a3be632b32d7d0aa9129125f0a27b9c4cb0ded31a",
+  "rawBearerMatches": 0,
+  "rawWorldCredentialMatches": 1,
+  "matchingRelativePath": "epic32-browser-t1/vault.sqlite-wal",
+  "crossSpineIssue": 789,
+  "anchorIssue": 780
+}

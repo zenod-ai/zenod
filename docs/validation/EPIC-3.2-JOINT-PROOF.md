@@ -6,24 +6,30 @@ This is the test-only joint proof for Epic 3.1 chassis behavior exercised throug
 
 ## Integration Prerequisite
 
-This tester branch was created from `8e12ebab64140f227f9c19d5a72e5d191de8d251`. Before scoring the joint proof, integrate this harness commit onto `codex/epic-3.2-zenod-multitenant` at or after `699a4ed4738ce4d0c8ec0b930e49642cb8a99b28`. That integration point contains the tenant runtime/server work from #734 at `cacf3cb` plus the subsequent web/cutover commits through `699a4ed`.
+Run only from the integrated Epic 3.2 product branch based on the latest accepted
+Epic 3.1 chassis main SHA. The `2d8509e` checkpoint used chassis `ba533b3` and
+found encrypted-vault blocker #789. The next definitive acceptance must name the
+exact post-#789 main parent and resulting product commit.
 
-Do not run the final acceptance from this branch's base and do not describe a base-branch prerequisite failure as a product regression. The final evidence must name the resulting integrated SHA after the harness commit is cherry-picked or merged.
+Never repair a chassis defect from the 3.2 branch. File a Proposed Cross-Spine
+Update anchored to #780 and wait for the 3.1 steward's merged SHA.
 
 ## What It Proves
 
 The black-box runner covers:
 
 - control-token-gated provisioning of T1, T2, and T3;
+- anonymous SPA root and one built JS/CSS asset, while product APIs stay protected;
 - registry redaction and unknown-token rejection;
-- ZD-8 `/mcp/<token>` initialization and tools listing for each tenant;
+- ZD-8 `/mcp/<token>` initialization, tools listing, and a real declared read-tool call for each tenant;
 - proof that the control-plane token cannot read `/api/settings`;
 - separate T1/T2/T3 bearer reads with each tenant's own repo settings;
 - tenant-scoped settings, repo, ingest, and usage API reads;
-- `/api/auth/tenant-login` followed by cookie-only API reads that stay on the owning tenant;
+- `/api/auth/login` followed by cookie-only API reads that stay on the owning tenant;
 - direct cross-tenant URL rejection and a tenant-id-tampered session-cookie rejection;
+- T2 token rotation, retired-token rejection, active-token MCP/API continuity, and a new signed session;
 - full-mode store receipts and unique marker-string negatives;
-- optional host-visible `/data/<tenant>/` layout, media path, and raw-token-at-rest checks;
+- optional host-visible `/data/<tenant>/` layout, media path, and byte scans for every issued bearer token, including the retired token;
 - persistent `journal_mode=wal` on the chassis DB and every tenant file DB;
 - in-process `busy_timeout=30000` on every live Zenod store and the chassis registry;
 - optional single-tenant self-host parity;
@@ -45,7 +51,7 @@ node scripts/epic32-joint-proof.mjs --mode contract
 
 Contract mode requires no GitHub or LLM credentials. It proves the control plane, tokened MCP initialization, control-token non-escalation, tenant bearer/session binding, tampered-cookie rejection, storage layout, and persistent WAL mode. It intentionally cannot prove durable commit receipts or marker search.
 
-Run the in-process PRAGMA proof after the parent implementation is integrated into this branch:
+Run the in-process PRAGMA proof on the integrated branch:
 
 ```sh
 npm run test -w @zenod/server -- epic32SqlitePragmas.test.ts
@@ -89,6 +95,10 @@ The migration worker's dry-run/apply/verify/rollback receipts remain authoritati
 
 After the API/session checks are green, use the same three provisioned tenants in a real browser. Retain one screenshot per tenant for Repo, Ingest, and Usage, plus the failed direct-URL attempt. Record browser version, viewport, base URL, exact commit, and screenshot paths in issue #736. A browser screenshot is supplementary evidence; the cookie-only API and tampered-cookie assertions are the deterministic isolation checks beneath it.
 
-## Current Expected Gap At Base Commit
+## Current Release Blocker
 
-At `8e12ebab64140f227f9c19d5a72e5d191de8d251`, `POST /api/tenants` is not implemented. A run against that commit must stop with exit `2` at provisioning. The post-dispatch parent branch has the tenant manager, tenant-login, signed sessions, fail-closed API dispatch, tenant media configuration, and SQLite PRAGMAs, but those edits are not present on this tester branch until the steward integrates or cherry-picks them. That is a truthful prerequisite failure, not a test pass.
+Checkpoint `2d8509e` passes this harness but fails the separate Law 5 custody
+scan because the chassis generic vault writes world credentials verbatim to
+SQLite/WAL. #789 owns the chassis fix. Harness success alone is therefore not
+Epic 3.2 readiness; the fresh post-#789 run must also prove zero raw world-key
+matches in DB, WAL, and SHM files.
