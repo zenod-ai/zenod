@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 1,
+  "operation": "apply",
+  "status": "success",
+  "runId": "f2d66a13-bbc8-461c-9a11-0069cbf0a887",
+  "recordedAt": "2026-07-10T03:09:51.772Z",
+  "tenantId": "epic32-migrated",
+  "tokenHash": "238c45f19ae1c966bc1315b744722f9970714ae79f050e999501a85552edd064",
+  "paths": {
+    "source": "/tmp/zenod-epic32-migration-664ce61/legacy",
+    "dataRoot": "/tmp/zenod-epic32-definitive.fhGI7n/migrated",
+    "target": "/tmp/zenod-epic32-definitive.fhGI7n/migrated/epic32-migrated",
+    "registry": "/tmp/zenod-epic32-definitive.fhGI7n/migrated/chassis-tenants.sqlite",
+    "receiptDir": "/Users/jordi/Documents/GitHub/wt-736-definitive/docs/evidence/epic-3.2-pilot/2d8509e-migration"
+  },
+  "planDigest": "df0c433fa622d94e9da4318d1238d8e8c064aeaf9f319e6ef4b335d3777a3c21",
+  "acceptedPlanDigest": "df0c433fa622d94e9da4318d1238d8e8c064aeaf9f319e6ef4b335d3777a3c21",
+  "idempotent": false,
+  "changes": {
+    "createdTarget": true,
+    "insertedRegistry": true,
+    "createdRegistry": true
+  },
+  "source": {
+    "manifestDigest": "e8dee45d631562d4fdd3a9a4ae7e92d35cd6e3c0dbadfddf46933502ea6e6ecd",
+    "files": 9,
+    "directories": 2,
+    "symlinks": 0,
+    "bytes": 311296,
+    "manifest": [
+      {
+        "path": "execution.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 16384,
+        "sha256": "7fa35cdb330a4cb5c6bcd9b31074392215a32e0d0cf206cf94a30d5fd5abc2e1"
+      },
+      {
+        "path": "ingest.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 16384,
+        "sha256": "2276e9f3646f2706a1ae1ad0cfdb66aec2fc99eab55d1d8bae25944bc721b8a2"
+      },
+      {
+        "path": "journeys.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 73728,
+        "sha256": "c7c1228b0869a8fc56be58143946e102066f7d4b3d683b39a150b56404b68506"
+      },
+      {
+        "path": "notifications.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 20480,
+        "sha256": "fc2c14dc289b4c45453505e72b76f40182b8857f5761243d997a2b26b2f39e9b"
+      },
+      {
+        "path": "oauth.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 32768,
+        "sha256": "3f2b0f8f58f94057bc576c510efa10e3d21cf83c09453a24bbb3b36494282570"
+      },
+      {
+        "path": "tasks.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 16384,
+        "sha256": "1dc83c6b9dbf88ce646a2222ac684df544731f70f236201cec93aa314feec186"
+      },
+      {
+        "path": "transcripts",
+        "type": "directory",
+        "mode": 493
+      },
+      {
+        "path": "usage.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 20480,
+        "sha256": "652b36e9e9f4901f473647d31bd135273bc41e2b337e9aae91ef79434280d2b7"
+      },
+      {
+        "path": "whatsapp",
+        "type": "directory",
+        "mode": 493
+      },
+      {
+        "path": "whatsapp/whatsapp.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 65536,
+        "sha256": "768160ad9549c76bddc0d7c4ddff844db41ca2800e9608953e755944f710665e"
+      },
+      {
+        "path": "zenod.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 49152,
+        "sha256": "e404dfbd8e690705443fad4cca0df31e3279431514f8fcdbf3c4e632ebbc25b6"
+      }
+    ],
+    "scrubbedSettings": [
+      "api_token",
+      "session_secret"
+    ],
+    "sqlite": [
+      {
+        "path": "execution.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "ingest.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "journeys.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "notifications.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "oauth.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "tasks.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "usage.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "whatsapp/whatsapp.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "zenod.sqlite",
+        "integrityCheck": "ok"
+      }
+    ],
+    "git": []
+  },
+  "target": {
+    "root": "/tmp/zenod-epic32-definitive.fhGI7n/migrated/epic32-migrated",
+    "entries": [
+      {
+        "path": "execution.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 16384,
+        "sha256": "7fa35cdb330a4cb5c6bcd9b31074392215a32e0d0cf206cf94a30d5fd5abc2e1"
+      },
+      {
+        "path": "ingest.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 16384,
+        "sha256": "2276e9f3646f2706a1ae1ad0cfdb66aec2fc99eab55d1d8bae25944bc721b8a2"
+      },
+      {
+        "path": "journeys.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 73728,
+        "sha256": "c7c1228b0869a8fc56be58143946e102066f7d4b3d683b39a150b56404b68506"
+      },
+      {
+        "path": "notifications.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 20480,
+        "sha256": "fc2c14dc289b4c45453505e72b76f40182b8857f5761243d997a2b26b2f39e9b"
+      },
+      {
+        "path": "oauth.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 32768,
+        "sha256": "3f2b0f8f58f94057bc576c510efa10e3d21cf83c09453a24bbb3b36494282570"
+      },
+      {
+        "path": "tasks.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 16384,
+        "sha256": "1dc83c6b9dbf88ce646a2222ac684df544731f70f236201cec93aa314feec186"
+      },
+      {
+        "path": "transcripts",
+        "type": "directory",
+        "mode": 493
+      },
+      {
+        "path": "usage.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 20480,
+        "sha256": "652b36e9e9f4901f473647d31bd135273bc41e2b337e9aae91ef79434280d2b7"
+      },
+      {
+        "path": "whatsapp",
+        "type": "directory",
+        "mode": 493
+      },
+      {
+        "path": "whatsapp/whatsapp.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 65536,
+        "sha256": "768160ad9549c76bddc0d7c4ddff844db41ca2800e9608953e755944f710665e"
+      },
+      {
+        "path": "zenod.sqlite",
+        "type": "file",
+        "mode": 420,
+        "size": 49152,
+        "sha256": "28e7bbe3508cc06690710b11a7136e8e9eae9597b59c55ce16d4824b531f9b8a"
+      }
+    ],
+    "digest": "55e7438e696899352080f47e68ae34181c8889c76cf2b8a420523fc952aba772",
+    "files": 9,
+    "directories": 2,
+    "symlinks": 0,
+    "bytes": 311296,
+    "sqlite": [
+      {
+        "path": "execution.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "ingest.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "journeys.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "notifications.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "oauth.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "tasks.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "usage.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "whatsapp/whatsapp.sqlite",
+        "integrityCheck": "ok"
+      },
+      {
+        "path": "zenod.sqlite",
+        "integrityCheck": "ok"
+      }
+    ],
+    "git": []
+  },
+  "registry": {
+    "exists": true,
+    "tableExists": true,
+    "compatible": true,
+    "columns": [
+      "tenant_id",
+      "name",
+      "plan",
+      "quota",
+      "token_hash",
+      "status",
+      "expires_at",
+      "created_at",
+      "updated_at"
+    ],
+    "uniqueColumns": [
+      "tenant_id",
+      "token_hash"
+    ],
+    "tenant": {
+      "tenant_id": "epic32-migrated",
+      "token_hash": "238c45f19ae1c966bc1315b744722f9970714ae79f050e999501a85552edd064"
+    },
+    "tokenTenant": {
+      "tenant_id": "epic32-migrated",
+      "token_hash": "238c45f19ae1c966bc1315b744722f9970714ae79f050e999501a85552edd064"
+    }
+  },
+  "verification": {
+    "checksums": "pass",
+    "sqliteIntegrity": "pass",
+    "gitVault": "pass",
+    "registry": "pass"
+  }
+}

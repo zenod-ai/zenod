@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "commit": "2d8509e973f10698b01f9922e6ddfdf3cbc4bc67",
+  "status": "pass",
+  "checks": {
+    "hostedSettingsAfterRestart": 200,
+    "hostedMcpInitializeAfterRestart": 200,
+    "selfHostSettingsAfterRestart": 200,
+    "selfHostMcpInitializeAfterRestart": 200,
+    "hostedRawBearerMatches": 0,
+    "selfHostRawBearerMatches": 0
+  },
+  "credentialHashes": {
+    "hostedRestartTenant": "83380e7761743500ed70dda51845799dcea0b474fa47bf7e0a57fd2516ae6dfc",
+    "selfHost": "d0aa2d9b03794e3e9ccf57da6eeafb924428a21323eef6bee180179b09135fa6"
+  }
+}

@@ -1,0 +1,479 @@
+{
+  "epic": "3.2",
+  "issue": 736,
+  "assignment": "epic32-joint-proof-tester",
+  "runId": "def2d8509e",
+  "mode": "contract",
+  "baseUrl": "http://127.0.0.1:8080",
+  "commit": "2d8509e973f10698b01f9922e6ddfdf3cbc4bc67",
+  "startedAt": "2026-07-10T03:08:41.381Z",
+  "tenantIds": [
+    "epic32-def2d8509e-t1",
+    "epic32-def2d8509e-t2",
+    "epic32-def2d8509e-t3"
+  ],
+  "tokenHashes": [
+    {
+      "label": "T1",
+      "sha256": "dc67caa0ecf2e7d92c0babc061d136ed1857f8d1789a7c6008f4d41c0b88f7f2"
+    },
+    {
+      "label": "T2",
+      "sha256": "036515da907350a57ecbcb65121642283f119aaf8ce6baff6a006b13ca90c668"
+    },
+    {
+      "label": "T3",
+      "sha256": "f3d5ceb68dfbe87efb5854dd62102a684e3a2038d8f408d2473d8967ae75f668"
+    }
+  ],
+  "status": "pass",
+  "steps": [
+    {
+      "name": "health",
+      "status": "pass",
+      "detail": {
+        "status": 200,
+        "body": {
+          "status": "ok",
+          "name": "zenod",
+          "version": "0.0.1"
+        }
+      }
+    },
+    {
+      "name": "anonymous root, built asset, and protected API boundary",
+      "status": "pass",
+      "detail": {
+        "rootStatus": 200,
+        "assetPath": "/assets/index-BdzEz9hj.js",
+        "assetStatus": 200,
+        "protectedApiStatus": 401
+      }
+    },
+    {
+      "name": "three-tenant provisioning and registry redaction",
+      "status": "pass",
+      "detail": {
+        "tenants": [
+          "epic32-def2d8509e-t1",
+          "epic32-def2d8509e-t2",
+          "epic32-def2d8509e-t3"
+        ],
+        "registry": {
+          "tenants": [
+            {
+              "tenantId": "epic32-def2d8509e-t1",
+              "name": "Epic 3.2 proof T1"
+            },
+            {
+              "tenantId": "epic32-def2d8509e-t2",
+              "name": "Epic 3.2 proof T2"
+            },
+            {
+              "tenantId": "epic32-def2d8509e-t3",
+              "name": "Epic 3.2 proof T3"
+            }
+          ],
+          "registryVisibility": "no list endpoint; persistence redaction verified by storage scan"
+        }
+      }
+    },
+    {
+      "name": "tokened MCP isolation and marker negatives",
+      "status": "pass",
+      "detail": {}
+    },
+    {
+      "name": "control token cannot access tenant product APIs",
+      "status": "pass",
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "name": "T1/T2/T3 bearer settings and signed tenant-session isolation",
+      "status": "pass",
+      "detail": {
+        "snapshots": {
+          "epic32-def2d8509e-t1": {
+            "settings": {
+              "settings": {
+                "instance_name": null,
+                "vault_repo": "epic32-proof/def2d8509e-t1",
+                "vault_branch": "main",
+                "github_token": "[redacted]",
+                "provider": null,
+                "anthropic_api_key": null,
+                "openai_api_key": null,
+                "openrouter_api_key": null,
+                "model_ask": null,
+                "model_classify": null,
+                "model_vision": null,
+                "model_max_steps": null,
+                "google_service_account_json": null,
+                "google_oauth_client_id": null,
+                "google_oauth_client_secret": "[redacted]",
+                "google_drive_folder_id": null,
+                "artifact_archive_provider": "local",
+                "artifact_archive_local_dir": "/tmp/zenod-epic32-definitive.fhGI7n/hosted/epic32-def2d8509e-t1/media",
+                "artifact_archive_drive_folder_id": null,
+                "groq_api_key": null,
+                "openai_long_transcription": null,
+                "long_transcription_provider": null,
+                "openrouter_transcription_model": null,
+                "whisper_model": null,
+                "telegram_enabled": null,
+                "telegram_bot_token": "[redacted]",
+                "telegram_allowed_users": null,
+                "telegram_accept_all": null,
+                "telegram_rich": null,
+                "composio_api_key": null,
+                "composio_user_id": null
+              },
+              "configured": false
+            },
+            "vault": {
+              "repo": "epic32-proof/def2d8509e-t1",
+              "branch": "main",
+              "vaultConfigured": false,
+              "configured": false,
+              "provider": "anthropic",
+              "llmReady": false,
+              "cloned": false,
+              "headSha": null,
+              "cloneError": null
+            },
+            "ingest": {
+              "jobs": []
+            },
+            "usage": {
+              "today": {
+                "since": 1783566521516,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              },
+              "last7d": {
+                "since": 1783048121516,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              }
+            }
+          },
+          "epic32-def2d8509e-t2": {
+            "settings": {
+              "settings": {
+                "instance_name": null,
+                "vault_repo": "epic32-proof/def2d8509e-t2",
+                "vault_branch": "main",
+                "github_token": "[redacted]",
+                "provider": null,
+                "anthropic_api_key": null,
+                "openai_api_key": null,
+                "openrouter_api_key": null,
+                "model_ask": null,
+                "model_classify": null,
+                "model_vision": null,
+                "model_max_steps": null,
+                "google_service_account_json": null,
+                "google_oauth_client_id": null,
+                "google_oauth_client_secret": "[redacted]",
+                "google_drive_folder_id": null,
+                "artifact_archive_provider": "local",
+                "artifact_archive_local_dir": "/tmp/zenod-epic32-definitive.fhGI7n/hosted/epic32-def2d8509e-t2/media",
+                "artifact_archive_drive_folder_id": null,
+                "groq_api_key": null,
+                "openai_long_transcription": null,
+                "long_transcription_provider": null,
+                "openrouter_transcription_model": null,
+                "whisper_model": null,
+                "telegram_enabled": null,
+                "telegram_bot_token": "[redacted]",
+                "telegram_allowed_users": null,
+                "telegram_accept_all": null,
+                "telegram_rich": null,
+                "composio_api_key": null,
+                "composio_user_id": null
+              },
+              "configured": false
+            },
+            "vault": {
+              "repo": "epic32-proof/def2d8509e-t2",
+              "branch": "main",
+              "vaultConfigured": false,
+              "configured": false,
+              "provider": "anthropic",
+              "llmReady": false,
+              "cloned": false,
+              "headSha": null,
+              "cloneError": null
+            },
+            "ingest": {
+              "jobs": []
+            },
+            "usage": {
+              "today": {
+                "since": 1783566521526,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              },
+              "last7d": {
+                "since": 1783048121526,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              }
+            }
+          },
+          "epic32-def2d8509e-t3": {
+            "settings": {
+              "settings": {
+                "instance_name": null,
+                "vault_repo": "epic32-proof/def2d8509e-t3",
+                "vault_branch": "main",
+                "github_token": "[redacted]",
+                "provider": null,
+                "anthropic_api_key": null,
+                "openai_api_key": null,
+                "openrouter_api_key": null,
+                "model_ask": null,
+                "model_classify": null,
+                "model_vision": null,
+                "model_max_steps": null,
+                "google_service_account_json": null,
+                "google_oauth_client_id": null,
+                "google_oauth_client_secret": "[redacted]",
+                "google_drive_folder_id": null,
+                "artifact_archive_provider": "local",
+                "artifact_archive_local_dir": "/tmp/zenod-epic32-definitive.fhGI7n/hosted/epic32-def2d8509e-t3/media",
+                "artifact_archive_drive_folder_id": null,
+                "groq_api_key": null,
+                "openai_long_transcription": null,
+                "long_transcription_provider": null,
+                "openrouter_transcription_model": null,
+                "whisper_model": null,
+                "telegram_enabled": null,
+                "telegram_bot_token": "[redacted]",
+                "telegram_allowed_users": null,
+                "telegram_accept_all": null,
+                "telegram_rich": null,
+                "composio_api_key": null,
+                "composio_user_id": null
+              },
+              "configured": false
+            },
+            "vault": {
+              "repo": "epic32-proof/def2d8509e-t3",
+              "branch": "main",
+              "vaultConfigured": false,
+              "configured": false,
+              "provider": "anthropic",
+              "llmReady": false,
+              "cloned": false,
+              "headSha": null,
+              "cloneError": null
+            },
+            "ingest": {
+              "jobs": []
+            },
+            "usage": {
+              "today": {
+                "since": 1783566521533,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              },
+              "last7d": {
+                "since": 1783048121533,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              }
+            }
+          }
+        },
+        "checks": [
+          {
+            "name": "T1 Bearer [redacted] snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T1 Bearer [redacted] separation",
+            "status": "pass"
+          },
+          {
+            "name": "T1 tenant-login",
+            "status": "pass"
+          },
+          {
+            "name": "T1 cookie-only API snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T1 cookie remains tenant-bound",
+            "status": "pass"
+          },
+          {
+            "name": "T1 direct cross-tenant URL negative",
+            "status": "pass"
+          },
+          {
+            "name": "T1 tampered tenant cookie negative",
+            "status": "pass"
+          },
+          {
+            "name": "T2 Bearer [redacted] snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T2 Bearer [redacted] separation",
+            "status": "pass"
+          },
+          {
+            "name": "T2 tenant-login",
+            "status": "pass"
+          },
+          {
+            "name": "T2 cookie-only API snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T2 cookie remains tenant-bound",
+            "status": "pass"
+          },
+          {
+            "name": "T2 direct cross-tenant URL negative",
+            "status": "pass"
+          },
+          {
+            "name": "T2 tampered tenant cookie negative",
+            "status": "pass"
+          },
+          {
+            "name": "T3 Bearer [redacted] snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T3 Bearer [redacted] separation",
+            "status": "pass"
+          },
+          {
+            "name": "T3 tenant-login",
+            "status": "pass"
+          },
+          {
+            "name": "T3 cookie-only API snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T3 cookie remains tenant-bound",
+            "status": "pass"
+          },
+          {
+            "name": "T3 direct cross-tenant URL negative",
+            "status": "pass"
+          },
+          {
+            "name": "T3 tampered tenant cookie negative",
+            "status": "pass"
+          }
+        ]
+      }
+    },
+    {
+      "name": "T2 token rotation, retired-token rejection, and new session",
+      "status": "pass",
+      "detail": {
+        "tenantId": "epic32-def2d8509e-t2",
+        "retiredCredentialSha256": "20134542f5e982582b8aaa51e661590c3bd2cc5d2f944dce7211e1a85ea718b9",
+        "activeCredentialSha256": "036515da907350a57ecbcb65121642283f119aaf8ce6baff6a006b13ca90c668",
+        "retiredStatus": 401,
+        "activeStatus": 200,
+        "sessionStatus": 200
+      }
+    },
+    {
+      "name": "joint chassis storage layout, persisted WAL, and token-at-rest",
+      "status": "pass",
+      "detail": {
+        "sqliteFiles": [
+          "chassis-tenants.sqlite",
+          "epic32-def2d8509e-t1/execution.sqlite",
+          "epic32-def2d8509e-t1/ingest.sqlite",
+          "epic32-def2d8509e-t1/journeys.sqlite",
+          "epic32-def2d8509e-t1/notifications.sqlite",
+          "epic32-def2d8509e-t1/oauth.sqlite",
+          "epic32-def2d8509e-t1/tasks.sqlite",
+          "epic32-def2d8509e-t1/usage.sqlite",
+          "epic32-def2d8509e-t1/vault.sqlite",
+          "epic32-def2d8509e-t1/whatsapp/whatsapp.sqlite",
+          "epic32-def2d8509e-t1/zenod.sqlite",
+          "epic32-def2d8509e-t2/execution.sqlite",
+          "epic32-def2d8509e-t2/ingest.sqlite",
+          "epic32-def2d8509e-t2/journeys.sqlite",
+          "epic32-def2d8509e-t2/notifications.sqlite",
+          "epic32-def2d8509e-t2/oauth.sqlite",
+          "epic32-def2d8509e-t2/tasks.sqlite",
+          "epic32-def2d8509e-t2/usage.sqlite",
+          "epic32-def2d8509e-t2/vault.sqlite",
+          "epic32-def2d8509e-t2/whatsapp/whatsapp.sqlite",
+          "epic32-def2d8509e-t2/zenod.sqlite",
+          "epic32-def2d8509e-t3/execution.sqlite",
+          "epic32-def2d8509e-t3/ingest.sqlite",
+          "epic32-def2d8509e-t3/journeys.sqlite",
+          "epic32-def2d8509e-t3/notifications.sqlite",
+          "epic32-def2d8509e-t3/oauth.sqlite",
+          "epic32-def2d8509e-t3/tasks.sqlite",
+          "epic32-def2d8509e-t3/usage.sqlite",
+          "epic32-def2d8509e-t3/vault.sqlite",
+          "epic32-def2d8509e-t3/whatsapp/whatsapp.sqlite",
+          "epic32-def2d8509e-t3/zenod.sqlite",
+          "usage.sqlite"
+        ]
+      }
+    },
+    {
+      "name": "single-tenant self-host parity",
+      "status": "pass",
+      "detail": {}
+    },
+    {
+      "name": "same-token migration rehearsal",
+      "status": "skip",
+      "reason": "migrated tenant requires both URL and token"
+    }
+  ],
+  "finishedAt": "2026-07-10T03:08:41.612Z"
+}
