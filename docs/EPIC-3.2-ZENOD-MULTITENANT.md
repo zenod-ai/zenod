@@ -82,8 +82,8 @@ Phase: implementation and autonomous validation
 Last verified: 2026-07-10 01:46 CEST
 Integration target: main
 Fresh base commit: `8e12ebab64140f227f9c19d5a72e5d191de8d251`
-Next action: finish #734, integrate the #733/#737/#736/#738 handoffs, then execute the joint 3.1/3.2 tenant storage/session proof. The pilot reports chassis friction through Proposed Cross-Spine Updates and never patches `packages/mcp-chassis/**`.
-Blockers: #735 waits for the #734 tenant context contract; live migration and retirement remain at the named Jordi gates.
+Next action: PLANNER DIRECTIVE (Jordi + Epic 3.0, 2026-07-10 — parent D19 and live-pilot row): (1) Deploy frozen head `4fb1abe` as Dokploy application `zenod-mt-pilot` on the test environment — own hostname, own `/data` volume, own `CHASSIS_VAULT_MASTER_KEY`; touch no existing 2.x tenant app. (2) Provision T1/T2/T3 via `/api/tenants`. (3) Run acceptance ONCE, ON THAT LIVE DEPLOYMENT (D19e — no local harness): targeted checks only (three browser sessions, isolation, receipts, rotation); NO full workspace suite re-runs — they passed on this commit. Model-key steps wait until Jordi pastes the OpenRouter key in each tenant's Keys tab and says "key set"; the key is NEVER injected by env or API. (4) Deliver the human test package: login URL, three tokens, self-host one-liner, 10-step click script. (5) Blocked on a human decision → entire status is "BLOCKED ON JORDI: <question>". Heartbeat every 30 minutes: state | blocker | ETA.
+Blockers: live migration and subdomain retirement remain at the named Jordi gates. Model-key acceptance steps gated on Jordi entering the key via UI.
 
 ## Role Goals
 

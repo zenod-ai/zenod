@@ -87,8 +87,8 @@ Phase: final joint proof and release gating
 Last verified: 2026-07-10 05:59 CEST
 Integration target: main
 Fresh chassis commit: `3062022938bb3dd26427fd820d174f29022fd7d1` (contained in current `main` `77d8e39143deb4234a6e87237251b9eeeac50b84`)
-Next action: Epic 3.2 starts #792 from current `main`, supplies the stable chassis vault key, and reruns the definitive three-tenant browser/self-host/restart byte-scan proof against the chassis merged at `3062022`. The 3.1 steward then reconciles that evidence and requests Jordi's API-freeze decision. C-17 runs when Stripe TEST-account authentication is supplied.
-Blockers: API freeze remains gated on the #792 joint 3.1 demo + 3.2 Zenod proof and Jordi's explicit approval. Definition-of-Done billing evidence is separately gated on Stripe TEST-account CLI authentication in #764.
+Next action: PLANNER DIRECTIVE (Jordi + Epic 3.0, 2026-07-10 — parent D19 and quiesce row): this epic is DONE-FOR-PILOT. Reconcile the ledger (C-1..C-16 + C-18 done; C-17 parked pending Jordi's Stripe TEST credentials; API freeze pending live pilot evidence), commit the spine, then STOP — no merges, no hardening, no new tickets until reactivated by the planner. The joint proof now runs ON Epic 3.2's live deployment (`zenod-mt-pilot`), not in a local harness (D19e); consume its evidence when filed.
+Blockers: quiesced by planner directive. API freeze gated on the 3.2 live pilot evidence + Jordi's explicit approval. C-17 gated on Stripe TEST-account CLI authentication.
 
 ## Role Goals
 
