@@ -3,6 +3,7 @@ import {
   ConductContractError,
   acceptedTicket,
   assertConductResult,
+  assertRegisteredToolResult,
   assertLongToolContract,
   completionEvent,
   conductErrorResult,
@@ -43,6 +44,21 @@ describe("conduct receipt discipline", () => {
   it("wraps tool handlers as reusable middleware", async () => {
     const guarded = withConduct("write_state", async () => ({ status: "ok" }), { classifier });
     await expect(guarded(undefined)).rejects.toMatchObject({ code: "silent_ack" });
+  });
+
+  it("accepts the historical jobId field when polling a canonical ticket", () => {
+    const result = {
+      ticket_id: "job-legacy-client",
+      state: "running",
+    };
+    expect(
+      assertRegisteredToolResult(
+        "get_task_result",
+        { jobId: "job-legacy-client" },
+        result,
+        { kind: "read", pollFor: ["store_memory"] },
+      ),
+    ).toBe(result);
   });
 
   it("preserves chassis contract messages but redacts unexpected errors", () => {

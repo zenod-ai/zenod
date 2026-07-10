@@ -128,12 +128,21 @@ describe("MCP endpoint", () => {
     args: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     const enqueued = await client.callTool({ name, arguments: args });
-    const { jobId, status } = enqueued.structuredContent as { jobId: string; status: string };
+    const { ticket_id, jobId, status, state, poll } = enqueued.structuredContent as {
+      ticket_id: string;
+      jobId: string;
+      status: string;
+      state: string;
+      poll: { name: string; inputField: string };
+    };
     expect(jobId).toBeTruthy();
+    expect(ticket_id).toBe(jobId);
     expect(status).toBe("queued");
+    expect(state).toBe("accepted");
+    expect(poll).toEqual({ name: "get_task_result", inputField: "ticket_id" });
     for (let attempt = 0; attempt < 50; attempt++) {
-      const poll = await client.callTool({ name: "get_task_result", arguments: { jobId } });
-      const job = poll.structuredContent as { status: string; result: Record<string, unknown> | null };
+      const polled = await client.callTool({ name: "get_task_result", arguments: { ticket_id } });
+      const job = polled.structuredContent as { status: string; result: Record<string, unknown> | null };
       if (job.status === "done") return job.result!;
       if (job.status === "error" || job.status === "interrupted") throw new Error(`job ${jobId} ${job.status}`);
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -193,14 +202,16 @@ describe("MCP endpoint", () => {
         hints: ["insurance"],
       },
     });
-    const queued = enqueued.structuredContent as { jobId: string; kind: string; status: string };
+    const queued = enqueued.structuredContent as { ticket_id: string; jobId: string; kind: string; status: string; state: string };
     expect(queued.jobId).toBeTruthy();
+    expect(queued.ticket_id).toBe(queued.jobId);
     expect(queued.kind).toBe("media_ingest");
     expect(queued.status).toBe("queued");
+    expect(queued.state).toBe("accepted");
 
     let terminal: { status: string; result: Record<string, unknown> | null } | null = null;
     for (let attempt = 0; attempt < 50; attempt++) {
-      const poll = await client.callTool({ name: "get_task_result", arguments: { jobId: queued.jobId } });
+      const poll = await client.callTool({ name: "get_task_result", arguments: { ticket_id: queued.ticket_id } });
       const job = poll.structuredContent as { status: string; result: Record<string, unknown> | null };
       if (job.status === "done") {
         terminal = job;
@@ -480,6 +491,11 @@ describe("MCP endpoint", () => {
     const client = await connect();
     const poll = await client.callTool({ name: "get_task_result", arguments: { jobId: "does-not-exist" } });
     expect((poll.structuredContent as { found: boolean }).found).toBe(false);
+    expect(poll.structuredContent).toMatchObject({
+      ticket_id: "does-not-exist",
+      state: "error",
+      error: { code: "not_found" },
+    });
     expect(poll.isError).toBe(true);
     await client.close();
   });

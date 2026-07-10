@@ -116,15 +116,40 @@ function formatTaskingReply(result: TaskingReply): string {
 
 /** The immediate reply when a long agentic tool enqueues a background job. */
 function enqueuedResponse(job: TaskJob) {
+  const poll = { name: "get_task_result", inputField: "ticket_id" as const };
   return {
     content: [
       {
         type: "text" as const,
-        text: `Queued job ${job.id} (status: ${job.status}). This runs in the background — poll get_task_result with this jobId until status is 'done'.`,
+        text: `Queued job ${job.id} (status: ${job.status}). This runs in the background — poll get_task_result with this ticket_id until state is 'done'.`,
       },
     ],
-    structuredContent: { jobId: job.id, kind: job.kind, status: job.status },
+    structuredContent: {
+      ticket_id: job.id,
+      jobId: job.id,
+      kind: job.kind,
+      status: job.status,
+      state: "accepted" as const,
+      poll,
+    },
   };
+}
+
+function taskJobEvidence(job: TaskJob): Array<Record<string, unknown>> {
+  const result = job.result as Record<string, unknown> | null;
+  const commitSha = typeof result?.commitSha === "string" ? result.commitSha : undefined;
+  const githubUrls = Array.isArray(result?.githubUrls)
+    ? result.githubUrls.filter((value): value is string => typeof value === "string")
+    : [];
+  return [
+    {
+      kind: job.kind === "store" ? "memory_stored" : "task_job",
+      id: job.id,
+      ticket_id: job.id,
+      ...(commitSha ? { commitSha } : {}),
+      ...(githubUrls[0] ? { url: githubUrls[0] } : {}),
+    },
+  ];
 }
 
 function formatExecutionStatus(tickets: ExecutionTicket[]): string {
@@ -1017,15 +1042,34 @@ export function buildMcpServer(
         title: "Get task result",
         description:
           "Poll a background job started by task_brain, run_task, store_memory, or ingest_memory, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, the plan/execution result for a run_task job, the evidence ref + pages + commit for a store_memory job, or the media ingest receipt/error contract for an ingest_memory job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
-        inputSchema: { jobId: z.string().min(1).describe("The jobId returned by task_brain, run_task, store_memory, or ingest_memory") },
+        inputSchema: {
+          ticket_id: z.string().min(1).optional().describe("The canonical ticket_id returned by an async tool"),
+          jobId: z.string().min(1).optional().describe("Compatibility alias for ticket_id"),
+        },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
-      async ({ jobId }) => {
-        const job = taskJobs.get(jobId);
+      async ({ ticket_id, jobId }) => {
+        const requestedId = ticket_id ?? jobId;
+        if (!requestedId) {
+          return {
+            content: [{ type: "text", text: "get_task_result requires ticket_id." }],
+            structuredContent: {
+              error: { code: "invalid_ticket", message: "get_task_result requires ticket_id." },
+            },
+            isError: true,
+          };
+        }
+        const job = taskJobs.get(requestedId);
         if (!job) {
           return {
-            content: [{ type: "text", text: `No job found for id ${jobId}.` }],
-            structuredContent: { found: false, jobId },
+            content: [{ type: "text", text: `No job found for id ${requestedId}.` }],
+            structuredContent: {
+              found: false,
+              ticket_id: requestedId,
+              jobId: requestedId,
+              state: "error" as const,
+              error: { code: "not_found", message: `No job found for id ${requestedId}.` },
+            },
             isError: true,
           };
         }
@@ -1043,17 +1087,29 @@ export function buildMcpServer(
               : job.status === "interrupted"
                 ? `INTERRUPTED: ${job.error ?? "a server restart killed this job"} — re-issue the original call.`
                 : `Status: ${job.status}. Not finished yet — poll get_task_result again shortly.`;
+        const failed = job.status === "error" || job.status === "interrupted";
+        const state = failed ? "error" : job.status;
         return {
           content: [{ type: "text", text: resultText }],
           structuredContent: {
             found: true,
+            ticket_id: job.id,
             jobId: job.id,
             kind: job.kind,
             status: job.status,
+            state,
             result: job.result ?? null,
-            error: job.error,
+            ...(job.status === "done" ? { evidence: taskJobEvidence(job) } : {}),
+            ...(failed
+              ? {
+                  error: {
+                    code: job.status === "interrupted" ? "interrupted" : "job_failed",
+                    message: job.error ?? `Job ${job.id} ${job.status}.`,
+                  },
+                }
+              : {}),
           },
-          isError: job.status === "error",
+          isError: failed,
         };
       },
     );
