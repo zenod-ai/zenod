@@ -12,6 +12,7 @@ import {
   editGithubIssue,
 } from "zenod";
 import { ZENOD_AGENT } from "./agent.js";
+import { ChassisCredentialVault } from "./credentialVault.js";
 import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
@@ -35,6 +36,8 @@ export class ZenodRuntimePool {
     }
     const runtime = new Runtime(context.storage.rootDir, ZENOD_AGENT, {
       seedFromEnv: false,
+      tenantId,
+      credentialVault: new ChassisCredentialVault(context.storage),
     });
     this.runtimes.set(tenantId, runtime);
     return runtime;
