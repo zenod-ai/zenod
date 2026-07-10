@@ -38,14 +38,30 @@ collectors = [
     for name in ("dokploy-project-all", "docker-ps-a", "docker-volumes", "watchdog-map")
 ]
 
-candidate = {
+separate_candidate = {
     "row_id": "epaminon-tenant-1",
     "topology": "separate-per-user",
     "classification": "live-paying",
     "tenant_ref": "tenant-1",
     "job_history_evidence_ref": "evidence/tenant-1-job-history.json",
 }
-discovered_rows = [candidate.copy()] if scenario == "missing-archive" else []
+suite_candidate = {
+    "row_id": "a5BbpChW5PKgXUJFZSUNo",
+    "topology": "suite-bundled",
+    "classification": "test",
+    "owner_unit": "ring",
+    "tenant_ref": "ring-suite:jordiring-fkegkz",
+    "epaminon_tenant_ref": None,
+    "job_history_evidence_ref": "evidence/ring-suite-job-history.json",
+}
+suite_scenarios = {"suite-owner", "suite-wrong-owner", "suite-invented-tenant"}
+candidate = suite_candidate if scenario in suite_scenarios else separate_candidate
+if scenario == "suite-wrong-owner":
+    candidate["owner_unit"] = "epaminon"
+if scenario == "suite-invented-tenant":
+    candidate["epaminon_tenant_ref"] = "invented-epaminon-customer"
+has_candidate = scenario == "missing-archive" or scenario in suite_scenarios
+discovered_rows = [candidate.copy()] if has_candidate else []
 postflight_rows = []
 if scenario == "unexpected-row":
     postflight_rows = [{
@@ -61,7 +77,7 @@ manifest = {
         "status": "proven",
         "basis_refs": ["evidence/fleet-reinventory.json"],
     },
-    "candidates": [candidate] if scenario == "missing-archive" else [],
+    "candidates": [candidate] if has_candidate else [],
 }
 inventory = {
     "schema_version": 1,
@@ -119,6 +135,13 @@ if scenario == "missing-archive":
         "rollback": {"status": "passed", "evidence_ref": "evidence/rollback.json"},
         "removal": {"status": "removed", "evidence_ref": "evidence/removal.json"},
     }]
+elif scenario in suite_scenarios:
+    receipt_rows = [{
+        "row_id": candidate["row_id"],
+        "archive": {"evidence_ref": "evidence/ring-suite-archive.json", "sha256": digest},
+        "rollback": {"status": "passed", "evidence_ref": "evidence/ring-suite-rollback.json"},
+        "removal": {"status": "removed", "evidence_ref": "evidence/ring-suite-removal.json"},
+    }]
 receipts = {
     "schema_version": 1,
     "wave": "DX-5",
@@ -150,7 +173,7 @@ approval = {
     "rollback_plan_ref": "runbook#rollback",
     "manifest_sha256": manifest_hash,
     "inventory_sha256": inventory_hash,
-    "approved_row_ids": [candidate["row_id"]] if scenario == "missing-archive" else [],
+    "approved_row_ids": [candidate["row_id"]] if has_candidate else [],
 }
 write("approval.json", approval)
 PY
@@ -192,6 +215,16 @@ expect_failure 'ephemeral sandbox proof lacks evidence_ref' "$TMP/missing-sandbo
 
 make_packet "$TMP/missing-archive" missing-archive
 expect_failure 'candidate epaminon-tenant-1 lacks archive evidence' "$TMP/missing-archive"
+
+make_packet "$TMP/suite-owner" suite-owner
+python3 "$VALIDATOR" --repo-root "$REPO" --package-dir "$TMP/suite-owner" --now 2026-07-10T05:00:00Z \
+  | grep -Fq 'DX-5 wave packet accepted'
+
+make_packet "$TMP/suite-wrong-owner" suite-wrong-owner
+expect_failure 'suite-bundled row a5BbpChW5PKgXUJFZSUNo owner_unit must be ring' "$TMP/suite-wrong-owner"
+
+make_packet "$TMP/suite-invented-tenant" suite-invented-tenant
+expect_failure 'suite-bundled row a5BbpChW5PKgXUJFZSUNo must not invent an Epaminon tenant' "$TMP/suite-invented-tenant"
 
 make_packet "$TMP/legacy" pass
 printf '%s\n' 'export const legacy = "ZENOD_AWAIT_PROVISION=1";' > "$REPO/packages/server/src/legacy.ts"

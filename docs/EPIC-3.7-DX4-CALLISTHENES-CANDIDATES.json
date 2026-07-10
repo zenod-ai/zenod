@@ -3,8 +3,8 @@
   "package_mode": "preparation-only",
   "unit": "callisthenes",
   "source_inventory": {
-    "ref": "docs/EPIC-3.7-DX1-INVENTORY.md",
-    "observed_at": "2026-07-10T02:10:00+02:00"
+    "ref": "docs/EPIC-3.7-DX1B-CURRENT-STATE.json",
+    "observed_at": "2026-07-10T03:37:50Z"
   },
   "shared_host": "calli.zenod.dev",
   "archive_target": null,
@@ -12,12 +12,19 @@
     {
       "candidate_id": "NR_px8Ul2L2w_RaM4-DWe",
       "slug": "callisthenes-jordicallifresh33087-muhmxp",
-      "classification": "unknown",
-      "classification_source_ref": "docs/EPIC-3.7-DX1-INVENTORY.md",
+      "classification": "test",
+      "classification_source_ref": "https://github.com/zenod-ai/zenod/issues/793",
+      "classification_evidence": {
+        "stripe_mode": "test",
+        "stripe_session_id": "cs_test_a1gjQa18N42b6UhVZDyFN36KLzXDoFgCFb5daQyLxt3LtZwnTD0iMUhmxP",
+        "owner_email": "jordi+calli-fresh-33087769@alpha9.io"
+      },
       "tenant_id": null,
       "kind": "compose",
       "dokploy_id": "NR_px8Ul2L2w_RaM4-DWe",
-      "domain_ids": [],
+      "domain_ids": [
+        "KbaT833rSfzz3W_T_jy-z"
+      ],
       "domains": [
         "c-jordicallifresh33087-muhmxp.zenod.dev"
       ],
@@ -29,12 +36,10 @@
       ],
       "watchdog_tokens": [],
       "inventory_gaps": [
-        "Jordi/steward classification confirmation",
         "tenant_id binding in the shared Callisthenes service",
-        "current Dokploy domain ID",
         "exact snapshot archive target"
       ],
-      "notes": "Current remaining per-user Callisthenes row. It looks test-like, but DX-1 did not prove ownership or disposability. Unknown is an execution-blocking classification."
+      "notes": "Stripe TEST ownership is proven for the original materialized row. Retirement remains blocked on CA-MT-6, a shared-service tenant_id, continuity, rollback/archive evidence, exact digest/window approval, and Jordi approval. The record-only duplicate is isolated in the DX-1B duplicate candidate packet and is not part of this live-wave manifest."
     }
   ]
 }

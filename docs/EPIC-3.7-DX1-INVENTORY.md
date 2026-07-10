@@ -1,9 +1,10 @@
 # Epic 3.7 DX-1 Inventory - 2.x Fleet Classification
 
-Status: ready for DX-2 planning
+Status: historical DX-1 baseline with current DX-1B addendum
 Created: 2026-07-10
-Last verified: 2026-07-10 02:10 CEST
-Branch: `codex/epic37-dx1-inventory`
+Last verified: 2026-07-10 05:38 CEST
+Original branch: `codex/epic37-dx1-inventory`
+Addendum branch: `codex/epic37-dx1b-classification`
 Base commit: `8e12ebab64140f227f9c19d5a72e5d191de8d251`
 Environment: Alpha9 Dokploy VPS (`dokploy.polyqu.com`, Docker host via `hetzner_vps_1`)
 Bound issue: https://github.com/zenod-ai/zenod/issues/714
@@ -226,6 +227,39 @@ Do not include these rows in DX-2 without owner confirmation:
 - `zenod-runner` (`unknown`)
 - `callisthenes` canonical domain row and `zenod-cloud-test` domain overlap until steward resolves the `callisthenes.zenod.dev` ownership conflict.
 
+The two `unknown` bullets above record the original DX-1 snapshot and the reason
+DX-2 excluded them. Their current classifications are superseded by the DX-1B
+addendum below; the completed DX-2 approval is not retroactively broadened.
+
+## DX-1B Current-State Addendum
+
+Issue [#793](https://github.com/zenod-ai/zenod/issues/793) supplied exact Stripe
+TEST ownership evidence for the two retained materialized rows. A fresh,
+read-only, allowlisted inventory was then captured from Dokploy at
+`2026-07-10T03:37:50Z` and Docker/volumes at `2026-07-10T03:38:10Z`. The
+sanitized machine-readable receipt is
+`docs/EPIC-3.7-DX1B-CURRENT-STATE.json`; its checksum is in
+`docs/EPIC-3.7-DX1B-CURRENT-STATE.sha256`.
+
+| Record | Current class | Topology / materialization | Exact current evidence | Authorization state |
+|---|---|---|---|---|
+| `NR_px8Ul2L2w_RaM4-DWe` | `test` | `separate-per-user` / running | Stripe TEST session and owner bind `jordicallifresh33087-muhmxp`; domain `KbaT833rSfzz3W_T_jy-z`; 1 deployment, 1 container, 1 volume | DX-4 remains blocked on CA-MT-6, shared `tenant_id`, continuity, archive/rollback, digest/window, and Jordi approval. |
+| `a5BbpChW5PKgXUJFZSUNo` | `test` | `suite-bundled` / running | Stripe TEST session and `jordi+ring@alpha9.io` bind `jordiring-fkegkz`; 2 deployments, 6 suite containers, 6 volumes | It is a Ring-owned suite. Its `zenod-epaminon` service is not an independent Epaminon tenant. |
+| `Us9aDVdhvlObXLDfDwW0I` | `duplicate` | `separate-per-user` / `record-only` | runtime project `compose-hack-redundant-driver-nu1cex`; domain `injtaVSszHyvNqLDEmJ88`; idle; 0 deployments, containers, volumes, or watchdog tokens | Exact preparation packet only; no removal without a new digest-bound approval. |
+
+The refreshed `zenod` project has 2 application rows and 16 compose rows. The
+new duplicate shares the original Callisthenes name and hostname but has a
+different compose and domain ID. It is isolated in
+`docs/EPIC-3.7-DX1B-CALLISTHENES-DUPLICATE-CANDIDATE.json`; it is not folded
+into the materialized DX-4 candidate and is not covered by an older approval.
+
+The cloud #62 [causation audit](https://github.com/zenod-ai/cloud/issues/62#issuecomment-4931765367)
+established the path: duplicate cross-environment Traefik ownership sent the
+cloud-test status GET to live. The deployed live `status-reconcile` GET directly
+wrote the account and queue, spawned the provisioner, created the compose and
+domain, then falsely accepted the original shared hostname. The recovery timer
+was not deployed and was not causal. This finding does not authorize cleanup.
+
 ## Acceptance Coverage
 
 - Every Dokploy `zenod` project application/compose row is listed above with status, branch, domains, and classification.
@@ -237,11 +271,12 @@ Do not include these rows in DX-2 without owner confirmation:
 
 ## Handoff
 
-Terminal state: ready for testing / DX-2 planning.
+Terminal state: DX-1 baseline complete; DX-1B classification refresh ready for testing.
 
 Next action:
 
-1. Spine steward reviews the `unknown` rows with Jordi.
-2. DX-2 worker defines snapshot destination and retention evidence.
-3. DX-2 starts with duplicate/test rows only, not live-paying or unknown rows.
-4. Resolve the `callisthenes.zenod.dev` domain overlap before any DNS or Dokploy cleanup touching Callisthenes/control-plane rows.
+1. Spine steward reconciles #793 and the two new `test` classifications.
+2. Keep DX-4 blocked until the shared tenant, cutover, continuity, archive, rollback, digest/window, and approval gates pass.
+3. Keep the Ring row `suite-bundled`; coordinate whole-suite retirement and do not invent an Epaminon tenant.
+4. Keep duplicate `Us9aDVdhvlObXLDfDwW0I` record-only until a new exact digest approval exists.
+5. Resolve the `callisthenes.zenod.dev` domain overlap before any DNS or Dokploy cleanup touching Callisthenes/control-plane rows.

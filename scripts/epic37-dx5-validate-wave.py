@@ -152,11 +152,19 @@ class PacketValidator:
         rows = self.validate_rows(inventory.get("rows"), "fleet re-inventory rows")
         allowed_topologies = RETIREMENT_TOPOLOGIES | ALLOWED_CURRENT_TOPOLOGIES
         for row_id, row in rows.items():
+            topology = row.get("topology")
             self.require(
-                row.get("topology") in allowed_topologies,
-                f"fleet re-inventory row {row_id} has unsupported topology {row.get('topology')!r}",
+                topology in allowed_topologies,
+                f"fleet re-inventory row {row_id} has unsupported topology {topology!r}",
             )
             self.require(bool(row.get("classification")), f"fleet re-inventory row {row_id} lacks classification")
+            if topology == "suite-bundled":
+                self.require(row.get("owner_unit") == "ring", f"suite-bundled row {row_id} owner_unit must be ring")
+                self.require(bool(row.get("tenant_ref")), f"suite-bundled row {row_id} lacks Ring tenant_ref")
+                self.require(
+                    row.get("epaminon_tenant_ref") in (None, ""),
+                    f"suite-bundled row {row_id} must not invent an Epaminon tenant",
+                )
         discovered = {
             row_id: row
             for row_id, row in rows.items()
@@ -249,9 +257,15 @@ class PacketValidator:
             )
             for field in ("tenant_ref", "job_history_evidence_ref"):
                 self.require(bool(candidate.get(field)), f"candidate {row_id} lacks {field}")
+            if candidate.get("topology") == "suite-bundled":
+                self.require(candidate.get("owner_unit") == "ring", f"suite-bundled candidate {row_id} owner_unit must be ring")
+                self.require(
+                    candidate.get("epaminon_tenant_ref") in (None, ""),
+                    f"suite-bundled candidate {row_id} must not invent an Epaminon tenant",
+                )
             inventory_row = discovered.get(row_id)
             if inventory_row is not None:
-                for field in ("topology", "classification", "tenant_ref"):
+                for field in ("topology", "classification", "tenant_ref", "owner_unit", "epaminon_tenant_ref"):
                     self.require(
                         candidate.get(field) == inventory_row.get(field),
                         f"candidate {row_id} {field} does not match fleet re-inventory",

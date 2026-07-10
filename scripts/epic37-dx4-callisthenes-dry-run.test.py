@@ -36,7 +36,7 @@ def eligible_manifest() -> dict[str, Any]:
     manifest = json.loads(REPO_MANIFEST.read_text(encoding="utf-8"))
     manifest["archive_target"] = ARCHIVE_TARGET
     candidate = manifest["candidates"][0]
-    candidate["classification"] = "live-paying"
+    candidate["classification"] = "test"
     candidate["classification_source_ref"] = EVIDENCE_REF
     candidate["tenant_id"] = TENANT_ID
     candidate["domain_ids"] = ["domain-callisthenes-jordi"]
@@ -67,7 +67,7 @@ def complete_receipt(manifest_digest: str) -> dict[str, Any]:
                 "candidate_id": CANDIDATE_ID,
                 "tenant_id": TENANT_ID,
                 "classification_confirmation": {
-                    "classification": "live-paying",
+                    "classification": "test",
                     "confirmed_by": "Jordi",
                     "evidence_ref": EVIDENCE_REF,
                     "confirmed_at": STAMP,
@@ -124,7 +124,7 @@ def complete_receipt(manifest_digest: str) -> dict[str, Any]:
                 {
                     "candidate_id": CANDIDATE_ID,
                     "tenant_id": TENANT_ID,
-                    "classification": "live-paying",
+                    "classification": "test",
                     "outbound_key_rollback_ref": OUTBOUND_ROLLBACK_REF,
                 }
             ],
@@ -173,22 +173,24 @@ class DX4DryRunTest(unittest.TestCase):
         self.assertIn(expected, result.stderr)
         self.assertFalse(output.exists(), "a refused package must not create a plan")
 
-    def test_repository_manifest_keeps_remaining_row_unknown(self) -> None:
+    def test_repository_manifest_preserves_test_classification_but_has_no_shared_tenant(self) -> None:
         manifest = json.loads(REPO_MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(manifest["package_mode"], "preparation-only")
         self.assertIsNone(manifest["archive_target"])
         self.assertEqual(len(manifest["candidates"]), 1)
         candidate = manifest["candidates"][0]
         self.assertEqual(candidate["candidate_id"], CANDIDATE_ID)
-        self.assertEqual(candidate["classification"], "unknown")
+        self.assertEqual(candidate["classification"], "test")
+        self.assertEqual(candidate["classification_evidence"]["stripe_mode"], "test")
+        self.assertEqual(candidate["classification_evidence"]["owner_email"], "jordi+calli-fresh-33087769@alpha9.io")
         self.assertIsNone(candidate["tenant_id"])
-        self.assertEqual(candidate["domain_ids"], [])
+        self.assertEqual(candidate["domain_ids"], ["KbaT833rSfzz3W_T_jy-z"])
 
-    def test_unknown_classification_refuses_before_plan(self) -> None:
+    def test_missing_shared_tenant_binding_refuses_before_plan(self) -> None:
         receipt_path = self.tmp / "receipt.json"
         write_json(receipt_path, {})
         result, output = self.run_validator(REPO_MANIFEST, receipt_path)
-        self.assert_refused_before_plan(result, output, "classification is unknown")
+        self.assert_refused_before_plan(result, output, "tenant_id must be non-empty")
 
     def test_unaccepted_ca_mt_6_refuses_before_plan(self) -> None:
         manifest_path, receipt_path, receipt = self.write_eligible_package()
@@ -213,9 +215,10 @@ class DX4DryRunTest(unittest.TestCase):
             (lambda receipt: receipt["candidate_receipts"][0]["shared_host_token_continuity"].update(shared_host="wrong.zenod.dev"), "shared-host mismatch"),
             (lambda receipt: receipt["candidate_receipts"][0]["rollback_checkpoint"].update(status="pending"), "rollback checkpoint must be ready"),
             (lambda receipt: receipt["candidate_receipts"][0]["rollback_checkpoint"]["snapshot"].update(archive_target="/wrong/archive"), "snapshot.archive_target does not match"),
-            (lambda receipt: receipt["candidate_receipts"][0]["classification_confirmation"].update(classification="test"), "classification confirmation mismatch"),
+            (lambda receipt: receipt["candidate_receipts"][0]["classification_confirmation"].update(classification="live-paying"), "classification confirmation mismatch"),
             (lambda receipt: receipt["wave_approval"].update(status="pending"), "Jordi wave approval status must be approved"),
             (lambda receipt: receipt["wave_approval"].update(archive_target="/wrong/archive"), "wave approval archive target mismatch"),
+            (lambda receipt: receipt["wave_approval"]["window"].update(end=receipt["wave_approval"]["window"]["start"]), "window must have start before end"),
             (lambda receipt: receipt["wave_approval"]["approved_candidates"][0].update(tenant_id="wrong-tenant"), "approval tenant mismatch"),
             (lambda receipt: receipt["wave_approval"]["approved_candidates"][0].update(outbound_key_rollback_ref="https://example.invalid/wrong"), "outbound-key rollback mismatch"),
         ]
