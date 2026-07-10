@@ -10,6 +10,7 @@ import {
   parseArgs,
   parseMcpPayload,
   redact,
+  requiredCustodyRelativePaths,
 } from "./epic32-joint-proof.mjs";
 
 test("parseArgs accepts CLI overrides without reading secrets into defaults", () => {
@@ -86,6 +87,23 @@ test("redact preserves numeric usage evidence while removing raw credentials", (
   );
 });
 
+test("custody inventory declares exact chassis and per-tenant DB/WAL/SHM paths", () => {
+  const paths = requiredCustodyRelativePaths([{ tenantId: "t1" }, { tenantId: "t2" }, { tenantId: "t3" }]);
+  assert.deepEqual(paths.slice(0, 6), [
+    "chassis-tenants.sqlite",
+    "chassis-tenants.sqlite-wal",
+    "chassis-tenants.sqlite-shm",
+    "usage.sqlite",
+    "usage.sqlite-wal",
+    "usage.sqlite-shm",
+  ]);
+  assert.ok(paths.includes("t1/zenod.sqlite-wal"));
+  assert.ok(paths.includes("t2/vault.sqlite-shm"));
+  assert.ok(paths.includes("t3/notifications.sqlite"));
+  assert.equal(paths.length, 96);
+  assert.equal(new Set(paths).size, paths.length);
+});
+
 test("full mode accepts only the three approved repos and complete parity inputs", () => {
   const options = {
     mode: "full",
@@ -106,6 +124,8 @@ test("full mode accepts only the three approved repos and complete parity inputs
     EPIC32_GITHUB_TOKEN: githubToken,
     EPIC32_LLM_API_KEY: "llm-key",
     CHASSIS_VAULT_MASTER_KEY: "11".repeat(32),
+    EPIC32_COMMIT: "a".repeat(40),
+    EPIC32_IMAGE_DIGEST: `sha256:${"b".repeat(64)}`,
     EPIC32_SELF_HOST_REPO: tenants[2].repo,
     EPIC32_MIGRATED_REPO: tenants[1].repo,
     EPIC32_MIGRATED_EXPECTED_TOKEN_SHA256: createHash("sha256").update(options.migratedToken).digest("hex"),
@@ -122,6 +142,14 @@ test("full mode accepts only the three approved repos and complete parity inputs
   assert.throws(
     () => assertFullModePrerequisites({ ...options, dataRoot: "" }, tenants, env),
     /EPIC32_DATA_ROOT/,
+  );
+  assert.throws(
+    () => assertFullModePrerequisites(options, tenants, { ...env, EPIC32_COMMIT: "unknown" }),
+    /EPIC32_COMMIT/,
+  );
+  assert.throws(
+    () => assertFullModePrerequisites(options, tenants, { ...env, EPIC32_IMAGE_DIGEST: "latest" }),
+    /EPIC32_IMAGE_DIGEST/,
   );
   assert.throws(
     () => assertFullModePrerequisites({ ...options, migratedUrl: options.baseUrl }, tenants, env),

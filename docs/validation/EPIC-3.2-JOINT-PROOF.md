@@ -37,7 +37,7 @@ The black-box runner covers:
 - required full-mode single-tenant self-host mutation/ingest/usage parity;
 - required full-mode same-token migrated mutation/ingest/usage parity.
 
-The runner exits `0` only when every required check passes. Exit `2` means a required implementation or environment prerequisite is absent. Exit `1` means an implemented surface violated the contract. Evidence is JSON with credentials redacted.
+The runner exits `0` only when every required check passes. Exit `2` means a required implementation or environment prerequisite is absent. Exit `1` means an implemented surface violated the contract. Evidence is JSON with credentials redacted. Full custody receipts enumerate every required SQLite database, WAL, and SHM path with a per-path zero-match result, plus recursive path and secret totals.
 
 ## Contract Run
 
@@ -45,6 +45,7 @@ Start the exact Zenod integration commit with multi-tenant mode enabled and a fr
 
 ```sh
 EPIC32_COMMIT="$(git rev-parse HEAD)" \
+EPIC32_IMAGE_DIGEST="sha256:<64-hex-index-digest>" \
 CONTROL_PLANE_TOKEN="<control-plane-token>" \
 EPIC32_BASE_URL="http://127.0.0.1:8080" \
 EPIC32_DATA_ROOT="<host-visible-data-root>" \
@@ -67,6 +68,7 @@ Use three disposable repositories and a test-only LLM key:
 
 ```sh
 EPIC32_COMMIT="$(git rev-parse HEAD)" \
+EPIC32_IMAGE_DIGEST="sha256:<64-hex-index-digest>" \
 CONTROL_PLANE_TOKEN="<control-plane-token>" \
 EPIC32_BASE_URL="http://127.0.0.1:8080" \
 EPIC32_DATA_ROOT="<host-visible-data-root>" \
@@ -86,7 +88,7 @@ EPIC32_MIGRATED_REPO="AlfaBlok/react_test1" \
 node scripts/epic32-joint-proof.mjs --mode full
 ```
 
-These are the only repositories approved for marker writes. The runner creates store and ingest markers per tenant, requires structured commit receipts and GitHub URLs, resolves the receipt commit through the GitHub API, finds both markers in that immutable tree, and proves all foreign markers are absent through MCP and repo reads. The ingest call supplies an authenticated transcript and requires `transcription: provided`, proving the zero-double-STT path.
+These are the only repositories approved for marker writes. Full mode refuses an unknown or malformed commit and any mutable image reference; its summary records both values and verifies the hosted, self-host, and migrated product-health SHA against `EPIC32_COMMIT`. The runner creates store and ingest markers per tenant, requires structured commit receipts and GitHub URLs, resolves the receipt commit through the GitHub API, finds both markers in that immutable tree, and proves all foreign markers are absent through MCP and repo reads. The ingest call supplies an authenticated transcript and requires `transcription: provided`, proving the zero-double-STT path.
 
 ## Self-Host And Migration
 

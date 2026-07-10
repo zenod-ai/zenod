@@ -197,6 +197,16 @@ export function assertFullModePrerequisites(options, tenants, env) {
       kind: "prerequisite",
     });
   }
+  if (!/^[a-f0-9]{40}$/i.test(env.EPIC32_COMMIT ?? "")) {
+    throw new ProofFailure("full mode requires exact 40-character EPIC32_COMMIT", {
+      kind: "prerequisite",
+    });
+  }
+  if (!/^sha256:[a-f0-9]{64}$/i.test(env.EPIC32_IMAGE_DIGEST ?? "")) {
+    throw new ProofFailure("full mode requires immutable EPIC32_IMAGE_DIGEST", {
+      kind: "prerequisite",
+    });
+  }
   if (tenants.some((tenant) => tenant.githubToken !== env.EPIC32_GITHUB_TOKEN)) {
     throw new ProofFailure("full mode requires the one approved EPIC32_GITHUB_TOKEN for all three tenants", {
       kind: "prerequisite",
@@ -858,6 +868,16 @@ async function walkFiles(root) {
   return output;
 }
 
+export function requiredCustodyRelativePaths(tenants) {
+  const databasePaths = [
+    ...CHASSIS_SQLITE_PATHS,
+    ...tenants.flatMap((tenant) =>
+      REQUIRED_TENANT_PATHS.filter((path) => path.endsWith(".sqlite")).map((path) => join(tenant.tenantId, path)),
+    ),
+  ];
+  return databasePaths.flatMap((path) => [path, `${path}-wal`, `${path}-shm`]);
+}
+
 async function verifyStorage(dataRoot, tenants, mode, worldSecrets = []) {
   const violations = [];
   for (const forbidden of FORBIDDEN_ROOT_STATE) {
@@ -883,10 +903,14 @@ async function verifyStorage(dataRoot, tenants, mode, worldSecrets = []) {
 
   const files = await walkFiles(dataRoot);
   const sqliteFiles = files.filter((path) => path.endsWith(".sqlite"));
-  const sqlitePerTenant = REQUIRED_TENANT_PATHS.filter((path) => path.endsWith(".sqlite")).length;
-  const expectedSqliteFiles = TENANT_COUNT * sqlitePerTenant + CHASSIS_SQLITE_PATHS.length;
-  if (sqliteFiles.length !== expectedSqliteFiles) {
-    violations.push(`expected ${expectedSqliteFiles} SQLite files (${sqlitePerTenant} per tenant plus ${CHASSIS_SQLITE_PATHS.length} chassis stores), found ${sqliteFiles.length}`);
+  const custodyRelativePaths = requiredCustodyRelativePaths(tenants);
+  const expectedSqliteRelativePaths = custodyRelativePaths.filter((path) => path.endsWith(".sqlite"));
+  const actualSqliteRelativePaths = sqliteFiles.map((path) => path.slice(resolve(dataRoot).length + 1));
+  for (const path of expectedSqliteRelativePaths) {
+    if (!actualSqliteRelativePaths.includes(path)) violations.push(`missing declared SQLite path ${path}`);
+  }
+  for (const path of actualSqliteRelativePaths) {
+    if (!expectedSqliteRelativePaths.includes(path)) violations.push(`unexpected SQLite path ${path}`);
   }
   for (const path of sqliteFiles) {
     const db = new DatabaseSync(path, { readOnly: true });
@@ -898,6 +922,14 @@ async function verifyStorage(dataRoot, tenants, mode, worldSecrets = []) {
       }
     } finally {
       db.close();
+    }
+  }
+  const requiredCustodyPaths = custodyRelativePaths.map((path) => join(resolve(dataRoot), path));
+  if (mode === "full") {
+    for (const path of requiredCustodyPaths) {
+      if (!files.includes(path)) {
+        violations.push(`custody scan missing required DB/WAL/SHM path ${path.slice(resolve(dataRoot).length + 1)}`);
+      }
     }
   }
   const secretScans = [
@@ -925,6 +957,19 @@ async function verifyStorage(dataRoot, tenants, mode, worldSecrets = []) {
   }
   return {
     sqliteFiles: sqliteFiles.map((path) => path.slice(resolve(dataRoot).length + 1)),
+    custodyPaths: requiredCustodyPaths
+      .filter((path) => files.includes(path))
+      .map((path) => ({
+        path: path.slice(resolve(dataRoot).length + 1),
+        kind: path.endsWith("-wal") ? "wal" : path.endsWith("-shm") ? "shm" : "database",
+        scannedSecrets: secretScans.length,
+        rawMatches: 0,
+      })),
+    recursiveScan: {
+      scannedPaths: files.length,
+      scannedSecrets: secretScans.length,
+      rawMatches: 0,
+    },
     secretScans: secretScans.map((entry) => ({
       label: entry.label,
       sha256: sha256(entry.value),
@@ -941,6 +986,11 @@ async function verifyParitySurface(name, baseUrl, token, proof = null) {
   if (!initialized?.serverInfo) throw new ProofFailure(`${name} MCP initialize omitted serverInfo`);
   const settings = await jsonRequest(baseUrl, "/api/settings", { token });
   expectStatus(settings, [200], `${name} settings`, "prerequisite");
+  const health = await jsonRequest(baseUrl, "/api/health", { token });
+  expectStatus(health, [200], `${name} product health`, "prerequisite");
+  if (proof?.expectedCommit && health.body?.sha !== proof.expectedCommit) {
+    throw new ProofFailure(`${name} is running ${String(health.body?.sha)} instead of ${proof.expectedCommit}`);
+  }
   if (!proof) return { initialize: "pass", settingsStatus: settings.response.status };
   if (settings.body?.settings?.vault_repo !== proof.repo) {
     throw new ProofFailure(`${name} is configured for ${String(settings.body?.settings?.vault_repo)} instead of ${proof.repo}`);
@@ -1034,6 +1084,7 @@ async function verifyParitySurface(name, baseUrl, token, proof = null) {
     repo: proof.repo,
     credentialSha256,
     ...(proof.expectedTokenHash ? { expectedTokenSha256: proof.expectedTokenHash } : {}),
+    commit: health.body.sha,
     marker,
     ingestMarker,
     store: storeReceipt,
@@ -1050,6 +1101,7 @@ function helpText() {
     `          --migrated-url URL --migrated-token TOKEN --run-id ID\n\n` +
     `Full mode requires the exact approved EPIC32_T1_REPO..EPIC32_T3_REPO set, ` +
     `EPIC32_GITHUB_TOKEN, EPIC32_LLM_API_KEY, CHASSIS_VAULT_MASTER_KEY, ` +
+    `EPIC32_COMMIT, EPIC32_IMAGE_DIGEST, ` +
     `EPIC32_DATA_ROOT, EPIC32_SELF_HOST_REPO, EPIC32_MIGRATED_REPO, ` +
     `EPIC32_MIGRATED_EXPECTED_TOKEN_SHA256, and distinct parity URL/token pairs.\n`;
 }
@@ -1070,6 +1122,7 @@ export async function runProof(options, env = process.env) {
     mode: options.mode,
     baseUrl,
     commit: env.EPIC32_COMMIT ?? "unknown",
+    imageDigest: env.EPIC32_IMAGE_DIGEST ?? "unknown",
     startedAt: new Date().toISOString(),
     tenantIds: tenants.map((tenant) => tenant.tenantId),
     tokenHashes: tenants.map((tenant) => ({ label: tenant.label, sha256: sha256(tenant.token) })),
@@ -1112,6 +1165,14 @@ export async function runProof(options, env = process.env) {
     });
   }
   if (tenantsReady) {
+    await runStep("exact product commit identity", async () => {
+      const health = await jsonRequest(baseUrl, "/api/health", { token: tenants[0].token });
+      expectStatus(health, [200], "tenant-authenticated product health", "prerequisite");
+      if (options.mode === "full" && health.body?.sha !== metadata.commit) {
+        throw new ProofFailure(`hosted surface is running ${String(health.body?.sha)} instead of ${metadata.commit}`);
+      }
+      return { commit: health.body?.sha ?? "unknown", imageDigest: metadata.imageDigest };
+    });
     await runStep("tokened MCP isolation and marker negatives", () => verifyMcpIsolation(baseUrl, tenants, options.mode));
     await runStep("control token cannot access tenant product APIs", async () => {
       const result = await jsonRequest(baseUrl, "/api/settings", { token: options.controlToken });
@@ -1153,6 +1214,7 @@ export async function runProof(options, env = process.env) {
                 label: "SELFHOST",
                 repo: env.EPIC32_SELF_HOST_REPO,
                 githubToken: env.EPIC32_GITHUB_TOKEN,
+                expectedCommit: metadata.commit,
               }
             : null,
         ),
@@ -1172,6 +1234,7 @@ export async function runProof(options, env = process.env) {
                 repo: env.EPIC32_MIGRATED_REPO,
                 githubToken: env.EPIC32_GITHUB_TOKEN,
                 expectedTokenHash: env.EPIC32_MIGRATED_EXPECTED_TOKEN_SHA256,
+                expectedCommit: metadata.commit,
               }
             : null,
         ),
