@@ -94,6 +94,8 @@ export interface AppOptions {
   webDist?: string;
   /** Per-agent identity/config consumed by the shell. Defaults to Zenod. */
   agent?: AgentDefinition;
+  /** Chassis route middleware has already authenticated and bound this tenant. */
+  trustedChassisAuth?: boolean;
 }
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
@@ -311,6 +313,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   const auth = requireAuth(settings);
   app.use("/api/*", async (c, next) => {
+    if (options.trustedChassisAuth) return next();
     const path = c.req.path;
     if (path === "/api/health" || path.startsWith("/api/auth/")) return next();
     // /api/provision is open ONLY while the agent is un-provisioned (it has no

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   ChassisStorage,
   createMemoryTenantStore,
+  hashToken,
   type UnitContext,
 } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it } from "vitest";
@@ -95,7 +96,91 @@ describe("Zenod chassis unit", () => {
         (await provisioned.json() as { token: string }).token,
       );
     } finally {
-      unit.runtimes.close();
+      unit.close();
+    }
+  });
+
+  it("routes product APIs through the authenticated tenant runtime", async () => {
+    const dataDir = await tempDir();
+    const tenants = createMemoryTenantStore([
+      { token: "alpha-token", tenant: { id: "tenant-alpha" } },
+      { token: "beta-token", tenant: { id: "tenant-beta" } },
+    ]);
+    const unit = createZenodUnit({ dataDir, tenantStore: tenants });
+    try {
+      for (const [token, repo] of [
+        ["alpha-token", "owner/alpha"],
+        ["beta-token", "owner/beta"],
+      ]) {
+        const response = await unit.app.request("/api/settings", {
+          method: "PUT",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ vault_repo: repo }),
+        });
+        expect(response.status).toBe(200);
+      }
+
+      const alpha = await unit.app.request(
+        "/api/settings?tenantId=tenant-beta",
+        { headers: { authorization: "Bearer alpha-token" } },
+      );
+      const beta = await unit.app.request("/api/settings", {
+        headers: { authorization: "Bearer beta-token" },
+      });
+      expect(await alpha.json()).toMatchObject({
+        settings: { vault_repo: "owner/alpha" },
+      });
+      expect(await beta.json()).toMatchObject({
+        settings: { vault_repo: "owner/beta" },
+      });
+
+      const anonymous = await unit.app.request("/api/settings");
+      expect(anonymous.status).toBe(401);
+
+      const login = await unit.app.request("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: "alpha-token" }),
+      });
+      const cookie = login.headers.get("set-cookie")?.split(";")[0];
+      expect(cookie).toBeTruthy();
+      const sessionSettings = await unit.app.request("/api/settings", {
+        headers: { cookie: cookie! },
+      });
+      expect(await sessionSettings.json()).toMatchObject({
+        settings: { vault_repo: "owner/alpha" },
+      });
+    } finally {
+      unit.close();
+    }
+  });
+
+  it("uses the durable chassis tenant store for idempotent self-host restart", async () => {
+    const dataDir = await tempDir();
+    const env = {
+      ZENOD_API_TOKEN: "zenod_self_host_restart_token",
+      ZENOD_TENANT_ID: "self-host-test",
+    };
+    const first = createZenodUnit({ dataDir, env });
+    expect(
+      await first.tenantStore.resolveTokenHash(
+        hashToken(env.ZENOD_API_TOKEN),
+      ),
+    ).toMatchObject({ tenant: { id: "self-host-test" } });
+    first.close();
+
+    const restarted = createZenodUnit({ dataDir, env });
+    try {
+      expect(
+        await restarted.tenantStore.resolveTokenHash(
+          hashToken(env.ZENOD_API_TOKEN),
+        ),
+      ).toMatchObject({ tenant: { id: "self-host-test" } });
+    } finally {
+      restarted.close();
     }
   });
 });
