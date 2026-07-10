@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createMemoryTenantStore, createUnit, hashToken, type UnitContext } from "./index.js";
+import { ChassisUsageStore, createMemoryTenantStore, createUnit, hashToken, type UnitContext } from "./index.js";
 
 const servers: ServerType[] = [];
 const tempDirs: string[] = [];
@@ -337,5 +337,99 @@ describe("createUnit", () => {
     expect(captured?.tenant).toEqual({ id: "tenant_alpha" });
     expect(captured?.storage?.rootDir).toBe(join(dataDir, "tenant_alpha"));
     expect(captured?.storage?.dir("unit")).toBe(join(dataDir, "tenant_alpha", "unit"));
+  });
+
+  it("increments only the resolved tenant's usage for MCP requests", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-create-unit-usage-"));
+    tempDirs.push(dataDir);
+    const usageStore = new ChassisUsageStore({ dataDir });
+    const seenUsageTotals: number[] = [];
+    const tenants = createMemoryTenantStore([
+      { token: "tenant-alpha-token", tenant: { id: "tenant_alpha", quota: 10 } },
+      { token: "tenant-beta-token", tenant: { id: "tenant_beta", quota: 10 } },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      version: "1.2.3",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      metering: usageStore,
+      tools(_server, context) {
+        seenUsageTotals.push(context.usage?.summary().units ?? 0);
+      },
+    });
+    const base = await listen(unit.app);
+
+    expect((await initialize(base, { headers: { authorization: "Bearer tenant-alpha-token" } })).status).toBe(200);
+    expect((await initialize(base, { headers: { authorization: "Bearer tenant-beta-token" } })).status).toBe(200);
+    expect((await initialize(base, { headers: { authorization: "Bearer tenant-alpha-token" } })).status).toBe(200);
+
+    expect(seenUsageTotals).toEqual([1, 1, 2]);
+    expect(usageStore.summary({ id: "tenant_alpha" })).toMatchObject({ events: 2, units: 2 });
+    expect(usageStore.summary({ id: "tenant_beta" })).toMatchObject({ events: 1, units: 1 });
+    expect(JSON.stringify(usageStore.timeline({ id: "tenant_alpha" }))).not.toContain("tenant_beta");
+    usageStore.close();
+  });
+
+  it("returns a structured denial and does not run tools when tenant quota is zero", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-create-unit-quota-"));
+    tempDirs.push(dataDir);
+    const usageStore = new ChassisUsageStore({ dataDir });
+    let toolCalls = 0;
+    const tenants = createMemoryTenantStore([{ token: "tenant-zero-token", tenant: { id: "tenant_zero", quota: 0 } }]);
+    const unit = createUnit({
+      name: "demo",
+      version: "1.2.3",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      metering: usageStore,
+      tools() {
+        toolCalls += 1;
+      },
+    });
+    const base = await listen(unit.app);
+
+    const response = await initialize(base, { headers: { authorization: "Bearer tenant-zero-token" } });
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual({
+      error: "quota_exceeded",
+      quota: 0,
+      used: 0,
+      requested: 1,
+      remaining: 0,
+    });
+    expect(toolCalls).toBe(0);
+    expect(usageStore.summary({ id: "tenant_zero" })).toMatchObject({ events: 0, units: 0 });
+    usageStore.close();
+  });
+
+  it("honors quota supplied through tenant provisioning", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-create-unit-provisioned-quota-"));
+    tempDirs.push(dataDir);
+    const usageStore = new ChassisUsageStore({ dataDir });
+    let toolCalls = 0;
+    const tenants = createMemoryTenantStore();
+    const unit = createUnit({
+      name: "demo",
+      version: "1.2.3",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      controlPlane: { store: tenants, token: "control-secret" },
+      metering: usageStore,
+      tools() {
+        toolCalls += 1;
+      },
+    });
+    const base = await listen(unit.app);
+    const created = await provisionTenant(base, { tenantId: "tenant_zero", quota: 0 }).then((r) => r.json());
+
+    const response = await initialize(base, { headers: { authorization: `Bearer ${created.token}` } });
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({ error: "quota_exceeded", quota: 0 });
+    expect(toolCalls).toBe(0);
+    expect(tenants.snapshot()[0]?.tenant).toEqual({ id: "tenant_zero", quota: 0 });
+    usageStore.close();
   });
 });

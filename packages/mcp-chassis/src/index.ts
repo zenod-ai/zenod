@@ -7,6 +7,7 @@ import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { ChassisStorage, type ChassisStorageOptions, type TenantStorage } from "./storage.js";
+import { ChassisUsageStore, type ChassisUsageStoreOptions, type TenantUsageMeter } from "./usage.js";
 
 export type TenantStatus = "active" | "suspended" | "deleted";
 
@@ -14,6 +15,7 @@ export interface TenantContext {
   id: string;
   name?: string;
   plan?: string;
+  quota?: number | null;
 }
 
 export interface UnitContext {
@@ -21,6 +23,8 @@ export interface UnitContext {
   tenant: TenantContext | null;
   /** Tenant-bound storage handles. Unit tools must not accept tenant ids from client payloads. */
   storage: TenantStorage | null;
+  /** Tenant-bound usage meter. Unit tools must never query usage for a client-supplied tenant id. */
+  usage: TenantUsageMeter | null;
 }
 
 type UnitHonoEnv = {
@@ -53,6 +57,7 @@ export interface ProvisionTenantInput {
   tenantId?: string;
   name?: string;
   plan?: string;
+  quota?: number | null;
   token?: string;
   status?: TenantStatus;
   expiresAt?: Date | string | number | null;
@@ -118,6 +123,8 @@ export interface CreateUnitOptions {
   singleTenant?: SingleTenantOptions;
   /** Tenant storage seam. Defaults to DATA_DIR or /data and is only materialized after tenant resolution. */
   storage?: ChassisStorage | ChassisStorageOptions;
+  /** Tenant usage ledger and quota checks. Defaults on when a storage/data dir is configured. */
+  metering?: ChassisUsageStore | ChassisUsageStoreOptions | false;
 }
 
 export interface UnitApp {
@@ -215,6 +222,7 @@ function normalizeProvisionTenant(input: ProvisionTenantInput, ordinal: number):
     id,
     ...(input.name ?? tenant.name ? { name: input.name ?? tenant.name } : {}),
     ...(input.plan ?? tenant.plan ? { plan: input.plan ?? tenant.plan } : {}),
+    ...(input.quota !== undefined || tenant.quota !== undefined ? { quota: input.quota ?? tenant.quota ?? null } : {}),
   };
 }
 
@@ -334,6 +342,34 @@ function storageFromOptions(storage: CreateUnitOptions["storage"]): ChassisStora
   return storage instanceof ChassisStorage ? storage : new ChassisStorage(storage);
 }
 
+function lazyUsageStore(
+  metering: CreateUnitOptions["metering"],
+  storage: ChassisStorage,
+  enabledByDefault: boolean,
+): () => ChassisUsageStore | null {
+  if (metering === false) return () => null;
+  if (metering instanceof ChassisUsageStore) return () => metering;
+  if (metering === undefined && !enabledByDefault) return () => null;
+  let store: ChassisUsageStore | null = null;
+  return () => {
+    store ??= new ChassisUsageStore({ dataDir: storage.dataDir, ...(metering ?? {}) });
+    return store;
+  };
+}
+
+function quotaExceededResponse(c: Context<UnitHonoEnv>, decision: ReturnType<TenantUsageMeter["checkQuota"]>): Response {
+  return c.json(
+    {
+      error: "quota_exceeded",
+      quota: decision.quota,
+      used: decision.used,
+      requested: decision.requested,
+      remaining: decision.remaining,
+    },
+    429,
+  );
+}
+
 export function createUnit(options: CreateUnitOptions): UnitApp {
   const name = options.name.trim();
   if (!name) throw new Error("createUnit requires a non-empty name");
@@ -342,6 +378,11 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const app = new Hono<UnitHonoEnv>();
   const auth = options.tenantAuth ? requireTenantAuth(options.tenantAuth) : noopAuth();
   const storage = storageFromOptions(options.storage);
+  const getUsageStore = lazyUsageStore(
+    options.metering,
+    storage,
+    options.storage !== undefined || Boolean(process.env.DATA_DIR?.trim()),
+  );
   const defaultProvisioningStore = isTenantProvisioningStore(options.tenantAuth?.store)
     ? options.tenantAuth.store
     : null;
@@ -388,10 +429,17 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     const { incoming, outgoing } = nodeBindings(c);
     const server = new McpServer({ name, version });
     const tenant = c.get("tenant") ?? null;
+    const usage = tenant ? getUsageStore()?.forTenant(tenant) ?? null : null;
+    if (tenant && usage) {
+      const decision = usage.checkQuota(tenant.quota, 1);
+      if (!decision.allowed) return quotaExceededResponse(c, decision);
+      usage.record({ kind: "mcp.request", units: 1 });
+    }
     await options.tools?.(server, {
       unitName: name,
       tenant,
       storage: tenant ? storage.forTenant(tenant) : null,
+      usage,
     });
 
     const transport = new StreamableHTTPServerTransport({
@@ -435,6 +483,7 @@ function parseProvisionTenantBody(body: unknown): ProvisionTenantInput {
     tenantId: stringOrUndefined(input.tenantId) ?? stringOrUndefined(input.id) ?? stringOrUndefined(tenantInput.id),
     name: stringOrUndefined(input.name) ?? stringOrUndefined(tenantInput.name),
     plan: stringOrUndefined(input.plan) ?? stringOrUndefined(tenantInput.plan),
+    quota: numberOrNullOrUndefined(input.quota) ?? numberOrNullOrUndefined(tenantInput.quota),
   };
 }
 
@@ -446,6 +495,11 @@ function parseTenantStatus(body: unknown): TenantStatus | null {
 
 function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function numberOrNullOrUndefined(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function toProvisionTenantResponse(result: ProvisionTenantResult): {
@@ -462,4 +516,14 @@ function toProvisionTenantResponse(result: ProvisionTenantResult): {
 
 export * from "./conduct.js";
 export { ChassisStorage, TenantVault, openSqlite } from "./storage.js";
+export { ChassisUsageStore, TenantUsageMeter } from "./usage.js";
 export type { ChassisStorageOptions, TenantStorage, UnitTenant } from "./storage.js";
+export type {
+  ChassisUsageStoreOptions,
+  QuotaDecision,
+  TenantUsageSummary,
+  UsageBucket,
+  UsageEvent,
+  UsageQuery,
+  UsageRecordInput,
+} from "./usage.js";
