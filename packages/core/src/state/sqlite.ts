@@ -27,6 +27,10 @@ export class SqliteStateStore implements StateStore {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 30000;
+    `);
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         conversation_id TEXT NOT NULL,
