@@ -1,6 +1,6 @@
 # EPIC 3.0 · Chassis Replatform — one multi-tenant container per unit, written once
 
-Status: draft
+Status: SUPERSEDED FOR EXECUTION — all active work is defined ONLY by `docs/EPIC-Z-NIGHT-SPRINT.md` (Zenod night sprint; chassis dissolved into Zenod; sign-in is GitHub-only; landing page is the entry point). This document remains the decision history (D1–D21). Do not execute from it.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`

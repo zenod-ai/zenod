@@ -36,13 +36,13 @@
 
 <!-- 1: THE TARGET -->
 <section class="slide active">
-  <p class="dim" style="letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px">Epic 3 · the whole point, one page</p>
+  <p class="dim" style="letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px">The target · execution lives in docs/EPIC-Z-NIGHT-SPRINT.md</p>
   <h1>A few containers. Services live on them.<br>Strangers pay and use them.</h1>
   <div class="card" style="max-width:900px">
     <p class="big">The target: <b>each product is ONE container on the VPS, serving ALL its customers.</b> A stranger opens the site, signs in with GitHub, pays, lands in a working dashboard, uses the product. Adding a customer is a database row. Adding a product is one more container.</p>
   </div>
   <div class="card" style="max-width:900px">
-    <p><span class="accent">Login and payment are built ONCE</span> — in the chassis — and every product inherits them. GitHub sign-in → account. Subscribe → Stripe checkout stamped with your user ID → tenant created on that account → dashboard. No unit ever writes auth or billing code again. No claim links, no token-paste logins, no email matching — ever.</p>
+    <p><span class="accent">Login and payment are built ONCE</span> — inside Zenod, the first complete unit; new products are made by duplicating the working Zenod and adapting it (no separate framework). GitHub sign-in only for now (Google later). GitHub sign-in → account. Subscribe → Stripe checkout stamped with your user ID → tenant created on that account → dashboard. New units copy it, never rewrite it. No claim links, no token-paste logins, no email matching — ever.</p>
   </div>
   <p class="dim" style="margin-top:auto">→ to advance</p>
 </section>
@@ -93,7 +93,7 @@
     <p><b>1 · Finish the Zenod journey</b> <span class="dim">(in flight now)</span> — fix the blank Keys page + wire checkout→tenant, walk the journey clean, hand Jordi the URL. Zenod is then a live product taking signups.</p>
   </div>
   <div class="card">
-    <p><b>2 · Hoist accounts+billing into the chassis</b> — the login/subscribe/user↔tenant code the pilot debugged moves into <code>packages/mcp-chassis</code> as the <code>accounts</code> module. Built once. Every unit inherits it from here on. This is the ONLY infra work left that isn't a product journey.</p>
+    <p><b>2 · Zenod IS the template</b> — no separate chassis/framework work, ever. When Zenod ships complete (landing → sign-in → pay → dashboard → MCP), it becomes the cookie-cutter: new units are made by duplicating it and swapping the product middle.</p>
   </div>
   <div class="card">
     <p><b>3 · Stand up Callisthenes</b> — one atomic unit: chassis front (inherited login/billing/dashboard, zero new auth code) + the Python X engine that already works (three-input connect, PIN, drafts-never-send, permalink receipts). Walk its journey clean, hand Jordi the URL. Then Epaminon, then Ring — same recipe, same test, each cheaper than the last.</p>

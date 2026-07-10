@@ -1,6 +1,6 @@
 # EPIC 3.6 · Phylax — one container per phone number, users are whitelist rows
 
-Status: draft
+Status: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`). Note: transcription moves INTO Phylax when this respawns (Jordi 2026-07-11). Chassis references herein are stale.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`

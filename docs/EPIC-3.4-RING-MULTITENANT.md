@@ -1,6 +1,6 @@
 # EPIC 3.4 · Ring Multi-Tenant — the door on the chassis
 
-Status: draft
+Status: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it. Chassis references herein are stale.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`

@@ -1,6 +1,6 @@
 # MCP Chassis — write the server art once, reuse it per unit
 
-Status: draft for planner review
+Status: HISTORICAL — the chassis as a separate project was dissolved into Zenod (2026-07-11, Jordi). Do not build from this document. Active work: `docs/EPIC-Z-NIGHT-SPRINT.md`.
 Created: 2026-07-09
 Author: Claude (Cowork session with Jordi)
 Bound spine for routing: `docs/EPIC-0-FOUNDATION-SPINE.md` (this doc is a proposed decision + cross-spine update source; child spines adopt via their own stewards)

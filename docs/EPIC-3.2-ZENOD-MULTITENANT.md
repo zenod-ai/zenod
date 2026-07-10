@@ -1,6 +1,6 @@
 # EPIC 3.2 · Zenod Multi-Tenant — one container, all wiki brains
 
-Status: active
+Status: SUPERSEDED by `docs/EPIC-Z-NIGHT-SPRINT.md` (2026-07-11). All prior directives in this spine are void. Its deployed work is the night sprint's starting material. Do not execute from this document.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`

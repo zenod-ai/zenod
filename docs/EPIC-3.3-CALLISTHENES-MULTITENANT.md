@@ -1,6 +1,6 @@
 # EPIC 3.3 · Callisthenes Multi-Tenant — conformance by contract, first proof
 
-Status: draft
+Status: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it (no chassis, no shared-framework work). Chassis/PKCE references herein are stale.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`

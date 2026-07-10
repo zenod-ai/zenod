@@ -1,6 +1,6 @@
 # EPIC 3.1 · MCP Chassis — extract the write-once scaffold
 
-Status: release-candidate; joint pilot proof and human gates pending
+Status: CLOSED — dissolved into Zenod (2026-07-11, Jordi). The chassis is no longer a separate project; merged code stays as Zenod internal plumbing. No further tickets, merges, or freeze gates. Active work: `docs/EPIC-Z-NIGHT-SPRINT.md` only.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
