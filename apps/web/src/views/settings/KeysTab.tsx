@@ -75,12 +75,12 @@ const MAX_STEPS_DEFAULT = 8
 const MAX_STEPS_MIN = 2
 const MAX_STEPS_MAX = 20
 
-function toFormState(settings: SettingsValues): FormState {
+export function toFormState(settings: SettingsValues): FormState {
   return {
     vault_repo: settings.vault_repo ?? "",
     vault_branch: settings.vault_branch ?? "",
     github_token: settings.github_token ?? "",
-    provider: settings.provider,
+    provider: settings.provider ?? "anthropic",
     anthropic_api_key: settings.anthropic_api_key ?? "",
     openai_api_key: settings.openai_api_key ?? "",
     openrouter_api_key: settings.openrouter_api_key ?? "",
