@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   DASHBOARD_SECTIONS,
+  PUBLIC_LANDING_URL,
   dashboardSectionForTab,
   mcpClientSnippets,
   mcpUrlForToken,
@@ -28,6 +29,10 @@ describe("Zenod dashboard navigation", () => {
     for (const tab of ["transcription", "whatsapp", "telegram", "ring"]) {
       expect(dashboardSectionForTab(tab)).toBe("connect")
     }
+  })
+
+  it("links back to the canonical public landing", () => {
+    expect(PUBLIC_LANDING_URL).toBe("https://zenod.dev/")
   })
 })
 

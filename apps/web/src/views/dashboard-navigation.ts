@@ -7,6 +7,7 @@ export const DASHBOARD_SECTIONS = Object.freeze([
 
 export type DashboardSection = (typeof DASHBOARD_SECTIONS)[number]["id"]
 
+export const PUBLIC_LANDING_URL = "https://zenod.dev/"
 export const CANONICAL_MCP_ORIGIN = "https://cloud.zenod.dev"
 
 export function dashboardSectionForTab(

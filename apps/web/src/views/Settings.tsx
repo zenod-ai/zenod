@@ -23,6 +23,7 @@ import {
 } from "@/views/DashboardOverview"
 import {
   DASHBOARD_SECTIONS,
+  PUBLIC_LANDING_URL,
   dashboardSectionForTab,
   type DashboardSection,
 } from "@/views/dashboard-navigation"
@@ -136,7 +137,7 @@ export function Settings({
         </div>
         <div className="flex items-center gap-1">
           <Button asChild variant="ghost" size="sm">
-            <a href="/">
+            <a href={PUBLIC_LANDING_URL}>
               <ArrowLeftIcon data-icon="inline-start" />
               Landing
             </a>
