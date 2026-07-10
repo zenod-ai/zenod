@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,7 +48,45 @@ function fixture() {
   settings.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run("api_token", "legacy-token-never-passed-to-tool");
   settings.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run("session_secret", "legacy-session-secret");
   settings.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run("vault_repo", "owner/repo");
+  const credentialHandle = `zenod-secret:v1:${"ab".repeat(24)}`;
+  settings.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run("github_token", credentialHandle);
   settings.close();
+  const credentialVault = new DatabaseSync(join(source, "vault.sqlite"));
+  credentialVault.exec(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE credential_entries (
+      handle TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      key_name TEXT NOT NULL,
+      ciphertext BLOB NOT NULL,
+      iv BLOB NOT NULL,
+      auth_tag BLOB NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE (tenant_id, key_name)
+    );
+    CREATE INDEX idx_credential_entries_tenant_key
+      ON credential_entries (tenant_id, key_name);
+  `);
+  credentialVault
+    .prepare(
+      `INSERT INTO credential_entries
+       (handle, tenant_id, key_name, ciphertext, iv, auth_tag, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      credentialHandle,
+      "standalone",
+      "github_token",
+      randomBytes(32),
+      randomBytes(12),
+      randomBytes(16),
+      1,
+      1,
+    );
+  credentialVault.close();
+  const legacyKey = randomBytes(32);
+  writeFileSync(join(source, ".zenod-vault-key"), legacyKey, { mode: 0o600 });
   createSqlite(join(source, "whatsapp", "whatsapp.sqlite"), "whatsapp");
   mkdirSync(join(source, "transcripts", "run-1"), { recursive: true });
   writeFileSync(join(source, "transcripts", "run-1", "events.jsonl"), '{"type":"done"}\n');
@@ -68,7 +106,15 @@ function fixture() {
   writeFileSync(join(vault, "Untracked.md"), "preserve working tree status\n");
 
   const tokenHash = createHash("sha256").update("legacy-token-never-passed-to-tool").digest("hex");
-  return { root, source, dataRoot, receiptDir, tenantId: "tenant-fixture", tokenHash };
+  return {
+    root,
+    source,
+    dataRoot,
+    receiptDir,
+    tenantId: "tenant-fixture",
+    tokenHash,
+    legacyKeyDigest: createHash("sha256").update(legacyKey).digest("hex"),
+  };
 }
 
 function options(value, mode = "plan") {
@@ -95,7 +141,16 @@ test("dry-run verifies the source and reports changes without mutation", () => {
 
   assert.equal(result.operation, "plan");
   assert.equal(result.mutation, false);
-  assert.equal(result.source.sqlite.length, 9);
+  assert.equal(result.source.sqlite.length, 10);
+  assert.deepEqual(result.source.credentials, {
+    schemaPresent: true,
+    rowCount: 1,
+    tenantIds: ["standalone"],
+    credentials: [{ tenantId: "standalone", key: "github_token", handle: `zenod-secret:v1:${"ab".repeat(24)}` }],
+    settingsReferenceCount: 1,
+    keyFile: { present: true, size: 32, mode: 0o600 },
+  });
+  assert.equal(JSON.stringify(result).includes(value.legacyKeyDigest), false);
   assert.equal(result.source.git.length, 1);
   assert.equal(result.source.git[0].status, "?? Untracked.md");
   assert.equal(existsSync(value.dataRoot), false);
@@ -131,6 +186,8 @@ test("apply copies all state, inserts only the token hash, verifies evidence, an
   assert.deepEqual(first.source.scrubbedSettings, ["api_token", "session_secret"]);
   assert.equal(readFileSync(join(target, "artifacts", "2026", "07", "evidence.txt"), "utf8"), "evidence bytes\n");
   assert.equal(existsSync(first.receiptPath), true);
+  assert.deepEqual(first.target.credentials, first.source.credentials);
+  assert.equal(readFileSync(first.receiptPath, "utf8").includes(value.legacyKeyDigest), false);
 
   const registry = new DatabaseSync(join(value.dataRoot, "chassis-tenants.sqlite"), { readOnly: true });
   const rows = registry.prepare("SELECT tenant_id, token_hash, status, updated_at FROM tenants").all();
@@ -178,6 +235,15 @@ test("apply rejects conflicting target content without overwriting it", () => {
   assert.throws(() => runMigration({ ...options(value, "apply"), acceptPlan: "stale-plan" }), /target already exists with different content/);
   assert.equal(readFileSync(join(target, "foreign.txt"), "utf8"), "do not overwrite\n");
   assert.equal(existsSync(join(value.dataRoot, "chassis-tenants.sqlite")), false);
+});
+
+test("an existing target with different legacy key bytes is never treated as identical", () => {
+  const value = fixture();
+  runMigration(applyOptions(value));
+  const targetKey = join(value.dataRoot, value.tenantId, ".zenod-vault-key");
+  writeFileSync(targetKey, randomBytes(32), { mode: 0o600 });
+
+  assert.throws(() => runMigration(options(value)), /different content outside the authorized legacy-auth scrub/);
 });
 
 test("rollback removes only state owned by the apply receipt and is repeatable", () => {

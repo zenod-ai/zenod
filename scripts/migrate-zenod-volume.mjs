@@ -40,6 +40,7 @@ const AUTH_DB_PATHS = new Set([
   "zenod.sqlite-shm",
   "zenod.sqlite-wal",
 ]);
+const SECRET_MANIFEST_PATHS = new Set([".zenod-vault-key"]);
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -249,6 +250,93 @@ function legacyAuthSettings(root) {
   }
 }
 
+export function legacyCredentialInventory(root) {
+  const vaultPath = join(root, "vault.sqlite");
+  const keyPath = join(root, ".zenod-vault-key");
+  const keyFile = existsSync(keyPath)
+    ? (() => {
+        const keyStat = lstatSync(keyPath);
+        if (!keyStat.isFile() || keyStat.isSymbolicLink()) {
+          throw new Error(".zenod-vault-key must be a regular file");
+        }
+        return { present: true, size: keyStat.size, mode: modeBits(keyStat) };
+      })()
+    : { present: false, size: null, mode: null };
+  if (!existsSync(vaultPath)) {
+    return {
+      schemaPresent: false,
+      rowCount: 0,
+      tenantIds: [],
+      credentials: [],
+      settingsReferenceCount: 0,
+      keyFile,
+    };
+  }
+
+  const scratch = mkdtempSync(join(tmpdir(), "zenod-credential-inventory-"));
+  const scratchVault = join(scratch, "vault.sqlite");
+  copyFileSync(vaultPath, scratchVault);
+  for (const suffix of ["-wal", "-shm"]) {
+    if (existsSync(`${vaultPath}${suffix}`)) {
+      copyFileSync(`${vaultPath}${suffix}`, `${scratchVault}${suffix}`);
+    }
+  }
+  let db = null;
+  try {
+    db = new DatabaseSync(scratchVault);
+    const table = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'credential_entries'")
+      .get();
+    const rows = table
+      ? db
+          .prepare("SELECT tenant_id, key_name, handle FROM credential_entries ORDER BY tenant_id, key_name")
+          .all()
+      : [];
+    const credentials = rows.map((row) => ({
+      tenantId: String(row.tenant_id),
+      key: String(row.key_name),
+      handle: String(row.handle),
+    }));
+    const settingsPath = join(root, "zenod.sqlite");
+    let settingsReferenceCount = 0;
+    if (existsSync(settingsPath)) {
+      const scratchSettings = join(scratch, "zenod.sqlite");
+      copyFileSync(settingsPath, scratchSettings);
+      for (const suffix of ["-wal", "-shm"]) {
+        if (existsSync(`${settingsPath}${suffix}`)) {
+          copyFileSync(`${settingsPath}${suffix}`, `${scratchSettings}${suffix}`);
+        }
+      }
+      const settingsDb = new DatabaseSync(scratchSettings);
+      try {
+        const settingsTable = settingsDb
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'")
+          .get();
+        if (settingsTable) {
+          settingsReferenceCount = Number(
+            settingsDb
+              .prepare("SELECT COUNT(*) AS count FROM settings WHERE value LIKE 'zenod-secret:v1:%'")
+              .get().count,
+          );
+        }
+      } finally {
+        settingsDb.close();
+      }
+    }
+    return {
+      schemaPresent: Boolean(table),
+      rowCount: credentials.length,
+      tenantIds: [...new Set(credentials.map((entry) => entry.tenantId))].sort(),
+      credentials,
+      settingsReferenceCount,
+      keyFile,
+    };
+  } finally {
+    db?.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 function scrubLegacyAuthSettings(root) {
   const path = join(root, "zenod.sqlite");
   const keys = legacyAuthSettings(root);
@@ -268,6 +356,18 @@ function scrubLegacyAuthSettings(root) {
 
 function comparableManifestEntries(manifest) {
   return manifest.entries.filter((entry) => !AUTH_DB_PATHS.has(entry.path));
+}
+
+function redactSecretManifestEntries(entries) {
+  return entries.map((entry) =>
+    entry.type === "file" && SECRET_MANIFEST_PATHS.has(entry.path)
+      ? { ...entry, sha256: "[redacted-secret-file]" }
+      : entry,
+  );
+}
+
+function manifestForEvidence(manifest) {
+  return { ...manifest, entries: redactSecretManifestEntries(manifest.entries) };
 }
 
 function assertMigratedManifest(sourceManifest, targetManifest, scrubbedSettings) {
@@ -530,6 +630,7 @@ function planMigration(options) {
   const sourceManifest = buildManifest(paths.source);
   const sourceSqlite = verifySqlite(paths.source, sourceManifest);
   const sourceGit = verifyGit(paths.source, sourceManifest);
+  const sourceCredentials = legacyCredentialInventory(paths.source);
   const scrubbedSettings = legacyAuthSettings(paths.source);
   const registry = registrySnapshot(paths.registry, options.tenantId, tokenHash);
   assertRegistryCompatible(registry, options.tenantId, tokenHash);
@@ -540,6 +641,9 @@ function planMigration(options) {
     assertMigratedManifest(sourceManifest, targetManifest, scrubbedSettings);
     if (legacyAuthSettings(paths.target).length > 0)
       throw new Error(`target still contains legacy auth settings: ${paths.target}`);
+    if (JSON.stringify(legacyCredentialInventory(paths.target)) !== JSON.stringify(sourceCredentials)) {
+      throw new Error("target legacy credential inventory differs from source");
+    }
     target = { exists: true, manifestDigest: targetManifest.digest };
   } else {
     target = { exists: false, manifestDigest: null };
@@ -568,8 +672,9 @@ function planMigration(options) {
       directories: sourceManifest.directories,
       symlinks: sourceManifest.symlinks,
       bytes: sourceManifest.bytes,
-      manifest: sourceManifest.entries,
+      manifest: redactSecretManifestEntries(sourceManifest.entries),
       scrubbedSettings,
+      credentials: sourceCredentials,
       sqlite: sourceSqlite,
       git: sourceGit,
     },
@@ -577,7 +682,12 @@ function planMigration(options) {
     registry,
     actions,
   };
-  return { ...plan, planDigest: sha256(JSON.stringify(plan)) };
+  const result = { ...plan, planDigest: sha256(JSON.stringify(plan)) };
+  Object.defineProperty(result, "sourceManifestEntries", {
+    value: sourceManifest.entries,
+    enumerable: false,
+  });
+  return result;
 }
 
 function timestampForFilename() {
@@ -645,13 +755,17 @@ export function runMigration(options) {
       }
       const migratedManifest = buildManifest(temporaryTarget);
       assertMigratedManifest(
-        { digest: plan.source.manifestDigest, entries: plan.source.manifest },
+        { digest: plan.source.manifestDigest, entries: plan.sourceManifestEntries },
         migratedManifest,
         plan.source.scrubbedSettings,
       );
       const temporarySqlite = verifySqlite(temporaryTarget, migratedManifest);
       const temporaryGit = verifyGit(temporaryTarget, migratedManifest);
+      const temporaryCredentials = legacyCredentialInventory(temporaryTarget);
       if (JSON.stringify(temporarySqlite) !== JSON.stringify(plan.source.sqlite)) throw new Error("temporary copy SQLite verification failed");
+      if (JSON.stringify(temporaryCredentials) !== JSON.stringify(plan.source.credentials)) {
+        throw new Error("temporary copy credential inventory verification failed");
+      }
       compareGit(plan.source.git, temporaryGit);
       renameSync(temporaryTarget, plan.paths.target);
       createdTarget = true;
@@ -661,10 +775,11 @@ export function runMigration(options) {
     const targetManifest = buildManifest(plan.paths.target);
     const targetSqlite = verifySqlite(plan.paths.target, targetManifest);
     const targetGit = verifyGit(plan.paths.target, targetManifest);
+    const targetCredentials = legacyCredentialInventory(plan.paths.target);
     const registry = registrySnapshot(plan.paths.registry, options.tenantId, plan.tokenHash);
     assertRegistryCompatible(registry, options.tenantId, plan.tokenHash);
     const verification = verificationSummary(
-      { digest: plan.source.manifestDigest, entries: plan.source.manifest },
+      { digest: plan.source.manifestDigest, entries: plan.sourceManifestEntries },
       targetManifest,
       plan.source.scrubbedSettings,
       plan.source.sqlite,
@@ -689,7 +804,12 @@ export function runMigration(options) {
       idempotent: !createdTarget && !insertedRegistry,
       changes: { createdTarget, insertedRegistry, createdRegistry: !registryExisted },
       source: plan.source,
-      target: { ...targetManifest, sqlite: targetSqlite, git: targetGit },
+      target: {
+        ...manifestForEvidence(targetManifest),
+        sqlite: targetSqlite,
+        git: targetGit,
+        credentials: targetCredentials,
+      },
       registry,
       verification,
     };
@@ -716,8 +836,9 @@ export function verifyMigration(options) {
   const targetManifest = buildManifest(plan.paths.target);
   const targetSqlite = verifySqlite(plan.paths.target, targetManifest);
   const targetGit = verifyGit(plan.paths.target, targetManifest);
+  const targetCredentials = legacyCredentialInventory(plan.paths.target);
   const verification = verificationSummary(
-    { digest: plan.source.manifestDigest, entries: plan.source.manifest },
+    { digest: plan.source.manifestDigest, entries: plan.sourceManifestEntries },
     targetManifest,
     plan.source.scrubbedSettings,
     plan.source.sqlite,
@@ -734,7 +855,12 @@ export function verifyMigration(options) {
     tokenHash: plan.tokenHash,
     paths: plan.paths,
     planDigest: plan.planDigest,
-    target: { manifestDigest: targetManifest.digest, sqlite: targetSqlite, git: targetGit },
+    target: {
+      manifestDigest: targetManifest.digest,
+      sqlite: targetSqlite,
+      git: targetGit,
+      credentials: targetCredentials,
+    },
     registry: plan.registry,
     verification,
   };

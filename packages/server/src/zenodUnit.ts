@@ -25,6 +25,8 @@ export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly apps = new Map<string, ReturnType<typeof createApp>>();
 
+  constructor(private readonly env: NodeJS.ProcessEnv = process.env) {}
+
   forContext(context: UnitContext): Runtime {
     if (!context.tenant || !context.storage) {
       throw new Error("Zenod requires an authenticated chassis tenant context");
@@ -40,7 +42,9 @@ export class ZenodRuntimePool {
     const runtime = new Runtime(context.storage.rootDir, ZENOD_AGENT, {
       seedFromEnv: false,
       tenantId,
-      credentialVault: new ChassisCredentialVault(context.storage),
+      credentialVault: new ChassisCredentialVault(context.storage, {
+        legacyMasterKey: this.env.ZENOD_CREDENTIAL_MASTER_KEY,
+      }),
     });
     runtime.settings.set("artifact_archive_provider", "local");
     runtime.settings.set(
@@ -146,15 +150,18 @@ export const ZENOD_READ_TOOLS = [
 ] as const;
 
 export function createZenodUnit(options: CreateZenodUnitOptions) {
-  const storage = new ChassisStorage({ dataDir: options.dataDir });
+  const env = options.env ?? process.env;
+  const storage = new ChassisStorage({
+    dataDir: options.dataDir,
+    vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
+  });
   const tenantStore =
     options.tenantStore ??
     createSqliteTenantStore({
       dataDir: storage.dataDir,
       busyTimeoutMs: 30_000,
     });
-  const env = options.env ?? process.env;
-  const runtimes = new ZenodRuntimePool();
+  const runtimes = new ZenodRuntimePool(env);
   const unit = createUnit({
     name: "zenod",
     version: VERSION,
