@@ -73,8 +73,6 @@ import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { callPeerTool } from "./peerClient.js";
 import { RingRouterCore, type RingConnectedServer, type RingInboundMessage, type RingToolCall } from "./ringRouter.js";
 import type { PhylaxChannel } from "./phylaxGateway.js";
-import { createCustomerLayer, customerAuthEnabled, type CustomerLayerOptions } from "./customerLayer.js";
-import { readCustomerSession } from "./customerSession.js";
 
 // #532/#548 — the running commit SHA for /api/health. Prefer an explicit GIT_SHA env
 // (GHCR/CI builds pass it); otherwise fall back to the `.gitsha` file the Docker build
@@ -98,8 +96,8 @@ export interface AppOptions {
   siteDist?: string;
   /** Per-agent identity/config consumed by the shell. Defaults to Zenod. */
   agent?: AgentDefinition;
-  /** Hosted customer-layer dependencies/config. Production defaults come from env. */
-  customer?: CustomerLayerOptions;
+  /** Chassis route middleware has already authenticated and bound this tenant. */
+  trustedChassisAuth?: boolean;
 }
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
@@ -201,10 +199,6 @@ function isPhylaxChannel(value: unknown): value is PhylaxChannel {
 export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bindings: HttpBindings }> {
   const app = new Hono<{ Bindings: HttpBindings }>();
   const { settings } = runtime;
-  const customerEnv = options.customer?.env ?? process.env;
-  const hostedCustomerAuth = customerAuthEnabled(customerEnv);
-  const customerLayer = createCustomerLayer(runtime, options.customer);
-  app.route("/", customerLayer.app);
   const usedHostedEntryNonces = new Set<string>();
   const agent = options.agent ?? runtime.agent;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
@@ -277,11 +271,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   app.get("/api/auth/status", (c) =>
     c.json({
-      needsSetup: !hostedCustomerAuth && !hostedRingMode() && !settings.hasAdminPassword(),
+      needsSetup: !hostedRingMode() && !settings.hasAdminPassword(),
       configured: settings.configured(),
       hostedMode: hostedRingMode() ? "ring" : null,
-      customerAuth: hostedCustomerAuth,
-      authMethod: hostedCustomerAuth ? "github" : "admin",
     }),
   );
 
@@ -296,7 +288,6 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.post("/api/auth/setup", async (c) => {
-    if (hostedCustomerAuth) return c.json({ error: "not found" }, 404);
     if (hostedRingMode()) return c.json({ error: "not found" }, 404);
     if (settings.hasAdminPassword()) return c.json({ error: "already set up" }, 403);
     const { password } = await c.req.json<{ password?: string }>();
@@ -307,7 +298,6 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.post("/api/auth/login", async (c) => {
-    if (hostedCustomerAuth) return c.json({ error: "not found" }, 404);
     const { password } = await c.req.json<{ password?: string }>();
     if (!password || !settings.verifyAdminPassword(password)) {
       return c.json({ error: "wrong password" }, 401);
@@ -317,7 +307,6 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.post("/api/auth/logout", (c) => {
-    if (hostedCustomerAuth) return c.json({ error: "not found" }, 404);
     clearSession(c);
     return c.json({ ok: true });
   });
@@ -326,6 +315,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   const auth = requireAuth(settings);
   app.use("/api/*", async (c, next) => {
+    if (options.trustedChassisAuth) return next();
     const path = c.req.path;
     if (path === "/api/health" || path.startsWith("/api/auth/")) return next();
     // /api/provision is open ONLY while the agent is un-provisioned (it has no
@@ -337,7 +327,6 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // the agent token can't forge execution state. It is internal-only and is never
     // republished on the public Console gateway.
     if (path.startsWith("/api/exec/")) return next();
-    if (readCustomerSession(c, customerEnv)) return next();
     return auth(c, next);
   });
 

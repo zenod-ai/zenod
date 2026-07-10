@@ -38,8 +38,8 @@ export function loadCustomerBillingConfig(env: NodeJS.ProcessEnv = process.env):
     stripeMode,
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || "",
     prices: {
-      monthly: env.PRICE_MONTHLY || env.PRICE_STARTER,
-      yearly: env.PRICE_YEARLY || env.PRICE_PRO,
+      monthly: env.PRICE_MONTHLY,
+      yearly: env.PRICE_YEARLY,
     },
   };
 }

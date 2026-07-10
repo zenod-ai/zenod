@@ -15,6 +15,7 @@ import {
 } from "./telegramConfig.js";
 import type { PeerConfig } from "./peerClient.js";
 import type { RingConnectedServer, RingRelayPolicy, RingRouteLogEntry } from "./ringRouter.js";
+import { isCredentialHandle, type CredentialVault } from "./credentialVault.js";
 
 /** Runtime settings persisted in SQLite; env vars seed them on first boot. */
 export const SETTING_KEYS = [
@@ -122,6 +123,12 @@ const SECRET_KEYS: ReadonlySet<string> = new Set([
   "composio_api_key",
 ]);
 
+const CREDENTIAL_SECRET_KEYS: ReadonlySet<string> = new Set([
+  ...SECRET_KEYS,
+  "github_app_private_key",
+  "google_oauth_refresh_token",
+]);
+
 const ENV_SEEDS: Record<SettingKey, string> = {
   instance_name: "ZENOD_INSTANCE_NAME",
   vault_repo: "VAULT_REPO",
@@ -157,13 +164,18 @@ const ENV_SEEDS: Record<SettingKey, string> = {
 };
 
 export class Settings {
-  constructor(private readonly store: SqliteStateStore) {}
+  constructor(
+    private readonly store: SqliteStateStore,
+    private readonly credentialVault?: CredentialVault,
+  ) {
+    this.migrateCredentialSecrets();
+  }
 
   /** Seed settings from env vars that aren't already set (first boot). */
   seedFromEnv(env: NodeJS.ProcessEnv = process.env): void {
     for (const key of SETTING_KEYS) {
       const envValue = env[ENV_SEEDS[key]];
-      if (envValue && this.get(key) === null) this.store.setSetting(key, envValue);
+      if (envValue && this.get(key) === null) this.set(key, envValue);
     }
     if (this.get("provider") === null) this.store.setSetting("provider", "anthropic");
     // ZD-9: a self-hoster can PIN their MCP token via ZENOD_API_TOKEN (sits next to
@@ -224,36 +236,70 @@ export class Settings {
     if (input.admin_password_hash) this.store.setSetting("admin_password_hash", input.admin_password_hash);
     if (input.session_secret) this.store.setSetting("session_secret", input.session_secret);
     if (input.provider) this.store.setSetting("provider", input.provider);
-    if (input.provider && input.api_key) this.store.setSetting(PROVIDER_KEY[input.provider as Provider], input.api_key);
+    if (input.provider && input.api_key) this.set(PROVIDER_KEY[input.provider as Provider], input.api_key);
     for (const k of ["model_ask", "model_classify", "vault_repo", "vault_branch", "backlog_repo"] as const) {
-      if (input[k]) this.store.setSetting(k, input[k]!);
+      if (input[k]) this.setRaw(k, input[k]!);
     }
     for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug", "github_token"] as const) {
-      if (input[k]) this.store.setSetting(k, input[k]!);
+      if (input[k]) this.setRaw(k, input[k]!);
     }
     for (const k of ["composio_api_key", "composio_user_id"] as const) {
-      if (input[k]) this.store.setSetting(k, input[k]!);
+      if (input[k]) this.setRaw(k, input[k]!);
     }
     this.setRaw("provisioned", "1");
   }
 
   get(key: SettingKey): string | null {
-    return this.store.getSetting(key);
+    return this.getStoredValue(key);
   }
 
   set(key: SettingKey, value: string): void {
-    if (value === "") this.store.deleteSetting(key);
-    else this.store.setSetting(key, value);
+    this.setStoredValue(key, value);
   }
 
   /** Internal keys (e.g. GitHub App credentials) — not part of the UI-editable set. */
   getRaw(key: string): string | null {
-    return this.store.getSetting(key);
+    return this.getStoredValue(key);
   }
 
   setRaw(key: string, value: string): void {
-    if (value === "") this.store.deleteSetting(key);
-    else this.store.setSetting(key, value);
+    this.setStoredValue(key, value);
+  }
+
+  private getStoredValue(key: string): string | null {
+    const stored = this.store.getSetting(key);
+    if (!stored || !this.credentialVault || !CREDENTIAL_SECRET_KEYS.has(key)) return stored;
+    if (isCredentialHandle(stored)) return this.credentialVault.materialize(key, stored);
+
+    // A pre-custody database or direct legacy write is migrated on first read.
+    const handle = this.credentialVault.put(key, stored);
+    this.store.setSetting(key, handle);
+    return stored;
+  }
+
+  private setStoredValue(key: string, value: string): void {
+    const current = this.store.getSetting(key);
+    if (value === "") {
+      if (this.credentialVault && current && isCredentialHandle(current)) {
+        this.credentialVault.delete(key, current);
+      }
+      this.store.deleteSetting(key);
+      return;
+    }
+    if (this.credentialVault && CREDENTIAL_SECRET_KEYS.has(key)) {
+      this.store.setSetting(key, this.credentialVault.put(key, value));
+      return;
+    }
+    this.store.setSetting(key, value);
+  }
+
+  private migrateCredentialSecrets(): void {
+    if (!this.credentialVault) return;
+    for (const key of CREDENTIAL_SECRET_KEYS) {
+      const stored = this.store.getSetting(key);
+      if (!stored || isCredentialHandle(stored)) continue;
+      this.store.setSetting(key, this.credentialVault.put(key, stored));
+    }
   }
 
   /**

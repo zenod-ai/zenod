@@ -1,6 +1,5 @@
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { openZenodSqlite } from "./sqlite.js";
 
 /**
  * Durable journal for every proactive notification event that passes through the
@@ -75,10 +74,10 @@ function rowToRecord(row: Row): NotificationRecord {
 
 export class NotificationStore {
   private readonly db: DatabaseSync;
+  private closed = false;
 
   constructor(path: string) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.db = new DatabaseSync(path);
+    this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS notifications (
         id TEXT PRIMARY KEY,
@@ -165,6 +164,8 @@ export class NotificationStore {
   }
 
   close(): void {
+    if (this.closed) return;
+    this.closed = true;
     this.db.close();
   }
 }

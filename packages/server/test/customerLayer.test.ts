@@ -3,9 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createApp } from "../src/app.js";
+import { createSqliteTenantStore, hashToken } from "@zenod/mcp-chassis";
 import { customerAccountId } from "../src/customerAccounts.js";
-import type { CustomerStripeClient } from "../src/customerBilling.js";
+import { loadCustomerBillingConfig, type CustomerStripeClient } from "../src/customerBilling.js";
+import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerMetering } from "../src/customerMetering.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -33,6 +34,7 @@ function checkoutSession(overrides: Partial<Stripe.Checkout.Session> = {}): Stri
 describe("hosted customer layer", () => {
   let dir: string;
   let runtime: Runtime;
+  let tenants: ReturnType<typeof createSqliteTenantStore>;
   let createdParams: Stripe.Checkout.SessionCreateParams | null;
   let completed: string[];
   let session: Stripe.Checkout.Session;
@@ -42,6 +44,7 @@ describe("hosted customer layer", () => {
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "zenod-customer-"));
     runtime = new Runtime(dir);
+    tenants = createSqliteTenantStore({ dataDir: dir });
     createdParams = null;
     completed = [];
     session = checkoutSession();
@@ -86,15 +89,18 @@ describe("hosted customer layer", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    tenants.close();
     runtime.close();
     await rm(dir, { recursive: true, force: true });
   });
 
   function customerApp(identityUser = { id: 42, login: "octocat", email: "customer@example.com" }) {
-    return createApp(runtime, {
-      customer: {
+    return createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
         env,
         stripe,
+        tenantStore: tenants,
         identity: {
           authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
           exchangeAndGetUser: async () => identityUser,
@@ -103,11 +109,26 @@ describe("hosted customer layer", () => {
           completed.push(account.session_id);
         },
       },
-    });
+    ).app;
+  }
+
+  function locallyBoundCustomerApp() {
+    return createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+      },
+    ).app;
   }
 
   async function signInCookie(
-    app: ReturnType<typeof createApp>,
+    app: ReturnType<typeof customerApp>,
     returnHost = "cloud.zenod.dev",
     expectedDestination = `${DESTINATION}/app`,
   ): Promise<string> {
@@ -125,7 +146,10 @@ describe("hosted customer layer", () => {
   }
 
   it("keeps the registered callback independent from the customer destination", async () => {
-    const app = createApp(runtime, { customer: { env, stripe } });
+    const app = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      { env, stripe, tenantStore: tenants },
+    ).app;
     const response = await app.request("/auth/signin");
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get("location")!);
@@ -152,7 +176,7 @@ describe("hosted customer layer", () => {
     await signInCookie(app, "cloud.zenod.dev", "https://cloud.zenod.dev/app");
   });
 
-  it("binds checkout to the stable account id and leaves repo-picker routes unchanged", async () => {
+  it("binds checkout to the stable account id", async () => {
     const app = customerApp();
     const cookie = await signInCookie(app);
     const checkout = await app.request("/create-checkout-session", {
@@ -169,12 +193,130 @@ describe("hosted customer layer", () => {
       success_url: `${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     });
 
-    const picker = await app.request("/api/github/app/start", {
-      headers: { cookie, host: "cloud.zenod.dev" },
+    const pendingAccount = await app.request("/api/console/account", { headers: { cookie } });
+    expect(pendingAccount.status).toBe(404);
+    expect(await pendingAccount.json()).toEqual({ error: "no_account" });
+
+  });
+
+  it("uses only the deployed PRICE_MONTHLY and PRICE_YEARLY env names", () => {
+    const config = loadCustomerBillingConfig({
+      PRICE_MONTHLY: "price_1TrjPC76yJ3p1J6XqXl1QwN8",
+      PRICE_YEARLY: "price_1TrjPD76yJ3p1J6XZGkcIQ56",
+      PRICE_STARTER: "legacy_monthly",
+      PRICE_PRO: "legacy_yearly",
     });
-    expect(picker.status).toBe(200);
-    const pickerBody = await picker.json();
-    expect(pickerBody.manifest.redirect_url).toBe("http://cloud.zenod.dev/api/github/app/callback");
+    expect(config.prices).toEqual({
+      monthly: "price_1TrjPC76yJ3p1J6XqXl1QwN8",
+      yearly: "price_1TrjPD76yJ3p1J6XZGkcIQ56",
+    });
+  });
+
+  it("inserts and binds one active local tenant row across webhook retries", async () => {
+    const app = locallyBoundCustomerApp();
+    const cookie = await signInCookie(app);
+    await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+
+    const first = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(await first.json()).toEqual({ received: true, result: "completed" });
+    const second = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(await second.json()).toEqual({ received: true, result: "duplicate" });
+
+    const accountResponse = await app.request("/api/console/account", { headers: { cookie } });
+    expect(accountResponse.status).toBe(200);
+    const account = await accountResponse.json();
+    expect(account).toMatchObject({
+      account_id: customerAccountId(42),
+      tier: "monthly",
+      subscription_status: "active",
+      tenant_id: customerAccountId(42),
+      slug: "octocat-42",
+    });
+    expect(account.token).toMatch(/^zenod_[a-f0-9]{48}$/);
+    expect(account.mcp_url).toBe(`${DESTINATION}/mcp/${account.token}`);
+    const accountJson = await readFile(join(dir, "customer-accounts.json"), "utf8");
+    const tokenVaultJson = await readFile(join(dir, "customer-token-bindings.json"), "utf8");
+    expect(accountJson).not.toContain(account.token);
+    expect(tokenVaultJson).not.toContain(account.token);
+
+    const tenants = createSqliteTenantStore({ dataDir: dir });
+    expect(tenants.snapshot()).toEqual([
+      expect.objectContaining({
+        tokenHash: hashToken(account.token),
+        tenant: { id: customerAccountId(42), name: "octocat", plan: "monthly" },
+        status: "active",
+      }),
+    ]);
+    tenants.close();
+  });
+
+  it("leaves existing pilot tenant rows untouched", async () => {
+    const tenants = createSqliteTenantStore({ dataDir: dir });
+    tenants.provisionTenant({
+      tenantId: "pilot-tenant",
+      name: "Pilot Tenant",
+      plan: "pilot",
+      token: "pilot-token-must-survive",
+    });
+    tenants.close();
+
+    const app = locallyBoundCustomerApp();
+    const cookie = await signInCookie(app);
+    await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    const response = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(200);
+
+    const reopened = createSqliteTenantStore({ dataDir: dir });
+    const snapshot = reopened.snapshot();
+    expect(snapshot).toHaveLength(2);
+    expect(snapshot.find((record) => record.tenant.id === "pilot-tenant")).toMatchObject({
+      tokenHash: hashToken("pilot-token-must-survive"),
+      tenant: { id: "pilot-tenant", name: "Pilot Tenant", plan: "pilot" },
+    });
+    reopened.close();
+  });
+
+  it("rejects invalid signatures and live events in TEST webhook mode", async () => {
+    const app = customerApp();
+    vi.mocked(stripe.webhooks.constructEvent).mockImplementationOnce(() => {
+      throw new Error("invalid signature");
+    });
+    const invalid = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "invalid" },
+      body: "{}",
+    });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: "invalid Stripe signature" });
+
+    vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({ livemode: true } as Stripe.Event);
+    const wrongMode = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid" },
+      body: "{}",
+    });
+    expect(wrongMode.status).toBe(400);
+    expect(await wrongMode.json()).toEqual({ error: "stripe mode mismatch" });
   });
 
   it("verifies the webhook, records billing once, and invokes only the local tenant adapter", async () => {
@@ -201,13 +343,7 @@ describe("hosted customer layer", () => {
     expect(completed).toEqual([session.id]);
 
     const accountResponse = await app.request("/api/console/account", { headers: { cookie } });
-    expect(await accountResponse.json()).toMatchObject({
-      account_id: customerAccountId(42),
-      tier: "monthly",
-      subscription_status: "active",
-      balance: null,
-      ledger: { calls: 0, tokens: 0, costUsd: 0 },
-    });
+    expect(accountResponse.status).toBe(404);
 
     const persisted = await readFile(join(dir, "customer-accounts.json"), "utf8");
     expect(persisted).not.toMatch(/dokploy|watchdog|claim_url|domain_host|console_password/i);

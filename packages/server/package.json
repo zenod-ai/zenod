@@ -19,6 +19,7 @@
   "dependencies": {
     "@hono/node-server": "^1.14.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@zenod/mcp-chassis": "*",
     "@whiskeysockets/baileys": "7.0.0-rc13",
     "ajv": "^8.20.0",
     "hono": "^4.7.0",

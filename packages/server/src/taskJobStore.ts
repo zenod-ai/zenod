@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { StoreResult, TaskingReply, WorkResult } from "zenod";
+import { openZenodSqlite } from "./sqlite.js";
 
 /**
  * Durable queue for long-running agentic MCP jobs (task_brain → handleTasking,
@@ -149,8 +148,7 @@ export class TaskJobStore {
   private readonly db: DatabaseSync;
 
   constructor(path: string, now: () => number = Date.now) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.db = new DatabaseSync(path);
+    this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS task_jobs (
         id TEXT PRIMARY KEY,
