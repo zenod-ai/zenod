@@ -134,6 +134,17 @@ export interface CreateZenodUnitOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+export const ZENOD_READ_TOOLS = [
+  "ask_brain",
+  "get_ingest_result",
+  "get_memory",
+  "get_recent_conversation_transcript",
+  "get_task_result",
+  "list_drive_files",
+  "read_llm_timeline",
+  "search_memory",
+] as const;
+
 export function createZenodUnit(options: CreateZenodUnitOptions) {
   const storage = new ChassisStorage({ dataDir: options.dataDir });
   const tenantStore =
@@ -147,6 +158,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const unit = createUnit({
     name: "zenod",
     version: VERSION,
+    conduct: { toolKinds: { read: ZENOD_READ_TOOLS } },
     tenantAuth: { store: tenantStore },
     controlPlane: {
       ...options.controlPlane,

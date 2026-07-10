@@ -145,6 +145,7 @@ function tenantFixture(index, runId, env) {
     tenantId: `epic32-${runId}-${lower}`.slice(0, 64),
     name: `Epic 3.2 proof ${label}`,
     token: "",
+    issuedTokens: [],
     marker: `EPIC32_${runId}_${label}_MARKER_${randomBytes(8).toString("hex")}`,
     repo: env[`EPIC32_${label}_REPO`] ?? `epic32-proof/${runId}-${lower}`,
     githubToken: env[`EPIC32_${label}_GITHUB_TOKEN`] ?? env.EPIC32_GITHUB_TOKEN ?? "",
@@ -283,6 +284,7 @@ async function provisionTenants(baseUrl, controlToken, tenants) {
       });
     }
     tenant.token = returnedToken;
+    tenant.issuedTokens.push(returnedToken);
 
     const settings = {
       vault_repo: tenant.repo,
@@ -326,6 +328,18 @@ async function verifyMcpIsolation(baseUrl, tenants, mode) {
     if (!initialized?.serverInfo) throw new ProofFailure(`${tenant.label} initialize omitted serverInfo`);
     const listed = await mcpRequest(baseUrl, tenant.token, "tools/list", {}, 2);
     if (!Array.isArray(listed?.tools)) throw new ProofFailure(`${tenant.label} tools/list omitted tools`);
+    const timeline = await callTool(baseUrl, tenant.token, "read_llm_timeline", {
+      windowMinutes: 60,
+      limit: 10,
+    });
+    if (timeline?.isError) {
+      throw new ProofFailure(`${tenant.label} declared read tool failed conduct`, {
+        detail: redact(timeline),
+      });
+    }
+    if (!Array.isArray(timeline?.structuredContent?.calls)) {
+      throw new ProofFailure(`${tenant.label} read_llm_timeline omitted calls[]`);
+    }
   }
 
   if (mode !== "full") return;
@@ -355,6 +369,69 @@ async function verifyMcpIsolation(baseUrl, tenants, mode) {
       assertNoForeignMarker(negative, "", [foreign.marker]);
     }
   }
+}
+
+async function verifyAnonymousWeb(baseUrl) {
+  const root = await fetchPayload(`${normalizeBaseUrl(baseUrl)}/`);
+  expectStatus(root, [200], "anonymous SPA root", "prerequisite");
+  if (typeof root.body !== "string" || !root.body.includes("<html")) {
+    throw new ProofFailure("anonymous SPA root did not return HTML");
+  }
+  const assetPath = root.body.match(/(?:src|href)="([^"]+\.(?:js|css)(?:\?[^"]*)?)"/i)?.[1];
+  if (!assetPath) throw new ProofFailure("anonymous SPA root did not reference a built JS/CSS asset");
+  const assetUrl = new URL(assetPath, `${normalizeBaseUrl(baseUrl)}/`).toString();
+  const asset = await fetchPayload(assetUrl);
+  expectStatus(asset, [200], "anonymous SPA asset", "prerequisite");
+  if (!asset.text.trim()) throw new ProofFailure("anonymous SPA asset was empty");
+
+  const protectedApi = await jsonRequest(baseUrl, "/api/settings");
+  expectStatus(protectedApi, [401], "anonymous protected product API");
+  return {
+    rootStatus: root.response.status,
+    assetPath,
+    assetStatus: asset.response.status,
+    protectedApiStatus: protectedApi.response.status,
+  };
+}
+
+async function rotateTenantToken(baseUrl, controlToken, tenant) {
+  const retiredToken = tenant.token;
+  const rotated = await jsonRequest(
+    baseUrl,
+    `/api/tenants/${encodeURIComponent(tenant.tenantId)}/token/rotate`,
+    { method: "POST", token: controlToken },
+  );
+  expectStatus(rotated, [200], `${tenant.label} token rotation`);
+  const nextToken = extractProvisionedToken(rotated.body);
+  if (!nextToken || nextToken === retiredToken) {
+    throw new ProofFailure(`${tenant.label} token rotation did not return a new one-time token`);
+  }
+  tenant.token = nextToken;
+  tenant.issuedTokens.push(nextToken);
+
+  const retired = await jsonRequest(baseUrl, "/api/settings", { token: retiredToken });
+  expectStatus(retired, [401], `${tenant.label} retired token negative`);
+  const active = await jsonRequest(baseUrl, "/api/settings", { token: nextToken });
+  expectStatus(active, [200], `${tenant.label} rotated token settings`);
+  await mcpInitialize(baseUrl, nextToken);
+
+  const login = await jsonRequest(baseUrl, "/api/auth/login", {
+    method: "POST",
+    body: { token: nextToken },
+  });
+  expectStatus(login, [200], `${tenant.label} rotated token session login`);
+  const cookie = (login.response.headers.get("set-cookie") ?? "").split(";", 1)[0];
+  if (!cookie.includes("=")) throw new ProofFailure(`${tenant.label} rotated token returned no session cookie`);
+  const session = await jsonRequest(baseUrl, "/api/settings", { cookie });
+  expectStatus(session, [200], `${tenant.label} rotated token session`);
+  return {
+    tenantId: tenant.tenantId,
+    retiredCredentialSha256: sha256(retiredToken),
+    activeCredentialSha256: sha256(nextToken),
+    retiredStatus: retired.response.status,
+    activeStatus: active.response.status,
+    sessionStatus: session.response.status,
+  };
 }
 
 async function tenantApiSnapshot(baseUrl, tenant, auth) {
@@ -526,11 +603,13 @@ async function verifyStorage(dataRoot, tenants, mode) {
     }
   }
   for (const tenant of tenants) {
-    const secret = Buffer.from(tenant.token);
-    for (const path of files) {
-      const bytes = await readFile(path);
-      if (bytes.indexOf(secret) !== -1) {
-        violations.push(`raw ${tenant.label} token persisted at ${path.slice(resolve(dataRoot).length + 1)}`);
+    for (const issuedToken of tenant.issuedTokens) {
+      const secret = Buffer.from(issuedToken);
+      for (const path of files) {
+        const bytes = await readFile(path);
+        if (bytes.indexOf(secret) !== -1) {
+          violations.push(`raw ${tenant.label} token persisted at ${path.slice(resolve(dataRoot).length + 1)}`);
+        }
       }
     }
   }
@@ -614,6 +693,7 @@ export async function runProof(options, env = process.env) {
   });
   let tenantsReady = false;
   if (healthReady) {
+    await runStep("anonymous root, built asset, and protected API boundary", () => verifyAnonymousWeb(baseUrl));
     tenantsReady = await runStep("three-tenant provisioning and registry redaction", async () => {
       const registry = await provisionTenants(baseUrl, options.controlToken, tenants);
       metadata.tokenHashes = tenants.map((tenant) => ({ label: tenant.label, sha256: sha256(tenant.token) }));
@@ -628,6 +708,11 @@ export async function runProof(options, env = process.env) {
       return { status: result.response.status };
     });
     await runStep("T1/T2/T3 bearer settings and signed tenant-session isolation", () => verifyApiAndSessions(baseUrl, tenants));
+    await runStep("T2 token rotation, retired-token rejection, and new session", async () => {
+      const detail = await rotateTenantToken(baseUrl, options.controlToken, tenants[1]);
+      metadata.tokenHashes = tenants.map((tenant) => ({ label: tenant.label, sha256: sha256(tenant.token) }));
+      return detail;
+    });
     if (options.dataRoot) {
       await runStep("joint chassis storage layout, persisted WAL, and token-at-rest", () => verifyStorage(resolve(options.dataRoot), tenants, options.mode));
     } else {
