@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 
 const TENANT_COUNT = 3;
+const CHASSIS_SQLITE_PATHS = ["chassis-tenants.sqlite", "usage.sqlite"];
 const REQUIRED_TENANT_PATHS = [
   "zenod.sqlite",
   "oauth.sqlite",
@@ -16,7 +17,6 @@ const REQUIRED_TENANT_PATHS = [
   "tasks.sqlite",
   "execution.sqlite",
   "journeys.sqlite",
-  "usage.sqlite",
   "notifications.sqlite",
   "vault.sqlite",
   "transcripts",
@@ -509,9 +509,9 @@ async function verifyStorage(dataRoot, tenants, mode) {
   const files = await walkFiles(dataRoot);
   const sqliteFiles = files.filter((path) => path.endsWith(".sqlite"));
   const sqlitePerTenant = REQUIRED_TENANT_PATHS.filter((path) => path.endsWith(".sqlite")).length;
-  const expectedSqliteFiles = TENANT_COUNT * sqlitePerTenant + 1;
+  const expectedSqliteFiles = TENANT_COUNT * sqlitePerTenant + CHASSIS_SQLITE_PATHS.length;
   if (sqliteFiles.length !== expectedSqliteFiles) {
-    violations.push(`expected ${expectedSqliteFiles} SQLite files (${sqlitePerTenant} per tenant plus chassis), found ${sqliteFiles.length}`);
+    violations.push(`expected ${expectedSqliteFiles} SQLite files (${sqlitePerTenant} per tenant plus ${CHASSIS_SQLITE_PATHS.length} chassis stores), found ${sqliteFiles.length}`);
   }
   for (const path of sqliteFiles) {
     const db = new DatabaseSync(path, { readOnly: true });
