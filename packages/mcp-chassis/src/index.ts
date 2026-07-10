@@ -173,7 +173,7 @@ export interface ControlPlaneOptions {
 }
 
 export interface SingleTenantOptions {
-  store?: MemoryTenantStore;
+  store?: TenantProvisioningStore;
   token?: string | null;
   tokenEnvVar?: string;
   env?: NodeJS.ProcessEnv;
@@ -659,7 +659,7 @@ function defaultSettingsValues(): Record<string, string | null> {
 }
 
 export function seedSingleTenantFromEnv(
-  store: MemoryTenantStore,
+  store: TenantProvisioningStore,
   options: SingleTenantOptions & { unitName?: string } = {},
 ): TenantTokenRecord | null {
   const env = options.env ?? process.env;
@@ -670,7 +670,7 @@ export function seedSingleTenantFromEnv(
     options.token ?? env[tokenEnvVar] ?? env.ZENOD_API_TOKEN ?? null;
   const trimmed = token?.trim();
   if (!trimmed) return null;
-  return store.provisionTenant({
+  const result = store.provisionTenant({
     tenant: {
       id: "self-host",
       name: "Self-host",
@@ -678,7 +678,11 @@ export function seedSingleTenantFromEnv(
       ...options.tenant,
     },
     token: trimmed,
-  }).record;
+  });
+  if (typeof (result as Promise<ProvisionTenantResult>).then === "function") {
+    throw new Error("singleTenant provisioning store must be synchronous at boot");
+  }
+  return (result as ProvisionTenantResult).record;
 }
 
 async function requestBody(c: Context): Promise<unknown> {
@@ -863,9 +867,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   });
 
   if (options.singleTenant) {
-    const store =
-      options.singleTenant.store ??
-      (isMemoryTenantStore(provisioningStore) ? provisioningStore : null);
+    const store = options.singleTenant.store ?? provisioningStore;
     if (store)
       seedSingleTenantFromEnv(store, {
         ...options.singleTenant,
@@ -875,6 +877,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
 
   app.get("/healthz", (c) => c.json({ status: "ok", name, version }));
 
+  let uiProductRoutes: Hono<UnitHonoEnv> | null = null;
   if (ui) {
     if (!options.tenantAuth?.store) {
       throw new Error(
@@ -933,7 +936,9 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       return c.json({ ok: true });
     });
 
-    app.get("/api/overview", requireUiTenant, (c) => {
+    const productRoutes = new Hono<UnitHonoEnv>();
+    uiProductRoutes = productRoutes;
+    productRoutes.get("/api/overview", requireUiTenant, (c) => {
       const tenant = c.get("tenant");
       const usage = tenant
         ? (getUsageStore()?.forTenant(tenant).summary() ?? null)
@@ -946,13 +951,13 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       });
     });
 
-    app.get("/api/operating-rules", requireUiTenant, async (c) => {
+    productRoutes.get("/api/operating-rules", requireUiTenant, async (c) => {
       const tenant = c.get("tenant");
       if (!tenant) return c.json({ error: "unauthorized" }, 401);
       return c.json(await operatingRules.snapshot(tenant));
     });
 
-    app.get("/api/mcp-config", requireUiTenant, (c) =>
+    productRoutes.get("/api/mcp-config", requireUiTenant, (c) =>
       c.json({
         tenant: c.get("tenant"),
         unit: { name, version },
@@ -978,7 +983,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       }),
     );
 
-    app.get("/api/skills", requireUiTenant, (c) =>
+    productRoutes.get("/api/skills", requireUiTenant, (c) =>
       c.json({
         tenant: c.get("tenant"),
         unit: { name, version },
@@ -987,14 +992,14 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       }),
     );
 
-    app.get("/api/keys", requireUiTenant, (c) =>
+    productRoutes.get("/api/keys", requireUiTenant, (c) =>
       c.json({
         tenant: c.get("tenant"),
         keys: [],
       }),
     );
 
-    app.get("/api/settings", requireUiTenant, (c) =>
+    productRoutes.get("/api/settings", requireUiTenant, (c) =>
       c.json({
         tenant: c.get("tenant"),
         settings: defaultSettingsValues(),
@@ -1002,7 +1007,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       }),
     );
 
-    app.put("/api/settings", requireUiTenant, (c) =>
+    productRoutes.put("/api/settings", requireUiTenant, (c) =>
       c.json({
         tenant: c.get("tenant"),
         settings: defaultSettingsValues(),
@@ -1010,7 +1015,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       }),
     );
 
-    app.get("/api/token", requireUiTenant, (c) =>
+    productRoutes.get("/api/token", requireUiTenant, (c) =>
       c.json({
         tenant: c.get("tenant"),
         token: "",
@@ -1018,7 +1023,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       }),
     );
 
-    app.post("/api/token/regenerate", requireUiTenant, async (c) => {
+    productRoutes.post("/api/token/regenerate", requireUiTenant, async (c) => {
       const tenant = c.get("tenant");
       const provisioning = isTenantProvisioningStore(tenantStore)
         ? tenantStore
@@ -1035,7 +1040,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       });
     });
 
-    app.get("/api/connections", requireUiTenant, (c) =>
+    productRoutes.get("/api/connections", requireUiTenant, (c) =>
       c.json({
         tenant: c.get("tenant"),
         token: "",
@@ -1045,7 +1050,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       }),
     );
 
-    app.post("/api/connections/revoke", requireUiTenant, (c) =>
+    productRoutes.post("/api/connections/revoke", requireUiTenant, (c) =>
       c.json({ ok: true, tenant: c.get("tenant") }),
     );
   }
@@ -1192,6 +1197,8 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     app.route("/", routeApp);
   }
 
+  if (uiProductRoutes) app.route("/", uiProductRoutes);
+
   if (ui?.webDist) {
     const root = ui.webDist;
     const noCache: Pick<ServeStaticOptions, "onFound"> = {
@@ -1214,12 +1221,6 @@ function isTenantProvisioningStore(
     "rotateTenantToken" in store &&
     "setTenantStatus" in store,
   );
-}
-
-function isMemoryTenantStore(
-  store: TenantProvisioningStore | null,
-): store is MemoryTenantStore {
-  return Boolean(store && "put" in store && "snapshot" in store);
 }
 
 function parseProvisionTenantBody(body: unknown): ProvisionTenantInput {

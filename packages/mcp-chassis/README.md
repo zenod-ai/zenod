@@ -95,6 +95,23 @@ Every route installed through `routes` is registered before the SPA fallback
 and fails closed unless a chassis bearer/OAuth token or signed UI session
 resolves the tenant. The injected `unitContext` owns tenant-bound storage,
 usage, and operating rules; handlers must not accept a tenant id from input.
+Unit routes take precedence over placeholder product APIs such as
+`/api/settings`; chassis health, auth, OAuth, control-plane, billing, and MCP
+routes remain reserved.
+
+The same durable store supports self-host seeding:
+
+```ts
+createUnit({
+  name: "my-unit",
+  tenantAuth: { store: tenants },
+  singleTenant: { store: tenants },
+});
+```
+
+At boot the chassis reads `<UNIT>_API_TOKEN` (falling back to
+`ZENOD_API_TOKEN`) and idempotently upserts the `self-host` tenant, so the same
+token and tenant survive SQLite reopen/restart.
 
 When billing is enabled, the unit serves:
 
