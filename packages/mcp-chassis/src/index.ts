@@ -1,8 +1,18 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
+import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { HttpBindings } from "@hono/node-server";
+import {
+  serveStatic,
+  type ServeStaticOptions,
+} from "@hono/node-server/serve-static";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -42,7 +52,9 @@ export interface TenantTokenRecord {
 }
 
 export interface TenantTokenStore {
-  resolveTokenHash(tokenHash: string): Promise<TenantTokenRecord | null> | TenantTokenRecord | null;
+  resolveTokenHash(
+    tokenHash: string,
+  ): Promise<TenantTokenRecord | null> | TenantTokenRecord | null;
 }
 
 export interface MemoryTenantInput {
@@ -69,8 +81,12 @@ export interface ProvisionTenantResult {
 }
 
 export interface TenantProvisioningStore extends TenantTokenStore {
-  provisionTenant(input?: ProvisionTenantInput): Promise<ProvisionTenantResult> | ProvisionTenantResult;
-  rotateTenantToken(tenantId: string): Promise<ProvisionTenantResult | null> | ProvisionTenantResult | null;
+  provisionTenant(
+    input?: ProvisionTenantInput,
+  ): Promise<ProvisionTenantResult> | ProvisionTenantResult;
+  rotateTenantToken(
+    tenantId: string,
+  ): Promise<ProvisionTenantResult | null> | ProvisionTenantResult | null;
   setTenantStatus(
     tenantId: string,
     status: TenantStatus,
@@ -81,7 +97,10 @@ export interface MemoryTenantStore extends TenantProvisioningStore {
   put(input: MemoryTenantInput): TenantTokenRecord;
   provisionTenant(input?: ProvisionTenantInput): ProvisionTenantResult;
   rotateTenantToken(tenantId: string): ProvisionTenantResult | null;
-  setTenantStatus(tenantId: string, status: TenantStatus): TenantTokenRecord | null;
+  setTenantStatus(
+    tenantId: string,
+    status: TenantStatus,
+  ): TenantTokenRecord | null;
   snapshot(): TenantTokenRecord[];
 }
 
@@ -104,9 +123,41 @@ export interface SingleTenantOptions {
   tenant?: Partial<TenantContext>;
 }
 
-export type UnitAuthMiddleware = (c: Context<UnitHonoEnv>, next: Next) => Promise<Response | void>;
+export type UnitUiPanel =
+  | "chat"
+  | "team"
+  | "vault"
+  | "keys"
+  | "transcription"
+  | "connections"
+  | "costs"
+  | "test"
+  | string;
 
-export type UnitToolRegistrar = (server: McpServer, context: UnitContext) => void | Promise<void>;
+export interface UnitUiOptions {
+  /** Directory with the built React console (apps/web/dist). */
+  webDist?: string;
+  /** Human-facing title returned from /api/agent. */
+  displayName?: string;
+  /** Human-facing subtitle returned from /api/agent. */
+  tagline?: string;
+  /** Existing console panels this unit wants visible. */
+  panels?: UnitUiPanel[];
+  /** Signing secret for tenant-scoped session cookies. Generated at boot if omitted. */
+  sessionSecret?: string;
+  /** Session cookie name. Defaults to zenod_session for console compatibility. */
+  sessionCookieName?: string;
+}
+
+export type UnitAuthMiddleware = (
+  c: Context<UnitHonoEnv>,
+  next: Next,
+) => Promise<Response | void>;
+
+export type UnitToolRegistrar = (
+  server: McpServer,
+  context: UnitContext,
+) => void | Promise<void>;
 
 export interface CreateUnitOptions {
   /** Machine name used in health responses and as the MCP server id. */
@@ -125,6 +176,8 @@ export interface CreateUnitOptions {
   storage?: ChassisStorage | ChassisStorageOptions;
   /** Tenant usage ledger and quota checks. Defaults on when a storage/data dir is configured. */
   metering?: ChassisUsageStore | ChassisUsageStoreOptions | false;
+  /** Optional tenant-scoped settings UI shell. */
+  ui?: UnitUiOptions;
 }
 
 export interface UnitApp {
@@ -147,7 +200,9 @@ export function generateTenantToken(): string {
   return `zenod_${randomBytes(24).toString("hex")}`;
 }
 
-export function createMemoryTenantStore(records: MemoryTenantInput[] = []): MemoryTenantStore {
+export function createMemoryTenantStore(
+  records: MemoryTenantInput[] = [],
+): MemoryTenantStore {
   const byHash = new Map<string, string>();
   const byTenant = new Map<string, TenantTokenRecord>();
 
@@ -200,7 +255,11 @@ export function createMemoryTenantStore(records: MemoryTenantInput[] = []): Memo
       const id = tenantId.trim();
       const existing = id ? byTenant.get(id) : null;
       if (!existing) return null;
-      const record: TenantTokenRecord = { ...existing, tenant: { ...existing.tenant }, status };
+      const record: TenantTokenRecord = {
+        ...existing,
+        tenant: { ...existing.tenant },
+        status,
+      };
       byTenant.set(id, record);
       return cloneTenantRecord(record);
     },
@@ -214,7 +273,10 @@ export function createMemoryTenantStore(records: MemoryTenantInput[] = []): Memo
   return store;
 }
 
-function normalizeProvisionTenant(input: ProvisionTenantInput, ordinal: number): TenantContext {
+function normalizeProvisionTenant(
+  input: ProvisionTenantInput,
+  ordinal: number,
+): TenantContext {
   const tenant = input.tenant ?? {};
   const id = (input.tenantId ?? tenant.id ?? `tenant-${ordinal}`).trim();
   if (!id) throw new Error("tenant id must be non-empty");
@@ -254,7 +316,10 @@ function presentedToken(c: Context): string | null {
 function isActive(record: TenantTokenRecord, now = Date.now()): boolean {
   if ((record.status ?? "active") !== "active") return false;
   if (record.expiresAt === null || record.expiresAt === undefined) return true;
-  const expiresAt = record.expiresAt instanceof Date ? record.expiresAt.getTime() : new Date(record.expiresAt).getTime();
+  const expiresAt =
+    record.expiresAt instanceof Date
+      ? record.expiresAt.getTime()
+      : new Date(record.expiresAt).getTime();
   return Number.isFinite(expiresAt) && expiresAt > now;
 }
 
@@ -269,8 +334,16 @@ function timingSafeStringEqual(a: string, b: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+function sign(secret: string, payload: string): string {
+  return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
 function controlPlaneToken(options: ControlPlaneOptions): string | null {
-  const token = options.token ?? options.env?.CONTROL_PLANE_TOKEN ?? process.env.CONTROL_PLANE_TOKEN ?? null;
+  const token =
+    options.token ??
+    options.env?.CONTROL_PLANE_TOKEN ??
+    process.env.CONTROL_PLANE_TOKEN ??
+    null;
   const trimmed = token?.trim();
   return trimmed || null;
 }
@@ -290,11 +363,15 @@ function requireControlPlane(options: ControlPlaneOptions): UnitAuthMiddleware {
   };
 }
 
-export function requireTenantAuth(options: TenantAuthOptions): UnitAuthMiddleware {
+export function requireTenantAuth(
+  options: TenantAuthOptions,
+): UnitAuthMiddleware {
   const realm = options.realm?.trim() || "mcp-chassis";
   return async (c, next) => {
     const token = presentedToken(c);
-    const record = token ? await options.store.resolveTokenHash(hashToken(token)) : null;
+    const record = token
+      ? await options.store.resolveTokenHash(hashToken(token))
+      : null;
 
     if (record && isActive(record)) {
       c.set("tenant", { ...record.tenant });
@@ -307,17 +384,174 @@ export function requireTenantAuth(options: TenantAuthOptions): UnitAuthMiddlewar
   };
 }
 
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_UI_PANELS: UnitUiPanel[] = [
+  "chat",
+  "keys",
+  "connections",
+  "costs",
+];
+
+interface UiSessionPayload {
+  expires: number;
+  tenant: TenantContext;
+}
+
+function encodeSessionPayload(payload: UiSessionPayload): string {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+}
+
+function decodeSessionPayload(encoded: string): UiSessionPayload | null {
+  try {
+    const value = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8"),
+    ) as Partial<UiSessionPayload>;
+    if (
+      !value ||
+      typeof value.expires !== "number" ||
+      !value.tenant ||
+      typeof value.tenant.id !== "string"
+    ) {
+      return null;
+    }
+    if (!value.tenant.id.trim()) return null;
+    return {
+      expires: value.expires,
+      tenant: {
+        id: value.tenant.id,
+        ...(typeof value.tenant.name === "string"
+          ? { name: value.tenant.name }
+          : {}),
+        ...(typeof value.tenant.plan === "string"
+          ? { plan: value.tenant.plan }
+          : {}),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function issueTenantSession(
+  c: Context,
+  ui: RequiredUiOptions,
+  tenant: TenantContext,
+  now = Date.now(),
+): void {
+  const payload = encodeSessionPayload({
+    expires: now + SESSION_TTL_MS,
+    tenant,
+  });
+  const token = `${payload}.${sign(ui.sessionSecret, payload)}`;
+  setCookie(c, ui.sessionCookieName, token, {
+    httpOnly: true,
+    sameSite: "Lax",
+    path: "/",
+    maxAge: SESSION_TTL_MS / 1000,
+  });
+}
+
+function clearTenantSession(c: Context, ui: RequiredUiOptions): void {
+  deleteCookie(c, ui.sessionCookieName, { path: "/" });
+}
+
+function resolveTenantSession(
+  c: Context,
+  ui: RequiredUiOptions,
+  now = Date.now(),
+): TenantContext | null {
+  const cookie = getCookie(c, ui.sessionCookieName);
+  if (!cookie) return null;
+  const [payload, mac] = cookie.split(".");
+  if (!payload || !mac) return null;
+  const expected = sign(ui.sessionSecret, payload);
+  if (!timingSafeStringEqual(mac, expected)) return null;
+  const decoded = decodeSessionPayload(payload);
+  if (!decoded || decoded.expires < now) return null;
+  return decoded.tenant;
+}
+
+async function resolveTenantToken(
+  store: TenantTokenStore,
+  token: string | null,
+): Promise<TenantTokenRecord | null> {
+  if (!token) return null;
+  const record = await store.resolveTokenHash(hashToken(token));
+  return record && isActive(record) ? record : null;
+}
+
+type RequiredUiOptions = Required<
+  Pick<UnitUiOptions, "sessionSecret" | "sessionCookieName">
+> &
+  Omit<UnitUiOptions, "sessionSecret" | "sessionCookieName">;
+
+function normalizeUiOptions(
+  name: string,
+  ui: UnitUiOptions,
+): RequiredUiOptions {
+  return {
+    ...ui,
+    displayName: ui.displayName?.trim() || displayNameFromId(name),
+    tagline: ui.tagline?.trim() || "MCP unit settings",
+    panels: ui.panels?.length ? [...ui.panels] : [...DEFAULT_UI_PANELS],
+    sessionSecret: ui.sessionSecret?.trim() || randomBytes(32).toString("hex"),
+    sessionCookieName: ui.sessionCookieName?.trim() || "zenod_session",
+  };
+}
+
+function displayNameFromId(id: string): string {
+  return id
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function defaultSettingsValues(): Record<string, string | null> {
+  return {
+    vault_repo: null,
+    vault_branch: null,
+    github_token: null,
+    provider: "anthropic",
+    anthropic_api_key: null,
+    openai_api_key: null,
+    openrouter_api_key: null,
+    model_ask: null,
+    model_classify: null,
+    model_vision: null,
+    model_max_steps: null,
+    google_service_account_json: null,
+    google_oauth_client_id: null,
+    google_oauth_client_secret: null,
+    google_drive_folder_id: null,
+    groq_api_key: null,
+    openai_long_transcription: null,
+    long_transcription_provider: null,
+    openrouter_transcription_model: null,
+    composio_api_key: null,
+    composio_user_id: null,
+  };
+}
+
 export function seedSingleTenantFromEnv(
   store: MemoryTenantStore,
   options: SingleTenantOptions & { unitName?: string } = {},
 ): TenantTokenRecord | null {
   const env = options.env ?? process.env;
-  const tokenEnvVar = options.tokenEnvVar ?? `${(options.unitName ?? "ZENOD").toUpperCase()}_API_TOKEN`;
-  const token = options.token ?? env[tokenEnvVar] ?? env.ZENOD_API_TOKEN ?? null;
+  const tokenEnvVar =
+    options.tokenEnvVar ??
+    `${(options.unitName ?? "ZENOD").toUpperCase()}_API_TOKEN`;
+  const token =
+    options.token ?? env[tokenEnvVar] ?? env.ZENOD_API_TOKEN ?? null;
   const trimmed = token?.trim();
   if (!trimmed) return null;
   return store.provisionTenant({
-    tenant: { id: "self-host", name: "Self-host", plan: "self-host", ...options.tenant },
+    tenant: {
+      id: "self-host",
+      name: "Self-host",
+      plan: "self-host",
+      ...options.tenant,
+    },
     token: trimmed,
   }).record;
 }
@@ -376,50 +610,206 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
 
   const version = options.version?.trim() || "0.0.0";
   const app = new Hono<UnitHonoEnv>();
-  const auth = options.tenantAuth ? requireTenantAuth(options.tenantAuth) : noopAuth();
+  const auth = options.tenantAuth
+    ? requireTenantAuth(options.tenantAuth)
+    : noopAuth();
   const storage = storageFromOptions(options.storage);
   const getUsageStore = lazyUsageStore(
     options.metering,
     storage,
     options.storage !== undefined || Boolean(process.env.DATA_DIR?.trim()),
   );
-  const defaultProvisioningStore = isTenantProvisioningStore(options.tenantAuth?.store)
+  const ui = options.ui ? normalizeUiOptions(name, options.ui) : null;
+  const defaultProvisioningStore = isTenantProvisioningStore(
+    options.tenantAuth?.store,
+  )
     ? options.tenantAuth.store
     : null;
-  const provisioningStore = options.controlPlane?.store ?? defaultProvisioningStore;
+  const provisioningStore =
+    options.controlPlane?.store ?? defaultProvisioningStore;
 
   if (options.singleTenant) {
-    const store = options.singleTenant.store ?? (isMemoryTenantStore(provisioningStore) ? provisioningStore : null);
-    if (store) seedSingleTenantFromEnv(store, { ...options.singleTenant, unitName: name.toUpperCase() });
+    const store =
+      options.singleTenant.store ??
+      (isMemoryTenantStore(provisioningStore) ? provisioningStore : null);
+    if (store)
+      seedSingleTenantFromEnv(store, {
+        ...options.singleTenant,
+        unitName: name.toUpperCase(),
+      });
   }
 
   app.get("/healthz", (c) => c.json({ status: "ok", name, version }));
+
+  if (ui) {
+    if (!options.tenantAuth?.store) {
+      throw new Error(
+        "createUnit({ ui }) requires tenantAuth.store so sessions can bind to a tenant",
+      );
+    }
+
+    const tenantStore = options.tenantAuth.store;
+    const requireUiTenant: UnitAuthMiddleware = async (c, next) => {
+      const bearerRecord = await resolveTenantToken(
+        tenantStore,
+        bearerToken(c),
+      );
+      const tenant = bearerRecord?.tenant ?? resolveTenantSession(c, ui);
+      if (tenant) {
+        c.set("tenant", { ...tenant });
+        await next();
+        return;
+      }
+      return c.json({ error: "unauthorized" }, 401);
+    };
+
+    app.get("/api/agent", (c) =>
+      c.json({
+        name,
+        displayName: ui.displayName,
+        tagline: ui.tagline,
+        panels: ui.panels,
+        vaultless: !ui.panels?.includes("vault"),
+        hostedMode: null,
+      }),
+    );
+
+    app.get("/api/auth/status", (c) => {
+      const tenant = resolveTenantSession(c, ui);
+      return c.json({
+        needsSetup: false,
+        configured: true,
+        hostedMode: null,
+        tenant,
+        authenticated: tenant !== null,
+      });
+    });
+
+    app.post("/api/auth/login", async (c) => {
+      const body = await c.req.json().catch(() => ({}));
+      const token = loginTokenFromBody(body);
+      const record = await resolveTenantToken(tenantStore, token);
+      if (!record) return c.json({ error: "unauthorized" }, 401);
+      issueTenantSession(c, ui, record.tenant);
+      return c.json({ ok: true, tenant: record.tenant });
+    });
+
+    app.post("/api/auth/logout", (c) => {
+      clearTenantSession(c, ui);
+      return c.json({ ok: true });
+    });
+
+    app.get("/api/overview", requireUiTenant, (c) => {
+      const tenant = c.get("tenant");
+      return c.json({ tenant, unit: { name, version }, panels: ui.panels });
+    });
+
+    app.get("/api/keys", requireUiTenant, (c) =>
+      c.json({
+        tenant: c.get("tenant"),
+        keys: [],
+      }),
+    );
+
+    app.get("/api/settings", requireUiTenant, (c) =>
+      c.json({
+        tenant: c.get("tenant"),
+        settings: defaultSettingsValues(),
+        configured: true,
+      }),
+    );
+
+    app.put("/api/settings", requireUiTenant, (c) =>
+      c.json({
+        tenant: c.get("tenant"),
+        settings: defaultSettingsValues(),
+        configured: true,
+      }),
+    );
+
+    app.get("/api/token", requireUiTenant, (c) =>
+      c.json({
+        tenant: c.get("tenant"),
+        token: "",
+        mcpPath: "/mcp",
+      }),
+    );
+
+    app.post("/api/token/regenerate", requireUiTenant, async (c) => {
+      const tenant = c.get("tenant");
+      const provisioning = isTenantProvisioningStore(tenantStore)
+        ? tenantStore
+        : provisioningStore;
+      if (!tenant || !provisioning)
+        return c.json({ error: "token rotation unavailable" }, 409);
+      const result = await provisioning.rotateTenantToken(tenant.id);
+      if (!result) return c.json({ error: "tenant not found" }, 404);
+      issueTenantSession(c, ui, result.record.tenant);
+      return c.json({
+        tenant: result.record.tenant,
+        token: result.token,
+        mcpPath: "/mcp",
+      });
+    });
+
+    app.get("/api/connections", requireUiTenant, (c) =>
+      c.json({
+        tenant: c.get("tenant"),
+        token: "",
+        mcpPath: "/mcp",
+        clients: [],
+        grants: [],
+      }),
+    );
+
+    app.post("/api/connections/revoke", requireUiTenant, (c) =>
+      c.json({ ok: true, tenant: c.get("tenant") }),
+    );
+  }
 
   if (options.controlPlane && provisioningStore) {
     const controlPlaneAuth = requireControlPlane(options.controlPlane);
 
     app.post("/api/tenants", controlPlaneAuth, async (c) => {
       const body = await c.req.json().catch(() => ({}));
-      const result = await provisioningStore.provisionTenant(parseProvisionTenantBody(body));
+      const result = await provisioningStore.provisionTenant(
+        parseProvisionTenantBody(body),
+      );
       return c.json(toProvisionTenantResponse(result), 201);
     });
 
     app.patch("/api/tenants/:tenantId", controlPlaneAuth, async (c) => {
       const status = parseTenantStatus(await c.req.json().catch(() => ({})));
-      if (!status || status === "deleted") return c.json({ error: "invalid status" }, 400);
-      const record = await provisioningStore.setTenantStatus(c.req.param("tenantId") ?? "", status);
+      if (!status || status === "deleted")
+        return c.json({ error: "invalid status" }, 400);
+      const record = await provisioningStore.setTenantStatus(
+        c.req.param("tenantId") ?? "",
+        status,
+      );
       if (!record) return c.json({ error: "tenant not found" }, 404);
-      return c.json({ tenant: record.tenant, status: record.status ?? "active" });
+      return c.json({
+        tenant: record.tenant,
+        status: record.status ?? "active",
+      });
     });
 
-    app.post("/api/tenants/:tenantId/token/rotate", controlPlaneAuth, async (c) => {
-      const result = await provisioningStore.rotateTenantToken(c.req.param("tenantId") ?? "");
-      if (!result) return c.json({ error: "tenant not found" }, 404);
-      return c.json(toProvisionTenantResponse(result));
-    });
+    app.post(
+      "/api/tenants/:tenantId/token/rotate",
+      controlPlaneAuth,
+      async (c) => {
+        const result = await provisioningStore.rotateTenantToken(
+          c.req.param("tenantId") ?? "",
+        );
+        if (!result) return c.json({ error: "tenant not found" }, 404);
+        return c.json(toProvisionTenantResponse(result));
+      },
+    );
 
     app.delete("/api/tenants/:tenantId", controlPlaneAuth, async (c) => {
-      const record = await provisioningStore.setTenantStatus(c.req.param("tenantId") ?? "", "deleted");
+      const record = await provisioningStore.setTenantStatus(
+        c.req.param("tenantId") ?? "",
+        "deleted",
+      );
       if (!record) return c.json({ error: "tenant not found" }, 404);
       return c.json({ tenant: record.tenant, status: "deleted" });
     });
@@ -460,27 +850,48 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   app.all("/mcp", auth, handleMcp);
   app.all("/mcp/:token", auth, handleMcp);
 
+  if (ui?.webDist) {
+    const root = ui.webDist;
+    const noCache: Pick<ServeStaticOptions, "onFound"> = {
+      onFound: (_path, c) => {
+        c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+      },
+    };
+    app.use("/*", serveStatic({ root, ...noCache }));
+    app.get("*", serveStatic({ root, path: "index.html", ...noCache }));
+  }
+
   return { app, name, version };
 }
-function isTenantProvisioningStore(store: TenantTokenStore | undefined): store is TenantProvisioningStore {
+function isTenantProvisioningStore(
+  store: TenantTokenStore | undefined,
+): store is TenantProvisioningStore {
   return Boolean(
     store &&
-      "provisionTenant" in store &&
-      "rotateTenantToken" in store &&
-      "setTenantStatus" in store,
+    "provisionTenant" in store &&
+    "rotateTenantToken" in store &&
+    "setTenantStatus" in store,
   );
 }
 
-function isMemoryTenantStore(store: TenantProvisioningStore | null): store is MemoryTenantStore {
+function isMemoryTenantStore(
+  store: TenantProvisioningStore | null,
+): store is MemoryTenantStore {
   return Boolean(store && "put" in store && "snapshot" in store);
 }
 
 function parseProvisionTenantBody(body: unknown): ProvisionTenantInput {
   if (!body || typeof body !== "object") return {};
   const input = body as Record<string, unknown>;
-  const tenantInput = input.tenant && typeof input.tenant === "object" ? (input.tenant as Record<string, unknown>) : {};
+  const tenantInput =
+    input.tenant && typeof input.tenant === "object"
+      ? (input.tenant as Record<string, unknown>)
+      : {};
   return {
-    tenantId: stringOrUndefined(input.tenantId) ?? stringOrUndefined(input.id) ?? stringOrUndefined(tenantInput.id),
+    tenantId:
+      stringOrUndefined(input.tenantId) ??
+      stringOrUndefined(input.id) ??
+      stringOrUndefined(tenantInput.id),
     name: stringOrUndefined(input.name) ?? stringOrUndefined(tenantInput.name),
     plan: stringOrUndefined(input.plan) ?? stringOrUndefined(tenantInput.plan),
     quota: numberOrNullOrUndefined(input.quota) ?? numberOrNullOrUndefined(tenantInput.quota),
@@ -490,7 +901,9 @@ function parseProvisionTenantBody(body: unknown): ProvisionTenantInput {
 function parseTenantStatus(body: unknown): TenantStatus | null {
   if (!body || typeof body !== "object") return null;
   const status = (body as Record<string, unknown>).status;
-  return status === "active" || status === "suspended" || status === "deleted" ? status : null;
+  return status === "active" || status === "suspended" || status === "deleted"
+    ? status
+    : null;
 }
 
 function stringOrUndefined(value: unknown): string | undefined {
@@ -500,6 +913,14 @@ function stringOrUndefined(value: unknown): string | undefined {
 function numberOrNullOrUndefined(value: unknown): number | null | undefined {
   if (value === null) return null;
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function loginTokenFromBody(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const input = body as Record<string, unknown>;
+  return (
+    stringOrUndefined(input.token) ?? stringOrUndefined(input.password) ?? null
+  );
 }
 
 function toProvisionTenantResponse(result: ProvisionTenantResult): {

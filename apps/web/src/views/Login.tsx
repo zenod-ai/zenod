@@ -31,7 +31,10 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
     setError(null)
 
     try {
-      await api("/api/auth/login", { method: "POST", body: { password } })
+      await api("/api/auth/login", {
+        method: "POST",
+        body: { password, token: password },
+      })
       onSuccess()
     } catch (err) {
       setError(isUnauthorized(err) ? "Incorrect password." : errorMessage(err))
@@ -49,13 +52,15 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
             </div>
             <CardTitle>Zenod</CardTitle>
             <CardDescription>
-              Enter your admin password to manage this server.
+              Enter your access token or admin password to manage this server.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <FieldGroup>
               <Field data-invalid={error !== null || undefined}>
-                <FieldLabel htmlFor="login-password">Password</FieldLabel>
+                <FieldLabel htmlFor="login-password">
+                  Access token or password
+                </FieldLabel>
                 <Input
                   id="login-password"
                   type="password"
