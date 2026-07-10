@@ -23,7 +23,7 @@ A new workspace package in the existing monorepo (fits RD-4: split later with `g
 2. **Auth + tenancy.** `requireMcpAuth` upgraded: resolve `tenant_id` from `sha256(bearer)` against the tenants table (the #645 pattern), or from tokened URL `/mcp/<token>` (ZD-8), or OAuth token → tenant. Attach `tenant` to request context. Constant-time compare, `WWW-Authenticate` on 401. (Exists minus the tenants-table lookup.)
 3. **Tenants table + provisioning API.** `tenants(token_hash, tenant_id, plan, quota, status, created_at)` in a chassis-owned SQLite/Postgres. Endpoints: `POST /api/tenants` (control-plane only — Stripe webhook inserts here), `DELETE`/suspend, token rotate. Replaces the Dokploy provisioner and `ZENOD_AWAIT_PROVISION` push flow.
 4. **Tenant-scoped storage handles.** The unit never touches paths or connections directly; it asks the chassis for `storage.db(tenant)` and `storage.dir(tenant)` → `/data/<tenant_id>/…`. Single-tenant self-host = same API with one implicit tenant (from `ZENOD_API_TOKEN` env). **This one API is what makes hosted and self-hosted the same product.**
-5. **Vault.** Per-tenant encrypted world-key custody (Law 6), keyed by `tenant_id`. Only the unit that owns a key class may read it.
+5. **Vault.** Per-tenant authenticated encrypted world-key custody (Law 6), keyed by `tenant_id`. The stable master key is injected from outside `/data`; it is never generated or persisted beside ciphertext. Missing, wrong, or changed keys fail closed before mutation. Only the unit that owns a key class may read it.
 6. **Metering + throttle.** Per-tenant usage ledger (`usage.sqlite` pattern, tenant-keyed), quota check middleware, warn/block-at-zero.
 7. **Observability.** Pino logging with `tenant_id` on every line; `/healthz`; per-tenant request counters.
 
@@ -52,7 +52,7 @@ Callisthenes stays Python (it wraps upstream `xmcp`; rewriting it buys nothing).
 | Provisioning | `POST /api/tenants` guarded by a control-plane token; new customer = insert, never a deploy |
 | Storage | All state under `/data/<tenant_id>/` or tenant-keyed rows; one volume per unit |
 | Health | `GET /healthz` → 200 + version. One watchdog per **unit** (5 checks total, static list — the watchdog registration problem dissolves) |
-| Config env | `PORT`, `<UNIT>_DATA_DIR=/data`, `CONTROL_PLANE_TOKEN`, single-tenant seed token var |
+| Config env | `PORT`, `<UNIT>_DATA_DIR=/data`, `CONTROL_PLANE_TOKEN`, single-tenant seed token var, stable unique-per-unit 32-byte `CHASSIS_VAULT_MASTER_KEY` or equivalent external key |
 | Container | One Dockerfile per unit, `EXPOSE <port>`, `VOLUME /data`, `restart: unless-stopped` |
 | DNS | One hostname per unit (`<unit>.zenod.dev`); no per-tenant records |
 | Deploy | One Dokploy application per unit; deploy = rebuild that one app |
