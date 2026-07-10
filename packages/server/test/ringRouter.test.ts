@@ -136,6 +136,11 @@ describe("RingRouterCore", () => {
           filename: "voice.ogg",
           contentHint: "remember the action items",
           hints: ["meeting"],
+          transcript: {
+            text: "Ship the pilot and record the receipt.",
+            source: "phylax",
+            version: "v2",
+          },
         },
       ],
     });
@@ -151,6 +156,11 @@ describe("RingRouterCore", () => {
       contentHint: "remember the action items",
       senderTimestamp: "2026-07-09T14:00:00Z",
       hints: ["meeting"],
+      transcript: {
+        text: "Ship the pilot and record the receipt.",
+        source: "phylax",
+        version: "v2",
+      },
     });
     expect(core.routeLog()[0]).toMatchObject({ chosenServerId: "zenod", reason: "media_ingest", resultStatus: "ok" });
   });

@@ -56,4 +56,25 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     expect(store.get(job.id)!.status).toBe("queued");
     expect(store.get(job.id)!.attempts).toBe(0);
   });
+
+  it("persists provided transcript provenance for media ingest jobs", () => {
+    const path = tmpDb();
+    let store = new TaskJobStore(path);
+    const job = store.enqueue("media_ingest", {
+      mediaType: "audio",
+      bytesRef: "drive://file/audio-1",
+      transcript: {
+        text: "Already transcribed upstream.",
+        source: "phylax",
+        version: "v2",
+      },
+    });
+
+    store = new TaskJobStore(path);
+    expect(store.get(job.id)?.input.transcript).toEqual({
+      text: "Already transcribed upstream.",
+      source: "phylax",
+      version: "v2",
+    });
+  });
 });
