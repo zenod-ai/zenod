@@ -5,6 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { ChassisStorage, ChassisUsageStore, createMemoryTenantStore, createSqliteTenantStore, createUnit, hashToken, type UnitContext } from "./index.js";
 
 const servers: ServerType[] = [];
@@ -95,6 +96,28 @@ async function callTool(
     }),
     ...rest,
   });
+}
+
+interface McpToolCallBody {
+  result?: {
+    content?: Array<{ type: string; text?: string }>;
+    structuredContent?: Record<string, unknown>;
+    isError?: boolean;
+  };
+  error?: unknown;
+}
+
+async function callToolResult(
+  base: string,
+  name: string,
+  args: Record<string, unknown> = {},
+): Promise<NonNullable<McpToolCallBody["result"]>> {
+  const response = await callTool(base, name, args);
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as McpToolCallBody;
+  expect(body.error).toBeUndefined();
+  expect(body.result).toBeDefined();
+  return body.result ?? {};
 }
 
 function controlPlaneHeaders(token = "control-secret"): Record<string, string> {
@@ -280,6 +303,428 @@ describe("createUnit", () => {
           version: "1.2.3",
         },
       },
+    });
+  });
+
+  it("structurally rejects silent acknowledgements from modern, legacy, updated, and unknown tools", async () => {
+    const unit = createUnit({
+      name: "conduct-demo",
+      conduct: {
+        toolKinds: {
+          read: ["declared_read", "legacy_read"],
+          mutate: ["declared_mutation", "updated_mutation"],
+        },
+      },
+      tools(server) {
+        server.registerTool(
+          "declared_mutation",
+          { annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "ok" }],
+            structuredContent: { status: "ok" },
+          }),
+        );
+        server.registerTool("unknown_tool", {}, async () => ({
+          content: [{ type: "text", text: "ok" }],
+          structuredContent: { status: "ok" },
+        }));
+        server.registerTool(
+          "unknown_read_hint",
+          { annotations: { readOnlyHint: true } },
+          async () => ({
+            content: [{ type: "text", text: "ok" }],
+            structuredContent: { status: "ok" },
+          }),
+        );
+        server.registerTool(
+          "declared_read",
+          { annotations: { readOnlyHint: true } },
+          async () => ({
+            content: [{ type: "text", text: "42" }],
+            structuredContent: { value: 42 },
+          }),
+        );
+        server.tool(
+          "legacy_read",
+          { readOnlyHint: true },
+          async () => ({
+            content: [{ type: "text", text: "legacy data" }],
+            structuredContent: { value: "legacy data" },
+          }),
+        );
+        server.tool("legacy_unknown", async () => ({
+          content: [{ type: "text", text: "ok" }],
+          structuredContent: { status: "ok" },
+        }));
+        const updated = server.registerTool(
+          "updated_mutation",
+          { annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "stored" }],
+            structuredContent: {
+              evidence: [{ kind: "item_updated", id: "before-update" }],
+            },
+          }),
+        );
+        updated.update({
+          callback: async () => ({
+            content: [{ type: "text", text: "ok" }],
+            structuredContent: { status: "ok" },
+          }),
+        });
+      },
+    });
+    const base = await listen(unit.app);
+
+    for (const tool of [
+      "declared_mutation",
+      "unknown_tool",
+      "unknown_read_hint",
+      "legacy_unknown",
+      "updated_mutation",
+    ]) {
+      const result = await callToolResult(base, tool);
+      expect(result.isError, tool).toBe(true);
+      expect(result.structuredContent, tool).toMatchObject({
+        error: { code: "silent_ack" },
+      });
+    }
+    await expect(callToolResult(base, "declared_read")).resolves.toMatchObject({
+      structuredContent: { value: 42 },
+    });
+    await expect(callToolResult(base, "legacy_read")).resolves.toMatchObject({
+      structuredContent: { value: "legacy data" },
+    });
+  });
+
+  it("normalizes handler failures to loud structured MCP errors", async () => {
+    const sentinelSecret = "provider_api_key=sentinel-secret-do-not-leak";
+    const unit = createUnit({
+      name: "conduct-errors",
+      tools(server) {
+        server.registerTool("structured_failure", {}, async () => ({
+          content: [{ type: "text", text: "invalid" }],
+          structuredContent: {
+            error: { code: "invalid_input", message: "name is required" },
+          },
+        }));
+        server.registerTool("thrown_failure", {}, async () => {
+          throw new Error(`connector unavailable: ${sentinelSecret}`);
+        });
+        server.registerTool(
+          "read_text_error",
+          { annotations: { readOnlyHint: true } },
+          async () => ({
+            content: [{ type: "text", text: "failed" }],
+            isError: true,
+          }),
+        );
+      },
+    });
+    const base = await listen(unit.app);
+
+    await expect(callToolResult(base, "structured_failure")).resolves.toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: { code: "invalid_input", message: "name is required" },
+      },
+    });
+    const thrown = await callToolResult(base, "thrown_failure");
+    expect(thrown).toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: {
+          code: "tool_error",
+          message: "Tool execution failed unexpectedly.",
+        },
+      },
+    });
+    expect(JSON.stringify(thrown.content)).not.toContain(sentinelSecret);
+    expect(JSON.stringify(thrown.structuredContent)).not.toContain(
+      sentinelSecret,
+    );
+    await expect(callToolResult(base, "read_text_error")).resolves.toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: { code: "unstructured_error" },
+      },
+    });
+  });
+
+  it("enforces long-tool tickets, poll completions, and dispatch propagation", async () => {
+    const poll = { name: "get_job_result", inputField: "ticket_id" as const };
+    const unit = createUnit({
+      name: "conduct-long-tools",
+      conduct: {
+        toolKinds: { read: ["get_job_result"] },
+        longTools: {
+          run_job: { pollTool: "get_job_result" },
+          missing_poll_contract: { pollTool: "get_job_result" },
+          wrong_poll_contract: { pollTool: "get_job_result" },
+          dispatch_job: { pollTool: "get_job_result", dispatch: true },
+        },
+      },
+      tools(server) {
+        server.registerTool(
+          "run_job",
+          { inputSchema: {}, annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: {
+              ticket_id: "job-good",
+              status: "accepted",
+              poll,
+            },
+          }),
+        );
+        server.registerTool(
+          "missing_poll_contract",
+          { inputSchema: {}, annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: { ticket_id: "job-no-poll", status: "accepted" },
+          }),
+        );
+        server.registerTool(
+          "wrong_poll_contract",
+          { inputSchema: {}, annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: {
+              ticket_id: "job-wrong-poll",
+              status: "accepted",
+              poll: { name: "some_other_poll", inputField: "ticket_id" },
+            },
+          }),
+        );
+        server.registerTool(
+          "undeclared_long_tool",
+          { inputSchema: {}, annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: {
+              ticket_id: "job-undeclared",
+              status: "accepted",
+              poll,
+            },
+          }),
+        );
+        server.registerTool(
+          "dispatch_job",
+          {
+            inputSchema: {
+              origin_ticket_id: z.string().optional(),
+              depth: z.number().int().optional(),
+            },
+            annotations: { readOnlyHint: false },
+          },
+          async ({ origin_ticket_id, depth }) => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: {
+              ticket_id: "dispatch-1",
+              status: "accepted",
+              origin_ticket_id:
+                origin_ticket_id === "mismatched-origin"
+                  ? "different-origin"
+                  : origin_ticket_id,
+              depth: (depth ?? 0) + 1,
+              poll,
+            },
+          }),
+        );
+        server.registerTool(
+          "get_job_result",
+          {
+            inputSchema: { ticket_id: z.string().min(1) },
+            annotations: { readOnlyHint: true },
+          },
+          async ({ ticket_id }) => {
+            if (ticket_id === "job-running") {
+              return {
+                content: [{ type: "text", text: "running" }],
+                structuredContent: { ticket_id, state: "running" },
+              };
+            }
+            if (ticket_id === "job-mismatch") {
+              return {
+                content: [{ type: "text", text: "done" }],
+                structuredContent: {
+                  ticket_id: "some-other-job",
+                  state: "done",
+                  evidence: [{ kind: "job_completed", id: "some-other-job" }],
+                },
+              };
+            }
+            if (ticket_id === "job-error-mismatch") {
+              return {
+                content: [{ type: "text", text: "failed" }],
+                structuredContent: {
+                  ticket_id: "some-other-job",
+                  state: "error",
+                  error: { code: "job_failed", message: "job failed" },
+                },
+                isError: true,
+              };
+            }
+            return {
+              content: [{ type: "text", text: "done" }],
+              structuredContent: {
+                ticket_id,
+                state: "done",
+                ...(ticket_id === "job-no-evidence"
+                  ? {}
+                  : { evidence: [{ kind: "job_completed", id: ticket_id }] }),
+              },
+            };
+          },
+        );
+      },
+    });
+    const base = await listen(unit.app);
+
+    await expect(callToolResult(base, "run_job")).resolves.toMatchObject({
+      structuredContent: { ticket_id: "job-good", status: "accepted" },
+    });
+    await expect(callToolResult(base, "missing_poll_contract")).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "missing_poll_tool" } },
+    });
+    await expect(callToolResult(base, "wrong_poll_contract")).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "poll_mismatch" } },
+    });
+    await expect(callToolResult(base, "undeclared_long_tool")).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "undeclared_long_tool" } },
+    });
+    await expect(
+      callToolResult(base, "dispatch_job", {
+        origin_ticket_id: "origin-1",
+        depth: 0,
+      }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        origin_ticket_id: "origin-1",
+        depth: 1,
+      },
+    });
+    await expect(callToolResult(base, "dispatch_job", {})).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "missing_origin_ticket_id" } },
+    });
+    await expect(
+      callToolResult(base, "dispatch_job", {
+        origin_ticket_id: "mismatched-origin",
+        depth: 0,
+      }),
+    ).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "origin_ticket_mismatch" } },
+    });
+    await expect(
+      callToolResult(base, "dispatch_job", {
+        origin_ticket_id: "origin-1",
+        depth: 1,
+      }),
+    ).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "dispatch_depth_exceeded" } },
+    });
+    await expect(
+      callToolResult(base, "get_job_result", { ticket_id: "job-running" }),
+    ).resolves.toMatchObject({
+      structuredContent: { ticket_id: "job-running", state: "running" },
+    });
+    await expect(
+      callToolResult(base, "get_job_result", { ticket_id: "job-mismatch" }),
+    ).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "ticket_mismatch" } },
+    });
+    await expect(
+      callToolResult(base, "get_job_result", {
+        ticket_id: "job-error-mismatch",
+      }),
+    ).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "ticket_mismatch" } },
+    });
+    await expect(
+      callToolResult(base, "get_job_result", { ticket_id: "job-no-evidence" }),
+    ).resolves.toMatchObject({
+      isError: true,
+      structuredContent: { error: { code: "completion_without_evidence" } },
+    });
+  });
+
+  it("fails registration closed when a declared long tool has no poll tool", async () => {
+    const unit = createUnit({
+      name: "conduct-missing-poll",
+      conduct: {
+        longTools: { run_job: { pollTool: "get_job_result" } },
+      },
+      tools(server) {
+        server.registerTool("run_job", {}, async () => ({
+          content: [{ type: "text", text: "accepted" }],
+          structuredContent: {
+            ticket_id: "job-1",
+            status: "accepted",
+            poll: { name: "get_job_result", inputField: "ticket_id" },
+          },
+        }));
+      },
+    });
+    const base = await listen(unit.app);
+    unit.app.onError((error, c) =>
+      c.json(
+        {
+          error: error instanceof Error ? error.name : "unknown",
+          message: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      ),
+    );
+
+    const response = await initialize(base);
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "ConductContractError",
+      message: expect.stringContaining("requires registered poll tool"),
+    });
+  });
+
+  it("fails closed when experimental SDK tasks try to bypass conduct registration", async () => {
+    const unit = createUnit({
+      name: "conduct-sdk-task",
+      tools(server) {
+        server.experimental.tasks.registerToolTask(
+          "sdk_task",
+          {},
+          {} as never,
+        );
+      },
+    });
+    unit.app.onError((error, c) =>
+      c.json(
+        {
+          error: error instanceof Error ? error.name : "unknown",
+          code:
+            error && typeof error === "object" && "code" in error
+              ? error.code
+              : null,
+          message: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      ),
+    );
+    const base = await listen(unit.app);
+
+    const response = await initialize(base);
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "ConductContractError",
+      code: "unsupported_task_registration",
+      message: expect.stringContaining("conduct.longTools"),
     });
   });
 

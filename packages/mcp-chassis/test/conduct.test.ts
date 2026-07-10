@@ -5,6 +5,7 @@ import {
   assertConductResult,
   assertLongToolContract,
   completionEvent,
+  conductErrorResult,
   createToolClassifier,
   evidence,
   propagateDispatchContext,
@@ -43,6 +44,25 @@ describe("conduct receipt discipline", () => {
     const guarded = withConduct("write_state", async () => ({ status: "ok" }), { classifier });
     await expect(guarded(undefined)).rejects.toMatchObject({ code: "silent_ack" });
   });
+
+  it("preserves chassis contract messages but redacts unexpected errors", () => {
+    const contract = conductErrorResult(
+      new ConductContractError("known_contract", "Specific chassis detail."),
+    );
+    const unexpected = conductErrorResult(
+      new Error("provider_api_key=sentinel-secret-do-not-leak"),
+    );
+
+    expect(contract.structuredContent.error).toEqual({
+      code: "known_contract",
+      message: "Specific chassis detail.",
+    });
+    expect(unexpected.structuredContent.error).toEqual({
+      code: "tool_error",
+      message: "Tool execution failed unexpectedly.",
+    });
+    expect(JSON.stringify(unexpected)).not.toContain("sentinel-secret");
+  });
 });
 
 describe("conduct long-running tool contract", () => {
@@ -57,6 +77,7 @@ describe("conduct long-running tool contract", () => {
       ticket_id: "council-1",
       state: "done",
       origin_ticket_id: "ring-mailbox-9",
+      depth: 0,
       evidence: [evidence("memory_stored", { commitSha: "abc1234" })],
     });
 
@@ -85,6 +106,26 @@ describe("conduct long-running tool contract", () => {
 
   it("rejects done completions without terminal evidence", () => {
     expect(() => completionEvent({ ticket_id: "job-1", state: "done", evidence: [] })).toThrow(/evidence/);
+  });
+
+  it("rejects completion events that lose the accepted origin", () => {
+    expect(() =>
+      assertLongToolContract({
+        accepted: acceptedTicket({
+          ticket_id: "job-1",
+          origin_ticket_id: "origin-1",
+          depth: 0,
+        }),
+        completion: completionEvent({
+          ticket_id: "job-1",
+          state: "done",
+          origin_ticket_id: "origin-2",
+          depth: 0,
+          evidence: [evidence("job_completed", { id: "job-1" })],
+        }),
+        poll: { name: "get_job_result" },
+      }),
+    ).toThrow(/origin_ticket_id/);
   });
 });
 
