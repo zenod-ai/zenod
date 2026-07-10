@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Epic 3.7 delivery manager (Codex task `019f4933-a958-79b3-8e16-21841be40c53`)
 Steward since: 2026-07-10 01:30 CEST
-Last reconciled commit: `dd403d3`
+Last reconciled commit: `098b94b`
 Planner: Epic 3.0 planner
 Worker: Epic 3.7 delivery manager + dispatched ticket workers
 Tester: DX-7 final tester dispatched
