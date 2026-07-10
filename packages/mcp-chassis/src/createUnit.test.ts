@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { ServerType } from "@hono/node-server";
 import { serve } from "@hono/node-server";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -121,6 +121,22 @@ function formBody(input: Record<string, string>): URLSearchParams {
   const body = new URLSearchParams();
   for (const [key, value] of Object.entries(input)) body.set(key, value);
   return body;
+}
+
+function stripeSignature(payload: string, secret: string, timestamp = 1_720_000_000): string {
+  const signature = createHmac("sha256", secret).update(`${timestamp}.${payload}`, "utf8").digest("hex");
+  return `t=${timestamp},v1=${signature}`;
+}
+
+async function postStripeWebhook(base: string, payload: string, signature: string): Promise<Response> {
+  return fetch(`${base}/api/billing/webhook`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "stripe-signature": signature,
+    },
+    body: payload,
+  });
 }
 
 describe("createUnit", () => {
@@ -825,5 +841,183 @@ describe("createUnit", () => {
     expect(toolCalls).toBe(0);
     expect(tenants.snapshot()[0]?.tenant).toEqual({ id: "tenant_zero", quota: 0 });
     usageStore.close();
+  });
+
+  it("verifies Stripe webhook signatures and provisions tenant rows", async () => {
+    const tenants = createMemoryTenantStore();
+    const secret = "whsec_test_secret";
+    const now = 1_720_000_000_000;
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      billing: {
+        store: tenants,
+        env: { BILLING_ENABLED: "true", STRIPE_WEBHOOK_SECRET: secret },
+        clock: () => now,
+      },
+    });
+    const base = await listen(unit.app);
+    const payload = JSON.stringify({
+      id: "evt_checkout",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_123",
+          customer: "cus_123",
+          customer_details: { email: "buyer@example.com" },
+          metadata: { tenant_id: "tenant-billing", plan: "starter" },
+        },
+      },
+    });
+
+    const response = await postStripeWebhook(base, payload, stripeSignature(payload, secret));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      received: true,
+      event: "checkout.session.completed",
+      action: "provisioned",
+      tenant: { id: "tenant-billing", name: "buyer@example.com", plan: "starter" },
+      status: "active",
+    });
+    const [record] = tenants.snapshot();
+    expect(record).toMatchObject({
+      tenant: { id: "tenant-billing", name: "buyer@example.com", plan: "starter" },
+      status: "active",
+    });
+    expect(record?.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("rejects bad Stripe webhook signatures before mutating tenants", async () => {
+    const tenants = createMemoryTenantStore();
+    const secret = "whsec_test_secret";
+    const now = 1_720_000_000_000;
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      billing: {
+        store: tenants,
+        env: { BILLING_ENABLED: "true", STRIPE_WEBHOOK_SECRET: secret },
+        clock: () => now,
+      },
+    });
+    const base = await listen(unit.app);
+    const payload = JSON.stringify({
+      type: "checkout.session.completed",
+      data: { object: { id: "cs_test_123", metadata: { tenant_id: "tenant-billing" } } },
+    });
+
+    const response = await postStripeWebhook(base, payload, stripeSignature(payload, "wrong-secret"));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "invalid Stripe signature" });
+    expect(tenants.snapshot()).toEqual([]);
+  });
+
+  it("suspends tenant rows from subscription deletion webhooks", async () => {
+    const tenants = createMemoryTenantStore([{ token: "tenant-token", tenant: { id: "tenant-billing" } }]);
+    const secret = "whsec_test_secret";
+    const now = 1_720_000_000_000;
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      billing: {
+        store: tenants,
+        env: { BILLING_ENABLED: "true", STRIPE_WEBHOOK_SECRET: secret },
+        clock: () => now,
+      },
+    });
+    const base = await listen(unit.app);
+    const payload = JSON.stringify({
+      id: "evt_deleted",
+      type: "customer.subscription.deleted",
+      data: { object: { id: "sub_123", metadata: { tenant_id: "tenant-billing" } } },
+    });
+
+    const response = await postStripeWebhook(base, payload, stripeSignature(payload, secret));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      received: true,
+      action: "suspended",
+      tenant: { id: "tenant-billing" },
+      status: "suspended",
+    });
+    expect(tenants.snapshot()).toEqual([
+      {
+        tokenHash: hashToken("tenant-token"),
+        tenant: { id: "tenant-billing" },
+        status: "suspended",
+        expiresAt: null,
+      },
+    ]);
+    await expect(initialize(base, { headers: { authorization: "Bearer tenant-token" } })).resolves.toHaveProperty(
+      "status",
+      401,
+    );
+  });
+
+  it("reactivates existing tenant rows from active subscription update webhooks", async () => {
+    const tenants = createMemoryTenantStore([
+      { token: "tenant-token", tenant: { id: "tenant-billing" }, status: "suspended" },
+    ]);
+    const secret = "whsec_test_secret";
+    const now = 1_720_000_000_000;
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      billing: {
+        store: tenants,
+        env: { BILLING_ENABLED: "true", STRIPE_WEBHOOK_SECRET: secret },
+        clock: () => now,
+      },
+    });
+    const base = await listen(unit.app);
+    const payload = JSON.stringify({
+      id: "evt_updated",
+      type: "customer.subscription.updated",
+      data: { object: { id: "sub_123", status: "active", metadata: { tenant_id: "tenant-billing" } } },
+    });
+
+    const response = await postStripeWebhook(base, payload, stripeSignature(payload, secret));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      received: true,
+      action: "updated",
+      tenant: { id: "tenant-billing" },
+      status: "active",
+    });
+    expect(tenants.snapshot()).toEqual([
+      {
+        tokenHash: hashToken("tenant-token"),
+        tenant: { id: "tenant-billing" },
+        status: "active",
+        expiresAt: null,
+      },
+    ]);
+    await expect(initialize(base, { headers: { authorization: "Bearer tenant-token" } })).resolves.toHaveProperty(
+      "status",
+      200,
+    );
+  });
+
+  it("serves unit-local checkout return handlers when billing is enabled", async () => {
+    const tenants = createMemoryTenantStore();
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      billing: { store: tenants, env: { BILLING_ENABLED: "true" } },
+    });
+    const base = await listen(unit.app);
+
+    const success = await fetch(`${base}/checkout/success`);
+    const cancel = await fetch(`${base}/checkout/cancel`);
+
+    expect(success.status).toBe(200);
+    expect(success.headers.get("content-type")).toContain("text/html");
+    await expect(success.text()).resolves.toContain("demo checkout complete");
+    expect(cancel.status).toBe(200);
+    await expect(cancel.text()).resolves.toContain("demo checkout canceled");
   });
 });

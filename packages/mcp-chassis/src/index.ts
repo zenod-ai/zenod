@@ -16,10 +16,12 @@ import {
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isBillingEnabled, registerBillingRoutes, type BillingOptions } from "./billing.js";
 import type { OAuthKitOptions } from "./oauth.js";
 import { installOAuthRoutes, oauthWwwAuthenticate, publicBaseUrl, resolveOAuthKit } from "./oauth.js";
 import { ChassisStorage, type ChassisStorageOptions, type TenantStorage } from "./storage.js";
 import { ChassisUsageStore, type ChassisUsageStoreOptions, type TenantUsageMeter } from "./usage.js";
+export type { BillingOptions } from "./billing.js";
 
 export type TenantStatus = "active" | "suspended" | "deleted";
 
@@ -39,7 +41,7 @@ export interface UnitContext {
   usage: TenantUsageMeter | null;
 }
 
-type UnitHonoEnv = {
+export type UnitHonoEnv = {
   Bindings: HttpBindings;
   Variables: {
     tenant: TenantContext | null;
@@ -198,6 +200,8 @@ export interface CreateUnitOptions {
   ui?: UnitUiOptions;
   /** OAuth server for MCP-client sign-in and OAuth client providers for world connections. */
   oauth?: OAuthKitOptions;
+  /** Optional unit-local billing webhook and checkout return handlers. */
+  billing?: BillingOptions;
 }
 
 export interface UnitApp {
@@ -859,6 +863,11 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       if (!record) return c.json({ error: "tenant not found" }, 404);
       return c.json({ tenant: record.tenant, status: "deleted" });
     });
+  }
+
+  const billingStore = options.billing?.store ?? provisioningStore;
+  if (options.billing && billingStore && isBillingEnabled(options.billing)) {
+    registerBillingRoutes(app, { ...options.billing, store: billingStore, unitName: name });
   }
 
   const handleMcp = async (c: Context<UnitHonoEnv>) => {
