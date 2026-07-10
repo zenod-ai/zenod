@@ -608,7 +608,7 @@ export async function runProof(options, env = process.env) {
   };
 
   const healthReady = await runStep("health", async () => {
-    const health = await jsonRequest(baseUrl, "/api/health");
+    const health = await jsonRequest(baseUrl, "/healthz");
     expectStatus(health, [200], "health", "prerequisite");
     return { status: health.response.status, body: health.body };
   });
