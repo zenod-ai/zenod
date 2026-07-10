@@ -94,6 +94,15 @@ X_DEVELOPER_CONSOLE_URL = "https://console.x.com/"
 X_CREDENTIALS_GUIDE_URL = "https://docs.x.com/x-api/getting-started/getting-access"
 X_AUTHORIZE_URL = "https://api.x.com/oauth/authorize"
 
+
+def _dashboard_throttle_limit() -> int:
+    raw = os.getenv("CALLISTHENES_THROTTLE_PER_HOUR", "10").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 10
+    return value if value >= 0 else 10
+
 X_SETUP_FIELDS = (
     (
         "X_OAUTH_CONSUMER_KEY",
@@ -1042,7 +1051,76 @@ def register(
         return page
 
     from starlette.requests import Request
-    from starlette.responses import HTMLResponse, RedirectResponse
+    from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
+
+    def _dashboard_page(request: "Request") -> "ConnectPage":
+        """Bind the existing controller to the front-resolved bearer for one request."""
+        authorization = request.headers.get("authorization", "")
+        scheme, _, bearer = authorization.partition(" ")
+        tenant = bearer.strip() if scheme.lower() == "bearer" else ""
+        if not tenant:
+            raise ValueError("authenticated tenant bearer is required")
+        return ConnectPage(
+            engine=page.engine,
+            connectors=page.connectors,
+            config=ConnectPageConfig(
+                mcp_url=page.config.mcp_url,
+                mcp_token=None,
+                owner_tenant=tenant,
+            ),
+            x_verifier=page.x_verifier,
+            x_oauth1_flow_factory=page.x_oauth1_flow_factory,
+        )
+
+    @custom_route("/api/dashboard/status", methods=["GET"])
+    async def _dashboard_status(request: "Request") -> JSONResponse:  # noqa: ANN001
+        try:
+            bound = _dashboard_page(request)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=401)
+        x_status = bound.x_config_status()
+        usage = bound.engine.usage(bound.tenant()) if bound.engine is not None else {"ok": True}
+        return JSONResponse(
+            {
+                "ok": True,
+                "x": {
+                    "connected": bool(x_status.get("sender_ready")),
+                    "username": x_status.get("verified_username", ""),
+                    "credential_suffixes": x_status.get("credential_suffixes", {}),
+                    "pin_required": bool(x_status.get("oauth1_pending") and x_status.get("oauth1_mode") == "pin"),
+                    "authorize_url": x_status.get("oauth1_authorize_url", ""),
+                },
+                "throttle": {
+                    "limit_per_hour": _dashboard_throttle_limit(),
+                },
+                "usage": usage,
+                "drafts": [],
+                "receipts": [],
+            }
+        )
+
+    @custom_route("/api/dashboard/x/app", methods=["POST"])
+    async def _dashboard_x_app(request: "Request") -> JSONResponse:  # noqa: ANN001
+        try:
+            bound = _dashboard_page(request)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=401)
+        payload = await request.json()
+        saved = bound.save_x_app_config(payload if isinstance(payload, Mapping) else {})
+        if not saved.get("ok"):
+            return JSONResponse(saved, status_code=400)
+        started = bound.start_x_oauth1()
+        return JSONResponse(started, status_code=200 if started.get("ok") else 400)
+
+    @custom_route("/api/dashboard/x/pin", methods=["POST"])
+    async def _dashboard_x_pin(request: "Request") -> JSONResponse:  # noqa: ANN001
+        try:
+            bound = _dashboard_page(request)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=401)
+        payload = await request.json()
+        result = bound.complete_x_oauth1_pin(str(payload.get("pin", "")) if isinstance(payload, Mapping) else "")
+        return JSONResponse(result, status_code=200 if result.get("ok") else 400)
 
     @custom_route("/connect", methods=["GET"])
     async def _connect_index(request: "Request") -> HTMLResponse:  # noqa: ANN001

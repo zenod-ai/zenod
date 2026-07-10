@@ -618,3 +618,63 @@ def test_live_desktop_x_app_redirects_to_pin_step_and_connects(monkeypatch, tmp_
     assert completed.headers["location"] == "/connect"
     connected = client.get("/connect")
     assert "Connected as @calli_test" in connected.text
+
+
+def test_dashboard_json_requires_front_resolved_tenant_bearer():
+    client, _ = _live_client()
+    denied = client.get("/api/dashboard/status")
+    assert denied.status_code == 401
+
+    status = client.get(
+        "/api/dashboard/status",
+        headers={"Authorization": "Bearer dashboard-tenant"},
+    )
+    assert status.status_code == 200
+    payload = status.json()
+    assert payload["ok"] is True
+    assert payload["x"]["connected"] is False
+    assert payload["throttle"]["limit_per_hour"] == 10
+    assert payload["drafts"] == []
+    assert payload["receipts"] == []
+
+
+def test_dashboard_json_ports_three_field_authorize_and_pin(monkeypatch, tmp_path):
+    for key in cp.X_CONFIG_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CALLISTHENES_X_CONFIG_PATH", str(tmp_path / "x-config.json"))
+    _DesktopOAuth1Flow.callbacks.clear()
+    client, _ = _live_client(x_oauth1_flow_factory=_desktop_oauth1_factory)
+    headers = {"Authorization": "Bearer dashboard-tenant"}
+    started = client.post(
+        "/api/dashboard/x/app",
+        headers=headers,
+        json={
+            "X_OAUTH_CONSUMER_KEY": "consumer-AB12",
+            "X_OAUTH_CONSUMER_SECRET": "secret-CD34",
+            "X_BEARER_TOKEN": "bearer-EF56",
+        },
+    )
+    assert started.status_code == 200
+    assert started.json()["pin_required"] is True
+
+    status = client.get("/api/dashboard/status", headers=headers).json()
+    assert status["x"]["pin_required"] is True
+    assert status["x"]["authorize_url"].startswith("https://api.x.com/oauth/authorize")
+
+    completed = client.post(
+        "/api/dashboard/x/pin",
+        headers=headers,
+        json={"pin": "pin-or-verifier"},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["connected"] is True
+
+    connected = client.get("/api/dashboard/status", headers=headers).json()
+    assert connected["x"]["connected"] is True
+    assert connected["x"]["username"] == "calli_test"
+    isolated = client.get(
+        "/api/dashboard/status",
+        headers={"Authorization": "Bearer another-dashboard-tenant"},
+    ).json()
+    assert isolated["x"]["connected"] is False
+    assert isolated["x"]["username"] == ""

@@ -18,6 +18,8 @@ COPY packages/mcp-chassis/package.json packages/mcp-chassis/
 COPY packages/server/package.json packages/server/
 COPY apps/web/package.json apps/web/
 COPY apps/site/package.json apps/site/
+COPY apps/calli-web/package.json apps/calli-web/
+COPY apps/calli-site/package.json apps/calli-site/
 RUN npm ci
 
 COPY tsconfig.base.json ./
@@ -26,6 +28,7 @@ COPY docs/tool-output-schemas.v4.json ./docs/tool-output-schemas.v4.json
 COPY packages ./packages
 COPY apps ./apps
 RUN npm run build
+RUN npm run build -w calli-site && npm run build -w calli-web
 
 # drop dev dependencies for the runtime copy
 RUN npm prune --omit=dev
@@ -73,6 +76,8 @@ COPY --from=build /app/packages/server/dist ./packages/server/dist
 COPY --from=build /app/packages/server/node_modules ./packages/server/node_modules
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/apps/site/dist ./apps/site/dist
+COPY --from=build /app/apps/calli-web/dist ./apps/calli-web/dist
+COPY --from=build /app/apps/calli-site/dist ./apps/calli-site/dist
 
 VOLUME /data
 EXPOSE 8080
