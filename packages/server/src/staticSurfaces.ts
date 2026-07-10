@@ -64,10 +64,20 @@ export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurface
       const host = c.req.header("x-forwarded-host") ?? c.req.header("host") ?? new URL(c.req.url).hostname;
       return isPublicSiteHost(host) ? handler(c, next) : next();
     };
+  const nonPublicHostOnly =
+    (handler: MiddlewareHandler<ServerEnv>): MiddlewareHandler<ServerEnv> =>
+    async (c, next) => {
+      const host = c.req.header("x-forwarded-host") ?? c.req.header("host") ?? new URL(c.req.url).hostname;
+      return isPublicSiteHost(host) ? next() : handler(c, next);
+    };
 
   app.get("/favicon.svg", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   app.get("/og.jpg", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   app.get("/legal/*", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
+  if (options.webDist) {
+    app.get("/", nonPublicHostOnly(staticFile({ root: options.webDist, path: "index.html", ...noCache })));
+    app.get("/account", nonPublicHostOnly(staticFile({ root: options.webDist, path: "index.html", ...noCache })));
+  }
   app.get("/", publicHostOnly(staticFile({ root: siteRoot, path: "index.html", ...noCache })));
   app.get("/pricing", publicHostOnly(staticFile({ root: siteRoot, path: "index.html", ...noCache })));
 }

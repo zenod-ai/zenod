@@ -39,8 +39,9 @@ describe("site and dashboard routing", () => {
     await expect((await app.request("/site/assets/site.js")).text()).resolves.toBe("site asset");
   });
 
-  it("leaves the cloud root available for the transplanted customer login", async () => {
-    expect((await app.request("https://cloud.zenod.dev/")).status).toBe(404);
+  it("serves the dashboard SPA at cloud root and account for the transplanted customer layer", async () => {
+    await expect((await app.request("https://cloud.zenod.dev/")).text()).resolves.toContain("dashboard");
+    await expect((await app.request("https://cloud.zenod.dev/account")).text()).resolves.toContain("dashboard");
     expect((await app.request("https://cloud.zenod.dev/pricing")).status).toBe(404);
   });
 
