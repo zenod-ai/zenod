@@ -193,10 +193,18 @@ describe("MCP endpoint", () => {
         hints: ["insurance"],
       },
     });
-    const queued = enqueued.structuredContent as { jobId: string; kind: string; status: string };
+    const queued = enqueued.structuredContent as {
+      jobId: string;
+      kind: string;
+      status: string;
+      evidence: Array<{ kind: string; id: string }>;
+    };
     expect(queued.jobId).toBeTruthy();
     expect(queued.kind).toBe("media_ingest");
     expect(queued.status).toBe("queued");
+    expect(queued.evidence).toEqual([
+      { kind: "job_queued", id: queued.jobId },
+    ]);
 
     let terminal: { status: string; result: Record<string, unknown> | null } | null = null;
     for (let attempt = 0; attempt < 50; attempt++) {
@@ -232,6 +240,36 @@ describe("MCP endpoint", () => {
       ]),
     );
 
+    await client.close();
+  });
+
+  it("ingest_memory accepts one optional upstream transcript and reports the bypass branch", async () => {
+    const client = await connect();
+    const receipt = await runAsyncTool(client, "ingest_memory", {
+      mediaType: "audio",
+      bytesRef: "data:audio/ogg;base64,dm9pY2UgYnl0ZXM=",
+      filename: "voice.ogg",
+      transcript: {
+        text: "The renewal date is 2026-08-15.",
+        source: "phylax",
+        version: "v2",
+      },
+    });
+
+    expect(receipt).toMatchObject({
+      status: "done",
+      transcription: "provided",
+      sttCalls: 0,
+      source: {
+        transcript: {
+          source: "phylax",
+          version: "v2",
+        },
+      },
+      extraction: {
+        provider: "phylax@v2",
+      },
+    });
     await client.close();
   });
 

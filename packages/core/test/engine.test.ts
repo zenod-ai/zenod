@@ -394,6 +394,7 @@ describe("BrainEngine", () => {
     expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(result.evidenceRef).toMatch(/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]{6}$/);
     expect(result.githubUrls.some((u) => u.includes("Areas/Insurance.md"))).toBe(true);
+    expect(result.githubUrls.every((url) => url.includes(`/blob/${result.commitSha}/`))).toBe(true);
 
     // evidence is verbatim and anchored
     const log = await readFile(join(repo.path, result.evidenceRef.split("#")[0]!), "utf8");

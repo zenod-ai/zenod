@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { StoreResult, TaskingReply, WorkResult } from "zenod";
+import { openZenodSqlite } from "./sqlite.js";
 
 /**
  * Durable queue for long-running agentic MCP jobs (task_brain → handleTasking,
@@ -29,6 +28,12 @@ const IN_FLIGHT_STATE = "running" as const;
 // it to completion with the normal receipt — bounded so a job that keeps crashing the
 // server eventually fails honestly instead of looping forever.
 const MAX_STORE_RESUME_ATTEMPTS = 3;
+
+export interface ProvidedTranscript {
+  text: string;
+  source: string;
+  version: string;
+}
 
 export interface TaskJobInput {
   /** task: the instruction sent through the shared tasking loop. */
@@ -61,6 +66,8 @@ export interface TaskJobInput {
   senderTimestamp?: string;
   /** media_ingest: optional filing hints. */
   mediaHints?: string[];
+  /** media_ingest: upstream transcript that bypasses Zenod STT. */
+  transcript?: ProvidedTranscript;
 }
 
 export interface MediaIngestReceipt {
@@ -76,6 +83,10 @@ export interface MediaIngestReceipt {
     senderTimestamp?: string;
     contentHint?: string;
     hints?: string[];
+    transcript?: {
+      source: string;
+      version: string;
+    };
   };
   rawArtifact: {
     handle: string | null;
@@ -95,6 +106,9 @@ export interface MediaIngestReceipt {
     commitSha: string | null;
     githubUrls: string[];
   };
+  transcription?: "provided" | "performed";
+  /** Number of Zenod STT provider invocations for this ingest. */
+  sttCalls?: number;
   nextAdapterIssues?: string[];
 }
 
@@ -149,8 +163,7 @@ export class TaskJobStore {
   private readonly db: DatabaseSync;
 
   constructor(path: string, now: () => number = Date.now) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.db = new DatabaseSync(path);
+    this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS task_jobs (
         id TEXT PRIMARY KEY,

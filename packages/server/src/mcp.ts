@@ -123,7 +123,12 @@ function enqueuedResponse(job: TaskJob) {
         text: `Queued job ${job.id} (status: ${job.status}). This runs in the background — poll get_task_result with this jobId until status is 'done'.`,
       },
     ],
-    structuredContent: { jobId: job.id, kind: job.kind, status: job.status },
+    structuredContent: {
+      jobId: job.id,
+      kind: job.kind,
+      status: job.status,
+      evidence: [{ kind: "job_queued", id: job.id }],
+    },
   };
 }
 
@@ -375,6 +380,7 @@ function formatMediaIngestResult(result: MediaIngestReceipt): string {
     `rawArtifact: ${result.rawArtifact.handle ?? "none"}`,
     `archiveUrl: ${result.rawArtifact.archiveUrl ?? "none"}`,
     `extraction: ${result.extraction.handle ?? "none"}`,
+    ...(result.transcription ? [`transcription: ${result.transcription}`] : []),
     `evidence: ${result.digest.evidenceRef ?? "none"}`,
     `pages: ${result.digest.pagesTouched.join(", ") || "none"}`,
     `commit: ${result.digest.commitSha ?? "none"}`,
@@ -421,8 +427,14 @@ export function buildMcpServer(
   // run several memories and tell them apart in their client. Empty → default.
   serverName: string = "",
   mediaIngest?: MediaIngestJobs,
+  existingServer?: McpServer,
 ): McpServer {
-  const server = new McpServer({ name: serverName.trim() || "zenod-mcp-server", version: VERSION });
+  const server =
+    existingServer ??
+    new McpServer({
+      name: serverName.trim() || "zenod-mcp-server",
+      version: VERSION,
+    });
 
   // This agent's chat-brain tool: a full engine.chat turn (the agent reasons with
   // its own tools and replies). Named per-agent — chat_with_zenod, chat_with_archus
@@ -850,7 +862,7 @@ export function buildMcpServer(
       inputSchema: INGEST_MEMORY_SHAPE,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    async ({ mediaType, artifactUrl, bytesRef, filename, sourceHint, contentHint, senderTimestamp, hints }) => {
+    async ({ mediaType, artifactUrl, bytesRef, filename, sourceHint, contentHint, senderTimestamp, hints, transcript }) => {
       if (!artifactUrl && !bytesRef) {
         return {
           content: [{ type: "text", text: "Invalid media ingest input: provide artifactUrl or bytesRef." }],
@@ -870,6 +882,7 @@ export function buildMcpServer(
         ...(contentHint ? { contentHint } : {}),
         ...(senderTimestamp ? { senderTimestamp } : {}),
         ...(hints ? { mediaHints: hints } : {}),
+        ...(transcript ? { transcript } : {}),
       };
       if (taskJobs) {
         const job = taskJobs.enqueue("media_ingest", input);
@@ -1184,7 +1197,7 @@ export function buildMcpServer(
       {
         title: "List Google Drive files",
         description:
-          "List files waiting in the user's Google Drive inbox folder, newest first — one per line with name, file ID, type, size, and modified date (already-ingested files live in its Archive/ subfolder and are not shown). Optional query filters by name. Use the file IDs with ingest_drive_file.",
+          "List files waiting in the user's Google Drive inbox folder, newest first — one per line with name, file ID, type, size, and modified date (already-ingested files live in its Archive/ subfolder and are not shown). Optional query filters by name. Ingest a returned file with ingest_memory and bytesRef drive://file/<id>.",
         inputSchema: { query: z.string().optional().describe("Filter by file name (substring)") },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       },
@@ -1193,22 +1206,6 @@ export function buildMcpServer(
       }),
     );
 
-    server.registerTool(
-      "ingest_drive_file",
-      {
-        title: "Ingest a Google Drive file",
-        description:
-          "Queue one Google Drive file (by ID) for background memory ingest: it downloads the raw artifact, extracts text/visual facts for images and PDFs, transcribes audio with the configured provider, files the extraction/transcript into the vault as evidence + meaning, commits, and archives the original — in a background worker. Unsupported media and extraction failures become loud job errors. Returns immediately with the job id/status; it does not wait for completion. Queue one file per call.",
-        inputSchema: {
-          fileId: z.string().min(1).describe("The Drive file ID from list_drive_files"),
-          hints: z.array(z.string()).optional().describe("Optional filing hints"),
-        },
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-      },
-      async ({ fileId, hints }) => ({
-        content: [{ type: "text", text: await driveTools.ingestDriveFile(fileId, hints) }],
-      }),
-    );
   }
 
   return server;

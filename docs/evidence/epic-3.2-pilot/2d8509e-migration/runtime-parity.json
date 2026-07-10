@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "commit": "2d8509e973f10698b01f9922e6ddfdf3cbc4bc67",
+  "status": "pass",
+  "tenantId": "epic32-migrated",
+  "credentialSha256": "238c45f19ae1c966bc1315b744722f9970714ae79f050e999501a85552edd064",
+  "checks": {
+    "anonymousRoot": 200,
+    "anonymousAsset": 200,
+    "settingsBeforeRestart": 200,
+    "mcpInitializeBeforeRestart": 200,
+    "settingsAfterRestart": 200,
+    "mcpInitializeAfterRestart": 200,
+    "rawBearerMatches": 0,
+    "repository": "epic32-proof/migrated-tenant"
+  }
+}
