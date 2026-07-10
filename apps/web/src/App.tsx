@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Toaster } from "@/components/ui/sonner"
 import { Login } from "@/views/Login"
+import { HostedAccount } from "@/views/HostedAccount"
+import { HostedLogin } from "@/views/HostedLogin"
 import { Settings } from "@/views/Settings"
 import { SetupWizard } from "@/views/SetupWizard"
 
@@ -22,6 +24,8 @@ type View =
   | { kind: "loading" }
   | { kind: "setup" }
   | { kind: "login" }
+  | { kind: "hosted-login" }
+  | { kind: "hosted-account" }
   | { kind: "settings"; settings: SettingsValues }
   | { kind: "error"; message: string }
 
@@ -73,7 +77,21 @@ export function App() {
 
   const boot = React.useCallback(() => {
     api<AuthStatus>("/api/auth/status")
-      .then((status) => {
+      .then(async (status) => {
+        if (status.customerAuth) {
+          const me = await fetch("/api/me")
+          if (me.status === 401) {
+            setView({ kind: "hosted-login" })
+            return
+          }
+          const account = await fetch("/api/console/account")
+          if (window.location.pathname === "/account" || account.status === 404) {
+            setView({ kind: "hosted-account" })
+            return
+          }
+          loadSettings()
+          return
+        }
         if (status.needsSetup) {
           setView({ kind: "setup" })
         } else {
@@ -118,6 +136,8 @@ export function App() {
       )}
       {view.kind === "setup" && <SetupWizard onComplete={loadSettings} />}
       {view.kind === "login" && <Login onSuccess={loadSettings} />}
+      {view.kind === "hosted-login" && <HostedLogin />}
+      {view.kind === "hosted-account" && <HostedAccount />}
       {view.kind === "settings" && (
         <Settings
           initialSettings={view.settings}

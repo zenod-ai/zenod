@@ -1,0 +1,212 @@
+import * as React from "react"
+import { CopyIcon, ExternalLinkIcon, LogOutIcon } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+
+// Transplanted from zenod-ai/cloud services/console/src/App.tsx and api.ts @ 6bdb318.
+
+type Me = { login: string; avatar_url: string }
+
+type Account = {
+  account_id: string
+  tier: string | null
+  subscription_status: "checkout_pending" | "active" | "canceled" | null
+  mcp_url: string | null
+  token: string | null
+  token_hint: string | null
+  vault_repo: string | null
+  vault_repo_url: string | null
+  balance: {
+    limitUsd: number | null
+    usageUsd: number
+    remainingUsd: number | null
+    state: "ok" | "warn" | "blocked"
+  } | null
+  ledger: { calls: number; tokens: number; costUsd: number }
+}
+
+async function optionalJson<T>(path: string): Promise<T | null> {
+  const response = await fetch(path)
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(`${response.status}`)
+  return response.json() as Promise<T>
+}
+
+function usd(value: number | null): string {
+  return value === null ? "Not set" : `$${value.toFixed(2)}`
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = React.useState(false)
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      title="Copy"
+      aria-label="Copy"
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => {
+          setCopied(true)
+          window.setTimeout(() => setCopied(false), 1200)
+        })
+      }}
+    >
+      <CopyIcon />
+      <span className="sr-only">{copied ? "Copied" : "Copy"}</span>
+    </Button>
+  )
+}
+
+export function HostedAccount() {
+  const [me, setMe] = React.useState<Me | null>(null)
+  const [account, setAccount] = React.useState<Account | null>(null)
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    Promise.all([optionalJson<Me>("/api/me"), optionalJson<Account>("/api/console/account")])
+      .then(([nextMe, nextAccount]) => {
+        setMe(nextMe)
+        setAccount(nextAccount)
+      })
+      .catch(() => {
+        setMe(null)
+        setAccount(null)
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  React.useEffect(() => {
+    if (!loading && !me) window.location.assign("/auth/signin")
+  }, [loading, me])
+
+  if (loading) {
+    return <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">Loading...</div>
+  }
+
+  if (!me) {
+    return <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">Redirecting...</div>
+  }
+
+  const endpoint = account?.mcp_url ?? ""
+  const token = account?.token ?? "<your token>"
+  const codex = endpoint ? `codex mcp add zenod --url ${endpoint} --bearer ${token}` : ""
+  const claude = endpoint
+    ? `claude mcp add --transport http zenod ${endpoint} --header "Authorization: Bearer ${token}"`
+    : ""
+
+  return (
+    <main className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-5 p-6">
+      <header className="flex items-center justify-between gap-4 border-b border-border pb-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <img src="/plates/zenod-plate-charcoal.jpg" alt="" className="size-10 border border-border object-cover" />
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold">Zenod account</h1>
+            <p className="truncate text-sm text-muted-foreground">@{me.login}</p>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            void fetch("/auth/signout", { method: "POST" }).then(() => window.location.assign("/"))
+          }}
+        >
+          <LogOutIcon data-icon="inline-start" />
+          Log out
+        </Button>
+      </header>
+
+      {!account ? (
+        <section className="border border-border p-8 text-center">
+          <h2 className="text-lg font-semibold">Choose your Zenod plan</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            Checkout stays bound to this GitHub account. Your dashboard opens after the subscription is active.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Button asChild className="rounded-none">
+              <a href="/buy?tier=monthly">Subscribe monthly</a>
+            </Button>
+            <Button asChild variant="outline" className="rounded-none">
+              <a href="/buy?tier=yearly">Subscribe yearly</a>
+            </Button>
+          </div>
+        </section>
+      ) : (
+        <>
+          <div className="grid gap-5 md:grid-cols-2">
+            <Card className="rounded-none">
+              <CardHeader>
+                <CardTitle>Subscription</CardTitle>
+                <CardDescription>{account.tier ?? "Plan pending"}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm font-medium capitalize">{account.subscription_status?.replace("_", " ") ?? "Pending"}</p>
+              </CardContent>
+            </Card>
+            <Card className="rounded-none">
+              <CardHeader>
+                <CardTitle>Credit and usage</CardTitle>
+                <CardDescription>
+                  {account.balance ? `${usd(account.balance.remainingUsd)} remaining` : "Gateway balance unavailable"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                {account.ledger.calls.toLocaleString()} calls, {account.ledger.tokens.toLocaleString()} tokens, {usd(account.ledger.costUsd)}
+              </CardContent>
+            </Card>
+          </div>
+
+          {endpoint && (
+            <Card className="rounded-none">
+              <CardHeader>
+                <CardTitle>Your MCP endpoint</CardTitle>
+                <CardDescription>Owner-only account session</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 overflow-x-auto border border-border bg-muted p-3 text-xs">{endpoint}</code>
+                  <CopyButton value={endpoint} />
+                </div>
+                {[{ label: "Claude", value: claude }, { label: "Codex", value: codex }].map((snippet) => (
+                  <div key={snippet.label}>
+                    <div className="mb-1 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                      <span>{snippet.label}</span>
+                      <CopyButton value={snippet.value} />
+                    </div>
+                    <code className="block overflow-x-auto border border-border bg-muted p-3 text-xs">{snippet.value}</code>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="rounded-none">
+            <CardHeader>
+              <CardTitle>Your memory repo</CardTitle>
+              <CardDescription>Repository access uses the existing Zenod GitHub App flow.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {account.vault_repo ? (
+                <a className="inline-flex items-center gap-2 text-sm underline" href={account.vault_repo_url ?? undefined}>
+                  {account.vault_repo}
+                  <ExternalLinkIcon className="size-3.5" />
+                </a>
+              ) : (
+                <Button asChild variant="outline" className="rounded-none">
+                  <a href="/app">Connect a repository</a>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </main>
+  )
+}
