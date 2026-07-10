@@ -1,0 +1,62 @@
+{
+  "schema_version": "epic37-dx3-candidates.v1",
+  "environment": "alpha9-production",
+  "observed_at": "2026-07-10T02:56:06Z",
+  "expected_candidate_count": 1,
+  "source_refs": [
+    "docs/EPIC-3.7-DX1-INVENTORY.md#dokploy-project-zenod-inventory",
+    "https://github.com/zenod-ai/zenod/issues/714",
+    "https://github.com/zenod-ai/zenod/issues/722#issuecomment-4931281736"
+  ],
+  "candidates": [
+    {
+      "tenant_id": "jordi-f2c7a6",
+      "unit": "zenod",
+      "classification": "live-paying",
+      "dokploy": {
+        "kind": "compose",
+        "name": "zenod-jordi-f2c7a6",
+        "compose_id": "xDxfVYs0_4M09naWuCl66",
+        "app_name": "compose-quantify-multi-byte-firewall-r3b7ka",
+        "status": "done"
+      },
+      "runtime": {
+        "container_names": [
+          "zenod-jordi-f2c7a6"
+        ],
+        "container_state": "running",
+        "image_ref": "ghcr.io/zenod-ai/zenod:sha-3ddd2af",
+        "image_digest": "sha256:6ed0c598757af859357d019a228c3cdb7075d8944f91099601b97116380c4ca7",
+        "runtime_commit_sha": "3ddd2afcf952842c2b93e2fad14c52f131329439"
+      },
+      "storage": {
+        "volume_names": [
+          "compose-quantify-multi-byte-firewall-r3b7ka_zenod-standalone-data"
+        ],
+        "mount_destination": "/data",
+        "volume_policy": "snapshot-verify-then-remove"
+      },
+      "routes": {
+        "legacy_hostname": "z-jordi-f2c7a6.zenod.dev",
+        "legacy_health_url": "https://z-jordi-f2c7a6.zenod.dev/api/health",
+        "domain_ids": [
+          "qJCkerpwpOQPqhYP_lN45"
+        ],
+        "target_hostname": "zenod.zenod.dev",
+        "target_mcp_route": "/mcp/<token>"
+      },
+      "watchdog_tokens": [
+        "zenod-jordi-f2c7a6",
+        "https://z-jordi-f2c7a6.zenod.dev/api/health"
+      ],
+      "current_evidence": {
+        "source_health": "pass",
+        "source_health_status": "ok",
+        "dokploy_read_ref": "compose.one:xDxfVYs0_4M09naWuCl66",
+        "domain_read_ref": "domain.byComposeId:xDxfVYs0_4M09naWuCl66",
+        "docker_read_ref": "compose-project:compose-quantify-multi-byte-firewall-r3b7ka",
+        "watchdog_read_ref": "/etc/zenod-watchdog.env exact-token presence (read-only)"
+      }
+    }
+  ]
+}

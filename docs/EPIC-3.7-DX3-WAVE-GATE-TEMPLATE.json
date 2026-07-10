@@ -1,0 +1,129 @@
+{
+  "schema_version": "epic37-dx3-wave-gate.v1",
+  "environment": "alpha9-production",
+  "candidate_manifest_sha256": "<sha256-from-EPIC-3.7-DX3-ZENOD-CANDIDATES.sha256>",
+  "archive_target": "/srv/zenod-archives/epic37/dx3/<window-id>",
+  "receipts": {
+    "current_state": {
+      "status": "pass",
+      "observed_at": "<ISO-8601 UTC>",
+      "valid_until": "<ISO-8601 UTC>",
+      "candidate_manifest_sha256": "<same-candidate-manifest-sha256>",
+      "candidate_ids": [
+        "jordi-f2c7a6"
+      ],
+      "compose_ids": [
+        "xDxfVYs0_4M09naWuCl66"
+      ],
+      "domain_ids": [
+        "qJCkerpwpOQPqhYP_lN45"
+      ],
+      "container_names": [
+        "zenod-jordi-f2c7a6"
+      ],
+      "volume_names": [
+        "compose-quantify-multi-byte-firewall-r3b7ka_zenod-standalone-data"
+      ],
+      "watchdog_tokens": [
+        "zenod-jordi-f2c7a6",
+        "https://z-jordi-f2c7a6.zenod.dev/api/health"
+      ],
+      "evidence_ref": "<immutable-or-access-controlled-read-only-preflight-ref>"
+    },
+    "z_mt_6_gate_2": {
+      "status": "accepted",
+      "issue_url": "https://github.com/zenod-ai/zenod/issues/738",
+      "approval_ref": "https://github.com/zenod-ai/zenod/issues/738#issuecomment-<id>",
+      "approved_by": "Jordi",
+      "approved_at": "<ISO-8601 UTC>",
+      "valid_until": "<ISO-8601 UTC, at least the DX-3 window end>",
+      "candidate_manifest_sha256": "<same-candidate-manifest-sha256>",
+      "tenant_receipts": [
+        {
+          "tenant_id": "jordi-f2c7a6",
+          "verification_receipt_id": "<V-jordi-f2c7a6-receipt-id>"
+        }
+      ],
+      "retire": {
+        "compose_ids": [
+          "xDxfVYs0_4M09naWuCl66"
+        ],
+        "domain_ids": [
+          "qJCkerpwpOQPqhYP_lN45"
+        ],
+        "volume_names": [
+          "compose-quantify-multi-byte-firewall-r3b7ka_zenod-standalone-data"
+        ],
+        "volume_policy": "snapshot-verify-then-remove",
+        "watchdog_tokens": [
+          "zenod-jordi-f2c7a6",
+          "https://z-jordi-f2c7a6.zenod.dev/api/health"
+        ],
+        "legacy_hostnames": [
+          "z-jordi-f2c7a6.zenod.dev"
+        ]
+      }
+    },
+    "tenant_acceptance": [
+      {
+        "tenant_id": "jordi-f2c7a6",
+        "status": "accepted",
+        "verification_receipt_id": "<V-jordi-f2c7a6-receipt-id>",
+        "observed_at": "<ISO-8601 UTC>",
+        "valid_until": "<ISO-8601 UTC, at least the DX-3 window end>",
+        "source_compose_id": "xDxfVYs0_4M09naWuCl66",
+        "shared_host_token_continuity": {
+          "status": "pass",
+          "hostname": "zenod.zenod.dev",
+          "route": "/mcp/<token>",
+          "token_sha256": "<64-lowercase-hex-without-the-raw-token>",
+          "proof_ref": "<Z-MT-6-V-receipt-continuity-ref>"
+        },
+        "migration_data_proof": {
+          "status": "pass",
+          "migration_receipt_ref": "<Z-MT-4-or-Z-MT-6-migration-receipt-ref>",
+          "verification_receipt_ref": "<Z-MT-6-V-receipt-ref>",
+          "normalized_data_sha256": "<64-lowercase-hex>",
+          "source_baseline_commit_sha": "<40-lowercase-hex>",
+          "target_baseline_commit_sha": "<same-40-lowercase-hex>",
+          "surfaces": {
+            "mcp": "pass",
+            "console": "pass",
+            "repo": "pass",
+            "ingest": "pass",
+            "usage": "pass",
+            "receipt": "pass",
+            "storage": "pass"
+          }
+        },
+        "rollback_checkpoint": {
+          "status": "ready",
+          "checkpoint_id": "<R2-checkpoint-id>",
+          "snapshot_ref": "<immutable-snapshot-ref>",
+          "checksum_sha256": "<64-lowercase-hex>",
+          "restore_proof_ref": "<Z-MT-6-full-prefix-restore-proof-ref>",
+          "verified_at": "<ISO-8601 UTC>",
+          "valid_until": "<ISO-8601 UTC, at least the DX-3 window end>",
+          "retained_until": "<ISO-8601 UTC after the DX-3 window end>"
+        }
+      }
+    ],
+    "jordi_wave_approval": {
+      "status": "approved",
+      "issue_url": "https://github.com/zenod-ai/zenod/issues/728",
+      "approval_ref": "https://github.com/zenod-ai/zenod/issues/728#issuecomment-<id>",
+      "approved_by": "Jordi",
+      "approved_at": "<ISO-8601 UTC>",
+      "window_start": "<ISO-8601 UTC>",
+      "window_end": "<ISO-8601 UTC>",
+      "candidate_manifest_sha256": "<same-candidate-manifest-sha256>",
+      "candidate_ids": [
+        "jordi-f2c7a6"
+      ],
+      "archive_target": "/srv/zenod-archives/epic37/dx3/<window-id>",
+      "rollback_checkpoint_ids": [
+        "<R2-checkpoint-id>"
+      ]
+    }
+  }
+}
