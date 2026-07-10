@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Runtime } from "../src/runtime.js";
+import { createZenodUnit } from "../src/zenodUnit.js";
 
 type StoreWithDatabase = { db: DatabaseSync };
 
@@ -61,19 +62,18 @@ describe("Epic 3.2 SQLite concurrency contract", () => {
     );
   });
 
-  it("reports WAL and busy_timeout=30000 on the chassis registry after integration", async (context) => {
-    const moduleUrl = new URL("../src/tenantRuntime.ts", import.meta.url).href;
-    const tenantModule = await import(/* @vite-ignore */ moduleUrl).catch(() => null);
-    if (!tenantModule?.TenantRuntimeManager) {
-      context.skip("TenantRuntimeManager is not present at this tester branch's recorded base");
-      return;
-    }
-
-    const manager = new tenantModule.TenantRuntimeManager(join(dir, "multitenant"), runtime.agent);
+  it("reports WAL and busy_timeout=30000 on the chassis tenant registry", () => {
+    const unit = createZenodUnit({
+      dataDir: join(dir, "multitenant"),
+      env: { ZENOD_API_TOKEN: "zenod_epic32_chassis_pragma_test_only" },
+    });
     try {
-      expect(pragmas(manager)).toEqual({ journalMode: "wal", busyTimeout: 30_000 });
+      expect(pragmas(unit.tenantStore)).toEqual({
+        journalMode: "wal",
+        busyTimeout: 30_000,
+      });
     } finally {
-      manager.close();
+      unit.close();
     }
   });
 });
