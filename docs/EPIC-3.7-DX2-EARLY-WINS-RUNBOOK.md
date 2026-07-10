@@ -1,6 +1,6 @@
 # Epic 3.7 DX-2 Early-Wins Retirement Runbook
 
-Status: prepared, blocked before execution
+Status: prepared for reviewed dry-run, blocked before execution
 Date: 2026-07-10
 Bound spine: `docs/EPIC-3.7-DECOMMISSION-2X.md`
 Bound issue: https://github.com/zenod-ai/zenod/issues/722
@@ -12,7 +12,7 @@ Base commit: `8e12ebab64140f227f9c19d5a72e5d191de8d251`
 
 Do not execute destructive commands from this runbook yet.
 
-Jordi must choose the snapshot archive target and approve the candidate list before execution. DX-1 must first classify each row as `test`, `dead`, or `duplicate`; any `live-paying`, `unknown`, or ambiguous row is out of scope for DX-2.
+Jordi must choose the snapshot archive target and approve the exact candidate CSV before execution. The CSV now binds all 13 test rows and 4 failed duplicate records from the 2026-07-10 read-only inventory to their live Dokploy IDs, domain IDs, containers, volumes, watchdog tokens, and post-removal endpoint expectation. Any `live-paying`, `unknown`, or ambiguous active row remains out of scope.
 
 Permitted before approval: read-only inventory, candidate CSV editing, dry-run command review, syntax checks, archive target comparison.
 
@@ -27,7 +27,7 @@ Not permitted before approval: `compose.stop`, `application.stop`, `domain.delet
 - Dokploy API auth: `x-api-key` via `eval "$(dokploy-env)"`
 - Watchdog env on VPS: `/etc/zenod-watchdog.env`
 
-DX-1 evidence available at preparation time is incomplete. The issue says read-only bootstrap saw:
+DX-1 read-only evidence used to build the exact candidate manifest:
 
 - Dokploy `project.all`: 6 projects, sanitized output expected at `/tmp/zenod-dokploy-inventory-sanitized.json`.
 - Docker `ps -a`: 100 containers, sanitized output expected at `/tmp/zenod-docker-inventory-sanitized.json`.
@@ -35,7 +35,7 @@ DX-1 evidence available at preparation time is incomplete. The issue says read-o
 - Watchdog active/enabled and still naming `zenod-jordi-f2c7a6`, `callisthenes-callisthenestest-vn6wnb`, and `ring-ringtest20260709-8uiw3s`.
 - Public probes returned HTTP 200 for known per-tenant Zenod, Callisthenes, and Ring endpoint families, so no item is currently proven dead by health alone.
 
-Initial candidate families are placeholders only: `tenant-testco`, `zenod-jorditest-*`, `zenod-jordizenodtest*`, `callisthenes-*test*`, `ring-*test*`, plus duplicate/error Dokploy rows for `ring-jordiring-fkegkz` and `zenod-jordizenodtest33-gmcxem` if DX-1 confirms them. Replace placeholders with exact DX-1 rows before execution.
+The candidate CSV contains no placeholder row. Its current review digest is `e0e81e0f2546d86034fc79bafb4e7c13abf383830cf9926241f8c7dc67e41c3f`. Its SHA-256 digest is the approval boundary: destructive mode refuses a CSV whose current digest differs from `APPROVED_CSV_SHA256`.
 
 ## Archive Target Options
 
@@ -43,7 +43,7 @@ Jordi must pick one:
 
 | Option | Target | Use When | Notes |
 |---|---|---|---|
-| A | VPS local: `/srv/zenod-archives/epic37/dx2/YYYYMMDD/` | Fastest restore, no external dependency. | Must be included in VPS backup policy; watch disk pressure before large batches. |
+| A | VPS local: `/srv/zenod-archives/epic37/dx2/YYYYMMDD/` | Recommended for the first wave because restore is local and no credential setup is needed. | The 45 candidate volumes total 15,168,771 bytes (~0.014 GiB); root had 55 GB free and Docker data had 35 GB free on 2026-07-10. Re-check immediately before approval and mirror off-host after the wave. |
 | B | Object storage: S3/R2 bucket path `zenod-archives/epic37/dx2/YYYYMMDD/` | Better durability and off-host retention. | Requires configured credentials and upload/checksum evidence. |
 | C | Admin laptop pull: `rsync` from VPS to local encrypted archive | Useful for small early-win set. | Operator must record local path and checksums; slower restore to VPS. |
 
@@ -63,7 +63,7 @@ Retention: keep all snapshots. Deletion is explicitly out of scope for Epic 3.7.
 CSV columns:
 
 ```text
-slug,classification,kind,dokploy_id,domain_ids,container_names,volume_names,bind_paths,watchdog_tokens,notes
+slug,classification,kind,dokploy_id,domain_ids,container_names,volume_names,bind_paths,watchdog_tokens,endpoint_expectation,notes
 ```
 
 Rules:
@@ -73,7 +73,10 @@ Rules:
 - Use semicolons inside multi-value cells, not commas.
 - `domain_ids` are Dokploy domain IDs, not hostnames. Capture them via `domain.byComposeId` or `domain.byApplicationId`.
 - `watchdog_tokens` must include every matching container name and health URL token that should be removed from `/etc/zenod-watchdog.env`.
+- `endpoint_expectation` is `unrouted` for retired hosts or `still-routed` where a retained active row intentionally shares the hostname.
 - Record-only rows still need manifest evidence and domain cleanup if any domain record exists.
+- CSV cells must not contain commas. The script rejects any row that does not have exactly 11 fields.
+- Before any stop, the script reads each live Dokploy record and Docker label set and refuses drift in slug, Dokploy ID, domain IDs, container names, mounted volume names, orphan-volume ownership, or watchdog tokens.
 
 ## Preflight Checks
 
@@ -131,29 +134,30 @@ docker volume inspect <volume-name> > "$DX2_EVIDENCE/<slug>.<volume-name>.volume
 
 ## Dry-Run Review
 
-This must be run before destructive execution and pasted back into issue `#722`.
+This must run on the Alpha9 VPS before destructive execution and be pasted back into issue `#722`. It performs live read-only reconciliation and prints every mutation without executing it.
 
 ```bash
-cd /Users/jordi/Documents/GitHub/zenod
+cd <reviewed-zenod-checkout-on-alpha9>
+eval "$(dokploy-env)"
 ARCHIVE_DIR="/srv/zenod-archives/epic37/dx2/$(date -u +%Y%m%d)" \
 CANDIDATES_CSV="docs/EPIC-3.7-DX2-EARLY-WINS-CANDIDATES.csv" \
 DRY_RUN=1 \
 bash scripts/epic37-dx2-early-wins-retire.sh
 ```
 
-The script should refuse placeholder classifications. That refusal is expected until DX-1 and Jordi have approved real rows.
+The dry-run is acceptable only if all 17 rows reconcile against live state and the output contains no unapproved identifier. A drift refusal is a safety pass and requires regenerating the manifest before seeking approval again.
 
 ## Execution Sequence
 
 Execute only after the blocker is cleared.
 
-1. Confirm candidate CSV contains no placeholder, `unknown`, or `live-paying` rows.
+1. Confirm candidate CSV contains no placeholder, `unknown`, or `live-paying` rows; compute and record its SHA-256 digest.
 2. Capture preflight evidence.
 3. Remove watchdog entries first so intentional stops do not page.
 4. Stop the Dokploy compose/application.
 5. Snapshot stopped volumes and bind mounts.
 6. Write SHA-256 checksums.
-7. Run one restore drill against a snapshot archive before deleting anything else in the batch.
+7. Run one restore drill against a checksummed snapshot archive before deleting any domain, Dokploy record, container, or volume in the batch.
 8. Delete Dokploy domain records.
 9. Delete Dokploy compose/application record with Docker volumes preserved by Dokploy where possible.
 10. Remove leftover containers.
@@ -166,100 +170,27 @@ Guarded execution command:
 ```bash
 set -euo pipefail
 eval "$(dokploy-env)"
-cd /Users/jordi/Documents/GitHub/zenod
+cd <reviewed-zenod-checkout-on-alpha9>
 
 export ARCHIVE_DIR="/srv/zenod-archives/epic37/dx2/$(date -u +%Y%m%d)"
 export CANDIDATES_CSV="docs/EPIC-3.7-DX2-EARLY-WINS-CANDIDATES.csv"
 export DRY_RUN=0
 export RESTORE_DRILL=1
 export JORDI_APPROVED_DX2=1
+export APPROVED_CSV_SHA256="<digest-recorded-in-Jordi-approval>"
+export APPROVAL_REF="<GitHub-comment-or-written-approval-reference>"
 
 bash scripts/epic37-dx2-early-wins-retire.sh 2>&1 | tee "/tmp/epic37-dx2-execution-$(date -u +%Y%m%dT%H%M%SZ).log"
 ```
 
-## Manual Command Batch
+## Execution Safety Properties
 
-Use this when not using the guarded script. Replace every placeholder before running.
-
-```bash
-set -euo pipefail
-eval "$(dokploy-env)"
-SLUG="<slug>"
-KIND="<compose|application|record-only>"
-DOKPLOY_ID="<composeId-or-applicationId>"
-DOMAIN_IDS="<domainId1 domainId2>"
-CONTAINERS="<container1 container2>"
-VOLUMES="<volume1 volume2>"
-WATCHDOG_TOKENS="<container-or-url-token1> <container-or-url-token2>"
-ARCHIVE_DIR="/srv/zenod-archives/epic37/dx2/$(date -u +%Y%m%d)"
-EVIDENCE_DIR="/tmp/epic37-dx2-$SLUG-$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir -p "$ARCHIVE_DIR" "$EVIDENCE_DIR"
-
-# 1. Evidence and manifests.
-docker ps -a --format '{{json .}}' > "$EVIDENCE_DIR/docker-ps-a.before.jsonl"
-docker volume ls > "$EVIDENCE_DIR/docker-volume-ls.before.txt"
-sudo cp /etc/zenod-watchdog.env "$EVIDENCE_DIR/zenod-watchdog.env.before"
-
-if [ "$KIND" = "compose" ]; then
-  curl -fsS -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_API_BASE/compose.one?composeId=$DOKPLOY_ID" > "$EVIDENCE_DIR/$SLUG.compose.one.json"
-  curl -fsS -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_API_BASE/compose.getConvertedCompose?composeId=$DOKPLOY_ID" > "$EVIDENCE_DIR/$SLUG.compose.converted.yml"
-  curl -fsS -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_API_BASE/domain.byComposeId?composeId=$DOKPLOY_ID" > "$EVIDENCE_DIR/$SLUG.domains.json"
-elif [ "$KIND" = "application" ]; then
-  curl -fsS -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_API_BASE/application.one?applicationId=$DOKPLOY_ID" > "$EVIDENCE_DIR/$SLUG.application.one.json"
-  curl -fsS -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_API_BASE/domain.byApplicationId?applicationId=$DOKPLOY_ID" > "$EVIDENCE_DIR/$SLUG.domains.json"
-fi
-
-for c in $CONTAINERS; do docker inspect "$c" > "$EVIDENCE_DIR/$SLUG.$c.inspect.json"; done
-for v in $VOLUMES; do docker volume inspect "$v" > "$EVIDENCE_DIR/$SLUG.$v.volume.json"; done
-
-# 2. Watchdog deregistration.
-sudo cp /etc/zenod-watchdog.env "/etc/zenod-watchdog.env.dx2.$SLUG.$(date -u +%Y%m%dT%H%M%SZ).bak"
-for token in $WATCHDOG_TOKENS; do
-  sudo perl -0pi -e "s/(^ZENOD_WATCHDOG_CONTAINERS=.*)\\b\\Q${token}\\E\\b\\s*/\$1/m; s/(^ZENOD_WATCHDOG_HEALTH_URLS=.*)\\b\\Q${token}\\E\\b\\s*/\$1/m" /etc/zenod-watchdog.env
-done
-sudo systemctl start zenod-watchdog.service
-
-# 3. Reversible stop.
-if [ "$KIND" = "compose" ]; then
-  curl -fsS -X POST -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d "{\"composeId\":\"$DOKPLOY_ID\"}" "$DOKPLOY_API_BASE/compose.stop"
-elif [ "$KIND" = "application" ]; then
-  curl -fsS -X POST -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d "{\"applicationId\":\"$DOKPLOY_ID\"}" "$DOKPLOY_API_BASE/application.stop"
-fi
-
-# 4. Snapshot and checksum.
-for v in $VOLUMES; do
-  out="$ARCHIVE_DIR/${SLUG}__volume-${v}__$(date -u +%Y%m%dT%H%M%SZ).tgz"
-  docker run --rm -v "$v:/data:ro" -v "$ARCHIVE_DIR:/archive" alpine:3.20 sh -c "cd /data && tar --numeric-owner -czf /archive/$(basename "$out") ."
-  sha256sum "$out" | tee -a "$ARCHIVE_DIR/SHA256SUMS"
-done
-
-# 5. Restore drill for one archive before deletion.
-first_archive="$(find "$ARCHIVE_DIR" -maxdepth 1 -type f -name "${SLUG}__*.tgz" | sort | head -n 1)"
-restore_volume="dx2-restore-${SLUG}-$(date -u +%Y%m%d%H%M%S)"
-docker volume create "$restore_volume"
-docker run --rm -v "$restore_volume:/restore" -v "$(dirname "$first_archive"):/archive:ro" alpine:3.20 sh -c "cd /restore && tar -xzf /archive/$(basename "$first_archive") && find /restore -maxdepth 2 -type f | head -50"
-docker volume rm "$restore_volume"
-
-# 6. Domain, Dokploy record, leftover container, and volume removal.
-for domain_id in $DOMAIN_IDS; do
-  curl -fsS -X POST -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d "{\"domainId\":\"$domain_id\"}" "$DOKPLOY_API_BASE/domain.delete"
-done
-
-if [ "$KIND" = "compose" ] || [ "$KIND" = "record-only" ]; then
-  curl -fsS -X POST -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d "{\"composeId\":\"$DOKPLOY_ID\",\"deleteVolumes\":false}" "$DOKPLOY_API_BASE/compose.delete"
-elif [ "$KIND" = "application" ]; then
-  curl -fsS -X POST -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d "{\"applicationId\":\"$DOKPLOY_ID\"}" "$DOKPLOY_API_BASE/application.delete"
-fi
-
-for c in $CONTAINERS; do docker rm --force "$c" || true; done
-for v in $VOLUMES; do docker volume rm "$v"; done
-
-# 7. Post-sweep.
-docker ps -a --format '{{json .}}' > "$EVIDENCE_DIR/docker-ps-a.after.jsonl"
-docker volume ls > "$EVIDENCE_DIR/docker-volume-ls.after.txt"
-sudo cp /etc/zenod-watchdog.env "$EVIDENCE_DIR/zenod-watchdog.env.after"
-sudo systemctl status zenod-watchdog.timer --no-pager > "$EVIDENCE_DIR/watchdog-timer.after.txt"
-```
+- Phase 0 is entirely read-only and reconciles the approved manifest against live Dokploy, Docker, volume, domain, and watchdog state before any stop.
+- Phase 1 stops approved records and creates archives plus a durable `SHA256SUMS`; no deletion occurs.
+- Phase 2 verifies the checksum, lists the tar, restores it into a temporary Docker volume, and removes only that temporary volume.
+- Phase 3 runs only after Phase 2 passes. Before every Docker volume removal it re-verifies a matching archive checksum.
+- The script records pre/post Docker inventory and stats, Dokploy inventory, watchdog state, per-candidate manifests, and endpoint results.
+- The `*.zenod.dev` records are wildcard DNS: candidate hosts and a random nonexistent probe resolved to the same Cloudflare addresses on 2026-07-10. DX-2 removes Dokploy/Traefik domain rows; there is no per-tenant DNS provider record to delete. Post-removal endpoint behavior is still required evidence.
 
 ## Rollback
 
@@ -342,7 +273,11 @@ Next action for spine steward:
 ## Self-Test Performed
 
 - `bash -n scripts/epic37-dx2-early-wins-retire.sh`
-- Dry-run guard expected behavior: placeholder candidate classifications must be rejected until DX-1 and Jordi approval replace the CSV rows.
+- `git diff --check`
+- Local fail-closed tests cover malformed CSV, missing approval digest, wrong digest, and missing restore gate. The live dry-run covers empty list fields and cross-wired identifiers.
+- `bash scripts/epic37-dx2-early-wins-retire.test.sh` passed locally.
+- Alpha9 live read-only dry-run passed all 17 rows on 2026-07-10: 362 log lines, 253 printed mutations, zero executed, and all four phases reached.
+- A deliberate cross-wire from the first test row to live-paying Dokploy ID `xDxfVYs0_4M09naWuCl66` failed with `Dokploy name drift` and did not enter Phase 1.
 
 ## API Notes
 
