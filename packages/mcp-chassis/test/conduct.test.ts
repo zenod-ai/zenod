@@ -5,6 +5,7 @@ import {
   assertConductResult,
   assertLongToolContract,
   completionEvent,
+  conductErrorResult,
   createToolClassifier,
   evidence,
   propagateDispatchContext,
@@ -42,6 +43,25 @@ describe("conduct receipt discipline", () => {
   it("wraps tool handlers as reusable middleware", async () => {
     const guarded = withConduct("write_state", async () => ({ status: "ok" }), { classifier });
     await expect(guarded(undefined)).rejects.toMatchObject({ code: "silent_ack" });
+  });
+
+  it("preserves chassis contract messages but redacts unexpected errors", () => {
+    const contract = conductErrorResult(
+      new ConductContractError("known_contract", "Specific chassis detail."),
+    );
+    const unexpected = conductErrorResult(
+      new Error("provider_api_key=sentinel-secret-do-not-leak"),
+    );
+
+    expect(contract.structuredContent.error).toEqual({
+      code: "known_contract",
+      message: "Specific chassis detail.",
+    });
+    expect(unexpected.structuredContent.error).toEqual({
+      code: "tool_error",
+      message: "Tool execution failed unexpectedly.",
+    });
+    expect(JSON.stringify(unexpected)).not.toContain("sentinel-secret");
   });
 });
 

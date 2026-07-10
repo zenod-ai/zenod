@@ -398,6 +398,7 @@ describe("createUnit", () => {
   });
 
   it("normalizes handler failures to loud structured MCP errors", async () => {
+    const sentinelSecret = "provider_api_key=sentinel-secret-do-not-leak";
     const unit = createUnit({
       name: "conduct-errors",
       tools(server) {
@@ -408,7 +409,7 @@ describe("createUnit", () => {
           },
         }));
         server.registerTool("thrown_failure", {}, async () => {
-          throw new Error("connector unavailable");
+          throw new Error(`connector unavailable: ${sentinelSecret}`);
         });
         server.registerTool(
           "read_text_error",
@@ -428,12 +429,20 @@ describe("createUnit", () => {
         error: { code: "invalid_input", message: "name is required" },
       },
     });
-    await expect(callToolResult(base, "thrown_failure")).resolves.toMatchObject({
+    const thrown = await callToolResult(base, "thrown_failure");
+    expect(thrown).toMatchObject({
       isError: true,
       structuredContent: {
-        error: { code: "tool_error", message: "connector unavailable" },
+        error: {
+          code: "tool_error",
+          message: "Tool execution failed unexpectedly.",
+        },
       },
     });
+    expect(JSON.stringify(thrown.content)).not.toContain(sentinelSecret);
+    expect(JSON.stringify(thrown.structuredContent)).not.toContain(
+      sentinelSecret,
+    );
     await expect(callToolResult(base, "read_text_error")).resolves.toMatchObject({
       isError: true,
       structuredContent: {

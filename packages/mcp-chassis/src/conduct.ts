@@ -548,7 +548,7 @@ export function conductErrorResult(error: unknown): McpLikeToolResult & {
       ? error
       : new ConductContractError(
           "tool_error",
-          error instanceof Error ? error.message : String(error),
+          "Tool execution failed unexpectedly.",
         );
   const structured = structuredError(contractError.code, contractError.message);
   return {
