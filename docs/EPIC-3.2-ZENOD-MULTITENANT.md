@@ -79,10 +79,10 @@ Run every hosted Zenod tenant from ONE container on the chassis. Tenant-prefix a
 ## Current State
 
 Phase: implementation and autonomous validation
-Last verified: 2026-07-10 03:51 CEST
+Last verified: 2026-07-10 04:13 CEST
 Integration target: main
 Fresh base commit: `bac2729d4e3d911476f61c466f242b5858550714`
-Next action: complete the Zenod-owned Z-MT-1 runtime/path adapter in `/Users/jordi/Documents/GitHub/wt-z-mt-1`, consume the #768 chassis extension when it lands, integrate the #733/#735/#737/#736/#738 handoffs, then execute the joint 3.1/3.2 tenant storage/session proof.
+Next action: consume the corrected #768 chassis extension, add D18 receipt rendering in #733, integrate the #735/#737/#736/#738 handoffs, then execute the joint 3.1/3.2 tenant storage/session proof.
 Blockers: #768 must add authenticated custom unit routes plus a durable tenant store before the hosted pilot can pass; live migration and retirement remain at the named Jordi gates.
 
 ## Role Goals
@@ -163,7 +163,7 @@ The epic worker validates WITHOUT human help, via browser automation against a f
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#734](https://github.com/zenod-ai/zenod/issues/734) | Ticket worker | Codex task `019f4933-5245-7651-9018-9ae342f587ac` | Z-MT-1 tenant runtime storage and token routing | in progress; chassis seam blocked | #768 | [draft PR #770](https://github.com/zenod-ai/zenod/pull/770), `codex/z-mt-1-chassis-reconcile`; `/Users/jordi/Documents/GitHub/wt-z-mt-1` | `bac2729` | All DB/paths tenant rooted through chassis handles; token/API/session isolation; WAL/busy timeout; D18 provided transcript bypass produces zero STT calls and receipt says `provided`, absent transcript receipt says `performed`. | `51a6e10`: runtime pool consumes `UnitContext.storage`; SQLite contract passes; server typecheck and 561 tests pass. | 2026-07-10 04:01 CEST | Consume #768 for product APIs and durable provisioning; implement D18 ingest detail. |
+| [#734](https://github.com/zenod-ai/zenod/issues/734) | Ticket worker | Codex task `019f4933-5245-7651-9018-9ae342f587ac` | Z-MT-1 tenant runtime storage and token routing | in progress; chassis seam blocked | #768 | [draft PR #770](https://github.com/zenod-ai/zenod/pull/770), `codex/z-mt-1-chassis-reconcile`; `/Users/jordi/Documents/GitHub/wt-z-mt-1` | `bac2729` | All DB/paths tenant rooted through chassis handles; token/API/session isolation; WAL/busy timeout; D18 provided transcript bypass produces zero STT calls and receipt says `provided`, absent transcript receipt says `performed`. | Runtime pool and SQLite contract pass; D18 one-tool/STT branch passes; server typecheck and 564 tests pass. | 2026-07-10 04:13 CEST | Consume corrected #768 for product APIs and durable provisioning. |
 | [#735](https://github.com/zenod-ai/zenod/issues/735) | Ticket worker | unassigned | Z-MT-2 repo-token custody in vault | queued | #734, #718 | `codex/z-mt-2-vault-custody` reserved | `8e12ebab` | Repo token per tenant, vault-read only by Zenod. | Dependency hold recorded in issue. | 2026-07-10 01:36 CEST | Dispatch after #734 context integrates. |
 | [#733](https://github.com/zenod-ai/zenod/issues/733) | Ticket worker | Raman / `019f493d-8c95-7a33-ad08-607f5d74ba9e` | Z-MT-3 Zenod settings UI panels | in progress | #768, #734 | `codex/z-mt-3-ui-panels` | `8e12ebab` | Tenant sees repo/ingest/usage panels only for itself; ingest UI uses one contract and renders `transcription: provided \| performed`. | D18 acceptance reconciled in #733; web handoff at `c752b28`. | 2026-07-10 03:51 CEST | Rebase to `bac2729`; integrate web handoff after authenticated route seam. |
 | [#737](https://github.com/zenod-ai/zenod/issues/737) | Ticket worker | Lovelace / `019f493d-8b1b-7d92-ac8a-8530f6a56833` | Z-MT-4 migration script + rollback | in progress | #734 storage contract | `codex/z-mt-4-migration` | `8e12ebab` | Dry-run and rollback on copied volume pass checksums/integrity. | Dispatch record in #737. | 2026-07-10 01:36 CEST | Review migration handoff and synthetic-volume evidence. |
@@ -222,6 +222,7 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 | 2026-07-10 | Z-MT-1 compile | working tree from `8e12ebab` | local Node 22 | `npm run typecheck -w zenod` and `npm run typecheck -w @zenod/server` | pass | core and server typecheck exit 0 |
 | 2026-07-10 | Z-MT-1 regression | working tree from `8e12ebab` | local Vitest | `npm test -w @zenod/server` | pass | 59 files, 558 tests |
 | 2026-07-10 | Z-MT-1 real-chassis checkpoint | `51a6e10` from `bac2729` | local Node 22 / Vitest | build `zenod` + `@zenod/mcp-chassis`; server typecheck; `npm test -w @zenod/server` | pass | 61 files, 561 tests; runtime pool tenant roots and WAL/30s focused tests included; draft PR #770 |
+| 2026-07-10 | Parent D18 one-ingest contract | `codex/z-mt-1-chassis-reconcile` | local Node 22 / Vitest | focused media/MCP/Ring/store tests plus `npm test -w @zenod/server` | pass | 61 files, 564 tests; supplied transcript: zero STT calls + `provided`; absent transcript: one STT call + `performed`; no second mutating media-ingest tool |
 
 ## Handoff Journal
 
