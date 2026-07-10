@@ -43,6 +43,12 @@ function fixture() {
   createSqlite(join(source, "journeys.sqlite"), "journeys");
   createSqlite(join(source, "usage.sqlite"), "usage");
   createSqlite(join(source, "notifications.sqlite"), "notifications");
+  const settings = new DatabaseSync(join(source, "zenod.sqlite"));
+  settings.exec("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  settings.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run("api_token", "legacy-token-never-passed-to-tool");
+  settings.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run("session_secret", "legacy-session-secret");
+  settings.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run("vault_repo", "owner/repo");
+  settings.close();
   createSqlite(join(source, "whatsapp", "whatsapp.sqlite"), "whatsapp");
   mkdirSync(join(source, "transcripts", "run-1"), { recursive: true });
   writeFileSync(join(source, "transcripts", "run-1", "events.jsonl"), '{"type":"done"}\n');
@@ -110,15 +116,44 @@ test("apply copies all state, inserts only the token hash, verifies evidence, an
     gitVault: "pass",
     registry: "pass",
   });
-  assert.equal(buildManifest(target).digest, buildManifest(value.source).digest);
+  assert.notEqual(buildManifest(target).digest, buildManifest(value.source).digest);
+  const migratedState = new DatabaseSync(join(target, "zenod.sqlite"), { readOnly: true });
+  assert.equal(migratedState.prepare("SELECT value FROM settings WHERE key = 'api_token'").get(), undefined);
+  assert.equal(migratedState.prepare("SELECT value FROM settings WHERE key = 'session_secret'").get(), undefined);
+  assert.deepEqual(
+    { ...migratedState.prepare("SELECT key, value FROM settings WHERE key = 'vault_repo'").get() },
+    { key: "vault_repo", value: "owner/repo" },
+  );
+  migratedState.close();
+  assert.deepEqual(first.source.scrubbedSettings, ["api_token", "session_secret"]);
   assert.equal(readFileSync(join(target, "artifacts", "2026", "07", "evidence.txt"), "utf8"), "evidence bytes\n");
   assert.equal(existsSync(first.receiptPath), true);
 
-  const registry = new DatabaseSync(join(value.dataRoot, "chassis.sqlite"), { readOnly: true });
-  const rows = registry.prepare("SELECT tenant_id, token_hash FROM tenants").all();
+  const registry = new DatabaseSync(join(value.dataRoot, "chassis-tenants.sqlite"), { readOnly: true });
+  const rows = registry.prepare("SELECT tenant_id, token_hash, status, updated_at FROM tenants").all();
+  const columns = registry.prepare("PRAGMA table_info(tenants)").all().map((row) => row.name);
+  const journalMode = registry.prepare("PRAGMA journal_mode").get().journal_mode;
   registry.close();
-  assert.deepEqual(rows.map((row) => ({ ...row })), [{ tenant_id: value.tenantId, token_hash: value.tokenHash }]);
+  assert.equal(rows.length, 1);
+  assert.deepEqual(
+    { tenant_id: rows[0].tenant_id, token_hash: rows[0].token_hash, status: rows[0].status },
+    { tenant_id: value.tenantId, token_hash: value.tokenHash, status: "active" },
+  );
+  assert.equal(typeof rows[0].updated_at, "number");
+  assert.deepEqual(columns, [
+    "tenant_id",
+    "name",
+    "plan",
+    "quota",
+    "token_hash",
+    "status",
+    "expires_at",
+    "created_at",
+    "updated_at",
+  ]);
+  assert.equal(journalMode, "wal");
   assert.equal(readFileSync(first.receiptPath, "utf8").includes("legacy-token-never-passed-to-tool"), false);
+  assert.equal(readFileSync(first.receiptPath, "utf8").includes("legacy-session-secret"), false);
 
   const second = runMigration(applyOptions(value));
   assert.equal(second.idempotent, true);
@@ -139,7 +174,7 @@ test("apply rejects conflicting target content without overwriting it", () => {
 
   assert.throws(() => runMigration({ ...options(value, "apply"), acceptPlan: "stale-plan" }), /target already exists with different content/);
   assert.equal(readFileSync(join(target, "foreign.txt"), "utf8"), "do not overwrite\n");
-  assert.equal(existsSync(join(value.dataRoot, "chassis.sqlite")), false);
+  assert.equal(existsSync(join(value.dataRoot, "chassis-tenants.sqlite")), false);
 });
 
 test("rollback removes only state owned by the apply receipt and is repeatable", () => {
@@ -165,7 +200,7 @@ test("rollback refuses to remove a tenant target changed after migration", () =>
 
   assert.throws(() => rollbackMigration(applied.receiptPath), /target changed after migration/);
   assert.equal(existsSync(target), true);
-  const registry = new DatabaseSync(join(value.dataRoot, "chassis.sqlite"), { readOnly: true });
+  const registry = new DatabaseSync(join(value.dataRoot, "chassis-tenants.sqlite"), { readOnly: true });
   assert.equal(registry.prepare("SELECT COUNT(*) AS count FROM tenants").get().count, 1);
   registry.close();
 });
@@ -197,7 +232,7 @@ test("apply rejects a stale or missing dry-run digest", () => {
 test("apply supports the chassis-spec registry without the optional name column", () => {
   const value = fixture();
   mkdirSync(value.dataRoot, { recursive: true });
-  const registry = new DatabaseSync(join(value.dataRoot, "chassis.sqlite"));
+  const registry = new DatabaseSync(join(value.dataRoot, "chassis-tenants.sqlite"));
   registry.exec(`
     CREATE TABLE tenants (
       token_hash TEXT NOT NULL UNIQUE,
@@ -231,7 +266,7 @@ test("registry and receipts cannot mutate the legacy source tree", () => {
     /outside the legacy source/,
   );
   assert.throws(
-    () => runMigration({ ...options(value), registryPath: join(value.source, "chassis.sqlite") }),
+    () => runMigration({ ...options(value), registryPath: join(value.source, "chassis-tenants.sqlite") }),
     /outside the legacy source/,
   );
 });
