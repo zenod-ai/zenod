@@ -8,6 +8,30 @@ trap 'rm -rf "$TMP"' EXIT
 
 bash -n "$SCRIPT"
 
+health_sha="$({
+  Z_N5_SOURCE_ONLY=1 \
+  DOKPLOY_API_KEY=test-only \
+  IMAGE=ghcr.io/zenod-ai/zenod:sha-abcdef0 \
+  STATE_DIR="$TMP/source-state" \
+  source "$SCRIPT"
+  health_sha '{"status":"ok","sha":"abcdef0123456789","git_sha":"wrong"}'
+})"
+[[ "$health_sha" == "abcdef0123456789" ]]
+
+redirect_body="$({
+  Z_N5_SOURCE_ONLY=1 \
+  DOKPLOY_API_KEY=test-only \
+  IMAGE=ghcr.io/zenod-ai/zenod:sha-abcdef0 \
+  STATE_DIR="$TMP/source-state" \
+  source "$SCRIPT"
+  api_post() { printf '%s\n' "$2"; }
+  ensure_redirect '{"redirects":[]}'
+})"
+[[ "$(jq -r '.regex' <<<"$redirect_body")" == '^https?://mind\.zenod\.dev(/.*)?$' ]]
+[[ "$(jq -r '.replacement' <<<"$redirect_body")" == 'https://zenod.dev$1' ]]
+[[ "$(jq -r '.permanent' <<<"$redirect_body")" == 'true' ]]
+grep -Fq '"https://zenod.dev/anything"' "$SCRIPT"
+
 expect_failure() {
   local expected="$1"; shift
   local output
@@ -69,7 +93,7 @@ grep -Fq 'detach cloud-test.zenod.dev' <<<"$output"
 grep -Fq 'detach zenod.zenod.dev' <<<"$output"
 grep -Fq 'attach zenod.dev to target' <<<"$output"
 grep -Fq 'attach cloud.zenod.dev to target' <<<"$output"
-grep -Fq '301 mind.zenod.dev to zenod.dev' <<<"$output"
+grep -Fq '301 mind.zenod.dev to zenod.dev preserving path' <<<"$output"
 grep -Fq 'verify: zenod landing 200' <<<"$output"
 grep -Fq 'stop old cloud compose' <<<"$output"
 grep -Fq 'stop old cloud-test compose' <<<"$output"

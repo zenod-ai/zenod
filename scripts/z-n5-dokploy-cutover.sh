@@ -219,9 +219,11 @@ ensure_redirect() {
   existing="$(jq -r --arg regex "$regex" '.redirects[]? | select(.regex == $regex) | .redirectId' <<<"$target")"
   [[ -z "$existing" ]] || { log "mind redirect already present"; return 0; }
   api_post "/redirects.create" "$(jq -n --arg applicationId "$TARGET_APP" --arg regex "$regex" \
-    '{applicationId:$applicationId,regex:$regex,replacement:"https://zenod.dev",permanent:true}')" \
-    "301 mind.zenod.dev to zenod.dev"
+    '{applicationId:$applicationId,regex:$regex,replacement:"https://zenod.dev$1",permanent:true}')" \
+    "301 mind.zenod.dev to zenod.dev preserving path"
 }
+
+health_sha() { jq -r '.sha // .git_sha // .gitSha // empty' <<<"$1"; }
 
 wait_for_deploy() {
   [[ "$DRY_RUN" == "0" ]] || { log "DRY_RUN wait for target deployment status=done and expected git SHA"; return 0; }
@@ -232,7 +234,7 @@ wait_for_deploy() {
     status="$(jq -r '.applicationStatus' <<<"$target")"
     if [[ "$status" == "done" ]]; then
       body="$(curl -fsS https://mind.zenod.dev/api/health 2>/dev/null || true)"
-      sha="$(jq -r '.git_sha // .gitSha // empty' <<<"$body" 2>/dev/null || true)"
+      sha="$(health_sha "$body" 2>/dev/null || true)"
       [[ "$sha" == "$expected"* ]] && return 0
     fi
     sleep "$HEALTH_POLL_SECONDS"
@@ -248,7 +250,7 @@ final_world_ready() {
   [[ "$(http_code https://zenod.dev/pricing)" == "200" ]] || return 1
   [[ "$(http_code https://cloud.zenod.dev/)" == "200" ]] || return 1
   body="$(curl -fsS https://cloud.zenod.dev/api/health)" || return 1
-  sha="$(jq -r '.git_sha // .gitSha // empty' <<<"$body")"
+  sha="$(health_sha "$body")"
   [[ "$sha" == "$expected"* ]] || return 1
   mcp_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
     --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' https://cloud.zenod.dev/mcp)"
@@ -258,7 +260,7 @@ final_world_ready() {
   [[ "$oauth_location" == *"redirect_uri=https%3A%2F%2Fcloud.zenod.dev%2Fauth%2Fgithub%2Fcallback"* ]] ||
     return 1
   location="$(curl -sS -o /dev/null -D - https://mind.zenod.dev/anything | awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/\r$/, ""); print substr($0,11)}')"
-  [[ "$(http_code https://mind.zenod.dev/anything)" == "301" && "$location" == "https://zenod.dev" ]] || return 1
+  [[ "$(http_code https://mind.zenod.dev/anything)" == "301" && "$location" == "https://zenod.dev/anything" ]] || return 1
   for host in cloud-test.zenod.dev zenod.zenod.dev; do
     [[ "$(http_code "https://$host/")" =~ ^(404|000)$ ]] || return 1
   done
@@ -395,7 +397,9 @@ rollback_cutover() {
   log "ROLLBACK 6/6 operator verifies restored endpoints; snapshot retained at $STATE_DIR"
 }
 
-case "$MODE" in
-  plan|apply) apply_cutover ;;
-  rollback) rollback_cutover ;;
-esac
+if [[ "${Z_N5_SOURCE_ONLY:-0}" != "1" ]]; then
+  case "$MODE" in
+    plan|apply) apply_cutover ;;
+    rollback) rollback_cutover ;;
+  esac
+fi
