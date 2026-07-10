@@ -18,6 +18,7 @@ const REQUIRED_TENANT_PATHS = [
   "journeys.sqlite",
   "usage.sqlite",
   "notifications.sqlite",
+  "vault.sqlite",
   "transcripts",
 ];
 const FORBIDDEN_ROOT_STATE = [
@@ -30,6 +31,7 @@ const FORBIDDEN_ROOT_STATE = [
   "journeys.sqlite",
   "usage.sqlite",
   "notifications.sqlite",
+  "vault.sqlite",
   "transcripts",
   "vault",
   "media",
@@ -138,12 +140,11 @@ function normalizeBaseUrl(value) {
 function tenantFixture(index, runId, env) {
   const label = `T${index + 1}`;
   const lower = label.toLowerCase();
-  const explicitToken = env[`EPIC32_${label}_TOKEN`];
   return {
     label,
     tenantId: `epic32-${runId}-${lower}`.slice(0, 64),
     name: `Epic 3.2 proof ${label}`,
-    token: explicitToken || `zenod_epic32_${runId}_${lower}_${randomBytes(12).toString("hex")}`,
+    token: "",
     marker: `EPIC32_${runId}_${label}_MARKER_${randomBytes(8).toString("hex")}`,
     repo: env[`EPIC32_${label}_REPO`] ?? `epic32-proof/${runId}-${lower}`,
     githubToken: env[`EPIC32_${label}_GITHUB_TOKEN`] ?? env.EPIC32_GITHUB_TOKEN ?? "",
@@ -269,32 +270,42 @@ async function provisionTenants(baseUrl, controlToken, tenants) {
   expectStatus(unauthenticated, [401, 403], "unauthenticated tenant provisioning");
 
   for (const tenant of tenants) {
+    const provisioned = await jsonRequest(baseUrl, "/api/tenants", {
+      method: "POST",
+      token: controlToken,
+      body: { tenantId: tenant.tenantId, name: tenant.name, plan: "pilot" },
+    });
+    expectStatus(provisioned, [201], `provision ${tenant.label}`, "prerequisite");
+    const returnedToken = extractProvisionedToken(provisioned.body);
+    if (!returnedToken) {
+      throw new ProofFailure(`${tenant.label} provisioning omitted the one-time raw token`, {
+        kind: "prerequisite",
+      });
+    }
+    tenant.token = returnedToken;
+
     const settings = {
       vault_repo: tenant.repo,
       vault_branch: "main",
       ...(tenant.githubToken ? { github_token: tenant.githubToken } : {}),
-      ...(tenant.apiKey ? { provider: tenant.provider, api_key: tenant.apiKey } : {}),
+      ...(tenant.apiKey
+        ? {
+            provider: tenant.provider,
+            [`${tenant.provider}_api_key`]: tenant.apiKey,
+          }
+        : {}),
     };
-    const result = await jsonRequest(baseUrl, "/api/tenants", {
-      method: "POST",
-      token: controlToken,
-      body: { tenantId: tenant.tenantId, name: tenant.name, token: tenant.token, settings },
+    const configured = await jsonRequest(baseUrl, "/api/settings", {
+      method: "PUT",
+      token: tenant.token,
+      body: settings,
     });
-    expectStatus(result, [200, 201], `provision ${tenant.label}`, "prerequisite");
-    const returnedToken = extractProvisionedToken(result.body);
-    if (returnedToken && returnedToken !== tenant.token) {
-      throw new ProofFailure(`${tenant.label} provisioning returned a different token`);
-    }
+    expectStatus(configured, [200], `configure ${tenant.label}`, "prerequisite");
   }
-
-  const listed = await jsonRequest(baseUrl, "/api/tenants", { token: controlToken });
-  expectStatus(listed, [200], "list tenants", "prerequisite");
-  const serialized = JSON.stringify(listed.body);
-  for (const tenant of tenants) {
-    if (!serialized.includes(tenant.tenantId)) throw new ProofFailure(`tenant registry omitted ${tenant.tenantId}`);
-    if (serialized.includes(tenant.token)) throw new ProofFailure(`tenant registry exposed raw token for ${tenant.label}`);
-  }
-  return listed.body;
+  return {
+    tenants: tenants.map(({ tenantId, name }) => ({ tenantId, name })),
+    registryVisibility: "no list endpoint; persistence redaction verified by storage scan",
+  };
 }
 
 async function verifyMcpIsolation(baseUrl, tenants, mode) {
@@ -400,13 +411,13 @@ async function verifyApiAndSessions(baseUrl, tenants) {
     }
 
     const login = await capture(`${tenant.label} tenant-login`, async () => {
-      const result = await jsonRequest(baseUrl, "/api/auth/tenant-login", {
+      const result = await jsonRequest(baseUrl, "/api/auth/login", {
         method: "POST",
         body: { token: tenant.token },
       });
       expectStatus(result, [200], `${tenant.label} tenant login`, "prerequisite");
-      if (result.body?.tenantId !== tenant.tenantId) {
-        throw new ProofFailure(`${tenant.label} tenant login bound ${String(result.body?.tenantId)} instead of ${tenant.tenantId}`);
+      if (result.body?.tenant?.id !== tenant.tenantId) {
+        throw new ProofFailure(`${tenant.label} tenant login bound ${String(result.body?.tenant?.id)} instead of ${tenant.tenantId}`);
       }
       return result;
     });
@@ -434,8 +445,15 @@ async function verifyApiAndSessions(baseUrl, tenants) {
     await capture(`${tenant.label} tampered tenant cookie negative`, async () => {
       const [cookieName, cookieValue] = tenant.sessionCookie.split("=", 2);
       const parts = cookieValue.split(".");
-      if (parts.length !== 3) throw new ProofFailure(`${tenant.label} session cookie does not carry a signed tenant id`);
-      parts[1] = foreign.tenantId;
+      if (parts.length !== 2) throw new ProofFailure(`${tenant.label} session cookie does not carry a signed tenant id`);
+      let payload;
+      try {
+        payload = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+      } catch {
+        throw new ProofFailure(`${tenant.label} session cookie payload is not valid base64url JSON`);
+      }
+      payload.tenant.id = foreign.tenantId;
+      parts[0] = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
       const tampered = await jsonRequest(baseUrl, "/api/settings", {
         cookie: `${cookieName}=${parts.join(".")}`,
       });
@@ -490,8 +508,10 @@ async function verifyStorage(dataRoot, tenants, mode) {
 
   const files = await walkFiles(dataRoot);
   const sqliteFiles = files.filter((path) => path.endsWith(".sqlite"));
-  if (sqliteFiles.length !== TENANT_COUNT * 9 + 1) {
-    violations.push(`expected ${TENANT_COUNT * 9 + 1} SQLite files (nine per tenant plus chassis), found ${sqliteFiles.length}`);
+  const sqlitePerTenant = REQUIRED_TENANT_PATHS.filter((path) => path.endsWith(".sqlite")).length;
+  const expectedSqliteFiles = TENANT_COUNT * sqlitePerTenant + 1;
+  if (sqliteFiles.length !== expectedSqliteFiles) {
+    violations.push(`expected ${expectedSqliteFiles} SQLite files (${sqlitePerTenant} per tenant plus chassis), found ${sqliteFiles.length}`);
   }
   for (const path of sqliteFiles) {
     const db = new DatabaseSync(path, { readOnly: true });
@@ -596,6 +616,7 @@ export async function runProof(options, env = process.env) {
   if (healthReady) {
     tenantsReady = await runStep("three-tenant provisioning and registry redaction", async () => {
       const registry = await provisionTenants(baseUrl, options.controlToken, tenants);
+      metadata.tokenHashes = tenants.map((tenant) => ({ label: tenant.label, sha256: sha256(tenant.token) }));
       return { tenants: tenants.map((tenant) => tenant.tenantId), registry };
     });
   }
