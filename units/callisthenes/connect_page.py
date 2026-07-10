@@ -240,15 +240,6 @@ class ConnectPage:
         # Multi-tenant hosted instances read this saved config through the
         # request-local signer hook. Never copy one tenant's keys into process env.
         if self.tenant():
-            if self.engine is not None:
-                if "X_OAUTH2_CLIENT_ID" in cfg and hasattr(self.engine, "_client_id"):
-                    self.engine._client_id = cfg.get("X_OAUTH2_CLIENT_ID", "")  # noqa: SLF001
-                if "X_OAUTH2_CLIENT_SECRET" in cfg and hasattr(self.engine, "_client_secret"):
-                    self.engine._client_secret = cfg.get("X_OAUTH2_CLIENT_SECRET", "")  # noqa: SLF001
-                if "X_OAUTH2_REDIRECT_URI" in cfg and hasattr(self.engine, "_redirect_uri"):
-                    self.engine._redirect_uri = cfg.get("X_OAUTH2_REDIRECT_URI", "")  # noqa: SLF001
-                if "X_OAUTH2_SCOPES" in cfg and hasattr(self.engine, "_scopes"):
-                    self.engine._scopes = cfg.get("X_OAUTH2_SCOPES", "")  # noqa: SLF001
             return cfg
         for key, value in cfg.items():
             if value:

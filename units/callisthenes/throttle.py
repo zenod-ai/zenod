@@ -142,7 +142,11 @@ def build_throttle_middleware(
     from fastmcp.exceptions import ToolError  # noqa: WPS433
 
     configured = limiter or limiter_from_env()
-    tenant_limiters = TenantRateLimiters(per_hour=configured.per_hour)
+    tenant_limiters = TenantRateLimiters(
+        per_hour=configured.per_hour,
+        window_seconds=configured.window_seconds,
+        clock=configured._clock,
+    )
     tools = frozenset(send_tools) if send_tools is not None else send_tools_from_env()
 
     if tenant_resolver is None:
