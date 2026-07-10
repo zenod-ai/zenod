@@ -150,7 +150,7 @@ export function App() {
               ? "keys"
               : undefined)
           }
-          onLoggedOut={() => setView({ kind: "login" })}
+          onLoggedOut={() => window.location.assign("/")}
         />
       )}
       <Toaster />
