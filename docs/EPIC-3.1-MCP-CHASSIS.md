@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
 Steward since: 2026-07-10 01:32 CEST
-Last reconciled commit: `bac2729d4e3d911476f61c466f242b5858550714`
+Last reconciled commit: `145e6f307284dd7770b28d6650609b4289bb9d4f`
 Planner: Epic 3.0 planner
 Worker: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
 Tester: unassigned
@@ -60,7 +60,7 @@ Create `packages/mcp-chassis` (`@zenod/mcp-chassis`): the reusable scaffold ever
 
 ## Definition Of Done
 
-- [ ] `packages/mcp-chassis` exists with: stateless Streamable HTTP `/mcp`, bearer→tenant resolution (`sha256(bearer)` lookup + tokened-URL form + OAuth mapping), tenants table, `POST/DELETE /api/tenants` + token rotation guarded by `CONTROL_PLANE_TOKEN`, `storage.db(tenant)`/`storage.dir(tenant)` handles, per-tenant vault, per-tenant usage metering + quota middleware, `/healthz`, pino logs carrying `tenant_id`. Core surface is merged; durable tenants and pino remain #761 and #766.
+- [ ] `packages/mcp-chassis` exists with: stateless Streamable HTTP `/mcp`, bearer→tenant resolution (`sha256(bearer)` lookup + tokened-URL form + OAuth mapping), tenants table, `POST/DELETE /api/tenants` + token rotation guarded by `CONTROL_PLANE_TOKEN`, `storage.db(tenant)`/`storage.dir(tenant)` handles, per-tenant vault, per-tenant usage metering + quota middleware, `/healthz`, pino logs carrying `tenant_id`. Core surface and durable SQLite tenants are merged through #768; pino remains #766.
 - [ ] Settings-UI shell: token/session login, per-tenant settings/keys/usage pages, unit plugs in its own panels. Shell is merged; durable settings/key data remains #762.
 - [x] Single-tenant mode: env-seeded token auto-creates one tenant at boot; identical image and UI (self-host contract).
 - [x] A demo unit (`units/demo` or test harness) runs on the chassis with the three-tenant smoke test passing: cross-tenant access fails, per-tenant ledgers isolate.
@@ -82,11 +82,11 @@ Create `packages/mcp-chassis` (`@zenod/mcp-chassis`): the reusable scaffold ever
 ## Current State
 
 Phase: co-development pilot and hardening
-Last verified: 2026-07-10 04:00 CEST
+Last verified: 2026-07-10 04:13 CEST
 Integration target: main
-Fresh base commit: `bac2729d4e3d911476f61c466f242b5858550714`
-Next action: Epic 3.2 may begin the Zenod first-application pilot from this exact `main` commit in a fresh issue worktree. In parallel, dispatch C-13..C-18 from fresh `main`; all chassis changes remain under the 3.1 steward.
-Blockers: API freeze remains gated on the joint 3.1 demo + 3.2 Zenod three-tenant proof, C-13..C-18 closure, and Jordi's explicit freeze approval. These gates do not block the 3.2 co-development pilot.
+Fresh base commit: `145e6f307284dd7770b28d6650609b4289bb9d4f`
+Next action: Epic 3.2 may resume the Zenod first-application pilot from this exact `main` commit and consume the protected route + durable tenant APIs delivered from its #768 feedback. In parallel, dispatch C-14..C-18 from fresh `main`; all chassis changes remain under the 3.1 steward.
+Blockers: API freeze remains gated on the joint 3.1 demo + 3.2 Zenod three-tenant proof, C-14..C-18 closure, and Jordi's explicit freeze approval. These gates do not block the 3.2 co-development pilot.
 
 ## Role Goals
 
@@ -114,7 +114,7 @@ Read in this order:
 
 Pilot rule (parent D6): the chassis is proven against ONE real character — Zenod (Epic 3.2) — before other units consume it. The C-7 demo unit exists for fast iteration, but "stable and proven" means the Zenod pilot's three-tenant browser E2E passes; only then is the chassis API frozen and Phase 2 (3.3/3.5/3.6) unleashed. Expect 3.1 and 3.2 to co-develop, with pilot feedback shaping the freeze.
 
-3.1/3.2 co-development rule: Epic 3.1 owns `packages/mcp-chassis` and SEAM-SPEC vNext. Epic 3.2 is authorized to begin the Zenod pilot from `main` at `bac2729`; it may consume the chassis and report friction through its own Proposed Cross-Spine Updates or GitHub issues, but it must not patch `packages/mcp-chassis` directly unless stewardship is explicitly transferred here. Joint proof is 3.1 demo E2E plus 3.2 Zenod pilot E2E against the same chassis API. Pilot authorization is not an API freeze: compatibility may still change through 3.1-owned reviewed PRs until the freeze gate closes.
+3.1/3.2 co-development rule: Epic 3.1 owns `packages/mcp-chassis` and SEAM-SPEC vNext. Epic 3.2 is authorized to resume the Zenod pilot from `main` at `145e6f3`; it may consume the chassis and report friction through its own Proposed Cross-Spine Updates or GitHub issues, but it must not patch `packages/mcp-chassis` directly unless stewardship is explicitly transferred here. Joint proof is 3.1 demo E2E plus 3.2 Zenod pilot E2E against the same chassis API. Pilot authorization is not an API freeze: compatibility may still change through 3.1-owned reviewed PRs until the freeze gate closes.
 
 Conduct kit sources (parent D12) — extract, don't rewrite: `docs/SEAM-SPEC.md` v1 is the binding wire/receipt contract (SEAM-SPEC vNext in C-8 EXTENDS it with tenancy/billing/OAuth rows; it never weakens the receipt laws). The receipt engine exists: `packages/server/src/outboundReceipt.ts` (verified-or-failed shapes, receipt strings never composed freehand), `filingReceipt.ts`, `storageReceipt.ts`, `packages/core/src/taskingPolicy.ts` (deterministic receipts + correction banners), `replyGate.ts` (action turns deliver only tool receipts), `toolKinds.ts` (read/mutate registry, unknown fails safe to mutate). Persona/operating rules per agent live in `packages/server/src/agent.ts` (`AgentDefinition`); the chassis lifts the rules that repeat across every persona into middleware and keeps personas for what is genuinely unit-specific. Known gap to close in C-11: `origin_ticket_id`/`depth` (SEAM items 10–11) are documented in `units/council/SEAM-SURFACE.md` but absent from code. The Epaminon↔Archus etiquette (`docs/EPAMINON-ARCHUS-PROTOCOL.md`: transitions-only, structured-not-conversational, idempotent id-keyed, one-blocker-one-ask) becomes the chassis's inter-unit dispatch conventions.
 
@@ -177,12 +177,13 @@ The epic worker validates WITHOUT human help, using browser automation (Playwrig
 | [#725](https://github.com/zenod-ai/zenod/issues/725) | Ticket worker | Dalton / steward integration | C-10 billing module | done | C-3 | PR [#753](https://github.com/zenod-ai/zenod/pull/753) / `/Users/jordi/Documents/GitHub/wt-725` | `54a8eac` | Signed webhook provisions/suspends tenant; bad signature rejected. | Merged `3615231`; deterministic webhook/signature tests and CI passed. External Stripe CLI proof remains #764. | 2026-07-10 04:00 CEST | None; live proof tracked separately. |
 | [#726](https://github.com/zenod-ai/zenod/issues/726) | Ticket worker | Steward fresh-main replay | C-11 conduct kit primitives | done | C-1 | PR [#742](https://github.com/zenod-ai/zenod/pull/742) / `/Users/jordi/Documents/GitHub/wt-726` | `df0ae3b` | Conduct result validation and dispatch context primitives exist and are tested. | Merged `e80596a`; 13 tests; both CI checks passed. Structural registration enforcement remains #765. | 2026-07-10 04:00 CEST | None; enforcement tracked separately. |
 | [#727](https://github.com/zenod-ai/zenod/issues/727) | Ticket worker | Rawls / steward takeover | C-12 directives + rules UI | done | C-6, C-11, C-9 | PR [#759](https://github.com/zenod-ai/zenod/pull/759) / `/Users/jordi/Documents/GitHub/wt-727` | `3615231` | Directive appears in turn preamble and per-tenant Operating Rules UI. | Merged `c53ec32`; 42 chassis tests; web/chassis typecheck/build and CI passed. | 2026-07-10 04:00 CEST | None. |
-| [#761](https://github.com/zenod-ai/zenod/issues/761) | Ticket worker | unassigned | C-13 durable SQLite tenant store + restart persistence | queued | C-3 | planned `/Users/jordi/Documents/GitHub/wt-761` | `bac2729` | Tenant lifecycle and token hashes survive restart. | Audit: current store is memory-backed. | 2026-07-10 04:00 CEST | Worker first action creates recorded worktree from `main`. |
+| [#761](https://github.com/zenod-ai/zenod/issues/761) | Ticket worker | superseded by #768 steward takeover | C-13 durable SQLite tenant store + restart persistence | done | C-3 | PRs [#769](https://github.com/zenod-ai/zenod/pull/769), [#771](https://github.com/zenod-ai/zenod/pull/771) / `/Users/jordi/Documents/GitHub/wt-768`, `/Users/jordi/Documents/GitHub/wt-768-fix` | `468095d` | Tenant lifecycle and token hashes survive restart; self-host env seed is idempotent. | Fulfilled by #768; merged through `145e6f3`; restart, migration continuity, rotation, and durable self-host seed tests pass. | 2026-07-10 04:13 CEST | None. |
 | [#762](https://github.com/zenod-ai/zenod/issues/762) | Ticket worker | unassigned | C-14 persist tenant settings + key metadata | queued | C-13 | planned `/Users/jordi/Documents/GitHub/wt-762` | `bac2729` | Settings/keys persist and isolate across tenants/restarts. | Audit: settings return defaults and keys are always empty. | 2026-07-10 04:00 CEST | Dispatch after C-13 API/storage shape is known. |
 | [#766](https://github.com/zenod-ai/zenod/issues/766) | Ticket worker | unassigned | C-15 tenant-aware pino logging | queued | C-1 | planned `/Users/jordi/Documents/GitHub/wt-766` | `bac2729` | Authenticated paths log `tenant_id`; credentials are redacted. | Audit: chassis has no pino integration. | 2026-07-10 04:00 CEST | Worker first action creates recorded worktree from `main`. |
 | [#765](https://github.com/zenod-ai/zenod/issues/765) | Ticket worker | unassigned | C-16 structural conduct enforcement | queued | C-11 | planned `/Users/jordi/Documents/GitHub/wt-765` | `bac2729` | `createUnit` tool registration structurally enforces conduct laws. | Audit: helpers exist but registration can bypass them. | 2026-07-10 04:00 CEST | Worker first action creates recorded worktree from `main`. |
 | [#764](https://github.com/zenod-ai/zenod/issues/764) | Tester | unassigned | C-17 Stripe CLI live webhook proof | queued | C-10 | planned `/Users/jordi/Documents/GitHub/wt-764` | `bac2729` | Test-mode live event proves lifecycle and signature behavior. | Deterministic tests pass; external live proof absent. | 2026-07-10 04:00 CEST | Run when Stripe test credentials/CLI auth are available. |
 | [#763](https://github.com/zenod-ai/zenod/issues/763) | Ticket worker | unassigned | C-18 reconcile SEAM vNext D16/D18 | queued | C-8 | planned `/Users/jordi/Documents/GitHub/wt-763` | `bac2729` | Parent decisions are normative before API freeze. | Audit identified unreconciled parent D16/D18 additions. | 2026-07-10 04:00 CEST | Worker first action creates recorded worktree from `main`. |
+| [#768](https://github.com/zenod-ai/zenod/issues/768) | Ticket worker | 3.1 steward takeover from 3.2 pilot feedback | Pilot friction: authenticated unit routes + durable tenants | done | C-6, C-13 | PRs [#769](https://github.com/zenod-ai/zenod/pull/769), [#771](https://github.com/zenod-ai/zenod/pull/771) / `/Users/jordi/Documents/GitHub/wt-768`, `/Users/jordi/Documents/GitHub/wt-768-fix` | `468095d` | Bearer/session routes isolate and fail closed; unit product routes precede placeholders; tenant store persists/imports/rotates and self-host seeds durably. | Merged through `145e6f3`; 48 chassis tests; chassis/web typecheck/build and both CI runs passed. | 2026-07-10 04:13 CEST | 3.2 resumes pilot from merged `main`. |
 
 ## Branch And Integration
 
@@ -214,14 +215,14 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 
 ## Planner Queue
 
-- Epic 3.2 pilot is authorized from `main` at `bac2729`; watch the co-development boundary and route chassis friction back to 3.1.
-- Dispatch independent C-13, C-15, C-16, and C-18 lanes from fresh `main`; C-14 follows C-13. C-17 runs when the named Stripe human gate is available.
-- Freeze only after C-13..C-18 and the joint 3.1/3.2 proof are reconciled.
+- Epic 3.2 pilot is authorized from `main` at `145e6f3`; watch the co-development boundary and route any further chassis friction back to 3.1.
+- Dispatch independent C-14, C-15, C-16, and C-18 lanes from fresh `main`. C-17 runs when the named Stripe human gate is available.
+- Freeze only after C-14..C-18 and the joint 3.1/3.2 proof are reconciled.
 
 ## Worker Queue
 
-- Complete on `main`: #715-#721 and #723-#727; final integration base `bac2729`.
-- Queued hardening: #761, #762, #763, #765, #766. Every worker begins with the issue's fresh-main worktree command and records its absolute path.
+- Complete on `main`: #715-#721, #723-#727, #761 (via #768), and #768; current integration base `145e6f3`.
+- Queued hardening: #762, #763, #765, #766. Every worker begins with the issue's fresh-main worktree command and records its absolute path.
 
 ## Tester Queue
 
@@ -243,6 +244,7 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 | 2026-07-10 | Integrated C-6/C-9/C-10/C-12 | `c53ec32` | fresh issue worktrees, then merged `main` | chassis/web tests, typechecks, builds, and GitHub CI per PR | pass; 42 chassis tests at C-12 integration | PRs #752, #754, #753, #759 |
 | 2026-07-10 | C-7 hosted three-tenant + self-host parity | `bac2729d4e3d911476f61c466f242b5858550714` | `/Users/jordi/Documents/GitHub/wt-721`; local hosted and self-host demo servers; in-app browser | 43 chassis tests; T1/T2/T3 browser sessions; direct tenant query isolation; T2 token rotation old/new/mutated = 401/200/401; self-host login + MCP initialize; web/chassis typecheck/build; GitHub CI | pass; browser-found hidden-panel regression fixed and retested | `docs/evidence/epic-3.1-c7/`, PR #760, issue #721 |
 | 2026-07-10 | Post-merge DoD audit | `bac2729d4e3d911476f61c466f242b5858550714` | `/Users/jordi/Documents/GitHub/wt-epic31-spine-live` | code and contract inspection | six gaps ticketed; pilot usable, API not frozen | #761-#766 |
+| 2026-07-10 | 3.2 pilot friction: protected unit routes + durable tenant store | `145e6f307284dd7770b28d6650609b4289bb9d4f` | `/Users/jordi/Documents/GitHub/wt-768` + `/Users/jordi/Documents/GitHub/wt-768-fix`; GitHub CI runs `29063657689`, `29064044683` | 48 chassis tests; bearer/session T1/T2 isolation; anonymous/config fail-closed; unit `/api/settings` precedence over placeholder; SPA ordering; restart persistence; imported-hash same-token continuity; old/new rotation; durable self-host seed close/reopen; chassis/web typecheck/build | pass; both CI runs success | #768 / PRs #769, #771 |
 
 ## Handoff Journal
 
@@ -298,6 +300,21 @@ Links:
 - PRs #752, #754, #753, #759, #760
 - Issues #761, #762, #763, #764, #765, #766
 
+### 2026-07-10 - Epic worker - First pilot friction resolved
+
+Context: Epic 3.2 consumed the agreed `bac2729` chassis without editing it, found the missing authenticated product-route and durable tenant-store seam, and filed #768. The 3.1 steward implemented the protected sub-router and SQLite provisioning store in PR #769. Pilot review then found route-placeholder shadowing and a memory-only self-host seed contract; the steward reopened #768 and fixed both in fresh-main PR #771. The final merge base is `145e6f3`.
+Next: Epic 3.2 resumes from `main` at `145e6f3` and uses `createUnit({ routes })` plus `createSqliteTenantStore` in the joint three-tenant proof. Further chassis friction follows the same #768 handoff pattern.
+Risks: API remains unfrozen until the full pilot passes and C-14..C-18 close. Unit product routes now precede placeholder APIs and are structurally tenant-authenticated, but 3.2 must still prove its real product handlers use the injected `unitContext` rather than payload tenant ids.
+Assignment identity: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
+Branch / latest commit: `main` / `145e6f307284dd7770b28d6650609b4289bb9d4f`
+Last verified: 2026-07-10 04:13 CEST
+Links:
+
+- Issue #768
+- PR #769
+- PR #771
+- GitHub CI runs `29063657689`, `29064044683`
+
 ## Open Questions
 
 - ~~Does the OAuth flow (Claude.ai sign-in) map to tenants 1:1 or can one OAuth user hold several tenants?~~ Resolved by C-9: each issued OAuth token is bound to exactly one tenant; access to another tenant requires a separately tenant-bound authorization.
@@ -309,6 +326,7 @@ Links:
 |---|---|---|---|---|---|
 | 2026-07-10 | `docs/EPIC-3.0-CHASSIS-REPLATFORM.md` | Record chassis API freeze date once C-1..C-8 land. | this spine | Epic 3.0 planner | proposed |
 | 2026-07-10 | `docs/EPIC-3.2-ZENOD-MULTITENANT.md` | Update stale Z-MT-5 / tester-queue wording from two-tenant smoke to three-tenant browser E2E, and record that 3.2 reports chassis friction to 3.1 instead of editing `packages/mcp-chassis` directly. | 3.0 D6/D8, this spine co-development rule, 3.2 Definition of Done already says three tenants | Epic 3.2 steward | proposed |
+| 2026-07-10 | `docs/EPIC-3.2-ZENOD-MULTITENANT.md` | Record #768 and its pilot-review follow-up resolved; resume Z-MT-1/Z-MT-5 from `main` at `145e6f3`, consuming `createUnit({ routes })` and `createSqliteTenantStore`. | #768, PRs #769/#771, CI runs `29063657689`/`29064044683` | Epic 3.2 steward | proposed |
 
 ## Appendix
 
