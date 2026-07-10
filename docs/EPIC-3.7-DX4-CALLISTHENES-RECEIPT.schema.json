@@ -1,0 +1,449 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zenod.dev/schemas/epic37-dx4-callisthenes-receipt-v1.json",
+  "title": "Epic 3.7 DX-4 Callisthenes retirement wave receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_state",
+    "unit",
+    "manifest_sha256",
+    "archive_target",
+    "pilot_gate",
+    "ca_mt_6",
+    "candidate_receipts",
+    "wave_approval"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epic37-dx4-receipt-v1"
+    },
+    "receipt_state": {
+      "enum": [
+        "pending",
+        "complete"
+      ]
+    },
+    "unit": {
+      "const": "callisthenes"
+    },
+    "manifest_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "archive_target": {
+      "$ref": "#/$defs/archive_target"
+    },
+    "pilot_gate": {
+      "$ref": "#/$defs/accepted_gate"
+    },
+    "ca_mt_6": {
+      "$ref": "#/$defs/ca_mt_6_gate"
+    },
+    "candidate_receipts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/candidate_receipt"
+      }
+    },
+    "wave_approval": {
+      "$ref": "#/$defs/wave_approval"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidence_ref": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "pattern": "^[Pp][Ee][Nn][Dd][Ii][Nn][Gg]"
+      }
+    },
+    "archive_target": {
+      "type": "string",
+      "pattern": "^/.+"
+    },
+    "classification": {
+      "enum": [
+        "live-paying",
+        "test",
+        "dead",
+        "duplicate"
+      ]
+    },
+    "accepted_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "receipt_ref",
+        "accepted_at"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "accepted"
+          ]
+        },
+        "receipt_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "accepted_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "ca_mt_6_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "receipt_ref",
+        "accepted_at",
+        "commit_sha"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "accepted"
+          ]
+        },
+        "receipt_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "accepted_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "classification_confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "confirmed_by",
+        "evidence_ref",
+        "confirmed_at"
+      ],
+      "properties": {
+        "classification": {
+          "$ref": "#/$defs/classification"
+        },
+        "confirmed_by": {
+          "const": "Jordi"
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "confirmed_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "tenant_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "tenant_id",
+        "evidence_ref",
+        "verified_at"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "verified"
+          ]
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "verified_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "tenant_receipt_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "tenant_id",
+        "receipt_count",
+        "evidence_ref",
+        "verified_at"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "verified"
+          ]
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "receipt_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "verified_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "token_continuity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "tenant_id",
+        "shared_host",
+        "old_token_fingerprint_sha256",
+        "evidence_ref",
+        "verified_at"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "passed"
+          ]
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared_host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "old_token_fingerprint_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "verified_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "archive_target",
+        "archive_path",
+        "sha256",
+        "evidence_ref",
+        "verified_at"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "verified"
+          ]
+        },
+        "archive_target": {
+          "$ref": "#/$defs/archive_target"
+        },
+        "archive_path": {
+          "$ref": "#/$defs/archive_target"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "verified_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "rollback_checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "checkpoint_ref",
+        "captured_at",
+        "outbound_key_rollback_ref",
+        "snapshot"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "ready"
+          ]
+        },
+        "checkpoint_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "captured_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "outbound_key_rollback_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/snapshot"
+        }
+      }
+    },
+    "candidate_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "tenant_id",
+        "classification_confirmation",
+        "tenant_scoped_credentials",
+        "tenant_scoped_receipts",
+        "shared_host_token_continuity",
+        "rollback_checkpoint"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification_confirmation": {
+          "$ref": "#/$defs/classification_confirmation"
+        },
+        "tenant_scoped_credentials": {
+          "$ref": "#/$defs/tenant_proof"
+        },
+        "tenant_scoped_receipts": {
+          "$ref": "#/$defs/tenant_receipt_proof"
+        },
+        "shared_host_token_continuity": {
+          "$ref": "#/$defs/token_continuity"
+        },
+        "rollback_checkpoint": {
+          "$ref": "#/$defs/rollback_checkpoint"
+        }
+      }
+    },
+    "approval_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "end": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "approved_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "tenant_id",
+        "classification",
+        "outbound_key_rollback_ref"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "$ref": "#/$defs/classification"
+        },
+        "outbound_key_rollback_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        }
+      }
+    },
+    "wave_approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "approved_by",
+        "approval_ref",
+        "approved_at",
+        "manifest_sha256",
+        "archive_target",
+        "window",
+        "approved_candidates"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "approved"
+          ]
+        },
+        "approved_by": {
+          "const": "Jordi"
+        },
+        "approval_ref": {
+          "$ref": "#/$defs/evidence_ref"
+        },
+        "approved_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "archive_target": {
+          "$ref": "#/$defs/archive_target"
+        },
+        "window": {
+          "$ref": "#/$defs/approval_window"
+        },
+        "approved_candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/approved_candidate"
+          }
+        }
+      }
+    }
+  }
+}
