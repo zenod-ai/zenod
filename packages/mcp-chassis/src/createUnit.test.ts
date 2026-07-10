@@ -1,6 +1,6 @@
 import type { ServerType } from "@hono/node-server";
 import { serve } from "@hono/node-server";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,26 +9,33 @@ import { ChassisUsageStore, createMemoryTenantStore, createUnit, hashToken, type
 const servers: ServerType[] = [];
 const tempDirs: string[] = [];
 
-async function listen(app: ReturnType<typeof createUnit>["app"]): Promise<string> {
+async function listen(
+  app: ReturnType<typeof createUnit>["app"],
+): Promise<string> {
   const info = await new Promise<{ port: number }>((resolve) => {
-    const server = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, (address) => {
-      resolve({ port: address.port });
-    });
+    const server = serve(
+      { fetch: app.fetch, port: 0, hostname: "127.0.0.1" },
+      (address) => {
+        resolve({ port: address.port });
+      },
+    );
     servers.push(server);
   });
   return `http://127.0.0.1:${info.port}`;
 }
 
 afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map(
+  await Promise.all([
+    ...servers.splice(0).map(
       (server) =>
         new Promise<void>((resolve, reject) => {
           server.close((err) => (err ? reject(err) : resolve()));
         }),
     ),
-  );
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+    ...tempDirs
+      .splice(0)
+      .map((dir) => rm(dir, { recursive: true, force: true })),
+  ]);
 });
 
 function initializeBody(id = 1, params: Record<string, unknown> = {}): string {
@@ -71,7 +78,10 @@ function controlPlaneHeaders(token = "control-secret"): Record<string, string> {
   };
 }
 
-async function provisionTenant(base: string, body: Record<string, unknown> = {}): Promise<Response> {
+async function provisionTenant(
+  base: string,
+  body: Record<string, unknown> = {},
+): Promise<Response> {
   return fetch(`${base}/api/tenants`, {
     method: "POST",
     headers: controlPlaneHeaders(),
@@ -79,12 +89,37 @@ async function provisionTenant(base: string, body: Record<string, unknown> = {})
   });
 }
 
+async function login(base: string, token: string): Promise<string> {
+  const response = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  expect(response.status).toBe(200);
+  const cookie = response.headers.get("set-cookie")?.split(";")[0];
+  expect(cookie).toBeTruthy();
+  return cookie ?? "";
+}
+
+async function tempWebDist(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "mcp-chassis-web-"));
+  tempDirs.push(dir);
+  await writeFile(
+    join(dir, "index.html"),
+    "<!doctype html><main>chassis shell</main>",
+  );
+  await writeFile(join(dir, "asset.txt"), "asset");
+  return dir;
+}
+
 describe("createUnit", () => {
   it("serves healthz", async () => {
     const unit = createUnit({ name: "demo", version: "1.2.3" });
     const base = await listen(unit.app);
 
-    await expect(fetch(`${base}/healthz`).then((r) => r.json())).resolves.toEqual({
+    await expect(
+      fetch(`${base}/healthz`).then((r) => r.json()),
+    ).resolves.toEqual({
       status: "ok",
       name: "demo",
       version: "1.2.3",
@@ -112,7 +147,9 @@ describe("createUnit", () => {
   });
 
   it("stores only token hashes in the memory tenant table", () => {
-    const tenants = createMemoryTenantStore([{ token: "raw-secret-token", tenant: { id: "tenant-a" } }]);
+    const tenants = createMemoryTenantStore([
+      { token: "raw-secret-token", tenant: { id: "tenant-a" } },
+    ]);
 
     expect(tenants.snapshot()).toEqual([
       {
@@ -122,7 +159,9 @@ describe("createUnit", () => {
         expiresAt: null,
       },
     ]);
-    expect(JSON.stringify(tenants.snapshot())).not.toContain("raw-secret-token");
+    expect(JSON.stringify(tenants.snapshot())).not.toContain(
+      "raw-secret-token",
+    );
   });
 
   it("resolves bearer and tokened MCP URL auth to tenant context for tools", async () => {
@@ -130,8 +169,14 @@ describe("createUnit", () => {
     tempDirs.push(dataDir);
     const seenTenants: Array<string | null> = [];
     const tenants = createMemoryTenantStore([
-      { token: "tenant-one-token", tenant: { id: "tenant-one", name: "Tenant One" } },
-      { token: "tenant-two-token", tenant: { id: "tenant-two", name: "Tenant Two" } },
+      {
+        token: "tenant-one-token",
+        tenant: { id: "tenant-one", name: "Tenant One" },
+      },
+      {
+        token: "tenant-two-token",
+        tenant: { id: "tenant-two", name: "Tenant Two" },
+      },
     ]);
     const unit = createUnit({
       name: "demo",
@@ -144,8 +189,14 @@ describe("createUnit", () => {
     });
     const base = await listen(unit.app);
 
-    const bearerResponse = await initialize(base, { headers: { authorization: "Bearer tenant-one-token" } });
-    const urlResponse = await initialize(base, undefined, "/mcp/tenant-two-token");
+    const bearerResponse = await initialize(base, {
+      headers: { authorization: "Bearer tenant-one-token" },
+    });
+    const urlResponse = await initialize(
+      base,
+      undefined,
+      "/mcp/tenant-two-token",
+    );
 
     expect(bearerResponse.status).toBe(200);
     expect(urlResponse.status).toBe(200);
@@ -153,17 +204,29 @@ describe("createUnit", () => {
   });
 
   it("rejects unknown or mutated tenant tokens with WWW-Authenticate", async () => {
-    const tenants = createMemoryTenantStore([{ token: "known-token", tenant: { id: "tenant-a" } }]);
+    const tenants = createMemoryTenantStore([
+      { token: "known-token", tenant: { id: "tenant-a" } },
+    ]);
     const unit = createUnit({ name: "demo", tenantAuth: { store: tenants } });
     const base = await listen(unit.app);
 
-    const unknown = await initialize(base, { headers: { authorization: "Bearer unknown-token" } });
-    const mutated = await initialize(base, undefined, "/mcp/known-token-mutated");
+    const unknown = await initialize(base, {
+      headers: { authorization: "Bearer unknown-token" },
+    });
+    const mutated = await initialize(
+      base,
+      undefined,
+      "/mcp/known-token-mutated",
+    );
 
     expect(unknown.status).toBe(401);
     expect(mutated.status).toBe(401);
-    expect(unknown.headers.get("www-authenticate")).toBe('Bearer realm="mcp-chassis", error="invalid_token"');
-    expect(mutated.headers.get("www-authenticate")).toBe('Bearer realm="mcp-chassis", error="invalid_token"');
+    expect(unknown.headers.get("www-authenticate")).toBe(
+      'Bearer realm="mcp-chassis", error="invalid_token"',
+    );
+    expect(mutated.headers.get("www-authenticate")).toBe(
+      'Bearer realm="mcp-chassis", error="invalid_token"',
+    );
     await expect(unknown.json()).resolves.toEqual({ error: "unauthorized" });
     await expect(mutated.json()).resolves.toEqual({ error: "unauthorized" });
   });
@@ -178,7 +241,11 @@ describe("createUnit", () => {
     const base = await listen(unit.app);
 
     const unauthorized = await fetch(`${base}/api/tenants`, { method: "POST" });
-    const created = await provisionTenant(base, { tenantId: "tenant-a", name: "Tenant A", plan: "pro" });
+    const created = await provisionTenant(base, {
+      tenantId: "tenant-a",
+      name: "Tenant A",
+      plan: "pro",
+    });
 
     expect(unauthorized.status).toBe(401);
     expect(unauthorized.headers.get("www-authenticate")).toBe(
@@ -201,7 +268,9 @@ describe("createUnit", () => {
     ]);
     expect(JSON.stringify(tenants.snapshot())).not.toContain(body.token);
 
-    const mcp = await initialize(base, { headers: { authorization: `Bearer ${body.token}` } });
+    const mcp = await initialize(base, {
+      headers: { authorization: `Bearer ${body.token}` },
+    });
     expect(mcp.status).toBe(200);
   });
 
@@ -213,8 +282,12 @@ describe("createUnit", () => {
       controlPlane: { store: tenants, token: "control-secret" },
     });
     const base = await listen(unit.app);
-    const first = await provisionTenant(base, { tenantId: "tenant-a" }).then((r) => r.json());
-    const second = await provisionTenant(base, { tenantId: "tenant-b" }).then((r) => r.json());
+    const first = await provisionTenant(base, { tenantId: "tenant-a" }).then(
+      (r) => r.json(),
+    );
+    const second = await provisionTenant(base, { tenantId: "tenant-b" }).then(
+      (r) => r.json(),
+    );
 
     const suspended = await fetch(`${base}/api/tenants/tenant-a`, {
       method: "PATCH",
@@ -236,14 +309,14 @@ describe("createUnit", () => {
       tenant: { id: "tenant-b" },
       status: "deleted",
     });
-    await expect(initialize(base, { headers: { authorization: `Bearer ${first.token}` } })).resolves.toHaveProperty(
-      "status",
-      401,
-    );
-    await expect(initialize(base, { headers: { authorization: `Bearer ${second.token}` } })).resolves.toHaveProperty(
-      "status",
-      401,
-    );
+    await expect(
+      initialize(base, { headers: { authorization: `Bearer ${first.token}` } }),
+    ).resolves.toHaveProperty("status", 401);
+    await expect(
+      initialize(base, {
+        headers: { authorization: `Bearer ${second.token}` },
+      }),
+    ).resolves.toHaveProperty("status", 401);
   });
 
   it("rotates tenant tokens and invalidates the old token", async () => {
@@ -254,12 +327,17 @@ describe("createUnit", () => {
       controlPlane: { store: tenants, token: "control-secret" },
     });
     const base = await listen(unit.app);
-    const created = await provisionTenant(base, { tenantId: "tenant-a" }).then((r) => r.json());
+    const created = await provisionTenant(base, { tenantId: "tenant-a" }).then(
+      (r) => r.json(),
+    );
 
-    const rotatedResponse = await fetch(`${base}/api/tenants/tenant-a/token/rotate`, {
-      method: "POST",
-      headers: controlPlaneHeaders(),
-    });
+    const rotatedResponse = await fetch(
+      `${base}/api/tenants/tenant-a/token/rotate`,
+      {
+        method: "POST",
+        headers: controlPlaneHeaders(),
+      },
+    );
     const rotated = await rotatedResponse.json();
 
     expect(rotatedResponse.status).toBe(200);
@@ -273,14 +351,157 @@ describe("createUnit", () => {
         expiresAt: null,
       },
     ]);
-    await expect(initialize(base, { headers: { authorization: `Bearer ${created.token}` } })).resolves.toHaveProperty(
-      "status",
-      401,
+    await expect(
+      initialize(base, {
+        headers: { authorization: `Bearer ${created.token}` },
+      }),
+    ).resolves.toHaveProperty("status", 401);
+    await expect(
+      initialize(base, {
+        headers: { authorization: `Bearer ${rotated.token}` },
+      }),
+    ).resolves.toHaveProperty("status", 200);
+  });
+
+  it("binds UI token login sessions to one tenant and ignores cross-tenant URL attempts", async () => {
+    const tenants = createMemoryTenantStore([
+      {
+        token: "tenant-one-token",
+        tenant: { id: "tenant-one", name: "Tenant One" },
+      },
+      {
+        token: "tenant-two-token",
+        tenant: { id: "tenant-two", name: "Tenant Two" },
+      },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      ui: {
+        displayName: "Demo Unit",
+        tagline: "Tenant settings",
+        panels: ["keys", "connections"],
+        sessionSecret: "test-session-secret",
+      },
+    });
+    const base = await listen(unit.app);
+
+    const tenantOneCookie = await login(base, "tenant-one-token");
+    const tenantTwoCookie = await login(base, "tenant-two-token");
+    const status = await fetch(`${base}/api/auth/status`, {
+      headers: { cookie: tenantOneCookie },
+    }).then((r) => r.json());
+    const settings = await fetch(`${base}/api/settings?tenantId=tenant-two`, {
+      headers: { cookie: tenantOneCookie },
+    }).then((r) => r.json());
+    const overview = await fetch(`${base}/api/overview`, {
+      headers: { cookie: tenantTwoCookie },
+    }).then((r) => r.json());
+    const agent = await fetch(`${base}/api/agent`).then((r) => r.json());
+
+    expect(status).toMatchObject({
+      authenticated: true,
+      tenant: { id: "tenant-one", name: "Tenant One" },
+    });
+    expect(settings).toMatchObject({
+      tenant: { id: "tenant-one", name: "Tenant One" },
+    });
+    expect(JSON.stringify(settings)).not.toContain("tenant-two");
+    expect(overview).toMatchObject({
+      tenant: { id: "tenant-two", name: "Tenant Two" },
+    });
+    expect(agent).toMatchObject({
+      name: "demo",
+      displayName: "Demo Unit",
+      tagline: "Tenant settings",
+      panels: ["keys", "connections"],
+    });
+  });
+
+  it("rejects protected UI routes without a tenant session or bearer token", async () => {
+    const tenants = createMemoryTenantStore([
+      { token: "known-token", tenant: { id: "tenant-a" } },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      ui: { sessionSecret: "test-session-secret" },
+    });
+    const base = await listen(unit.app);
+
+    const anonymous = await fetch(`${base}/api/settings`);
+    const bearer = await fetch(`${base}/api/settings`, {
+      headers: { authorization: "Bearer known-token" },
+    });
+
+    expect(anonymous.status).toBe(401);
+    expect(bearer.status).toBe(200);
+    await expect(bearer.json()).resolves.toMatchObject({
+      tenant: { id: "tenant-a" },
+    });
+  });
+
+  it("rotates the logged-in tenant token from the UI and invalidates the old MCP token", async () => {
+    const tenants = createMemoryTenantStore([
+      { token: "tenant-one-token", tenant: { id: "tenant-one" } },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      controlPlane: { store: tenants, token: "control-secret" },
+      ui: { sessionSecret: "test-session-secret" },
+    });
+    const base = await listen(unit.app);
+    const cookie = await login(base, "tenant-one-token");
+
+    const rotatedResponse = await fetch(`${base}/api/token/regenerate`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    const rotated = await rotatedResponse.json();
+
+    expect(rotatedResponse.status).toBe(200);
+    expect(rotated).toMatchObject({
+      tenant: { id: "tenant-one" },
+      mcpPath: "/mcp",
+    });
+    expect(rotated.token).toMatch(/^zenod_[a-f0-9]{48}$/);
+    await expect(
+      initialize(base, {
+        headers: { authorization: "Bearer tenant-one-token" },
+      }),
+    ).resolves.toHaveProperty("status", 401);
+    await expect(
+      initialize(base, {
+        headers: { authorization: `Bearer ${rotated.token}` },
+      }),
+    ).resolves.toHaveProperty("status", 200);
+  });
+
+  it("serves the existing React console assets with an SPA fallback", async () => {
+    const tenants = createMemoryTenantStore([
+      { token: "known-token", tenant: { id: "tenant-a" } },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      ui: {
+        webDist: await tempWebDist(),
+        sessionSecret: "test-session-secret",
+      },
+    });
+    const base = await listen(unit.app);
+
+    await expect(
+      fetch(`${base}/asset.txt`).then((r) => r.text()),
+    ).resolves.toBe("asset");
+    const fallback = await fetch(`${base}/settings/keys`);
+
+    expect(fallback.status).toBe(200);
+    expect(fallback.headers.get("cache-control")).toBe(
+      "no-cache, no-store, must-revalidate",
     );
-    await expect(initialize(base, { headers: { authorization: `Bearer ${rotated.token}` } })).resolves.toHaveProperty(
-      "status",
-      200,
-    );
+    await expect(fallback.text()).resolves.toContain("chassis shell");
   });
 
   it("seeds one implicit self-host tenant from env token", async () => {
@@ -306,7 +527,9 @@ describe("createUnit", () => {
         expiresAt: null,
       },
     ]);
-    const response = await initialize(base, { headers: { authorization: "Bearer zenod_self_host_seed_token" } });
+    const response = await initialize(base, {
+      headers: { authorization: "Bearer zenod_self_host_seed_token" },
+    });
     expect(response.status).toBe(200);
   });
 

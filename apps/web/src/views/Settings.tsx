@@ -15,13 +15,23 @@ import { KeysTab } from "@/views/settings/KeysTab"
 import { TestTab } from "@/views/settings/TestTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 
+type SettingsTab =
+  | "chat"
+  | "team"
+  | "vault"
+  | "keys"
+  | "transcription"
+  | "connections"
+  | "costs"
+  | "test"
+
 export function Settings({
   initialSettings,
   initialTab,
   onLoggedOut,
 }: {
   initialSettings: SettingsValues
-  initialTab?: "chat" | "vault" | "keys" | "transcription" | "connections" | "costs" | "test"
+  initialTab?: SettingsTab
   onLoggedOut: () => void
 }) {
   const [loggingOut, setLoggingOut] = React.useState(false)
@@ -34,10 +44,36 @@ export function Settings({
     displayName: "Zenod",
     tagline: "Self-hosted memory agent",
     vaultless: false,
+    panels: null as SettingsTab[] | null,
   })
   React.useEffect(() => {
-    api<{ displayName: string; tagline: string; vaultless?: boolean }>("/api/agent")
-      .then((r) => setIdentity({ displayName: r.displayName, tagline: r.tagline, vaultless: r.vaultless ?? false }))
+    api<{
+      displayName: string
+      tagline: string
+      vaultless?: boolean
+      panels?: string[]
+    }>("/api/agent")
+      .then((r) =>
+        setIdentity({
+          displayName: r.displayName,
+          tagline: r.tagline,
+          vaultless: r.vaultless ?? false,
+          panels: Array.isArray(r.panels)
+            ? r.panels.filter((panel): panel is SettingsTab =>
+                [
+                  "chat",
+                  "team",
+                  "vault",
+                  "keys",
+                  "transcription",
+                  "connections",
+                  "costs",
+                  "test",
+                ].includes(panel)
+              )
+            : null,
+        })
+      )
       .catch(() => {})
   }, [])
   React.useEffect(() => {
@@ -59,9 +95,30 @@ export function Settings({
   // Vaultless agents (the Console shell) have no vault, so the vault-specific
   // tabs (Vault, Transcription — which files Drive transcripts into the vault)
   // are hidden. This is the per-capability tab model in miniature.
-  const showVault = !identity.vaultless
+  const panelSet = identity.panels === null ? null : new Set(identity.panels)
+  const showChat = panelSet?.has("chat") ?? true
+  const showVault = panelSet?.has("vault") ?? !identity.vaultless
   // The Console (vaultless) is the team manager — it enables the other agents.
-  const showTeam = identity.vaultless
+  const showTeam = panelSet?.has("team") ?? identity.vaultless
+  const showKeys = panelSet?.has("keys") ?? true
+  const showTranscription = panelSet?.has("transcription") ?? true
+  const showConnections = panelSet?.has("connections") ?? true
+  const showCosts = panelSet?.has("costs") ?? true
+  const showTest = panelSet?.has("test") ?? true
+  const visibleTabs: SettingsTab[] = [
+    ...(showChat ? (["chat"] as const) : []),
+    ...(showTeam ? (["team"] as const) : []),
+    ...(showVault ? (["vault"] as const) : []),
+    ...(showKeys ? (["keys"] as const) : []),
+    ...(showTranscription ? (["transcription"] as const) : []),
+    ...(showConnections ? (["connections"] as const) : []),
+    ...(showCosts ? (["costs"] as const) : []),
+    ...(showTest ? (["test"] as const) : []),
+  ]
+  const defaultTab =
+    initialTab && visibleTabs.includes(initialTab)
+      ? initialTab
+      : (visibleTabs[0] ?? "keys")
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -82,7 +139,9 @@ export function Settings({
             <BrainIcon className="size-4.5" />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-xl font-semibold tracking-tight">{identity.displayName}</h1>
+            <h1 className="text-xl font-semibold tracking-tight">
+              {identity.displayName}
+            </h1>
             <p className="text-sm text-muted-foreground">{identity.tagline}</p>
           </div>
         </div>
@@ -97,20 +156,28 @@ export function Settings({
         </Button>
       </header>
 
-      <Tabs defaultValue={initialTab ?? "chat"}>
+      <Tabs defaultValue={defaultTab}>
         <TabsList>
-          <TabsTrigger value="chat">Chat</TabsTrigger>
+          {showChat && <TabsTrigger value="chat">Chat</TabsTrigger>}
           {showTeam && <TabsTrigger value="team">Team</TabsTrigger>}
           {showVault && <TabsTrigger value="vault">Vault</TabsTrigger>}
-          <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>
-          <TabsTrigger value="transcription">Transcription</TabsTrigger>
-          <TabsTrigger value="connections">Connections</TabsTrigger>
-          <TabsTrigger value="costs">Costs</TabsTrigger>
-          <TabsTrigger value="test">Test</TabsTrigger>
+          {showKeys && (
+            <TabsTrigger value="keys">Keys &amp; models</TabsTrigger>
+          )}
+          {showTranscription && (
+            <TabsTrigger value="transcription">Transcription</TabsTrigger>
+          )}
+          {showConnections && (
+            <TabsTrigger value="connections">Connections</TabsTrigger>
+          )}
+          {showCosts && <TabsTrigger value="costs">Costs</TabsTrigger>}
+          {showTest && <TabsTrigger value="test">Test</TabsTrigger>}
         </TabsList>
-        <TabsContent value="chat" className="mt-4">
-          <ChatTab vaultless={identity.vaultless} />
-        </TabsContent>
+        {showChat && (
+          <TabsContent value="chat" className="mt-4">
+            <ChatTab vaultless={identity.vaultless} />
+          </TabsContent>
+        )}
         {showTeam && (
           <TabsContent value="team" className="mt-4">
             <TeamTab />
@@ -121,21 +188,35 @@ export function Settings({
             <VaultTab />
           </TabsContent>
         )}
-        <TabsContent value="keys" className="mt-4">
-          <KeysTab initial={settings} onSaved={setSettings} vaultless={identity.vaultless} />
-        </TabsContent>
-        <TabsContent value="transcription" className="mt-4">
-          <TranscriptionTab />
-        </TabsContent>
-        <TabsContent value="connections" className="mt-4">
-          <ConnectionsTab />
-        </TabsContent>
-        <TabsContent value="costs" className="mt-4">
-          <CostsTab />
-        </TabsContent>
-        <TabsContent value="test" className="mt-4">
-          <TestTab />
-        </TabsContent>
+        {showKeys && (
+          <TabsContent value="keys" className="mt-4">
+            <KeysTab
+              initial={settings}
+              onSaved={setSettings}
+              vaultless={identity.vaultless}
+            />
+          </TabsContent>
+        )}
+        {showTranscription && (
+          <TabsContent value="transcription" className="mt-4">
+            <TranscriptionTab />
+          </TabsContent>
+        )}
+        {showConnections && (
+          <TabsContent value="connections" className="mt-4">
+            <ConnectionsTab />
+          </TabsContent>
+        )}
+        {showCosts && (
+          <TabsContent value="costs" className="mt-4">
+            <CostsTab />
+          </TabsContent>
+        )}
+        {showTest && (
+          <TabsContent value="test" className="mt-4">
+            <TestTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )
