@@ -58,3 +58,14 @@ test("extractProvisionedToken tolerates chassis response shapes", () => {
   assert.equal(extractProvisionedToken({ tenant: { token: "three" } }), "three");
   assert.equal(extractProvisionedToken({ tenant: { tenantId: "t1" } }), null);
 });
+
+test("redact preserves non-secret credential hashes as proof handles", () => {
+  const output = redact({
+    retiredCredentialSha256: "retired-hash",
+    activeCredentialSha256: "active-hash",
+  });
+  assert.deepEqual(output, {
+    retiredCredentialSha256: "retired-hash",
+    activeCredentialSha256: "active-hash",
+  });
+});

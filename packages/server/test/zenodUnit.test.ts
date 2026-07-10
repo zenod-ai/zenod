@@ -8,7 +8,11 @@ import {
   type UnitContext,
 } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it } from "vitest";
-import { createZenodUnit, ZenodRuntimePool } from "../src/zenodUnit.js";
+import {
+  createZenodUnit,
+  ZENOD_READ_TOOLS,
+  ZenodRuntimePool,
+} from "../src/zenodUnit.js";
 
 const tempDirs: string[] = [];
 
@@ -39,6 +43,19 @@ function contextFor(
 }
 
 describe("Zenod chassis unit", () => {
+  it("declares every Zenod read tool for chassis conduct enforcement", () => {
+    expect([...ZENOD_READ_TOOLS].sort()).toEqual([
+      "ask_brain",
+      "get_ingest_result",
+      "get_memory",
+      "get_recent_conversation_transcript",
+      "get_task_result",
+      "list_drive_files",
+      "read_llm_timeline",
+      "search_memory",
+    ]);
+  });
+
   it("caches one runtime per verified tenant storage root", async () => {
     const dataDir = await tempDir();
     const storage = new ChassisStorage({ dataDir });
