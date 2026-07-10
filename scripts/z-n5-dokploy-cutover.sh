@@ -226,17 +226,13 @@ ensure_redirect() {
 health_sha() { jq -r '.sha // .git_sha // .gitSha // empty' <<<"$1"; }
 
 wait_for_deploy() {
-  [[ "$DRY_RUN" == "0" ]] || { log "DRY_RUN wait for target deployment status=done and expected git SHA"; return 0; }
+  [[ "$DRY_RUN" == "0" ]] || { log "DRY_RUN wait for target health to report expected git SHA"; return 0; }
   local deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS)) expected="${IMAGE##*:sha-}"
   while (( SECONDS < deadline )); do
-    local target status body sha
-    target="$(app_json "$TARGET_APP")"
-    status="$(jq -r '.applicationStatus' <<<"$target")"
-    if [[ "$status" == "done" ]]; then
-      body="$(curl -fsS https://mind.zenod.dev/api/health 2>/dev/null || true)"
-      sha="$(health_sha "$body" 2>/dev/null || true)"
-      [[ "$sha" == "$expected"* ]] && return 0
-    fi
+    local body sha
+    body="$(curl -fsS https://mind.zenod.dev/api/health 2>/dev/null || true)"
+    sha="$(health_sha "$body" 2>/dev/null || true)"
+    [[ "$sha" == "$expected"* ]] && return 0
     sleep "$HEALTH_POLL_SECONDS"
   done
   die "target did not report image SHA $expected on mind.zenod.dev before domain movement"
