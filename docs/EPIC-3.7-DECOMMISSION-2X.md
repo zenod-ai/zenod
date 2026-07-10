@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Epic 3.7 delivery manager (Codex task `019f4933-a958-79b3-8e16-21841be40c53`)
 Steward since: 2026-07-10 01:30 CEST
-Last reconciled commit: `8e12ebab64140f227f9c19d5a72e5d191de8d251`
+Last reconciled commit: `dd403d3`
 Planner: Epic 3.0 planner
 Worker: Epic 3.7 delivery manager + dispatched ticket workers
 Tester: DX-7 final tester dispatched
@@ -21,8 +21,8 @@ Tester: DX-7 final tester dispatched
 | Epic 0 worker | Epic 0 Foundation planner | Root scope | Reads for rollups. | Root state reconciled. |
 | Planner | Epic 3.0 planner | Decommission scope | Shape acceptance and tickets until an epic worker is bound. | Executable ledger. |
 | Epic worker | Epic 3.7 delivery manager (`019f4933-a958-79b3-8e16-21841be40c53`) | This spine | Delivery lead and MANAGER (parent D8): mint issues, dispatch ticket workers and testers, run fix loops, iterate until Definition of Done or a named Human Gate; never stop for questions the spine or code answers. | Spine, issues, integration state current. |
-| Ticket worker | Dalton (`019f493b-5e40-7bd2-b3d5-98c1d6f8aeb9`), Descartes (`019f493b-5ec9-73c1-bd3a-450ab687796c`), Faraday (`019f493b-5f51-7352-9bf4-9b4ee36888ea`) | #714, #722, #731 | Execute assigned issue branches. | PR/patch, commit, evidence, blocker, next action. |
-| Tester | Lovelace (`019f493b-5fe8-77e1-85d3-df536f8f2059`) | #732 | Validate final sweep/restore runbook readiness. | Commit, environment, pass/fail, risk. |
+| Ticket worker | Dalton (`019f493b-5e40-7bd2-b3d5-98c1d6f8aeb9`), Descartes (`019f493b-5ec9-73c1-bd3a-450ab687796c`), Faraday (`019f493b-5f51-7352-9bf4-9b4ee36888ea`), Franklin (`019f4943-96fe-78b0-89fb-f17df5738be7`), Galileo (`019f4950-33d0-7cb2-b779-1b447e381fab`) | #714, #722, #731, #741, #745 | Execute assigned issue branches. | PR/patch, commit, evidence, blocker, next action. |
+| Tester | Lovelace (`019f493b-5fe8-77e1-85d3-df536f8f2059`), Heisenberg (`019f4950-3452-7863-b296-fe04c2cb2ecf`) | #732; DX-1/DX-2 safety review | Validate runbook and execution-package readiness. | Commit, environment, pass/fail, risk. |
 
 ## Write Scope
 
@@ -76,12 +76,12 @@ Inventory and retire the entire Epic 2.x per-user container fleet — every per-
 
 ## Current State
 
-Phase: execution
-Last verified: 2026-07-10 01:30 CEST
+Phase: human gate + dependency execution
+Last verified: 2026-07-10 02:27 CEST
 Integration target: main
 Fresh base commit: `8e12ebab64140f227f9c19d5a72e5d191de8d251`
-Next action: manage dispatched workers for #714, #722, #731, and #732; keep #728/#729/#730 blocked until 3.2/3.3/3.5 cutovers.
-Blockers: destructive DX-2 execution is blocked until Jordi selects a snapshot archive target and approves the candidate list. Live retirement waves are blocked by 3.2/3.3/3.5 cutovers and per-wave Jordi approval. Initial read-only probes show visible per-tenant endpoints are HTTP 200, so early wins are currently classification/snapshot/runbook work, not blind deletion.
+Next action: Jordi approves the exact DX-2 CSV digest and archive target; meanwhile review cloud PR #59 and deliver the missing unit `/api/tenants` endpoints through their owning epics. Keep #728/#729/#730 blocked until 3.2/3.3/3.5 cutovers.
+Blockers: DX-2 destructive execution needs Jordi's exact approval of digest `e0e81e0f2546d86034fc79bafb4e7c13abf383830cf9926241f8c7dc67e41c3f` and archive target. DX-8 cannot enable `tenants_api` until Zenod, Callisthenes, and Ring expose deployed HTTPS `/api/tenants` endpoints with control-plane tokens. Live retirement waves remain blocked by 3.2/3.3/3.5 cutovers and per-wave Jordi approval.
 
 ## Role Goals
 
@@ -124,13 +124,13 @@ Ticket sketch: DX-1 inventory + classification; DX-2 early-wins wave (dead/test)
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | [#714](https://github.com/zenod-ai/zenod/issues/714) | Ticket worker | Dalton (`019f493b-5e40-7bd2-b3d5-98c1d6f8aeb9`) | DX-1 full 2.x fleet inventory + classification | ready for review | - | [PR #746](https://github.com/zenod-ai/zenod/pull/746) / `codex/epic37-dx1-inventory` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Every 2.x app/container listed and classified; record-only vs running distinguished. | `docs/EPIC-3.7-DX1-INVENTORY.md`: corrected 34-row count and added all opaque Dokploy IDs; 16 running 2.x candidates; 4 failed duplicates; 5 orphan-volume candidates; watchdog entries mapped. | 2026-07-10 02:20 CEST | Review corrected identifier map; DX-2 exact candidate manifest now binds live IDs and rejects drift. |
-| [#722](https://github.com/zenod-ai/zenod/issues/722) | Ticket worker | Descartes (`019f493b-5ec9-73c1-bd3a-450ab687796c`) | DX-2 early wins: retire confirmed dead/test instances | blocked / package ready | #714 + archive target + Jordi approval | [PR #749](https://github.com/zenod-ai/zenod/pull/749) / `codex/epic37-dx2-early-wins` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | All dead/test instances snapshotted + removed; reclaimed resources recorded. | Commit `fee2d6c7d5be02a256c2eb84af48ded536d952de`: runbook, candidate CSV, guarded retire script; dry-run failed closed on placeholder candidates as intended. | 2026-07-10 02:20 CEST | Jordi chooses archive target and approves exact DX-1 candidate rows; then run dry-run and reviewed command batch. |
+| [#722](https://github.com/zenod-ai/zenod/issues/722) | Ticket worker | Descartes + steward hardening | DX-2 early wins: retire confirmed dead/test instances | blocked / human-ready package | #714 + archive target + Jordi approval | [PR #749](https://github.com/zenod-ai/zenod/pull/749) / `codex/epic37-dx2-early-wins` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | All dead/test instances snapshotted + removed; reclaimed resources recorded. | Commit `976131d`: exact 17-row manifest; approved digest; live identifier reconciliation; snapshot/restore-before-delete; automatic pre-delete rollback; pre/post Docker/Dokploy/watchdog/endpoint evidence. Alpha9 dry-run passed all rows with zero mutations. | 2026-07-10 02:27 CEST | Jordi approves digest `e0e81e...e41c3f` and archive target. Recommended: VPS-local dated directory with off-host mirror after the wave. |
 | [#728](https://github.com/zenod-ai/zenod/issues/728) | Ticket worker | blocked | DX-3 Zenod retirement wave | blocked | 3.2 Z-MT-6 + #714 | `codex/epic37-dx3-zenod-wave` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | All per-user Zenods retired with per-tenant verification. | Issue minted. | 2026-07-10 01:30 CEST | Wait for Zenod cutover; prepare wave checklist if spare capacity opens. |
 | [#729](https://github.com/zenod-ai/zenod/issues/729) | Ticket worker | blocked | DX-4 Callisthenes retirement wave | blocked | 3.3 CA-MT-6 + #714 | `codex/epic37-dx4-callisthenes-wave` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | All per-user Callisthenes retired with per-tenant verification. | Issue minted. | 2026-07-10 01:30 CEST | Wait for Callisthenes cutover; prepare wave checklist if spare capacity opens. |
 | [#730](https://github.com/zenod-ai/zenod/issues/730) | Ticket worker | blocked | DX-5 Epaminon retirement wave | blocked | 3.5 E-MT-7 + #714 | `codex/epic37-dx5-epaminon-wave` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | All per-user Epaminons retired; AWAIT_PROVISION fleet gone. | Issue minted. | 2026-07-10 01:30 CEST | Wait for Epaminon cutover. |
-| [#731](https://github.com/zenod-ai/zenod/issues/731) | Ticket worker | Faraday (`019f493b-5f51-7352-9bf4-9b4ee36888ea`) | DX-6 retire provisioner, watchdog registration, DNS minting | blocked / audit ready | DX-3..5 + #741 + #745 for destructive removal | [PR #747](https://github.com/zenod-ai/zenod/pull/747) / `codex/epic37-dx6-provisioner-artifacts` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | 2.x provisioning code paths removed with tombstones. | Commit `76141afd0f9191a036d86159c0da5ee9f5c4122b`: public repo audit says `/api/provision`, `ZENOD_AWAIT_PROVISION`, suite-agent provisioning, and tests are still live; no production removal safe yet. | 2026-07-10 02:00 CEST | Implement #745 replacement, then destructive cleanup waits for waves. |
+| [#731](https://github.com/zenod-ai/zenod/issues/731) | Ticket worker | Faraday + steward | DX-6 retire provisioner, watchdog registration, DNS minting | blocked / replacement in review | DX-3..5 + #741 + #745 enablement | [PR #747](https://github.com/zenod-ai/zenod/pull/747), [cloud PR #59](https://github.com/zenod-ai/cloud/pull/59) | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | 2.x provisioning code paths removed with tombstones. | Public audit commit `76141af`; cloud replacement commit `60114da` adds fail-closed shared-unit provisioning but cannot be enabled until unit endpoints deploy. | 2026-07-10 02:27 CEST | Review PR #59; deliver/enable unit endpoints; destructive cleanup still waits for waves. |
 | [#741](https://github.com/zenod-ai/zenod/issues/741) | Ticket worker | Franklin (`019f4943-96fe-78b0-89fb-f17df5738be7`) | DX-6C cloud provisioner, DNS, and watchdog minting audit | blocked / audit ready | #731; destructive removal waits for #745 + DX-3..5 | [cloud PR #58](https://github.com/zenod-ai/cloud/pull/58) / `codex/epic37-dx6-cloud-audit` | cloud `4300ec34e0a59c4f3689fb789eae460c6d7354d0` | Cloud Dokploy app/domain/watchdog provisioning paths audited and cleanup plan split into now-safe vs gated. | Commit `775daa7dbd7ba02b384d347d775be157388afed3`: cloud still has live Stripe-triggered 2.x provisioners for Zenod, Callisthenes, and Ring; no current `/api/tenants` caller. | 2026-07-10 02:50 CEST | #745 must replace cloud Dokploy provisioners with unit `/api/tenants` flow before deletion. |
-| [#745](https://github.com/zenod-ai/zenod/issues/745) | Ticket worker | blocked | DX-8 cloud `/api/tenants` checkout replacement | blocked | 3.1 tenants API + unit endpoints + #741 | future cloud branch | cloud base TBD | Stripe checkout provisions unit tenant rows instead of Dokploy compose/domain records. | Issue minted from #741 audit. | 2026-07-10 02:55 CEST | Start after tenant API contract/endpoints are available; test in cloud-test first. |
+| [#745](https://github.com/zenod-ai/zenod/issues/745) | Ticket worker | Galileo (`019f4950-33d0-7cb2-b779-1b447e381fab`) | DX-8 cloud `/api/tenants` checkout replacement | blocked / code ready | deployed Zenod + Callisthenes + Ring endpoints | [cloud PR #59](https://github.com/zenod-ai/cloud/pull/59) / `codex/epic37-dx8-cloud-tenants` | cloud `4300ec34e0a59c4f3689fb789eae460c6d7354d0` | Stripe checkout provisions unit tenant rows instead of Dokploy compose/domain records. | Commit `60114da`: exact C3 request/auth/token contract, fail-closed mode, queue dedup, tenant persistence, watchdog exclusion; webhook typecheck/build and 13 tests pass. | 2026-07-10 02:27 CEST | Merge/review code only; enable on cloud-test after all three endpoints/tokens exist, then run one Stripe TEST checkout per unit. |
 | [#732](https://github.com/zenod-ai/zenod/issues/732) | Tester | Lovelace (`019f493b-5fe8-77e1-85d3-df536f8f2059`) | DX-7 final sweep + restore drill + runbook | blocked / runbook ready | DX-3..6 for final pass | [PR #748](https://github.com/zenod-ai/zenod/pull/748) / `codex/epic37-dx7-final-sweep-restore` | `8e12ebab64140f227f9c19d5a72e5d191de8d251` | Fleet matches canonical slide; one snapshot restored as drill; runbook merged. | Commit `1a7de0b`: final sweep and restore-drill runbook pushed; no destructive commands executed; final pass blocked by retirement waves and restore target approval. | 2026-07-10 02:15 CEST | Review runbook; execute only after waves complete and restore target is approved. |
 
 ## Branch And Integration
@@ -149,6 +149,8 @@ Ticket sketch: DX-1 inventory + classification; DX-2 early-wins wave (dead/test)
 | Gate | Human Owner | Trigger | Exact Approval / Input Required | What May Continue |
 |---|---|---|---|---|
 | Any removal touching a live-paying tenant's instance | Jordi | DX-3..5 wave execution | Approve the wave's tenant list + window + rollback plan | Inventory, snapshots, dead/test removals |
+| DX-2 test/duplicate retirement batch | Jordi | Before `DRY_RUN=0` | Approve CSV digest `e0e81e0f2546d86034fc79bafb4e7c13abf383830cf9926241f8c7dc67e41c3f`, archive target, and approval reference | Read-only reconciliation and dry-runs |
+| Cloud-test shared-unit provisioning enablement | Jordi | Before setting `TENANT_PROVISIONING_MODE=tenants_api` | Confirm all three unit endpoints/tokens are configured and approve three Stripe TEST checkouts | Merge/review fail-closed code while mode remains off |
 | VPS-level script execution | Jordi | Any step Dokploy API cannot perform | Run the exact reviewed script/command provided in the issue | API-reachable steps |
 | Archive retention policy | Jordi | After DX-7 | Decide snapshot retention/deletion | Nothing blocked; archives kept meanwhile |
 
@@ -189,6 +191,9 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 | 2026-07-10 | DX-6 public repo provisioner audit | `76141afd0f9191a036d86159c0da5ee9f5c4122b` | local tests | `git diff --check`; `npm test --workspace @zenod/server -- provision.test.ts settingsZd9.test.ts`; `bash scripts/watchdog/watchdog-logic.test.sh` | blocked / audit pass | Public repo deletion is unsafe until `/api/provision`, `ZENOD_AWAIT_PROVISION`, suite provisioning, and cloud provisioners are replaced. |
 | 2026-07-10 | DX-7 final sweep runbook | `1a7de0b` | runbook validation | `git diff --check`; required-section grep; ASCII check; read-only Dokploy `project.all` | blocked / runbook pass | Final acceptance cannot run while current Dokploy state still has 2.x rows. |
 | 2026-07-10 | DX-6C cloud provisioner audit | `775daa7dbd7ba02b384d347d775be157388afed3` | `zenod-ai/cloud` local tests | `git diff --check`; ASCII/secret scans; `node --check` scripts; webhook typecheck/build; console build; `node --test scripts/provision-callisthenes.test.mjs` | blocked / audit pass | Cloud still has live Stripe-triggered 2.x provisioners and no `/api/tenants` caller; #745 created. |
+| 2026-07-10 | DX-1 identifier correction | `dd403d3` | local artifact against sanitized Dokploy source | strict spine validation; identifier map count; `git diff --check`; GitHub CI | pass / ready for review | 34 source rows = 34 table rows = 34 opaque IDs; PR #746 ready for review. |
+| 2026-07-10 | DX-2 hardened execution package | `976131d` | local + Alpha9 live read-only | guard/rollback tests; `bash -n`; two Alpha9 dry-runs; deliberate live-paying ID cross-wire; wildcard DNS probe; volume byte/free-space checks | pass / human gate | 17 rows reconciled; 253 mutations printed and zero executed; cross-wire rejected before Phase 1; automatic pre-delete rollback tested. |
+| 2026-07-10 | DX-8 cloud shared-unit client | cloud `60114da` | `zenod-ai/cloud` local | webhook typecheck/build; 13 tests/5 suites; console build; health smoke; compose config; `git diff --check`; independent contract review | pass / endpoint gate | C3 contract matched; no fallback after API failure; production default unchanged; PR #59. |
 | 2026-07-10 | GitHub issue board and draft PRs | `zenod-ai/zenod`, `zenod-ai/cloud` | GitHub issues/PRs | `gh issue create`; `gh pr create --draft`; `gh issue list --label epic:3.7` | pass | Issues #714, #722, #728, #729, #730, #731, #732, #741, #745; PRs #746, #747, #748, #749, cloud #58. |
 
 ## Handoff Journal
@@ -263,11 +268,25 @@ Links:
 - https://github.com/zenod-ai/zenod/issues/745
 - https://github.com/zenod-ai/cloud/pull/58
 
+### 2026-07-10 - Delivery Manager - Safety fix loop and DX-8 implementation complete
+
+Context: independent DX-1/DX-2 safety review found six defects. The steward corrected the 34-row inventory and added all Dokploy IDs, then hardened DX-2 through exact live identifier reconciliation, digest-bound approval, durable manifests/checksums, snapshot/restore-before-delete, automatic pre-delete rollback, watchdog before/after evidence, endpoint expectations, and resource measurements. A second Alpha9 dry-run reconciled all 17 rows with zero mutations. Galileo implemented the fail-closed cloud `/api/tenants` replacement and an independent observer matched it to C3.
+Next: Jordi approves the DX-2 digest/archive target. Unit owners deliver the three deployed endpoints so cloud-test can enable PR #59 and run Stripe TEST checkouts.
+Risks: no destructive command has run; current 2.x rows still exist. Enabling `tenants_api` before all unit endpoints/tokens exist fails startup by design. Legacy cleanup remains unsafe until endpoint enablement and retirement waves complete.
+Assignment identity: Epic 3.7 delivery manager reconciliation
+Branch / latest commits: DX-1 `dd403d3`; DX-2 `976131d`; cloud DX-8 `60114da`
+Last verified: 2026-07-10 02:27 CEST
+Links:
+
+- https://github.com/zenod-ai/zenod/pull/746
+- https://github.com/zenod-ai/zenod/pull/749
+- https://github.com/zenod-ai/cloud/pull/59
+
 ## Open Questions
 
-- Where do volume snapshots archive to (VPS-local archive dir vs object storage vs a git-LFS-style repo)? Owner: Jordi. Needed by: DX-2.
-- DX-1 found one live-paying row (`zenod-jordi-f2c7a6`), 13 test rows, 4 failed duplicate rows, 2 ambiguous running 2.x rows (`callisthenes-jordicallifresh33087-muhmxp`, active `ring-jordiring-fkegkz`), and several non-tenant unknown/control rows. Owner: Jordi/steward. Needed by: DX-2 approval.
-- Cloud audit #741 found live Stripe-triggered 2.x provisioners and no `/api/tenants` caller; #745 must implement the replacement path before DX-6 can delete provisioners. Owner: future cloud worker/steward. Needed by: DX-6.
+- Approve DX-2 digest `e0e81e0f2546d86034fc79bafb4e7c13abf383830cf9926241f8c7dc67e41c3f` and choose archive target. Recommendation: `/srv/zenod-archives/epic37/dx2/YYYYMMDD/`; 45 candidate volumes total ~0.014 GiB and Docker data had 35 GB free, with an off-host mirror after execution. Owner: Jordi. Needed by: DX-2.
+- DX-1 found one live-paying row (`zenod-jordi-f2c7a6`) and two ambiguous active rows (`callisthenes-jordicallifresh33087-muhmxp`, `ring-jordiring-fkegkz`). The DX-2 batch excludes all three; only the failed duplicate record sharing the Ring hostname is included with `still-routed` postcondition. Owner: Jordi/steward. Needed by: later waves, not DX-2 test-row approval.
+- Cloud PR #59 implements #745, but generic C3 is branch-only and Callisthenes/Ring deployed endpoints are absent. Owner: Epic 3.1/3.3/Ring unit workers. Needed by: DX-8 enablement and DX-6 cleanup.
 
 ## Proposed Cross-Spine Updates
 
