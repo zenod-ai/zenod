@@ -255,8 +255,10 @@ function scrubLegacyAuthSettings(root) {
   if (keys.length === 0) return keys;
   const db = new DatabaseSync(path);
   try {
+    db.exec("PRAGMA secure_delete = ON");
     const placeholders = keys.map(() => "?").join(", ");
     db.prepare(`DELETE FROM settings WHERE key IN (${placeholders})`).run(...keys);
+    db.exec("VACUUM");
     db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   } finally {
     db.close();

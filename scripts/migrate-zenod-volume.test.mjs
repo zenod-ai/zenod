@@ -125,6 +125,9 @@ test("apply copies all state, inserts only the token hash, verifies evidence, an
     { key: "vault_repo", value: "owner/repo" },
   );
   migratedState.close();
+  const migratedBytes = readFileSync(join(target, "zenod.sqlite"));
+  assert.equal(migratedBytes.includes(Buffer.from("legacy-token-never-passed-to-tool")), false);
+  assert.equal(migratedBytes.includes(Buffer.from("legacy-session-secret")), false);
   assert.deepEqual(first.source.scrubbedSettings, ["api_token", "session_secret"]);
   assert.equal(readFileSync(join(target, "artifacts", "2026", "07", "evidence.txt"), "utf8"), "evidence bytes\n");
   assert.equal(existsSync(first.receiptPath), true);
