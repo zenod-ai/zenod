@@ -272,8 +272,16 @@ export interface TranscriptionKitOptions {
 }
 
 export interface ProcessTranscriptionOptions {
-  /** Trusted source resolved from the authenticated upstream connection/card. */
+  /**
+   * Trusted source resolved from the upstream connection/card. Required when
+   * input carries text_transcript or transcription_failed.
+   */
   authenticatedSource?: TranscriptionSource;
+  /**
+   * Book supplied usage to this tenant. Enable only at the attribution hop
+   * (for example, the Ring after sender-to-tenant mapping). Defaults to false.
+   */
+  bookProvidedUsageToTenant?: boolean;
   signal?: AbortSignal;
 }
 
@@ -338,17 +346,26 @@ export function createTranscriptionKit(options: TranscriptionKitOptions): Transc
     async process(context, rawInput, processOptions = {}) {
       requireTenantStorage(context);
       const input = parseInput(rawInput);
+      const authenticatedInputSource =
+        input.text_transcript || input.transcription_failed
+          ? resolveAuthenticatedInputSource(input, processOptions.authenticatedSource)
+          : null;
       const media = resolveMedia(input, maxInlineBytes);
 
       if (input.text_transcript) {
-        const source = resolveProvidedSource(input, processOptions.authenticatedSource);
-        if (input.transcription_usage) {
-          meterUsage(context, usageKind, "provided", input.transcription_usage, source);
+        if (input.transcription_usage && processOptions.bookProvidedUsageToTenant === true) {
+          meterUsage(
+            context,
+            usageKind,
+            "provided",
+            input.transcription_usage,
+            authenticatedInputSource!,
+          );
         }
         return transcriptionResultSchema.parse({
           transcription_status: "provided",
           ...forwardFields(input),
-          transcription_source: source,
+          transcription_source: authenticatedInputSource,
         });
       }
 
@@ -365,7 +382,7 @@ export function createTranscriptionKit(options: TranscriptionKitOptions): Transc
       if (!binding) {
         return failedResult(
           input,
-          input.transcription_source ?? localSource,
+          authenticatedInputSource ?? localSource,
           input.transcription_failed ?? {
             code: "unavailable",
             message: "no transcription provider is configured for this tenant",
@@ -454,22 +471,19 @@ function requireTenantStorage(context: UnitContext) {
   return context.storage;
 }
 
-function resolveProvidedSource(
+function resolveAuthenticatedInputSource(
   input: TranscriptionInput,
   authenticatedSource: TranscriptionSource | undefined,
 ): TranscriptionSource {
-  const trusted = authenticatedSource
-    ? transcriptionSourceSchema.parse(authenticatedSource)
-    : undefined;
-  if (!input.transcription_source && !trusted) {
+  if (!authenticatedSource) {
     throw new TranscriptionKitError(
       "invalid_input",
-      "a pre-transcribed input requires authenticated source unit and version",
+      "a pre-transcribed transcript or upstream failure requires authenticated source unit and version",
     );
   }
+  const trusted = transcriptionSourceSchema.parse(authenticatedSource);
   if (
     input.transcription_source &&
-    trusted &&
     (input.transcription_source.unit !== trusted.unit ||
       input.transcription_source.version !== trusted.version)
   ) {
@@ -478,7 +492,7 @@ function resolveProvidedSource(
       "transcription_source does not match the authenticated source",
     );
   }
-  return input.transcription_source ?? trusted!;
+  return trusted;
 }
 
 function resolveMedia(
@@ -487,11 +501,18 @@ function resolveMedia(
 ): TranscriptionProviderMedia {
   if (input.artifact_ref) return { kind: "artifact_ref", artifactRef: input.artifact_ref };
   const inline = input.inline_media!;
+  const maxEncodedLength = Math.ceil(maxInlineBytes / 3) * 4;
+  if (inline.data_base64.length > maxEncodedLength) {
+    throw new TranscriptionKitError(
+      "invalid_input",
+      `inline media encoded payload exceeds the ${maxInlineBytes}-byte limit; use artifact_ref`,
+    );
+  }
   const bytes = Buffer.from(inline.data_base64, "base64");
   if (bytes.byteLength > maxInlineBytes) {
     throw new TranscriptionKitError(
       "invalid_input",
-      `inline media exceeds the ${maxInlineBytes}-byte limit; use artifact_ref`,
+      `decoded inline media exceeds the ${maxInlineBytes}-byte limit; use artifact_ref`,
     );
   }
   return {
@@ -576,8 +597,8 @@ function forwardFields(input: TranscriptionInput) {
 }
 
 function normalizeInlineLimit(value: number): number {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error("maxInlineBytes must be a non-negative integer");
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error("maxInlineBytes must be a non-negative safe integer");
   }
   return value;
 }

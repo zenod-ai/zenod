@@ -276,13 +276,21 @@ The canonical D18 fields are `sender`, `artifact_ref`, `text_transcript`,
 `tenant_id`. `channelMediaForwardSchema` requires an HTTPS `artifact_ref` and
 forbids inline base64. General media tools may use `inline_media`, bounded to
 256 KiB by default (`maxInlineBytes`); larger payloads must use `artifact_ref`.
+The encoded length is rejected before base64 decoding, followed by an exact
+decoded-byte check for padding boundary cases.
+
+`authenticatedSource` is mandatory whenever input carries a supplied
+transcript or upstream failure. Any caller-supplied `transcription_source` must
+match it. The receiver derives this trusted unit/version from its authenticated
+connection and D16 card; caller fields alone are never provenance.
 
 `process()` returns an explicit `transcription_status`:
 
 - `provided`: a supplied non-empty transcript bypassed provider resolution and
-  provider execution. Pass `authenticatedSource` when the first receiver has
-  derived the source unit/version from its authenticated connection and D16
-  card.
+  provider execution. Supplied `transcription_usage` is preserved but is not
+  booked by default. Only the attribution hop (the Ring after mapping sender to
+  tenant) sets `bookProvidedUsageToTenant: true`; later ingest hops leave it
+  false to prevent quota inflation.
 - `performed`: exactly one tenant-resolved adapter call produced text. The kit
   adds source provenance and non-secret usage, then records that usage through
   the same tenant's `UnitContext.usage` meter.

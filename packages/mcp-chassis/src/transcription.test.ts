@@ -78,7 +78,7 @@ describe("D18 transcription schemas", () => {
 });
 
 describe("createTranscriptionKit", () => {
-  it("bypasses provider resolution for supplied text and preserves provenance and usage", async () => {
+  it("bypasses provider resolution and preserves supplied usage without booking it by default", async () => {
     const dataDir = root();
     const storage = new ChassisStorage({ dataDir });
     const usage = new ChassisUsageStore({ dataDir });
@@ -115,22 +115,20 @@ describe("createTranscriptionKit", () => {
       transcription_source: { unit: "phylax", version: "2.3.1" },
       transcription_usage: { provider: "groq", billable_units: 7 },
     });
-    expect(tenant.usage?.timeline()).toHaveLength(1);
-    expect(tenant.usage?.timeline()[0]).toMatchObject({
-      tenantId: "tenant-1",
-      kind: "transcription.audio",
-      units: 7,
-      metadata: { status: "provided", source_unit: "phylax" },
-    });
+    expect(tenant.usage?.timeline()).toEqual([]);
     usage.close();
   });
 
-  it("passes performed output to the next unit without a second provider call", async () => {
-    const dataDir = root();
-    const storage = new ChassisStorage({ dataDir });
-    const usage = new ChassisUsageStore({ dataDir });
+  it("books provided usage only at the explicit Ring attribution hop", async () => {
+    const edgeStorage = new ChassisStorage({ dataDir: root() });
+    const ringStorage = new ChassisStorage({ dataDir: root() });
+    const zenodStorage = new ChassisStorage({ dataDir: root() });
+    const edgeUsage = new ChassisUsageStore({ dataDir: edgeStorage.dataDir });
+    const ringUsage = new ChassisUsageStore({ dataDir: ringStorage.dataDir });
+    const zenodUsage = new ChassisUsageStore({ dataDir: zenodStorage.dataDir });
     let edgeCalls = 0;
-    let downstreamCalls = 0;
+    let ringCalls = 0;
+    let zenodCalls = 0;
     const provider: TranscriptionProvider = {
       id: "edge-stt",
       async transcribe() {
@@ -142,33 +140,128 @@ describe("createTranscriptionKit", () => {
       unit: { unit: "phylax", version: "2.0.0" },
       resolveProvider: () => ({ provider, apiKey: "secret" }),
     });
-    const downstream = createTranscriptionKit({
-      unit: { unit: "zenod", version: "4.0.0" },
+    const ring = createTranscriptionKit({
+      unit: { unit: "ring", version: "1.0.0" },
       resolveProvider: () => {
-        downstreamCalls += 1;
+        ringCalls += 1;
         return { provider, apiKey: "must-not-be-used" };
       },
     });
-    const tenant = context(storage, usage, "tenant-1");
+    const zenod = createTranscriptionKit({
+      unit: { unit: "zenod", version: "4.0.0" },
+      resolveProvider: () => {
+        zenodCalls += 1;
+        return { provider, apiKey: "must-not-be-used" };
+      },
+    });
+    const edgeTenant = context(edgeStorage, edgeUsage, "tenant-1");
+    const ringTenant = context(ringStorage, ringUsage, "tenant-1");
+    const zenodTenant = context(zenodStorage, zenodUsage, "tenant-1");
+    const phylaxSource = { unit: "phylax", version: "2.0.0" };
 
-    const performed = await edge.process(tenant, {
+    const performed = await edge.process(edgeTenant, {
       sender: "whatsapp:alice",
       artifact_ref: "https://phylax.example/artifacts/a.ogg",
     });
     const forwarded = channelMediaForwardPayload(performed);
-    const provided = await downstream.process(tenant, transcriptionPayload(performed));
+    const attributed = await ring.process(
+      ringTenant,
+      transcriptionPayload(performed),
+      { authenticatedSource: phylaxSource, bookProvidedUsageToTenant: true },
+    );
+    const preserved = await zenod.process(
+      zenodTenant,
+      transcriptionPayload(attributed),
+      { authenticatedSource: phylaxSource },
+    );
 
     expect(edgeCalls).toBe(1);
-    expect(downstreamCalls).toBe(0);
+    expect(ringCalls).toBe(0);
+    expect(zenodCalls).toBe(0);
     expect(forwarded).toMatchObject({
       text_transcript: "one transcription",
-      transcription_source: { unit: "phylax", version: "2.0.0" },
+      transcription_source: phylaxSource,
     });
-    expect(provided).toMatchObject({
+    expect(preserved).toMatchObject({
       transcription_status: "provided",
       text_transcript: "one transcription",
-      transcription_source: { unit: "phylax", version: "2.0.0" },
+      transcription_source: phylaxSource,
+      transcription_usage: { provider: "edge-stt", billable_units: 2 },
     });
+    expect(edgeTenant.usage?.timeline()).toHaveLength(1);
+    expect(edgeTenant.usage?.timeline()[0]).toMatchObject({
+      units: 2,
+      metadata: { status: "performed" },
+    });
+    expect(ringTenant.usage?.timeline()).toHaveLength(1);
+    expect(ringTenant.usage?.timeline()[0]).toMatchObject({
+      tenantId: "tenant-1",
+      kind: "transcription.audio",
+      units: 2,
+      metadata: { status: "provided", source_unit: "phylax" },
+    });
+    expect(zenodTenant.usage?.timeline()).toEqual([]);
+    edgeUsage.close();
+    ringUsage.close();
+    zenodUsage.close();
+  });
+
+  it("rejects caller-only or spoofed provenance for transcripts and upstream failures", async () => {
+    const dataDir = root();
+    const storage = new ChassisStorage({ dataDir });
+    const usage = new ChassisUsageStore({ dataDir });
+    let resolverCalls = 0;
+    const kit = createTranscriptionKit({
+      unit: { unit: "zenod", version: "4.0.0" },
+      resolveProvider: () => {
+        resolverCalls += 1;
+        return null;
+      },
+    });
+    const tenant = context(storage, usage, "tenant-1");
+    const source = { unit: "phylax", version: "2.0.0" };
+    const base = {
+      artifact_ref: "https://phylax.example/artifacts/a.ogg",
+      transcription_source: source,
+    };
+
+    for (const upstream of [
+      { ...base, text_transcript: "trusted text" },
+      {
+        ...base,
+        transcription_failed: { code: "unavailable", message: "edge STT failed" },
+      },
+    ]) {
+      await expect(kit.process(tenant, upstream)).rejects.toMatchObject({
+        code: "invalid_input",
+        message:
+          "a pre-transcribed transcript or upstream failure requires authenticated source unit and version",
+      });
+      await expect(
+        kit.process(tenant, upstream, {
+          authenticatedSource: { unit: "spoofed-unit", version: "9.9.9" },
+        }),
+      ).rejects.toMatchObject({
+        code: "invalid_input",
+        message: "transcription_source does not match the authenticated source",
+      });
+    }
+    expect(resolverCalls).toBe(0);
+
+    const preservedFailure = await kit.process(
+      tenant,
+      {
+        artifact_ref: base.artifact_ref,
+        transcription_failed: { code: "unavailable", message: "edge STT failed" },
+      },
+      { authenticatedSource: source },
+    );
+    expect(preservedFailure).toMatchObject({
+      transcription_status: "failed",
+      transcription_failed: { code: "unavailable", message: "edge STT failed" },
+      transcription_source: source,
+    });
+    expect(resolverCalls).toBe(1);
     usage.close();
   });
 
@@ -334,7 +427,21 @@ describe("createTranscriptionKit", () => {
       }),
     ).rejects.toMatchObject<Partial<TranscriptionKitError>>({
       code: "invalid_input",
-      message: "inline media exceeds the 3-byte limit; use artifact_ref",
+      message: "inline media encoded payload exceeds the 3-byte limit; use artifact_ref",
+    });
+
+    const exactByteKit = createTranscriptionKit({
+      unit: { unit: "unit", version: "1" },
+      resolveProvider: () => ({ provider, apiKey: "secret" }),
+      maxInlineBytes: 1,
+    });
+    await expect(
+      exactByteKit.process(tenant, {
+        inline_media: { data_base64: Buffer.from("12").toString("base64"), mime_type: "audio/ogg" },
+      }),
+    ).rejects.toMatchObject<Partial<TranscriptionKitError>>({
+      code: "invalid_input",
+      message: "decoded inline media exceeds the 1-byte limit; use artifact_ref",
     });
     await expect(
       kit.process(tenant, { artifact_ref: "https://unit.example/artifacts/large.ogg" }),
