@@ -15,6 +15,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./demo": {
+      "types": "./dist/demo.d.ts",
+      "default": "./dist/demo.js"
+    },
     "./conduct": {
       "types": "./dist/conduct.d.ts",
       "default": "./dist/conduct.js"
@@ -26,6 +30,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "demo": "node dist/demo.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

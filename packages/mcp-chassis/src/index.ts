@@ -17,16 +17,33 @@ import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { isBillingEnabled, registerBillingRoutes, type BillingOptions } from "./billing.js";
+import {
+  isBillingEnabled,
+  registerBillingRoutes,
+  type BillingOptions,
+} from "./billing.js";
 import type { OAuthKitOptions } from "./oauth.js";
-import { installOAuthRoutes, oauthWwwAuthenticate, publicBaseUrl, resolveOAuthKit } from "./oauth.js";
+import {
+  installOAuthRoutes,
+  oauthWwwAuthenticate,
+  publicBaseUrl,
+  resolveOAuthKit,
+} from "./oauth.js";
 import {
   MemoryOperatingRulesStore,
   type OperatingRulesStore,
   type TurnPreamble,
 } from "./rules.js";
-import { ChassisStorage, type ChassisStorageOptions, type TenantStorage } from "./storage.js";
-import { ChassisUsageStore, type ChassisUsageStoreOptions, type TenantUsageMeter } from "./usage.js";
+import {
+  ChassisStorage,
+  type ChassisStorageOptions,
+  type TenantStorage,
+} from "./storage.js";
+import {
+  ChassisUsageStore,
+  type ChassisUsageStoreOptions,
+  type TenantUsageMeter,
+} from "./usage.js";
 export type { BillingOptions } from "./billing.js";
 
 export type TenantStatus = "active" | "suspended" | "deleted";
@@ -336,9 +353,11 @@ function normalizeProvisionTenant(
   if (!id) throw new Error("tenant id must be non-empty");
   return {
     id,
-    ...(input.name ?? tenant.name ? { name: input.name ?? tenant.name } : {}),
-    ...(input.plan ?? tenant.plan ? { plan: input.plan ?? tenant.plan } : {}),
-    ...(input.quota !== undefined || tenant.quota !== undefined ? { quota: input.quota ?? tenant.quota ?? null } : {}),
+    ...((input.name ?? tenant.name) ? { name: input.name ?? tenant.name } : {}),
+    ...((input.plan ?? tenant.plan) ? { plan: input.plan ?? tenant.plan } : {}),
+    ...(input.quota !== undefined || tenant.quota !== undefined
+      ? { quota: input.quota ?? tenant.quota ?? null }
+      : {}),
   };
 }
 
@@ -382,8 +401,17 @@ function wwwAuthenticate(realm: string): string {
   return `Bearer realm="${escaped}", error="invalid_token"`;
 }
 
-function unauthorized(c: Context, realm: string, oauthChallenge: boolean): Response {
-  c.header("WWW-Authenticate", oauthChallenge ? oauthWwwAuthenticate(publicBaseUrl(c)) : wwwAuthenticate(realm));
+function unauthorized(
+  c: Context,
+  realm: string,
+  oauthChallenge: boolean,
+): Response {
+  c.header(
+    "WWW-Authenticate",
+    oauthChallenge
+      ? oauthWwwAuthenticate(publicBaseUrl(c))
+      : wwwAuthenticate(realm),
+  );
   return c.json({ error: "unauthorized" }, 401);
 }
 
@@ -439,7 +467,10 @@ export function requireTenantAuth(
     }
 
     const bearer = bearerToken(c);
-    const oauthToken = bearer && options.oauth ? await options.oauth.resolveOAuthAccessToken(bearer) : null;
+    const oauthToken =
+      bearer && options.oauth
+        ? await options.oauth.resolveOAuthAccessToken(bearer)
+        : null;
     if (oauthToken && oauthToken.expiresAt > Date.now()) {
       c.set("tenant", { ...oauthToken.tenant });
       await next();
@@ -641,8 +672,12 @@ function nodeBindings(c: Context<UnitHonoEnv>): {
   return { incoming, outgoing };
 }
 
-function storageFromOptions(storage: CreateUnitOptions["storage"]): ChassisStorage {
-  return storage instanceof ChassisStorage ? storage : new ChassisStorage(storage);
+function storageFromOptions(
+  storage: CreateUnitOptions["storage"],
+): ChassisStorage {
+  return storage instanceof ChassisStorage
+    ? storage
+    : new ChassisStorage(storage);
 }
 
 function lazyUsageStore(
@@ -655,12 +690,18 @@ function lazyUsageStore(
   if (metering === undefined && !enabledByDefault) return () => null;
   let store: ChassisUsageStore | null = null;
   return () => {
-    store ??= new ChassisUsageStore({ dataDir: storage.dataDir, ...(metering ?? {}) });
+    store ??= new ChassisUsageStore({
+      dataDir: storage.dataDir,
+      ...(metering ?? {}),
+    });
     return store;
   };
 }
 
-function quotaExceededResponse(c: Context<UnitHonoEnv>, decision: ReturnType<TenantUsageMeter["checkQuota"]>): Response {
+function quotaExceededResponse(
+  c: Context<UnitHonoEnv>,
+  decision: ReturnType<TenantUsageMeter["checkQuota"]>,
+): Response {
   return c.json(
     {
       error: "quota_exceeded",
@@ -755,11 +796,16 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const version = options.version?.trim() || "0.0.0";
   const app = new Hono<UnitHonoEnv>();
   const oauth = resolveOAuthKit(options.oauth);
-  if (oauth && !options.tenantAuth) throw new Error("OAuth routes require tenantAuth so grants can bind to tenants");
+  if (oauth && !options.tenantAuth)
+    throw new Error(
+      "OAuth routes require tenantAuth so grants can bind to tenants",
+    );
   const auth = options.tenantAuth
     ? requireTenantAuth({
         ...options.tenantAuth,
-        ...(oauth?.serverEnabled ? { oauth: oauth.store, oauthChallenge: true } : {}),
+        ...(oauth?.serverEnabled
+          ? { oauth: oauth.store, oauthChallenge: true }
+          : {}),
       })
     : noopAuth();
   const storage = storageFromOptions(options.storage);
@@ -770,7 +816,9 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   );
   const operatingRules =
     options.operatingRules?.store ?? new MemoryOperatingRulesStore();
-  const unitSkill = options.skill ? normalizeSkillManifest(options.skill) : null;
+  const unitSkill = options.skill
+    ? normalizeSkillManifest(options.skill)
+    : null;
   const installedSkills = (options.skills ?? []).map(normalizeSkillManifest);
   const ui = options.ui ? normalizeUiOptions(name, options.ui) : null;
   const defaultProvisioningStore = isTenantProvisioningStore(
@@ -854,7 +902,15 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
 
     app.get("/api/overview", requireUiTenant, (c) => {
       const tenant = c.get("tenant");
-      return c.json({ tenant, unit: { name, version }, panels: ui.panels });
+      const usage = tenant
+        ? (getUsageStore()?.forTenant(tenant).summary() ?? null)
+        : null;
+      return c.json({
+        tenant,
+        unit: { name, version },
+        panels: ui.panels,
+        usage,
+      });
     });
 
     app.get("/api/operating-rules", requireUiTenant, async (c) => {
@@ -1020,14 +1076,18 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
 
   const billingStore = options.billing?.store ?? provisioningStore;
   if (options.billing && billingStore && isBillingEnabled(options.billing)) {
-    registerBillingRoutes(app, { ...options.billing, store: billingStore, unitName: name });
+    registerBillingRoutes(app, {
+      ...options.billing,
+      store: billingStore,
+      unitName: name,
+    });
   }
 
   const handleMcp = async (c: Context<UnitHonoEnv>) => {
     const { incoming, outgoing } = nodeBindings(c);
     const server = new McpServer({ name, version });
     const tenant = c.get("tenant") ?? null;
-    const usage = tenant ? getUsageStore()?.forTenant(tenant) ?? null : null;
+    const usage = tenant ? (getUsageStore()?.forTenant(tenant) ?? null) : null;
     if (tenant && usage) {
       const decision = usage.checkQuota(tenant.quota, 1);
       if (!decision.allowed) return quotaExceededResponse(c, decision);
@@ -1107,7 +1167,9 @@ function parseProvisionTenantBody(body: unknown): ProvisionTenantInput {
       stringOrUndefined(tenantInput.id),
     name: stringOrUndefined(input.name) ?? stringOrUndefined(tenantInput.name),
     plan: stringOrUndefined(input.plan) ?? stringOrUndefined(tenantInput.plan),
-    quota: numberOrNullOrUndefined(input.quota) ?? numberOrNullOrUndefined(tenantInput.quota),
+    quota:
+      numberOrNullOrUndefined(input.quota) ??
+      numberOrNullOrUndefined(tenantInput.quota),
   };
 }
 
@@ -1125,7 +1187,9 @@ function stringOrUndefined(value: unknown): string | undefined {
 
 function numberOrNullOrUndefined(value: unknown): number | null | undefined {
   if (value === null) return null;
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function loginTokenFromBody(body: unknown): string | null {
@@ -1151,7 +1215,11 @@ function toProvisionTenantResponse(result: ProvisionTenantResult): {
 export * from "./conduct.js";
 export { ChassisStorage, TenantVault, openSqlite } from "./storage.js";
 export { ChassisUsageStore, TenantUsageMeter } from "./usage.js";
-export type { ChassisStorageOptions, TenantStorage, UnitTenant } from "./storage.js";
+export type {
+  ChassisStorageOptions,
+  TenantStorage,
+  UnitTenant,
+} from "./storage.js";
 export type {
   ChassisUsageStoreOptions,
   QuotaDecision,
@@ -1163,4 +1231,9 @@ export type {
 } from "./usage.js";
 export * from "./rules.js";
 export { MemoryOAuthStore } from "./oauth.js";
-export type { OAuthKitOptions, OAuthProvider, OAuthStore, OAuthTokenSet } from "./oauth.js";
+export type {
+  OAuthKitOptions,
+  OAuthProvider,
+  OAuthStore,
+  OAuthTokenSet,
+} from "./oauth.js";
