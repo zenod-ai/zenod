@@ -416,6 +416,8 @@ describe("createUnit", () => {
   });
 
   it("binds UI token login sessions to one tenant and ignores cross-tenant URL attempts", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-ui-session-"));
+    tempDirs.push(dataDir);
     const tenants = createMemoryTenantStore([
       {
         token: "tenant-one-token",
@@ -428,6 +430,7 @@ describe("createUnit", () => {
     ]);
     const unit = createUnit({
       name: "demo",
+      storage: { dataDir },
       tenantAuth: { store: tenants },
       ui: {
         displayName: "Demo Unit",
@@ -471,11 +474,14 @@ describe("createUnit", () => {
   });
 
   it("rejects protected UI routes without a tenant session or bearer token", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-ui-auth-"));
+    tempDirs.push(dataDir);
     const tenants = createMemoryTenantStore([
       { token: "known-token", tenant: { id: "tenant-a" } },
     ]);
     const unit = createUnit({
       name: "demo",
+      storage: { dataDir },
       tenantAuth: { store: tenants },
       ui: { sessionSecret: "test-session-secret" },
     });
@@ -491,6 +497,206 @@ describe("createUnit", () => {
     await expect(bearer.json()).resolves.toMatchObject({
       tenant: { id: "tenant-a" },
     });
+  });
+
+  it("persists tenant settings and key metadata across restarts without cross-tenant leakage", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-settings-"));
+    tempDirs.push(dataDir);
+    const tenantOneToken = "tenant-one-settings-token";
+    const tenantTwoToken = "tenant-two-settings-token";
+    const firstTenants = createSqliteTenantStore({ dataDir });
+    firstTenants.importTenantTokenHash({
+      tokenHash: hashToken(tenantOneToken),
+      tenant: { id: "tenant-one", name: "Tenant One" },
+    });
+    firstTenants.importTenantTokenHash({
+      tokenHash: hashToken(tenantTwoToken),
+      tenant: { id: "tenant-two", name: "Tenant Two" },
+    });
+    const firstUnit = createUnit({
+      name: "demo",
+      storage: { dataDir },
+      tenantAuth: { store: firstTenants },
+      ui: { sessionSecret: "durable-settings-session" },
+    });
+    const firstBase = await listen(firstUnit.app);
+
+    const tenantOneSave = await fetch(
+      `${firstBase}/api/settings?tenantId=tenant-two`,
+      {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${tenantOneToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          tenant_id: "tenant-two",
+          vault_repo: "tenant-one/vault",
+          github_token: "tenant-one-github-1111",
+          provider: "openai",
+          openai_api_key: "tenant-one-openai-2222",
+          model_ask: "gpt-tenant-one",
+        }),
+      },
+    );
+    const tenantTwoSave = await fetch(`${firstBase}/api/settings`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${tenantTwoToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        vault_repo: "tenant-two/vault",
+        provider: "anthropic",
+        anthropic_api_key: "tenant-two-anthropic-3333",
+      }),
+    });
+
+    expect(tenantOneSave.status).toBe(200);
+    await expect(tenantOneSave.json()).resolves.toMatchObject({
+      tenant: { id: "tenant-one" },
+      settings: {
+        vault_repo: "tenant-one/vault",
+        provider: "openai",
+        openai_api_key: "\u2022\u2022\u2022\u20222222",
+        model_ask: "gpt-tenant-one",
+      },
+    });
+    expect(tenantTwoSave.status).toBe(200);
+
+    const tenantOneCookie = await login(firstBase, tenantOneToken);
+    const [tenantOneSettings, tenantTwoSettings, tenantOneKeys, tenantTwoKeys] =
+      await Promise.all([
+        fetch(`${firstBase}/api/settings?tenantId=tenant-two`, {
+          headers: { cookie: tenantOneCookie },
+        }).then((response) => response.json()),
+        fetch(`${firstBase}/api/settings`, {
+          headers: { authorization: `Bearer ${tenantTwoToken}` },
+        }).then((response) => response.json()),
+        fetch(`${firstBase}/api/keys`, {
+          headers: { authorization: `Bearer ${tenantOneToken}` },
+        }).then((response) => response.json()),
+        fetch(`${firstBase}/api/keys`, {
+          headers: { authorization: `Bearer ${tenantTwoToken}` },
+        }).then((response) => response.json()),
+      ]);
+
+    expect(tenantOneSettings).toMatchObject({
+      tenant: { id: "tenant-one" },
+      settings: {
+        vault_repo: "tenant-one/vault",
+        github_token: "\u2022\u2022\u2022\u20221111",
+        openai_api_key: "\u2022\u2022\u2022\u20222222",
+      },
+    });
+    expect(tenantTwoSettings).toMatchObject({
+      tenant: { id: "tenant-two" },
+      settings: {
+        vault_repo: "tenant-two/vault",
+        provider: "anthropic",
+        anthropic_api_key: "\u2022\u2022\u2022\u20223333",
+        openai_api_key: null,
+      },
+    });
+    expect(JSON.stringify(tenantOneSettings)).not.toContain("tenant-two");
+    expect(JSON.stringify(tenantTwoSettings)).not.toContain("tenant-one");
+    expect(JSON.stringify({ tenantOneSettings, tenantOneKeys })).not.toContain(
+      "tenant-one-openai-2222",
+    );
+    expect(tenantOneKeys.tenant).toMatchObject({ id: "tenant-one" });
+    expect(tenantOneKeys.keys).toEqual([
+      {
+        id: "github_token",
+        label: "GitHub token",
+        configured: true,
+        maskedValue: "\u2022\u2022\u2022\u20221111",
+        updatedAt: expect.any(String),
+      },
+      {
+        id: "openai_api_key",
+        label: "OpenAI API key",
+        configured: true,
+        maskedValue: "\u2022\u2022\u2022\u20222222",
+        updatedAt: expect.any(String),
+      },
+    ]);
+    expect(tenantTwoKeys).toMatchObject({
+      tenant: { id: "tenant-two" },
+      keys: [
+        {
+          id: "anthropic_api_key",
+          label: "Anthropic API key",
+          configured: true,
+          maskedValue: "\u2022\u2022\u2022\u20223333",
+          updatedAt: expect.any(String),
+        },
+      ],
+    });
+
+    const invalid = await fetch(`${firstBase}/api/settings`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${tenantOneToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ provider: 42, model_ask: "must-not-persist" }),
+    });
+    expect(invalid.status).toBe(400);
+
+    firstTenants.close();
+    const restartedTenants = createSqliteTenantStore({ dataDir });
+    const restartedUnit = createUnit({
+      name: "demo",
+      storage: { dataDir },
+      tenantAuth: { store: restartedTenants },
+      ui: { sessionSecret: "durable-settings-session" },
+    });
+    const restartedBase = await listen(restartedUnit.app);
+
+    const [restartedOne, restartedTwo, restartedKeys] = await Promise.all([
+      fetch(`${restartedBase}/api/settings`, {
+        headers: { authorization: `Bearer ${tenantOneToken}` },
+      }).then((response) => response.json()),
+      fetch(`${restartedBase}/api/settings`, {
+        headers: { authorization: `Bearer ${tenantTwoToken}` },
+      }).then((response) => response.json()),
+      fetch(`${restartedBase}/api/keys`, {
+        headers: { authorization: `Bearer ${tenantOneToken}` },
+      }).then((response) => response.json()),
+    ]);
+
+    expect(restartedOne).toMatchObject({
+      tenant: { id: "tenant-one" },
+      settings: {
+        vault_repo: "tenant-one/vault",
+        model_ask: "gpt-tenant-one",
+        openai_api_key: "\u2022\u2022\u2022\u20222222",
+      },
+    });
+    expect(restartedTwo).toMatchObject({
+      tenant: { id: "tenant-two" },
+      settings: {
+        vault_repo: "tenant-two/vault",
+        anthropic_api_key: "\u2022\u2022\u2022\u20223333",
+      },
+    });
+    expect(restartedKeys.keys).toEqual(tenantOneKeys.keys);
+
+    const maskedEcho = await fetch(`${restartedBase}/api/settings`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${tenantOneToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        openai_api_key: "\u2022\u2022\u2022\u2022tenant-one-openai-2222",
+      }),
+    }).then((response) => response.json());
+    expect(maskedEcho.settings.openai_api_key).toBe(
+      "\u2022\u2022\u2022\u20222222",
+    );
+
+    restartedTenants.close();
   });
 
   it("protects unit routes with bearer or session auth and injects tenant-bound context", async () => {
