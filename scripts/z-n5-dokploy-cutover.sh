@@ -333,11 +333,11 @@ apply_cutover() {
   target="$(app_json "$TARGET_APP")"
   ensure_redirect "$target"
 
-  log "PLAN 7/8 verify landing/customer/app/MCP image, OAuth callback, redirect, and retired hosts"
-  verify_final_world
-  log "PLAN 8/8 stop old cloud composes only after live health passes"
+  log "PLAN 7/8 stop old cloud composes so baked Traefik labels release retired hosts"
   api_post "/compose.stop" "$(jq -n --arg composeId "$OLD_CLOUD_COMPOSE" '{composeId:$composeId}')" "stop old cloud compose"
   api_post "/compose.stop" "$(jq -n --arg composeId "$OLD_TEST_COMPOSE" '{composeId:$composeId}')" "stop old cloud-test compose"
+  log "PLAN 8/8 verify landing/customer/app/MCP image, OAuth callback, redirect, and retired hosts"
+  verify_final_world
   verify_legacy_stopped
   log "cutover sequence complete; old records and volumes retained for rollback"
 }

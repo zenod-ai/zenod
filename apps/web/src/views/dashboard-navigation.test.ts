@@ -6,6 +6,7 @@ import {
   dashboardSectionForTab,
   mcpClientSnippets,
   mcpUrlForToken,
+  resolveMcpAccess,
 } from "./dashboard-navigation"
 
 describe("Zenod dashboard navigation", () => {
@@ -49,5 +50,17 @@ describe("MCP access details", () => {
     expect(snippets.claude).toContain("https://cloud.zenod.dev/mcp/secret")
     expect(snippets.codex).toContain("https://cloud.zenod.dev/mcp/secret")
     expect(snippets.claude).not.toContain("Authorization")
+  })
+
+  it("uses the hosted account token instead of the self-host runtime token", () => {
+    expect(
+      resolveMcpAccess("", {
+        token: "hosted-token",
+        mcp_url: "https://cloud.zenod.dev/mcp/hosted-token",
+      })
+    ).toEqual({
+      token: "hosted-token",
+      url: "https://cloud.zenod.dev/mcp/hosted-token",
+    })
   })
 })
