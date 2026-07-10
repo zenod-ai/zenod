@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
 Steward since: 2026-07-10 01:32 CEST
-Last reconciled commit: `ba533b3987c13a6e1c3a136bc7bab08beb00abf9`
+Last reconciled commit: `3062022938bb3dd26427fd820d174f29022fd7d1`
 Planner: Epic 3.0 planner
 Worker: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
 Tester: unassigned
@@ -60,7 +60,7 @@ Create `packages/mcp-chassis` (`@zenod/mcp-chassis`): the reusable scaffold ever
 
 ## Definition Of Done
 
-- [x] `packages/mcp-chassis` exists with: stateless Streamable HTTP `/mcp`, bearer→tenant resolution (`sha256(bearer)` lookup + tokened-URL form + OAuth mapping), durable tenants table, `POST/DELETE /api/tenants` + token rotation guarded by `CONTROL_PLANE_TOKEN`, `storage.db(tenant)`/`storage.dir(tenant)` handles, per-tenant vault, per-tenant usage metering + quota middleware, `/healthz`, and credential-safe pino logs carrying `tenant_id` + `request_id`.
+- [x] `packages/mcp-chassis` exists with: stateless Streamable HTTP `/mcp`, bearer→tenant resolution (`sha256(bearer)` lookup + tokened-URL form + OAuth mapping), durable tenants table, `POST/DELETE /api/tenants` + token rotation guarded by `CONTROL_PLANE_TOKEN`, `storage.db(tenant)`/`storage.dir(tenant)` handles, encrypted per-tenant vault custody, per-tenant usage metering + quota middleware, `/healthz`, and credential-safe pino logs carrying `tenant_id` + `request_id`.
 - [x] Settings-UI shell: token/session login, durable per-tenant settings/key metadata/usage pages, unit-defined authenticated product routes, and unit panel selection. Unit routes take precedence over placeholders while anonymous SPA root/assets remain public.
 - [x] Single-tenant mode: env-seeded token auto-creates one tenant at boot; identical image and UI (self-host contract).
 - [x] A demo unit (`units/demo` or test harness) runs on the chassis with the three-tenant smoke test passing: cross-tenant access fails, per-tenant ledgers isolate.
@@ -84,11 +84,11 @@ Create `packages/mcp-chassis` (`@zenod/mcp-chassis`): the reusable scaffold ever
 ## Current State
 
 Phase: final joint proof and release gating
-Last verified: 2026-07-10 04:59 CEST
+Last verified: 2026-07-10 05:59 CEST
 Integration target: main
-Fresh base commit: `ba533b3987c13a6e1c3a136bc7bab08beb00abf9`
-Next action: Epic 3.2 rebases a new live-pilot worktree onto this exact `main` commit and reruns the definitive three-tenant browser/self-host proof. The 3.1 steward then reconciles that evidence and requests Jordi's API-freeze decision. C-17 runs when Stripe TEST-account authentication is supplied.
-Blockers: API freeze remains gated on the fresh joint 3.1 demo + 3.2 Zenod proof and Jordi's explicit approval. Definition-of-Done billing evidence is separately gated on Stripe TEST-account CLI authentication in #764.
+Fresh chassis commit: `3062022938bb3dd26427fd820d174f29022fd7d1` (contained in current `main` `77d8e39143deb4234a6e87237251b9eeeac50b84`)
+Next action: Epic 3.2 starts #792 from current `main`, supplies the stable chassis vault key, and reruns the definitive three-tenant browser/self-host/restart byte-scan proof against the chassis merged at `3062022`. The 3.1 steward then reconciles that evidence and requests Jordi's API-freeze decision. C-17 runs when Stripe TEST-account authentication is supplied.
+Blockers: API freeze remains gated on the #792 joint 3.1 demo + 3.2 Zenod proof and Jordi's explicit approval. Definition-of-Done billing evidence is separately gated on Stripe TEST-account CLI authentication in #764.
 
 ## Role Goals
 
@@ -116,7 +116,7 @@ Read in this order:
 
 Pilot rule (parent D6): the chassis is proven against ONE real character — Zenod (Epic 3.2) — before other units consume it. The C-7 demo unit exists for fast iteration, but "stable and proven" means the Zenod pilot's three-tenant browser E2E passes; only then is the chassis API frozen and Phase 2 (3.3/3.5/3.6) unleashed. Expect 3.1 and 3.2 to co-develop, with pilot feedback shaping the freeze.
 
-3.1/3.2 co-development rule: Epic 3.1 owns `packages/mcp-chassis` and SEAM-SPEC vNext. Epic 3.2 consumes `main` at `ba533b3` and reports friction through its own Proposed Cross-Spine Updates or GitHub issues; it must not patch `packages/mcp-chassis` directly unless stewardship is explicitly transferred here. Joint proof is 3.1 demo E2E plus 3.2 Zenod pilot E2E against this exact chassis API. Pilot authorization is not an API freeze: Jordi closes the freeze gate only after the joint evidence is reconciled.
+3.1/3.2 co-development rule: Epic 3.1 owns `packages/mcp-chassis` and SEAM-SPEC vNext. Epic 3.2 consumes `main` containing chassis merge `3062022` and reports friction through its own Proposed Cross-Spine Updates or GitHub issues; it must not patch `packages/mcp-chassis` directly unless stewardship is explicitly transferred here. Joint proof is 3.1 demo E2E plus the #792 3.2 Zenod pilot E2E against this exact chassis API. Pilot authorization is not an API freeze: Jordi closes the freeze gate only after the joint evidence is reconciled.
 
 Conduct kit sources (parent D12) — extract, don't rewrite: `docs/SEAM-SPEC.md` v1 is the binding wire/receipt contract (SEAM-SPEC vNext in C-8 EXTENDS it with tenancy/billing/OAuth rows; it never weakens the receipt laws). The receipt engine exists: `packages/server/src/outboundReceipt.ts` (verified-or-failed shapes, receipt strings never composed freehand), `filingReceipt.ts`, `storageReceipt.ts`, `packages/core/src/taskingPolicy.ts` (deterministic receipts + correction banners), `replyGate.ts` (action turns deliver only tool receipts), `toolKinds.ts` (read/mutate registry, unknown fails safe to mutate). Persona/operating rules per agent live in `packages/server/src/agent.ts` (`AgentDefinition`); the chassis lifts the rules that repeat across every persona into middleware and keeps personas for what is genuinely unit-specific. Known gap to close in C-11: `origin_ticket_id`/`depth` (SEAM items 10–11) are documented in `units/council/SEAM-SURFACE.md` but absent from code. The Epaminon↔Archus etiquette (`docs/EPAMINON-ARCHUS-PROTOCOL.md`: transitions-only, structured-not-conversational, idempotent id-keyed, one-blocker-one-ask) becomes the chassis's inter-unit dispatch conventions.
 
@@ -139,7 +139,7 @@ Explicitly NOT in scope: redesigning pages, new component library, server-render
 ### Container And Deploy
 
 - One image (`zenod-ai/mcp-chassis-demo` for C-7), port 8080, `VOLUME /data`, `restart: unless-stopped`, `/healthz`.
-- Env contract: `PORT`, `DATA_DIR=/data`, `CONTROL_PLANE_TOKEN`, `<UNIT>_API_TOKEN` (single-tenant seed), DB target per D4.
+- Env contract: `PORT`, `DATA_DIR=/data`, `CONTROL_PLANE_TOKEN`, `<UNIT>_API_TOKEN` (single-tenant seed), one stable unique-per-unit 32-byte `CHASSIS_VAULT_MASTER_KEY` outside `/data`, and DB target per D4.
 - One Dokploy application; deploy = rebuild that app. No per-tenant anything in the deploy layer.
 
 ### Autonomous Validation Protocol (three-tenant browser E2E — the definition of "done, tested by me")
@@ -162,6 +162,7 @@ The epic worker validates WITHOUT human help, using browser automation (Playwrig
 | 2026-07-10 | Extract from `packages/server` rather than greenfield. | The transport/auth/storage code is proven in production. | Code survey in parent appendix |
 | 2026-07-10 | Tokens stored as hashes only; raw token shown once at mint. | Standard credential hygiene; matches #645 tenant-from-bearer rule. | `docs/MCP-CHASSIS-SPEC.md` |
 | 2026-07-10 | Branch isolation law: every ticket's first Git action is `git worktree add ../wt-<issue> -b <branch> main`; work stays there. The shared clone remains pinned to `main`, receives fast-forward pulls only, and is never switched. | Parallel workers previously shared long-lived stacked worktrees; fresh-main isolation makes integration state observable and prevents one worker from hijacking another's checkout. | Jordi priority shift; issues #715-#727 worktree records |
+| 2026-07-10 | Tenant vaults and chassis secret settings use authenticated encryption under a stable external per-unit master key; no key is generated or stored beside `/data`. Legacy plaintext migration is offline, recoverable, and fences old writers by replacing plaintext value columns. | The 3.2 pilot recovered a synthetic GitHub credential from `vault.sqlite-wal`; masking and path isolation were not encrypted custody. | #789 / PR #794 / merge `3062022` |
 
 ## Issue Ledger
 
@@ -189,6 +190,7 @@ The epic worker validates WITHOUT human help, using browser automation (Playwrig
 | [#776](https://github.com/zenod-ai/zenod/issues/776) | Ticket worker | McClintock / steward integration | C-19 publish D16 atomic-unit skill manifest | done | C-18 | PR [#781](https://github.com/zenod-ai/zenod/pull/781) / `/Users/jordi/Documents/GitHub/wt-776` | `0a00165` | Public well-known card is versioned, tenant-neutral, and deterministic. | Merged `6bdf6e5`; 52 chassis tests, typecheck/build, README smoke, and CI passed. | 2026-07-10 04:39 CEST | None. |
 | [#775](https://github.com/zenod-ai/zenod/issues/775) | Ticket worker | Planck / steward integration | C-20 implement D18 shared transcription kit | done | C-18, C-15 | PR [#784](https://github.com/zenod-ai/zenod/pull/784) / `/Users/jordi/Documents/GitHub/wt-775` | `1d7f440` | One-STT, authenticated provenance, tenant custody, attribution, graceful failure, and payload bounds. | Merged `2e3ee33`; steward repeated 64 chassis tests and build/typecheck; CI passed. | 2026-07-10 04:54 CEST | 3.2 consumes the API in its D18 path. |
 | [#780](https://github.com/zenod-ai/zenod/issues/780) | Ticket worker / pilot ledger | 3.1 steward | Pilot friction: preserve public SPA while protecting custom routes | done | #768 | PR [#782](https://github.com/zenod-ai/zenod/pull/782) / `/Users/jordi/Documents/GitHub/wt-780` | `90c21c0` | Anonymous root/assets/fallback pass; registered unit routes remain bearer/session protected. | Merged `98ce0ea`; 50 chassis tests plus chassis/web typecheck/build and CI passed; exact SHA handed to 3.2. | 2026-07-10 04:43 CEST | Ownership/ledger anchor for any further 3.2 chassis friction. |
+| [#789](https://github.com/zenod-ai/zenod/issues/789) | Ticket worker / security gate | 3.1 steward | Pilot defect: encrypt tenant vault and settings credentials at rest | done | #780 | PR [#794](https://github.com/zenod-ai/zenod/pull/794) / `/Users/jordi/Documents/GitHub/wt-789` | `6f16985` | Raw credentials absent from SQLite DB/WAL/SHM; exact-value isolation/restart pass; wrong or missing key fails closed; legacy migration is explicit and recoverable. | Merged `3062022`; 82 chassis tests, full clean-install workspace gate, two independent no-blocker reviews, and GitHub CI passed. | 2026-07-10 05:59 CEST | 3.2 #792 consumes the stable-key API and repeats the exact synthetic-token root scan. |
 
 ## Branch And Integration
 
@@ -207,7 +209,7 @@ The epic worker validates WITHOUT human help, using browser automation (Playwrig
 |---|---|---|---|---|
 | D4 database choice | Jordi | Before C-1 | Resolved 2026-07-10: SQLite/WAL per unit behind storage seam | None; implementation may continue |
 | Stripe TEST-account proof | Jordi | C-17 live proof | Run `stripe login` for the intended TEST account or provide a scoped test key through a secret channel; no live-mode credential is requested | Joint pilot, spine reconciliation, and all local validation |
-| Chassis API freeze | Jordi | After the `ba533b3` 3.2 pilot and before 3.3/3.5/3.6 consume it | Approve the pilot-proven `createUnit` + SEAM-SPEC vNext surface after reviewing the joint proof and the explicit C-17 evidence state | Epic 3.2 pilot and evidence reconciliation |
+| Chassis API freeze | Jordi | After the #792 pilot on chassis merge `3062022` and before 3.3/3.5/3.6 consume it | Approve the pilot-proven `createUnit` + encrypted-custody + SEAM-SPEC vNext surface after reviewing the joint proof and the explicit C-17 evidence state | Epic 3.2 pilot and evidence reconciliation |
 
 Do not use `human required` as a complete blocker. Name the decision, owner, evidence, and exact input required.
 
@@ -221,18 +223,18 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 
 ## Planner Queue
 
-- Epic 3.2 is rerunning the definitive joint proof from exact `main` `ba533b3`; route any further chassis friction to #780 without editing `packages/mcp-chassis` in 3.2.
+- Epic 3.2 starts #792 from current `main` containing chassis merge `3062022`; route any further chassis friction to a 3.1 issue without editing `packages/mcp-chassis` in 3.2.
 - Run C-17 when the named Stripe TEST-account gate is available.
 - Request Jordi's API-freeze decision only after the fresh 3.2 evidence is reconciled; do not equate merged code with a frozen API.
 
 ## Worker Queue
 
-- Complete on `main`: #715-#721, #723-#727, #761-#763, #765-#766, #768, #775-#776, and #780; current integration base `ba533b3`.
+- Complete on `main`: #715-#721, #723-#727, #761-#763, #765-#766, #768, #775-#776, #780, and #789; current chassis integration commit `3062022`.
 - No implementation lane is queued. Any pilot-discovered chassis defect starts from a new issue worktree and uses #780 as the 3.1 ledger anchor.
 
 ## Tester Queue
 
-- 3.1 demo browser E2E complete in #721; 3.2 Z-MT-5 (#736) is rerunning against exact chassis `ba533b3` for the joint proof.
+- 3.1 demo browser E2E complete in #721; 3.2 #792 reruns against chassis merge `3062022` with the stable key and recursive credential byte scan for the joint proof.
 - #764 Stripe CLI live proof is blocked only on the named TEST-account credential gate.
 
 ## Validation Evidence
@@ -256,6 +258,7 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 | 2026-07-10 | C-15 tenant-aware structured logging | `1d7f4407bf5ede1aa366145d7a1f45457f7ad9d6` | `/Users/jordi/Documents/GitHub/wt-766`; steward independent rerun + GitHub CI | 55 chassis tests; request/tenant correlation; path/credential redaction; chassis/web typecheck/build | pass | #766 / PR #779 |
 | 2026-07-10 | C-20 D18 shared transcription | `2e3ee33e01da96f699f9b7b4cace7fbbc27979ea` | `/Users/jordi/Documents/GitHub/wt-775`; steward independent rerun + GitHub CI | 64 chassis tests; zero double STT; authenticated provenance; explicit Ring booking; T1/T2 vault isolation; provider failure; encoded/decoded payload limits | pass | #775 / PR #784 |
 | 2026-07-10 | Final integrated chassis through C-16 | `ba533b3987c13a6e1c3a136bc7bab08beb00abf9` | `/Users/jordi/Documents/GitHub/wt-765`; steward independent rerun; GitHub CI `29065737476` | 71 chassis tests; chassis/web typecheck/build; modern/legacy/update conduct enforcement; ticket/poll/origin/depth; unexpected-error secret redaction; all prior route/logging/transcription tests | pass | #765 / PR #783 |
+| 2026-07-10 | #789 encrypted tenant credential custody | `3062022938bb3dd26427fd820d174f29022fd7d1` | `/Users/jordi/Documents/GitHub/wt-789`; clean `npm ci`; GitHub CI `29067869905` | AES-256-GCM + HKDF tenant/vault/key binding; authenticated key verifier; atomic encrypted secret settings; restart/wrong-key/legacy migration/old-writer fence; recursive DB/WAL/SHM scans; full build; core 304 + 6 skips, chassis 82, server 558, scripts 193, schemas, all typechecks; two independent reviews | pass | #789 / PR #794 |
 
 ## Handoff Journal
 
@@ -341,6 +344,20 @@ Links:
 - #775 / PR #784
 - #765 / PR #783
 - #764 Stripe TEST-account gate
+
+### 2026-07-10 - Epic worker - Encrypted custody blocker merged
+
+Context: The definitive 3.2 pilot found its synthetic GitHub credential in the chassis-owned `vault.sqlite-wal` and filed #789 without editing `packages/mcp-chassis`. The 3.1 steward added authenticated per-tenant vault encryption, transactional encrypted secret settings, stable-key verification, offline recoverable plaintext migration, and old-writer schema fencing. PR #794 merged as `3062022`; local clean-install gates, two independent reviews, and GitHub CI passed.
+Next: Epic 3.2 creates #792 from current `main`, configures a stable unique-per-unit key, and reruns hosted/self-host restart acceptance plus a recursive scan for the exact synthetic credential. Reconcile that proof before requesting Jordi's API-freeze decision. Execute #764 when Stripe TEST-account authentication is available.
+Risks: Master-key rotation is intentionally unsupported in this version; loss or change of the external key makes encrypted credentials unreadable and fails closed. Existing plaintext data must be backed up and migrated with old processes stopped. The API remains unfrozen until #792 and Jordi's decision.
+Assignment identity: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
+Branch / latest commit: `main` / `3062022938bb3dd26427fd820d174f29022fd7d1`
+Last verified: 2026-07-10 05:59 CEST
+Links:
+
+- #789 / PR #794
+- #792 3.2 joint proof
+- GitHub CI run `29067869905`
 
 ## Open Questions
 
