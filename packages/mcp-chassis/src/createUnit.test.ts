@@ -178,6 +178,91 @@ describe("createUnit", () => {
     });
   });
 
+  it("publishes the exact tenant-neutral D16 skill manifest without auth", async () => {
+    const tenants = createMemoryTenantStore([
+      {
+        token: "tenant-one-secret-token",
+        tenant: { id: "tenant-one", name: "Tenant One" },
+      },
+    ]);
+    const skill = {
+      id: " demo.skill ",
+      name: " Demo Skill ",
+      version: " 4.5.6 ",
+      description: " Tenant-neutral routing metadata. ",
+      purpose: " File durable knowledge. ",
+      whenToRoute: [" When a user wants information filed. "],
+      tools: [" ingest "],
+      etiquette: [" Never claim a write without a receipt. "],
+      receiptExpectations: [" Mutations return a commit SHA. "],
+      tenant: { id: "tenant-one" },
+      token: "tenant-one-secret-token",
+      connectorCredentials: { github: "connector-secret" },
+      installedDirectives: ["tenant-only directive"],
+    };
+    const unit = createUnit({
+      name: "demo",
+      version: "1.2.3",
+      tenantAuth: { store: tenants },
+      skill,
+    });
+    const base = await listen(unit.app);
+
+    const response = await fetch(
+      `${base}/.well-known/atomic-unit-skill.json?tenant_id=tenant-one`,
+    );
+    const manifest = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(manifest).toEqual({
+      schemaVersion: "1.0",
+      id: "demo.skill",
+      name: "Demo Skill",
+      version: "4.5.6",
+      description: "Tenant-neutral routing metadata.",
+      purpose: "File durable knowledge.",
+      whenToRoute: ["When a user wants information filed."],
+      tools: ["ingest"],
+      etiquette: ["Never claim a write without a receipt."],
+      receiptExpectations: ["Mutations return a commit SHA."],
+      unit: { name: "demo", version: "1.2.3" },
+    });
+    expect(JSON.stringify(manifest)).not.toMatch(
+      /tenant-one|secret|connectorCredentials|installedDirectives|directive/,
+    );
+  });
+
+  it("returns a loud tenant-neutral 404 when no skill is declared", async () => {
+    const unit = createUnit({ name: "demo", version: "1.2.3" });
+    const base = await listen(unit.app);
+
+    const response = await fetch(
+      `${base}/.well-known/atomic-unit-skill.json`,
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: "skill manifest not configured",
+    });
+  });
+
+  it("fails startup loudly when a declared skill omits required D16 fields", () => {
+    expect(() =>
+      createUnit({
+        name: "demo",
+        skill: {
+          id: "demo.skill",
+          name: "Demo Skill",
+          purpose: "Exercise the demo unit.",
+          whenToRoute: ["Use for demo-unit checks."],
+          tools: [],
+          etiquette: ["Return grounded results."],
+          receiptExpectations: ["Mutations return evidence."],
+        },
+      }),
+    ).toThrow("createUnit skill.tools must contain at least one item");
+  });
+
   it("answers MCP initialize over stateless Streamable HTTP", async () => {
     const unit = createUnit({ name: "demo", version: "1.2.3" });
     const base = await listen(unit.app);
@@ -927,9 +1012,23 @@ describe("createUnit", () => {
         id: "demo.skill",
         name: "Demo Skill",
         version: "1.0.0",
+        purpose: "Exercise the demo unit.",
+        whenToRoute: ["Use for demo-unit checks."],
         tools: ["install_operating_directive"],
+        etiquette: ["Follow installed operating directives."],
         receiptExpectations: ["mutations return evidence[]"],
       },
+      skills: [
+        {
+          id: "installed.helper",
+          name: "Installed Helper",
+          purpose: "Represent a tenant-installed skill copy.",
+          whenToRoute: ["Use for installed helper checks."],
+          tools: ["helper_read"],
+          etiquette: ["Keep installed edits tenant-scoped."],
+          receiptExpectations: ["Reads return data or an explicit empty state."],
+        },
+      ],
     });
     const base = await listen(unit.app);
     const tenantOneCookie = await login(base, "tenant-one-token");
@@ -959,6 +1058,10 @@ describe("createUnit", () => {
     const skills = await fetch(`${base}/api/skills`, {
       headers: { cookie: tenantOneCookie },
     }).then((r) => r.json());
+    const anonymousSkills = await fetch(`${base}/api/skills`);
+    const publishedSkill = await fetch(
+      `${base}/.well-known/atomic-unit-skill.json`,
+    ).then((r) => r.json());
     const agent = await fetch(`${base}/api/agent`).then((r) => r.json());
 
     expect(tenantOneRules).toMatchObject({
@@ -992,11 +1095,23 @@ describe("createUnit", () => {
     expect(skills).toMatchObject({
       tenant: { id: "tenant-one" },
       published: {
+        schemaVersion: "1.0",
         id: "demo.skill",
         name: "Demo Skill",
         tools: ["install_operating_directive"],
+        unit: { name: "demo", version: "1.2.3" },
       },
+      installed: [
+        {
+          id: "installed.helper",
+          name: "Installed Helper",
+          tools: ["helper_read"],
+        },
+      ],
     });
+    expect(anonymousSkills.status).toBe(401);
+    expect(skills.published).toEqual(publishedSkill);
+    expect(publishedSkill).not.toHaveProperty("installed");
     expect(agent.panels).toEqual([
       "chat",
       "rules",

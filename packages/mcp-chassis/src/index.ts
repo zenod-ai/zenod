@@ -221,13 +221,29 @@ export interface UnitUiOptions {
   sessionCookieName?: string;
 }
 
+export const ATOMIC_UNIT_SKILL_MANIFEST_PATH =
+  "/.well-known/atomic-unit-skill.json";
+export const ATOMIC_UNIT_SKILL_SCHEMA_VERSION = "1.0" as const;
+
+/** Deployment metadata used to publish a tenant-neutral D16 skill card. */
 export interface UnitSkillManifest {
   id: string;
   name: string;
   version?: string;
   description?: string;
-  tools?: string[];
-  receiptExpectations?: string[];
+  purpose: string;
+  whenToRoute: string[];
+  tools: string[];
+  etiquette: string[];
+  receiptExpectations: string[];
+}
+
+export interface PublishedUnitSkillManifest extends UnitSkillManifest {
+  schemaVersion: typeof ATOMIC_UNIT_SKILL_SCHEMA_VERSION;
+  unit: {
+    name: string;
+    version: string;
+  };
 }
 
 export interface OperatingRulesOptions {
@@ -789,18 +805,49 @@ async function installOperatingRulesTools(
   );
 }
 
+function normalizeSkillText(value: unknown, field: string): string {
+  if (typeof value !== "string")
+    throw new Error(`createUnit skill.${field} must be a string`);
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`createUnit skill.${field} must not be empty`);
+  return normalized;
+}
+
+function normalizeSkillList(values: unknown, field: string): string[] {
+  if (!Array.isArray(values) || !values.length)
+    throw new Error(`createUnit skill.${field} must contain at least one item`);
+  return values.map((value, index) =>
+    normalizeSkillText(value, `${field}[${index}]`),
+  );
+}
+
 function normalizeSkillManifest(skill: UnitSkillManifest): UnitSkillManifest {
   return {
-    id: skill.id.trim(),
-    name: skill.name.trim(),
+    id: normalizeSkillText(skill.id, "id"),
+    name: normalizeSkillText(skill.name, "name"),
     ...(skill.version?.trim() ? { version: skill.version.trim() } : {}),
     ...(skill.description?.trim()
       ? { description: skill.description.trim() }
       : {}),
-    ...(skill.tools?.length ? { tools: [...skill.tools] } : {}),
-    ...(skill.receiptExpectations?.length
-      ? { receiptExpectations: [...skill.receiptExpectations] }
-      : {}),
+    purpose: normalizeSkillText(skill.purpose, "purpose"),
+    whenToRoute: normalizeSkillList(skill.whenToRoute, "whenToRoute"),
+    tools: normalizeSkillList(skill.tools, "tools"),
+    etiquette: normalizeSkillList(skill.etiquette, "etiquette"),
+    receiptExpectations: normalizeSkillList(
+      skill.receiptExpectations,
+      "receiptExpectations",
+    ),
+  };
+}
+
+function publishSkillManifest(
+  skill: UnitSkillManifest,
+  unit: { name: string; version: string },
+): PublishedUnitSkillManifest {
+  return {
+    schemaVersion: ATOMIC_UNIT_SKILL_SCHEMA_VERSION,
+    ...normalizeSkillManifest(skill),
+    unit: { ...unit },
   };
 }
 
@@ -832,7 +879,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const operatingRules =
     options.operatingRules?.store ?? new MemoryOperatingRulesStore();
   const unitSkill = options.skill
-    ? normalizeSkillManifest(options.skill)
+    ? publishSkillManifest(options.skill, { name, version })
     : null;
   const installedSkills = (options.skills ?? []).map(normalizeSkillManifest);
   const ui = options.ui ? normalizeUiOptions(name, options.ui) : null;
@@ -863,6 +910,11 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   }
 
   app.get("/healthz", (c) => c.json({ status: "ok", name, version }));
+  app.get(ATOMIC_UNIT_SKILL_MANIFEST_PATH, (c) =>
+    unitSkill
+      ? c.json(unitSkill)
+      : c.json({ error: "skill manifest not configured" }, 404),
+  );
 
   let uiProductRoutes: Hono<UnitHonoEnv> | null = null;
   if (ui) {
