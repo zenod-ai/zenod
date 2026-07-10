@@ -26,6 +26,17 @@ export function mcpUrlForToken(
   return new URL(`/mcp/${encodeURIComponent(token)}`, `${origin}/`).toString()
 }
 
+export function resolveMcpAccess(
+  connectionToken: string,
+  account?: { token?: string | null; mcp_url?: string | null } | null
+): { token: string; url: string } {
+  const token = account?.token || connectionToken
+  return {
+    token,
+    url: account?.mcp_url || mcpUrlForToken(token),
+  }
+}
+
 export function mcpClientSnippets(mcpUrl: string) {
   return {
     claude: `claude mcp add --transport http zenod ${mcpUrl}`,

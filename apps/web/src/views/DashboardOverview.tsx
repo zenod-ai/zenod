@@ -26,7 +26,7 @@ import {
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { mcpClientSnippets, mcpUrlForToken } from "@/views/dashboard-navigation"
+import { mcpClientSnippets, resolveMcpAccess } from "@/views/dashboard-navigation"
 
 export type DashboardOverviewData = {
   tenant: { id: string; name?: string }
@@ -34,6 +34,8 @@ export type DashboardOverviewData = {
 }
 
 type CustomerAccount = {
+  mcp_url?: string | null
+  token?: string | null
   balance?: {
     limitUsd: number | null
     usageUsd: number | null
@@ -174,7 +176,8 @@ export function DashboardOverview({
     )
   }
 
-  const mcpUrl = mcpUrlForToken(connections.token)
+  const mcpAccess = resolveMcpAccess(connections.token, account)
+  const mcpUrl = mcpAccess.url
   const snippets = mcpClientSnippets(mcpUrl)
 
   return (
@@ -223,7 +226,7 @@ export function DashboardOverview({
                   id="dashboard-mcp-token"
                   className="min-w-0 font-mono text-xs"
                   type={showToken ? "text" : "password"}
-                  value={connections.token}
+                  value={mcpAccess.token}
                   readOnly
                 />
                 <Button
@@ -238,7 +241,7 @@ export function DashboardOverview({
                 >
                   {showToken ? <EyeOffIcon /> : <EyeIcon />}
                 </Button>
-                <CopyButton value={connections.token} label="Copy" />
+                <CopyButton value={mcpAccess.token} label="Copy" />
               </div>
             </Field>
           </div>

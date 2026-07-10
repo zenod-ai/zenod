@@ -102,4 +102,10 @@ grep -Fq 'verify old cloud compose hosts no longer serve' <<<"$output"
 ! grep -Eq 'oauth-secret|sk_test_secret|whsec_secret|target-only|tenant-only|must-not-copy' <<<"$output"
 ! grep -Eq 'oauth-secret|sk_test_secret|whsec_secret|target-only|tenant-only|must-not-copy' "$FAKE_LOG"
 
+env Z_N5_SOURCE_ONLY=1 MODE=apply DRY_RUN=0 CUTOVER_APPROVED=1 APPROVAL_REF=test \
+  DOKPLOY_API_KEY=test-only IMAGE=ghcr.io/zenod-ai/zenod:sha-abcdef0 \
+  HEALTH_TIMEOUT_SECONDS=1 HEALTH_POLL_SECONDS=1 \
+  bash -c 'source "$1"; curl() { printf "%s\n" '\''{"status":"ok","sha":"abcdef0123456789"}'\''; }; wait_for_deploy' \
+  _ "$SCRIPT"
+
 printf 'Z-N5 cutover contract tests passed\n'
