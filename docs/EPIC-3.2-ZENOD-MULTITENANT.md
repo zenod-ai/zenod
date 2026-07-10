@@ -9,10 +9,10 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Codex task `019f4933-5245-7651-9018-9ae342f587ac`
 Steward since: 2026-07-10 01:32 CEST
-Last reconciled commit: working tree from `8e12ebab64140f227f9c19d5a72e5d191de8d251`
+Last reconciled commit: `fe4e6552d7b5257185324f025dba69bb5fbe8a98`
 Planner: Epic 3.0 planner
 Worker: Codex task `019f4933-5245-7651-9018-9ae342f587ac`
-Tester: Franklin / agent `019f493d-8bcc-7930-b2d5-92f4a1dab782` on #736
+Tester: steward takeover / Codex task `019f4933-5245-7651-9018-9ae342f587ac` on #736
 
 ## Role Bindings
 
@@ -22,7 +22,7 @@ Tester: Franklin / agent `019f493d-8bcc-7930-b2d5-92f4a1dab782` on #736
 | Planner | Epic 3.0 planner | Zenod migration scope | Shape acceptance and tickets until an epic worker is bound. | Executable ledger. |
 | Epic worker | Codex task `019f4933-5245-7651-9018-9ae342f587ac` | This spine | Delivery lead and MANAGER (parent D8): mint issues, dispatch ticket workers and testers, run fix loops, iterate until Definition of Done or a named Human Gate; never stop for questions the spine or code answers. | Spine, issues, integration state current. |
 | Ticket worker | See Issue Ledger | One bound GitHub issue and branch | Execute one issue branch; do not edit this spine or `packages/mcp-chassis/**`. | PR, commit, evidence, blocker, next action in issue. |
-| Tester | Franklin / `019f493d-8bcc-7930-b2d5-92f4a1dab782` | #736 joint 3.1/3.2 proof | Validate exact commits; report chassis friction as Proposed Cross-Spine Updates. | Commit, environment, pass/fail, risk in #736. |
+| Tester | Steward takeover / `019f4933-5245-7651-9018-9ae342f587ac` | #736 joint 3.1/3.2 proof | Validate exact commits; report chassis friction as Proposed Cross-Spine Updates. | Commit, environment, pass/fail, risk in #736. |
 
 ## Write Scope
 
@@ -61,11 +61,11 @@ Run every hosted Zenod tenant from ONE container on the chassis. Tenant-prefix a
 
 ## Definition Of Done
 
-- [ ] Zenod boots via `createUnit` on the chassis; `AGENT=zenod` path retired.
-- [ ] All state tenant-prefixed: `zenod.sqlite`, `ingest.sqlite`, `usage.sqlite`, `vault/` clone, `transcripts/`, media store under `/data/<tenant>/`.
-- [ ] Per-tenant repo token custody in the chassis vault; only Zenod code may read it (Law 6).
+- [x] Zenod boots via `createUnit` on the chassis; the Zenod entry path no longer boots the legacy standalone app.
+- [x] All Zenod product state is tenant-prefixed: `zenod.sqlite`, `ingest.sqlite`, `usage.sqlite`, vault, transcripts, media, and the remaining runtime databases under `/data/<tenant>/`.
+- [x] Per-tenant repo token custody uses the chassis vault adapter; only tenant-bound Zenod runtime code materializes it (Law 6).
 - [ ] Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three provisioned tenants, each logging into the UI sees only its repo/ingest/usage, cross-tenant reads provably fail, per-tenant commit receipts intact — executed autonomously with screenshots in evidence.
-- [ ] Zenod UI panels (Repo, Ingest, Usage) served from the unit container per the UI Surface section.
+- [x] Zenod UI panels (Repo, Ingest, Usage) are served from the unit container per the UI Surface section.
 - [ ] Self-host parity: public image, env token, single tenant, UI included; restore-from-repo runbook (Z-5) re-verified.
 - [ ] Existing hosted tenants migrated by script from per-user volumes to tenant prefixes, with rollback documented.
 - [ ] `zenod.zenod.dev` serves all tenants; per-tenant subdomains retired after migration window.
@@ -78,12 +78,14 @@ Run every hosted Zenod tenant from ONE container on the chassis. Tenant-prefix a
 
 ## Current State
 
-Phase: implementation and autonomous validation
-Last verified: 2026-07-10 04:13 CEST
+Phase: human-ready pilot validation; external and production gates remain
+Last verified: 2026-07-10 04:54 CEST
 Integration target: main
-Fresh base commit: `bac2729d4e3d911476f61c466f242b5858550714`
-Next action: consume the corrected #768 chassis extension, add D18 receipt rendering in #733, integrate the #735/#737/#736/#738 handoffs, then execute the joint 3.1/3.2 tenant storage/session proof.
-Blockers: #768 must add authenticated custom unit routes plus a durable tenant store before the hosted pilot can pass; live migration and retirement remain at the named Jordi gates.
+Fresh base commit: `98ce0eafd5087044d73473c569c8faecae70d019`
+Integration branch / head: `codex/epic-3.2-live-pilot` / `fe4e6552d7b5257185324f025dba69bb5fbe8a98`
+Worktree: `/Users/jordi/Documents/GitHub/wt-736-live`
+Next action: open the final integration PR, provide a test LLM key plus three disposable writable repositories for full commit-receipt proof, then request Jordi's live-migration gate only after that proof passes.
+Blockers: full-mode per-tenant commit receipts require a test LLM key; Stripe test-event proof lacks Stripe test authentication; live migration and subdomain retirement remain at the named Jordi gates.
 
 ## Role Goals
 
@@ -154,21 +156,23 @@ The epic worker validates WITHOUT human help, via browser automation against a f
 |---|---|---|---|
 | 2026-07-10 | Preserve existing tenant tokens across migration. | Client URLs (ZD-8) must not change; token hash is the tenant key. | `docs/MCP-CHASSIS-SPEC.md` |
 | 2026-07-10 | Lazy per-tenant storage init. | Avoid boot-time scan of all tenants; first request creates handles. | parent D1 |
-| 2026-07-10 | Tenant sessions carry a tenant id inside a tenant-secret-signed cookie; the multitenant root fails closed for unbound product APIs. | Browser API calls need a stable tenant context without changing the existing SPA API paths or trusting a client-supplied tenant id. | #734 working tree from `8e12ebab` |
+| 2026-07-10 | Tenant sessions carry a tenant id inside a chassis-signed cookie; product APIs fail closed while the anonymous SPA/login shell remains public. | Browser API calls need stable tenant context without trusting client-supplied tenant ids, and users must be able to reach the login screen. | #734 and chassis #780 / PR #782 |
 | 2026-07-10 | Shared model binaries may remain outside tenant roots; media artifacts and all mutable product state may not. | Whisper model files are immutable cache, while archive/media receipts are tenant data. | #734 path audit |
 | 2026-07-10 | Parent D18 is binding acceptance for Z-MT-1 and Z-MT-3: one ingest tool accepts an optional transcript, bypasses STT when supplied, and reports `transcription: provided \| performed`. | This prevents double transcription by construction while keeping the change narrowly scoped to the parent decision. | #734 and #733 issue comments |
-| 2026-07-10 | Z-MT-1 consumes chassis tenant auth and storage rather than reviving the custom `TenantRuntimeManager`. | Main `bac2729` now contains the real chassis; duplicating its token registry/session logic in Zenod would violate the co-development boundary. | #768 |
+| 2026-07-10 | Z-MT-1 consumes chassis tenant auth and storage rather than reviving the custom `TenantRuntimeManager`. | Duplicating chassis token registry/session logic in Zenod would violate the co-development boundary. | #768, #769, #771 |
+| 2026-07-10 | Migration targets `chassis-tenants.sqlite` and securely removes obsolete standalone auth rows from the copied `zenod.sqlite`. | Same-token URL continuity belongs in the chassis hash registry; keeping the old raw token or session secret at rest would violate custody. | #737 and `fe4e655` migration proof |
+| 2026-07-10 | Chassis friction remains 3.1-owned. | The pilot exposed public-SPA route auth scope without taking over `packages/mcp-chassis/**`; 3.1 fixed and merged it. | #780 / PR #782 / `98ce0ea` |
 
 ## Issue Ledger
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#734](https://github.com/zenod-ai/zenod/issues/734) | Ticket worker | Codex task `019f4933-5245-7651-9018-9ae342f587ac` | Z-MT-1 tenant runtime storage and token routing | in progress; chassis seam blocked | #768 | [draft PR #770](https://github.com/zenod-ai/zenod/pull/770), `codex/z-mt-1-chassis-reconcile`; `/Users/jordi/Documents/GitHub/wt-z-mt-1` | `bac2729` | All DB/paths tenant rooted through chassis handles; token/API/session isolation; WAL/busy timeout; D18 provided transcript bypass produces zero STT calls and receipt says `provided`, absent transcript receipt says `performed`. | Runtime pool and SQLite contract pass; D18 one-tool/STT branch passes; server typecheck and 564 tests pass. | 2026-07-10 04:13 CEST | Consume corrected #768 for product APIs and durable provisioning. |
-| [#735](https://github.com/zenod-ai/zenod/issues/735) | Ticket worker | unassigned | Z-MT-2 repo-token custody in vault | queued | #734, #718 | `codex/z-mt-2-vault-custody` reserved | `8e12ebab` | Repo token per tenant, vault-read only by Zenod. | Dependency hold recorded in issue. | 2026-07-10 01:36 CEST | Dispatch after #734 context integrates. |
-| [#733](https://github.com/zenod-ai/zenod/issues/733) | Ticket worker | Raman / `019f493d-8c95-7a33-ad08-607f5d74ba9e` | Z-MT-3 Zenod settings UI panels | in progress | #768, #734 | `codex/z-mt-3-ui-panels` | `8e12ebab` | Tenant sees repo/ingest/usage panels only for itself; ingest UI uses one contract and renders `transcription: provided \| performed`. | D18 acceptance reconciled in #733; web handoff at `c752b28`. | 2026-07-10 03:51 CEST | Rebase to `bac2729`; integrate web handoff after authenticated route seam. |
-| [#737](https://github.com/zenod-ai/zenod/issues/737) | Ticket worker | Lovelace / `019f493d-8b1b-7d92-ac8a-8530f6a56833` | Z-MT-4 migration script + rollback | in progress | #734 storage contract | `codex/z-mt-4-migration` | `8e12ebab` | Dry-run and rollback on copied volume pass checksums/integrity. | Dispatch record in #737. | 2026-07-10 01:36 CEST | Review migration handoff and synthetic-volume evidence. |
-| [#736](https://github.com/zenod-ai/zenod/issues/736) | Tester | Franklin / `019f493d-8bcc-7930-b2d5-92f4a1dab782` | Z-MT-5 three-tenant E2E + self-host parity | in progress | #734, #735, #733, #737 | `codex/z-mt-5-e2e` | `8e12ebab` | Three-tenant isolation, receipts, migration, self-host parity. | Joint proof dispatch in #736. | 2026-07-10 01:44 CEST | Land harness; execute as prerequisites integrate. |
-| [#738](https://github.com/zenod-ai/zenod/issues/738) | Ticket worker | Gibbs / `019f493d-8d3c-7841-a934-0540531463bf` | Z-MT-6 cutover + retire per-user instances | preparation | #737, #736, Jordi gates | `codex/z-mt-6-cutover` | `8e12ebab` | Approved cutover verified; legacy retirement reversible. | Dispatch record in #738. | 2026-07-10 01:36 CEST | Prepare runbook/inventory only; no live mutation. |
+| [#734](https://github.com/zenod-ai/zenod/issues/734) | Ticket worker | Steward integration | Z-MT-1 tenant runtime storage and token routing | ready for review | #768, #780 complete | `codex/epic-3.2-live-pilot`; `/Users/jordi/Documents/GitHub/wt-736-live` | `98ce0ea` | All DB/paths tenant rooted through chassis handles; token/API/session isolation; WAL/busy timeout; D18 receipt branches. | `fe4e655`; 575 server tests; three-tenant contract and browser sessions pass. | 2026-07-10 04:54 CEST | Review final integration PR. |
+| [#735](https://github.com/zenod-ai/zenod/issues/735) | Ticket worker | Steward integration | Z-MT-2 repo-token custody in vault | ready for review | #734 | `codex/epic-3.2-live-pilot` | `98ce0ea` | Repo token per tenant, vault-read only by Zenod. | Chassis vault adapter, cross-tenant handle negative, fake-credential browser pilot, raw-token scan pass at `fe4e655`. | 2026-07-10 04:54 CEST | Review final integration PR. |
+| [#733](https://github.com/zenod-ai/zenod/issues/733) | Ticket worker | Steward integration | Z-MT-3 Zenod settings UI panels | ready for review | #734 | `codex/epic-3.2-live-pilot` | `98ce0ea` | Tenant sees repo/ingest/usage panels only for itself; ingest UI renders `provided \| performed`. | T1/T2/T3 browser captures plus D18 web test/build at `fe4e655`. | 2026-07-10 04:54 CEST | Review final integration PR. |
+| [#737](https://github.com/zenod-ai/zenod/issues/737) | Ticket worker | Steward integration | Z-MT-4 migration script + rollback | validated | #734 storage contract | `codex/epic-3.2-live-pilot` | `98ce0ea` | Dry-run, apply, verify, rollback, same-token continuity, and secret erasure pass. | 11 tests plus live synthetic same-token boot, repo preservation, zero raw-token matches at `fe4e655`. | 2026-07-10 04:54 CEST | Keep live migration behind Jordi gate. |
+| [#736](https://github.com/zenod-ai/zenod/issues/736) | Tester | Steward takeover | Z-MT-5 three-tenant E2E + self-host parity | partial pass; external full-mode gate | #734, #735, #733, #737 | `codex/epic-3.2-live-pilot` | `98ce0ea` | Three-tenant isolation, receipts, migration, self-host parity. | Contract/browser/self-host/migration pass at `fe4e655`; full commit receipts need a test LLM key and disposable repos. | 2026-07-10 04:54 CEST | Supply key/repos and run `--mode full`. |
+| [#738](https://github.com/zenod-ai/zenod/issues/738) | Ticket worker | Steward integration | Z-MT-6 cutover + retire per-user instances | preparation complete; human-gated | #737, #736, Jordi gates | `codex/epic-3.2-live-pilot` | `98ce0ea` | Approved cutover verified; legacy retirement reversible. | Inventory/runbook tests pass; no production mutation performed. | 2026-07-10 04:54 CEST | Wait for full proof and Jordi approvals. |
 
 ## Branch And Integration
 
@@ -200,31 +204,46 @@ Stale assignment policy: no automatic timeout; verify issue, branch, PR, latest 
 
 ## Planner Queue
 
-- Route #768 to the Epic 3.1 steward; accept only a chassis-owned authenticated route extension and durable tenant store, with restart/isolation tests.
-- Reconcile #734/#736 pilot friction into Proposed Cross-Spine Updates for the 3.1 steward; do not patch the chassis.
-- Keep #735 queued until the authenticated tenant context is stable enough for secret custody.
-- Prepare the live-tenant inventory through #738 without crossing either Jordi approval gate.
+- Open and review the final Epic 3.2 integration PR from `fe4e655`.
+- Obtain a test LLM key and three disposable writable repositories for #736 full mode.
+- Keep live migration and subdomain retirement behind the two Jordi gates.
+- Continue routing any chassis friction to 3.1; do not patch `packages/mcp-chassis/**`.
 
 ## Worker Queue
 
-- Active: #734, #733, #737, #738.
-- Queued: #735 after #734.
+- Ready for review: #733, #734, #735, #737.
+- Human-gated preparation: #738.
 
 ## Tester Queue
 
-- #736: build and execute the joint 3.1/3.2 three-tenant browser/MCP proof, including vault marker and commit-receipt negatives.
+- #736: contract/browser/self-host/migration pass; run full marker and commit-receipt proof when the test LLM key and repositories are supplied.
 
 ## Validation Evidence
 
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
-| 2026-07-10 | Spine structural contract | working tree from `f1edc8c` | local | `python3 skills/epic-spine/scripts/validate_spine.py --strict docs/EPIC-3.2-ZENOD-MULTITENANT.md` | pending | - |
+| 2026-07-10 | Spine structural contract | working tree from `fe4e655` | local | `python3 skills/epic-spine/scripts/validate_spine.py --strict docs/EPIC-3.2-ZENOD-MULTITENANT.md` | pass | strict validator OK |
 | 2026-07-10 | Z-MT-1 compile | working tree from `8e12ebab` | local Node 22 | `npm run typecheck -w zenod` and `npm run typecheck -w @zenod/server` | pass | core and server typecheck exit 0 |
 | 2026-07-10 | Z-MT-1 regression | working tree from `8e12ebab` | local Vitest | `npm test -w @zenod/server` | pass | 59 files, 558 tests |
 | 2026-07-10 | Z-MT-1 real-chassis checkpoint | `51a6e10` from `bac2729` | local Node 22 / Vitest | build `zenod` + `@zenod/mcp-chassis`; server typecheck; `npm test -w @zenod/server` | pass | 61 files, 561 tests; runtime pool tenant roots and WAL/30s focused tests included; draft PR #770 |
 | 2026-07-10 | Parent D18 one-ingest contract | `codex/z-mt-1-chassis-reconcile` | local Node 22 / Vitest | focused media/MCP/Ring/store tests plus `npm test -w @zenod/server` | pass | 61 files, 564 tests; supplied transcript: zero STT calls + `provided`; absent transcript: one STT call + `performed`; no second mutating media-ingest tool |
+| 2026-07-10 | Final rebased build and automation | `fe4e655` on `98ce0ea` | local Node 22 | root build; chassis/server/script suites | pass | 53 chassis tests; 63 server files / 575 tests; 25 Epic scripts; no skips |
+| 2026-07-10 | Joint three-tenant contract | `fe4e655` | production entrypoint, fresh local data root | `node scripts/epic32-joint-proof.mjs --mode contract` | pass | `docs/evidence/epic-3.2-pilot/fe4e655-contract/summary.json` |
+| 2026-07-10 | T1/T2/T3 browser UI and URL-spoof negative | `fe4e655` | Codex in-app Browser, 1280x720 | token login; Vault, Transcription, Costs; T2 query under T3 session | pass | `docs/evidence/epic-3.2-pilot/fe4e655-browser/` |
+| 2026-07-10 | Self-host env-token parity and restart | `fe4e655` | production entrypoint on local 8081 | root/static, MCP, settings, token login, browser, process restart | pass | `self-host.png`; restart returned root/settings/login 200 |
+| 2026-07-10 | Same-token migration rehearsal | `fe4e655` | synthetic legacy volume and production entrypoint on local 8082 | plan/apply/verify, unchanged MCP token, repo read, raw-byte scan | pass | checksums/SQLite/git/registry pass; zero raw-token files |
 
 ## Handoff Journal
+
+### 2026-07-10 - Epic worker - Final-chassis pilot reconciled
+
+Context: `codex/epic-3.2-live-pilot` was rebased in `/Users/jordi/Documents/GitHub/wt-736-live` onto exact `main` `98ce0ea`, including 3.1's #780 route-auth fix. The rebased head `fe4e655` passes builds, 53 chassis tests, 575 server tests, 25 Epic script tests, three-tenant contract proof, real T1/T2/T3 browser sessions, self-host restart, and same-token migration. No 3.2 commit edits `packages/mcp-chassis/**`.
+Next: open/review the final PR; supply a test LLM key and three disposable writable repositories for full commit receipts; keep production migration and DNS behind Jordi gates.
+Risks: full live GitHub commit receipts and Stripe test events are not yet evidenced; fake browser credentials intentionally show clone failures while proving tenant-specific repo rendering.
+Assignment identity: Codex task `019f4933-5245-7651-9018-9ae342f587ac`
+Branch / latest commit: `codex/epic-3.2-live-pilot` / `fe4e6552d7b5257185324f025dba69bb5fbe8a98`
+Last verified: 2026-07-10 04:54 CEST
+Links: #733, #734, #735, #736, #737, #738, #780, PR #782, `docs/evidence/epic-3.2-pilot/`
 
 ### 2026-07-10 - Epic worker - Z-MT-1 rebased to real chassis contract
 
@@ -260,17 +279,18 @@ Links:
 
 ## Open Questions
 
-- Do any ingest/media code paths hardcode `/data` roots outside `runtime.ts`? Owner: Epic worker. Needed by: Z-MT-1.
-- Per-tenant gateway (LLM) keys: chassis vault or keep the standalone keyring? Owner: Jordi. Needed by: Z-MT-2.
+- Full receipt proof inputs: which three disposable repositories and which test LLM key may #736 use? Owner: Jordi. Needed before: merge/go-live declaration.
+- Live cutover window and per-tenant order remain a named Jordi gate. Owner: Jordi. Needed before: #738 execution.
 
 ## Proposed Cross-Spine Updates
 
 | Date | Target Spine | Proposed Change | Evidence | Suggested Owner | Status |
 |---|---|---|---|---|---|
 | 2026-07-10 | `docs/EPIC-2.3-ZENOD-MOVE-0.md` | Mark Z-1/ZD-6/ZD-10 deployment model superseded by this epic once Z-MT-6 lands. | this spine | Epic 2.3 steward | proposed |
-| 2026-07-10 | `docs/EPIC-3.1-MCP-CHASSIS.md` | Reconcile C-4 with pilot evidence: the Zenod SQLite set needs a canonical WAL + 30s busy-timeout contract and tenant media paths, while tenant identity must come from verified token/session context rather than request data. | #734 working tree and #736 joint-proof contract | Epic 3.1 steward | proposed |
-| 2026-07-10 | `docs/EPIC-3.1-MCP-CHASSIS.md` | Reconcile C-6 with the pilot session shape: tenant id is carried in a tenant-secret-signed session and the root front controller fails closed for unbound product APIs. | #733/#734 | Epic 3.1 steward | proposed |
-| 2026-07-10 | `docs/EPIC-3.1-MCP-CHASSIS.md` | Add a pre-SPA authenticated custom-route extension to `createUnit` that supplies tenant-bound context, plus a durable chassis-owned tenant provisioning store with restart persistence and same-token migration continuity. | Main `bac2729` API audit and [#768](https://github.com/zenod-ai/zenod/issues/768) | Epic 3.1 steward | proposed; blocking joint proof |
+| 2026-07-10 | `docs/EPIC-3.1-MCP-CHASSIS.md` | Reconcile C-4 with pilot evidence: the Zenod SQLite set needs WAL + 30s busy timeout and tenant media paths, while identity comes from verified token/session context. | #734 and #736 contract | Epic 3.1 steward | accepted in pilot integration |
+| 2026-07-10 | `docs/EPIC-3.1-MCP-CHASSIS.md` | Reconcile C-6 with the pilot session shape: chassis-signed tenant session, fail-closed product APIs, public login SPA. | #733/#734 and #780 | Epic 3.1 steward | accepted via PR #782 |
+| 2026-07-10 | `docs/EPIC-3.1-MCP-CHASSIS.md` | Add authenticated custom product routes and a durable chassis-owned tenant store. | [#768](https://github.com/zenod-ai/zenod/issues/768) | Epic 3.1 steward | accepted via PRs #769 and #771 |
+| 2026-07-10 | `docs/EPIC-3.1-MCP-CHASSIS.md` | Scope custom-route auth to declared route matches so anonymous root/static SPA requests remain public. | [#780](https://github.com/zenod-ai/zenod/issues/780) | Epic 3.1 steward | accepted via PR #782 / `98ce0ea` |
 
 ## Appendix
 

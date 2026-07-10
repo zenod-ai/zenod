@@ -6,21 +6,19 @@ This is the test-only joint proof for Epic 3.1 chassis behavior exercised throug
 
 ## Integration Prerequisite
 
-This tester branch was created from `8e12ebab64140f227f9c19d5a72e5d191de8d251`. Before scoring the joint proof, integrate this harness commit onto `codex/epic-3.2-zenod-multitenant` at or after `699a4ed4738ce4d0c8ec0b930e49642cb8a99b28`. That integration point contains the tenant runtime/server work from #734 at `cacf3cb` plus the subsequent web/cutover commits through `699a4ed`.
-
-Do not run the final acceptance from this branch's base and do not describe a base-branch prerequisite failure as a product regression. The final evidence must name the resulting integrated SHA after the harness commit is cherry-picked or merged.
+Run from the final Epic 3.2 integration branch after rebasing onto merged chassis main. The accepted pilot is `fe4e6552d7b5257185324f025dba69bb5fbe8a98` on `main` `98ce0eafd5087044d73473c569c8faecae70d019`. Final evidence must name the exact tested integration SHA.
 
 ## What It Proves
 
 The black-box runner covers:
 
 - control-token-gated provisioning of T1, T2, and T3;
-- registry redaction and unknown-token rejection;
+- one-time minted-token custody, persistence redaction, and unknown-token rejection;
 - ZD-8 `/mcp/<token>` initialization and tools listing for each tenant;
 - proof that the control-plane token cannot read `/api/settings`;
 - separate T1/T2/T3 bearer reads with each tenant's own repo settings;
 - tenant-scoped settings, repo, ingest, and usage API reads;
-- `/api/auth/tenant-login` followed by cookie-only API reads that stay on the owning tenant;
+- `/api/auth/login` followed by cookie-only API reads that stay on the owning tenant;
 - direct cross-tenant URL rejection and a tenant-id-tampered session-cookie rejection;
 - full-mode store receipts and unique marker-string negatives;
 - optional host-visible `/data/<tenant>/` layout, media path, and raw-token-at-rest checks;
@@ -51,7 +49,7 @@ Run the in-process PRAGMA proof after the parent implementation is integrated in
 npm run test -w @zenod/server -- epic32SqlitePragmas.test.ts
 ```
 
-`busy_timeout` is connection-local and cannot be proved by reopening a SQLite file from the black-box process. The focused test reads each live store connection directly and requires `journal_mode=wal` plus `busy_timeout=30000`; it also checks the chassis registry when `TenantRuntimeManager` is present.
+`busy_timeout` is connection-local and cannot be proved by reopening a SQLite file from the black-box process. The focused test reads each live store connection directly and requires `journal_mode=wal` plus `busy_timeout=30000`, including the default `createSqliteTenantStore` registry used by `createZenodUnit`.
 
 ## Full Run
 
@@ -89,6 +87,6 @@ The migration worker's dry-run/apply/verify/rollback receipts remain authoritati
 
 After the API/session checks are green, use the same three provisioned tenants in a real browser. Retain one screenshot per tenant for Repo, Ingest, and Usage, plus the failed direct-URL attempt. Record browser version, viewport, base URL, exact commit, and screenshot paths in issue #736. A browser screenshot is supplementary evidence; the cookie-only API and tampered-cookie assertions are the deterministic isolation checks beneath it.
 
-## Current Expected Gap At Base Commit
+## Accepted Contract Evidence
 
-At `8e12ebab64140f227f9c19d5a72e5d191de8d251`, `POST /api/tenants` is not implemented. A run against that commit must stop with exit `2` at provisioning. The post-dispatch parent branch has the tenant manager, tenant-login, signed sessions, fail-closed API dispatch, tenant media configuration, and SQLite PRAGMAs, but those edits are not present on this tester branch until the steward integrates or cherry-picks them. That is a truthful prerequisite failure, not a test pass.
+Contract mode passes at `fe4e6552d7b5257185324f025dba69bb5fbe8a98`; see `docs/evidence/epic-3.2-pilot/fe4e655-contract/summary.json`. Full mode still requires disposable repositories and a test LLM key. Browser, self-host restart, and same-token migration evidence are recorded beside that summary.

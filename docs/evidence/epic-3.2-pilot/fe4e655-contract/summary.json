@@ -1,0 +1,457 @@
+{
+  "epic": "3.2",
+  "issue": 736,
+  "assignment": "epic32-joint-proof-tester",
+  "runId": "fe4e655-contract",
+  "mode": "contract",
+  "baseUrl": "http://127.0.0.1:8080",
+  "commit": "fe4e6552d7b5257185324f025dba69bb5fbe8a98",
+  "startedAt": "2026-07-10T02:44:29.768Z",
+  "tenantIds": [
+    "epic32-fe4e655-contract-t1",
+    "epic32-fe4e655-contract-t2",
+    "epic32-fe4e655-contract-t3"
+  ],
+  "tokenHashes": [
+    {
+      "label": "T1",
+      "sha256": "62ad5503a3cc7b5cff11751862644e78c96531ef9817e175703d96623d86df99"
+    },
+    {
+      "label": "T2",
+      "sha256": "b931452482177955781b9843e98c0b26bc9f9125ad8e648fb05d760373a0349f"
+    },
+    {
+      "label": "T3",
+      "sha256": "b499dbdce960522c9bc7d2dc61c0c538717d4d38c398baeb578507b9edb2161c"
+    }
+  ],
+  "status": "pass",
+  "steps": [
+    {
+      "name": "health",
+      "status": "pass",
+      "detail": {
+        "status": 200,
+        "body": {
+          "status": "ok",
+          "name": "zenod",
+          "version": "0.0.1"
+        }
+      }
+    },
+    {
+      "name": "three-tenant provisioning and registry redaction",
+      "status": "pass",
+      "detail": {
+        "tenants": [
+          "epic32-fe4e655-contract-t1",
+          "epic32-fe4e655-contract-t2",
+          "epic32-fe4e655-contract-t3"
+        ],
+        "registry": {
+          "tenants": [
+            {
+              "tenantId": "epic32-fe4e655-contract-t1",
+              "name": "Epic 3.2 proof T1"
+            },
+            {
+              "tenantId": "epic32-fe4e655-contract-t2",
+              "name": "Epic 3.2 proof T2"
+            },
+            {
+              "tenantId": "epic32-fe4e655-contract-t3",
+              "name": "Epic 3.2 proof T3"
+            }
+          ],
+          "registryVisibility": "no list endpoint; persistence redaction verified by storage scan"
+        }
+      }
+    },
+    {
+      "name": "tokened MCP isolation and marker negatives",
+      "status": "pass",
+      "detail": {}
+    },
+    {
+      "name": "control token cannot access tenant product APIs",
+      "status": "pass",
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "name": "T1/T2/T3 bearer settings and signed tenant-session isolation",
+      "status": "pass",
+      "detail": {
+        "snapshots": {
+          "epic32-fe4e655-contract-t1": {
+            "settings": {
+              "settings": {
+                "instance_name": null,
+                "vault_repo": "epic32-proof/fe4e655-contract-t1",
+                "vault_branch": "main",
+                "github_token": "[redacted]",
+                "provider": null,
+                "anthropic_api_key": null,
+                "openai_api_key": null,
+                "openrouter_api_key": null,
+                "model_ask": null,
+                "model_classify": null,
+                "model_vision": null,
+                "model_max_steps": null,
+                "google_service_account_json": null,
+                "google_oauth_client_id": null,
+                "google_oauth_client_secret": "[redacted]",
+                "google_drive_folder_id": null,
+                "artifact_archive_provider": "local",
+                "artifact_archive_local_dir": "/tmp/zenod-epic32-fe4e655-final/epic32-fe4e655-contract-t1/media",
+                "artifact_archive_drive_folder_id": null,
+                "groq_api_key": null,
+                "openai_long_transcription": null,
+                "long_transcription_provider": null,
+                "openrouter_transcription_model": null,
+                "whisper_model": null,
+                "telegram_enabled": null,
+                "telegram_bot_token": "[redacted]",
+                "telegram_allowed_users": null,
+                "telegram_accept_all": null,
+                "telegram_rich": null,
+                "composio_api_key": null,
+                "composio_user_id": null
+              },
+              "configured": false
+            },
+            "vault": {
+              "repo": "epic32-proof/fe4e655-contract-t1",
+              "branch": "main",
+              "vaultConfigured": false,
+              "configured": false,
+              "provider": "anthropic",
+              "llmReady": false,
+              "cloned": false,
+              "headSha": null,
+              "cloneError": null
+            },
+            "ingest": {
+              "jobs": []
+            },
+            "usage": {
+              "today": {
+                "since": 1783565069889,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              },
+              "last7d": {
+                "since": 1783046669889,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              }
+            }
+          },
+          "epic32-fe4e655-contract-t2": {
+            "settings": {
+              "settings": {
+                "instance_name": null,
+                "vault_repo": "epic32-proof/fe4e655-contract-t2",
+                "vault_branch": "main",
+                "github_token": "[redacted]",
+                "provider": null,
+                "anthropic_api_key": null,
+                "openai_api_key": null,
+                "openrouter_api_key": null,
+                "model_ask": null,
+                "model_classify": null,
+                "model_vision": null,
+                "model_max_steps": null,
+                "google_service_account_json": null,
+                "google_oauth_client_id": null,
+                "google_oauth_client_secret": "[redacted]",
+                "google_drive_folder_id": null,
+                "artifact_archive_provider": "local",
+                "artifact_archive_local_dir": "/tmp/zenod-epic32-fe4e655-final/epic32-fe4e655-contract-t2/media",
+                "artifact_archive_drive_folder_id": null,
+                "groq_api_key": null,
+                "openai_long_transcription": null,
+                "long_transcription_provider": null,
+                "openrouter_transcription_model": null,
+                "whisper_model": null,
+                "telegram_enabled": null,
+                "telegram_bot_token": "[redacted]",
+                "telegram_allowed_users": null,
+                "telegram_accept_all": null,
+                "telegram_rich": null,
+                "composio_api_key": null,
+                "composio_user_id": null
+              },
+              "configured": false
+            },
+            "vault": {
+              "repo": "epic32-proof/fe4e655-contract-t2",
+              "branch": "main",
+              "vaultConfigured": false,
+              "configured": false,
+              "provider": "anthropic",
+              "llmReady": false,
+              "cloned": false,
+              "headSha": null,
+              "cloneError": null
+            },
+            "ingest": {
+              "jobs": []
+            },
+            "usage": {
+              "today": {
+                "since": 1783565069897,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              },
+              "last7d": {
+                "since": 1783046669897,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              }
+            }
+          },
+          "epic32-fe4e655-contract-t3": {
+            "settings": {
+              "settings": {
+                "instance_name": null,
+                "vault_repo": "epic32-proof/fe4e655-contract-t3",
+                "vault_branch": "main",
+                "github_token": "[redacted]",
+                "provider": null,
+                "anthropic_api_key": null,
+                "openai_api_key": null,
+                "openrouter_api_key": null,
+                "model_ask": null,
+                "model_classify": null,
+                "model_vision": null,
+                "model_max_steps": null,
+                "google_service_account_json": null,
+                "google_oauth_client_id": null,
+                "google_oauth_client_secret": "[redacted]",
+                "google_drive_folder_id": null,
+                "artifact_archive_provider": "local",
+                "artifact_archive_local_dir": "/tmp/zenod-epic32-fe4e655-final/epic32-fe4e655-contract-t3/media",
+                "artifact_archive_drive_folder_id": null,
+                "groq_api_key": null,
+                "openai_long_transcription": null,
+                "long_transcription_provider": null,
+                "openrouter_transcription_model": null,
+                "whisper_model": null,
+                "telegram_enabled": null,
+                "telegram_bot_token": "[redacted]",
+                "telegram_allowed_users": null,
+                "telegram_accept_all": null,
+                "telegram_rich": null,
+                "composio_api_key": null,
+                "composio_user_id": null
+              },
+              "configured": false
+            },
+            "vault": {
+              "repo": "epic32-proof/fe4e655-contract-t3",
+              "branch": "main",
+              "vaultConfigured": false,
+              "configured": false,
+              "provider": "anthropic",
+              "llmReady": false,
+              "cloned": false,
+              "headSha": null,
+              "cloneError": null
+            },
+            "ingest": {
+              "jobs": []
+            },
+            "usage": {
+              "today": {
+                "since": 1783565069904,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              },
+              "last7d": {
+                "since": 1783046669904,
+                "calls": 0,
+                "inputTokens": "[redacted]",
+                "outputTokens": "[redacted]",
+                "cachedInputTokens": "[redacted]",
+                "cacheCreationInputTokens": "[redacted]",
+                "costUsd": 0,
+                "byOperation": [],
+                "byModel": []
+              }
+            }
+          }
+        },
+        "checks": [
+          {
+            "name": "T1 Bearer [redacted] snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T1 Bearer [redacted] separation",
+            "status": "pass"
+          },
+          {
+            "name": "T1 tenant-login",
+            "status": "pass"
+          },
+          {
+            "name": "T1 cookie-only API snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T1 cookie remains tenant-bound",
+            "status": "pass"
+          },
+          {
+            "name": "T1 direct cross-tenant URL negative",
+            "status": "pass"
+          },
+          {
+            "name": "T1 tampered tenant cookie negative",
+            "status": "pass"
+          },
+          {
+            "name": "T2 Bearer [redacted] snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T2 Bearer [redacted] separation",
+            "status": "pass"
+          },
+          {
+            "name": "T2 tenant-login",
+            "status": "pass"
+          },
+          {
+            "name": "T2 cookie-only API snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T2 cookie remains tenant-bound",
+            "status": "pass"
+          },
+          {
+            "name": "T2 direct cross-tenant URL negative",
+            "status": "pass"
+          },
+          {
+            "name": "T2 tampered tenant cookie negative",
+            "status": "pass"
+          },
+          {
+            "name": "T3 Bearer [redacted] snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T3 Bearer [redacted] separation",
+            "status": "pass"
+          },
+          {
+            "name": "T3 tenant-login",
+            "status": "pass"
+          },
+          {
+            "name": "T3 cookie-only API snapshot",
+            "status": "pass"
+          },
+          {
+            "name": "T3 cookie remains tenant-bound",
+            "status": "pass"
+          },
+          {
+            "name": "T3 direct cross-tenant URL negative",
+            "status": "pass"
+          },
+          {
+            "name": "T3 tampered tenant cookie negative",
+            "status": "pass"
+          }
+        ]
+      }
+    },
+    {
+      "name": "joint chassis storage layout, persisted WAL, and token-at-rest",
+      "status": "pass",
+      "detail": {
+        "sqliteFiles": [
+          "chassis-tenants.sqlite",
+          "epic32-fe4e655-contract-t1/execution.sqlite",
+          "epic32-fe4e655-contract-t1/ingest.sqlite",
+          "epic32-fe4e655-contract-t1/journeys.sqlite",
+          "epic32-fe4e655-contract-t1/notifications.sqlite",
+          "epic32-fe4e655-contract-t1/oauth.sqlite",
+          "epic32-fe4e655-contract-t1/tasks.sqlite",
+          "epic32-fe4e655-contract-t1/usage.sqlite",
+          "epic32-fe4e655-contract-t1/vault.sqlite",
+          "epic32-fe4e655-contract-t1/whatsapp/whatsapp.sqlite",
+          "epic32-fe4e655-contract-t1/zenod.sqlite",
+          "epic32-fe4e655-contract-t2/execution.sqlite",
+          "epic32-fe4e655-contract-t2/ingest.sqlite",
+          "epic32-fe4e655-contract-t2/journeys.sqlite",
+          "epic32-fe4e655-contract-t2/notifications.sqlite",
+          "epic32-fe4e655-contract-t2/oauth.sqlite",
+          "epic32-fe4e655-contract-t2/tasks.sqlite",
+          "epic32-fe4e655-contract-t2/usage.sqlite",
+          "epic32-fe4e655-contract-t2/vault.sqlite",
+          "epic32-fe4e655-contract-t2/whatsapp/whatsapp.sqlite",
+          "epic32-fe4e655-contract-t2/zenod.sqlite",
+          "epic32-fe4e655-contract-t3/execution.sqlite",
+          "epic32-fe4e655-contract-t3/ingest.sqlite",
+          "epic32-fe4e655-contract-t3/journeys.sqlite",
+          "epic32-fe4e655-contract-t3/notifications.sqlite",
+          "epic32-fe4e655-contract-t3/oauth.sqlite",
+          "epic32-fe4e655-contract-t3/tasks.sqlite",
+          "epic32-fe4e655-contract-t3/usage.sqlite",
+          "epic32-fe4e655-contract-t3/vault.sqlite",
+          "epic32-fe4e655-contract-t3/whatsapp/whatsapp.sqlite",
+          "epic32-fe4e655-contract-t3/zenod.sqlite",
+          "usage.sqlite"
+        ]
+      }
+    },
+    {
+      "name": "single-tenant self-host parity",
+      "status": "skip",
+      "reason": "single-tenant self-host requires both URL and token"
+    },
+    {
+      "name": "same-token migration rehearsal",
+      "status": "skip",
+      "reason": "migrated tenant requires both URL and token"
+    }
+  ],
+  "finishedAt": "2026-07-10T02:44:29.935Z"
+}
