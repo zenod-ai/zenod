@@ -1,8 +1,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { HttpBindings } from "@hono/node-server";
+import { Hono } from "hono";
 import {
   ChassisStorage,
   createSqliteTenantStore,
   createUnit,
+  hashToken,
   type ControlPlaneOptions,
   type TenantProvisioningStore,
   type UnitContext,
@@ -20,6 +23,9 @@ import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
 import type { ChatTestAuditStore } from "./testHarness.js";
+import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
+import { readCustomerSession } from "./customerSession.js";
+import { mountStaticSurfaces } from "./staticSurfaces.js";
 
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
@@ -133,8 +139,10 @@ function registerZenodTools(
 export interface CreateZenodUnitOptions {
   dataDir?: string;
   webDist?: string;
+  siteDist?: string;
   tenantStore?: TenantProvisioningStore;
   controlPlane?: Omit<ControlPlaneOptions, "store">;
+  customer?: CustomerLayerOptions;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -218,11 +226,64 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       });
     },
   });
+  const customer = createCustomerLayer(
+    {
+      dataDir: storage.dataDir,
+      runtimeForAccount: (account) => (account.tenant_id ? runtimes.get(account.tenant_id) : null),
+    },
+    { ...options.customer, env, tenantStore },
+  );
+  const app = new Hono<{ Bindings: HttpBindings }>();
+  app.route("/", customer.app);
+  mountStaticSurfaces(app, { webDist: options.webDist, siteDist: options.siteDist });
+  app.all("*", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (session) {
+      const forbidden =
+        c.req.path === "/api/tenants" ||
+        c.req.path.startsWith("/api/tenants/") ||
+        c.req.path === "/api/exec" ||
+        c.req.path.startsWith("/api/exec/") ||
+        c.req.path.startsWith("/api/executions") ||
+        c.req.path.startsWith("/api/executor") ||
+        c.req.path.startsWith("/api/journeys") ||
+        c.req.path.startsWith("/api/journey-steps") ||
+        c.req.path.startsWith("/api/tasks") ||
+        c.req.path === "/api/lane-secret" ||
+        c.req.path.startsWith("/mcp") ||
+        c.req.path === "/internal" ||
+        c.req.path.startsWith("/internal/");
+      if (forbidden) return c.json({ error: "forbidden" }, 403);
+
+      const headers = new Headers(c.req.raw.headers);
+      headers.delete("cookie");
+      if (c.req.path.startsWith("/api/")) {
+        const account = customer.accounts.resolveActiveTenantForUser(session.github_id);
+        const token = account ? customer.tokenVault.get(account.account_id) : null;
+        const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
+        if (
+          !account?.tenant_id ||
+          !token ||
+          !record ||
+          record.tenant.id !== account.tenant_id ||
+          (record.status ?? "active") !== "active"
+        ) {
+          return c.json({ error: "unauthorized" }, 401);
+        }
+        headers.set("authorization", `Bearer ${token}`);
+      }
+      return unit.app.fetch(new Request(c.req.raw, { headers }), c.env);
+    }
+    return unit.app.fetch(c.req.raw, c.env);
+  });
   return {
     ...unit,
+    app,
     runtimes,
     storage,
     tenantStore,
+    customerAccounts: customer.accounts,
+    customerTokenVault: customer.tokenVault,
     close() {
       runtimes.close();
       if ("close" in tenantStore && typeof tenantStore.close === "function") {

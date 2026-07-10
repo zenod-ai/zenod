@@ -94,11 +94,21 @@ export class CustomerAccountStore {
     return accounts.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
   }
 
+  resolveActiveTenantForUser(githubId: number): CustomerAccount | null {
+    const latestByTenant = new Map<string, CustomerAccount>();
+    for (const account of Object.values(this.load()).sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))) {
+      if (account.github_id !== githubId || !account.tenant_id || account.subscription_status === "checkout_pending") continue;
+      if (!latestByTenant.has(account.tenant_id)) latestByTenant.set(account.tenant_id, account);
+    }
+    const active = [...latestByTenant.values()].filter((account) => account.subscription_status === "active");
+    return active.length === 1 ? active[0]! : null;
+  }
+
   list(): CustomerAccount[] {
     return Object.values(this.load());
   }
 }
 
 export function customerAccountId(githubId: number): string {
-  return `github:${githubId}`;
+  return `github-${githubId}`;
 }

@@ -14,6 +14,7 @@ RUN rm -rf ./.git
 
 COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
+COPY packages/mcp-chassis/package.json packages/mcp-chassis/
 COPY packages/server/package.json packages/server/
 COPY apps/web/package.json apps/web/
 COPY apps/site/package.json apps/site/

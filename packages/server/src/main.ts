@@ -35,6 +35,7 @@ const unit = useChassisZenod
   ? createZenodUnit({
       dataDir,
       ...(hasWeb ? { webDist } : {}),
+      ...(hasSite ? { siteDist } : {}),
       env: process.env,
     })
   : null;

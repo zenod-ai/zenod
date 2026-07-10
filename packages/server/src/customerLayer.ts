@@ -13,6 +13,9 @@ import {
 import { GithubIdentityProvider, signState, verifyState, type IdentityProvider } from "./customerIdentity.js";
 import { customerMetering } from "./customerMetering.js";
 import { clearCustomerSession, issueCustomerSession, readCustomerSession } from "./customerSession.js";
+import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
+import { CustomerTokenVault } from "./customerTokenVault.js";
+import { hashToken } from "@zenod/mcp-chassis";
 
 // Customer HTTP layer transplanted from zenod-ai/cloud services/webhook/src/server.ts
 // and services/console/src/api.ts @ 6bdb318.
@@ -21,7 +24,13 @@ export interface CustomerLayerOptions {
   env?: NodeJS.ProcessEnv;
   identity?: IdentityProvider;
   stripe?: CustomerStripeClient;
+  tenantStore?: import("@zenod/mcp-chassis").TenantProvisioningStore;
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
+}
+
+export interface CustomerLayerHost {
+  dataDir: string;
+  runtimeForAccount?: (account: CustomerAccount) => Runtime | null;
 }
 
 export function customerAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -52,10 +61,11 @@ function signedReturnDestination(returnHost: string | undefined, env: NodeJS.Pro
   return `${customerDestination(env)}/app`;
 }
 
-export function createCustomerLayer(runtime: Runtime, options: CustomerLayerOptions = {}) {
+export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLayerOptions = {}) {
   const env = options.env ?? process.env;
-  const accounts = new CustomerAccountStore(runtime.dataDir);
+  const accounts = new CustomerAccountStore(host.dataDir);
   const billing = loadCustomerBillingConfig(env);
+  const tokenVault = new CustomerTokenVault(host.dataDir, customerStateSecret(env));
   if (env.STRIPE_SECRET_KEY) {
     const expectedMarker = billing.stripeMode === "live" ? "_live_" : "_test_";
     if (!env.STRIPE_SECRET_KEY.includes(expectedMarker)) {
@@ -74,6 +84,14 @@ export function createCustomerLayer(runtime: Runtime, options: CustomerLayerOpti
           appInfo: { name: "zenod/customer-layer", version: "0.1.0" },
         }) as CustomerStripeClient)
       : null);
+  const onCheckoutCompleted =
+    options.onCheckoutCompleted ??
+    createLocalTenantBindingAdapter({
+      dataDir: host.dataDir,
+      accounts,
+      tenantStore: options.tenantStore,
+      tokenVault,
+    });
   const app = new Hono<{ Bindings: HttpBindings }>();
 
   app.get("/auth/signin", (c) => {
@@ -116,12 +134,41 @@ export function createCustomerLayer(runtime: Runtime, options: CustomerLayerOpti
     });
   });
 
+  app.get("/api/auth/status", (c) =>
+    c.json({ needsSetup: false, configured: true, customerAuth: true, authMethod: "github" }),
+  );
+  app.all("/api/auth/login", (c) => c.json({ error: "not found" }, 404));
+  app.all("/api/auth/setup", (c) => c.json({ error: "not found" }, 404));
+  app.all("/api/auth/logout", (c) => c.json({ error: "not found" }, 404));
+
   app.get("/api/console/account", async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
-    const account = accounts.resolveForUser(session.github_id);
-    if (!account) return c.json({ error: "no_account" }, 404);
-    const summary = runtime.usageStore.summary(Date.now() - 7 * 24 * 60 * 60_000);
+    const account = accounts.resolveActiveTenantForUser(session.github_id);
+    const token = account ? tokenVault.get(account.account_id) : null;
+    const tenantRecord = token ? await options.tenantStore?.resolveTokenHash(hashToken(token)) : null;
+    if (
+      !account ||
+      !account.tenant_id ||
+      !token ||
+      !tenantRecord ||
+      tenantRecord.tenant.id !== account.tenant_id ||
+      (tenantRecord.status ?? "active") !== "active"
+    ) {
+      return c.json({ error: "no_account" }, 404);
+    }
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    const summary = runtime?.usageStore.summary(Date.now() - 7 * 24 * 60 * 60_000) ?? {
+      since: Date.now() - 7 * 24 * 60 * 60_000,
+      calls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      costUsd: 0,
+      byOperation: [],
+      byModel: [],
+    };
     const metering = await customerMetering(summary, env.OPENROUTER_PROVISIONING_KEY, account.tenant_slug);
     return c.json({
       account_id: account.account_id,
@@ -129,12 +176,38 @@ export function createCustomerLayer(runtime: Runtime, options: CustomerLayerOpti
       subscription_status: account.subscription_status,
       tenant_id: account.tenant_id,
       slug: account.tenant_slug,
-      mcp_url: account.mcp_url,
-      token: account.mcp_token,
-      token_hint: account.mcp_token ? account.mcp_token.slice(-4) : null,
-      vault_repo: account.vault_repo ?? runtime.settings.get("vault_repo"),
+      mcp_url: `${billing.domain}/mcp/${token}`,
+      token,
+      token_hint: token.slice(-4),
+      vault_repo: account.vault_repo ?? runtime?.settings.get("vault_repo") ?? null,
       vault_repo_url: account.vault_repo_url,
       ...metering,
+    });
+  });
+
+  app.post("/api/token/regenerate", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.github_id);
+    if (!account?.tenant_id || !options.tenantStore) return c.json({ error: "no_account" }, 404);
+    const currentToken = tokenVault.get(account.account_id);
+    const current = currentToken ? await options.tenantStore.resolveTokenHash(hashToken(currentToken)) : null;
+    if (
+      !current ||
+      current.tenant.id !== account.tenant_id ||
+      (current.status ?? "active") !== "active"
+    ) {
+      return c.json({ error: "tenant unavailable" }, 409);
+    }
+    const rotated = await options.tenantStore.rotateTenantToken(account.tenant_id);
+    if (!rotated || (rotated.record.status ?? "active") !== "active") {
+      return c.json({ error: "tenant unavailable" }, 409);
+    }
+    tokenVault.put(account.account_id, rotated.token);
+    return c.json({
+      token: rotated.token,
+      mcpPath: `/mcp/${rotated.token}`,
+      mcp_url: `${billing.domain}/mcp/${rotated.token}`,
     });
   });
 
@@ -178,7 +251,7 @@ export function createCustomerLayer(runtime: Runtime, options: CustomerLayerOpti
     if (session.payment_status !== "paid" && session.status !== "complete") {
       return c.text("Checkout is not complete.", 409);
     }
-    await completeCustomerCheckout(session, accounts, options.onCheckoutCompleted);
+    await completeCustomerCheckout(session, accounts, onCheckoutCompleted);
     return c.redirect(`${customerDestination(env)}/app`, 303);
   });
 
@@ -197,10 +270,10 @@ export function createCustomerLayer(runtime: Runtime, options: CustomerLayerOpti
     const result = await completeCustomerCheckout(
       event.data.object as Stripe.Checkout.Session,
       accounts,
-      options.onCheckoutCompleted,
+      onCheckoutCompleted,
     );
     return c.json({ received: true, result });
   });
 
-  return { app, accounts };
+  return { app, accounts, tokenVault };
 }
