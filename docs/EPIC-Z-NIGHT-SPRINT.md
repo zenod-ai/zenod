@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Night-sprint delivery manager (bind on dispatch)
 Steward since: 2026-07-10T20:19:03+02:00
-Last reconciled commit: 2962ab90617534db64264fb976498be6e50f16ab
+Last reconciled commit: 2632e8f68122a7e05a178020bb0601813de36704
 Planner: Jordi + Epic 3.0 planner
 Worker: Night-sprint delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -78,11 +78,11 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 
 ## Current State
 
-Phase: minting
-Last verified: 2026-07-10T20:19:03+02:00
+Phase: wave 1 active
+Last verified: 2026-07-10T20:35:35+02:00
 Integration target: main
-Fresh base commit: `2962ab90617534db64264fb976498be6e50f16ab` — pinned; no rebases until the journey passes (D19c)
-Next action: manager mints tickets Z-N1..Z-N6, then dispatches Z-N1/Z-N2/Z-N4 in parallel worktrees immediately.
+Fresh base commit: `2632e8f68122a7e05a178020bb0601813de36704` — pinned; no rebases until the journey passes (D19c)
+Next action: manager monitors Z-N1/Z-N2/Z-N4, integrates passing PRs, then dispatches Z-N3/Z-N5.
 Blockers: none — every decision is pre-answered below. Inputs from Jordi are non-blocking (decision rules given).
 
 ## Role Goals
@@ -139,12 +139,12 @@ Every decision pre-answered; the manager invents nothing:
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| mint | Ticket worker | assign | Z-N1 landing + pricing served from the container | ready | - | worktree | pinned main | Journey steps 1–2 render | - | dispatch | dispatch wave 1 |
-| mint | Ticket worker | assign | Z-N2 OAuth sign-in (GitHub, +Google per rule); kill public token login | ready | - | worktree | pinned main | Journey step 3; no public token field | - | dispatch | dispatch wave 1 |
-| mint | Ticket worker | assign | Z-N4 dashboard reshape: MCP-first, vault, credit; delete non-Zenod tabs | ready | - | worktree | pinned main | Journey step 5 | - | dispatch | dispatch wave 1 |
-| mint | Ticket worker | assign | Z-N3 Stripe subscribe → tenant row → dashboard; upgrade prompt | ready | Z-N2 | worktree | pinned main | Journey steps 4, 7b | - | dispatch | wave 2 |
-| mint | Ticket worker | assign | Z-N5 one domain family; re-mint MCP URLs; 301 old host | ready | domain rule | worktree | pinned main | One host serves 1–7 | - | dispatch | wave 2 |
-| mint | Epic worker | manager | Z-N6 journey loop to one clean pass + morning package | ready | Z-N1..5 | - | pinned main | SHIP items 1–8 | - | dispatch | last |
+| [#802](https://github.com/zenod-ai/zenod/issues/802) | Ticket worker | Z-N1-worker / Jason | Z-N1 landing + pricing served from the container | in progress | - | `codex/z-n1-landing-pricing` | `2632e8f` | Journey steps 1–2 render | dispatched | 2026-07-10T20:35:35+02:00 | implement + targeted tests + PR |
+| [#806](https://github.com/zenod-ai/zenod/issues/806) | Ticket worker | Z-N2-worker / Feynman | Z-N2 total cloud customer-layer transplant | in progress | - | `codex/z-n2-auth-transplant` | `2632e8f` | Auth/accounts/billing/UI/metering ported; four corpses excluded | clean source `6bdb318`; dispatched | 2026-07-10T20:35:35+02:00 | transplant + targeted tests + PR |
+| [#801](https://github.com/zenod-ai/zenod/issues/801) | Ticket worker | Z-N4-worker / Arendt | Z-N4 dashboard reshape: MCP-first, vault, credit; delete non-Zenod tabs | in progress | - | `codex/z-n4-dashboard` | `2632e8f` | Journey step 5 | dispatched | 2026-07-10T20:35:35+02:00 | implement + targeted tests + PR |
+| [#804](https://github.com/zenod-ai/zenod/issues/804) | Ticket worker | Z-N3-worker (wave 2) | Z-N3 adapt transplanted Stripe billing to local tenant rows | ready | [#806](https://github.com/zenod-ai/zenod/issues/806) | worktree on dispatch | `2632e8f` | Journey steps 4, 7b | contract reconciled | 2026-07-10T20:35:35+02:00 | wait for Z-N2 |
+| [#803](https://github.com/zenod-ai/zenod/issues/803) | Ticket worker | Z-N5-worker (wave 2) | Z-N5 one domain family; re-mint MCP URLs; 301 mind host | ready | domain rule | worktree on dispatch | `2632e8f` | One container serves 1–7; cloud runs nothing | contract reconciled | 2026-07-10T20:35:35+02:00 | wave 2 |
+| [#805](https://github.com/zenod-ai/zenod/issues/805) | Epic worker | Night-sprint delivery manager | Z-N6 journey loop to one clean pass + morning package | ready | Z-N1..5 | manager | `2632e8f` | SHIP items 1–8 | contract reconciled | 2026-07-10T20:35:35+02:00 | last |
 
 ## Branch And Integration
 
@@ -189,6 +189,12 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | pending | SHIP journey clean pass | - | live product domain | real browser walk, screenshots per step | pending | morning package |
 
 ## Handoff Journal
+
+### 2026-07-10T20:35:35+02:00 - Night-sprint delivery manager - Wave 1 dispatched
+
+Context: all six issues were reconciled to the final total-cloud-transplant scope. Z-N1, Z-N2, and Z-N4 launched in isolated worktrees from pinned base `2632e8f68122a7e05a178020bb0601813de36704`. The dirty local cloud checkout was preserved; Z-N2 reads a clean detached source worktree at cloud commit `6bdb318`.
+Assignments: Z-N1-worker / Jason / `codex/z-n1-landing-pricing`; Z-N2-worker / Feynman / `codex/z-n2-auth-transplant`; Z-N4-worker / Arendt / `codex/z-n4-dashboard`.
+Next: monitor 90-minute budgets, integrate passing PRs, dispatch Z-N3/Z-N5, deploy, then run the Z-N6 live-browser loop.
 
 ### 2026-07-10T20:19:03+02:00 - Night-sprint delivery manager - Steward bound
 
