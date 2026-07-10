@@ -803,6 +803,57 @@ describe("createUnit", () => {
     tenants.close();
   });
 
+  it("keeps the SPA shell public when unit routes use an API wildcard", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-route-fallback-"));
+    tempDirs.push(dataDir);
+    await writeFile(join(dataDir, "index.html"), "<html>Public login shell</html>");
+    await writeFile(join(dataDir, "asset.txt"), "public asset");
+    const tenants = createMemoryTenantStore([
+      { token: "known-token", tenant: { id: "tenant-a", name: "Tenant A" } },
+    ]);
+    const unit = createUnit({
+      name: "demo",
+      storage: { dataDir },
+      tenantAuth: { store: tenants },
+      ui: { webDist: dataDir, sessionSecret: "route-fallback-secret" },
+      routes(routes) {
+        routes.all("/api/*", (c) =>
+          c.json({ tenant: c.get("unitContext").tenant }),
+        );
+      },
+    });
+    const base = await listen(unit.app);
+    const sessionCookie = await login(base, "known-token");
+
+    const [root, asset, fallback, anonymousApi, bearerApi, sessionApi] =
+      await Promise.all([
+        fetch(`${base}/`),
+        fetch(`${base}/asset.txt`),
+        fetch(`${base}/not-a-real-route`),
+        fetch(`${base}/api/unit-state`),
+        fetch(`${base}/api/unit-state`, {
+          headers: { authorization: "Bearer known-token" },
+        }),
+        fetch(`${base}/api/unit-state`, {
+          headers: { cookie: sessionCookie },
+        }),
+      ]);
+
+    expect(root.status).toBe(200);
+    expect(asset.status).toBe(200);
+    expect(fallback.status).toBe(200);
+    await expect(root.text()).resolves.toContain("Public login shell");
+    await expect(asset.text()).resolves.toBe("public asset");
+    await expect(fallback.text()).resolves.toContain("Public login shell");
+    expect(anonymousApi.status).toBe(401);
+    await expect(bearerApi.json()).resolves.toEqual({
+      tenant: { id: "tenant-a", name: "Tenant A" },
+    });
+    await expect(sessionApi.json()).resolves.toEqual({
+      tenant: { id: "tenant-a", name: "Tenant A" },
+    });
+  });
+
   it("refuses to register unit routes without tenant auth", () => {
     expect(() =>
       createUnit({
