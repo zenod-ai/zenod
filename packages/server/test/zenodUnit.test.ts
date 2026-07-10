@@ -15,6 +15,7 @@ import {
 } from "../src/zenodUnit.js";
 
 const tempDirs: string[] = [];
+const CHASSIS_VAULT_MASTER_KEY = "11".repeat(32);
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "zenod-unit-"));
@@ -58,7 +59,10 @@ describe("Zenod chassis unit", () => {
 
   it("caches one runtime per verified tenant storage root", async () => {
     const dataDir = await tempDir();
-    const storage = new ChassisStorage({ dataDir });
+    const storage = new ChassisStorage({
+      dataDir,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    });
     const pool = new ZenodRuntimePool();
     try {
       const alphaContext = contextFor(storage, "tenant-alpha");
@@ -97,6 +101,7 @@ describe("Zenod chassis unit", () => {
       dataDir,
       tenantStore: tenants,
       controlPlane: { token: "control-secret" },
+      env: { CHASSIS_VAULT_MASTER_KEY },
     });
     try {
       const health = await unit.app.request("/healthz");
@@ -130,7 +135,11 @@ describe("Zenod chassis unit", () => {
       { token: "alpha-token", tenant: { id: "tenant-alpha" } },
       { token: "beta-token", tenant: { id: "tenant-beta" } },
     ]);
-    const unit = createZenodUnit({ dataDir, tenantStore: tenants });
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: tenants,
+      env: { CHASSIS_VAULT_MASTER_KEY },
+    });
     try {
       for (const [token, repo] of [
         ["alpha-token", "owner/alpha"],
@@ -187,6 +196,7 @@ describe("Zenod chassis unit", () => {
     const env = {
       ZENOD_API_TOKEN: "zenod_self_host_restart_token",
       ZENOD_TENANT_ID: "self-host-test",
+      CHASSIS_VAULT_MASTER_KEY,
     };
     const first = createZenodUnit({ dataDir, env });
     expect(

@@ -1,5 +1,16 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { openSqlite, type TenantStorage, type TenantVault } from "@zenod/mcp-chassis";
@@ -9,6 +20,7 @@ const HANDLE_RE = /^zenod-secret:v1:[a-f0-9]{48}$/;
 const LOCAL_KEY_FILE = ".zenod-vault-key";
 const CHASSIS_RECORD_PREFIX = "zenod.credential.";
 const CHASSIS_RECORD_OWNER = "zenod";
+const CHASSIS_MIGRATION_MARKER = "zenod.credential-migration.v1";
 
 export interface CredentialMetadata {
   key: string;
@@ -47,6 +59,40 @@ interface ChassisCredentialEnvelope {
 
 export interface ChassisCredentialVaultOptions {
   vaultName?: string;
+  legacyMasterKey?: string;
+}
+
+interface LegacyCredentialRow {
+  handle: string;
+  tenantId: string;
+  key: string;
+  ciphertext: Uint8Array;
+  iv: Uint8Array;
+  authTag: Uint8Array;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface DecryptedLegacyCredential extends Omit<LegacyCredentialRow, "ciphertext" | "iv" | "authTag"> {
+  value: string;
+}
+
+interface CredentialReference {
+  key: string;
+  handle: string;
+}
+
+interface LegacyCredentialSnapshot {
+  databasePath: string;
+  keyPath: string;
+  credentials: DecryptedLegacyCredential[];
+  references: CredentialReference[];
+}
+
+interface CredentialMigrationMarker {
+  version: 1;
+  state: "pending_scrub" | "complete";
+  credentials: CredentialReference[];
 }
 
 /**
@@ -61,7 +107,7 @@ export class ChassisCredentialVault implements CredentialVault {
   constructor(storage: TenantStorage, options: ChassisCredentialVaultOptions = {}) {
     this.tenantId = storage.tenant.id;
     assertTenantId(this.tenantId);
-    this.vault = options.vaultName ? storage.vault(options.vaultName) : storage.vault();
+    this.vault = openMigratedChassisVault(storage, options);
   }
 
   put(key: string, value: string): string {
@@ -120,24 +166,7 @@ export class ChassisCredentialVault implements CredentialVault {
     const stored = this.vault.get(chassisRecordKey(safeKey));
     if (!stored) return null;
     try {
-      const parsed = JSON.parse(stored) as Partial<ChassisCredentialEnvelope>;
-      if (
-        parsed.version !== 1 ||
-        parsed.owner !== CHASSIS_RECORD_OWNER ||
-        parsed.tenantId !== this.tenantId ||
-        parsed.key !== safeKey ||
-        typeof parsed.handle !== "string" ||
-        !isCredentialHandle(parsed.handle) ||
-        typeof parsed.value !== "string" ||
-        !parsed.value ||
-        typeof parsed.createdAt !== "number" ||
-        !Number.isFinite(parsed.createdAt) ||
-        typeof parsed.updatedAt !== "number" ||
-        !Number.isFinite(parsed.updatedAt)
-      ) {
-        return null;
-      }
-      return parsed as ChassisCredentialEnvelope;
+      return parseChassisEnvelope(stored, this.tenantId, safeKey);
     } catch {
       return null;
     }
@@ -145,6 +174,442 @@ export class ChassisCredentialVault implements CredentialVault {
 
   private assertOpen(): void {
     if (this.closed) throw new Error("credential vault is closed");
+  }
+}
+
+function openMigratedChassisVault(
+  storage: TenantStorage,
+  options: ChassisCredentialVaultOptions,
+): TenantVault {
+  const vaultName = options.vaultName ?? "vault.sqlite";
+  const snapshot = readLegacyCredentialSnapshot(
+    storage.rootDir,
+    options.legacyMasterKey,
+  );
+  const references = snapshot?.references ?? readCredentialReferences(storage.rootDir);
+  let vault = storage.vault(vaultName);
+  let vaultOpen = true;
+
+  try {
+    if (snapshot) {
+      importLegacyCredentials(vault, storage.tenant.id, snapshot.credentials);
+      verifyCredentialReferences(vault, storage.tenant.id, references);
+      const markerCredentials = snapshot.credentials.map(({ key, handle }) => ({ key, handle }));
+      verifyMigrationMarkerCredentials(vault, storage.tenant.id, markerCredentials);
+      vault.set(
+        CHASSIS_MIGRATION_MARKER,
+        JSON.stringify({ version: 1, state: "pending_scrub", credentials: markerCredentials }),
+      );
+      vault.close();
+      vaultOpen = false;
+
+      cleanupLegacyCredentialDatabase(snapshot.databasePath);
+      vault = storage.vault(vaultName);
+      vaultOpen = true;
+      verifyImportedCredentials(vault, storage.tenant.id, snapshot.credentials);
+      verifyCredentialReferences(vault, storage.tenant.id, references);
+      verifyMigrationMarkerCredentials(vault, storage.tenant.id, markerCredentials);
+      vault.set(
+        CHASSIS_MIGRATION_MARKER,
+        JSON.stringify({ version: 1, state: "complete", credentials: markerCredentials }),
+      );
+      securelyRemoveLegacyKey(snapshot.keyPath);
+      return vault;
+    }
+
+    verifyCredentialReferences(vault, storage.tenant.id, references);
+    const marker = readCredentialMigrationMarker(vault);
+    if (marker?.state === "pending_scrub") {
+      verifyMigrationMarkerCredentials(vault, storage.tenant.id, marker.credentials);
+      vault.close();
+      vaultOpen = false;
+      cleanupLegacyCredentialDatabase(join(storage.rootDir, "vault.sqlite"));
+      vault = storage.vault(vaultName);
+      vaultOpen = true;
+      verifyMigrationMarkerCredentials(vault, storage.tenant.id, marker.credentials);
+      verifyCredentialReferences(vault, storage.tenant.id, references);
+      vault.set(
+        CHASSIS_MIGRATION_MARKER,
+        JSON.stringify({ ...marker, state: "complete" }),
+      );
+    }
+    if (marker) {
+      securelyRemoveLegacyKey(join(storage.rootDir, LOCAL_KEY_FILE));
+    }
+    return vault;
+  } catch (error) {
+    if (vaultOpen) {
+      try {
+        vault.close();
+      } catch {
+        // Preserve the migration failure that made construction abort.
+      }
+    }
+    throw error;
+  }
+}
+
+function readCredentialMigrationMarker(vault: TenantVault): CredentialMigrationMarker | null {
+  const stored = vault.get(CHASSIS_MIGRATION_MARKER);
+  if (!stored) return null;
+  let parsed: { version?: unknown; state?: unknown; credentials?: unknown };
+  try {
+    parsed = JSON.parse(stored) as typeof parsed;
+  } catch {
+    throw new Error("legacy credential migration marker is malformed");
+  }
+  if (
+    parsed.version !== 1 ||
+    !new Set(["pending_scrub", "complete"]).has(String(parsed.state)) ||
+    !Array.isArray(parsed.credentials)
+  ) {
+    throw new Error("legacy credential migration marker is malformed");
+  }
+  const credentials = parsed.credentials.map((entry) => {
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      typeof (entry as { key?: unknown }).key !== "string" ||
+      typeof (entry as { handle?: unknown }).handle !== "string" ||
+      !isCredentialHandle((entry as { handle: string }).handle)
+    ) {
+      throw new Error("legacy credential migration marker is malformed");
+    }
+    return {
+      key: assertCredentialKey((entry as { key: string }).key),
+      handle: (entry as { handle: string }).handle,
+    };
+  });
+  const identities = credentials.map((entry) => `${entry.key}\0${entry.handle}`);
+  if (new Set(identities).size !== identities.length) {
+    throw new Error("legacy credential migration marker is malformed");
+  }
+  return {
+    version: 1,
+    state: parsed.state as CredentialMigrationMarker["state"],
+    credentials,
+  };
+}
+
+function verifyMigrationMarkerCredentials(
+  vault: TenantVault,
+  tenantId: string,
+  credentials: CredentialReference[],
+): void {
+  verifyCredentialReferences(vault, tenantId, credentials);
+  const storedCredentialKeys = vault
+    .listKeys()
+    .filter((key) => key.startsWith(CHASSIS_RECORD_PREFIX))
+    .sort();
+  const expectedCredentialKeys = credentials
+    .map((entry) => chassisRecordKey(entry.key))
+    .sort();
+  if (JSON.stringify(storedCredentialKeys) !== JSON.stringify(expectedCredentialKeys)) {
+    throw new Error("legacy credential migration marker does not match the complete chassis credential set");
+  }
+}
+
+function readLegacyCredentialSnapshot(
+  rootDir: string,
+  legacyMasterKey: string | undefined,
+): LegacyCredentialSnapshot | null {
+  const databasePath = join(rootDir, "vault.sqlite");
+  if (!existsSync(databasePath)) return null;
+
+  const db = new DatabaseSync(databasePath, { readOnly: true });
+  let rawRows: Array<{
+    handle: unknown;
+    tenant_id: unknown;
+    key_name: unknown;
+    ciphertext: unknown;
+    iv: unknown;
+    auth_tag: unknown;
+    created_at: unknown;
+    updated_at: unknown;
+  }>;
+  try {
+    const table = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'credential_entries'")
+      .get();
+    if (!table) return null;
+    rawRows = db
+      .prepare(
+        `SELECT handle, tenant_id, key_name, ciphertext, iv, auth_tag, created_at, updated_at
+           FROM credential_entries
+          ORDER BY tenant_id, key_name`,
+      )
+      .all() as typeof rawRows;
+  } finally {
+    db.close();
+  }
+  const rows = rawRows.map(normalizeLegacyCredentialRow);
+  const references = readCredentialReferences(rootDir);
+  for (const reference of references) {
+    if (!rows.some((row) => row.key === reference.key && row.handle === reference.handle)) {
+      throw new Error(`legacy credential handle ${reference.handle} has no matching ${reference.key} row`);
+    }
+  }
+  const keyPath = join(rootDir, LOCAL_KEY_FILE);
+  if (rows.length === 0) {
+    return { databasePath, keyPath, credentials: [], references };
+  }
+
+  const tenantIds = [...new Set(rows.map((row) => row.tenantId))];
+  if (tenantIds.length !== 1) {
+    throw new Error("legacy credential migration requires exactly one tenant id");
+  }
+  const legacyTenantId = tenantIds[0];
+  if (!legacyTenantId) throw new Error("legacy credential migration found no tenant id");
+  const candidates: Buffer[] = [];
+  if (legacyMasterKey) {
+    candidates.push(deriveStandaloneMasterKey(legacyTenantId, legacyMasterKey));
+  }
+  if (existsSync(keyPath)) {
+    const keyStat = lstatSync(keyPath);
+    if (!keyStat.isFile() || keyStat.isSymbolicLink()) {
+      throw new Error(`${LOCAL_KEY_FILE} must be a regular file`);
+    }
+    const localKey = readFileSync(keyPath);
+    if (localKey.length !== 32) {
+      throw new Error(`${LOCAL_KEY_FILE} must contain exactly 32 bytes`);
+    }
+    candidates.push(localKey);
+  }
+  const uniqueCandidates = [...new Map(candidates.map((key) => [key.toString("hex"), key])).values()];
+  if (uniqueCandidates.length === 0) {
+    throw new Error("legacy credential migration requires its local key or ZENOD_CREDENTIAL_MASTER_KEY");
+  }
+
+  const successful: DecryptedLegacyCredential[][] = [];
+  for (const candidate of uniqueCandidates) {
+    try {
+      successful.push(
+        rows.map((row) => ({
+          handle: row.handle,
+          tenantId: row.tenantId,
+          key: row.key,
+          value: decrypt(
+            row.ciphertext,
+            row.iv,
+            row.authTag,
+            candidate,
+            aad(row.tenantId, row.key, row.handle),
+          ),
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        })),
+      );
+    } catch {
+      // A candidate must authenticate the complete legacy set.
+    }
+  }
+  if (successful.length !== 1) {
+    throw new Error("legacy credential migration could not identify exactly one valid encryption key");
+  }
+  const credentials = successful[0];
+  if (!credentials) throw new Error("legacy credential migration found no decrypted credential set");
+  if (credentials.some((entry) => !entry.value)) {
+    throw new Error("legacy credential migration found an empty credential value");
+  }
+  return { databasePath, keyPath, credentials, references };
+}
+
+function normalizeLegacyCredentialRow(row: {
+  handle: unknown;
+  tenant_id: unknown;
+  key_name: unknown;
+  ciphertext: unknown;
+  iv: unknown;
+  auth_tag: unknown;
+  created_at: unknown;
+  updated_at: unknown;
+}): LegacyCredentialRow {
+  if (typeof row.handle !== "string" || !isCredentialHandle(row.handle)) {
+    throw new Error("legacy credential row has an invalid handle");
+  }
+  if (typeof row.tenant_id !== "string") {
+    throw new Error("legacy credential row has an invalid tenant id");
+  }
+  assertTenantId(row.tenant_id);
+  if (typeof row.key_name !== "string") {
+    throw new Error("legacy credential row has an invalid key");
+  }
+  const key = assertCredentialKey(row.key_name);
+  if (!(row.ciphertext instanceof Uint8Array) || row.ciphertext.length === 0) {
+    throw new Error("legacy credential row has invalid ciphertext");
+  }
+  if (!(row.iv instanceof Uint8Array) || row.iv.length !== 12) {
+    throw new Error("legacy credential row has an invalid IV");
+  }
+  if (!(row.auth_tag instanceof Uint8Array) || row.auth_tag.length !== 16) {
+    throw new Error("legacy credential row has an invalid authentication tag");
+  }
+  if (typeof row.created_at !== "number" || !Number.isFinite(row.created_at)) {
+    throw new Error("legacy credential row has an invalid created timestamp");
+  }
+  if (typeof row.updated_at !== "number" || !Number.isFinite(row.updated_at)) {
+    throw new Error("legacy credential row has an invalid updated timestamp");
+  }
+  return {
+    handle: row.handle,
+    tenantId: row.tenant_id,
+    key,
+    ciphertext: row.ciphertext,
+    iv: row.iv,
+    authTag: row.auth_tag,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function readCredentialReferences(rootDir: string): CredentialReference[] {
+  const path = join(rootDir, "zenod.sqlite");
+  if (!existsSync(path)) return [];
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    const table = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'")
+      .get();
+    if (!table) return [];
+    const rows = db
+      .prepare("SELECT key, value FROM settings WHERE value LIKE 'zenod-secret:v1:%' ORDER BY key")
+      .all() as Array<{ key: unknown; value: unknown }>;
+    return rows.map((row) => {
+      if (typeof row.key !== "string" || typeof row.value !== "string" || !isCredentialHandle(row.value)) {
+        throw new Error("settings contains a malformed credential handle");
+      }
+      return { key: assertCredentialKey(row.key), handle: row.value };
+    });
+  } finally {
+    db.close();
+  }
+}
+
+function importLegacyCredentials(
+  vault: TenantVault,
+  tenantId: string,
+  credentials: DecryptedLegacyCredential[],
+): void {
+  for (const credential of credentials) {
+    const recordKey = chassisRecordKey(credential.key);
+    const envelope: ChassisCredentialEnvelope = {
+      version: 1,
+      owner: CHASSIS_RECORD_OWNER,
+      tenantId,
+      key: credential.key,
+      handle: credential.handle,
+      value: credential.value,
+      createdAt: credential.createdAt,
+      updatedAt: credential.updatedAt,
+    };
+    const existing = vault.get(recordKey);
+    if (existing) {
+      const parsed = parseChassisEnvelope(existing, tenantId, credential.key);
+      if (JSON.stringify(parsed) !== JSON.stringify(envelope)) {
+        throw new Error(`legacy credential migration conflicts with chassis record ${credential.key}`);
+      }
+      continue;
+    }
+    vault.set(recordKey, JSON.stringify(envelope));
+  }
+  verifyImportedCredentials(vault, tenantId, credentials);
+}
+
+function verifyImportedCredentials(
+  vault: TenantVault,
+  tenantId: string,
+  credentials: DecryptedLegacyCredential[],
+): void {
+  for (const credential of credentials) {
+    const stored = vault.get(chassisRecordKey(credential.key));
+    if (!stored) throw new Error(`migrated credential ${credential.key} is missing`);
+    const envelope = parseChassisEnvelope(stored, tenantId, credential.key);
+    if (envelope.handle !== credential.handle || envelope.value !== credential.value) {
+      throw new Error(`migrated credential ${credential.key} failed round-trip verification`);
+    }
+  }
+}
+
+function verifyCredentialReferences(
+  vault: TenantVault,
+  tenantId: string,
+  references: CredentialReference[],
+): void {
+  for (const reference of references) {
+    const stored = vault.get(chassisRecordKey(reference.key));
+    if (!stored) throw new Error(`credential handle ${reference.handle} cannot be materialized`);
+    const envelope = parseChassisEnvelope(stored, tenantId, reference.key);
+    if (envelope.handle !== reference.handle) {
+      throw new Error(`credential handle ${reference.handle} cannot be materialized`);
+    }
+  }
+}
+
+function parseChassisEnvelope(
+  stored: string,
+  tenantId: string,
+  key: string,
+): ChassisCredentialEnvelope {
+  let parsed: Partial<ChassisCredentialEnvelope>;
+  try {
+    parsed = JSON.parse(stored) as Partial<ChassisCredentialEnvelope>;
+  } catch {
+    throw new Error(`chassis credential record ${key} is malformed`);
+  }
+  if (
+    parsed.version !== 1 ||
+    parsed.owner !== CHASSIS_RECORD_OWNER ||
+    parsed.tenantId !== tenantId ||
+    parsed.key !== key ||
+    typeof parsed.handle !== "string" ||
+    !isCredentialHandle(parsed.handle) ||
+    typeof parsed.value !== "string" ||
+    !parsed.value ||
+    typeof parsed.createdAt !== "number" ||
+    !Number.isFinite(parsed.createdAt) ||
+    typeof parsed.updatedAt !== "number" ||
+    !Number.isFinite(parsed.updatedAt)
+  ) {
+    throw new Error(`chassis credential record ${key} is malformed`);
+  }
+  return parsed as ChassisCredentialEnvelope;
+}
+
+function cleanupLegacyCredentialDatabase(path: string): void {
+  const db = new DatabaseSync(path);
+  try {
+    db.exec("PRAGMA secure_delete = ON; BEGIN IMMEDIATE");
+    try {
+      db.exec("DROP INDEX IF EXISTS idx_credential_entries_tenant_key; DROP TABLE IF EXISTS credential_entries; COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE); VACUUM; PRAGMA wal_checkpoint(TRUNCATE)");
+  } finally {
+    db.close();
+  }
+}
+
+function securelyRemoveLegacyKey(path: string): void {
+  if (!existsSync(path)) return;
+  const keyStat = lstatSync(path);
+  if (!keyStat.isFile() || keyStat.isSymbolicLink() || keyStat.size !== 32) {
+    throw new Error(`${LOCAL_KEY_FILE} must be a regular 32-byte file before cleanup`);
+  }
+  const descriptor = openSync(path, "r+");
+  try {
+    writeSync(descriptor, randomBytes(32), 0, 32, 0);
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
+  unlinkSync(path);
+  const directory = openSync(join(path, ".."), "r");
+  try {
+    fsyncSync(directory);
+  } finally {
+    closeSync(directory);
   }
 }
 
@@ -287,12 +752,7 @@ function assertCredentialKey(key: string): string {
 function deriveEncryptionKey(options: SqliteCredentialVaultOptions): Buffer {
   const masterKey = options.masterKey ?? process.env.ZENOD_CREDENTIAL_MASTER_KEY;
   if (masterKey) {
-    return createHash("sha256")
-      .update("zenod-credential-vault\0")
-      .update(options.tenantId)
-      .update("\0")
-      .update(masterKey)
-      .digest();
+    return deriveStandaloneMasterKey(options.tenantId, masterKey);
   }
 
   const keyPath = join(options.dataDir, LOCAL_KEY_FILE);
@@ -314,6 +774,15 @@ function deriveEncryptionKey(options: SqliteCredentialVaultOptions): Buffer {
     if (existing.length !== 32) throw new Error(`${LOCAL_KEY_FILE} must contain exactly 32 bytes`);
     return existing;
   }
+}
+
+function deriveStandaloneMasterKey(tenantId: string, masterKey: string): Buffer {
+  return createHash("sha256")
+    .update("zenod-credential-vault\0")
+    .update(tenantId)
+    .update("\0")
+    .update(masterKey)
+    .digest();
 }
 
 function aad(tenantId: string, key: string, handle: string): Buffer {
