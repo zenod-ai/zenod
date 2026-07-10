@@ -216,11 +216,15 @@ export class Runtime {
     }
   }
 
-  constructor(readonly dataDir: string, readonly agent: AgentDefinition = ZENOD_AGENT) {
+  constructor(
+    readonly dataDir: string,
+    readonly agent: AgentDefinition = ZENOD_AGENT,
+    options: { seedFromEnv?: NodeJS.ProcessEnv | false } = {},
+  ) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
     this.oauth = new OAuthStore(join(dataDir, "oauth.sqlite"));
     this.settings = new Settings(this.state);
-    this.settings.seedFromEnv();
+    if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
     this.whatsapp = new WhatsAppGateway({
       dataDir: join(dataDir, "whatsapp"),
@@ -1871,6 +1875,7 @@ export class Runtime {
     this.whatsapp.close();
     void this.telegram.close();
     this.state.close();
+    this.oauth.close();
     this.whatsappStore.close();
     this.ingestStore.close();
     this.taskJobStore.close();
@@ -1878,6 +1883,7 @@ export class Runtime {
     this.journeyMonitor.stop();
     this.journeyStore.close();
     this.usageStore.close();
+    this.notificationStore.close();
   }
 }
 
