@@ -153,7 +153,7 @@ Phase: planning
 Last verified: 2026-07-10 03:58 CEST
 Integration target: main
 Fresh base commit: `468095d`
-Next action: spawn child spines 4.1 and 4.2 (critical path), then reconcile the map here.
+Next action: dispatch the loop-core PoC worker (`docs/EPIC-4.2-POC-LOOP-CORE.md`); spawn 4.1/4.2 spines with the PoC as 4.2's first installment.
 Blockers: none at root level. 4.4 posting pre-blocked on 2.4 C-1 tester-green (2 reds as of 2026-07-08: #635 build, #636 chat-auth).
 
 ## Decisions
@@ -167,12 +167,14 @@ Blockers: none at root level. 4.4 posting pre-blocked on 2.4 C-1 tester-green (2
 | 2026-07-10 | D-4.0-2 · The briefing is the UI; lane YAML is compiled output; setup mode is a conversation state gated on ✓ | No settings screen in v0; hosted users never see YAML | This spine §Loop Model |
 | 2026-07-10 | D-4.0-3 · Decomposition = Cut A (by loop anatomy) with the two-layer law as a per-ticket invariant | Demoable increments + never-fork discipline at ticket level | Session 2026-07-10 |
 | 2026-07-10 | D-4.0-4 · This spine supersedes `EPIC-4-HERALD.md`, absorbing D-H1..3 and mapping H3-1..5 into children | Single authoritative Herald root in EpicSpine format | Jordi, session 2026-07-10 |
+| 2026-07-10 | D-4.0-5 · PoC-first: build loop-core as a pure library with four ports (Memory/Agent/Channel/Clock) in `spikes/loop-core/`, LLM via plain script, fake channel, simulated clock; lift core into 4.2 unchanged, integration = adapter swaps | Prove loop mechanics + generality without deployment machinery; de-risk 4.2 | `docs/EPIC-4.2-POC-LOOP-CORE.md` |
 
 ## Issue Ledger
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| draft | Planner | Epic 0 worker 4.0 | Spawn 4.2 lane-runtime child spine | draft | D-4.0-3 | - | `468095d` | Child spine exists, validated, worker-bindable | - | 2026-07-10 03:58 CEST | Draft with Jordi |
+| draft | Planner | Epic 0 worker 4.0 | Spawn 4.2 lane-runtime child spine | draft | D-4.0-3, loop-core PoC | - | `468095d` | Child spine exists, validated, worker-bindable | - | 2026-07-10 03:58 CEST | Draft with Jordi |
+| draft | Ticket worker | unassigned | loop-core PoC per `EPIC-4.2-POC-LOOP-CORE.md` | draft | D-4.0-5 | - | `468095d` | Spec's 7 ACs, incl. config-only newsletter loop + zero-imports-outside-ports lint | - | 2026-07-10 04:15 CEST | Dispatch a worker (spike branch) |
 | draft | Planner | Epic 0 worker 4.0 | Spawn 4.1 briefing child spine | draft | D-4.0-3 | - | `468095d` | Child spine exists, validated, worker-bindable | - | 2026-07-10 03:58 CEST | Draft with Jordi |
 
 Ticket-level ledgers live in child spines once spawned; this root ledger tracks only root-scope work.
