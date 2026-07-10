@@ -187,9 +187,10 @@ bash scripts/epic37-dx2-early-wins-retire.sh 2>&1 | tee "/tmp/epic37-dx2-executi
 
 - Phase 0 is entirely read-only and reconciles the approved manifest against live Dokploy, Docker, volume, domain, and watchdog state before any stop.
 - Phase 1 stops approved records and creates archives plus a durable `SHA256SUMS`; no deletion occurs.
+- If Phase 1 or the restore drill fails, the error trap restores the captured watchdog baseline and restarts every compose/application that the batch stopped. Archives already written are retained.
 - Phase 2 verifies the checksum, lists the tar, restores it into a temporary Docker volume, and removes only that temporary volume.
 - Phase 3 runs only after Phase 2 passes. Before every Docker volume removal it re-verifies a matching archive checksum.
-- The script records pre/post Docker inventory and stats, Dokploy inventory, watchdog state, per-candidate manifests, and endpoint results.
+- The script records pre/post Docker inventory and stats, Dokploy inventory, watchdog env and timer state, per-candidate manifests, and endpoint results.
 - The `*.zenod.dev` records are wildcard DNS: candidate hosts and a random nonexistent probe resolved to the same Cloudflare addresses on 2026-07-10. DX-2 removes Dokploy/Traefik domain rows; there is no per-tenant DNS provider record to delete. Post-removal endpoint behavior is still required evidence.
 
 ## Rollback
@@ -274,9 +275,9 @@ Next action for spine steward:
 
 - `bash -n scripts/epic37-dx2-early-wins-retire.sh`
 - `git diff --check`
-- Local fail-closed tests cover malformed CSV, missing approval digest, wrong digest, and missing restore gate. The live dry-run covers empty list fields and cross-wired identifiers.
+- Local fail-closed tests cover malformed CSV, missing approval digest, wrong digest, missing restore gate, and automatic pre-delete rollback after a simulated archive failure. The live dry-run covers empty list fields and cross-wired identifiers.
 - `bash scripts/epic37-dx2-early-wins-retire.test.sh` passed locally.
-- Alpha9 live read-only dry-run passed all 17 rows on 2026-07-10: 362 log lines, 253 printed mutations, zero executed, and all four phases reached.
+- Alpha9 live read-only dry-run passed all 17 rows again after rollback hardening on 2026-07-10: 362 log lines, 253 printed mutations, zero executed, all four phases reached, and postflight watchdog evidence was captured.
 - A deliberate cross-wire from the first test row to live-paying Dokploy ID `xDxfVYs0_4M09naWuCl66` failed with `Dokploy name drift` and did not enter Phase 1.
 
 ## API Notes

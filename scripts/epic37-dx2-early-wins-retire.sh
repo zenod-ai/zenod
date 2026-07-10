@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eEuo pipefail
 
 # Epic 3.7 DX-2 early-wins retirement batch.
 # Defaults to dry-run. Do not run with DRY_RUN=0 until Jordi has approved the
@@ -20,6 +20,10 @@ DOKPLOY_API_KEY="${DOKPLOY_API_KEY:-}"
 WATCHDOG_ENV="${WATCHDOG_ENV:-/etc/zenod-watchdog.env}"
 CHECKSUMS_FILE=""
 FIRST_ARCHIVE=""
+PREPARE_STARTED=0
+DELETION_STARTED=0
+PREPARED_KINDS=()
+PREPARED_IDS=()
 
 log() {
   printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2
@@ -120,6 +124,32 @@ dokploy_post() {
     "${DOKPLOY_API_BASE}${endpoint}"
 }
 
+rollback_predelete() {
+  local rc="${1:-1}"
+  [[ "$rc" -ne 0 ]] || rc=130
+  trap - ERR INT TERM
+  set +e
+  set +u
+
+  if [[ "$DRY_RUN" != "1" && "$PREPARE_STARTED" == "1" && "$DELETION_STARTED" != "1" ]]; then
+    log "Pre-delete failure detected; restoring watchdog baseline and restarting stopped records"
+    if [[ -f "$EVIDENCE_DIR/zenod-watchdog.env.before" ]]; then
+      sudo cp "$EVIDENCE_DIR/zenod-watchdog.env.before" "$WATCHDOG_ENV"
+      sudo systemctl start zenod-watchdog.service
+    fi
+
+    local i
+    for ((i = ${#PREPARED_IDS[@]} - 1; i >= 0; i--)); do
+      case "${PREPARED_KINDS[$i]}" in
+        compose) dokploy_post "/compose.start" "{\"composeId\":\"${PREPARED_IDS[$i]}\"}" ;;
+        application) dokploy_post "/application.start" "{\"applicationId\":\"${PREPARED_IDS[$i]}\"}" ;;
+      esac
+    done
+  fi
+
+  exit "$rc"
+}
+
 capture_preflight() {
   log "Capturing read-only preflight evidence in $EVIDENCE_DIR"
   read_to_file "$EVIDENCE_DIR/docker-ps-a.before.jsonl" docker ps -a --format '{{json .}}'
@@ -150,18 +180,22 @@ capture_candidate_manifest() {
   fi
 
   local -a containers=()
-  IFS=';' read -r -a containers <<< "$container_names"
-  for container in "${containers[@]}"; do
-    [[ -n "$container" ]] || continue
-    read_to_file "$row_dir/${container}.inspect.json" docker inspect "$container"
-  done
+  if [[ -n "$container_names" ]]; then
+    IFS=';' read -r -a containers <<< "$container_names"
+    for container in "${containers[@]}"; do
+      [[ -n "$container" ]] || continue
+      read_to_file "$row_dir/${container}.inspect.json" docker inspect "$container"
+    done
+  fi
 
   local -a volumes=()
-  IFS=';' read -r -a volumes <<< "$volume_names"
-  for volume in "${volumes[@]}"; do
-    [[ -n "$volume" ]] || continue
-    read_to_file "$row_dir/${volume}.volume.json" docker volume inspect "$volume"
-  done
+  if [[ -n "$volume_names" ]]; then
+    IFS=';' read -r -a volumes <<< "$volume_names"
+    for volume in "${volumes[@]}"; do
+      [[ -n "$volume" ]] || continue
+      read_to_file "$row_dir/${volume}.volume.json" docker volume inspect "$volume"
+    done
+  fi
 
   printf '%s\n' "$domain_ids" > "$row_dir/approved-domain-ids.txt"
 }
@@ -222,7 +256,7 @@ validate_live_candidate() {
 
     if [[ -n "$actual_containers" ]]; then
       local -a containers=()
-      IFS=';' read -r -a containers <<< "$actual_containers"
+      [[ -z "$actual_containers" ]] || IFS=';' read -r -a containers <<< "$actual_containers"
       for container in "${containers[@]}"; do
         [[ -n "$container" ]] || continue
         actual_volumes+="$(docker inspect "$container" | jq -r '.[0].Mounts[] | select(.Type == "volume") | .Name')"$'\n'
@@ -231,23 +265,27 @@ validate_live_candidate() {
       assert_set_equal "$slug mounted volumes" "$volume_names" "$actual_volumes"
     else
       local -a volumes=()
-      IFS=';' read -r -a volumes <<< "$volume_names"
-      for volume in "${volumes[@]}"; do
-        [[ -n "$volume" ]] || continue
-        [[ "$(docker volume inspect "$volume" | jq -r '.[0].Labels["com.docker.compose.project"] // ""')" == "$app_name" ]] || {
-          echo "Volume $volume is not owned by Dokploy app $app_name." >&2
-          exit 2
-        }
-      done
+      if [[ -n "$volume_names" ]]; then
+        IFS=';' read -r -a volumes <<< "$volume_names"
+        for volume in "${volumes[@]}"; do
+          [[ -n "$volume" ]] || continue
+          [[ "$(docker volume inspect "$volume" | jq -r '.[0].Labels["com.docker.compose.project"] // ""')" == "$app_name" ]] || {
+            echo "Volume $volume is not owned by Dokploy app $app_name." >&2
+            exit 2
+          }
+        done
+      fi
     fi
   fi
 
   local -a tokens=()
-  IFS=';' read -r -a tokens <<< "$watchdog_tokens"
-  for token in "${tokens[@]}"; do
-    [[ -n "$token" ]] || continue
-    sudo grep -Fq -- "$token" "$WATCHDOG_ENV" || { echo "Watchdog token drift for $slug: $token not found." >&2; exit 2; }
-  done
+  if [[ -n "$watchdog_tokens" ]]; then
+    IFS=';' read -r -a tokens <<< "$watchdog_tokens"
+    for token in "${tokens[@]}"; do
+      [[ -n "$token" ]] || continue
+      sudo grep -Fq -- "$token" "$WATCHDOG_ENV" || { echo "Watchdog token drift for $slug: $token not found." >&2; exit 2; }
+    done
+  fi
 }
 
 assert_safe_classification() {
@@ -320,7 +358,7 @@ remove_watchdog_tokens() {
   [[ -n "$watchdog_tokens" ]] || return 0
   log "Removing watchdog tokens for $slug from $WATCHDOG_ENV"
   local -a tokens=()
-  IFS=';' read -r -a tokens <<< "$watchdog_tokens"
+  [[ -z "$watchdog_tokens" ]] || IFS=';' read -r -a tokens <<< "$watchdog_tokens"
   local backup="${WATCHDOG_ENV}.dx2.${slug}.$(date -u +%Y%m%dT%H%M%SZ).bak"
   run sudo cp "$WATCHDOG_ENV" "$backup"
   for token in "${tokens[@]}"; do
@@ -350,7 +388,7 @@ delete_domains() {
   local domain_ids="$1"
   [[ -n "$domain_ids" ]] || return 0
   local -a ids=()
-  IFS=';' read -r -a ids <<< "$domain_ids"
+  [[ -z "$domain_ids" ]] || IFS=';' read -r -a ids <<< "$domain_ids"
   for domain_id in "${ids[@]}"; do
     [[ -n "$domain_id" ]] || continue
     dokploy_post "/domain.delete" "{\"domainId\":\"${domain_id}\"}"
@@ -373,7 +411,7 @@ remove_leftover_containers() {
   local container_names="$1"
   [[ -n "$container_names" ]] || return 0
   local -a containers=()
-  IFS=';' read -r -a containers <<< "$container_names"
+  [[ -z "$container_names" ]] || IFS=';' read -r -a containers <<< "$container_names"
   for container in "${containers[@]}"; do
     [[ -n "$container" ]] || continue
     run docker rm --force "$container"
@@ -385,7 +423,7 @@ remove_archived_volumes() {
   local volume_names="$2"
   [[ -n "$volume_names" ]] || return 0
   local -a volumes=()
-  IFS=';' read -r -a volumes <<< "$volume_names"
+  [[ -z "$volume_names" ]] || IFS=';' read -r -a volumes <<< "$volume_names"
   for volume in "${volumes[@]}"; do
     [[ -n "$volume" ]] || continue
     if [[ "$DRY_RUN" != "1" ]]; then
@@ -435,20 +473,28 @@ prepare_candidate() {
   log "Preparing $slug ($classification, $kind, $dokploy_id)"
   remove_watchdog_tokens "$slug" "$watchdog_tokens"
   stop_dokploy_record "$kind" "$dokploy_id"
+  if [[ "$kind" == "compose" || "$kind" == "application" ]]; then
+    PREPARED_KINDS+=("$kind")
+    PREPARED_IDS+=("$dokploy_id")
+  fi
 
   local -a volumes=()
-  IFS=';' read -r -a volumes <<< "$volume_names"
-  for volume in "${volumes[@]}"; do
-    [[ -n "$volume" ]] || continue
-    archive_named_volume "$slug" "$volume"
-  done
+  if [[ -n "$volume_names" ]]; then
+    IFS=';' read -r -a volumes <<< "$volume_names"
+    for volume in "${volumes[@]}"; do
+      [[ -n "$volume" ]] || continue
+      archive_named_volume "$slug" "$volume"
+    done
+  fi
 
   local -a binds=()
-  IFS=';' read -r -a binds <<< "$bind_paths"
-  for bind_path in "${binds[@]}"; do
-    [[ -n "$bind_path" ]] || continue
-    archive_bind_path "$slug" "$bind_path"
-  done
+  if [[ -n "$bind_paths" ]]; then
+    IFS=';' read -r -a binds <<< "$bind_paths"
+    for bind_path in "${binds[@]}"; do
+      [[ -n "$bind_path" ]] || continue
+      archive_bind_path "$slug" "$bind_path"
+    done
+  fi
 
 }
 
@@ -504,6 +550,8 @@ main() {
   require_execute_guard
   require_inputs
   capture_preflight
+  trap 'rollback_predelete $?' ERR
+  trap 'rollback_predelete 130' INT TERM
 
   # CSV columns:
   # slug,classification,kind,dokploy_id,domain_ids,container_names,volume_names,bind_paths,watchdog_tokens,endpoint_expectation,notes
@@ -514,6 +562,7 @@ main() {
   done < <(tail -n +2 "$CANDIDATES_CSV")
 
   log "Phase 1/3: stop records and archive data"
+  PREPARE_STARTED=1
   while IFS=, read -r slug classification kind dokploy_id _domain_ids container_names volume_names bind_paths watchdog_tokens _endpoint_expectation _notes; do
     [[ -n "${slug:-}" ]] || continue
     prepare_candidate "$slug" "$classification" "$kind" "$dokploy_id" "$container_names" "$volume_names" "$bind_paths" "$watchdog_tokens"
@@ -524,6 +573,7 @@ main() {
   restore_drill_archive "batch" "$FIRST_ARCHIVE"
 
   log "Phase 3/3: remove approved domains, records, containers, and archived volumes"
+  DELETION_STARTED=1
   while IFS=, read -r slug classification kind dokploy_id domain_ids container_names volume_names _bind_paths _watchdog_tokens _endpoint_expectation _notes; do
     [[ -n "${slug:-}" ]] || continue
     retire_candidate "$slug" "$classification" "$kind" "$dokploy_id" "$domain_ids" "$container_names" "$volume_names"
@@ -534,12 +584,15 @@ main() {
   read_to_file "$EVIDENCE_DIR/docker-volume-ls.after.txt" docker volume ls
   read_to_file "$EVIDENCE_DIR/docker-stats.after.jsonl" docker stats --no-stream --format '{{json .}}'
   dokploy_get_to_file "/project.all" "$EVIDENCE_DIR/dokploy-project-all.after.json"
+  read_to_file "$EVIDENCE_DIR/zenod-watchdog.env.after" sudo cat "$WATCHDOG_ENV"
   read_to_file "$EVIDENCE_DIR/watchdog-timer.after.txt" sudo systemctl status zenod-watchdog.timer --no-pager
 
   while IFS=, read -r slug _classification _kind dokploy_id _domain_ids _container_names _volume_names _bind_paths _watchdog_tokens endpoint_expectation _notes; do
     [[ -n "${slug:-}" ]] || continue
     probe_post_endpoint "$slug" "$dokploy_id" "$endpoint_expectation"
   done < <(tail -n +2 "$CANDIDATES_CSV")
+
+  trap - ERR INT TERM
 }
 
 main "$@"
