@@ -58,6 +58,7 @@ ENV NODE_ENV=production \
     PORT=8080 \
     ZENOD_DATA_DIR=/data \
     ZENOD_WEB_DIST=/app/apps/web/dist \
+    ZENOD_SITE_DIST=/app/apps/site/dist \
     GIT_SHA=${GIT_SHA}
 
 COPY --from=build /app/.gitsha ./.gitsha
@@ -68,6 +69,7 @@ COPY --from=build /app/packages/server/package.json ./packages/server/package.js
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 COPY --from=build /app/packages/server/node_modules ./packages/server/node_modules
 COPY --from=build /app/apps/web/dist ./apps/web/dist
+COPY --from=build /app/apps/site/dist ./apps/site/dist
 
 VOLUME /data
 EXPOSE 8080

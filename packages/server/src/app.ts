@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
-import { serveStatic, type ServeStaticOptions } from "@hono/node-server/serve-static";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { conversationId, NoteNotFoundError, VERSION, type CleanSlateResult } from "zenod";
@@ -70,6 +69,7 @@ import { driveArchiveUnavailableReason } from "./voiceArchive.js";
 import { validateStepCallback, type StepCallbackResult } from "./journeyContracts.js";
 import type { DeliverableManifest } from "./executionQueue.js";
 import { creditHeadroomDecision } from "./sessionLog.js";
+import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { callPeerTool } from "./peerClient.js";
 import { RingRouterCore, type RingConnectedServer, type RingInboundMessage, type RingToolCall } from "./ringRouter.js";
 import type { PhylaxChannel } from "./phylaxGateway.js";
@@ -92,6 +92,8 @@ function resolvedGitSha(): string {
 export interface AppOptions {
   /** Directory with the built web UI (apps/web/dist). Optional in dev/tests. */
   webDist?: string;
+  /** Directory with the built public site (apps/site/dist). Optional in dev/tests. */
+  siteDist?: string;
   /** Per-agent identity/config consumed by the shell. Defaults to Zenod. */
   agent?: AgentDefinition;
 }
@@ -2762,18 +2764,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return RESPONSE_ALREADY_SENT;
   });
 
-  // --- static settings UI ---
-
-  if (options.webDist) {
-    const root = options.webDist;
-    const noCache: Pick<ServeStaticOptions, "onFound"> = {
-      onFound: (_path, c) => {
-        c.header("Cache-Control", "no-cache, no-store, must-revalidate");
-      },
-    };
-    app.use("/*", serveStatic({ root, ...noCache }));
-    app.get("*", serveStatic({ root, path: "index.html", ...noCache })); // SPA fallback
-  }
+  mountStaticSurfaces(app, options);
 
   return app;
 }
