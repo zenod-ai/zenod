@@ -16,6 +16,8 @@ import {
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { OAuthKitOptions } from "./oauth.js";
+import { installOAuthRoutes, oauthWwwAuthenticate, publicBaseUrl, resolveOAuthKit } from "./oauth.js";
 import { ChassisStorage, type ChassisStorageOptions, type TenantStorage } from "./storage.js";
 import { ChassisUsageStore, type ChassisUsageStoreOptions, type TenantUsageMeter } from "./usage.js";
 
@@ -55,6 +57,20 @@ export interface TenantTokenStore {
   resolveTokenHash(
     tokenHash: string,
   ): Promise<TenantTokenRecord | null> | TenantTokenRecord | null;
+}
+
+export interface TenantOAuthAccessToken {
+  tenant: TenantContext;
+  clientId: string;
+  clientName: string;
+  scope: string;
+  expiresAt: number;
+}
+
+export interface TenantOAuthAccessTokenStore {
+  resolveOAuthAccessToken(
+    accessToken: string,
+  ): Promise<TenantOAuthAccessToken | null> | TenantOAuthAccessToken | null;
 }
 
 export interface MemoryTenantInput {
@@ -106,6 +122,8 @@ export interface MemoryTenantStore extends TenantProvisioningStore {
 
 export interface TenantAuthOptions {
   store: TenantTokenStore;
+  oauth?: TenantOAuthAccessTokenStore;
+  oauthChallenge?: boolean;
   realm?: string;
 }
 
@@ -178,6 +196,8 @@ export interface CreateUnitOptions {
   metering?: ChassisUsageStore | ChassisUsageStoreOptions | false;
   /** Optional tenant-scoped settings UI shell. */
   ui?: UnitUiOptions;
+  /** OAuth server for MCP-client sign-in and OAuth client providers for world connections. */
+  oauth?: OAuthKitOptions;
 }
 
 export interface UnitApp {
@@ -328,6 +348,11 @@ function wwwAuthenticate(realm: string): string {
   return `Bearer realm="${escaped}", error="invalid_token"`;
 }
 
+function unauthorized(c: Context, realm: string, oauthChallenge: boolean): Response {
+  c.header("WWW-Authenticate", oauthChallenge ? oauthWwwAuthenticate(publicBaseUrl(c)) : wwwAuthenticate(realm));
+  return c.json({ error: "unauthorized" }, 401);
+}
+
 function timingSafeStringEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
@@ -379,8 +404,15 @@ export function requireTenantAuth(
       return;
     }
 
-    c.header("WWW-Authenticate", wwwAuthenticate(realm));
-    return c.json({ error: "unauthorized" }, 401);
+    const bearer = bearerToken(c);
+    const oauthToken = bearer && options.oauth ? await options.oauth.resolveOAuthAccessToken(bearer) : null;
+    if (oauthToken && oauthToken.expiresAt > Date.now()) {
+      c.set("tenant", { ...oauthToken.tenant });
+      await next();
+      return;
+    }
+
+    return unauthorized(c, realm, options.oauthChallenge === true);
   };
 }
 
@@ -610,8 +642,13 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
 
   const version = options.version?.trim() || "0.0.0";
   const app = new Hono<UnitHonoEnv>();
+  const oauth = resolveOAuthKit(options.oauth);
+  if (oauth && !options.tenantAuth) throw new Error("OAuth routes require tenantAuth so grants can bind to tenants");
   const auth = options.tenantAuth
-    ? requireTenantAuth(options.tenantAuth)
+    ? requireTenantAuth({
+        ...options.tenantAuth,
+        ...(oauth?.serverEnabled ? { oauth: oauth.store, oauthChallenge: true } : {}),
+      })
     : noopAuth();
   const storage = storageFromOptions(options.storage);
   const getUsageStore = lazyUsageStore(
@@ -765,6 +802,15 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     app.post("/api/connections/revoke", requireUiTenant, (c) =>
       c.json({ ok: true, tenant: c.get("tenant") }),
     );
+  }
+
+  if (oauth && options.tenantAuth) {
+    installOAuthRoutes(app, {
+      kit: oauth,
+      tenantStore: options.tenantAuth.store,
+      storage,
+      tenantAuth: auth,
+    });
   }
 
   if (options.controlPlane && provisioningStore) {
@@ -948,3 +994,5 @@ export type {
   UsageQuery,
   UsageRecordInput,
 } from "./usage.js";
+export { MemoryOAuthStore } from "./oauth.js";
+export type { OAuthKitOptions, OAuthProvider, OAuthStore, OAuthTokenSet } from "./oauth.js";
