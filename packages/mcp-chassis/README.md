@@ -61,6 +61,41 @@ createUnit({
 });
 ```
 
+Hosted units should use the chassis-owned durable store and may import an
+existing SHA-256 token hash without changing the user's token:
+
+```ts
+import { createSqliteTenantStore, createUnit } from "@zenod/mcp-chassis";
+
+const tenants = createSqliteTenantStore({ dataDir: "/data" });
+tenants.importTenantTokenHash({
+  tokenHash: existingTokenHash,
+  tenant: { id: "tenant-1", name: "Tenant 1" },
+});
+
+createUnit({
+  name: "my-unit",
+  tenantAuth: { store: tenants },
+  controlPlane: { store: tenants },
+  ui: { webDist: "apps/web/dist" },
+  routes(routes) {
+    routes.get("/api/my-unit/state", (c) => {
+      const context = c.get("unitContext");
+      return c.json({
+        tenant: context.tenant,
+        storageRoot: context.storage.rootDir,
+        usage: context.usage?.summary() ?? null,
+      });
+    });
+  },
+});
+```
+
+Every route installed through `routes` is registered before the SPA fallback
+and fails closed unless a chassis bearer/OAuth token or signed UI session
+resolves the tenant. The injected `unitContext` owns tenant-bound storage,
+usage, and operating rules; handlers must not accept a tenant id from input.
+
 When billing is enabled, the unit serves:
 
 - `POST /api/billing/webhook`
