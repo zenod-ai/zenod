@@ -22,6 +22,10 @@
     "./conduct": {
       "types": "./dist/conduct.d.ts",
       "default": "./dist/conduct.js"
+    },
+    "./transcription": {
+      "types": "./dist/transcription.d.ts",
+      "default": "./dist/transcription.js"
     }
   },
   "files": [

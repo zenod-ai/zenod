@@ -1444,6 +1444,7 @@ export type {
   UsageRecordInput,
 } from "./usage.js";
 export * from "./rules.js";
+export * from "./transcription.js";
 export { MemoryOAuthStore } from "./oauth.js";
 export type {
   OAuthKitOptions,
