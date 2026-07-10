@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { SqliteCredentialVault, type CredentialVault } from "./credentialVault.js";
 import {
   createBrainLlm,
   createEngine,
@@ -176,6 +177,7 @@ function createRunStatusLabel(result: CreateIssueThenRunResult): string {
  */
 export class Runtime {
   readonly settings: Settings;
+  readonly credentialVault: CredentialVault;
   readonly state: SqliteStateStore;
   readonly oauth: OAuthStore;
   readonly whatsappStore: WhatsAppStore;
@@ -216,11 +218,27 @@ export class Runtime {
     }
   }
 
-  constructor(readonly dataDir: string, readonly agent: AgentDefinition = ZENOD_AGENT) {
+  constructor(
+    readonly dataDir: string,
+    readonly agent: AgentDefinition = ZENOD_AGENT,
+    options: {
+      seedFromEnv?: NodeJS.ProcessEnv | false;
+      tenantId?: string;
+      credentialVault?: CredentialVault;
+      credentialMasterKey?: string;
+    } = {},
+  ) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
     this.oauth = new OAuthStore(join(dataDir, "oauth.sqlite"));
-    this.settings = new Settings(this.state);
-    this.settings.seedFromEnv();
+    this.credentialVault =
+      options.credentialVault ??
+      new SqliteCredentialVault({
+        dataDir,
+        tenantId: options.tenantId ?? "standalone",
+        masterKey: options.credentialMasterKey,
+      });
+    this.settings = new Settings(this.state, this.credentialVault);
+    if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
     this.whatsapp = new WhatsAppGateway({
       dataDir: join(dataDir, "whatsapp"),
@@ -1878,6 +1896,8 @@ export class Runtime {
     this.journeyMonitor.stop();
     this.journeyStore.close();
     this.usageStore.close();
+    this.notificationStore.close();
+    this.credentialVault.close();
   }
 }
 
