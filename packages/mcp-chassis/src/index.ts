@@ -1219,6 +1219,10 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     }
     const routeApp = new Hono<UnitHonoEnv>();
     const routeAuth: UnitAuthMiddleware = async (c, next) => {
+      if (c.get("unitContext")) {
+        await next();
+        return;
+      }
       const tenant =
         (await resolveAuthenticatedTenant(c, {
           ...tenantAuth,
@@ -1243,9 +1247,18 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       c.set("unitContext", context);
       await next();
     };
-    routeApp.use("*", routeAuth);
     options.routes(routeApp);
-    app.route("/", routeApp);
+    const protectedRouteApp = new Hono<UnitHonoEnv>();
+    const protectedPaths = new Set<string>();
+    for (const route of routeApp.routes) {
+      const key = `${route.method}\0${route.path}`;
+      if (!protectedPaths.has(key)) {
+        protectedRouteApp.on(route.method, route.path, routeAuth);
+        protectedPaths.add(key);
+      }
+      protectedRouteApp.on(route.method, route.path, route.handler);
+    }
+    app.route("/", protectedRouteApp);
   }
 
   if (uiProductRoutes) app.route("/", uiProductRoutes);
