@@ -2,11 +2,13 @@
   "schema_version": 1,
   "wave": "DX-5",
   "mode": "preparation-baseline",
-  "generated_at": "2026-07-10T05:20:00+02:00",
+  "generated_at": "2026-07-10T03:38:10Z",
   "bound_issue": "https://github.com/zenod-ai/zenod/issues/730",
   "basis": {
     "dx1_inventory": "docs/EPIC-3.7-DX1-INVENTORY.md",
     "dx1_inventory_commit": "69bee3a",
+    "dx1b_current_state": "docs/EPIC-3.7-DX1B-CURRENT-STATE.json",
+    "dx1b_classification_issue": "https://github.com/zenod-ai/zenod/issues/793",
     "dx2_execution_issue": "https://github.com/zenod-ai/zenod/issues/722",
     "dx2_package_commit": "cd9c21f",
     "dx2_approval_receipt": "https://github.com/zenod-ai/zenod/issues/722#issuecomment-4931281736",
@@ -31,13 +33,14 @@
   },
   "zero_instance_proof": {
     "status": "baseline-only",
-    "assertion": "DX-1 classified zero separate live per-user Epaminon rows. This is not a current-fleet or zero-suite-executor proof.",
+    "assertion": "DX-1B fresh inventory confirms zero separate per-user Epaminon rows and one retained Ring-owned suite-bundled Epaminon executor. This is not a zero-suite-executor proof.",
     "separate_per_user_rows": 0,
     "basis_refs": [
       "docs/EPIC-3.7-DX1-INVENTORY.md#dokploy-project-zenod-inventory",
-      "docs/EPIC-3.7-DX1-INVENTORY.md#ring-suite-container-expansion"
+      "docs/EPIC-3.7-DX1-INVENTORY.md#ring-suite-container-expansion",
+      "docs/EPIC-3.7-DX1B-CURRENT-STATE.json"
     ],
-    "operational_requirement": "Replace baseline-only with proven only after a fresh re-inventory finds no separate-per-user or suite-bundled retirement row."
+    "operational_requirement": "Replace baseline-only with proven only after a wave-time re-inventory either lists the exact Ring suite as suite-bundled or proves an independently approved Ring wave retired it."
   },
   "canonical_exclusions": [
     {
@@ -90,11 +93,18 @@
     {
       "row_id": "a5BbpChW5PKgXUJFZSUNo",
       "name": "ring-jordiring-fkegkz",
-      "classification": "unknown",
+      "classification": "test",
+      "classification_source_ref": "https://github.com/zenod-ai/zenod/issues/793",
       "topology": "suite-bundled",
+      "owner_unit": "ring",
+      "owner_tenant_ref": "ring-suite:jordiring-fkegkz",
+      "owner_email": "jordi+ring@alpha9.io",
+      "stripe_mode": "test",
+      "stripe_session_id": "cs_test_a1JB1AdPDiLyFzuKTekkiXBt4wItj2LBD82stmW3BEpWpn9GachVFKEgkz",
+      "epaminon_tenant_ref": null,
       "container": "compose-quantify-open-source-pixel-siik6w-zenod-epaminon-1",
       "dx2_disposition": "excluded from DX-2 and retained",
-      "required_action": "A fresh DX-5 inventory must either rediscover this exact row and place it in candidates with tenant/job-history/archive/rollback/removal evidence, or provide evidence that another approved wave already retired it."
+      "required_action": "A wave-time inventory must either rediscover this exact Ring-owned row as suite-bundled and retire it only with the whole approved Ring suite, or provide evidence that another approved Ring wave already retired it. Never invent an independent Epaminon customer or tenant for this executor."
     }
   ],
   "candidates": []

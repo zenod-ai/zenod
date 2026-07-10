@@ -1,10 +1,12 @@
 # Epic 3.7 DX-5 Epaminon Retirement Wave Runbook
 
-Status: preparation package only; live wave blocked
+Status: Ring test ownership refreshed; live wave blocked
 Date: 2026-07-10
 Bound issue: https://github.com/zenod-ai/zenod/issues/730
+Classification refresh: https://github.com/zenod-ai/zenod/issues/793
 Bound spine: `docs/EPIC-3.7-DECOMMISSION-2X.md` (steward-owned, read-only here)
-Branch: `codex/epic37-dx5-epaminon-wave`
+Branch: `codex/epic37-dx1b-classification`
+Base commit: `6f1698578e5f46466507c9520f88579059b54c94`
 Integration target: `main`
 
 This runbook prepares the decommission side of DX-5. It does not authorize or
@@ -20,10 +22,14 @@ facts that must not be collapsed into one claim:
    row appears in its 34-row project inventory.
 2. DX-1 found six test Ring/suite rows with a bundled `zenod-epaminon` executor.
    DX-2 archived and retired all six as part of the approved test wave.
-3. DX-1 also found the active `ring-jordiring-fkegkz` unknown suite, which has a
-   bundled Epaminon executor. DX-2 deliberately excluded and retained that row.
-   A current DX-5 inventory must rediscover and resolve it; the narrow zero-row
-   fact in item 1 is not proof that all tenant-scoped executors are gone.
+3. DX-1 also found the active `ring-jordiring-fkegkz` suite, which has a bundled
+   Epaminon executor. DX-2 deliberately excluded and retained that row. Issue
+   #793 now proves it is a Stripe TEST Ring suite owned by
+   `jordi+ring@alpha9.io`; fresh inventory preserves `topology=suite-bundled`
+   with six running suite containers and six volumes. The executor is owned by
+   the Ring suite and is not an independent Epaminon customer or tenant. A
+   wave-time DX-5 inventory must rediscover the exact suite or reference an
+   independently approved Ring retirement.
 4. The canonical `epaminon` row and its `zenod-epaminon` container are a shared
    unit row. E-MT-7 replaces that runtime shape with `epaminon-api` plus ephemeral
    sandboxes. It is not a per-user row to delete under a zero-instance wave.
@@ -46,7 +52,7 @@ Production apply remains blocked until all of these exist:
 - Ephemeral sandbox evidence proves spawn, run, persistence, teardown, and zero
   crash-test orphans using a pinned worker image digest.
 - A fleet re-inventory no older than 24 hours has classified every separate
-  Epaminon and suite-bundled Epaminon executor.
+  Epaminon and suite-bundled Epaminon executor without changing Ring ownership.
 - Jordi has approved the exact manifest digest, exact inventory digest, exact
   tenant/job-history row list, execution window, and rollback plan.
 
@@ -61,7 +67,9 @@ In scope for DX-5 classification:
 
 - A separate per-user Epaminon Dokploy application/compose, including `e-*` or
   customer-named Epaminon rows.
-- A suite compose containing an always-on `zenod-epaminon` tenant executor.
+- A suite compose containing an always-on `zenod-epaminon` executor. The
+  candidate identity and owner remain the suite; the embedded service is not
+  promoted to an independent Epaminon tenant.
 - Its Dokploy ID, domains, containers, volumes/binds, watchdog tokens, tenant,
   and job-history disposition.
 
@@ -139,6 +147,11 @@ Every preflight row with either retirement topology must appear exactly once in
 `scope-manifest.json.candidates`. No fuzzy name matching or unlisted row is
 allowed.
 
+For `suite-bundled` rows, both the inventory and manifest must set
+`owner_unit: "ring"`, use the Ring suite identity as `tenant_ref`, and leave
+`epaminon_tenant_ref` absent or null. The validator rejects an owner mismatch or
+an invented embedded Epaminon tenant.
+
 ## Manifest And Approval
 
 For each discovered candidate, add:
@@ -152,6 +165,24 @@ For each discovered candidate, add:
   "job_history_evidence_ref": "<migration or deliberate archive evidence>"
 }
 ```
+
+The known retained suite uses this shape instead:
+
+```json
+{
+  "row_id": "a5BbpChW5PKgXUJFZSUNo",
+  "topology": "suite-bundled",
+  "classification": "test",
+  "owner_unit": "ring",
+  "tenant_ref": "ring-suite:jordiring-fkegkz",
+  "epaminon_tenant_ref": null,
+  "job_history_evidence_ref": "<bundled-executor disposition evidence>"
+}
+```
+
+That shape authorizes no action by itself. A Ring suite must be archived,
+rolled back, and removed as one exact approved topology; DX-5 must never target
+only its `zenod-epaminon` container or manufacture an Epaminon customer record.
 
 For a genuinely empty current wave, keep `candidates: []` and replace the
 baseline zero proof with:
@@ -271,7 +302,7 @@ Post to issue #730 after package review or later execution:
 
 ```markdown
 Commit:
-Branch: codex/epic37-dx5-epaminon-wave
+Branch: codex/epic37-dx1b-classification
 Tests:
 Manifest SHA-256:
 Inventory SHA-256:

@@ -1,0 +1,43 @@
+{
+  "schema_version": "epic37-dx1b-record-only-candidate-v1",
+  "package_mode": "preparation-only",
+  "bound_issue": "https://github.com/zenod-ai/zenod/issues/793",
+  "source_current_state": "docs/EPIC-3.7-DX1B-CURRENT-STATE.json",
+  "observed_at": "2026-07-10T03:37:50Z",
+  "production_mutation_permitted": false,
+  "candidates": [
+    {
+      "candidate_id": "Us9aDVdhvlObXLDfDwW0I",
+      "unit": "callisthenes",
+      "name": "callisthenes-jordicallifresh33087-muhmxp",
+      "runtime_project": "compose-hack-redundant-driver-nu1cex",
+      "status": "idle",
+      "deployment_count": 0,
+      "classification": "duplicate",
+      "materialization": "record-only",
+      "duplicate_of": "NR_px8Ul2L2w_RaM4-DWe",
+      "domain_ids": [
+        "injtaVSszHyvNqLDEmJ88"
+      ],
+      "domains": [
+        "c-jordicallifresh33087-muhmxp.zenod.dev"
+      ],
+      "container_names": [],
+      "volume_names": [],
+      "watchdog_tokens": [],
+      "classification_evidence_ref": "docs/EPIC-3.7-DX1B-CURRENT-STATE.json",
+      "recovery_defect_ref": "https://github.com/zenod-ai/cloud/issues/62"
+    }
+  ],
+  "approval_requirements": {
+    "approved_by": "Jordi",
+    "exact_manifest_sha256": true,
+    "exact_candidate_ids": true,
+    "maintenance_window": true,
+    "pre_removal_metadata_export": true,
+    "rollback_plan": true,
+    "fresh_zero_materialization_recheck": true
+  },
+  "causation_statement": "The status probe may have coincided with periodic legacy provisioning recovery; direct GET mutation is unproven.",
+  "apply_path_present": false
+}

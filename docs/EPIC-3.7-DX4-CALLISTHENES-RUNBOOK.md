@@ -1,11 +1,12 @@
 # Epic 3.7 DX-4 Callisthenes Retirement Wave Runbook
 
-Status: preparation package complete; live execution blocked
+Status: test classification refreshed; live execution blocked
 Date: 2026-07-10
 Bound issue: https://github.com/zenod-ai/zenod/issues/729
+Classification refresh: https://github.com/zenod-ai/zenod/issues/793
 Bound spine: `docs/EPIC-3.7-DECOMMISSION-2X.md` (read-only to this worker)
-Branch: `codex/epic37-dx4-callisthenes-wave`
-Base commit: `1d7f4407bf5ede1aa366145d7a1f45457f7ad9d6`
+Branch: `codex/epic37-dx1b-classification`
+Base commit: `6f1698578e5f46466507c9520f88579059b54c94`
 Integration target: `main`
 
 This package prepares the decommission side only. It does not authorize or implement live execution. The validator has no apply mode and performs no network, SSH, Docker, Dokploy, watchdog, DNS, or production-state operation.
@@ -16,9 +17,14 @@ DX-2 retired the three explicitly classified Callisthenes test rows. One per-use
 
 | Candidate | Dokploy ID | Container | Volume | Current classification | Retirement eligibility |
 |---|---|---|---|---|---|
-| `callisthenes-jordicallifresh33087-muhmxp` | `NR_px8Ul2L2w_RaM4-DWe` | `callisthenes-jordicallifresh33087-muhmxp` | `compose-reboot-neural-hard-drive-z8o9gy_callisthenes-data` | `unknown` | blocked |
+| `callisthenes-jordicallifresh33087-muhmxp` | `NR_px8Ul2L2w_RaM4-DWe` | `callisthenes-jordicallifresh33087-muhmxp` | `compose-reboot-neural-hard-drive-z8o9gy_callisthenes-data` | `test` | blocked |
 
-The name looks test-like, but that is not ownership or disposability evidence. `unknown` is deliberately non-executable. Jordi or the spine steward must classify the exact row, bind it to a shared-service `tenant_id`, fill its current Dokploy domain ID and archive target, and record the source evidence before a dry-run plan can exist.
+Issue #793 binds the exact row to Stripe TEST session
+`cs_test_a1gjQa18N42b6UhVZDyFN36KLzXDoFgCFb5daQyLxt3LtZwnTD0iMUhmxP` and owner
+`jordi+calli-fresh-33087769@alpha9.io`. Fresh read-only inventory at
+`2026-07-10T03:37:50Z` confirms the original compose, domain ID
+`KbaT833rSfzz3W_T_jy-z`, running container, and volume. This proves `test`; it
+does not supply a shared-service `tenant_id` or authorize retirement.
 
 Sanitized candidate data: `docs/EPIC-3.7-DX4-CALLISTHENES-CANDIDATES.json`.
 
@@ -31,6 +37,27 @@ Sanitized candidate data: `docs/EPIC-3.7-DX4-CALLISTHENES-CANDIDATES.json`.
 
 Receipts contain references and SHA-256 fingerprints only. Do not put bearer tokens, X credentials, environment dumps, raw Dokploy git URLs, or other secrets in repository artifacts or issue comments.
 
+## Record-Only Duplicate Boundary
+
+The fresh inventory also found compose `Us9aDVdhvlObXLDfDwW0I`, runtime project
+`compose-hack-redundant-driver-nu1cex`, sharing the original tenant name and
+hostname. It is `idle`, has zero deployments, containers, volumes, and watchdog
+tokens, and owns domain ID `injtaVSszHyvNqLDEmJ88`. It is classified
+`duplicate` / `record-only`, not as a second tenant and not as part of the
+materialized DX-4 candidate.
+
+Its exact preparation packet is
+`docs/EPIC-3.7-DX1B-CALLISTHENES-DUPLICATE-CANDIDATE.json`. The packet has no
+apply path. `scripts/epic37-dx1b-validate-duplicate.py` can emit only a
+review-only plan after a fresh zero-materialization recheck, compose/domain
+metadata export, rollback reference, exact manifest digest, maintenance window,
+and new Jordi approval. No cleanup was performed.
+
+Cloud recovery defect [#62](https://github.com/zenod-ai/cloud/issues/62) tracks
+the duplicate creation path. The observed status probe may have coincided with
+periodic legacy recovery; the available evidence does not prove direct GET
+mutation.
+
 ## Blocking Gates
 
 Every gate below is conjunctive. Passing one never weakens another.
@@ -39,7 +66,7 @@ Every gate below is conjunctive. Passing one never weakens another.
 |---|---|---|---|
 | Parent pilot gate | Accepted pilot-gate receipt with timestamp and durable reference | Epic 3.0 steward | blocked / not supplied |
 | CA-MT-6 cutover | Accepted receipt, exact 40-character commit, timestamp, durable reference | Epic 3.3 steward | blocked / Epic 3.3 remains planning in the required read |
-| Exact classification | Manifest is no longer `unknown`; Jordi confirms the exact classification and source | Jordi/steward | blocked / `unknown` |
+| Exact classification | Exact Stripe TEST session and owner bind the original compose | #793 / steward | passed / `test` |
 | Tenant binding | Candidate maps to one exact shared-service `tenant_id` | Epic 3.3 steward | blocked / not supplied |
 | Tenant credentials and receipts | Tenant-scoped credential proof plus at least one tenant-scoped receipt proof | Epic 3.3 tester | blocked / not supplied |
 | Shared-host continuity | The old token fingerprint passes against the manifest's exact shared host for the same tenant | Epic 3.3 tester | blocked / not supplied |
@@ -53,7 +80,7 @@ The current Epic 3.3 spine names `calli.zenod.dev` as the target. The candidate 
 The later operator must preserve this order. Steps 1 through 7 are evidence preparation and validation; no retirement mutation is allowed before all complete.
 
 1. Refresh read-only inventory for the exact Dokploy ID, domain ID, container, volume, old route, and watchdog/source registrations. Any mismatch requires a new manifest and digest.
-2. Obtain explicit classification and tenant binding. Replace `unknown`, fill `tenant_id`, fill `domain_ids`, set one exact non-root absolute `archive_target`, and remove resolved inventory gaps. Do not infer classification from the slug.
+2. Preserve the evidence-backed `test` classification and exact domain ID, then fill `tenant_id`, set one exact non-root absolute `archive_target`, and remove only resolved inventory gaps. Do not infer shared-service binding from the slug or Stripe owner.
 3. Compute SHA-256 over the exact manifest bytes. The completed receipt and Jordi approval must both quote this digest and the exact archive target.
 4. Attach accepted parent pilot and CA-MT-6 receipts. CA-MT-6 evidence must identify the accepted commit and test surface.
 5. For the same `tenant_id`, record tenant-scoped credential proof, tenant-scoped receipt proof, and old-token continuity on the exact shared host. Store only evidence references and an irreversible token fingerprint.
@@ -97,9 +124,11 @@ Local package validation:
 
 ```bash
 python3 scripts/epic37-dx4-callisthenes-dry-run.test.py
+python3 scripts/epic37-dx1b-validate-duplicate.test.py
 python3 -m json.tool docs/EPIC-3.7-DX4-CALLISTHENES-CANDIDATES.json >/dev/null
 python3 -m json.tool docs/EPIC-3.7-DX4-CALLISTHENES-RECEIPT.schema.json >/dev/null
+python3 -m json.tool docs/EPIC-3.7-DX1B-CALLISTHENES-DUPLICATE-CANDIDATE.json >/dev/null
 git diff --check
 ```
 
-The issue handoff must record the exact package commit and tests, then state the live blocker precisely: parent pilot receipt, accepted CA-MT-6 receipt, explicit classification and tenant binding, exact archive target and verified rollback checkpoint, and Jordi's candidate/window/outbound-key rollback approval are still required. No live execution occurred.
+The issue handoff must record the exact package commit and tests, then state the live blocker precisely: parent pilot receipt, accepted CA-MT-6 receipt, shared-service tenant binding, exact archive target and verified rollback checkpoint, and Jordi's candidate/digest/window/outbound-key rollback approval are still required. The duplicate additionally requires its own new digest-bound cleanup approval. No live execution occurred.
