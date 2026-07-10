@@ -18,6 +18,7 @@ import {
 } from "./transcription.js";
 
 const roots: string[] = [];
+const TEST_VAULT_KEY = "33".repeat(32);
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -267,7 +268,10 @@ describe("createTranscriptionKit", () => {
 
   it("resolves provider keys from each tenant vault and makes exactly one call per input", async () => {
     const dataDir = root();
-    const storage = new ChassisStorage({ dataDir });
+    const storage = new ChassisStorage({
+      dataDir,
+      vaultEncryptionKey: TEST_VAULT_KEY,
+    });
     const usage = new ChassisUsageStore({ dataDir });
     const calls: TranscriptionProviderRequest[] = [];
     const provider: TranscriptionProvider = {

@@ -1645,11 +1645,13 @@ function toProvisionTenantResponse(result: ProvisionTenantResult): {
 }
 
 export * from "./conduct.js";
-export { ChassisStorage, TenantVault, openSqlite } from "./storage.js";
+export { ChassisStorage, openSqlite } from "./storage.js";
 export { ChassisUsageStore, TenantUsageMeter } from "./usage.js";
 export type {
   ChassisStorageOptions,
   TenantStorage,
+  TenantValueCipher,
+  TenantVault,
   UnitTenant,
 } from "./storage.js";
 export type {

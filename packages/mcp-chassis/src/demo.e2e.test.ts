@@ -8,6 +8,7 @@ import { createDemoUnit, DEMO_CONTROL_TOKEN } from "./demo.js";
 
 const servers: ServerType[] = [];
 const tempDirs: string[] = [];
+const TEST_VAULT_KEY = "22".repeat(32);
 
 afterEach(async () => {
   await Promise.all([
@@ -90,6 +91,7 @@ describe("MCP chassis demo", () => {
       DATA_DIR: dataDir,
       CONTROL_PLANE_TOKEN: DEMO_CONTROL_TOKEN,
       DEMO_SESSION_SECRET: "three-tenant-session-secret",
+      CHASSIS_VAULT_MASTER_KEY: TEST_VAULT_KEY,
     });
 
     const tenants = await Promise.all([
@@ -197,6 +199,7 @@ describe("MCP chassis demo", () => {
       DEMO_API_TOKEN: "self-host-token",
       DEMO_TENANT_ID: "self-host",
       DEMO_TENANT_NAME: "Self-hosted Demo",
+      CHASSIS_VAULT_MASTER_KEY: TEST_VAULT_KEY,
     });
     const selfHostLogin = await login(selfHostBase, "self-host-token");
     await expect(
