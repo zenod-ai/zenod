@@ -208,3 +208,99 @@ subscriptions suspend tenant rows.
 
 Unit tests use a deterministic fake provider, so no external credentials are
 needed to prove the framework.
+
+## D18 transcription kit
+
+Import the framework-neutral kit from `@zenod/mcp-chassis/transcription` (or
+the package root). A unit supplies provider adapters; the chassis owns the
+canonical envelope, tenant-bound credential resolution, one-transcription
+decision, provenance, metering, and failure behavior.
+
+```ts
+import {
+  createTranscriptionKit,
+  createVaultTranscriptionProviderResolver,
+  type TranscriptionProvider,
+} from "@zenod/mcp-chassis/transcription";
+import { createSqliteTenantStore, createUnit } from "@zenod/mcp-chassis";
+
+const groq: TranscriptionProvider = {
+  id: "groq",
+  async transcribe({ media, apiKey, model, signal }) {
+    // The adapter may fetch artifact_ref with the owning unit bearer or send
+    // bounded inline bytes to its provider. Never put apiKey in the result.
+    return {
+      text: await callProvider({ media, apiKey, model, signal }),
+      usage: { model, billableUnits: 1 },
+    };
+  },
+};
+
+const transcription = createTranscriptionKit({
+  unit: { unit: "phylax", version: "3.1.0" },
+  resolveProvider: createVaultTranscriptionProviderResolver({
+    providers: [{
+      provider: groq,
+      apiKeyVaultKey: "transcription.groq.api_key",
+      modelVaultKey: "transcription.groq.model",
+    }],
+  }),
+});
+const tenants = createSqliteTenantStore({ dataDir: "/data" });
+
+createUnit({
+  name: "phylax",
+  tenantAuth: { store: tenants },
+  storage: { dataDir: "/data" },
+  routes(routes) {
+    routes.post("/api/transcribe", async (c) => {
+      const result = await transcription.process(
+        c.get("unitContext"),
+        await c.req.json(),
+      );
+      return c.json(result);
+    });
+  },
+});
+```
+
+Each tenant selects a provider in its own vault entry
+`transcription.provider`; provider definitions name the tenant-local key and
+optional model entries. Resolution fails closed without a tenant-bound
+`UnitContext`. Raw keys are passed only to the chosen adapter and never enter
+results or usage metadata.
+
+The canonical D18 fields are `sender`, `artifact_ref`, `text_transcript`,
+`transcription_usage`, `transcription_failed`, and `transcription_source`
+(`unit` plus `version`). The strict schemas reject unknown fields, including
+`tenant_id`. `channelMediaForwardSchema` requires an HTTPS `artifact_ref` and
+forbids inline base64. General media tools may use `inline_media`, bounded to
+256 KiB by default (`maxInlineBytes`); larger payloads must use `artifact_ref`.
+The encoded length is rejected before base64 decoding, followed by an exact
+decoded-byte check for padding boundary cases.
+
+`authenticatedSource` is mandatory whenever input carries a supplied
+transcript or upstream failure. Any caller-supplied `transcription_source` must
+match it. The receiver derives this trusted unit/version from its authenticated
+connection and D16 card; caller fields alone are never provenance.
+
+`process()` returns an explicit `transcription_status`:
+
+- `provided`: a supplied non-empty transcript bypassed provider resolution and
+  provider execution. Supplied `transcription_usage` is preserved but is not
+  booked by default. Only the attribution hop (the Ring after mapping sender to
+  tenant) sets `bookProvidedUsageToTenant: true`; later ingest hops leave it
+  false to prevent quota inflation.
+- `performed`: exactly one tenant-resolved adapter call produced text. The kit
+  adds source provenance and non-secret usage, then records that usage through
+  the same tenant's `UnitContext.usage` meter.
+- `failed`: provider resolution or the single adapter attempt failed. The
+  result immediately carries `transcription_failed: { code, message }` and the
+  original artifact metadata; the kit never retries or queues provider work.
+
+Use `transcriptionPayload(result)` for a later media hand-off, or
+`channelMediaForwardPayload(result)` to additionally enforce the artifact-only
+channel profile. Both preserve transcript, usage, failure, and original source
+provenance. These are media metadata, not mutation evidence: the surrounding
+MCP tool must still return an ID/URL/SHA or `{ ticket_id }` under the conduct
+receipt rules.
