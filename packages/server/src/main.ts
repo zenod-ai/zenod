@@ -12,21 +12,31 @@ const dataDir = resolve(process.env.ZENOD_DATA_DIR ?? "./data");
 mkdirSync(dataDir, { recursive: true });
 
 const webDist = process.env.ZENOD_WEB_DIST ?? resolve(import.meta.dirname, "../../../apps/web/dist");
+const siteDist = process.env.ZENOD_SITE_DIST ?? resolve(import.meta.dirname, "../../../apps/site/dist");
 let hasWeb = true;
+let hasSite = true;
 try {
   accessSync(webDist);
 } catch {
   hasWeb = false;
+}
+try {
+  accessSync(siteDist);
+} catch {
+  hasSite = false;
 }
 
 // One image can run as any agent — pick it from the AGENT env var (default zenod).
 const agent = resolveAgent(process.env.AGENT);
 compileAllToolOutputSchemas();
 const runtime = new Runtime(dataDir, agent);
-const app = createApp(runtime, hasWeb ? { webDist } : {});
+const app = createApp(runtime, {
+  ...(hasWeb ? { webDist } : {}),
+  ...(hasSite ? { siteDist } : {}),
+});
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(
-    `${agent.name} server listening on :${info.port} (data: ${dataDir}${hasWeb ? `, ui: ${webDist}` : ", no ui build"})`,
+    `${agent.name} server listening on :${info.port} (data: ${dataDir}${hasWeb ? `, dashboard: ${webDist}` : ", no dashboard build"}${hasSite ? `, site: ${siteDist}` : ", no site build"})`,
   );
 });

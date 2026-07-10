@@ -6,6 +6,7 @@ import {
   CopyIcon,
   GitCommitIcon,
   KeyRoundIcon,
+  LayoutDashboardIcon,
   LibraryIcon,
   MinusIcon,
   NetworkIcon,
@@ -20,37 +21,21 @@ import { ModelDiagram } from "@/components/model-diagram"
 import { cn } from "@/lib/utils"
 import alexandria from "@/assets/alexandria.jpg"
 import zenodPlate from "@/assets/zenod-plate.jpg"
-
-function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      {...props}
-    >
-      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-    </svg>
-  )
-}
+import {
+  createHostedCheckout,
+  DASHBOARD_URL,
+  type CustomerSession,
+  type PaidTier,
+  PRICING_OPTIONS,
+  readCustomerSession,
+  SIGN_IN_PATH,
+  SignInRequiredError,
+} from "@/lib/customer"
 
 const GITHUB_URL = "https://github.com/zenod-ai/zenod"
 const DOCS_URL = "https://github.com/zenod-ai/zenod/tree/main/docs"
-const DOCTRINE_URL =
-  "https://github.com/zenod-ai/zenod/blob/main/docs/LIBRARIAN-DOCTRINE.md"
-const ROADMAP_URL =
-  "https://github.com/zenod-ai/zenod/blob/main/docs/ROADMAP.md"
-const HOSTED_URL = `${GITHUB_URL}/issues/new?title=${encodeURIComponent(
-  "Hosted Zenod — alpha access request"
-)}&body=${encodeURIComponent(
-  "I'd like to join the waitlist for the hosted Zenod alpha (first 100 users free).\n\nHow I plan to use it: "
-)}`
-
-// [TEST MODE - 2026-07-09] Hosted Zenod signup points to cloud-test while the
-// full Stripe/GitHub/provisioning flow is validated. Live checkout returns to
-// cloud.zenod.dev only after live Stripe keys, prices, webhook, and OAuth are set.
-const HOSTED_PAYMENT_LINK = "https://cloud-test.zenod.dev/buy?unit=zenod&tier=starter"
+const DOCTRINE_URL = "https://github.com/zenod-ai/zenod/blob/main/docs/LIBRARIAN-DOCTRINE.md"
+const ROADMAP_URL = "https://github.com/zenod-ai/zenod/blob/main/docs/ROADMAP.md"
 const TERMS_URL = "/legal/terms.html"
 const PRIVACY_URL = "/legal/privacy.html"
 const DATA_URL = "/legal/data-handling.html"
@@ -58,8 +43,16 @@ const DATA_URL = "/legal/data-handling.html"
 const INSTALL_CMD = `git clone ${GITHUB_URL}.git && cd zenod
 docker build -t zenod . && docker run -d -p 8080:8080 -v zenod-data:/data zenod`
 
-const CONNECT_CMD = `claude mcp add --transport http zenod https://your-host/mcp \\
-  --header "Authorization: Bearer <token from settings>"`
+const CONNECT_CMD = `claude mcp add --transport http zenod https://your-host/mcp`
+const PENDING_TIER_KEY = "zenod.pending-checkout-tier"
+
+function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+    </svg>
+  )
+}
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = React.useState(false)
@@ -83,15 +76,7 @@ function CopyButton({ value }: { value: string }) {
   )
 }
 
-function CommandBlock({
-  step,
-  title,
-  command,
-}: {
-  step: string
-  title: string
-  command: string
-}) {
+function CommandBlock({ step, title, command }: { step: string; title: string; command: string }) {
   return (
     <div className="border-t border-border">
       <div className="flex items-baseline justify-between gap-4 pt-3 pb-2">
@@ -107,15 +92,7 @@ function CommandBlock({
   )
 }
 
-function SectionHeading({
-  kicker,
-  title,
-  id,
-}: {
-  kicker: string
-  title: string
-  id?: string
-}) {
+function SectionHeading({ kicker, title, id }: { kicker: string; title: string; id?: string }) {
   return (
     <div id={id} className="mb-10 scroll-mt-24">
       <p className="label-caps mb-3 text-rust">{kicker}</p>
@@ -150,6 +127,196 @@ function Partial({ note }: { note?: string }) {
       <MinusIcon className="size-4 shrink-0" />
       {note ? <span className="text-xs">{note}</span> : null}
     </span>
+  )
+}
+
+interface CustomerJourney {
+  session: CustomerSession | null
+  loading: boolean
+  busyTier: PaidTier | null
+  error: string | null
+  subscribe: (tier: PaidTier) => void
+}
+
+function isPaidTier(value: string | null): value is PaidTier {
+  return value === "monthly" || value === "yearly"
+}
+
+function useCustomerJourney(): CustomerJourney {
+  const [session, setSession] = React.useState<CustomerSession | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [busyTier, setBusyTier] = React.useState<PaidTier | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const beginCheckout = React.useCallback(async (tier: PaidTier) => {
+    setBusyTier(tier)
+    setError(null)
+    try {
+      const destination = await createHostedCheckout(tier)
+      window.location.assign(destination)
+    } catch (checkoutError) {
+      if (checkoutError instanceof SignInRequiredError) {
+        window.sessionStorage.setItem(PENDING_TIER_KEY, tier)
+        window.location.assign(SIGN_IN_PATH)
+        return
+      }
+      setError(checkoutError instanceof Error ? checkoutError.message : "Could not start checkout")
+      setBusyTier(null)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    let active = true
+    readCustomerSession()
+      .then((customer) => {
+        if (!active) return
+        setSession(customer)
+        setLoading(false)
+
+        const pending = window.sessionStorage.getItem(PENDING_TIER_KEY)
+        if (customer && isPaidTier(pending)) {
+          window.sessionStorage.removeItem(PENDING_TIER_KEY)
+          void beginCheckout(pending)
+        }
+      })
+      .catch(() => {
+        if (!active) return
+        setSession(null)
+        setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [beginCheckout])
+
+  const subscribe = React.useCallback(
+    (tier: PaidTier) => {
+      if (loading || !session) {
+        window.sessionStorage.setItem(PENDING_TIER_KEY, tier)
+        window.location.assign(SIGN_IN_PATH)
+        return
+      }
+      void beginCheckout(tier)
+    },
+    [beginCheckout, loading, session],
+  )
+
+  return { session, loading, busyTier, error, subscribe }
+}
+
+function SiteHeader({ customer }: { customer: CustomerJourney }) {
+  return (
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm">
+      <div className="flex min-h-16 items-stretch justify-between">
+        <a
+          href="/"
+          className="font-display flex items-center border-r border-border px-4 text-xl font-bold sm:px-6 sm:text-2xl"
+        >
+          ZENOD
+        </a>
+        <nav className="flex min-w-0 flex-1 items-center justify-end text-sm">
+          <a
+            href="/pricing"
+            className="hidden h-full items-center px-4 text-muted-foreground transition-colors hover:text-rust sm:flex"
+          >
+            Pricing
+          </a>
+          {customer.session ? (
+            <>
+              <span className="hidden max-w-40 truncate px-3 text-muted-foreground md:block">
+                {customer.session.login}
+              </span>
+              <a
+                href={DASHBOARD_URL}
+                className="flex h-full items-center gap-2 border-l border-border px-4 font-medium transition-colors hover:text-rust sm:px-5"
+              >
+                <LayoutDashboardIcon className="size-4" />
+                Dashboard
+              </a>
+            </>
+          ) : (
+            <a
+              href={SIGN_IN_PATH}
+              className="flex h-full items-center gap-2 border-l border-border px-4 font-medium transition-colors hover:text-rust sm:px-5"
+            >
+              <GithubIcon className="size-4" />
+              <span className="hidden sm:inline">GitHub </span>Sign in
+            </a>
+          )}
+          <a
+            href="/pricing"
+            className="flex h-full items-center bg-foreground px-4 font-semibold text-background transition-colors hover:bg-rust sm:px-5"
+          >
+            Get started
+          </a>
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Zenod on GitHub"
+            className="hidden h-full items-center border-l border-border px-5 transition-colors hover:text-rust lg:flex"
+          >
+            <GithubIcon className="size-5" />
+          </a>
+        </nav>
+      </div>
+    </header>
+  )
+}
+
+function PricingSection({ customer }: { customer: CustomerJourney }) {
+  return (
+    <section id="pricing" className="scroll-mt-20 border-b border-border px-6 py-20 sm:px-12">
+      <SectionHeading kicker="Simple pricing" title="Keep the library. Choose who runs it." />
+      <div className="grid border border-border lg:grid-cols-3">
+        {PRICING_OPTIONS.map((plan, index) => (
+          <article
+            key={plan.name}
+            className={cn(
+              "flex min-h-[23rem] flex-col p-6 sm:p-8",
+              index > 0 && "border-t border-border lg:border-t-0 lg:border-l",
+            )}
+          >
+            <h3 className="font-display text-2xl font-semibold">{plan.name}</h3>
+            <div className="mt-6 flex items-baseline gap-2">
+              <span className="font-display text-4xl font-semibold">{plan.price}</span>
+              <span className="text-sm text-muted-foreground">{plan.cadence}</span>
+            </div>
+            <p className="mt-5 flex-1 text-sm leading-relaxed text-muted-foreground">
+              {plan.description}
+            </p>
+            <div className="mt-8">
+              {plan.tier === null ? (
+                <Button asChild size="lg" variant="outline" className="w-full rounded-none">
+                  <a href={`${GITHUB_URL}#readme`} target="_blank" rel="noreferrer">
+                    <GithubIcon data-icon="inline-start" />
+                    View install guide
+                  </a>
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  className="w-full rounded-none"
+                  disabled={customer.busyTier !== null}
+                  onClick={() => plan.tier && customer.subscribe(plan.tier)}
+                >
+                  {customer.busyTier === plan.tier ? "Opening checkout…" : `Choose ${plan.tier}`}
+                  <ArrowUpRightIcon data-icon="inline-end" />
+                </Button>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+      {customer.error ? (
+        <p role="alert" className="mt-4 text-sm text-destructive">
+          {customer.error}. Please retry.
+        </p>
+      ) : null}
+      <p className="label-caps mt-5 text-muted-foreground/70">
+        Paid plans use Stripe checkout. GitHub is the only sign-in method.
+      </p>
+    </section>
   )
 }
 
@@ -220,52 +387,11 @@ const categories = [
   },
 ]
 
-export default function App() {
+function LandingPage({ customer }: { customer: CustomerJourney }) {
   return (
     <div className="paper-grain min-h-screen">
       <div className="mx-auto max-w-6xl border-x border-border">
-        {/* ───────────────────────── nav ───────────────────────── */}
-        <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-sm">
-          <div className="flex items-stretch justify-between">
-            <a
-              href="#"
-              className="font-display border-r border-border px-6 py-4 text-2xl font-bold tracking-tight"
-            >
-              ZENOD
-            </a>
-            <nav className="label-caps hidden items-center gap-8 px-6 text-muted-foreground sm:flex">
-              <a href="#philosophy" className="transition-colors hover:text-rust">
-                Philosophy
-              </a>
-              <a href="#compare" className="transition-colors hover:text-rust">
-                Compare
-              </a>
-              <a href="#self-host" className="transition-colors hover:text-rust">
-                Self-host
-              </a>
-              <a href={HOSTED_PAYMENT_LINK} className="transition-colors hover:text-rust">
-                Hosted €5/mo
-              </a>
-              <a
-                href={DOCS_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="transition-colors hover:text-rust"
-              >
-                Docs
-              </a>
-            </nav>
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Zenod on GitHub"
-              className="flex items-center border-l border-border px-6 text-foreground transition-colors hover:text-rust"
-            >
-              <GithubIcon className="size-5" />
-            </a>
-          </div>
-        </header>
+        <SiteHeader customer={customer} />
 
         {/* ───────────────────────── hero ───────────────────────── */}
         <section className="relative overflow-hidden border-b border-border">
@@ -277,32 +403,31 @@ export default function App() {
           />
           <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-6 py-20 sm:py-24 lg:grid-cols-[1fr_minmax(0,26rem)]">
             <div className="text-center lg:text-left">
-              <p className="label-caps mb-6 text-rust">
-                Open source · AGPL-3.0 · Self-hosted
-              </p>
+              <p className="label-caps mb-6 text-rust">Open source · AGPL-3.0 · Self-hosted</p>
               <h1 className="font-display text-5xl leading-[1.05] font-bold tracking-tight text-balance sm:text-6xl xl:text-7xl">
                 The librarian your agents report to.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground max-lg:mx-auto">
-                Zenod is a self-hosted memory agent that runs your personal
-                library. It files every piece of evidence, distills it into
-                living ideas, and serves your knowledge to every AI agent you
-                use — one brain across all of them. Plain markdown, in a git
-                repo, in <em className="text-foreground not-italic">your</em>{" "}
-                GitHub account. You keep the keys.
+                Zenod is a self-hosted memory agent that runs your personal library. It files every
+                piece of evidence, distills it into living ideas, and serves your knowledge to every
+                AI agent you use — one brain across all of them. Plain markdown, in a git repo, in{" "}
+                <em className="text-foreground not-italic">your</em> GitHub account. You keep the
+                keys.
               </p>
 
-              {/* [TEST MODE - 2026-07-09] primary hosted CTA uses cloud-test Stripe. */}
-              <div className="mt-10 flex flex-col items-center gap-2 lg:items-start">
+              <div className="mt-10 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
                 <Button asChild size="lg" className="rounded-none px-6">
-                  <a href={HOSTED_PAYMENT_LINK}>
-                    Test hosted signup
+                  <a href="/pricing">
+                    Get started
                     <ArrowUpRightIcon data-icon="inline-end" />
                   </a>
                 </Button>
-                <p className="label-caps text-muted-foreground/70">
-                  Stripe test mode · your repo, your keys · or self-host free below
-                </p>
+                <Button asChild size="lg" variant="outline" className="rounded-none px-6">
+                  <a href={SIGN_IN_PATH}>
+                    <GithubIcon data-icon="inline-start" />
+                    Sign in with GitHub
+                  </a>
+                </Button>
               </div>
             </div>
 
@@ -338,24 +463,18 @@ export default function App() {
                   <ArrowUpRightIcon data-icon="inline-end" />
                 </a>
               </Button>
-              <Button asChild size="lg" variant="outline" className="rounded-none px-5">
-                <a href={HOSTED_URL} target="_blank" rel="noreferrer">
-                  Request alpha access
-                </a>
-              </Button>
             </div>
             <p className="label-caps mt-4 text-muted-foreground/70">
-              Self-host free forever · hosted alpha — first 100 users free
+              Self-host free forever · hosted monthly or yearly
             </p>
           </div>
         </section>
 
+        <PricingSection customer={customer} />
+
         {/* ───────────────────────── use case ───────────────────────── */}
         <section className="border-b border-border px-6 py-20 sm:px-12">
-          <SectionHeading
-            kicker="The use case"
-            title="Your memory, defragmented."
-          />
+          <SectionHeading kicker="The use case" title="Your memory, defragmented." />
           <MemoryDiagram />
         </section>
 
@@ -390,14 +509,12 @@ export default function App() {
                   "border-border p-8",
                   i > 0 && "border-t sm:border-t-0",
                   "sm:[&:nth-child(even)]:border-l lg:border-l",
-                  i === 0 && "lg:border-l-0"
+                  i === 0 && "lg:border-l-0",
                 )}
               >
                 <Icon className="size-5 text-rust" strokeWidth={1.5} />
                 <h3 className="font-display mt-5 text-xl font-semibold">{title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  {body}
-                </p>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{body}</p>
               </div>
             ))}
           </div>
@@ -405,24 +522,18 @@ export default function App() {
 
         {/* ───────────────────────── how it works ───────────────────────── */}
         <section className="border-b border-border px-6 py-20 sm:px-12">
-          <SectionHeading
-            kicker="The model"
-            title="Ingest. Curate. Retrieve."
-          />
+          <SectionHeading kicker="The model" title="Ingest. Curate. Retrieve." />
           <ModelDiagram />
         </section>
 
         {/* ───────────────────────── the bet ───────────────────────── */}
         <section className="border-b border-border px-6 py-20 sm:px-12">
-          <SectionHeading
-            kicker="The bet"
-            title="Everybody reads. One writes."
-          />
+          <SectionHeading kicker="The bet" title="Everybody reads. One writes." />
           <p className="-mt-4 mb-10 max-w-2xl leading-relaxed text-muted-foreground">
-            Zenod is an opinionated bet on structure. You won't be married to
-            one agent — you'll use ten, each good at something different. What
-            can't survive that world is scattered context. So: one library,
-            open to every reader, with a single gatekeeper holding the pen.
+            Zenod is an opinionated bet on structure. You won't be married to one agent — you'll use
+            ten, each good at something different. What can't survive that world is scattered
+            context. So: one library, open to every reader, with a single gatekeeper holding the
+            pen.
           </p>
           <BetDiagram />
           <div className="mt-12 grid gap-px border border-border bg-border sm:grid-cols-2">
@@ -446,9 +557,7 @@ export default function App() {
             ].map((t) => (
               <div key={t.title} className="bg-background p-6">
                 <h3 className="font-display text-lg font-semibold">{t.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  {t.body}
-                </p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t.body}</p>
               </div>
             ))}
           </div>
@@ -479,24 +588,21 @@ export default function App() {
                 <span className="text-foreground">
                   The LLM is the librarian. You're the curator.
                 </span>{" "}
-                Zenod's write path is the product: agents can't produce a
-                disorganized vault, because the rules live in the service —
-                deterministic validation code, not prompts a caller might
-                ignore.
+                Zenod's write path is the product: agents can't produce a disorganized vault,
+                because the rules live in the service — deterministic validation code, not prompts a
+                caller might ignore.
               </p>
               <p>
-                The vault schema is fixed and machine-enforced: immutable
-                captures on one tier, distilled entity pages on the other;
-                shallow folders, links over hierarchy, controlled vocabulary;
-                a note without links is a bug. Renames, merges and migrations
+                The vault schema is fixed and machine-enforced: immutable captures on one tier,
+                distilled entity pages on the other; shallow folders, links over hierarchy,
+                controlled vocabulary; a note without links is a bug. Renames, merges and migrations
                 are proposal-first — the librarian plans, you approve.
               </p>
               <p>
-                And against vault pollution — the deepest objection to letting
-                an AI near your notes —{" "}
-                <span className="text-foreground">provenance is first-class</span>:
-                human-authored and agent-written are always distinguishable,
-                and agents never edit your thinking notes.
+                And against vault pollution — the deepest objection to letting an AI near your notes
+                — <span className="text-foreground">provenance is first-class</span>: human-authored
+                and agent-written are always distinguishable, and agents never edit your thinking
+                notes.
               </p>
               <p>
                 <a
@@ -512,16 +618,15 @@ export default function App() {
             </div>
             <figure className="border-l-2 border-rust pl-6 lg:col-span-2">
               <blockquote className="font-display text-xl leading-relaxed text-foreground italic">
-                "Instead of just retrieving from raw documents at query time,
-                the LLM incrementally builds and maintains a persistent wiki."
+                "Instead of just retrieving from raw documents at query time, the LLM incrementally
+                builds and maintains a persistent wiki."
               </blockquote>
               <figcaption className="label-caps mt-4 text-muted-foreground">
                 Andrej Karpathy — LLM Knowledge Bases, April 2026
               </figcaption>
               <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
-                Karpathy gave the world the recipe. Zenod is the restaurant —
-                the same pattern delivered as a service with an enforced write
-                path, instead of a manual workflow.
+                Karpathy gave the world the recipe. Zenod is the restaurant — the same pattern
+                delivered as a service with an enforced write path, instead of a manual workflow.
               </p>
             </figure>
           </div>
@@ -529,11 +634,7 @@ export default function App() {
 
         {/* ───────────────────────── comparison ───────────────────────── */}
         <section className="border-b border-border px-6 py-20 sm:px-12">
-          <SectionHeading
-            id="compare"
-            kicker="The landscape"
-            title="Where Zenod stands."
-          />
+          <SectionHeading id="compare" kicker="The landscape" title="Where Zenod stands." />
 
           <div className="overflow-x-auto border border-border">
             <table className="w-full min-w-[760px] border-collapse text-sm">
@@ -572,10 +673,9 @@ export default function App() {
 
           <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
             <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-rust" />
-            Honest reading: competitor checkmarks are shipped at scale; Zenod
-            is pre-alpha running code — we are user #1. Memory APIs = Mem0,
-            supermemory, Zep, Letta. And two things we deliberately concede:
-            local-first purism, and benchmark recall at enterprise scale.
+            Honest reading: competitor checkmarks are shipped at scale; Zenod is pre-alpha running
+            code — we are user #1. Memory APIs = Mem0, supermemory, Zep, Letta. And two things we
+            deliberately concede: local-first purism, and benchmark recall at enterprise scale.
             That's the funded players' game. Ours is a library you own.
           </p>
 
@@ -584,9 +684,7 @@ export default function App() {
               <div key={c.name} className="bg-background p-6">
                 <h3 className="font-display text-lg font-semibold">{c.name}</h3>
                 <p className="label-caps mt-1 text-muted-foreground">{c.examples}</p>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  {c.gap}
-                </p>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{c.gap}</p>
               </div>
             ))}
           </div>
@@ -610,22 +708,18 @@ export default function App() {
               </h2>
               <div className="mt-6 space-y-4 leading-relaxed text-muted-foreground">
                 <p>
-                  The Library of Alexandria didn't just collect scrolls — it
-                  appointed a librarian. Zenodotus invented alphabetical
-                  organization, attached identifying tags to every scroll, and
-                  turned a pile of papyrus into the ancient world's memory.
+                  The Library of Alexandria didn't just collect scrolls — it appointed a librarian.
+                  Zenodotus invented alphabetical organization, attached identifying tags to every
+                  scroll, and turned a pile of papyrus into the ancient world's memory.
                 </p>
                 <p>
-                  That's the job here. Your captures, conversations, documents
-                  and voice notes are the scrolls. Zenod is the librarian: it
-                  decides where things go, keeps the catalog coherent, and
-                  hands any agent exactly the scroll it asked for — while the
+                  That's the job here. Your captures, conversations, documents and voice notes are
+                  the scrolls. Zenod is the librarian: it decides where things go, keeps the catalog
+                  coherent, and hands any agent exactly the scroll it asked for — while the
                   collection stays yours.
                 </p>
               </div>
-              <p className="label-caps mt-8 text-muted-foreground">
-                Pronounced ZEN-od · zenod.dev
-              </p>
+              <p className="label-caps mt-8 text-muted-foreground">Pronounced ZEN-od · zenod.dev</p>
             </div>
           </div>
         </section>
@@ -636,9 +730,8 @@ export default function App() {
             <div>
               <p className="font-display text-2xl font-bold tracking-tight">ZENOD</p>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                A self-hosted AI memory agent that owns your personal library.
-                Pre-alpha — we are user #1, and the whole thing is open
-                source.
+                A self-hosted AI memory agent that owns your personal library. Pre-alpha — we are
+                user #1, and the whole thing is open source.
               </p>
             </div>
             <nav className="label-caps flex flex-wrap gap-x-8 gap-y-3 text-muted-foreground">
@@ -686,11 +779,48 @@ export default function App() {
             </nav>
           </div>
           <p className="label-caps mt-10 border-t border-border pt-6 text-muted-foreground/70">
-            Engraving: the Great Library of Alexandria, O. Von Corven, 19th c.
-            (public domain)
+            Engraving: the Great Library of Alexandria, O. Von Corven, 19th c. (public domain)
           </p>
         </footer>
       </div>
     </div>
+  )
+}
+
+function PricingPage({ customer }: { customer: CustomerJourney }) {
+  return (
+    <div className="paper-grain min-h-screen">
+      <div className="mx-auto min-h-screen max-w-6xl border-x border-border">
+        <SiteHeader customer={customer} />
+        <main>
+          <div className="border-b border-border px-6 pt-16 sm:px-12 sm:pt-20">
+            <p className="label-caps mb-4 text-rust">Zenod plans</p>
+            <h1 className="font-display max-w-3xl text-4xl font-semibold sm:text-5xl">
+              Your agents share one library. You decide where it runs.
+            </h1>
+            <p className="mt-6 max-w-2xl pb-14 leading-relaxed text-muted-foreground">
+              Every plan keeps your memory in a plain markdown repository in your GitHub account.
+              Hosted plans include the managed Zenod service.
+            </p>
+          </div>
+          <PricingSection customer={customer} />
+        </main>
+        <footer className="flex flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-muted-foreground sm:px-12">
+          <span>Zenod · AGPL-3.0</span>
+          <a href={GITHUB_URL} className="inline-flex items-center gap-2 hover:text-rust">
+            <GithubIcon className="size-4" /> GitHub
+          </a>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+export default function App() {
+  const customer = useCustomerJourney()
+  return window.location.pathname === "/pricing" ? (
+    <PricingPage customer={customer} />
+  ) : (
+    <LandingPage customer={customer} />
   )
 }
