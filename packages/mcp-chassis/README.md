@@ -105,6 +105,33 @@ Unit routes take precedence over placeholder product APIs such as
 `/api/settings`; chassis health, auth, OAuth, control-plane, billing, and MCP
 routes remain reserved.
 
+## Structured logging
+
+The chassis emits pino JSON lifecycle logs for every request. Authenticated MCP,
+unit-route, and UI work carries `tenant_id`; public, rejected, control-plane,
+and other non-tenant work carries an explicit `tenant_id: null`. Every record
+also carries `unit_name` and `request_id`, and the same request ID is returned in
+`X-Request-Id`.
+
+MCP tools receive the same request-scoped logger:
+
+```ts
+createUnit({
+  name: "my-unit",
+  tools(server, context) {
+    server.registerTool("ping", {}, async () => {
+      context.logger.info({ operation: "ping" }, "tool invoked");
+      return { content: [{ type: "text", text: "pong" }] };
+    });
+  },
+});
+```
+
+The default level is `LOG_LEVEL` or `info`. Chassis log serialization redacts
+authorization headers, cookies, tokens, OAuth state, API keys, passwords,
+credentials, and secrets recursively. Query strings are not logged, and raw
+token-bearing MCP paths are normalized to `/mcp/:token`.
+
 The same durable store supports self-host seeding:
 
 ```ts

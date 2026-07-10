@@ -17,6 +17,7 @@ import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import type { Logger } from "pino";
 import {
   isBillingEnabled,
   registerBillingRoutes,
@@ -29,6 +30,12 @@ import {
   publicBaseUrl,
   resolveOAuthKit,
 } from "./oauth.js";
+import {
+  createChassisLogger,
+  createRequestLogContext,
+  safeRequestPath,
+  type ChassisLoggingOptions,
+} from "./logging.js";
 import {
   MemoryOperatingRulesStore,
   type OperatingRulesStore,
@@ -46,6 +53,7 @@ import {
 } from "./usage.js";
 import { SqliteTenantSettingsStore } from "./settings.js";
 export type { BillingOptions } from "./billing.js";
+export type { ChassisLoggingOptions } from "./logging.js";
 export {
   defaultTenantSettingsValues,
   SqliteTenantSettingsStore,
@@ -76,6 +84,9 @@ export interface TenantContext {
 export interface UnitContext {
   unitName: string;
   tenant: TenantContext | null;
+  /** Request-scoped pino logger carrying request_id and explicit tenant_id. */
+  logger: Logger;
+  requestId: string;
   /** Tenant-bound storage handles. Unit tools must not accept tenant ids from client payloads. */
   storage: TenantStorage | null;
   /** Tenant-bound usage meter. Unit tools must never query usage for a client-supplied tenant id. */
@@ -94,6 +105,7 @@ export type UnitHonoEnv = {
   Variables: {
     tenant: TenantContext | null;
     unitContext: TenantUnitContext;
+    requestId: string;
   };
 };
 
@@ -274,6 +286,8 @@ export interface CreateUnitOptions {
   routes?: UnitRouteRegistrar;
   /** Optional tenant auth. When set, every MCP request resolves a tenant first. */
   tenantAuth?: TenantAuthOptions;
+  /** Structured request/tool logging. Defaults to pino at LOG_LEVEL or info. */
+  logging?: ChassisLoggingOptions;
   /** Optional control-plane tenant provisioning API. */
   controlPlane?: ControlPlaneOptions;
   /** Optional same-image self-host seed tenant. */
@@ -745,6 +759,10 @@ function quotaExceededResponse(
   );
 }
 
+function responseStatus(c: Context<UnitHonoEnv>): number {
+  return c.env?.outgoing?.statusCode ?? c.res.status;
+}
+
 const INSTALL_DIRECTIVE_SCHEMA = {
   id: z.string().trim().min(1).optional(),
   text: z.string().trim().min(1),
@@ -857,6 +875,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
 
   const version = options.version?.trim() || "0.0.0";
   const app = new Hono<UnitHonoEnv>();
+  const logger = createChassisLogger(name, options.logging);
   const oauth = resolveOAuthKit(options.oauth);
   if (oauth && !options.tenantAuth)
     throw new Error(
@@ -892,13 +911,20 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const provisioningStore =
     options.controlPlane?.store ?? defaultProvisioningStore;
 
-  const tenantContext = async (tenant: TenantContext): Promise<TenantUnitContext> => ({
-    unitName: name,
-    tenant,
-    storage: storage.forTenant(tenant),
-    usage: getUsageStore()?.forTenant(tenant) ?? null,
-    operatingRules: await operatingRules.turnPreamble(tenant),
-  });
+  const tenantContext = async (
+    c: Context<UnitHonoEnv>,
+    tenant: TenantContext,
+  ): Promise<TenantUnitContext> => {
+    const requestId = c.get("requestId");
+    return {
+      unitName: name,
+      tenant,
+      ...createRequestLogContext(logger, tenant.id, requestId),
+      storage: storage.forTenant(tenant),
+      usage: getUsageStore()?.forTenant(tenant) ?? null,
+      operatingRules: await operatingRules.turnPreamble(tenant),
+    };
+  };
 
   if (options.singleTenant) {
     const store = options.singleTenant.store ?? provisioningStore;
@@ -908,6 +934,51 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
         unitName: name.toUpperCase(),
       });
   }
+
+  app.use("*", async (c, next) => {
+    const startedAt = performance.now();
+    const requestId = randomBytes(16).toString("hex");
+    let logged = false;
+    let thrown: unknown;
+    c.set("requestId", requestId);
+    c.header("X-Request-Id", requestId);
+    const outgoing = c.env?.outgoing;
+    if (outgoing && !outgoing.headersSent) {
+      outgoing.setHeader("X-Request-Id", requestId);
+    }
+    const writeLifecycleLog = () => {
+      if (logged) return;
+      logged = true;
+      const error = thrown ?? c.error;
+      const requestLogger = createRequestLogContext(
+        logger,
+        c.get("tenant")?.id ?? null,
+        requestId,
+      ).logger;
+      const details = {
+        event: error ? "http.request.failed" : "http.request.completed",
+        http: {
+          method: c.req.method,
+          path: safeRequestPath(c.req.url),
+          status_code: responseStatus(c),
+        },
+        duration_ms: Math.round((performance.now() - startedAt) * 100) / 100,
+      };
+      if (error)
+        requestLogger.error({ ...details, err: error }, "request failed");
+      else requestLogger.info(details, "request completed");
+    };
+    outgoing?.once("finish", writeLifecycleLog);
+    outgoing?.once("close", writeLifecycleLog);
+    try {
+      await next();
+      if (!outgoing) writeLifecycleLog();
+    } catch (err) {
+      thrown = err;
+      if (!outgoing) writeLifecycleLog();
+      throw err;
+    }
+  });
 
   app.get("/healthz", (c) => c.json({ status: "ok", name, version }));
   app.get(ATOMIC_UNIT_SKILL_MANIFEST_PATH, (c) =>
@@ -952,6 +1023,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
 
     app.get("/api/auth/status", (c) => {
       const tenant = resolveTenantSession(c, ui);
+      if (tenant) c.set("tenant", tenant);
       return c.json({
         needsSetup: false,
         configured: true,
@@ -966,11 +1038,14 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       const token = loginTokenFromBody(body);
       const record = await resolveTenantToken(tenantStore, token);
       if (!record) return c.json({ error: "unauthorized" }, 401);
+      c.set("tenant", { ...record.tenant });
       issueTenantSession(c, ui, record.tenant);
       return c.json({ ok: true, tenant: record.tenant });
     });
 
     app.post("/api/auth/logout", (c) => {
+      const tenant = resolveTenantSession(c, ui);
+      if (tenant) c.set("tenant", tenant);
       clearTenantSession(c, ui);
       return c.json({ ok: true });
     });
@@ -1189,6 +1264,11 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     await options.tools?.(server, {
       unitName: name,
       tenant,
+      ...createRequestLogContext(
+        logger,
+        tenant?.id ?? null,
+        c.get("requestId"),
+      ),
       storage: tenant ? storage.forTenant(tenant) : null,
       usage,
       operatingRules: turnPreamble,
@@ -1238,7 +1318,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
         );
       }
       c.set("tenant", tenant);
-      const context = await tenantContext(tenant);
+      const context = await tenantContext(c, tenant);
       if (context.usage) {
         const decision = context.usage.checkQuota(tenant.quota, 1);
         if (!decision.allowed) return quotaExceededResponse(c, decision);
