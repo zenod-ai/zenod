@@ -1,6 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { openZenodSqlite } from "./sqlite.js";
 
 export interface OAuthClient {
   clientId: string;
@@ -36,10 +35,10 @@ export interface OAuthToken {
  */
 export class OAuthStore {
   private readonly db: DatabaseSync;
+  private closed = false;
 
   constructor(path: string) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.db = new DatabaseSync(path);
+    this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS oauth_clients (
         client_id TEXT PRIMARY KEY,
@@ -191,6 +190,8 @@ export class OAuthStore {
   }
 
   close(): void {
+    if (this.closed) return;
+    this.closed = true;
     this.db.close();
   }
 }
