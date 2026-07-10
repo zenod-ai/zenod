@@ -120,6 +120,17 @@ describe("Zenod chassis unit", () => {
         name: "zenod",
       });
 
+      const publicHealth = await unit.app.request("/api/health");
+      expect(publicHealth.status).toBe(200);
+      await expect(publicHealth.json()).resolves.toMatchObject({
+        status: "ok",
+        name: "zenod",
+        sha: "unknown",
+      });
+
+      const protectedApi = await unit.app.request("/api/settings");
+      expect(protectedApi.status).toBe(401);
+
       const provisioned = await unit.app.request("/api/tenants", {
         method: "POST",
         headers: {
