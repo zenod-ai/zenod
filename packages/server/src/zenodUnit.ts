@@ -42,6 +42,11 @@ export class ZenodRuntimePool {
       tenantId,
       credentialVault: new ChassisCredentialVault(context.storage),
     });
+    runtime.settings.set("artifact_archive_provider", "local");
+    runtime.settings.set(
+      "artifact_archive_local_dir",
+      context.storage.dir("media"),
+    );
     this.runtimes.set(tenantId, runtime);
     return runtime;
   }
