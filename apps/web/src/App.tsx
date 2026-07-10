@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Toaster } from "@/components/ui/sonner"
+import { extractHostedAccessToken } from "@/lib/hosted-entry"
 import { Login } from "@/views/Login"
 import { Settings } from "@/views/Settings"
 import { SetupWizard } from "@/views/SetupWizard"
@@ -47,9 +48,21 @@ function initialTabFromHash(): "connections" | undefined {
     : undefined
 }
 
+function consumeHostedAccessToken(): string | null {
+  const token = extractHostedAccessToken(window.location.hash)
+  if (!token) return null
+  window.history.replaceState(
+    null,
+    "",
+    window.location.pathname + window.location.search
+  )
+  return token
+}
+
 export function App() {
   const [view, setView] = React.useState<View>({ kind: "loading" })
   const [githubReturn] = React.useState(consumeGithubReturn)
+  const [hostedAccessToken] = React.useState(consumeHostedAccessToken)
 
   React.useEffect(() => {
     if (githubReturn) {
@@ -72,6 +85,21 @@ export function App() {
   }, [])
 
   const boot = React.useCallback(() => {
+    if (hostedAccessToken) {
+      api("/api/auth/login", {
+        method: "POST",
+        body: { token: hostedAccessToken },
+      })
+        .then(loadSettings)
+        .catch((err: unknown) => {
+          if (isUnauthorized(err)) {
+            setView({ kind: "login" })
+          } else {
+            setView({ kind: "error", message: errorMessage(err) })
+          }
+        })
+      return
+    }
     api<AuthStatus>("/api/auth/status")
       .then((status) => {
         if (status.needsSetup) {
@@ -83,7 +111,7 @@ export function App() {
       .catch((err: unknown) => {
         setView({ kind: "error", message: errorMessage(err) })
       })
-  }, [loadSettings])
+  }, [hostedAccessToken, loadSettings])
 
   React.useEffect(() => {
     boot()
