@@ -84,12 +84,12 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: R-S5 authorized generic receipt rendering lap
-Last verified: 2026-07-11T04:52:00+02:00
+Phase: R-S5e authoritative stream completion lap
+Last verified: 2026-07-11T05:22:00+02:00
 Integration target: main
-Fresh base commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92` — PINNED; no rebases until the journey passes (D19c)
-Next action: land the smallest generic verified-receipt gate for mutating wallet peer tools, deploy one exact SHA, rerun SHIP 7.
-Blockers: none — Jordi authorized continuation; Calli handoff forbids product/name-specific Ring adapters.
+Fresh base commit: `b7c0ca55ffd699db3c502e1a3598aeca909537c1` — PINNED; no rebases until the journey passes (D19c)
+Next action: make the stream completion event carry the authoritative gated reply, replace the transient model draft in the Council UI, then rerun SHIP 7.
+Blockers: none — live logs prove the generic reply gate intercepted correctly; the remaining seam is stream finalization.
 
 ## Role Goals
 
@@ -138,6 +138,7 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | 2026-07-11 | Per-peer skills | The tenant attaches a versioned Agent Skills bundle in My Units. The MCP server does not advertise or choose it. Ring stores it as a tenant artifact and exposes it through progressive `load_peer_skill` disclosure. |
 | 2026-07-11 | Skill runtime boundary | Current AI SDK 6 provider-independent pattern first. AI SDK 7 `uploadSkill` and provider containers are a separate future decision. Scripts stay inert; skill prose cannot override authority or mutation guards. |
 | 2026-07-11 | Generic peer receipt gate | Verified receipts from mutating wallet peer tools render verbatim from the tool result. Do not special-case `add_memory`, Zenod, or Calli; preserve the existing separate reconciliation path for backlog/execution tools. |
+| 2026-07-11 | Authoritative stream completion | Streaming deltas are transient UX. The `done` event must carry `engine.chat`'s final authoritative text, and the UI must replace the draft with it. This applies generically to every final reply, not only wallet receipts. |
 
 ## Issue Ledger
 
@@ -150,7 +151,8 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | blocked | #837, #836, #838, #839 done | `main` / manager journey; fixes [#852](https://github.com/zenod-ai/zenod/pull/852), [#853](https://github.com/zenod-ai/zenod/pull/853), [#856](https://github.com/zenod-ai/zenod/pull/856), [#857](https://github.com/zenod-ai/zenod/pull/857) | `a729d08` live | SHIP 1–10 | 1–6 pass; 7 wallet pass/receipt timeout; 8 external chat pass; 9 persistence+isolation pass | 2026-07-11T04:31:00+02:00 | BLOCKED ON JORDI: another focused lap or stop |
 | [#854](https://github.com/zenod-ai/zenod/issues/854) | Ticket worker | R-S5a-worker | Surface downstream Zenod commit receipt in Council chat | done (code) | #840 | [#856](https://github.com/zenod-ai/zenod/pull/856) / `codex/r-s5a-zenod-receipt` | `527023c` | SHIP 7 receipt within 180s | CI + review pass; live still times out | 2026-07-11T04:31:00+02:00 | epic blocker remains |
 | [#855](https://github.com/zenod-ai/zenod/issues/855) | Ticket worker | R-S5b-worker | Make `chat_with_ring` satisfy conduct-kit receipt gate | done | #840 | [#857](https://github.com/zenod-ai/zenod/pull/857) / `codex/r-s5b-mcp-receipt` | `527023c` | SHIP 8 external chat reply | live HTTP 200 + Council reply + `chat_audit` evidence | 2026-07-11T04:31:00+02:00 | integrated |
-| [#858](https://github.com/zenod-ai/zenod/issues/858) | Ticket worker | R-S5d-worker | Diagnose and close live Zenod receipt timeout | in progress | #840, #854 | `codex/r-s5d-generic-receipt-gate` / `../wt-r-s5d`; prior [#859](https://github.com/zenod-ai/zenod/pull/859) | `0e06e6b` | exact SHIP 7 receipt within 180s; generic Calli-style peer receipt regression | Calli generic contract reviewed; lap authorized | 2026-07-11T04:52:00+02:00 | generic gate + tests + PR |
+| [#858](https://github.com/zenod-ai/zenod/issues/858) | Ticket worker | R-S5d-worker | Diagnose and close live Zenod receipt timeout | done (code) | #840, #854 | [#869](https://github.com/zenod-ai/zenod/pull/869) / `codex/r-s5d-generic-receipt-gate` | `0e06e6b` | exact SHIP 7 receipt within 180s; generic Calli-style peer receipt regression | CI + independent review pass; merged `cc47b3a`; live gate intercept confirmed | 2026-07-11T05:22:00+02:00 | integrated; UI stream seam moved to #879 |
+| [#879](https://github.com/zenod-ai/zenod/issues/879) | Ticket worker | R-S5e-worker | Make streamed Council reply authoritative after receipt gate | in progress | #858 | `codex/r-s5e-authoritative-stream` / `../wt-r-s5e` | `b7c0ca5` | stream `done` carries final text; UI replaces draft; exact live commit receipt | live `b7c0ca5` logs show reply-gate interception but UI retained discarded delta text | 2026-07-11T05:22:00+02:00 | implement + tests + independent review |
 | [#863](https://github.com/zenod-ai/zenod/issues/863) | Ticket worker | R-H1-worker | Generic MCP discovery + dynamic Council tools | ready | - | `codex/r-h1-generic-mcp-discovery` / `../wt-r-h1` | `2fe2289` | arbitrary peers expose real schemas/tools; auto-refresh; tools-ready state | issue minted | 2026-07-11T04:34:35+02:00 | dispatch after Ring steward sequences with #858 |
 | [#860](https://github.com/zenod-ai/zenod/issues/860) | Ticket worker | R-H2-worker | Tenant skill artifact store + attachment API | ready | - | `codex/r-h2-peer-skill-artifacts` / `../wt-r-h2` | `2fe2289` | immutable/versioned/path-safe/tenant-isolated bundles + APIs | issue minted | 2026-07-11T04:34:35+02:00 | dispatch after Ring steward sequences with #858 |
 | [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | blocked | #863, #860 | `codex/r-h3-peer-skill-ui` | wave 1 merge | transport vs tools-ready; attach/replace/download/detach | issue minted | 2026-07-11T04:34:35+02:00 | wave 2 |
@@ -198,8 +200,14 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | SHIP live gate | `fde458f` | ring.zenod.dev live | real Chrome walk, external MCP client, two bearer-authenticated tenants | BLOCKED: SHIP 7 receipt missing after 180s; SHIP 8 mutating call `silent_ack`; all other gates pass | `docs/evidence/ring-ship-2026-07-11/TEST-PACKAGE.md` |
 | 2026-07-11 | Authorized receipt fix lap | `a729d08` | ring.zenod.dev live | real Chrome SHIP 7–9, external MCP chat, two bearer-authenticated tenants | BLOCKED: SHIP 7 still lacks commit receipt; SHIP 8–9 pass | `docs/evidence/ring-ship-2026-07-11/11`–`14`; `TEST-PACKAGE.md` |
 | 2026-07-11 | Focused poll-path diagnosis lap | `fae4f33` | ring.zenod.dev live | real Chrome exact SHIP 7 phrase + Zenod durable task audit | PARTIAL: poll fixed and commit succeeds; visible reply omits SHA/URL | `docs/evidence/ring-ship-2026-07-11/15-path-fixed-commit-omitted.png`; `TEST-PACKAGE.md` |
+| 2026-07-11 | Generic receipt gate live reprove | `b7c0ca5` | ring.zenod.dev live | real Chrome exact SHIP 7 phrase + Ring runtime logs | PARTIAL: gate intercepted `add_memory` and selected the verified receipt; stream UI retained the discarded model delta because `done` omitted final text | `docs/evidence/ring-ship-2026-07-11/17-gate-intercept-stream-draft-visible.png`; issue #879 |
 
 ## Handoff Journal
+
+### 2026-07-11T05:22:00+02:00 - Ring delivery manager - Generic gate passes; stream finalization is the exact blocker
+
+Context: PR #869 merged after CI and independent review, and Ring deployed exact pinned main `b7c0ca5`. On the exact browser phrase, runtime logs show `[reply-gate] intercepted on action turn (add_memory)` and state that the verified receipt replaced the model draft. However `/api/chat/stream` emits model deltas and a `done` event without `reply.text`; `ChatTab` only clears activity on `done`, so the discarded draft remains visible. This is a generic streaming contract seam, not a wallet or product-profile gap.
+Next: #879 carries the smallest generic fix from `b7c0ca5`: include final authoritative text in `done`, replace the transient draft in the UI, test normal and intercepted replies, review, deploy, and rerun exact SHIP 7.
 
 ### 2026-07-11T04:52:00+02:00 - Ring delivery manager - Generic receipt lap authorized after Calli handoff
 
