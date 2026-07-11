@@ -48,9 +48,9 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     defaultTenantName: "Self-hosted Phylax",
     panels: ["mcp", "transcription", "connections"],
     additionalReadTools: ["channel_status"],
-    registerAdditionalTools(server, context) {
+    registerAdditionalTools(server, context, runtimeInstance) {
       registerTenantChannelTools(server, context, runtime, tenantSettings);
-      options.registerAdditionalTools?.(server, context);
+      options.registerAdditionalTools?.(server, context, runtimeInstance);
     },
     customerProduct: {
       product: "phylax",

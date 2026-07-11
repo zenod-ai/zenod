@@ -94,8 +94,23 @@ describe("Herald council unit", () => {
       expect(await overview.json()).toMatchObject({
         tenant: { id: "tenant-alpha" },
         unit: { name: "herald" },
-        panels: ["chat", "keys", "connections", "costs", "mcp"],
+        panels: ["chat", "briefing", "board", "keys", "connections", "costs", "mcp"],
       });
+
+      const briefing = await unit.app.request("/api/herald/briefing", {
+        headers: { authorization: "Bearer alpha-token" },
+      });
+      expect(await briefing.json()).toEqual({ briefing: null });
+      const board = await unit.app.request("/api/herald/board", {
+        headers: { authorization: "Bearer alpha-token" },
+      });
+      expect(await board.json()).toEqual({ items: [], wakes: [] });
+      const refused = await unit.app.request("/api/herald/run-now", {
+        method: "POST",
+        headers: { authorization: "Bearer alpha-token" },
+      });
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ code: "briefing_required", status: "refused" });
 
       const runtime = unit.runtimes.get("tenant-alpha");
       expect(runtime).not.toBeNull();
@@ -115,6 +130,13 @@ describe("Herald council unit", () => {
       const client = new Client({ name: "herald-external-test", version: "1" });
       await client.connect(transport);
       expect(client.getServerVersion()).toMatchObject({ name: "herald" });
+      const tools = await client.listTools();
+      expect(tools.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+        "get_board",
+        "get_briefing",
+        "propose_now",
+        "approve_items",
+      ]));
 
       const chat = await client.callTool({
         name: "chat_with_herald",

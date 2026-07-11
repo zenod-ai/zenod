@@ -35,6 +35,7 @@ import { SkillSettingsTab } from "@/views/settings/SkillSettingsTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 import { ChatTab } from "@/views/ChatTab"
 import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
+import { HeraldLoopPanels } from "@/components/herald-loop-panels"
 
 const SECTION_ICONS = {
   connect: PlugZapIcon,
@@ -173,6 +174,7 @@ export function Settings({
           <section aria-label="My Units">
             <PeerAgents />
           </section>
+          {isHerald ? <HeraldLoopPanels /> : null}
           <div className="grid gap-6 lg:grid-cols-2">
             <DashboardOverview overview={overview} />
             <section aria-labelledby="ring-keys-heading" className="flex flex-col gap-2">

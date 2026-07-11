@@ -9,6 +9,7 @@ import {
   hashToken,
   type ControlPlaneOptions,
   type TenantProvisioningStore,
+  type UnitHonoEnv,
   type UnitContext,
 } from "@zenod/mcp-chassis";
 import {
@@ -50,18 +51,22 @@ export class ZenodRuntimePool {
     if (!context.tenant || !context.storage) {
       throw new Error("Zenod requires an authenticated chassis tenant context");
     }
-    const tenantId = context.tenant.id;
+    return this.forTenantStorage(context.tenant.id, context.storage);
+  }
+
+  /** Host-owned wake paths may resume a tenant without an active HTTP request. */
+  forTenantStorage(tenantId: string, tenantStorage: NonNullable<UnitContext["storage"]>): Runtime {
     const existing = this.runtimes.get(tenantId);
     if (existing) {
-      if (existing.dataDir !== context.storage.rootDir) {
+      if (existing.dataDir !== tenantStorage.rootDir) {
         throw new Error("chassis tenant storage root changed during process lifetime");
       }
       return existing;
     }
-    const runtime = new Runtime(context.storage.rootDir, this.agent, {
+    const runtime = new Runtime(tenantStorage.rootDir, this.agent, {
       seedFromEnv: false,
       tenantId,
-      credentialVault: new ChassisCredentialVault(context.storage, {
+      credentialVault: new ChassisCredentialVault(tenantStorage, {
         legacyMasterKey: this.env.ZENOD_CREDENTIAL_MASTER_KEY,
       }),
       settingFallbacks: sharedGithubSettingFallbacks(this.sharedGithubApp),
@@ -69,7 +74,7 @@ export class ZenodRuntimePool {
     runtime.settings.set("artifact_archive_provider", "local");
     runtime.settings.set(
       "artifact_archive_local_dir",
-      context.storage.dir("media"),
+      tenantStorage.dir("media"),
     );
     this.runtimes.set(tenantId, runtime);
     return runtime;
@@ -170,7 +175,12 @@ export interface CreateZenodUnitOptions {
   panels?: string[];
   customerProduct?: CustomerProductConfig;
   /** Register unit-specific tools on the same instrumented MCP server. */
-  registerAdditionalTools?: (server: McpServer, context: UnitContext) => void;
+  registerAdditionalTools?: (server: McpServer, context: UnitContext, runtime: Runtime) => void;
+  /** Mount authenticated unit-specific API routes before the shared /api proxy. */
+  mountAdditionalRoutes?: (
+    routes: Hono<UnitHonoEnv>,
+    runtimes: ZenodRuntimePool,
+  ) => void;
   additionalReadTools?: readonly string[];
   customerAdmin?: {
     githubLogin: string;
@@ -254,10 +264,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       ],
     },
     tools(server, context) {
-      registerZenodTools(server, runtimes.forContext(context), agent);
-      options.registerAdditionalTools?.(server, context);
+      const runtime = runtimes.forContext(context);
+      registerZenodTools(server, runtime, agent);
+      options.registerAdditionalTools?.(server, context, runtime);
     },
     routes(routes) {
+      options.mountAdditionalRoutes?.(routes, runtimes);
       routes.all("/api/*", async (c, next) => {
         if (
           [

@@ -283,6 +283,11 @@ export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
   const recordingStartedAtRef = React.useRef(0)
   const recordingTimerRef = React.useRef<number | null>(null)
 
+  const refreshHistory = React.useCallback(async () => {
+    const history = await api<ChatHistoryResponse>("/api/chat/history")
+    setMessages(history.messages.map((message) => ({ role: message.role, text: message.text })))
+  }, [])
+
   // Rehydrate the thread from the server so navigating away and back keeps context.
   React.useEffect(() => {
     let cancelled = false
@@ -298,6 +303,12 @@ export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
       cancelled = true
     }
   }, [])
+
+  React.useEffect(() => {
+    const refresh = () => void refreshHistory().catch(() => {})
+    window.addEventListener("herald:chat-refresh", refresh)
+    return () => window.removeEventListener("herald:chat-refresh", refresh)
+  }, [refreshHistory])
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
