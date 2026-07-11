@@ -184,9 +184,9 @@ Testers may vary names and nonce text, but must preserve the human intent. Promp
 | draft-T01-T06 | Tester | `discovery-schema` | Generic discovery/schema lane | tested | - | read-only | `0e3c145` | 2 pass / 2 fail / 2 blocked | `/tmp/ring-calli-t01-t06/` + Ring browser transcript | 2026-07-11 14:10 CEST | File deterministic catalog-inspection gaps |
 | draft-T07-T15 | Tester | `mutation-receipts` | Approval/receipt lane | tested | T01–T04 | read-only | `0e3c145` | 3 pass / 5 fail / 1 blocked | Ring browser transcript + verified X receipt | 2026-07-11 14:13 CEST | File Ring approval-state/guard gaps |
 | draft-T16-T24 | Tester | `faults-tenancy` | Fault/tenancy/genericity lane | tested | T01–T04 | read-only | `0e3c145` | 1 pass / 3 fail / 5 blocked | Ring browser transcript and screenshots | 2026-07-11 14:13 CEST | File zero-action truth gate; provision fixtures |
-| draft-F1 | Ticket worker | `safe-contract-catalog` | Deterministic generic MCP catalog contract | in progress | T02,T03,T04,T05,T06,T24 | `codex/ring-contract-catalog` / `/private/tmp/ring-contract-catalog` | `0e3c145` | Human chat can inspect exact upstream names, schemas, annotations, refresh state, and collisions without model invention | - | 2026-07-11 14:20 CEST | Implement and commit |
-| draft-F2 | Ticket worker | `safe-contract-approval` | Durable semantic standing-action approval | integrated to staging | T07–T13,T15,T23 | `codex/ring-contract-approval` / `dc968b9`; staging `35e7925` | `0e3c145` | Natural draft/approval/edit/cancel maps to one tenant/conversation-bound exact tool call without magic words | 143 focused pass; core 337 pass / 6 skipped | 2026-07-11 14:31 CEST | Combined integration tests |
-| draft-F3 | Ticket worker | `safe-contract-truth` | Universal evidence and receipt gate | in progress | T14,T16–T21,T24 | `codex/ring-contract-truth` / `/private/tmp/ring-contract-truth` | `0e3c145` | No zero-action or failed-action success claims; placeholders rejected; generic peer results remain authoritative | - | 2026-07-11 14:20 CEST | Implement and commit |
+| draft-F1 | Ticket worker | `safe-contract-catalog` | Deterministic generic MCP catalog contract | integrated and live-tested | T02,T03,T04,T05,T06,T24 | `b743353`; main through `4e09029` | `0e3c145` | Human chat can inspect exact upstream names, schemas, annotations, refresh state, and collisions without model invention | Calli 18 / Zenod 17 live; exact catalog/schema prompts pass | 2026-07-11 20:25 CEST | Done |
+| draft-F2 | Ticket worker | `safe-contract-approval` | Durable semantic standing-action approval | integrated and live-tested | T07–T13,T15,T23 | `a121ee7`, `7d8129e`, `885fc8a`, `eb0f095`; main through `4e09029` | `0e3c145` | Natural draft/approval/edit/cancel maps to one tenant/conversation-bound exact tool call without magic words | Natural held draft and conversational approval passed live; replay live blocked by provider quota after zero tools | 2026-07-11 20:25 CEST | Re-run live replay after Jordi replenishes/raises the OpenRouter key limit |
+| draft-F3 | Ticket worker | `safe-contract-truth` | Universal evidence and receipt gate | integrated and live-tested | T14,T16–T21,T24 | `b5ff620`, `4e09029`; main through `4e09029` | `0e3c145` | No zero-action or failed-action success claims; placeholders rejected; generic peer results remain authoritative | Canonical receipt only; approval-required result held; generic Zenod read grounded; 373 core pass / 6 skipped | 2026-07-11 20:25 CEST | Done |
 
 ## Branch And Integration
 
@@ -220,6 +220,12 @@ Stale assignment policy: after 30 minutes without a handoff or progress signal, 
 | 2026-07-11 | T01–T06 discovery/schema chat lane | `0e3c145` | live Ring web UI/chat, AlfaBlok | Ordinary catalog, refresh, schema, namespace, and skill-authority prompts | 2 pass / 2 fail / 2 blocked | `/tmp/ring-calli-t01-t06/`; live transcript preserved |
 | 2026-07-11 | T07–T15 mutation/receipt chat lane | `0e3c145` | live Ring web chat, AlfaBlok, Calli 18 tools, Grok 4.3 | Natural draft/approval/negation/receipt/deletion-boundary prompts | 3 pass / 5 fail / 1 blocked | Live transcript; canonical receipt `https://x.com/i/web/status/2075911694342148213` |
 | 2026-07-11 | T16–T24 fault/tenancy/generic chat lane | `0e3c145` | live Ring web chat, AlfaBlok | Zero-tool, failed-tool, placeholder, capability, and generic Zenod read prompts | 1 pass / 3 fail / 5 blocked | Live transcript and tester screenshot output |
+| 2026-07-11 | Generic safe-contract fix lap | `4e09029ac7634a818cadf3ecb285a32581d47eeb` | live Ring web chat, AlfaBlok | real discovery → natural held draft → conversational approval → canonical receipt | PASS; replay follow-up blocked before tools by OpenRouter total key limit | `docs/evidence/ring-calli-safe-contract-2026-07-11/TEST-PACKAGE.md` |
+| 2026-07-11 | Final automated contract | `4e09029ac7634a818cadf3ecb285a32581d47eeb` | local monorepo | core suite + workspace typecheck | 373 passed / 6 skipped; all typechecks passed | image workflow `29162997261` passed |
+
+### Post-fix retest rollup
+
+The earlier failure rollup below is retained as the before-state. On final live SHA `4e09029`, exact catalog/schema inspection, natural mutation routing, approval-required hold rendering, conversational approval, canonical receipt rendering, zero-tool truth gating, and a generic Zenod read all passed. The only unfinished live check in this lap is approval replay after success: the tenant OpenRouter key hit its hard total limit before tool selection. Host-level one-time approval consumption and nothing-pending replay remain covered by green deterministic tests; no additional public mutation or key-budget change was attempted.
 
 ### Result Rollup
 
@@ -279,6 +285,16 @@ Assignment identity: `/root`
 Branch / latest commit: `main` / `0e3c145`
 Last verified: 2026-07-11 14:13 CEST
 Links: `https://x.com/ZenodAgent/status/2075911694342148213`, `/tmp/ring-calli-t01-t06/`
+
+### 2026-07-11 - fix lap complete - generic safe contract live
+
+Context: Three agent lanes were integrated as generic host boundaries, followed by two root live-fix laps. Ring now discovers real MCP catalogs, safely degrades oversized optional schemas per tool, binds natural mutation intent to the discovered operation family, retains tenant-local exact standing actions, renders approval-required results as held/unpublished, and emits success only from validated same-turn receipts.
+Next: Jordi may replenish or raise the existing OpenRouter key limit, then rerun only the post-success replay prompt. Do not create a new post; reuse the existing canonical text/ledger receipt.
+Risks: The provider key hard limit currently prevents further model turns. Ring surfaced that provider failure without a tool call or fabricated send.
+Assignment identity: `/root`
+Branch / latest commit: `main` / `4e09029`
+Last verified: 2026-07-11 20:25 CEST
+Links: `docs/evidence/ring-calli-safe-contract-2026-07-11/TEST-PACKAGE.md`, `https://x.com/i/web/status/2075911694342148213`
 
 ## Open Questions
 
