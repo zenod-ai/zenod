@@ -1,4 +1,5 @@
 import type { PeerConfig } from "./peerClient.js";
+import { validateWalletUrl } from "./walletUrl.js";
 
 /** UUID pattern — what z2 returns for queued task jobs. */
 function extractUuid(text: string): string | null {
@@ -57,8 +58,18 @@ export async function pollPeerJob(
     await new Promise<void>((r) => setTimeout(r, intervalMs));
 
     for (const peer of peers) {
+      const pollUrl = peerApiUrl(peer.url, jobId);
+      const hostname = new URL(pollUrl).hostname.toLowerCase().replace(/^\[|\]$/g, "");
       try {
-        const res = await fetch(peerApiUrl(peer.url, jobId), {
+        await validateWalletUrl(pollUrl, { allowHosts: peer.allowPrivateHost ? [hostname] : [] });
+      } catch (error) {
+        return {
+          status: "error",
+          error: `Peer job polling refused: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+      try {
+        const res = await fetch(pollUrl, {
           headers: { Authorization: `Bearer ${peer.token}` },
         });
         if (!res.ok) continue;
