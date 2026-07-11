@@ -3,9 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type Stripe from "stripe";
 import { createMemoryTenantStore } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { BrainEngine } from "zenod";
 import { CONSOLE_AGENT, RING_AGENT } from "../src/agent.js";
 import type { CustomerStripeClient } from "../src/customerBilling.js";
 import { createRingUnit } from "../src/ringUnit.js";
@@ -93,31 +96,39 @@ describe("Ring council unit", () => {
         panels: ["chat", "keys", "connections", "costs", "mcp"],
       });
 
+      const runtime = unit.runtimes.get("tenant-alpha");
+      expect(runtime).not.toBeNull();
+      runtime!.getEngine = async () => ({
+        async chat(message) {
+          return { text: `Council reply: ${message}`, sources: [] };
+        },
+      }) as BrainEngine;
+
       const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
         const started = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(started));
       });
       const address = server.address() as AddressInfo;
-      const initialize = await fetch(`http://127.0.0.1:${address.port}/mcp/alpha-token`, {
-        method: "POST",
-        headers: {
-          accept: "application/json, text/event-stream",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: {
-            protocolVersion: "2025-03-26",
-            capabilities: {},
-            clientInfo: { name: "ring-test", version: "1" },
-          },
-        }),
+      const transport = new StreamableHTTPClientTransport(
+        new URL(`http://127.0.0.1:${address.port}/mcp/alpha-token`),
+      );
+      const client = new Client({ name: "ring-external-test", version: "1" });
+      await client.connect(transport);
+      expect(client.getServerVersion()).toMatchObject({ name: "ring" });
+
+      const chat = await client.callTool({
+        name: "chat_with_ring",
+        arguments: { message: "is the council available?" },
       });
-      expect(initialize.status).toBe(200);
-      expect(await initialize.json()).toMatchObject({
-        result: { serverInfo: { name: "ring" } },
+      expect(chat.isError).not.toBe(true);
+      expect(chat.content).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: expect.stringContaining("Council reply: is the council available?") }),
+      ]));
+      expect(chat.structuredContent).toMatchObject({
+        status: "ok",
+        text: "Council reply: is the council available?",
+        evidence: [{ kind: "chat_audit", id: expect.stringMatching(/^test_/), conversationId: expect.any(String) }],
       });
+      await client.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     } finally {
       unit.close();
