@@ -1,5 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import {
   DisconnectReason,
   downloadContentFromMessage,
@@ -105,6 +106,15 @@ export interface SocketLike {
 }
 
 export type SocketFactory = (sessionDir: string) => Promise<SocketLike>;
+
+export interface WhatsAppPortedInbound {
+  event: WhatsAppInboundEvent;
+  text: string;
+  media?: { bytes: Buffer; mimeType: string | null; fileName: string | null };
+  transcription?: { provider?: string; failed?: { code: string; message: string } };
+}
+
+export type WhatsAppPortedInboundHandler = (input: WhatsAppPortedInbound) => Promise<{ replyText: string }>;
 
 function normalizedJid(value: unknown): string {
   if (!value) return "";
@@ -316,6 +326,7 @@ export class WhatsAppGateway {
       getEngine: () => Promise<BrainEngine>;
       recordAssistantMessage?: (event: WhatsAppInboundEvent, text: string) => Promise<void> | void;
       socketFactory?: SocketFactory;
+      portedInboundHandler?: WhatsAppPortedInboundHandler;
     },
   ) {}
 
@@ -645,6 +656,28 @@ export class WhatsAppGateway {
     return { sent: recipients.length, recipients };
   }
 
+  /** Ported provider send primitive used by Phylax's tenant-scoped MCP face. */
+  async sendText(recipient: string, text: string): Promise<{ sentMessageId: string }> {
+    const socket = this.socket;
+    if (!socket) throw new Error("WhatsApp is not connected");
+    const normalized = normalizeWhatsAppIdentifier(recipient);
+    if (!normalized || !text.trim()) throw new Error("WhatsApp recipient and text are required");
+    const jid = `${normalized}@s.whatsapp.net`;
+    const sent = await socket.sendMessage(jid, { text });
+    const sentMessageId = sent?.key?.id ?? null;
+    this.options.store.recordOutboundAudit({
+      messageId: `mcp-${randomUUID().replaceAll("-", "")}`,
+      chatId: jid,
+      contactId: jid,
+      bodyText: text,
+      status: sentMessageId ? "sent" : "failed",
+      sentMessageId,
+      raw: sent,
+    });
+    if (!sentMessageId) throw new Error("WhatsApp provider returned no delivery receipt");
+    return { sentMessageId };
+  }
+
   // Send a read receipt (blue ticks) for the inbound message. Uses ONLY the
   // real inbound key — never fabricate/rewrite remoteJid/participant, which is
   // what desynced @lid Signal sessions before. v7 addresses the receipt itself.
@@ -798,6 +831,11 @@ export class WhatsAppGateway {
 
     await this.markRead(event);
 
+    if (this.options.portedInboundHandler) {
+      await this.handlePortedInbound(event, settings);
+      return;
+    }
+
     if (event.hasMedia) {
       const isVoice = event.mediaType === "audio" || event.mediaType === "ptt";
       if (!isVoice) {
@@ -883,6 +921,44 @@ export class WhatsAppGateway {
       console.error(`[whatsapp] reply failed for ${event.messageId}: ${message}`);
     } finally {
       if (keepTyping) clearInterval(keepTyping);
+      await this.setTyping(event, false);
+    }
+  }
+
+  private async handlePortedInbound(event: WhatsAppInboundEvent, settings: WhatsAppSettings): Promise<void> {
+    const handler = this.options.portedInboundHandler!;
+    await this.setTyping(event, true);
+    try {
+      let text = event.body.trim();
+      let media: WhatsAppPortedInbound["media"];
+      let transcription: WhatsAppPortedInbound["transcription"];
+      if ((event.mediaType === "audio" || event.mediaType === "ptt") && event.mediaRaw) {
+        const stream = await downloadContentFromMessage(event.mediaRaw as never, "audio");
+        const data = await streamToBuffer(stream);
+        const filename = `${event.messageId}.${event.mimeType?.includes("mpeg") ? "mp3" : "ogg"}`;
+        media = { bytes: data, mimeType: event.mimeType ?? "audio/ogg", fileName: filename };
+        const result = await transcribeChannelAudio(this.options.settings, data, filename);
+        if (result.success && result.transcript?.trim()) {
+          text = result.transcript.trim();
+          transcription = { ...(result.provider ? { provider: result.provider } : {}) };
+          this.options.store.recordInboundTranscript(event.messageId, text);
+        } else {
+          transcription = {
+            ...(result.provider ? { provider: result.provider } : {}),
+            failed: { code: result.noSpeech ? "no_speech" : "unavailable", message: result.error ?? "transcription failed" },
+          };
+        }
+      }
+      this.options.store.markMessageStatus(event.messageId, "processing");
+      const forwarded = await handler({ event, text, ...(media ? { media } : {}), ...(transcription ? { transcription } : {}) });
+      if (!forwarded.replyText.trim()) throw new Error("tenant downstream returned no reply");
+      await this.sendReply(event, forwarded.replyText, "sent");
+      this.options.store.markMessageStatus(event.messageId, "replied");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.options.store.markMessageStatus(event.messageId, "failed");
+      await this.sendReply(event, `⚠️ ${message}`, "error").catch(() => {});
+    } finally {
       await this.setTyping(event, false);
     }
   }
