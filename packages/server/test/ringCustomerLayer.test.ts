@@ -88,6 +88,8 @@ describe("Ring customer-layer duplicate", () => {
       { product: "ring", unit: "ring", defaultDomain: "https://ring.zenod.dev" },
     );
     expect(checkoutInput()?.metadata).toMatchObject({ product: "ring", unit: "ring" });
+    expect(checkoutInput()?.client_reference_id).toBe("github-42");
+    expect(checkoutInput()?.line_items).toEqual([{ price: "price_monthly", quantity: 1 }]);
     expect(checkoutInput()?.success_url).toBe(
       "https://ring.zenod.dev/checkout/complete?session_id={CHECKOUT_SESSION_ID}",
     );
