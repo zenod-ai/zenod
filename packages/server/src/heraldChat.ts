@@ -295,6 +295,17 @@ export function createHeraldChatHandler(dependencies: HeraldChatDependencies) {
       }
     }
 
+    // The briefing approval crosses a real asynchronous Zenod filing boundary.
+    // A client retry after that commit must be idempotent and must never fall
+    // through to the board-selection parser just because the briefing is now
+    // approved.
+    if (message === EXACT_BRIEFING_APPROVAL) {
+      return {
+        handled: true,
+        text: `Briefing v${approved.version} is already approved; nothing changed.`,
+      };
+    }
+
     if (!message.startsWith("✓")) return { handled: false };
     const proposals = dependencies.listProposed(tenantId);
     if (proposals.length === 0) {

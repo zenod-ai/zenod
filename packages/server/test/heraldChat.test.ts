@@ -113,6 +113,10 @@ describe("Herald briefing chat", () => {
       });
       expect(store.getBriefingDraft("alpha")).toBeNull();
       expect(store.listFilings("alpha")).toEqual([expect.objectContaining({ kind: "briefing", commitReceipt: expect.stringContaining("abc1234") })]);
+
+      const retried = await handle({ tenantId: "alpha", text: "✓ approve briefing" });
+      expect(retried.text).toContain("Briefing v1 is already approved; nothing changed");
+      expect(fileToMemory).toHaveBeenCalledOnce();
     } finally {
       store.close();
     }
