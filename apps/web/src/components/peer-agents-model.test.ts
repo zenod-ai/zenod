@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   isCurrentOperation,
+  isPeerToolsReady,
   nextOperationGeneration,
   peerFromResponse,
   replacePeer,
@@ -52,6 +53,8 @@ describe("peer wallet UI model", () => {
       "calli__search_chats",
     ])
     expect(JSON.stringify(ready)).not.toContain("ask_calli")
+    expect(isPeerToolsReady(empty)).toBe(false)
+    expect(isPeerToolsReady(ready)).toBe(true)
   })
 
   it("ignores an older per-peer response after a newer operation starts", () => {

@@ -35,7 +35,8 @@ import {
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import type { Peer } from "@/components/peer-agents-model"
+import { isPeerToolsReady, type Peer } from "@/components/peer-agents-model"
+import { ringPeerStatus } from "@/components/ring-control-surface-model"
 
 type TeamAgent = {
   name: string
@@ -174,22 +175,6 @@ function healthUrlForPeer(peer: Peer | undefined): string | null {
   }
 }
 
-function peerStatus(
-  peer: Peer | undefined,
-  teamAgent: TeamAgent | undefined
-): SurfaceStatus {
-  if (peer && !peer.hasToken) return "missing-token"
-  if (peer?.transportStatus === "error" || peer?.toolsStatus === "error")
-    return "unhealthy"
-  if (
-    peer?.transportStatus === "connected" &&
-    peer.toolsStatus === "ready"
-  )
-    return "connected"
-  if (teamAgent?.enabled) return "disconnected"
-  return "disabled"
-}
-
 function channelStatus(
   enabled: boolean,
   state: "disabled" | "disconnected" | "pairing" | "connected" | "error" | undefined,
@@ -262,7 +247,7 @@ function ProductRow({
   test: TestState | undefined
   onTest: (product: ProductDefinition) => void
 }) {
-  const status = test?.status === "error" ? "unhealthy" : peerStatus(peer, teamAgent)
+  const status = test?.status === "error" ? "unhealthy" : ringPeerStatus(peer, teamAgent?.enabled ?? false)
   const settingsUrl = settingsUrlForPeer(peer)
   const healthUrl = healthUrlForPeer(peer)
   const canTest = status === "connected"
@@ -505,7 +490,9 @@ export function RingControlSurface({ enabled }: { enabled: boolean }) {
     peer: peersByName.get(product.peerName),
     teamAgent: teamByName.get(product.peerName),
   }))
-  const connectedProducts = productRows.filter(({ peer }) => peer?.hasToken).length
+  const connectedProducts = productRows.filter(({ peer }) =>
+    isPeerToolsReady(peer)
+  ).length
   const whatsappStatus = channelStatus(
     snapshot.whatsapp?.enabled ?? false,
     snapshot.whatsapp?.state,
@@ -549,7 +536,7 @@ export function RingControlSurface({ enabled }: { enabled: boolean }) {
             <Stat
               label="Products"
               value={`${connectedProducts}/${PRODUCT_DEFINITIONS.length}`}
-              hint="Connected MCP servers with tokens"
+              hint="Tools-ready MCP servers"
             />
             <Stat
               label="Default route"

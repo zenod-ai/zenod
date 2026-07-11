@@ -50,6 +50,15 @@ export function peerFromResponse(
   return peers.find((peer) => peer.name === name)
 }
 
+export function isPeerToolsReady(peer: Peer | undefined): boolean {
+  return Boolean(
+    peer?.hasToken &&
+    peer.transportStatus === "connected" &&
+    peer.toolsStatus === "ready" &&
+    peer.toolCount > 0
+  )
+}
+
 export function replacePeer(peers: Peer[], replacement: Peer): Peer[] {
   return peers.map((peer) =>
     peer.name === replacement.name ? replacement : peer

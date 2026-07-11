@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import {
   isCurrentOperation,
+  isPeerToolsReady,
   nextOperationGeneration,
   peerFromResponse,
   replacePeer,
@@ -97,11 +98,7 @@ export function PeerAgents() {
       setName("")
       setUrl("")
       setToken("")
-      if (
-        added?.transportStatus === "connected" &&
-        added.toolsStatus === "ready" &&
-        added.toolCount > 0
-      ) {
+      if (added && isPeerToolsReady(added)) {
         toast.success(`Unit "${added.name}" tools ready`, {
           description: `${added.toolCount} discovered ${added.toolCount === 1 ? "tool" : "tools"}.`,
         })
