@@ -1,6 +1,6 @@
 # EPIC 5 · Herald Sprint — duplicate the Ring, give it an agenda
 
-Status: active — dispatch-ready (Jordi, 2026-07-11)
+Status: active — H-S5 paused during final live walk (Jordi, 2026-07-11)
 Created: 2026-07-11
 Updated: 2026-07-11
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Herald delivery manager
 Steward since: 2026-07-11T19:50:29+02:00
-Last reconciled commit: `cfc13e2eed1c4cefb069e76d6334d3ddc8ca9e3f`
+Last reconciled commit: `17e3f30319371fbc4750c8790ff4ce1f45377dea`
 Planner: Jordi + Epic 3.0 planner
 Worker: Herald delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -89,12 +89,14 @@ HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Ca
 
 ## Current State
 
-Phase: Wave 2 dispatch
-Last verified: 2026-07-11T20:07:57+02:00
+Phase: H-S5 live journey — paused by Jordi during the final clean lap
+Last verified: 2026-07-11T21:47:58+02:00
 Integration target: main
 Fresh base commit: `bf366b5939492af1417814bfae1daf30006b3cf4` — pinned from `origin/main` at dispatch (D19c); no rebases until the journey passes
-Next action: dispatch H-S3 and H-S4 in parallel from integrated Wave 1 commit `cfc13e2`, then monitor 30-minute heartbeats and 90-minute budgets.
-Blockers: none. Ring is shipped (the duplicate source), Calli is shipped (the mouth), Zenod is live (the memory). Wallet tokens for the manager's laps are minted from those units' own dashboards during the walk — no input from Jordi required.
+Live deployment: `https://herald.zenod.dev/` is serving exact commit `17e3f30319371fbc4750c8790ff4ce1f45377dea`; CI and image publication passed.
+Paused point: tenant one is paid and authenticated; the duplicated wallet contains live Zenod + Calli tenants; Calli is connected to `@ZenodAgent`; the corrected active test model key is stored; Herald loop/chat state was reset for the final uninterrupted lap. The final lap had re-verified the logged-out landing and GitHub return and was entering the dashboard when Jordi paused it. Existing screenshots cover steps 1–7, but they are partial-lap evidence and do not yet constitute SHIP.
+Next action on resume: restart H-S5 at step 1, walk steps 1–12 without interruption, delete test posts after permalink capture, then write the test package. Do not resume from the paused browser step because Definition Of Done requires a clean pass from step 1.
+Blockers: none requiring Jordi. The first Ring test OpenRouter key reached its provider-side total limit; under H-D15 the manager rotated Herald to an already-custodied, active test OpenRouter key from the live Zenod tenant without minting a key or requesting credentials.
 
 ## Role Goals
 
@@ -161,9 +163,9 @@ Pre-answered — the planner is asleep.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | [#897](https://github.com/zenod-ai/zenod/issues/897) | Ticket worker | H-S1-worker | H-S1 front duplicate (landing, pricing, billing, domain) | DUPLICATE from ring | done | pinned base | 1 | [#900](https://github.com/zenod-ai/zenod/pull/900) / `codex/h-s1-front-duplicate` | `bf366b5` | CI + manager review; merged `f7b10b0` | 2026-07-11T20:07:57+02:00 | integrated |
 | [#895](https://github.com/zenod-ai/zenod/issues/895) | Ticket worker | H-S2-worker | H-S2 loop organ (scheduler + boards + briefing store + no-briefing-no-fire gate) | BUILD (verified absent everywhere) | done | pinned base | 1 | [#901](https://github.com/zenod-ai/zenod/pull/901) / `codex/h-s2-loop-organ` | `bf366b5` | 685 server tests + manager integration tests; merged `cfc13e2` | 2026-07-11T20:07:57+02:00 | integrated |
-| [#898](https://github.com/zenod-ai/zenod/issues/898) | Ticket worker | H-S3-worker | H-S3 briefing setup mode + ✓ parsing + filings via wallet | BUILD on PORTed ring chat | dispatched | H-S1, H-S2 | 2 | `codex/h-s3-briefing-chat` | `cfc13e2` | Wave 1 integrated; worker dispatching | 2026-07-11T20:07:57+02:00 | create worktree, implement, validate, PR |
-| [#899](https://github.com/zenod-ai/zenod/issues/899) | Ticket worker | H-S4-worker | H-S4 proposer/poster lanes + Board & Briefing dashboard panels + Run now | BUILD on DUPLICATEd wallet/dashboard | dispatched | H-S1, H-S2 | 2 | `codex/h-s4-loop-lanes-dashboard` | `cfc13e2` | Wave 1 integrated; worker dispatching | 2026-07-11T20:07:57+02:00 | create worktree, implement, validate, PR |
-| [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | blocked by H-S1..4 | H-S1..4 | last | `main` | freeze after H-S1..4 | issue minted | 2026-07-11T19:50:29+02:00 | integrate, deploy, walk live journey |
+| [#898](https://github.com/zenod-ai/zenod/issues/898) | Ticket worker | H-S3-worker | H-S3 briefing setup mode + ✓ parsing + filings via wallet | BUILD on PORTed ring chat | done | H-S1, H-S2 | 2 | [#902](https://github.com/zenod-ai/zenod/pull/902) / `codex/h-s3-briefing-chat` | `cfc13e2` | CI + 13 focused tests; merged `ea005cb` | 2026-07-11T20:42:28+02:00 | integrated |
+| [#899](https://github.com/zenod-ai/zenod/issues/899) | Ticket worker | H-S4-worker | H-S4 proposer/poster lanes + Board & Briefing dashboard panels + Run now | BUILD on DUPLICATEd wallet/dashboard | done | H-S1, H-S2 | 2 | [#903](https://github.com/zenod-ai/zenod/pull/903) / `codex/h-s4-loop-lanes-dashboard` | `cfc13e2` | CI + 699 server tests + web/build/typecheck; merged `7d9dad1`; chat seam fixed `0820167` | 2026-07-11T20:42:28+02:00 | integrated |
+| [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | paused | H-S1..4 | last | `main` | `17e3f30` live | 709 server tests + typecheck; CI + image publish pass; live screenshots through briefing receipt are partial-lap only | 2026-07-11T21:47:58+02:00 | on resume restart the real-browser walk at step 1 |
 
 Budgets: 90 min per ticket; manager reassigns anything silent past budget. Heartbeat every 30 min: `lap/state | blocker | ETA`.
 
@@ -196,9 +198,27 @@ None permitted. Anything that surfaces: H-D15 — simplest option, journal it, k
 
 | Date | Scope | Commit | Surface | Method | Result | Evidence |
 |---|---|---|---|---|---|---|
-| - | - | - | - | - | - | journey screenshots land here |
+| 2026-07-11 | Integrated Herald implementation + H-S5 retry fix | `17e3f30319371fbc4750c8790ff4ce1f45377dea` | local + GitHub Actions | 709 server tests, server typecheck, CI, runtime image boot smoke and publish | pass | [CI](https://github.com/zenod-ai/zenod/actions/runs/29165148248), [image](https://github.com/zenod-ai/zenod/actions/runs/29165148267) |
+| 2026-07-11 | Live deployment identity | `17e3f30319371fbc4750c8790ff4ce1f45377dea` | `https://herald.zenod.dev/` | `/api/health` exact-SHA check | pass | live endpoint |
+| 2026-07-11 | H-S5 partial browser laps | `17e3f30319371fbc4750c8790ff4ce1f45377dea` | live Chrome session | landing, pricing, GitHub, Stripe TEST, dashboard/wallet, no-briefing refusal, briefing + Zenod commit receipt | partial — not SHIP; final uninterrupted pass still required | local-only `docs/evidence/herald-ship-2026-07-11/`; redact credential-bearing wallet URLs before committing any image |
 
 ## Handoff Journal
+
+### 2026-07-11T21:47:58+02:00 — Herald delivery manager — H-S5 paused by Jordi
+
+Context: Herald is live at `https://herald.zenod.dev/` on exact commit `17e3f30319371fbc4750c8790ff4ce1f45377dea`; both CI and runtime image publication passed. Dokploy was provisioned as app `herald` with persistent `herald-data`; platform queue starvation prevented the normal first deployment record, so the manager recovered the one Herald Swarm service without touching other services. The published image tag is the workflow's short-SHA form (`sha-17e3f30`).
+
+Live laps exposed two bounded defects/states. First, a retried exact `✓ approve briefing` could fall through to proposal approval after the asynchronous Zenod filing completed. Commit `17e3f30` makes that retry idempotent and adds regression coverage; the full server suite passed 709/709. Second, the first imported Ring credential was initially the whole custody envelope and, after extracting its value correctly, OpenRouter reported that key's total limit was exhausted. The manager corrected the shape, then used H-D15 to rotate Herald to the already-custodied active test OpenRouter key used by the live Zenod tenant. No key was minted and no credential was requested from Jordi.
+
+Verified live before pause: logged-out landing; three-option pricing; GitHub return; Stripe TEST monthly checkout; duplicated chat/wallet/customer dashboard; live Zenod and Calli wallet catalogs; Calli connected to `@ZenodAgent`; loud scheduler refusal before briefing; five-field briefing interview; exact ✓ approval; Zenod evidence/page/commit receipt. Screenshots `01`–`07` exist locally under `docs/evidence/herald-ship-2026-07-11/`, but they span partial laps and are not the Definition Of Done package. They remain uncommitted because the wallet screenshot exposes a token-bearing MCP URL and must be redacted or recaptured before publication. For the final lap the manager reset tenant-one Herald loop/chat state while preserving the paid account, wallet, and corrected model key. The lap had reached the authenticated return and dashboard transition when Jordi requested a pause.
+
+Next: on explicit resume, start again from step 1 and complete one uninterrupted steps 1–12 pass. Remaining proof is live substantiated proposals, `✓ 1,3`, separate `publish approved`, Calli permalink receipts, deletion of test posts, shaped next wake, persistence, second-tenant isolation, and the final test package.
+
+### 2026-07-11T20:42:28+02:00 — Herald delivery manager — Wave 2 integrated; H-S5 frozen
+
+Context: H-S3 passed CI and merged as `ea005cb`, adding the ported chat's briefing interview, exact ✓ gate, current-list approval parser, and verified Zenod filing seam. H-S4 passed CI and merged as `7d9dad1`, adding the cited proposer, C-22 poster, Board/Briefing dashboard, Run now, and four Herald MCP tools. Manager integration commit `082016755403f2efcbd8d9995bec732ba05be406` binds those seams into the duplicated chat without replacing its normal path and preserves a visible approved state until the exact `publish approved` command. Integrated validation: server typecheck; 26 Herald loop/chat/lane/unit tests; 28 web tests; server, web, and Herald-site production builds. Changed web files pass focused ESLint; the workspace-wide web lint remains red only on pre-existing settings-file rules outside this epic's diff.
+Decision under H-D15: SHIP step 9's simplest explicit chat phrase is `publish approved`; it invokes the poster-only path after step 8's `✓` decision so the approved board state remains observable before publication.
+Next: deploy frozen `0820167` to the one Herald app, then manager performs H-S5 on the live public surface, fixing only the first breakage per lap and restarting at step 1.
 
 ### 2026-07-11T20:07:57+02:00 — Herald delivery manager — Wave 1 integrated; Wave 2 pinned
 
