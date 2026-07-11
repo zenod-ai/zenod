@@ -102,15 +102,19 @@ describe("PhylaxChannelsOrgan", () => {
     expect(existsSync(join(phylaxWhatsAppPaths(dataDir).artifacts, "alpha"))).toBe(true);
 
     fail = true;
-    const degraded = await organ.receive({
-      channel: "whatsapp",
-      sender: "34611111111",
-      chatId: "chat",
-      media: { bytes: Buffer.from("ogg2"), fileName: "voice2.ogg", mimeType: "audio/ogg" },
-    });
+    const degraded = await Promise.race([
+      organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat",
+        media: { bytes: Buffer.from("ogg2"), fileName: "voice2.ogg", mimeType: "audio/ogg" },
+      }),
+      new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("D18 failure path queued")), 250)),
+    ]);
     expect(degraded.handoff).toMatchObject({ transcription_failed: { code: "unavailable", message: "provider offline" } });
     expect(calls).toHaveLength(2);
     expect(calls[1].arguments.message).toContain("transcription_failed");
+    expect(calls[1].route.tenantId).toBe("alpha");
   });
 
   it("uses only the fresh Phylax-owned /data/whatsapp shape", () => {

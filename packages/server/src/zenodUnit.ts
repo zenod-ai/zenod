@@ -149,6 +149,8 @@ function registerZenodTools(
 
 export interface CreateZenodUnitOptions {
   dataDir?: string;
+  /** Reuse one storage owner when a composed unit must build adapters first. */
+  storage?: ChassisStorage;
   webDist?: string;
   siteDist?: string;
   tenantStore?: TenantProvisioningStore;
@@ -162,6 +164,9 @@ export interface CreateZenodUnitOptions {
   defaultTenantName?: string;
   panels?: string[];
   customerProduct?: CustomerProductConfig;
+  /** Register unit-specific tools on the same instrumented MCP server. */
+  registerAdditionalTools?: (server: McpServer, context: UnitContext) => void;
+  additionalReadTools?: readonly string[];
   customerAdmin?: {
     githubLogin: string;
     mountRoutes?: (app: Hono<{ Bindings: HttpBindings }>) => void;
@@ -191,7 +196,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const env = options.env ?? process.env;
   const agent = options.agent ?? ZENOD_AGENT;
   const unitName = options.unitName ?? "zenod";
-  const storage = new ChassisStorage({
+  const storage = options.storage ?? new ChassisStorage({
     dataDir: options.dataDir,
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
   });
@@ -207,7 +212,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     name: unitName,
     version: VERSION,
     conduct: {
-      toolKinds: { read: ZENOD_READ_TOOLS },
+      toolKinds: { read: [...ZENOD_READ_TOOLS, ...(options.additionalReadTools ?? [])] },
       longTools: ZENOD_LONG_TOOLS,
     },
     tenantAuth: { store: tenantStore },
@@ -244,6 +249,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
     tools(server, context) {
       registerZenodTools(server, runtimes.forContext(context), agent);
+      options.registerAdditionalTools?.(server, context);
     },
     routes(routes) {
       routes.all("/api/*", async (c, next) => {
