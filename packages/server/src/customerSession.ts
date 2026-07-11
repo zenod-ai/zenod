@@ -51,6 +51,9 @@ export function clearCustomerSession(c: Context, env: NodeJS.ProcessEnv = proces
     path: "/",
     domain: cookieDomain,
   });
+  if (cookieDomain !== ".zenod.dev") {
+    deleteCookie(c, CUSTOMER_SESSION_COOKIE, { path: "/", domain: ".zenod.dev" });
+  }
 }
 
 export function readCustomerSession(c: Context, env: NodeJS.ProcessEnv = process.env): CustomerSession | null {
