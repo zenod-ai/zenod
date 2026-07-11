@@ -6,9 +6,9 @@ Deployed immutable commit: `fde458fa50818b9b125572d01fa4eb613f7f867c` (`/api/hea
 
 ## Result
 
-The live journey is **not yet SHIP**. Steps 1–6 and the wallet-connect portion of 7 passed. Step 7 routed `remember this: the ring is alive` to the connected Zenod, but the UI remained at “Saving to Zenod’s memory” and did not show a commit receipt within the required 180 seconds. The final allowed fix lap was already consumed, so this package freezes the evidence instead of inventing another implementation lap.
+The live journey is **not yet SHIP**. Jordi authorized one additional receipt-only fix lap. The resulting exact build `a729d08304ef49412e72fe5739fb3b51762721d2` passed CI, guarded deployment, SHIP 8 external MCP chat, logout/login persistence, and two-tenant isolation. SHIP 7 still failed: `remember this: the ring is alive` held the Council UI for the complete polling window, then returned “queued … I'll confirm once it's filed” without the required Zenod commit SHA/URL.
 
-Step 8's external MCP transport and read-only tool call passed. Its mutating `chat_with_ring` call reached Ring but was rejected by the receipt middleware as `silent_ack` because the successful result supplied neither `evidence[]` nor a structured error; therefore the required council reply did not pass. Step 9 persistence and live two-tenant wallet/key isolation passed.
+The authorized lap fixed SHIP 8: external `initialize` returned Ring `0.0.1`, and `chat_with_ring` returned HTTP 200, `isError=false`, a Council reply, and correlation-backed `chat_audit` evidence. Step 9 persistence and live two-tenant wallet/key isolation passed again on the same build.
 
 ## Journey ledger
 
@@ -23,6 +23,26 @@ Step 8's external MCP transport and read-only tool call passed. Its mutating `ch
 | 8 external MCP face | PARTIAL | initialize returned Ring server info and `read_llm_timeline` returned HTTP 200; mutating chat returned `silent_ack`; `08-ring-mcp-external.png` is the live Ring endpoint/usage reference |
 | 9 logout/login persistence | PASS | `09-relogin-persistence.png` |
 | 9 two-tenant isolation | PASS | `10-two-tenant-isolation-alpha.png` plus the redacted live API proof below |
+| Authorized-lap SHIP 7 | FAIL | `11-authorized-lap-receipt-timeout.png`; no commit receipt after the full polling window |
+| Authorized-lap SHIP 8 | PASS | `12-external-mcp-chat-pass.png`; external response recorded below |
+| Authorized-lap SHIP 9 persistence | PASS | `13-authorized-lap-relogin.png` |
+| Authorized-lap SHIP 9 isolation | PASS | `14-authorized-lap-isolation-alpha.png` plus redacted API proof below |
+
+## Authorized-lap external MCP proof
+
+```json
+{
+  "initialize": {
+    "status": 200,
+    "server": { "name": "ring", "version": "0.0.1" }
+  },
+  "chat": {
+    "status": 200,
+    "isError": false,
+    "evidence": [{ "kind": "chat_audit", "conversationId": "mcp:ring-ship-final-a729d08" }]
+  }
+}
+```
 
 ## Live two-tenant proof
 
@@ -32,7 +52,7 @@ Two bearer-authenticated tenants queried the same exact deployment. A tenant-B r
 {
   "alpha": {
     "status": [200, 200],
-    "peerNames": ["Zenod"],
+    "peerNames": ["Zenod", "Calli"],
     "provider": "openrouter"
   },
   "beta_cross_query": {
@@ -47,13 +67,13 @@ Two bearer-authenticated tenants queried the same exact deployment. A tenant-B r
 
 ## Automated and deployment evidence
 
-- PR #853 final fix CI: PASS.
-- Publish-image workflow for `fde458f`: PASS.
-- Guarded Dokploy cutover receipt: `/var/tmp/r-s5-cutover-fde458f/health-receipt.json`.
+- PR #856 and #857 CI: PASS; independent receipt/security review: PASS after per-poll wallet SSRF validation was added.
+- Publish-image workflow for `a729d08`: PASS.
+- Guarded Dokploy cutover receipt: `/var/tmp/r-s5-cutover-a729d08/health-receipt.json`.
 - Live routes: `/` 200, `/app` 200, `/healthz` 200, `/api/health` exact SHA, unauthenticated `/mcp` 401.
 - External MCP initialize: HTTP 200, protocol `2025-03-26`, server `ring` `0.0.1`.
 - External read-only tool call: HTTP 200 with Ring's OpenRouter usage timeline.
 
 ## BLOCKED ON JORDI
 
-Authorize one additional fix lap for the two related acceptance failures: surface the downstream Zenod async commit receipt in Council chat, and make `chat_with_ring` return receipt-middleware-compliant evidence so an external client receives the council reply.
+The authorized additional lap is exhausted. Decide whether to authorize another focused diagnosis/fix lap for the remaining live Zenod async receipt timeout, or stop Ring SHIP here.
