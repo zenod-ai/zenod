@@ -84,12 +84,12 @@ HARDEN (after Jordi approves SHIP): multiple units in the wallet exercised end-t
 
 ## Current State
 
-Phase: R-S5 blocked at live receipt gate
-Last verified: 2026-07-11T04:01:00+02:00
+Phase: R-S5 authorized receipt fix lap
+Last verified: 2026-07-11T04:10:00+02:00
 Integration target: main
 Fresh base commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92` — PINNED; no rebases until the journey passes (D19c)
-Next action: BLOCKED ON JORDI — authorize one additional fix lap for the downstream commit-receipt and MCP `silent_ack` seams.
-Blockers: SHIP 7 did not surface the Zenod commit receipt within 180 seconds; SHIP 8 mutating chat returned receipt-middleware `silent_ack`. Final allowed fix lap is exhausted.
+Next action: integrate the two authorized receipt-only fixes, freeze one exact SHA, deploy, and rerun SHIP 7–10.
+Blockers: none — Jordi authorized exactly one additional fix lap on 2026-07-11.
 
 ## Role Goals
 
@@ -144,6 +144,8 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#838](https://github.com/zenod-ai/zenod/issues/838) | Ticket worker | R-S3-worker | R-S3 wallet (peers surface → per-tenant unit wallet) | done | #837, #836 done | [#850](https://github.com/zenod-ai/zenod/pull/850) / `codex/r-s3-wallet` | `4ed9440` | SHIP 7 | CI green; 46 focused tests; merged `9e5862c` | 2026-07-11T02:46:31+02:00 | integrated |
 | [#839](https://github.com/zenod-ai/zenod/issues/839) | Ticket worker | R-S4-worker | R-S4 billing + domain (duplicate recipe) | done | #837 done | [#849](https://github.com/zenod-ai/zenod/pull/849) / `codex/r-s4-billing-domain` | `4ed9440` | SHIP 2, 4 live | CI green; guarded runbook/script; merged `6352ee1` | 2026-07-11T02:46:31+02:00 | integrated; manager cutover |
 | [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | blocked | #837, #836, #838, #839 done | `main` / manager journey; fixes [#852](https://github.com/zenod-ai/zenod/pull/852), [#853](https://github.com/zenod-ai/zenod/pull/853) | `fde458f` live | SHIP 1–10 | steps 1–6 pass; 7 wallet pass/receipt fail; 8 initialize/read pass/chat `silent_ack`; 9 persistence+isolation pass | 2026-07-11T04:01:00+02:00 | BLOCKED ON JORDI: authorize one additional fix lap |
+| [#854](https://github.com/zenod-ai/zenod/issues/854) | Ticket worker | R-S5a-worker | Surface downstream Zenod commit receipt in Council chat | in progress | #840 | `codex/r-s5a-zenod-receipt` / `../wt-r-s5a` | `527023c` | SHIP 7 receipt within 180s | authorized fix lap dispatched | 2026-07-11T04:10:00+02:00 | targeted fix + tests + PR |
+| [#855](https://github.com/zenod-ai/zenod/issues/855) | Ticket worker | R-S5b-worker | Make `chat_with_ring` satisfy conduct-kit receipt gate | in progress | #840 | `codex/r-s5b-mcp-receipt` / `../wt-r-s5b` | `527023c` | SHIP 8 external chat reply | authorized fix lap dispatched | 2026-07-11T04:10:00+02:00 | targeted fix + tests + PR |
 
 ## Branch And Integration
 
@@ -185,6 +187,11 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | SHIP live gate | `fde458f` | ring.zenod.dev live | real Chrome walk, external MCP client, two bearer-authenticated tenants | BLOCKED: SHIP 7 receipt missing after 180s; SHIP 8 mutating call `silent_ack`; all other gates pass | `docs/evidence/ring-ship-2026-07-11/TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T04:10:00+02:00 - Ring delivery manager - One additional receipt fix lap authorized
+
+Context: Jordi answered “go for it,” authorizing exactly the requested additional lap without changing acceptance or broader scope. The manager split the two independent receipt seams into #854 (`codex/r-s5a-zenod-receipt`, `../wt-r-s5a`) and #855 (`codex/r-s5b-mcp-receipt`, `../wt-r-s5b`), both pinned to `527023c` and dispatched in parallel.
+Next: merge only targeted passing fixes, deploy one frozen exact SHA, and rerun SHIP 7–10 on `ring.zenod.dev`.
 
 ### 2026-07-11T04:01:00+02:00 - Ring delivery manager - Live gate frozen; final fix budget exhausted
 
