@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Night-sprint delivery manager (bind on dispatch)
 Steward since: 2026-07-10T20:19:03+02:00
-Last reconciled commit: 35f7cd8cb300b772e5ffca6dec70d37eef5752c1
+Last reconciled commit: 171af1f716b19faadb8cacce304901d061fae07b
 Planner: Jordi + Epic 3.0 planner
 Worker: Night-sprint delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -78,12 +78,13 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 
 ## Current State
 
-Phase: shipped - clean live journey complete
-Last verified: 2026-07-10T23:16:00+02:00
+Phase: shipped; memory acceptance Iteration 1 targeted remediation complete (3/3 live replays pass)
+Last verified: 2026-07-11T03:03:00+02:00
 Integration target: main
+Live Zenod MT artifact: `ghcr.io/zenod-ai/zenod:sha-6352ee1` (`6352ee18059e525818829f754f2a557a1023b56d`)
 Wave 1 base commit: `2632e8f68122a7e05a178020bb0601813de36704` — pinned; no rebases were performed (D19c)
 Wave 2 base commit: `43a38a0b551e13d9205455bf09e740fa745799b9` — integrated wave 1, pinned
-Next action: Jordi tests the shipped journey from `https://zenod.dev/`.
+Next action: keep the shipped journey stable; plan Iteration 2 for the two untargeted memory-test failures (marker-scoped broad isolation and distractor response completeness) and separately service [#835](https://github.com/zenod-ai/zenod/issues/835).
 Blockers: none — every decision is pre-answered below. Inputs from Jordi are non-blocking (decision rules given).
 
 ## Role Goals
@@ -146,6 +147,15 @@ Every decision pre-answered; the manager invents nothing:
 | [#804](https://github.com/zenod-ai/zenod/issues/804) | Ticket worker | Z-N3-worker / Archimedes | Z-N3 adapt transplanted Stripe billing to local tenant rows | done | [#806](https://github.com/zenod-ai/zenod/issues/806) done | [#813](https://github.com/zenod-ai/zenod/pull/813) / `codex/z-n3-billing` | `43a38a0` | Journey steps 4, 7b | merged `1e76bde`; live TEST checkout inserted tenant | 2026-07-10T23:16:00+02:00 | integrated |
 | [#803](https://github.com/zenod-ai/zenod/issues/803) | Ticket worker | Z-N5-worker / Turing | Z-N5 one domain family; re-mint MCP URLs; 301 mind host | done | domain rule resolved | [#812](https://github.com/zenod-ai/zenod/pull/812) / `codex/z-n5-domain` | `43a38a0` | One container serves 1–7; cloud runs nothing | cloud canonical; retired hosts 404; mind path-preserving 301 | 2026-07-10T23:16:00+02:00 | integrated |
 | [#805](https://github.com/zenod-ai/zenod/issues/805) | Epic worker | Night-sprint delivery manager | Z-N6 journey loop to one clean pass + morning package | done | Z-N3, Z-N5 | [#814](https://github.com/zenod-ai/zenod/pull/814), [#815](https://github.com/zenod-ai/zenod/pull/815), [#816](https://github.com/zenod-ai/zenod/pull/816), [#817](https://github.com/zenod-ai/zenod/pull/817) | `43a38a0` | SHIP items 1–8 | uninterrupted Chrome pass on `35f7cd8`; seven screenshots; MCP initialize + tool call | 2026-07-10T23:16:00+02:00 | morning package |
+| [#828](https://github.com/zenod-ai/zenod/pull/828) | Ticket worker | Async receipt fix | Preserve accepted receipts for async MCP tools | done | shipped MT | [#828](https://github.com/zenod-ai/zenod/pull/828) | `6708d5f` | `store_memory`/`ingest_memory`/`task_brain`/`run_task` return accepted ticket contracts | merged `95f9370`; live `F5 banana receipt-fix` stored once and found | 2026-07-11T02:05:00+02:00 | integrated |
+| [#831](https://github.com/zenod-ai/zenod/issues/831) | Tester | Iteration 1 steward | Human-like Zenod MT memory acceptance battery | testing | shipped MT | reports [#832](https://github.com/zenod-ai/zenod/issues/832), [#833](https://github.com/zenod-ai/zenod/issues/833), [#834](https://github.com/zenod-ai/zenod/issues/834) | `95f9370` | write, narrow/broad recall, synthesis, correction, distractors, unknowns, citations | baseline 12 PASS / 5 FAIL; targeted remediation 3/3 PASS on `6352ee1` | 2026-07-11T03:03:00+02:00 | Iteration 2 for two residual failures |
+| [#832](https://github.com/zenod-ai/zenod/issues/832) | Tester | Harvey | L1 durable write + narrow retrieval | test complete / open | #831 | evidence comment | `95f9370` | receipt, terminal write, exact/narrow retrieval, readback, once-only | core 6/6; supplemental multi-term ranking failed, then passed after #843 | 2026-07-11T03:03:00+02:00 | close with parent or carry to Iteration 2 |
+| [#833](https://github.com/zenod-ai/zenod/issues/833) | Tester | Bohr | L2 paraphrase, broad recall, synthesis | partial / open | #831 | evidence comment | `95f9370` | human narrow + broad, marker scope, synthesis | baseline 2/5; human narrow and broad grounding targets now pass; marker-scoped broad isolation remains unrerun | 2026-07-11T03:03:00+02:00 | Iteration 2 marker-isolation replay |
+| [#834](https://github.com/zenod-ai/zenod/issues/834) | Tester | Arendt | L3 correction, distractor, unknown, citations | partial / open | #831 | evidence comment | `95f9370` | correction, near-match, unknown honesty, citation dereference | 4/5; response completeness still omitted requested `Amber-902` | 2026-07-11T03:03:00+02:00 | Iteration 2 completeness replay |
+| [#835](https://github.com/zenod-ai/zenod/issues/835) | Ticket worker | unassigned | Zenod MT `create_issue` generic `tool_error` | proposed / open | - | - | live MT | create issue or return structured permission/config error | reproduced; `gh` fallback used for test backlog | 2026-07-11T00:14:00+02:00 | assign independently |
+| [#843](https://github.com/zenod-ai/zenod/issues/843) | Ticket worker | Kant | Boost exact phrase + all-term deterministic ranking | done | #832 | [#846](https://github.com/zenod-ai/zenod/pull/846) | `0bbd045` | exact/multi-term fixture ranks first | merged `dbdd1c8`; live replay rank 1 on `6352ee1` | 2026-07-11T03:03:00+02:00 | closed |
+| [#844](https://github.com/zenod-ai/zenod/issues/844) | Ticket worker | Lovelace | Retry before `ask_brain` concludes absent | done | #833 | [#847](https://github.com/zenod-ai/zenod/pull/847) | `0bbd045` | human narrow recall finds explicitly requested synthetic evidence | merged `49afb56`; live answer returned 14 days + LumenCell 42 | 2026-07-11T03:03:00+02:00 | closed |
+| [#845](https://github.com/zenod-ai/zenod/issues/845) | Ticket worker | Popper | Reject out-of-scope literals + invalid citations | done | #833 | [#848](https://github.com/zenod-ai/zenod/pull/848) | `0bbd045` | broad replay has no neighboring literal or invalid anchor | merged `abc2657`; live scoped broad replay passed | 2026-07-11T03:03:00+02:00 | closed |
 
 ## Branch And Integration
 
@@ -153,6 +163,7 @@ Every decision pre-answered; the manager invents nothing:
 - One worktree per worker (`git worktree add ../wt-<ticket> -b <branch> <pinned-main>`); the shared clone stays on main, read-only. Checkout in the shared clone is a defect.
 - Manager integrates PRs to main as tickets land; deploy = Dokploy rebuild of the ONE Zenod app.
 - Full test suites are not run tonight; targeted tests + the journey are the gates.
+- Post-ship memory remediation exception: combined build + full workspace suite + main CI + published-image boot smoke passed before deploying `sha-6352ee1`.
 
 ## Human Gates
 
@@ -173,23 +184,39 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 ## Planner Queue
 
-- None. Planner is asleep. The spine is the planner.
+- Iteration 2: isolate the two remaining Iteration 1 failures without reopening the three green targets: marker-scoped broad isolation ([#833](https://github.com/zenod-ai/zenod/issues/833)) and response completeness ([#834](https://github.com/zenod-ai/zenod/issues/834)).
+- Service the independent backlog-write tooling defect [#835](https://github.com/zenod-ai/zenod/issues/835).
 
 ## Worker Queue
 
-- Wave 1: Z-N1, Z-N2, Z-N4 in parallel. Wave 2: Z-N3, Z-N5. Then Z-N6.
+- Original night-sprint waves are complete.
+- No active remediation worker. #843/#844/#845 are merged, deployed, live-retested, and closed.
 
 ## Tester Queue
 
-- Z-N6: the manager walks the journey; nobody asks Jordi to click anything unclicked.
+- Original Z-N6 browser journey is complete.
+- Iteration 2 should rerun only the two residual memory behaviors, then update #831's aggregate score.
 
 ## Validation Evidence
 
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
 | 2026-07-10 | SHIP journey clean pass | `35f7cd8` | `zenod.dev` + `cloud.zenod.dev` | Chrome stranger journey, Stripe TEST card, existing GitHub App repo picker, MCP JSON-RPC, logout/login | PASS | `docs/evidence/night-sprint-2026-07-10/` |
+| 2026-07-11 | Async MCP accepted receipt | `95f9370` | live `cloud.zenod.dev/mcp` | `store_memory` -> accepted ticket -> terminal receipt -> `search_memory("F5 banana receipt-fix 95f9370")` | PASS | ticket `d24c9345-68db-4a04-b646-dad1b9db0aa0`; `Log/2026-07-11.md#^e-2c5f8d`; vault commit `e92cd157` |
+| 2026-07-11 | Memory acceptance Iteration 1 baseline | `95f9370` | live Zenod MT MCP | three parallel human-like lanes: write/read, narrow/broad/synthesis, correction/distractor/unknown/citations | 12 PASS / 5 FAIL | [#831 summary](https://github.com/zenod-ai/zenod/issues/831#issuecomment-4940697880), [#832](https://github.com/zenod-ai/zenod/issues/832), [#833](https://github.com/zenod-ai/zenod/issues/833), [#834](https://github.com/zenod-ai/zenod/issues/834) |
+| 2026-07-11 | Memory acceptance targeted remediation | `6352ee1` | live `cloud.zenod.dev/mcp`; image `sha-6352ee1` | combined build/full suite; main CI; image boot smoke; exact replay of multi-term search, human narrow recall, human broad grounding | 3/3 PASS | [#831 remediation summary](https://github.com/zenod-ai/zenod/issues/831#issuecomment-4940865726), [#843](https://github.com/zenod-ai/zenod/issues/843#issuecomment-4940862444), [#844](https://github.com/zenod-ai/zenod/issues/844#issuecomment-4940863414), [#845](https://github.com/zenod-ai/zenod/issues/845#issuecomment-4940864648) |
 
 ## Handoff Journal
+
+### 2026-07-11T03:03:00+02:00 - Night-sprint delivery manager - Memory Iteration 1 reconciled
+
+Baseline: [#831](https://github.com/zenod-ai/zenod/issues/831) ran 17 human-like live MCP checks across three isolated lanes and scored 12 PASS / 5 FAIL. The suite covered accepted/terminal writes, exact and natural-language retrieval, broad and cross-memory synthesis, corrections, near-match distractors, unknown-answer honesty, citation dereference, and once-only evidence. The result itself was stored through Zenod at `Log/2026-07-11.md#^e-9ab29c` (vault commit `aa615d3`). The product's own `create_issue` path returned a generic `tool_error`; [#835](https://github.com/zenod-ai/zenod/issues/835) tracks that independent defect.
+
+Remediation: [#843](https://github.com/zenod-ai/zenod/issues/843), [#844](https://github.com/zenod-ai/zenod/issues/844), and [#845](https://github.com/zenod-ai/zenod/issues/845) were dispatched in parallel worktrees and merged through [#846](https://github.com/zenod-ai/zenod/pull/846), [#847](https://github.com/zenod-ai/zenod/pull/847), and [#848](https://github.com/zenod-ai/zenod/pull/848). Production now runs immutable image `sha-6352ee1`; Dokploy's desired image and the converged Swarm service match revision `6352ee18059e525818829f754f2a557a1023b56d`. Combined build, full workspace tests, main CI, and the image boot smoke passed.
+
+Live retest: the exact multi-term `LANTERN-48271 observatory access code` fixture ranks first; the human Aurora Kestrel narrow question returns `14 days` and `LumenCell 42` while labeling them synthetic; the scoped broad Aurora Kestrel answer contains the requested L2 facts without neighboring markers, `Cobalt-471`, or the invalid `^e-06cada` anchor. Targeted result: 3/3 PASS. Two baseline failures were deliberately outside this fix batch and remain for Iteration 2: marker-scoped broad isolation and answer completeness for the `Amber-902` distractor prompt.
+
+Next: keep `sha-6352ee1` as the validated Zenod MT memory baseline; plan the two residual Iteration 2 checks and service #835 independently.
 
 ### 2026-07-10T23:16:00+02:00 - Night-sprint delivery manager - SHIP journey clean
 
