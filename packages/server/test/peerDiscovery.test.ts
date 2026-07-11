@@ -180,6 +180,56 @@ describe("generic wallet MCP discovery", () => {
       .resolves.toMatchObject({ transport: "connected", tools: "error", error: expect.stringContaining("discovery limit") });
   });
 
+  it("keeps usable tools when one optional output schema exceeds the discovery bound", async () => {
+    vi.stubGlobal("fetch", mcpFetch([
+      {
+        name: "getPostsByIds",
+        description: "Read posts by id",
+        inputSchema: {
+          type: "object",
+          required: ["ids"],
+          properties: { ids: { type: "array", items: { type: "string" } } },
+        },
+        outputSchema: { type: "object", description: "x".repeat(70_000) },
+        annotations: { readOnlyHint: true, destructiveHint: false },
+      },
+      {
+        name: "createPosts",
+        description: "Create a held post draft",
+        inputSchema: {
+          type: "object",
+          required: ["text"],
+          properties: { text: { type: "string" } },
+        },
+        outputSchema: { type: "object", properties: { draftId: { type: "string" } } },
+        annotations: { readOnlyHint: false, destructiveHint: true },
+      },
+    ]));
+
+    const result = await discoverPeerTools({ name: "Calli", url: "https://peer.example/mcp", token: "secret" });
+
+    expect(result).toMatchObject({ transport: "connected", tools: "ready" });
+    expect(result.specs).toHaveLength(2);
+    expect(result.specs[0]).toEqual(expect.objectContaining({
+      mcp: "getPostsByIds",
+      description: "Read posts by id",
+      inputSchema: {
+        type: "object",
+        required: ["ids"],
+        properties: { ids: { type: "array", items: { type: "string" } } },
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+      preserveFullResult: true,
+    }));
+    expect(result.specs[0]).not.toHaveProperty("outputSchema");
+    expect(result.specs[1]).toEqual(expect.objectContaining({
+      mcp: "createPosts",
+      outputSchema: { type: "object", properties: { draftId: { type: "string" } } },
+      annotations: { readOnlyHint: false, destructiveHint: true },
+      preserveFullResult: true,
+    }));
+  });
+
   it("refreshes saved peers on startup and through the token-free refresh API", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "ring-peer-refresh-"));
     dirs.push(dataDir);
