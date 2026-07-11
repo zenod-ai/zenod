@@ -111,7 +111,7 @@ function Pricing({ subscribe, busyTier, error }: ReturnType<typeof useCustomerJo
                   {busyTier === plan.tier ? "Opening checkout…" : "Subscribe"}
                 </Button>
               ) : (
-                <Button asChild variant="outline"><a href="https://github.com/zenod-ai/zenod/tree/main/units/phylax">Self-host</a></Button>
+                <Button asChild variant="outline"><a href="https://github.com/zenod-ai/zenod/blob/main/docker-compose.phylax.yml">Self-host</a></Button>
               )}
             </article>
           ))}
