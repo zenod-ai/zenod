@@ -4,12 +4,20 @@ import {
   createHostedCheckout,
   PRICING_OPTIONS,
   readCustomerSession,
+  SELF_HOST_URL,
   SignInRequiredError,
 } from "./customer"
 
 describe("customer route contracts", () => {
   it("exposes exactly the approved pricing options", () => {
     expect(PRICING_OPTIONS.map(({ name }) => name)).toEqual(["Self-hosted", "Monthly", "Yearly"])
+  })
+
+  it("sends the Self-hosted click to the full customer unit, never the protected legacy compose", () => {
+    expect(SELF_HOST_URL).toBe(
+      "https://github.com/zenod-ai/zenod/blob/main/units/phylax/docker-compose.phylax.yml",
+    )
+    expect(SELF_HOST_URL).not.toMatch(/\/blob\/main\/docker-compose\.phylax\.yml$/)
   })
 
   it("treats an unauthorized session response as logged out", async () => {
