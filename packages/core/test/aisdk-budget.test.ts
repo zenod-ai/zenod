@@ -186,6 +186,37 @@ describe("answer tool-step budget", () => {
     expect(calls).toEqual([{ query: "recent" }]);
   });
 
+  it("executes an explicitly requested namespaced mutation while keeping its advertised mutation classification", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    await llm.answer(
+      {
+        question:
+          "Explicitly run the discovered Calli createPosts tool exactly once to create one held draft; no approval and do not publish.",
+        vaultBriefing: "brief",
+        conversation: [],
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        calli__createposts__2c00e9c77473c663: {
+          description: "Create a held post draft.",
+          inputSchema: z.object({ text: z.string() }),
+          annotations: { readOnlyHint: false, destructiveHint: true },
+          run: async (input) => {
+            calls.push(input);
+            return JSON.stringify({ held: true, published: false });
+          },
+        },
+      },
+    );
+
+    const result = await captured.config.tools.calli__createposts__2c00e9c77473c663.execute({ text: "held draft" });
+    expect(result).toBe('{"held":true,"published":false}');
+    expect(calls).toEqual([{ text: "held draft" }]);
+  });
+
   it("keeps advisory skill prose subordinate while structural mutation guards remain active", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     const mutationCalls: unknown[] = [];

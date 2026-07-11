@@ -106,6 +106,41 @@ function hasUnnegatedVerb(request: string, verbs: RegExp): boolean {
 
 const POST_VERB_RE = /\b(?:post|publish|send)\b/gi;
 const EMAIL_VERB_RE = /\b(?:send|email|mail)\b/gi;
+const INTENT_CLAUSE_BOUNDARY_RE = /[.;!?]|\b(?:but|however|instead|then)\b/gi;
+const DYNAMIC_RUN_VERB_RE = /\b(?:run|execute)\b/gi;
+const DYNAMIC_NEGATION_RE = /\b(?:no|not|don'?t|won'?t|never|cancel|stop|abort|nvm|nevermind|without|exclude|except|skip|omit)\b/i;
+const POSTFIX_CANCELLATION_RE =
+  /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this|the\s+call))?|stop|abort|nvm|nevermind|do\s+not\s+(?:do|run|execute|invoke|call|proceed)|don'?t\s+(?:do|run|execute|invoke|call|proceed))\b/i;
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Strict positive `run|execute <exact-tool-leaf>` intent with no later cancellation. */
+function hasExplicitDynamicMutationVerb(tool: string, request: string): boolean {
+  const toolLeaf = tool.split("__")[1] ?? "";
+  if (toolLeaf.length < 4) return false;
+  const exactLeaf = new RegExp(`(?<![A-Za-z0-9_-])${escapeRegex(toolLeaf)}(?![A-Za-z0-9_-])`, "gi");
+  for (const leafMatch of request.matchAll(exactLeaf)) {
+    const beforeLeaf = request.slice(0, leafMatch.index!);
+    let clauseStart = 0;
+    for (const boundary of beforeLeaf.matchAll(INTENT_CLAUSE_BOUNDARY_RE)) {
+      clauseStart = boundary.index! + boundary[0].length;
+    }
+    const clauseBeforeLeaf = request.slice(clauseStart, leafMatch.index!);
+    let runVerb: RegExpMatchArray | undefined;
+    for (const match of clauseBeforeLeaf.matchAll(DYNAMIC_RUN_VERB_RE)) {
+      runVerb = match;
+    }
+    if (!runVerb) continue;
+    const bindingText = clauseBeforeLeaf.slice(runVerb.index! + runVerb[0].length);
+    if (bindingText.length > 100 || DYNAMIC_NEGATION_RE.test(clauseBeforeLeaf)) continue;
+    const afterLeaf = request.slice(leafMatch.index! + leafMatch[0].length);
+    if (POSTFIX_CANCELLATION_RE.test(afterLeaf)) return false;
+    return true;
+  }
+  return false;
+}
 
 function hasExplicitMutationIntent(tool: string, request: string): boolean {
   const normalized = normalizedToolName(tool);
@@ -201,7 +236,8 @@ export interface PeerMutationGuardContext {
  * undo a closed issue or sent message.
  */
 export function peerMutationGuardFailure(tool: string, userRequest: string, context?: PeerMutationGuardContext): string | null {
-  if (!context?.forceMutation && !isPeerMutationTool(tool)) return null;
+  const legacyMutationTool = isPeerMutationTool(tool);
+  if (!context?.forceMutation && !legacyMutationTool) return null;
   const normalized = normalizedToolName(tool);
   if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest) && !READ_ONLY_REQUEST_RE.test(userRequest)) {
     return `Blocked ${tool}: explicit backlog writes/runs must use the dedicated Archus write/run tool, not ask_archus.`;
@@ -210,7 +246,14 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
   if (normalized === "archusrunissue" && !QUALIFIED_ISSUE_REF_RE.test(userRequest)) {
     return `Blocked ${tool}: running requires an exact work issue already named by the user as owner/repo#N. For create-and-run requests, send the full natural-language request to Archus instead of inventing a target.`;
   }
-  const explicitMutation = hasExplicitMutationIntent(tool, userRequest);
+  const explicitDynamicMutation = Boolean(
+    context?.forceMutation &&
+      !legacyMutationTool &&
+      !READ_ONLY_REQUEST_RE.test(userRequest) &&
+      !EXECUTION_STATUS_REQUEST_RE.test(userRequest) &&
+      hasExplicitDynamicMutationVerb(tool, userRequest),
+  );
+  const explicitMutation = hasExplicitMutationIntent(tool, userRequest) || explicitDynamicMutation;
   if (READ_ONLY_REQUEST_RE.test(userRequest) && !explicitMutation) {
     return `Blocked ${tool}: the user's current request is read-only/status-oriented, so mutating peer tools are not allowed this turn.`;
   }

@@ -1026,6 +1026,88 @@ describe("peerMutationGuardFailure", () => {
     expect(failure).toContain("create-and-run");
   });
 
+  describe("dynamic MCP mutation intent", () => {
+    const createPosts = "calli__createposts__2c00e9c77473c663";
+
+    it("allows an explicit unnegated run of a namespaced mutation tool", () => {
+      expect(
+        peerMutationGuardFailure(
+          createPosts,
+          "Explicitly run the discovered Calli createPosts tool exactly once to create one held draft; no approval and do not publish.",
+          { forceMutation: true },
+        ),
+      ).toBeNull();
+    });
+
+    it("blocks held-draft prose without an explicit mutation instruction", () => {
+      expect(
+        peerMutationGuardFailure(createPosts, "Here is a held draft for review. Do not publish it.", { forceMutation: true }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+
+    it("does not authorize a dynamic tool from an unrelated mutation verb", () => {
+      expect(
+        peerMutationGuardFailure(createPosts, "Please update me with the latest headlines.", { forceMutation: true }),
+      ).toContain("require an explicit write/run/send instruction");
+      expect(
+        peerMutationGuardFailure(createPosts, "Write a summary using the Calli createPosts tool.", { forceMutation: true }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+
+    it("binds run intent to the exact tool leaf and rejects cross-tool negation", () => {
+      const deletePosts = "calli__deleteposts__78b44fe21a3d23bb";
+      for (const request of [
+        "Run Calli createPosts, not deletePosts.",
+        "Run createPosts without invoking deletePosts.",
+        "Run the read-only report.",
+        "Run deletePostsBackup exactly once.",
+      ]) {
+        expect(peerMutationGuardFailure(deletePosts, request, { forceMutation: true })).not.toBeNull();
+      }
+    });
+
+    it("rejects later same-turn cancellation of an otherwise explicit dynamic run", () => {
+      for (const request of [
+        "Run the Calli createPosts tool? No, cancel that.",
+        "Run createPosts — actually no.",
+        "Execute createPosts, then do not proceed.",
+      ]) {
+        expect(peerMutationGuardFailure(createPosts, request, { forceMutation: true })).toContain(
+          "require an explicit write/run/send instruction",
+        );
+      }
+    });
+
+    it("rejects direct pre-verb negation of a dynamic run", () => {
+      for (const request of ["Do not run createPosts.", "Never execute createPosts.", "Don't run createPosts."]) {
+        expect(peerMutationGuardFailure(createPosts, request, { forceMutation: true })).not.toBeNull();
+      }
+    });
+
+    it("blocks read-only/status and negated-only turns", () => {
+      expect(
+        peerMutationGuardFailure(createPosts, "Read-only: what is the status of the held posts? Do not create anything.", {
+          forceMutation: true,
+        }),
+      ).toContain("read-only/status-oriented");
+      expect(
+        peerMutationGuardFailure(createPosts, "Don't run, create, post, send, update, delete, or publish anything.", {
+          forceMutation: true,
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+
+    it("does not let forceMutation bypass legacy outbound approval behavior", () => {
+      expect(
+        peerMutationGuardFailure("post_tweet", "Create a held draft for my review.", {
+          conversationId: "dynamic-legacy-outbound",
+          args: { text: "held draft" },
+          forceMutation: true,
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+  });
+
   describe("M-1 — stateful approval token for outbound sends", () => {
     beforeEach(() => __resetApprovalTokens());
 
