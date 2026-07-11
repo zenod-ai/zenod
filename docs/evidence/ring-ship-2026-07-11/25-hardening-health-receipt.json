@@ -1,0 +1,12 @@
+{
+  "url": "https://ring.zenod.dev",
+  "sha": "e6b0a2b",
+  "verified_at": "2026-07-11T11:13:52Z",
+  "routes": {
+    "landing": 200,
+    "app": "200|redirect",
+    "mcp": 401,
+    "healthz": 200
+  },
+  "oauth_callback": "https://ring.zenod.dev/auth/github/callback"
+}

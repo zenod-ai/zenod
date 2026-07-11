@@ -84,11 +84,11 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: HARDEN R-H5 — exact-SHA deploy + live Calli validation
-Last verified: 2026-07-11T06:53:42+02:00
+Phase: HARDEN complete — generic MCP + tenant Agent Skills live
+Last verified: 2026-07-11T13:19:05+02:00
 Integration target: main
-Fresh base commit: `062e91ef63147b48560b76fc6462a74979ac1472` — PINNED R-H5 integration base (D19c)
-Next action: publish and deploy exact `062e91e`, then validate saved Calli discovery, canonical skill load, held draft, refresh, and two-tenant isolation.
+Fresh base commit: `e6b0a2bb3777af223df8783c443811485be31588` — LIVE exact R-H5 release (D19c)
+Next action: none; R-H1–R-H5 package delivered.
 Blockers: none.
 
 ## Role Goals
@@ -157,7 +157,7 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#860](https://github.com/zenod-ai/zenod/issues/860) | Ticket worker | R-H2-worker | Tenant skill artifact store + attachment API | done | - | [#885](https://github.com/zenod-ai/zenod/pull/885) / `codex/r-h2-peer-skill-artifacts` | `af1cfdf` | immutable/versioned/path-safe/tenant-isolated bundles + APIs | CI + independent security review pass; merged `19c45fa` | 2026-07-11T06:30:00+02:00 | integrated |
 | [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | done | #863, #860 done | [#888](https://github.com/zenod-ai/zenod/pull/888) / `codex/r-h3-peer-skill-ui` | `ddab094` | transport vs tools-ready; attach/replace/download/detach | CI + independent review pass; 23 web tests; merged `062e91e` | 2026-07-11T06:53:42+02:00 | integrated |
 | [#865](https://github.com/zenod-ai/zenod/issues/865) | Ticket worker | R-H4-worker | Progressive `load_peer_skill` runtime + safety | done | #863, #860 done | [#887](https://github.com/zenod-ai/zenod/pull/887) / `codex/r-h4-peer-skill-runtime` | `ddab094` | metadata-only baseline; on-demand skill; no authority escalation/scripts | CI + independent security review pass; merged `e1c257b` | 2026-07-11T06:53:42+02:00 | integrated |
-| [#864](https://github.com/zenod-ai/zenod/issues/864) | Epic worker / tester | Ring delivery manager | Generic MCP + skills integration and live Calli validation | in progress | #862, #865, #866, #861 done | `main` | `062e91e` | existing Calli auto-refresh, held draft only, two-tenant isolation | wave 2 integrated; exact-SHA live lap next | 2026-07-11T06:53:42+02:00 | deploy + final integration |
+| [#864](https://github.com/zenod-ai/zenod/issues/864) | Epic worker / tester | Ring delivery manager | Generic MCP + skills integration and live Calli validation | done | #862, #865, #866, #861 done | `main`; live fixes [#889](https://github.com/zenod-ai/zenod/pull/889), [#890](https://github.com/zenod-ai/zenod/pull/890) | `e6b0a2b` live | existing Calli auto-refresh, held draft only, two-tenant isolation | Calli 18 real tools; skill v1.0.0; held receipt; external MCP + isolation pass | 2026-07-11T13:19:05+02:00 | package delivered |
 
 ## Branch And Integration
 
@@ -202,8 +202,14 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Focused poll-path diagnosis lap | `fae4f33` | ring.zenod.dev live | real Chrome exact SHIP 7 phrase + Zenod durable task audit | PARTIAL: poll fixed and commit succeeds; visible reply omits SHA/URL | `docs/evidence/ring-ship-2026-07-11/15-path-fixed-commit-omitted.png`; `TEST-PACKAGE.md` |
 | 2026-07-11 | Generic receipt gate live reprove | `b7c0ca5` | ring.zenod.dev live | real Chrome exact SHIP 7 phrase + Ring runtime logs | PARTIAL: gate intercepted `add_memory` and selected the verified receipt; stream UI retained the discarded model delta because `done` omitted final text | `docs/evidence/ring-ship-2026-07-11/17-gate-intercept-stream-draft-visible.png`; issue #879 |
 | 2026-07-11 | Final SHIP journey | `5ac9f37` | ring.zenod.dev live | real browser exact SHIP 7; external MCP SDK client; bearer-isolated beta tenant | PASS: commit `45e22e2` + GitHub links visible without reload; `ring-face-ok`; alpha peers/key hidden from beta; beta cleaned up | `docs/evidence/ring-ship-2026-07-11/19-ship7-live-authoritative-receipt.png`; `TEST-PACKAGE.md` |
+| 2026-07-11 | Generic MCP + skills hardening | `e6b0a2b` | ring.zenod.dev live | saved Calli refresh; real browser skill/draft; external MCP SDK; bearer-isolated beta tenant | PASS: Calli tools ready 18; canonical skill loaded; `[draft_not_approved]` held; MCP status ok; beta sees no peers/key/skill; cleaned up | `docs/evidence/ring-ship-2026-07-11/20`–`25`; `TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T13:19:05+02:00 - Ring delivery manager - HARDEN complete
+
+Context: Exact live release `e6b0a2b` passes R-H1–R-H5. The already-saved Calli peer refreshed without reconnecting and exposes 18 real namespaced tools. The canonical `callisthenes@1.0.0` three-file skill is attached; scripts remain inert. Council loaded the skill and executed `createPosts` once with no approval, receiving `[draft_not_approved]`, held handle `dr_7281ac3`, and no publication. An external MCP SDK client listed and called Ring successfully. A temporary beta tenant saw zero peers, no OpenRouter key, and no Calli skill despite an alpha-facing query, then deleted cleanly.
+Next: none. Test package and screenshots are authoritative under `docs/evidence/ring-ship-2026-07-11/`.
 
 ### 2026-07-11T06:53:42+02:00 - Ring delivery manager - HARDEN wave 2 merged; R-H5 active
 

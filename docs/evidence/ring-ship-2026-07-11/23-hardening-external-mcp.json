@@ -1,0 +1,14 @@
+{
+  "deployment": "e6b0a2b",
+  "client": "@modelcontextprotocol/sdk",
+  "toolCount": 17,
+  "hasChatWithRing": true,
+  "call": {
+    "isError": false,
+    "status": "ok",
+    "text": "Hakut",
+    "correlationId": "test_ca1ff1c2f9c24d84919adaed64abaa16",
+    "conversationId": "mcp:test_ca1ff1c2f9c24d84919adaed64abaa16",
+    "evidenceKind": "chat_audit"
+  }
+}

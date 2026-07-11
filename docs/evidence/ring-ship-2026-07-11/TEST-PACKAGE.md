@@ -79,6 +79,31 @@ Two independently authenticated tenants queried the same deployment. Tenant B de
 - Live guarded routes: `/` 200, `/app` 200, `/healthz` 200, `/api/health` exact SHA, unauthenticated `/mcp` 401, GitHub OAuth callback pinned to `https://ring.zenod.dev/auth/github/callback`.
 - Persistent `/data` was preserved. Existing Zenod, Calli, and customer services were not redeployed by this cutover.
 
+## Generic MCP + Agent Skill hardening addendum
+
+Final hardening deployment: `e6b0a2bb3777af223df8783c443811485be31588` (`/api/health` reports `e6b0a2b`).
+
+**R-H1–R-H5 — PASS.** The existing saved Calli peer refreshed without reconnecting and now reports `tools ready · 18`. Its expanded wallet catalog shows the real namespaced MCP tools, including `createPosts`, `getUsersMe`, and `approve_send`; there is no synthetic `ask_calli` fallback in the wallet catalog. The canonical `callisthenes@1.0.0` skill is attached with three files and scripts stored inert.
+
+The Council progressively loaded the attached skill and called the discovered namespaced `createPosts` tool once. Calli returned `[draft_not_approved]`, handle `dr_7281ac3`, and `status: held`; no `approve_send` call was made and nothing was published. Screenshot `22-hardening-held-draft-receipt.png` shows the held receipt beside the tools-ready wallet.
+
+| Hardening gate | Result | Evidence |
+|---|---|---|
+| saved Calli refresh, no reconnect | PASS | `20-hardening-tools-ready-skill.png` |
+| real 18-tool discovery, deterministic names | PASS | `21-hardening-calli-tools-expanded.png` |
+| canonical skill attached and progressively loaded | PASS | `20-hardening-tools-ready-skill.png`; Council `load_peer_skill` event retained in chat |
+| held draft only, no publish | PASS | `22-hardening-held-draft-receipt.png` |
+| Ring MCP face answers external SDK client | PASS | `23-hardening-external-mcp.json` |
+| two-tenant tools/key/skill isolation | PASS | `24-hardening-two-tenant.json`; beta deleted with HTTP 200 |
+| exact immutable health and OAuth boundary | PASS | `25-hardening-health-receipt.json` |
+
+The live lap found and closed two integration-only defects before signoff:
+
+- PR #889 (`563821a`) omits an oversized optional peer `outputSchema` instead of rejecting the whole usable catalog; input schemas and catalog limits remain strict.
+- PR #890 (`e6b0a2b`) allows a dynamically namespaced mutation only for `run|execute` bound to the exact tool leaf. Cross-tool intent, substrings, read-only requests, pre-verb negation, and later cancellation all fail closed; legacy outbound approval tokens remain unchanged.
+
+Both PRs passed full CI and independent security review. The final temporary beta tenant saw zero peers, no OpenRouter key, and a 404 for Calli's skill even while supplying the alpha-facing query value; it was deleted after the proof.
+
 ## Diagnostic trail retained
 
 Earlier screenshots `07`, `11`, `15`, and `17` intentionally retain the sequence of live failures: downstream timeout, malformed poll path, omitted receipt, and streamed draft winning over the authoritative reply. `18-reload-shows-authoritative-receipt.png` proved persistence before PR #882; `19` is the final no-reload browser pass.

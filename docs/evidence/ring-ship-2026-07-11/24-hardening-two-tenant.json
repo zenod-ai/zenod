@@ -1,0 +1,18 @@
+{
+  "deployment": "e6b0a2b",
+  "alphaBrowser": {
+    "peerNames": ["Zenod", "calli"],
+    "toolCounts": [17, 18],
+    "calliSkill": "callisthenes@1.0.0",
+    "provider": "openrouter"
+  },
+  "betaCrossQuery": {
+    "tenant": "ring-hardening-beta-e6b0a2b-1783768718",
+    "peerCount": 0,
+    "provider": null,
+    "openrouterKeyPresent": false,
+    "calliSkillStatus": 404
+  },
+  "isolated": true,
+  "cleanupStatus": 200
+}
