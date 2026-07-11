@@ -4,3 +4,23 @@ export { createPhylaxCustomerLayer } from "./phylaxCustomerLayer.js";
 export { createPhylaxUnit } from "./phylaxUnit.js";
 export { createRingUnit } from "./ringUnit.js";
 export { createRingCustomerLayer } from "./ringCustomerLayer.js";
+export {
+  HERALD_DEFAULT_PROPOSAL_COUNT,
+  HERALD_MAX_PROPOSAL_COUNT,
+  HERALD_MIN_CADENCE_MINUTES,
+  HeraldLoopScheduler,
+  HeraldLoopStore,
+} from "./heraldLoop.js";
+export type {
+  HeraldBoardItem,
+  HeraldBoardState,
+  HeraldBriefing,
+  HeraldBriefingContent,
+  HeraldFiling,
+  HeraldLoopSchedulerOptions,
+  HeraldMutationReceipt,
+  HeraldProposalInput,
+  HeraldWakeHandlerInput,
+  HeraldWakeReceipt,
+  HeraldWakeSource,
+} from "./heraldLoop.js";
