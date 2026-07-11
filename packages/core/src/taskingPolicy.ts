@@ -134,7 +134,7 @@ function hasExplicitDynamicMutationVerb(tool: string, request: string): boolean 
     }
     if (!runVerb) continue;
     const bindingText = clauseBeforeLeaf.slice(runVerb.index! + runVerb[0].length);
-    if (bindingText.length > 100 || DYNAMIC_NEGATION_RE.test(bindingText)) continue;
+    if (bindingText.length > 100 || DYNAMIC_NEGATION_RE.test(clauseBeforeLeaf)) continue;
     const afterLeaf = request.slice(leafMatch.index! + leafMatch[0].length);
     if (POSTFIX_CANCELLATION_RE.test(afterLeaf)) return false;
     return true;

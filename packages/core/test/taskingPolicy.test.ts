@@ -1078,6 +1078,12 @@ describe("peerMutationGuardFailure", () => {
       }
     });
 
+    it("rejects direct pre-verb negation of a dynamic run", () => {
+      for (const request of ["Do not run createPosts.", "Never execute createPosts.", "Don't run createPosts."]) {
+        expect(peerMutationGuardFailure(createPosts, request, { forceMutation: true })).not.toBeNull();
+      }
+    });
+
     it("blocks read-only/status and negated-only turns", () => {
       expect(
         peerMutationGuardFailure(createPosts, "Read-only: what is the status of the held posts? Do not create anything.", {
