@@ -402,16 +402,8 @@ export class TelegramGateway {
         const downloaded = await this.downloadFile(voice.file_id);
         const filename = `${voice.file_unique_id ?? voice.file_id}.${downloaded.ext}`;
         media = { bytes: downloaded.data, mimeType: voice.mime_type ?? "audio/ogg", fileName: filename };
-        const result = await transcribeChannelAudio(this.options.settings, downloaded.data, filename);
-        if (result.success && result.transcript?.trim()) {
-          text = result.transcript.trim();
-          transcription = { ...(result.provider ? { provider: result.provider } : {}) };
-        } else {
-          transcription = {
-            ...(result.provider ? { provider: result.provider } : {}),
-            failed: { code: result.noSpeech ? "no_speech" : "unavailable", message: result.error ?? "transcription failed" },
-          };
-        }
+        // The ported Phylax organ transcribes after tenant resolution. This
+        // preserves the existing downloader while keeping provider keys scoped.
       } catch (error) {
         transcription = { failed: { code: "unavailable", message: error instanceof Error ? error.message : String(error) } };
       }

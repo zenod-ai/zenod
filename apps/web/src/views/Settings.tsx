@@ -34,6 +34,7 @@ import { OperatingRulesTab } from "@/views/settings/OperatingRulesTab"
 import { SkillSettingsTab } from "@/views/settings/SkillSettingsTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 import { ChatTab } from "@/views/ChatTab"
+import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
 
 const SECTION_ICONS = {
   connect: PlugZapIcon,
@@ -104,6 +105,7 @@ export function Settings({
     null
   )
   const isRing = overview?.unit?.name === "ring"
+  const isPhylax = overview?.unit?.name === "phylax"
 
   React.useEffect(() => {
     api<DashboardOverviewData>("/api/overview")
@@ -130,7 +132,7 @@ export function Settings({
             <BrainIcon className="size-4.5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold">{isRing ? "The Ring" : "Zenod"}</h1>
+            <h1 className="text-xl font-semibold">{isRing ? "The Ring" : isPhylax ? "Phylax" : "Zenod"}</h1>
             <p className="truncate text-sm text-muted-foreground">
               {overview
                 ? `${overview.tenant.name ?? overview.tenant.id} · ${overview.usage?.units ?? 0} usage units`
@@ -140,7 +142,7 @@ export function Settings({
         </div>
         <div className="flex items-center gap-1">
           <Button asChild variant="ghost" size="sm">
-            <a href={isRing ? "https://ring.zenod.dev/" : PUBLIC_LANDING_URL}>
+            <a href={isRing ? "https://ring.zenod.dev/" : isPhylax ? "https://phylax.zenod.dev/" : PUBLIC_LANDING_URL}>
               <ArrowLeftIcon data-icon="inline-start" />
               Landing
             </a>
@@ -157,7 +159,7 @@ export function Settings({
         </div>
       </header>
 
-      {isRing ? (
+      {isPhylax ? <main><PhylaxTenantSettings /></main> : isRing ? (
         <main className="flex flex-col gap-6">
           <section aria-labelledby="council-chat-heading" className="flex flex-col gap-2">
             <div>
