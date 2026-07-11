@@ -191,6 +191,38 @@ describe("Herald proposer and poster lanes", () => {
     }
   });
 
+  it("publishes items already approved by the chat decision controller", async () => {
+    const { service, calls } = await fixture();
+    try {
+      await service.proposeNow("alpha");
+      const item = service.getBoard("alpha").items[0];
+      expect(service.store.approveItems("alpha", [item.id])).toMatchObject({
+        status: "ok",
+      });
+
+      await expect(
+        service.approveAndPublish("alpha", [item.id]),
+      ).resolves.toMatchObject({
+        status: "ok",
+        code: "items_posted",
+        ids: [item.id],
+        published: [
+          {
+            itemId: item.id,
+            permalink: "https://x.com/i/web/status/123456789",
+          },
+        ],
+      });
+      expect(calls.slice(-2).map((call) => call.tool)).toEqual([
+        "createPosts",
+        "approve_send",
+      ]);
+      expect(service.getBoard("alpha").items[0].state).toBe("posted");
+    } finally {
+      service.close();
+    }
+  });
+
   it("never calls approve_send unless Calli first proves the draft was held", async () => {
     const { service, callTool } = await fixture();
     callTool.mockImplementation(async (_target, toolName) => {

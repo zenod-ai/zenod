@@ -204,11 +204,40 @@ export class HeraldLaneService {
     tenantId: string,
     itemIds: string[],
   ): Promise<HeraldApprovalReceipt> {
-    const approved = this.store.approveItems(tenantId, itemIds);
+    const ids = [...new Set(itemIds)];
+    const items = ids.map((itemId) =>
+      this.store.getBoardItem(tenantId, itemId),
+    );
+    const invalidIndex = items.findIndex(
+      (item) =>
+        !item || (item.state !== "proposed" && item.state !== "approved"),
+    );
+    if (invalidIndex >= 0) {
+      return {
+        status: "error",
+        code: "invalid_board_transition",
+        message: `Board item ${ids[invalidIndex]} must be proposed or approved before publishing.`,
+        tenantId,
+        published: [],
+      };
+    }
+    const proposedIds = items
+      .filter((item): item is HeraldBoardItem => item?.state === "proposed")
+      .map((item) => item.id);
+    const approved =
+      proposedIds.length > 0
+        ? this.store.approveItems(tenantId, proposedIds)
+        : {
+            status: "ok" as const,
+            code: "items_already_approved",
+            message: `${ids.length} item${ids.length === 1 ? "" : "s"} already approved.`,
+            tenantId,
+            ids,
+          };
     if (approved.status === "error") return { ...approved, published: [] };
 
     const published: HeraldPublishReceipt[] = [];
-    for (const itemId of approved.ids ?? []) {
+    for (const itemId of ids) {
       published.push(await this.publishApproved(tenantId, itemId));
     }
     const message = published.map((entry) => entry.permalink).join("\n");
@@ -220,6 +249,7 @@ export class HeraldLaneService {
       ...approved,
       code: "items_posted",
       message: `Published ${published.length} approved item${published.length === 1 ? "" : "s"} with canonical permalink receipts.`,
+      ids,
       published,
     };
   }
