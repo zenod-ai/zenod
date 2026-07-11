@@ -1054,6 +1054,30 @@ describe("peerMutationGuardFailure", () => {
       ).toContain("require an explicit write/run/send instruction");
     });
 
+    it("binds run intent to the exact tool leaf and rejects cross-tool negation", () => {
+      const deletePosts = "calli__deleteposts__78b44fe21a3d23bb";
+      for (const request of [
+        "Run Calli createPosts, not deletePosts.",
+        "Run createPosts without invoking deletePosts.",
+        "Run the read-only report.",
+        "Run deletePostsBackup exactly once.",
+      ]) {
+        expect(peerMutationGuardFailure(deletePosts, request, { forceMutation: true })).not.toBeNull();
+      }
+    });
+
+    it("rejects later same-turn cancellation of an otherwise explicit dynamic run", () => {
+      for (const request of [
+        "Run the Calli createPosts tool? No, cancel that.",
+        "Run createPosts — actually no.",
+        "Execute createPosts, then do not proceed.",
+      ]) {
+        expect(peerMutationGuardFailure(createPosts, request, { forceMutation: true })).toContain(
+          "require an explicit write/run/send instruction",
+        );
+      }
+    });
+
     it("blocks read-only/status and negated-only turns", () => {
       expect(
         peerMutationGuardFailure(createPosts, "Read-only: what is the status of the held posts? Do not create anything.", {
