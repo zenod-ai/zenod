@@ -136,6 +136,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     clearCustomerSession(c, env);
     return c.json({ ok: true });
   });
+  app.get("/auth/signout", (c) => {
+    clearCustomerSession(c, env);
+    return c.redirect("/");
+  });
 
   app.get("/api/me", (c) => {
     const session = readCustomerSession(c, env);

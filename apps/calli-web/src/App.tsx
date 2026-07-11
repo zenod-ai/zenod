@@ -186,7 +186,7 @@ export default function App() {
     <main className="mx-auto flex min-h-svh w-full max-w-5xl flex-col gap-5 p-5 sm:p-8">
       <header className="flex items-center justify-between gap-4 border-b border-border pb-4">
         <div><a href="/" className="text-sm text-muted-foreground hover:text-foreground">← Callisthenes landing</a><h1 className="mt-1 text-2xl font-semibold">One mouth for your agents</h1><p className="text-sm text-muted-foreground">@{me.login}</p></div>
-        <Button variant="ghost" onClick={() => void fetch("/api/auth/logout", { method: "POST" }).then(() => window.location.assign("/"))}><LogOutIcon />Log out</Button>
+        <Button variant="ghost" onClick={() => window.location.assign("/auth/signout")}><LogOutIcon />Log out</Button>
       </header>
 
       <Card className="rounded-none border-2">

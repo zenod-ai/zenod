@@ -187,6 +187,15 @@ describe("hosted customer layer", () => {
     expect(me.status).toBe(401);
   });
 
+  it("supports a navigation-safe customer signout", async () => {
+    const app = customerApp();
+    const cookie = await signInCookie(app);
+    const logout = await app.request("/auth/signout", { headers: { cookie } });
+    expect(logout.status).toBe(302);
+    expect(logout.headers.get("location")).toBe("/");
+    expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+
   it("returns apex sign-in to the landing and direct cloud sign-in to the app", async () => {
     const app = customerApp();
     await signInCookie(app, "zenod.dev", "https://zenod.dev/");
