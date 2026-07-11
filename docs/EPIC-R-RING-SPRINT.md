@@ -84,11 +84,11 @@ HARDEN (after Jordi approves SHIP): multiple units in the wallet exercised end-t
 
 ## Current State
 
-Phase: wave 1 dispatched
-Last verified: 2026-07-11T02:20:29+02:00
+Phase: wave 2 dispatched
+Last verified: 2026-07-11T02:33:31+02:00
 Integration target: main
 Fresh base commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92` — PINNED; no rebases until the journey passes (D19c)
-Next action: R-S1 and R-S2 execute in parallel; manager monitors the 90-minute budgets and integrates passing work.
+Next action: R-S3 and R-S4 execute in parallel from integrated wave-2 base `4ed9440`; manager monitors the wallet hard budget and integrates passing work.
 Blockers: none — decisions pre-answered; inputs have absence-rules.
 
 ## Role Goals
@@ -139,10 +139,10 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#837](https://github.com/zenod-ai/zenod/issues/837) | Ticket worker | R-S1-worker | R-S1 front duplicate (landing, auth, tenants) | in progress | - | `codex/r-s1-front-duplicate` / `../wt-r-s1` | `fcac83f` | SHIP 1–4 | dispatched | 2026-07-11T02:20:29+02:00 | implement, validate, PR |
-| [#836](https://github.com/zenod-ai/zenod/issues/836) | Ticket worker | R-S2-worker | R-S2 council middle (ChatTab + persona + Keys, tenant-scoped) | in progress | - | `codex/r-s2-council-middle` / `../wt-r-s2` | `fcac83f` | SHIP 5–6 | dispatched | 2026-07-11T02:20:29+02:00 | implement, validate, PR |
-| [#838](https://github.com/zenod-ai/zenod/issues/838) | Ticket worker | assign wave 2 | R-S3 wallet (peers surface → per-tenant unit wallet) | ready | #837, #836 | `codex/r-s3-wallet` / `../wt-r-s3` | `fcac83f` | SHIP 7 | - | 2026-07-11T02:20:29+02:00 | wait for wave 1 integration |
-| [#839](https://github.com/zenod-ai/zenod/issues/839) | Ticket worker | assign wave 2 | R-S4 billing + domain (duplicate recipe) | ready | #837 | `codex/r-s4-billing-domain` / `../wt-r-s4` | `fcac83f` | SHIP 2, 4 live | - | 2026-07-11T02:20:29+02:00 | wait for R-S1 integration |
+| [#837](https://github.com/zenod-ai/zenod/issues/837) | Ticket worker | R-S1-worker | R-S1 front duplicate (landing, auth, tenants) | done | - | [#841](https://github.com/zenod-ai/zenod/pull/841) / `codex/r-s1-front-duplicate` | `fcac83f` | SHIP 1–4 | CI green; merged `0bbd045` | 2026-07-11T02:33:31+02:00 | integrated |
+| [#836](https://github.com/zenod-ai/zenod/issues/836) | Ticket worker | R-S2-worker | R-S2 council middle (ChatTab + persona + Keys, tenant-scoped) | done | - | [#842](https://github.com/zenod-ai/zenod/pull/842) / `codex/r-s2-council-middle` | `fcac83f` | SHIP 5–6 | CI green; Ring namespace fix; merged `4ed9440` | 2026-07-11T02:33:31+02:00 | integrated |
+| [#838](https://github.com/zenod-ai/zenod/issues/838) | Ticket worker | R-S3-worker | R-S3 wallet (peers surface → per-tenant unit wallet) | in progress | #837, #836 done | `codex/r-s3-wallet` / `../wt-r-s3` | `4ed9440` | SHIP 7 | dispatched; hard 90-minute budget | 2026-07-11T02:33:31+02:00 | evolve, validate, PR or escalate |
+| [#839](https://github.com/zenod-ai/zenod/issues/839) | Ticket worker | R-S4-worker | R-S4 billing + domain (duplicate recipe) | in progress | #837 done | `codex/r-s4-billing-domain` / `../wt-r-s4` | `4ed9440` | SHIP 2, 4 live | dispatched | 2026-07-11T02:33:31+02:00 | duplicate, validate, PR |
 | [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | ready | #837, #836, #838, #839 | - | `fcac83f` | SHIP 1–10 | - | 2026-07-11T02:20:29+02:00 | last |
 
 ## Branch And Integration
@@ -185,6 +185,12 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | pending | SHIP journey clean pass | - | ring.zenod.dev live | real browser walk + MCP client check, screenshots | pending | test package |
 
 ## Handoff Journal
+
+### 2026-07-11T02:33:31+02:00 - Ring delivery manager - Wave 1 integrated; wave 2 dispatched
+
+Context: R-S1 passed CI and merged as `0bbd045`; R-S2 passed CI and merged as `4ed9440` after manager review caught and closed a customer-layer namespace seam so Ring accounts, checkout URLs, OAuth callback, and storage use `ring` / `ring.zenod.dev`. Wave 2 is pinned to integrated commit `4ed94400f1bbdd9cb8252def2b72b2614ee3a354` without rebasing wave 1.
+Assignments: R-S3-worker / `codex/r-s3-wallet` / `../wt-r-s3` with the hard 90-minute escalate-not-invent budget; R-S4-worker / `codex/r-s4-billing-domain` / `../wt-r-s4`.
+Next: integrate R-S3/R-S4, publish and deploy the one Ring unit without touching live Zenod/Callisthenes services, then start the R-S5 live journey at `https://ring.zenod.dev/`.
 
 ### 2026-07-11T02:20:29+02:00 - Ring delivery manager - Steward bound and wave 1 dispatched
 
