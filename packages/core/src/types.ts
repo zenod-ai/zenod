@@ -377,6 +377,26 @@ export interface StateStore {
    * chat history (WhatsApp, web, …) rather than in the vault.
    */
   searchConversations(query: string, options?: ConversationSearchOptions): Promise<ConversationSearchHit[]>;
+  /** Tenant-local durable standing-action state. Optional for custom ephemeral stores. */
+  loadApprovalTokens?(conversationId: string): Promise<Array<{
+    tool: string;
+    draftHash: string;
+    expiresAt: number;
+    owner?: string;
+    description?: string;
+    args?: Record<string, unknown>;
+    anyOutboundSend?: boolean;
+  }>>;
+  /** Atomically replace the live standing actions for one conversation. */
+  saveApprovalTokens?(conversationId: string, tokens: Array<{
+    tool: string;
+    draftHash: string;
+    expiresAt: number;
+    owner?: string;
+    description?: string;
+    args?: Record<string, unknown>;
+    anyOutboundSend?: boolean;
+  }>): Promise<void>;
 }
 
 export interface ConversationMessage {

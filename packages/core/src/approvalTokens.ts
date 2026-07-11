@@ -1,97 +1,179 @@
 import { createHash } from "node:crypto";
 
-/**
- * M-1 — stateful approval token for a standing outbound draft.
- *
- * The peer-mutation guard (taskingPolicy.ts) previously string-matched a write verb
- * ("post", "publish", "send") in the user's CURRENT message and had no memory of a
- * draft shown earlier in the conversation — so a follow-up "Tweet approved" was
- * blocked because "approved" isn't a write verb, even though a real standing draft
- * was waiting. Fixing that requires real state: when a mutating outbound call is
- * blocked for lack of an explicit verb but DOES carry real draft content, that block
- * doubles as the draft-approval prompt and registers a one-time token (tool + a hash
- * of the exact draft content, ~15min expiry) on the conversation. A later
- * natural-language affirmative ("approved", "send it") resolves the SAME tool with
- * the SAME content by consuming that token — never a bare affirmative alone, and
- * never a different tool/content than what was actually shown.
- *
- * In-process, per-conversation, single-slot (one standing draft at a time) — the
- * same scope tradeoff outboundTools.ts's E1-T4 idempotency cache already makes; a
- * durable store is a later concern.
- */
-
+/** A host-owned, one-time authorization candidate created by a guarded peer result. */
 export interface ApprovalToken {
   tool: string;
   draftHash: string;
   expiresAt: number;
-  /**
-   * P-1 — a token registered from the outbound-COMPOSE path (ask_outbound) rather than
-   * a blocked direct send. Console never sees the exact final text Callistheness drafts
-   * there (Callistheness holds it), so there is no tool+content hash to match against
-   * later. Such a token resolves against ANY outbound send tool's affirmative in this
-   * conversation instead of a specific tool/content match.
-   */
+  owner?: string;
+  description?: string;
+  args?: Record<string, unknown>;
   anyOutboundSend?: boolean;
 }
 
+export type ApprovalIntent = "approve" | "cancel" | "edit" | "none";
+
 const TOKEN_TTL_MS = 15 * 60 * 1000;
-const tokensByConversation = new Map<string, ApprovalToken>();
+const tokensByConversation = new Map<string, ApprovalToken[]>();
+const NEGATION_RE = /\b(?:no|not|don'?t|won'?t|never|cancel|stop|abort|nvm|nevermind|hold on|wait)\b/i;
+const EDIT_RE = /\b(?:change|edit|revise|rewrite|replace|instead|make it|update the (?:draft|text|message|post))\b/i;
+const APPROVAL_RE = /(?:^|\b)(?:a?pprove(?:d)?|confirm(?:ed)?|go\s*ahead|do\s+it|send\s+it|post\s+it|publish\s+it|ship\s+it|yes|yep|yeah|ok(?:ay)?|sounds?\s+good|looks?\s+good)(?:\b|\s*:)/i;
+const APPROVAL_REQUIRED_RE = /(?:\[(?:draft_not_approved|approval_required|confirmation_required)\]|\b(?:approval|confirmation)\s+(?:is\s+)?required\b|\bnot[_ -]approved\b)/i;
+const INTERNAL_APPROVAL_KEY_RE = /(?:approval|approve|confirmation|confirm|token|secret|password)/i;
 
 function canonicalDraft(content: unknown): string {
   if (typeof content === "string") return content;
+  if (Array.isArray(content)) return `[${content.map(canonicalDraft).join(",")}]`;
   if (content && typeof content === "object") {
-    return JSON.stringify(content, Object.keys(content as Record<string, unknown>).sort());
+    const entries = Object.entries(content as Record<string, unknown>)
+      .filter(([key]) => !INTERNAL_APPROVAL_KEY_RE.test(key))
+      .sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, value]) => `${JSON.stringify(key)}:${canonicalDraft(value)}`).join(",")}}`;
   }
-  return String(content ?? "");
+  return JSON.stringify(content ?? null);
 }
 
 export function draftHash(content: unknown): string {
   return createHash("sha256").update(canonicalDraft(content)).digest("hex").slice(0, 32);
 }
 
-/** Register a one-time approval token for a just-blocked draft on this conversation. */
-export function registerApprovalToken(conversationId: string, tool: string, content: unknown): void {
-  tokensByConversation.set(conversationId, { tool, draftHash: draftHash(content), expiresAt: Date.now() + TOKEN_TTL_MS });
+function liveTokens(conversationId: string): ApprovalToken[] {
+  const now = Date.now();
+  const live = (tokensByConversation.get(conversationId) ?? []).filter((token) => token.expiresAt > now);
+  if (live.length) tokensByConversation.set(conversationId, live);
+  else tokensByConversation.delete(conversationId);
+  return live;
 }
+
+/** Deterministic intent classification. It recognizes language; it never grants authority. */
+export function classifyApprovalIntent(userRequest: string): ApprovalIntent {
+  const text = userRequest.trim();
+  if (!text) return "none";
+  if (NEGATION_RE.test(text)) return "cancel";
+  if (EDIT_RE.test(text)) return "edit";
+  return APPROVAL_RE.test(text) ? "approve" : "none";
+}
+
+/** Exact text restated by APPROVE:/PPROVE:, if present. */
+export function approvedExactText(userRequest: string): string | undefined {
+  const match = userRequest.trim().match(/^a?pprove(?:d)?\s*:\s*["“]([\s\S]*?)["”]\s*[.!]?\s*$/i);
+  return match?.[1];
+}
+
+export function isApprovalRequiredResult(result: string): boolean {
+  return APPROVAL_REQUIRED_RE.test(result);
+}
+
+function hasSubstantiveArgs(args: Record<string, unknown>): boolean {
+  return Object.entries(args).some(
+    ([key, value]) => !INTERNAL_APPROVAL_KEY_RE.test(key) && value !== undefined && value !== null && canonicalDraft(value).length > 2,
+  );
+}
+
+/** Register the exact arguments refused by a mutating peer as a standing action. */
+export function registerStandingApproval(
+  conversationId: string,
+  owner: string,
+  tool: string,
+  args: Record<string, unknown>,
+  result: string,
+  description = "",
+): boolean {
+  if (!isApprovalRequiredResult(result) || !hasSubstantiveArgs(args)) return false;
+  const cleanArgs = Object.fromEntries(Object.entries(args).filter(([key]) => !INTERNAL_APPROVAL_KEY_RE.test(key)));
+  const token: ApprovalToken = {
+    owner,
+    description,
+    tool,
+    args: cleanArgs,
+    draftHash: draftHash(cleanArgs),
+    expiresAt: Date.now() + TOKEN_TTL_MS,
+  };
+  const others = liveTokens(conversationId).filter((candidate) => candidate.owner !== owner || candidate.tool !== tool);
+  tokensByConversation.set(conversationId, [...others, token]);
+  return true;
+}
+
+/** Register a one-time legacy approval token for a just-blocked draft. */
+export function registerApprovalToken(conversationId: string, tool: string, content: unknown): void {
+  tokensByConversation.set(conversationId, [{ tool, draftHash: draftHash(content), expiresAt: Date.now() + TOKEN_TTL_MS }]);
+}
+
+export function registerOutboundComposeApprovalToken(conversationId: string): void {
+  tokensByConversation.set(conversationId, [{ tool: "", draftHash: "", expiresAt: Date.now() + TOKEN_TTL_MS, anyOutboundSend: true }]);
+}
+
+export function hasValidApprovalToken(conversationId: string, tool: string, content: unknown): boolean {
+  const tokens = liveTokens(conversationId);
+  return tokens.some((token) => token.anyOutboundSend || (!token.owner && token.tool === tool && token.draftHash === draftHash(content)));
+}
+
+function exactArgsContained(expected: Record<string, unknown>, actual: Record<string, unknown>): boolean {
+  return Object.entries(expected).every(([key, value]) => key in actual && canonicalDraft(actual[key]) === canonicalDraft(value));
+}
+
+export type StandingApprovalResolution = "allowed" | "nothing_pending" | "ambiguous" | "mismatch";
 
 /**
- * P-1 — register a standing approval for a draft composed through the ask_outbound
- * path, where Console has no exact final-content hash to key on (see anyOutboundSend
- * above). One-time, per-conversation, same TTL as a direct-ask token.
+ * Validate a model-selected commit candidate against host-owned standing state.
+ * The candidate must stay on the same peer and carry every exact draft argument.
  */
-export function registerOutboundComposeApprovalToken(conversationId: string): void {
-  tokensByConversation.set(conversationId, { tool: "", draftHash: "", expiresAt: Date.now() + TOKEN_TTL_MS, anyOutboundSend: true });
+export function resolveStandingApproval(input: {
+  conversationId: string;
+  owner: string;
+  tool: string;
+  args: Record<string, unknown>;
+  userRequest: string;
+  description?: string;
+}): StandingApprovalResolution {
+  const tokens = liveTokens(input.conversationId).filter((token) => token.owner && token.args);
+  if (tokens.length === 0) return "nothing_pending";
+  const exactText = approvedExactText(input.userRequest);
+  const candidates = exactText === undefined
+    ? tokens
+    : tokens.filter((token) => Object.values(token.args!).some((value) => typeof value === "string" && value === exactText));
+  if (candidates.length === 0) return "mismatch";
+  if (candidates.length !== 1) return "ambiguous";
+  const candidate = candidates[0]!;
+  const sourceOperation = `${candidate.tool.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")} ${candidate.description ?? ""}`;
+  const targetOperation = `${input.tool.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")} ${input.description ?? ""}`;
+  const sourceDeletes = /\b(?:delete|remove|destroy|revoke)\w*\b/i.test(sourceOperation);
+  const targetDeletes = /\b(?:delete|remove|destroy|revoke)\w*\b/i.test(targetOperation);
+  if (
+    candidate.owner !== input.owner ||
+    sourceDeletes !== targetDeletes ||
+    !exactArgsContained(candidate.args!, input.args)
+  ) return "mismatch";
+  tokensByConversation.set(input.conversationId, liveTokens(input.conversationId).filter((token) => token !== candidate));
+  return "allowed";
 }
 
-function liveToken(conversationId: string): ApprovalToken | undefined {
-  const token = tokensByConversation.get(conversationId);
-  if (!token) return undefined;
-  if (Date.now() > token.expiresAt) {
-    tokensByConversation.delete(conversationId);
-    return undefined;
-  }
-  return token;
+export function cancelStandingApprovals(conversationId: string): boolean {
+  const existed = liveTokens(conversationId).length > 0;
+  tokensByConversation.delete(conversationId);
+  return existed;
 }
 
-/** True when a non-expired token exists for this exact tool + draft content. */
-export function hasValidApprovalToken(conversationId: string, tool: string, content: unknown): boolean {
-  const token = liveToken(conversationId);
-  if (!token) return false;
-  if (token.anyOutboundSend) return true;
-  return token.tool === tool && token.draftHash === draftHash(content);
-}
-
-/** One-time use: delete the token once it resolves a mutation. */
 export function consumeApprovalToken(conversationId: string): void {
   tokensByConversation.delete(conversationId);
 }
 
-/** True when ANY non-expired token (either shape) stands for this conversation. */
 export function hasAnyLiveApprovalToken(conversationId: string): boolean {
-  return Boolean(liveToken(conversationId));
+  return liveTokens(conversationId).length > 0;
 }
 
-/** Test-only: reset all tokens between cases. */
+/** Serializable snapshot used by the tenant SQLite boundary. */
+export function approvalTokenSnapshot(conversationId: string): ApprovalToken[] {
+  return liveTokens(conversationId).map((token) => ({ ...token, ...(token.args ? { args: structuredClone(token.args) } : {}) }));
+}
+
+/** Replace in-memory state from the current tenant's durable conversation row. */
+export function hydrateApprovalTokens(conversationId: string, tokens: ApprovalToken[]): void {
+  const live = tokens.filter((token) => token.expiresAt > Date.now());
+  if (live.length) tokensByConversation.set(conversationId, live);
+  else tokensByConversation.delete(conversationId);
+}
+
 export function __resetApprovalTokens(): void {
   tokensByConversation.clear();
 }

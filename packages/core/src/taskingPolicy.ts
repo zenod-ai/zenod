@@ -1,8 +1,10 @@
 import {
+  classifyApprovalIntent,
   consumeApprovalToken,
   hasValidApprovalToken,
   registerApprovalToken,
   registerOutboundComposeApprovalToken,
+  resolveStandingApproval,
 } from "./approvalTokens.js";
 import { toolKind } from "./toolKinds.js";
 
@@ -192,14 +194,9 @@ function hasExplicitMutationIntent(tool: string, request: string): boolean {
 // friendly draft-approval prompt or resolves to a real send — never a raw error.
 const OUTBOUND_SEND_TOOL_NAMES = new Set(["posttweet", "postreddit", "sendemail"]);
 
-const AFFIRMATIVE_APPROVAL_RE =
-  /^\s*(?:[\w'-]+\s+){0,3}?(?:approved?|confirmed?|go\s*ahead|do\s+it|send\s+it|post\s+it|ship\s+it|yes|yep|yeah|ok(?:ay)?|sounds?\s+good|looks?\s+good)[.!]*\s*$/i;
-
-/** True for a short natural-language affirmative ("approved", "Tweet approved", "send it") — never a full sentence, never a negation. */
+/** True when natural language expresses approval. Recognition alone never grants authority. */
 export function isAffirmativeApproval(userRequest: string): boolean {
-  const trimmed = userRequest.trim();
-  if (NEGATION_RE.test(trimmed)) return false;
-  return AFFIRMATIVE_APPROVAL_RE.test(trimmed);
+  return classifyApprovalIntent(userRequest) === "approve";
 }
 
 /** True when a call to an outbound send tool carries an actual draft (not an empty/bare call). */
@@ -227,6 +224,46 @@ export interface PeerMutationGuardContext {
   args?: Record<string, unknown> | undefined;
   /** Dynamic MCP tools are classified by their advertised annotations. */
   forceMutation?: boolean | undefined;
+  /** Discovered peer identity. Standing actions never cross this boundary. */
+  owner?: string | undefined;
+  /** Advertised MCP description, used only to bind natural intent to an operation family. */
+  description?: string | undefined;
+}
+
+const MUTATION_FAMILIES = [
+  { tool: /\b(?:delete|remove|destroy|revoke)\w*\b/i, request: /\b(?:delete|remove|destroy|revoke)\w*\b/i },
+  { tool: /\b(?:create|draft|post|publish|send|compose|prepare|save|store|submit)\w*\b/i, request: /\b(?:create|draft|post|publish|send|compose|prepare|save|store|submit)\w*\b/i },
+  { tool: /\b(?:create|draft|compose|prepare)\w*\b/i, request: /\b(?:edit|change|revise|rewrite|replace)\w*\b/i },
+  { tool: /\b(?:edit|update|change|rename|patch)\w*\b/i, request: /\b(?:edit|update|change|rename|patch|revise|rewrite)\w*\b/i },
+  { tool: /\b(?:approve|confirm|commit|execute|run)\w*\b/i, request: /\b(?:approve|confirm|commit|execute|run)\w*\b/i },
+] as const;
+
+function operationWords(tool: string, description = ""): string {
+  const leaf = tool.split("__")[1] ?? tool;
+  return `${leaf.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")} ${description}`;
+}
+
+/** Bind ordinary human mutation language to the discovered operation family. */
+function hasNaturalDynamicMutationIntent(tool: string, request: string, description?: string): boolean {
+  if (READ_ONLY_REQUEST_RE.test(request) || EXECUTION_STATUS_REQUEST_RE.test(request) || /\b(?:run|execute|invoke|call)\b/i.test(request)) return false;
+  const operation = operationWords(tool, description);
+  const leaf = tool.split("__")[1] ?? "";
+  const humanRequest = leaf
+    ? request.replace(new RegExp(`\b(?:using|via|with)\s+(?:the\s+)?(?:\w+\s+)?${escapeRegex(leaf)}(?:\s+tool)?\b`, "gi"), " ")
+    : request;
+  return MUTATION_FAMILIES.some((family) => {
+    if (!family.tool.test(operation)) return false;
+    const verbs = new RegExp(family.request.source, "gi");
+    for (const match of humanRequest.matchAll(verbs)) {
+      const lead = humanRequest.slice(0, match.index!);
+      const localLead = lead.slice(Math.max(0, lead.length - 32));
+      const requested = lead.trim().length === 0 || /(?:please|can you|could you|would you|will you|i (?:want|need|would like) you to|let'?s)\s*$/i.test(localLead);
+      if (!requested) continue;
+      const negationLead = humanRequest.slice(Math.max(0, match.index! - 20), match.index);
+      if (!NEGATION_RE.test(negationLead)) return true;
+    }
+    return false;
+  });
 }
 
 /**
@@ -246,6 +283,20 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
   if (normalized === "archusrunissue" && !QUALIFIED_ISSUE_REF_RE.test(userRequest)) {
     return `Blocked ${tool}: running requires an exact work issue already named by the user as owner/repo#N. For create-and-run requests, send the full natural-language request to Archus instead of inventing a target.`;
   }
+  if (context?.forceMutation && !legacyMutationTool && isAffirmativeApproval(userRequest) && context.conversationId) {
+    const resolution = resolveStandingApproval({
+      conversationId: context.conversationId,
+      owner: context.owner ?? "",
+      tool,
+      args: context.args ?? {},
+      userRequest,
+      ...(context.description ? { description: context.description } : {}),
+    });
+    if (resolution === "allowed") return null;
+    if (resolution === "ambiguous") return `Blocked ${tool}: more than one standing action matches; ask the user which exact draft to approve.`;
+    if (resolution === "mismatch") return `Blocked ${tool}: the selected peer, operation, or exact arguments do not match the standing action.`;
+    return NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL;
+  }
   const explicitDynamicMutation = Boolean(
     context?.forceMutation &&
       !legacyMutationTool &&
@@ -258,6 +309,10 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
     return `Blocked ${tool}: the user's current request is read-only/status-oriented, so mutating peer tools are not allowed this turn.`;
   }
   if (explicitMutation) return null;
+
+  if (context?.forceMutation && !legacyMutationTool && hasNaturalDynamicMutationIntent(tool, userRequest, context.description)) {
+    return null;
+  }
 
   if (OUTBOUND_SEND_TOOL_NAMES.has(normalized) && context?.conversationId) {
     const { conversationId, args } = context;

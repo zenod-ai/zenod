@@ -47,7 +47,13 @@ import {
   summarizeActionsForReply,
 } from "../taskingPolicy.js";
 import { applyReplyGate } from "../replyGate.js";
-import { hasAnyLiveApprovalToken } from "../approvalTokens.js";
+import {
+  approvalTokenSnapshot,
+  cancelStandingApprovals,
+  classifyApprovalIntent,
+  hasAnyLiveApprovalToken,
+  hydrateApprovalTokens,
+} from "../approvalTokens.js";
 
 const LONG_MESSAGE_DIGEST_CHARS = 1_200;
 const ZENOD_DIGEST_TOOL = "zenod_digest_message";
@@ -304,6 +310,22 @@ interface Briefing {
 
 export function createEngine(options: EngineOptions): BrainEngine {
   const { repo, llm, state } = options;
+  // State stores are tenant-local in hosted Ring. This runtime nonce prevents two
+  // tenants with the same human conversation key from sharing the in-process cache;
+  // durable rows are re-hydrated into the new nonce after a restart.
+  const approvalScope = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const scopedApprovalId = (conversationId: string) => `${approvalScope}:${conversationId}`;
+
+  async function prepareApprovalTurn(conversationId: string, message: string): Promise<string> {
+    const scoped = scopedApprovalId(conversationId);
+    if (state.loadApprovalTokens) hydrateApprovalTokens(scoped, await state.loadApprovalTokens(conversationId));
+    if (classifyApprovalIntent(message) === "cancel") cancelStandingApprovals(scoped);
+    return scoped;
+  }
+
+  async function persistApprovalTurn(conversationId: string, scoped: string): Promise<void> {
+    if (state.saveApprovalTokens) await state.saveApprovalTokens(conversationId, approvalTokenSnapshot(scoped));
+  }
   // Vaultless mode (Console shell): no repo → vaultPath is empty and every vault
   // touchpoint below guards on `repo`. assertVault() gates the vault-only methods.
   const vaultPath = repo ? repo.path : "";
@@ -1289,8 +1311,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // live standing-draft token for this conversation, the only honest reply is the same
     // deterministic zero-state the token guard itself renders for a resolved bare
     // affirmative.
-    if (actions.length === 0 && isAffirmativeApproval(userMessage) && !hasAnyLiveApprovalToken(cid)) {
-      return NOTHING_PENDING_TO_APPROVE_TEXT;
+    if (actions.length === 0 && isAffirmativeApproval(userMessage)) {
+      return hasAnyLiveApprovalToken(cid)
+        ? "Nothing was sent; the pending action was not executed."
+        : NOTHING_PENDING_TO_APPROVE_TEXT;
     }
 
     const drafted = rawText.trim()
@@ -1314,6 +1338,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         : (onDeltaOrOptions ?? {});
     await syncForRead();
     const cid = conversationId(surface, chatOptions.conversationKey);
+    const approvalCid = await prepareApprovalTurn(cid, message);
     const window = await state.recentWindow(cid);
     await state.appendMessage(cid, "user", message, surface);
 
@@ -1334,7 +1359,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const result = await llm.answer(
       {
         question: message,
-        conversationId: cid,
+        conversationId: approvalCid,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
@@ -1352,7 +1377,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       options.driveTools,
       options.peerTools,
     );
-    const text = finalizeReply(result.text, actions, message, cid);
+    const text = finalizeReply(result.text, actions, message, approvalCid);
+    await persistApprovalTurn(cid, approvalCid);
     await state.appendMessage(cid, "assistant", text, surface);
 
     return {
@@ -1365,6 +1391,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function handleTasking(input: TaskingInput): Promise<TaskingReply> {
     await syncForRead();
     const cid = conversationId(input.surface, input.conversationKey);
+    const approvalCid = await prepareApprovalTurn(cid, input.text);
     const window = await state.recentWindow(cid);
     await state.appendMessage(cid, "user", input.text, input.surface);
 
@@ -1393,7 +1420,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const result = await llm.answer(
       {
         question,
-        conversationId: cid,
+        conversationId: approvalCid,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),
         onPeerAction: (tool, inp, res, metadata) => actions.push({
@@ -1409,7 +1436,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       options.driveTools,
       options.peerTools,
     );
-    const text = finalizeReply(result.text, actions, input.text, cid);
+    const text = finalizeReply(result.text, actions, input.text, approvalCid);
+    await persistApprovalTurn(cid, approvalCid);
     await state.appendMessage(cid, "assistant", text, input.surface);
     return { text, actions };
   }

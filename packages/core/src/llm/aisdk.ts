@@ -13,12 +13,14 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import {
   coerceEditIssueLabelsForUserRequest,
+  isAffirmativeApproval,
   NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
   NOTHING_PENDING_TO_APPROVE_TEXT,
   normalizedToolName,
   peerMutationGuardFailure,
   registerOutboundComposeApproval,
 } from "../taskingPolicy.js";
+import { registerStandingApproval } from "../approvalTokens.js";
 import { isKnownTool } from "../toolKinds.js";
 import type {
   AnswerInput,
@@ -1006,7 +1008,19 @@ export class AiSdkBrainLlm implements BrainLlm {
             outputSchema: (peer.schemaFormat === "json-schema" ? jsonSchema(peer.outputSchema as never) : peer.outputSchema) as never,
           } : {}),
           execute: async (peerInput) => {
-            const args = (peerInput ?? {}) as Record<string, unknown>;
+            let args = (peerInput ?? {}) as Record<string, unknown>;
+            // Approval/confirmation inputs are authority fields, not model authority.
+            // Strip whatever the model supplied. After standing-state validation the
+            // host may set advertised boolean fields itself; opaque/string secrets are
+            // never inferred or forwarded from chat.
+            const schema = peer.schemaFormat === "json-schema" && peer.inputSchema && typeof peer.inputSchema === "object"
+              ? peer.inputSchema as { properties?: Record<string, { type?: string; description?: string }> }
+              : undefined;
+            const approvalFields = Object.entries(schema?.properties ?? {})
+              .filter(([key]) => /(?:approval|approve|confirmation|confirm|authorized|authorised)/i.test(key));
+            if (approvalFields.length) {
+              args = Object.fromEntries(Object.entries(args).filter(([key]) => !approvalFields.some(([field]) => field === key)));
+            }
             const receiptMetadata = peer.verifiedMutationReceipt
               ? { verifiedMutationReceipt: true as const }
               : undefined;
@@ -1025,6 +1039,8 @@ export class AiSdkBrainLlm implements BrainLlm {
                   conversationId: input.conversationId,
                   args,
                   forceMutation: peer.annotations?.readOnlyHint === false || !isKnownTool(name),
+                  owner: peer.owner,
+                  description: peer.description,
                 });
             if (guardFailure) {
               if (isOutboundSend) {
@@ -1038,9 +1054,16 @@ export class AiSdkBrainLlm implements BrainLlm {
                 input.onPeerAction?.(name, args, text, receiptMetadata);
                 return text;
               }
-              const result = `ERROR: ${guardFailure}`;
+              const result = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL
+                ? NOTHING_PENDING_TEXT
+                : `ERROR: ${guardFailure}`;
               input.onPeerAction?.(name, args, result, receiptMetadata);
               return result;
+            }
+            if (isAffirmativeApproval(input.question)) {
+              for (const [field, property] of approvalFields) {
+                if (property.type === "boolean") args[field] = true;
+              }
             }
             const boundaryFailure = archusWriteBoundaryFailure(name, peer, args);
             if (boundaryFailure) {
@@ -1057,6 +1080,9 @@ export class AiSdkBrainLlm implements BrainLlm {
             const existing = dedupeKey ? sameTurnPeerMutations.get(dedupeKey) : undefined;
             if (existing) return existing;
             const pending = caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? "")))).then((result) => {
+              if (input.conversationId && peer.owner) {
+                registerStandingApproval(input.conversationId, peer.owner, name, args, result, peer.description);
+              }
               input.onPeerAction?.(name, args, result, receiptMetadata);
               return result;
             });

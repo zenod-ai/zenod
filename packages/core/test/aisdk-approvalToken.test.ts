@@ -247,3 +247,79 @@ describe("M-1 — stateful approval token, friendly block template, retry-stop",
     expect(calls).toHaveLength(1);
   });
 });
+
+describe("generic discovered MCP standing actions", () => {
+  beforeEach(() => __resetApprovalTokens());
+
+  it("routes an ordinary draft request, then validates a conversational approval against the exact peer and args", async () => {
+    const calls: Array<{ tool: string; args: unknown }> = [];
+    const peer = {
+      calli__createposts__hash: {
+        owner: "calli",
+        description: "Create a held draft post for review.",
+        annotations: { readOnlyHint: false },
+        inputSchema: z.object({ text: z.string() }),
+        run: async (args: unknown) => {
+          calls.push({ tool: "create", args });
+          return "[draft_not_approved] held; nothing was published";
+        },
+      },
+      calli__approve_send__hash: {
+        owner: "calli",
+        description: "Approve and send the exact standing draft.",
+        annotations: { readOnlyHint: false, idempotentHint: true },
+        inputSchema: z.object({ channel: z.literal("x"), text: z.string() }),
+        run: async (args: unknown) => {
+          calls.push({ tool: "approve", args });
+          return "https://x.com/i/web/status/42";
+        },
+      },
+    };
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const cid = "tenant-a:web:generic";
+
+    await llm.answer({ question: "Draft this for X and stop before publishing: Hello world", conversationId: cid, vaultBriefing: "brief", conversation: [] }, readTools, undefined, undefined, peer);
+    expect(await captured.config.tools.calli__createposts__hash.execute({ text: "Hello world" })).toContain("draft_not_approved");
+
+    await llm.answer({ question: "Looks good — send that exact draft now", conversationId: cid, vaultBriefing: "brief", conversation: [] }, readTools, undefined, undefined, peer);
+    expect(await captured.config.tools.calli__approve_send__hash.execute({ channel: "x", text: "Hello world" })).toBe("https://x.com/i/web/status/42");
+    expect(calls.map((call) => call.tool)).toEqual(["create", "approve"]);
+
+    await llm.answer({ question: "yes", conversationId: cid, vaultBriefing: "brief", conversation: [] }, readTools, undefined, undefined, peer);
+    expect(await captured.config.tools.calli__approve_send__hash.execute({ channel: "x", text: "Hello world" })).toBe("Nothing pending to approve.");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("supports same-tool boolean confirmation and keeps the approval field host-controlled", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const peer = {
+      fixture__save__hash: {
+        owner: "fixture",
+        description: "Save the exact document after confirmation.",
+        annotations: { readOnlyHint: false },
+        schemaFormat: "json-schema" as const,
+        inputSchema: {
+          type: "object",
+          properties: {
+            text: { type: "string", description: "The exact text the user confirmed." },
+            confirmed: { type: "boolean", description: "Explicit confirmation for this mutation." },
+          },
+          required: ["text"],
+        },
+        run: async (args: Record<string, unknown>) => {
+          calls.push({ ...args });
+          return args.confirmed === true ? "saved id=doc-1" : "[confirmation_required] held";
+        },
+      },
+    };
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const cid = "tenant-a:web:same-tool";
+    await llm.answer({ question: "Please save this document for me", conversationId: cid, vaultBriefing: "brief", conversation: [] }, readTools, undefined, undefined, peer);
+    expect(await captured.config.tools.fixture__save__hash.execute({ text: "exact", confirmed: true })).toContain("confirmation_required");
+    expect(calls[0]).toEqual({ text: "exact" });
+
+    await llm.answer({ question: "yes, go ahead", conversationId: cid, vaultBriefing: "brief", conversation: [] }, readTools, undefined, undefined, peer);
+    expect(await captured.config.tools.fixture__save__hash.execute({ text: "exact", confirmed: false })).toBe("saved id=doc-1");
+    expect(calls[1]).toEqual({ text: "exact", confirmed: true });
+  });
+});

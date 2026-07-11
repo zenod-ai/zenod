@@ -66,6 +66,12 @@ export class SqliteStateStore implements StateStore {
       );
       CREATE INDEX IF NOT EXISTS idx_chat_test_runs_at ON chat_test_runs (at DESC);
       CREATE INDEX IF NOT EXISTS idx_chat_test_runs_test_run_id ON chat_test_runs (test_run_id, at DESC);
+      CREATE TABLE IF NOT EXISTS approval_tokens (
+        conversation_id TEXT NOT NULL,
+        token_json TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_approval_tokens_conversation ON approval_tokens (conversation_id, expires_at);
     `);
   }
 
@@ -111,6 +117,50 @@ export class SqliteStateStore implements StateStore {
 
   async clearConversation(conversationId: string): Promise<void> {
     this.db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(conversationId);
+    this.db.prepare("DELETE FROM approval_tokens WHERE conversation_id = ?").run(conversationId);
+  }
+
+  async loadApprovalTokens(conversationId: string): Promise<Array<{
+    tool: string;
+    draftHash: string;
+    expiresAt: number;
+    owner?: string;
+    description?: string;
+    args?: Record<string, unknown>;
+    anyOutboundSend?: boolean;
+  }>> {
+    this.db.prepare("DELETE FROM approval_tokens WHERE expires_at <= ?").run(Date.now());
+    return this.db
+      .prepare("SELECT token_json FROM approval_tokens WHERE conversation_id = ? ORDER BY expires_at")
+      .all(conversationId)
+      .flatMap((row) => {
+        try {
+          return [JSON.parse(String((row as { token_json: string }).token_json))];
+        } catch {
+          return [];
+        }
+      });
+  }
+
+  async saveApprovalTokens(conversationId: string, tokens: Array<{
+    tool: string;
+    draftHash: string;
+    expiresAt: number;
+    owner?: string;
+    description?: string;
+    args?: Record<string, unknown>;
+    anyOutboundSend?: boolean;
+  }>): Promise<void> {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM approval_tokens WHERE conversation_id = ?").run(conversationId);
+      const insert = this.db.prepare("INSERT INTO approval_tokens (conversation_id, token_json, expires_at) VALUES (?, ?, ?)");
+      for (const token of tokens) insert.run(conversationId, JSON.stringify(token), token.expiresAt);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   async searchConversations(query: string, options: ConversationSearchOptions = {}): Promise<ConversationSearchHit[]> {
