@@ -1,6 +1,6 @@
 # EPIC P · Phylax Sprint — duplicate Zenod, the middle is the channels organ
 
-Status: pending — DISPATCH ONLY AFTER EPIC R (Ring) SHIP is approved by Jordi
+Status: active — gate satisfied 2026-07-11 (Jordi approved Ring SHIP and said "go phylax"); dispatched
 Created: 2026-07-11
 Updated: 2026-07-11
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -84,12 +84,12 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: pending — gated on EPIC R SHIP approval
-Last verified: 2026-07-11
+Phase: dispatched — wave 1 (P-S1 ∥ P-S2)
+Last verified: 2026-07-11 (gate satisfied by Jordi)
 Integration target: main
-Fresh base commit: pin current `main` at dispatch (D19c)
-Next action: when Jordi approves the Ring's test package, dispatch this manager.
-Blockers: EPIC R SHIP (the downstream must exist). Nothing else.
+Fresh base commit: `31e69bbbc20e2e4a2b053a2d30adf44f18b34245` — PINNED at dispatch; no rebases until the journey passes (D19c)
+Next action: manager binds, mints P-S1..P-S5, dispatches wave 1 in worktrees.
+Blockers: none. Test WhatsApp number needed only at P-S5 start (Human Gates) — P-S1..P-S4 proceed without it.
 
 ## Role Goals
 

@@ -124,7 +124,7 @@ engine — block nothing, build nothing for it yet.
 | Child | Layer | Scope | Absorbs | Status | Spine |
 |---|---|---|---|---|---|
 | 4.1 Briefing & setup mode | engine + config | Briefing schema (directives, metrics, goals, benchmarks); setup-mode conversation flow; ✓ versioning; no-briefing-no-fire enforcement hook | H3-3 AC1 | draft — spine not yet spawned | tbd `docs/EPIC-4.1-BRIEFING.md` |
-| 4.2 Lane runtime | engine | `lanes/` dir, YAML schema, loader + validation, deterministic scheduler, gateway-enforced toolbelt/budget, escalation; generality paper test | H3-2 (all ACs) | draft | tbd `docs/EPIC-4.2-LANE-RUNTIME.md` |
+| 4.2 Lane runtime | engine | `lanes/` dir, YAML schema, loader + validation, deterministic scheduler, gateway-enforced toolbelt/budget, escalation; generality test via loop-core PoC | H3-2 (all ACs) | active — PoC delivery spine spawned 2026-07-10, steward: 4.2 delivery manager (Codex session) | `docs/EPIC-4.2-POC-LOOP-CORE.md` |
 | 4.3 Boards & approval | engine | Board primitive (memory pages + states), board-event triggers, `approval` policy field, ✓-parsing ("✓ 1,3 + five more") | H3-3 AC4 | draft | tbd `docs/EPIC-4.3-BOARDS.md` |
 | 4.4 Herald's lanes | config | Four mission prompts (proposer / poster / replier / distiller), lane files with guardrails (pace, never-list, sour-thread ✋), reply grounding via repo + memory | H3-3 AC2-3,5 | draft | tbd `docs/EPIC-4.4-HERALD-LANES.md` |
 | 4.5 Scorecard | engine + config | X engagement reading, post log, snapshot lane, weekly report lane | H3-4 (all ACs) | draft | tbd `docs/EPIC-4.5-SCORECARD.md` |
@@ -168,6 +168,7 @@ Blockers: none at root level. 4.4 posting pre-blocked on 2.4 C-1 tester-green (2
 | 2026-07-10 | D-4.0-3 · Decomposition = Cut A (by loop anatomy) with the two-layer law as a per-ticket invariant | Demoable increments + never-fork discipline at ticket level | Session 2026-07-10 |
 | 2026-07-10 | D-4.0-4 · This spine supersedes `EPIC-4-HERALD.md`, absorbing D-H1..3 and mapping H3-1..5 into children | Single authoritative Herald root in EpicSpine format | Jordi, session 2026-07-10 |
 | 2026-07-10 | D-4.0-5 · PoC-first: build loop-core as a pure library with four ports (Memory/Agent/Channel/Clock) in `spikes/loop-core/`, LLM via plain script, fake channel, simulated clock; lift core into 4.2 unchanged, integration = adapter swaps | Prove loop mechanics + generality without deployment machinery; de-risk 4.2 | `docs/EPIC-4.2-POC-LOOP-CORE.md` |
+| 2026-07-10 | D-4.0-6 · 4.1/4.2 boundary for the PoC: 4.2 may implement the minimal briefing→lane-YAML compiler needed to test `setup fixture → generated YAML → validation → execution` end to end; that compiler is seed code handed to 4.1, not a 4.2 scope expansion. Core acceptance runs on deterministic adapters (scripted Agent, fixed clock, fixtures, golden snapshots); live-LLM runs are optional integration evidence, not acceptance | 4.2 reviewer findings 1–3 accepted; PoC must test the compile half of "briefing is the UI, YAML is compiled output" and be repeatable | Session 2026-07-10; `docs/EPIC-4.2-POC-LOOP-CORE.md` review |
 
 ## Issue Ledger
 
@@ -229,6 +230,7 @@ Stale assignment policy: a root-scope assignment untouched for 7 days may be mar
 |---|---|---|---|---|---|
 | 2026-07-10 | `docs/EPIC-4-HERALD.md` | Append-zone note: "2026-07-10 · Jordi · Superseded by `docs/EPIC-4.0-HERALD.md` (D-4.0-4). D-H1..3 absorbed; H3-1..5 mapped to children 4.1–4.6. This doc is historical record; no new tickets here." | This spine | Jordi | proposed |
 | 2026-07-10 | `docs/EPIC-0-FOUNDATION-SPINE.md` | Add `docs/EPIC-4.0-HERALD.md` to read-only linked spines / child map, replacing or alongside the 2.6 Herald link | This spine | Foundation steward | proposed |
+| 2026-07-10 | `docs/EPIC-4.2-POC-LOOP-CORE.md` | Per D-4.0-6: (a) add DoD item — versioned setup fixture → generated lane YAML → validation → controlled execution, with golden YAML + run-trace snapshots; (b) state core acceptance uses deterministic adapters only (scripted Agent, fixed clock, fixtures); live Anthropic adapter = optional evidence; (c) note the compiler is 4.1 seed code; (d) refresh base from `origin/main` before creating the spike branch (recorded base `99700d0` stale) | 4.2 review findings 1–4, accepted by parent | 4.2 delivery manager | proposed |
 
 ## Handoff Journal
 
@@ -245,6 +247,18 @@ Assignment identity: Jordi + bound Fable session (this conversation).
 Branch / latest commit: main / `468095d` (doc-only change, uncommitted).
 Last verified: 2026-07-10 03:58 CEST.
 Links: `docs/EPIC-4-HERALD.md`, `docs/EPIC-2.6-HERALD-MOVE-0.md`, `docs/HANDOVER-I9.md` Part 2 (lane schema B1–B4).
+
+### 2026-07-10 - Epic 0 worker (Fable session) - 4.2 spawned; reviewer findings reconciled
+
+Context: 4.2 delivery manager (Codex session) converted the PoC spec into an active child spine and
+stewards it. Its five review findings accepted: YAML-generation acceptance gap, determinism-first,
+4.1/4.2 compiler boundary (settled as D-4.0-6), stale base, keep-spines-lean.
+Next: 4.2 steward applies the proposed DoD changes, refreshes base, creates `codex/epic-4.2-loop-core-poc`, dispatches the worker.
+Risks: none new; parent and 4.2 spec currently uncommitted/modified on local main — commit before branching.
+Assignment identity: Jordi + bound Fable session.
+Branch / latest commit: main, local ahead-of-record; refresh from `origin/main`.
+Last verified: 2026-07-11 00:20 CEST.
+Links: `docs/EPIC-4.2-POC-LOOP-CORE.md`.
 
 ## Appendix
 
