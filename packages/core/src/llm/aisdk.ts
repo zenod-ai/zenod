@@ -1,6 +1,7 @@
 import {
   generateObject,
   generateText,
+  jsonSchema,
   NoObjectGeneratedError,
   stepCountIs,
   streamText,
@@ -18,6 +19,7 @@ import {
   peerMutationGuardFailure,
   registerOutboundComposeApproval,
 } from "../taskingPolicy.js";
+import { isKnownTool } from "../toolKinds.js";
 import type {
   AnswerInput,
   AnswerResult,
@@ -997,7 +999,12 @@ export class AiSdkBrainLlm implements BrainLlm {
         name,
         tool({
           description: peer.description,
-          inputSchema: (peer.inputSchema ?? z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") })) as never,
+          inputSchema: (peer.schemaFormat === "json-schema"
+            ? jsonSchema(peer.inputSchema as never)
+            : peer.inputSchema ?? z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") })) as never,
+          ...(peer.outputSchema ? {
+            outputSchema: (peer.schemaFormat === "json-schema" ? jsonSchema(peer.outputSchema as never) : peer.outputSchema) as never,
+          } : {}),
           execute: async (peerInput) => {
             const args = (peerInput ?? {}) as Record<string, unknown>;
             const receiptMetadata = peer.verifiedMutationReceipt
@@ -1012,7 +1019,13 @@ export class AiSdkBrainLlm implements BrainLlm {
               return blockedOutboundTurn.text;
             }
 
-            const guardFailure = peerMutationGuardFailure(name, input.question, { conversationId: input.conversationId, args });
+            const guardFailure = peer.annotations?.readOnlyHint === true
+              ? null
+              : peerMutationGuardFailure(name, input.question, {
+                  conversationId: input.conversationId,
+                  args,
+                  forceMutation: peer.annotations?.readOnlyHint === false || !isKnownTool(name),
+                });
             if (guardFailure) {
               if (isOutboundSend) {
                 // M-1 friendly block template: the raw "ERROR: Blocked …" string is an

@@ -160,6 +160,54 @@ describe("answer tool-step budget", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("executes an explicitly read-only discovered peer tool without mutation gating", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    await llm.answer(
+      { question: "show the recent posts", vaultBriefing: "brief", conversation: [] },
+      readTools,
+      undefined,
+      undefined,
+      {
+        calli__searchpostsrecent__abc123: {
+          description: "Read recent posts.",
+          inputSchema: { type: "object", properties: { query: { type: "string" } } },
+          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+          run: async (input) => {
+            calls.push(input);
+            return JSON.stringify({ posts: [{ id: "7", text: "hello" }] });
+          },
+        },
+      },
+    );
+
+    const result = await captured.config.tools.calli__searchpostsrecent__abc123.execute({ query: "recent" });
+    expect(result).toBe('{"posts":[{"id":"7","text":"hello"}]}');
+    expect(calls).toEqual([{ query: "recent" }]);
+  });
+
+  it("keeps unannotated discovered tools fail-safe mutation guarded", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    await llm.answer(
+      { question: "show status only", vaultBriefing: "brief", conversation: [] },
+      readTools,
+      undefined,
+      undefined,
+      {
+        peer__unknownfuturetool__abc123: {
+          description: "Unknown future behavior.",
+          inputSchema: { type: "object" },
+          run: async (input) => { calls.push(input); return "called"; },
+        },
+      },
+    );
+
+    const result = await captured.config.tools.peer__unknownfuturetool__abc123.execute({});
+    expect(result).toContain("ERROR: Blocked");
+    expect(calls).toHaveLength(0);
+  });
+
   it("deduplicates same-turn Console create-issues peer calls by issue content", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     const calls: unknown[] = [];

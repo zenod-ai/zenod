@@ -58,7 +58,7 @@ import { runExecutionIngestSweep, type MemoryJobStatus } from "./executionIngest
 import { detectStuckIngestJobs, formatStuckIngestAlert, STUCK_INGEST_THRESHOLD_MS } from "./ingestWatchdog.js";
 import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
-import { callPeer, callPeerTool, callPeerWithArgs, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
+import { callPeer, callPeerTool, callPeerWithArgs, discoverPeerTools, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
 import { createIssueThenRunJourney, type CreateIssueThenRunInput, type CreateIssueThenRunResult } from "./createIssueRunJourney.js";
 import { createIssuesJourney, type CreateIssuesJourneyInput, type CreateIssuesJourneyResult } from "./parallelIssueJourney.js";
@@ -107,7 +107,8 @@ type RunEphemeralTaskInput = RunEphemeralJourneyInput & {
   skills?: string[];
 };
 
-function peerToolInputSchema(schemaKey?: string): ZodTypeAny | undefined {
+function peerToolInputSchema(schemaKey?: string | Record<string, unknown>): ZodTypeAny | Record<string, unknown> | undefined {
+  if (schemaKey && typeof schemaKey === "object") return schemaKey;
   switch (schemaKey) {
     case "archus.get_issue":
       return z.object(V4_GET_ISSUE_SHAPE);
@@ -206,6 +207,7 @@ export class Runtime {
   private engine: BrainEngine | null = null;
   private repo: VaultRepo | null = null;
   private readonly taskingContext = new AsyncLocalStorage<TaskingRunContext>();
+  private walletPeerRefresh: Promise<PeerConfig[]> | null = null;
 
   async reconcileMergedExecutionReviews(): Promise<void> {
     if (!this.executionQueue) return;
@@ -324,6 +326,40 @@ export class Runtime {
     this.repo = null;
   }
 
+  /**
+   * Serialize wallet discovery so startup and edits cannot overwrite each other.
+   * Failed catalogs are not replaced by a synthetic ask_brain capability.
+   */
+  refreshWalletPeerTools(peers?: PeerConfig[], names?: ReadonlySet<string>): Promise<PeerConfig[]> {
+    const refresh = async (): Promise<PeerConfig[]> => {
+      const source = peers ?? this.settings.peers();
+      const next = await Promise.all(source.map(async (peer) => {
+        if (!peer.wallet || (names && !names.has(peer.name))) return peer;
+        const result = await discoverPeerTools(peer);
+        return {
+          ...peer,
+          tools: result.specs,
+          discovery: {
+            transport: result.transport,
+            tools: result.tools,
+            ...(result.error ? { error: result.error } : {}),
+            refreshedAt: new Date().toISOString(),
+          },
+        } satisfies PeerConfig;
+      }));
+      this.settings.setPeers(next);
+      this.invalidate();
+      return next;
+    };
+    const queued = (this.walletPeerRefresh ?? Promise.resolve([])).catch(() => []).then(refresh);
+    this.walletPeerRefresh = queued;
+    return queued;
+  }
+
+  ensureWalletPeerTools(): Promise<PeerConfig[]> {
+    return this.walletPeerRefresh ?? this.refreshWalletPeerTools();
+  }
+
   async getRepo(options: { ensureSchema?: boolean } = {}): Promise<VaultRepo> {
     const ensureSchema = options.ensureSchema ?? true;
     if (this.repo) return this.repo;
@@ -351,6 +387,7 @@ export class Runtime {
   }
 
   async getEngine(): Promise<BrainEngine> {
+    if (this.agent.name === "ring" && this.walletPeerRefresh) await this.walletPeerRefresh;
     if (this.engine) return this.engine;
     // Vaultless agents (the Console shell) boot the engine with no vault: only an
     // LLM key is required, no vault/tasking/drive tools. Vault agents are unchanged.
@@ -639,11 +676,13 @@ export class Runtime {
     const shouldForwardConsoleContext = this.agent.name === "console";
     for (const peer of this.settings.peers()) {
       const safe = peer.name.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
-      // A peer either declares a curated tool set (e.g. Zenod's memory toolset) or
-      // gets a single ask_<name> delegation to its ask_brain.
+      // Ring wallet catalogs are authoritative. Legacy non-wallet suite peers may
+      // still use their curated list or single ask_<name> compatibility tool.
       const specs =
         peer.tools && peer.tools.length > 0
           ? peer.tools
+          : peer.wallet
+            ? []
           : [
               {
                 as: `ask_${safe}`,
@@ -662,6 +701,9 @@ export class Runtime {
         tools[spec.as] = {
           description: spec.description,
           ...(inputSchema ? { inputSchema } : {}),
+          ...(spec.outputSchema ? { outputSchema: spec.outputSchema } : {}),
+          ...(typeof spec.inputSchema === "object" ? { schemaFormat: "json-schema" as const } : {}),
+          ...(spec.annotations ? { annotations: spec.annotations } : {}),
           ...(verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
           owner: peer.name,
           ...(peer.repo ? { authorityRepo: peer.repo } : {}),
