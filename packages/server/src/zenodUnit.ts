@@ -24,6 +24,7 @@ import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
 import type { ChatTestAuditStore } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
+import type { CustomerProductConfig } from "./customerBilling.js";
 import { readCustomerSession } from "./customerSession.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
@@ -157,6 +158,7 @@ export interface CreateZenodUnitOptions {
   tokenEnvVar?: string;
   defaultTenantName?: string;
   panels?: string[];
+  customerProduct?: CustomerProductConfig;
 }
 
 export const ZENOD_READ_TOOLS = [
@@ -258,7 +260,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       runtimeForAccount: (account) => (account.tenant_id ? runtimes.get(account.tenant_id) : null),
       sharedGithubApp,
     },
-    { ...options.customer, env, tenantStore },
+    {
+      ...options.customer,
+      env,
+      tenantStore,
+      product: options.customerProduct ?? options.customer?.product,
+    },
   );
   const app = new Hono<{ Bindings: HttpBindings }>();
   app.get("/api/health", (c) =>

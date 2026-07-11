@@ -3,9 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
+import type Stripe from "stripe";
 import { createMemoryTenantStore } from "@zenod/mcp-chassis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONSOLE_AGENT, RING_AGENT } from "../src/agent.js";
+import type { CustomerStripeClient } from "../src/customerBilling.js";
 import { createRingUnit } from "../src/ringUnit.js";
 import { resolveServerMode } from "../src/serverMode.js";
 
@@ -93,6 +95,93 @@ describe("Ring council unit", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     } finally {
       unit.close();
+    }
+  });
+
+  it("uses the Ring namespace, checkout metadata, domain and default OAuth callback", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "ring-customer-"));
+    dirs.push(dataDir);
+    let created: Stripe.Checkout.SessionCreateParams | null = null;
+    const checkoutSession = {
+      id: "cs_ring",
+      object: "checkout.session",
+      client_reference_id: "github-42",
+      metadata: { product: "ring", unit: "ring" },
+      mode: "subscription",
+      payment_status: "unpaid",
+      status: "open",
+      url: "https://checkout.stripe.test/ring",
+    } as Stripe.Checkout.Session;
+    const stripe: CustomerStripeClient = {
+      checkout: {
+        sessions: {
+          create: vi.fn(async (params) => {
+            created = params;
+            return checkoutSession;
+          }),
+          retrieve: vi.fn(async () => checkoutSession),
+        },
+      },
+      webhooks: { constructEvent: vi.fn() },
+    };
+    const env = {
+      NODE_ENV: "test",
+      ACCOUNT_STATE_SECRET: "ring-state-secret",
+      GITHUB_OAUTH_CLIENT_ID: "ring-client",
+      GITHUB_OAUTH_CLIENT_SECRET: "ring-client-secret",
+      CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+      PRICE_MONTHLY: "price_ring_monthly",
+    };
+    const tenants = createMemoryTenantStore();
+    const unit = createRingUnit({
+      dataDir,
+      tenantStore: tenants,
+      env,
+      customer: {
+        stripe,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "ring-owner", email: null }),
+        },
+      },
+    });
+    try {
+      expect(unit.customerAccounts.path).toBe(join(dataDir, "customer-accounts-ring.json"));
+      const signIn = await unit.app.request("/auth/signin", {
+        headers: { host: "ring.zenod.dev" },
+      });
+      const state = new URL(signIn.headers.get("location")!).searchParams.get("state")!;
+      const callback = await unit.app.request(
+        `/auth/github/callback?code=ok&state=${encodeURIComponent(state)}`,
+      );
+      expect(callback.headers.get("location")).toBe("https://ring.zenod.dev/");
+      const cookie = callback.headers.get("set-cookie")!.split(";")[0]!;
+      const checkout = await unit.app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ tier: "monthly" }),
+      });
+      expect(checkout.status).toBe(200);
+      expect(created).toMatchObject({
+        client_reference_id: "github-42",
+        metadata: { product: "ring", unit: "ring" },
+        success_url: "https://ring.zenod.dev/checkout/complete?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url: "https://ring.zenod.dev/pricing?checkout=cancelled",
+      });
+    } finally {
+      unit.close();
+    }
+
+    const callbackUnit = createRingUnit({ dataDir: `${dataDir}-callback`, env });
+    dirs.push(`${dataDir}-callback`);
+    try {
+      const signIn = await callbackUnit.app.request("/auth/signin");
+      const location = new URL(signIn.headers.get("location")!);
+      expect(location.searchParams.get("redirect_uri")).toBe(
+        "https://ring.zenod.dev/auth/github/callback",
+      );
+    } finally {
+      callbackUnit.close();
     }
   });
 });

@@ -14,5 +14,11 @@ export function createRingUnit(options: CreateZenodUnitOptions = {}) {
     tokenEnvVar: "RING_API_TOKEN",
     defaultTenantName: "Self-hosted Ring",
     panels: ["chat", "keys", "connections", "costs", "mcp"],
+    customerProduct: {
+      product: "ring",
+      unit: "ring",
+      defaultDomain: "https://ring.zenod.dev",
+      signInToLanding: true,
+    },
   });
 }
