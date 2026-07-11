@@ -106,6 +106,16 @@ def _desktop_oauth1_factory(_key, _secret):  # noqa: ANN001
     return _DesktopOAuth1Flow()
 
 
+def test_callback_not_approved_uses_existing_pin_fallback():
+    exc = OAuth1Error(
+        "unavailable",
+        "Callback URL not approved for this client application.",
+        http_status=403,
+        provider_code="415",
+    )
+    assert cp._oauth1_requires_oob(exc) is True
+
+
 def _engine() -> ChatAuth:
     """A ChatAuth whose OAuth2 flow uses the mocked HTTP client + an in-memory store."""
     store = InMemoryTokenStore()

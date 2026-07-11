@@ -754,8 +754,10 @@ def _verify_x_account(config: Dict[str, str]) -> Dict[str, Any]:
 def _oauth1_requires_oob(exc: Exception) -> bool:
     provider_code = str(getattr(exc, "provider_code", "") or "")
     message = str(getattr(exc, "message", str(exc))).lower()
-    return provider_code == "417" or (
+    return provider_code in {"415", "417"} or (
         "desktop applications" in message and "oauth_callback" in message and "oob" in message
+    ) or (
+        "callback url not approved" in message
     )
 
 
