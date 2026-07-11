@@ -84,10 +84,10 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: HARDEN complete — generic MCP + tenant Agent Skills live
-Last verified: 2026-07-11T13:19:05+02:00
+Phase: HARDEN complete — generic MCP + advertised and tenant-managed Agent Skills live
+Last verified: 2026-07-11T14:35:28+02:00
 Integration target: main
-Fresh base commit: `e6b0a2bb3777af223df8783c443811485be31588` — LIVE exact R-H5 release (D19c)
+Fresh base commit: `e7dc215a566189c317a68533a7006c6d8a5b2d8f` — LIVE exact advertised-skill release (D19c)
 Next action: none; R-H1–R-H5 package delivered.
 Blockers: none.
 
@@ -135,7 +135,7 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | 2026-07-11 | Conduct kit | Register async ticket shapes with any receipt middleware BEFORE walking (the Zenod silent_ack lesson). |
 | 2026-07-11 | Anything unanswered | Simplest option, journal it, keep moving. |
 | 2026-07-11 | Generic wallet tools | Ring discovers every peer through MCP `tools/list`; it never assumes `ask_brain` and never carries product-specific profiles. Names are collision-safe; descriptions and JSON Schemas reach the Council; saved peers auto-refresh on boot and edit without reconnecting. |
-| 2026-07-11 | Per-peer skills | The tenant attaches a versioned Agent Skills bundle in My Units. The MCP server does not advertise or choose it. Ring stores it as a tenant artifact and exposes it through progressive `load_peer_skill` disclosure. |
+| 2026-07-11 | Per-peer skills | A peer may advertise one canonical same-origin Agent Skills bundle in its D16 card. Ring imports it on successful connection/refresh when no skill or explicit detach opt-out exists. Manual attach/replace/detach remains authoritative; detach persists the opt-out. Cross-origin, redirected, malformed, or oversized advertisements are ignored without breaking MCP discovery. Ring stores accepted bundles as tenant artifacts and exposes them only through progressive `load_peer_skill` disclosure. |
 | 2026-07-11 | Skill runtime boundary | Current AI SDK 6 provider-independent pattern first. AI SDK 7 `uploadSkill` and provider containers are a separate future decision. Scripts stay inert; skill prose cannot override authority or mutation guards. |
 | 2026-07-11 | Generic peer receipt gate | Verified receipts from mutating wallet peer tools render verbatim from the tool result. Do not special-case `add_memory`, Zenod, or Calli; preserve the existing separate reconciliation path for backlog/execution tools. |
 | 2026-07-11 | Authoritative stream completion | Streaming deltas are transient UX. The `done` event must carry `engine.chat`'s final authoritative text, and the UI must replace the draft with it. This applies generically to every final reply, not only wallet receipts. |
@@ -158,6 +158,7 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | done | #863, #860 done | [#888](https://github.com/zenod-ai/zenod/pull/888) / `codex/r-h3-peer-skill-ui` | `ddab094` | transport vs tools-ready; attach/replace/download/detach | CI + independent review pass; 23 web tests; merged `062e91e` | 2026-07-11T06:53:42+02:00 | integrated |
 | [#865](https://github.com/zenod-ai/zenod/issues/865) | Ticket worker | R-H4-worker | Progressive `load_peer_skill` runtime + safety | done | #863, #860 done | [#887](https://github.com/zenod-ai/zenod/pull/887) / `codex/r-h4-peer-skill-runtime` | `ddab094` | metadata-only baseline; on-demand skill; no authority escalation/scripts | CI + independent security review pass; merged `e1c257b` | 2026-07-11T06:53:42+02:00 | integrated |
 | [#864](https://github.com/zenod-ai/zenod/issues/864) | Epic worker / tester | Ring delivery manager | Generic MCP + skills integration and live Calli validation | done | #862, #865, #866, #861 done | `main`; live fixes [#889](https://github.com/zenod-ai/zenod/pull/889), [#890](https://github.com/zenod-ai/zenod/pull/890) | `e6b0a2b` live | existing Calli auto-refresh, held draft only, two-tenant isolation | Calli 18 real tools; skill v1.0.0; held receipt; external MCP + isolation pass | 2026-07-11T13:19:05+02:00 | package delivered |
+| [#892](https://github.com/zenod-ai/zenod/issues/892) | Ticket worker | Zenod skill steward | Advertised peer skill import + canonical Zenod bundle | done | #860, #862, #865 | [#893](https://github.com/zenod-ai/zenod/pull/893) / `codex/zenod-advertised-skill` | `e5387eb` | same-origin bounded import; tenant override; live progressive load | deployed `e7dc215`; existing Zenod peer auto-attached v1.0.0; loader audit pass | 2026-07-11T14:35:28+02:00 | closed |
 
 ## Branch And Integration
 
@@ -203,8 +204,14 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Generic receipt gate live reprove | `b7c0ca5` | ring.zenod.dev live | real Chrome exact SHIP 7 phrase + Ring runtime logs | PARTIAL: gate intercepted `add_memory` and selected the verified receipt; stream UI retained the discarded model delta because `done` omitted final text | `docs/evidence/ring-ship-2026-07-11/17-gate-intercept-stream-draft-visible.png`; issue #879 |
 | 2026-07-11 | Final SHIP journey | `5ac9f37` | ring.zenod.dev live | real browser exact SHIP 7; external MCP SDK client; bearer-isolated beta tenant | PASS: commit `45e22e2` + GitHub links visible without reload; `ring-face-ok`; alpha peers/key hidden from beta; beta cleaned up | `docs/evidence/ring-ship-2026-07-11/19-ship7-live-authoritative-receipt.png`; `TEST-PACKAGE.md` |
 | 2026-07-11 | Generic MCP + skills hardening | `e6b0a2b` | ring.zenod.dev live | saved Calli refresh; real browser skill/draft; external MCP SDK; bearer-isolated beta tenant | PASS: Calli tools ready 18; canonical skill loaded; `[draft_not_approved]` held; MCP status ok; beta sees no peers/key/skill; cleaned up | `docs/evidence/ring-ship-2026-07-11/20`–`25`; `TEST-PACKAGE.md` |
+| 2026-07-11 | Advertised Zenod skill import | `e7dc215` | ring.zenod.dev + cloud.zenod.dev live | existing peer boot refresh; signed-in Chrome; external Ring MCP chat; service correlation audit | PASS: Zenod v1.0.0 auto-attached, 3 inert files; `load_peer_skill` ran and reported scripts non-executable | `docs/evidence/ring-zenod-skill-2026-07-11/zenod-auto-attached.png`; correlation `test_abdfd93795ad4ff1a6fac8ebc8c16ca6` |
 
 ## Handoff Journal
+
+### 2026-07-11T14:35:28+02:00 - Ring delivery manager - Advertised Zenod skill live
+
+Context: [#893](https://github.com/zenod-ai/zenod/pull/893) added the generic D16 advertised-bundle import and Zenod's canonical bundle. Published image `sha-e7dc215` is live on both Ring and Zenod with exact health SHA. The existing saved Zenod wallet peer auto-imported `zenod@1.0.0` on boot refresh without reconnecting; the browser shows three inert files and manual replace/download/detach controls. External Ring MCP conversation `mcp:zenod-skill-live-proof-e7dc215` caused the Council to call host-owned `load_peer_skill`; correlation `test_abdfd93795ad4ff1a6fac8ebc8c16ca6` records start, end, and success. The reply `zenod 1.0.0 false` confirms scripts are not executable.
+Next: none; advertised import is additive, peers without an advertisement remain manually attachable, and explicit detach prevents silent re-import.
 
 ### 2026-07-11T13:19:05+02:00 - Ring delivery manager - HARDEN complete
 

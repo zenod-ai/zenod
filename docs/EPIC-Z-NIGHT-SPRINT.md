@@ -78,13 +78,13 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 
 ## Current State
 
-Phase: shipped; memory acceptance Iteration 1 targeted remediation complete (3/3 live replays pass)
-Last verified: 2026-07-11T03:03:00+02:00
+Phase: shipped; canonical Zenod Agent Skill v1.0.0 advertised and live-imported by Ring
+Last verified: 2026-07-11T14:35:28+02:00
 Integration target: main
-Live Zenod MT artifact: `ghcr.io/zenod-ai/zenod:sha-6352ee1` (`6352ee18059e525818829f754f2a557a1023b56d`)
+Live Zenod MT artifact: `ghcr.io/zenod-ai/zenod:sha-e7dc215` (`e7dc215a566189c317a68533a7006c6d8a5b2d8f`)
 Wave 1 base commit: `2632e8f68122a7e05a178020bb0601813de36704` — pinned; no rebases were performed (D19c)
 Wave 2 base commit: `43a38a0b551e13d9205455bf09e740fa745799b9` — integrated wave 1, pinned
-Next action: keep the shipped journey stable; plan Iteration 2 for the two untargeted memory-test failures (marker-scoped broad isolation and distractor response completeness) and separately service [#835](https://github.com/zenod-ai/zenod/issues/835).
+Next action: keep the shipped journey and advertised skill contract stable; plan Iteration 2 for the two untargeted memory-test failures and separately service [#835](https://github.com/zenod-ai/zenod/issues/835).
 Blockers: none — every decision is pre-answered below. Inputs from Jordi are non-blocking (decision rules given).
 
 ## Role Goals
@@ -136,6 +136,7 @@ Every decision pre-answered; the manager invents nothing:
 | 2026-07-11 | Existing pilot tenants | Leave untouched; they keep working. No migration tonight. |
 | 2026-07-11 | Chassis | The word does not appear in any ticket. Zenod's internal plumbing is Zenod's. |
 | 2026-07-11 | Full cloud transplant (Jordi, final) | The ENTIRE working customer layer of `zenod-ai/cloud` (auth, accounts, checkout, Stripe webhook, account UI, metering) is PORTED into the Zenod container. Excluded corpses: Dokploy per-tenant provisioner, watchdog registration, claim links, per-tenant DNS — replaced by a tenant-row insert in the same container. The MCP server itself was never in cloud; it is already this container. After this port, `zenod-ai/cloud` runs nothing. |
+| 2026-07-11 | Published Agent Skill | Zenod owns canonical `zenod@1.0.0` guidance under `units/zenod/skill/zenod/`. Its D16 well-known card advertises a same-origin, redirect-free, size-bounded bundle. Hosts may import it as untrusted progressive guidance; live `tools/list` remains authoritative and scripts remain inert. |
 
 ## Issue Ledger
 
@@ -156,6 +157,7 @@ Every decision pre-answered; the manager invents nothing:
 | [#843](https://github.com/zenod-ai/zenod/issues/843) | Ticket worker | Kant | Boost exact phrase + all-term deterministic ranking | done | #832 | [#846](https://github.com/zenod-ai/zenod/pull/846) | `0bbd045` | exact/multi-term fixture ranks first | merged `dbdd1c8`; live replay rank 1 on `6352ee1` | 2026-07-11T03:03:00+02:00 | closed |
 | [#844](https://github.com/zenod-ai/zenod/issues/844) | Ticket worker | Lovelace | Retry before `ask_brain` concludes absent | done | #833 | [#847](https://github.com/zenod-ai/zenod/pull/847) | `0bbd045` | human narrow recall finds explicitly requested synthetic evidence | merged `49afb56`; live answer returned 14 days + LumenCell 42 | 2026-07-11T03:03:00+02:00 | closed |
 | [#845](https://github.com/zenod-ai/zenod/issues/845) | Ticket worker | Popper | Reject out-of-scope literals + invalid citations | done | #833 | [#848](https://github.com/zenod-ai/zenod/pull/848) | `0bbd045` | broad replay has no neighboring literal or invalid anchor | merged `abc2657`; live scoped broad replay passed | 2026-07-11T03:03:00+02:00 | closed |
+| [#892](https://github.com/zenod-ai/zenod/issues/892) | Ticket worker | Zenod skill steward | Advertise canonical Zenod skill and auto-attach in Ring | done | Ring skill store/runtime | [#893](https://github.com/zenod-ai/zenod/pull/893) / `codex/zenod-advertised-skill` | `e5387eb` | public canonical bundle; same-origin auto-import; manual detach authority; progressive load | merged/deployed `e7dc215`; browser card + audited `load_peer_skill` pass | 2026-07-11T14:35:28+02:00 | closed |
 
 ## Branch And Integration
 
@@ -205,8 +207,14 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Async MCP accepted receipt | `95f9370` | live `cloud.zenod.dev/mcp` | `store_memory` -> accepted ticket -> terminal receipt -> `search_memory("F5 banana receipt-fix 95f9370")` | PASS | ticket `d24c9345-68db-4a04-b646-dad1b9db0aa0`; `Log/2026-07-11.md#^e-2c5f8d`; vault commit `e92cd157` |
 | 2026-07-11 | Memory acceptance Iteration 1 baseline | `95f9370` | live Zenod MT MCP | three parallel human-like lanes: write/read, narrow/broad/synthesis, correction/distractor/unknown/citations | 12 PASS / 5 FAIL | [#831 summary](https://github.com/zenod-ai/zenod/issues/831#issuecomment-4940697880), [#832](https://github.com/zenod-ai/zenod/issues/832), [#833](https://github.com/zenod-ai/zenod/issues/833), [#834](https://github.com/zenod-ai/zenod/issues/834) |
 | 2026-07-11 | Memory acceptance targeted remediation | `6352ee1` | live `cloud.zenod.dev/mcp`; image `sha-6352ee1` | combined build/full suite; main CI; image boot smoke; exact replay of multi-term search, human narrow recall, human broad grounding | 3/3 PASS | [#831 remediation summary](https://github.com/zenod-ai/zenod/issues/831#issuecomment-4940865726), [#843](https://github.com/zenod-ai/zenod/issues/843#issuecomment-4940862444), [#844](https://github.com/zenod-ai/zenod/issues/844#issuecomment-4940863414), [#845](https://github.com/zenod-ai/zenod/issues/845#issuecomment-4940864648) |
+| 2026-07-11 | Published Zenod Agent Skill | `e7dc215` | live `cloud.zenod.dev` + `ring.zenod.dev` | public card/bundle curl; signed-in Chrome Ring reload; external Ring MCP chat; service log audit | PASS: `zenod@1.0.0`, 3 inert files, auto-attached; `load_peer_skill` executed | `docs/evidence/ring-zenod-skill-2026-07-11/zenod-auto-attached.png`; correlation `test_abdfd93795ad4ff1a6fac8ebc8c16ca6` |
 
 ## Handoff Journal
+
+### 2026-07-11T14:35:28+02:00 - Zenod skill steward - Canonical skill advertised to Ring
+
+Context: [#893](https://github.com/zenod-ai/zenod/pull/893) merged and the published `sha-e7dc215` image passed its boot smoke. The same immutable image is live on `cloud.zenod.dev` and `ring.zenod.dev`; both health endpoints report `e7dc215a566189c317a68533a7006c6d8a5b2d8f`. Zenod now publishes a D16 card plus a same-origin three-file `zenod@1.0.0` bundle. Ring imported it for the existing saved Zenod peer without reconnecting. The signed-in My Units surface shows the skill, and an external Ring MCP chat invoked `load_peer_skill`, returning `zenod 1.0.0 false`; service correlation `test_abdfd93795ad4ff1a6fac8ebc8c16ca6` records the loader start/end and successful completion.
+Next: treat the skill as untrusted guidance and keep live MCP discovery authoritative; manual replace/detach remains the tenant override.
 
 ### 2026-07-11T03:03:00+02:00 - Night-sprint delivery manager - Memory Iteration 1 reconciled
 
