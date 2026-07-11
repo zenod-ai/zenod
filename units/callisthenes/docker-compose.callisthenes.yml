@@ -63,6 +63,11 @@ services:
       X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY:?required}
       X_OAUTH_CONSUMER_SECRET: ${X_OAUTH_CONSUMER_SECRET:?required}
       X_BEARER_TOKEN: ${X_BEARER_TOKEN:?required}
+      # Upstream xmcp otherwise starts an interactive OAuth1 handshake during
+      # process boot. Tenant-bound requests ignore these inert placeholders and
+      # load the real per-tenant PIN credentials from /data/engine instead.
+      X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN:-hosted-tenant-custody}
+      X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET:-hosted-tenant-custody}
       X_API_TOOL_ALLOWLIST: getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions,createPosts,deletePosts,mediaUpload
       CALLISTHENES_THROTTLE_PER_HOUR: ${CALLISTHENES_THROTTLE_PER_HOUR:-10}
       CALLISTHENES_SEND_TOOLS: createPosts,deletePosts,mediaUpload,post_reddit
