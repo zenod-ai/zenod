@@ -634,8 +634,11 @@ def test_dashboard_json_requires_front_resolved_tenant_bearer():
     assert payload["ok"] is True
     assert payload["x"]["connected"] is False
     assert payload["throttle"]["limit_per_hour"] == 10
-    assert payload["drafts"] == []
-    assert payload["receipts"] == []
+    assert payload["drafts"]["available"] is False
+    assert payload["drafts"]["records"] == []
+    assert "active agent conversation" in payload["drafts"]["source"]
+    assert payload["receipts"]["available"] is False
+    assert "recentSends" in payload["receipts"]["source"]
 
 
 def test_dashboard_json_ports_three_field_authorize_and_pin(monkeypatch, tmp_path):

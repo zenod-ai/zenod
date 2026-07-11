@@ -31,8 +31,8 @@ type DashboardStatus = {
   x: XStatus
   throttle: { limit_per_hour: number }
   usage: { usage?: { calls: number | null; sends: number | null; cost_usd: number | null }; source?: string }
-  drafts: Array<{ id?: string; text?: string; created_at?: string }>
-  receipts: Array<{ id?: string; url?: string; text?: string; created_at?: string }>
+  drafts: { available: boolean; records: Array<{ id?: string; text?: string; created_at?: string }>; source?: string }
+  receipts: { available: boolean; records: Array<{ id?: string; url?: string; text?: string; created_at?: string }>; source?: string }
 }
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -201,10 +201,10 @@ export default function App() {
 
       <div className="grid gap-5 md:grid-cols-2">
         <Card className="rounded-none"><CardHeader><CardTitle className="flex items-center gap-2"><GaugeIcon />Throttle & usage</CardTitle><CardDescription>Tenant-scoped send control and ledger.</CardDescription></CardHeader><CardContent className="grid grid-cols-2 gap-4 text-sm"><div><p className="text-muted-foreground">Hourly cap</p><p className="text-2xl font-semibold">{status.throttle.limit_per_hour}</p></div><div><p className="text-muted-foreground">Approved sends</p><p className="text-2xl font-semibold">{usage?.sends ?? "—"}</p></div><div><p className="text-muted-foreground">Calls</p><p>{usage?.calls ?? account.ledger.calls}</p></div><div><p className="text-muted-foreground">Cost</p><p>{usage?.cost_usd == null ? "Not measured" : `$${usage.cost_usd.toFixed(4)}`}</p></div></CardContent></Card>
-        <Card className="rounded-none"><CardHeader><CardTitle className="flex items-center gap-2"><SendIcon />Drafts</CardTitle><CardDescription>Read-only. Approve sends through MCP `approve_send`.</CardDescription></CardHeader><CardContent>{status.drafts.length ? status.drafts.map((draft, index) => <article key={draft.id ?? index} className="border-t py-3 text-sm">{draft.text}</article>) : <p className="text-sm text-muted-foreground">No held drafts yet.</p>}</CardContent></Card>
+        <Card className="rounded-none"><CardHeader><CardTitle className="flex items-center gap-2"><SendIcon />Drafts</CardTitle><CardDescription>Read-only. Approve sends through MCP `approve_send`.</CardDescription></CardHeader><CardContent>{status.drafts.records.length ? status.drafts.records.map((draft, index) => <article key={draft.id ?? index} className="border-t py-3 text-sm">{draft.text}</article>) : <p className="text-sm text-muted-foreground">{status.drafts.available ? "No held drafts yet." : "Draft history is not persisted by the current engine."}</p>}</CardContent></Card>
       </div>
 
-      <Card className="rounded-none"><CardHeader><CardTitle className="flex items-center gap-2"><ReceiptTextIcon />Receipts</CardTitle><CardDescription>Canonical permalinks returned after approved sends.</CardDescription></CardHeader><CardContent>{status.receipts.length ? status.receipts.map((receipt, index) => <article key={receipt.id ?? index} className="border-t py-3 text-sm">{receipt.url ? <a href={receipt.url} className="underline" target="_blank" rel="noreferrer">{receipt.url}</a> : receipt.text}</article>) : <p className="text-sm text-muted-foreground">No send receipts yet.</p>}</CardContent></Card>
+      <Card className="rounded-none"><CardHeader><CardTitle className="flex items-center gap-2"><ReceiptTextIcon />Receipts</CardTitle><CardDescription>Canonical permalinks returned after approved sends.</CardDescription></CardHeader><CardContent>{status.receipts.records.length ? status.receipts.records.map((receipt, index) => <article key={receipt.id ?? index} className="border-t py-3 text-sm">{receipt.url ? <a href={receipt.url} className="underline" target="_blank" rel="noreferrer">{receipt.url}</a> : receipt.text}</article>) : <p className="text-sm text-muted-foreground">{status.receipts.available ? "No send receipts yet." : "Receipt history is not persisted by the current engine."}</p>}</CardContent></Card>
     </main>
   )
 }

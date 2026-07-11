@@ -1094,8 +1094,16 @@ def register(
                     "limit_per_hour": _dashboard_throttle_limit(),
                 },
                 "usage": usage,
-                "drafts": [],
-                "receipts": [],
+                "drafts": {
+                    "available": False,
+                    "records": [],
+                    "source": "standing drafts exist only in the active agent conversation; no persisted draft store exists",
+                },
+                "receipts": {
+                    "available": False,
+                    "records": [],
+                    "source": "outboundTools recentSends is process-local idempotency state and is neither tenant-keyed nor persisted",
+                },
             }
         )
 
