@@ -20,6 +20,7 @@ COPY apps/web/package.json apps/web/
 COPY apps/site/package.json apps/site/
 COPY apps/calli-web/package.json apps/calli-web/
 COPY apps/calli-site/package.json apps/calli-site/
+COPY apps/ring-site/package.json apps/ring-site/
 RUN npm ci
 
 COPY tsconfig.base.json ./
@@ -29,6 +30,7 @@ COPY packages ./packages
 COPY apps ./apps
 RUN npm run build
 RUN npm run build -w calli-site && npm run build -w calli-web
+RUN npm run build -w ring-site
 
 # drop dev dependencies for the runtime copy
 RUN npm prune --omit=dev
@@ -78,6 +80,7 @@ COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/apps/site/dist ./apps/site/dist
 COPY --from=build /app/apps/calli-web/dist ./apps/calli-web/dist
 COPY --from=build /app/apps/calli-site/dist ./apps/calli-site/dist
+COPY --from=build /app/apps/ring-site/dist ./apps/ring-site/dist
 
 VOLUME /data
 EXPOSE 8080
