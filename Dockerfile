@@ -84,6 +84,7 @@ COPY --from=build /app/apps/calli-web/dist ./apps/calli-web/dist
 COPY --from=build /app/apps/calli-site/dist ./apps/calli-site/dist
 COPY --from=build /app/apps/ring-site/dist ./apps/ring-site/dist
 COPY --from=build /app/apps/phylax-site/dist ./apps/phylax-site/dist
+COPY units/zenod/skill/zenod ./units/zenod/skill/zenod
 
 VOLUME /data
 EXPOSE 8080

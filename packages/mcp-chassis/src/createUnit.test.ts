@@ -219,6 +219,7 @@ describe("createUnit", () => {
       tools: [" ingest "],
       etiquette: [" Never claim a write without a receipt. "],
       receiptExpectations: [" Mutations return a commit SHA. "],
+      bundleUrl: " /.well-known/agent-skill-bundle.json ",
       tenant: { id: "tenant-one" },
       token: "tenant-one-secret-token",
       connectorCredentials: { github: "connector-secret" },
@@ -250,6 +251,10 @@ describe("createUnit", () => {
       etiquette: ["Never claim a write without a receipt."],
       receiptExpectations: ["Mutations return a commit SHA."],
       unit: { name: "demo", version: "1.2.3" },
+      bundle: {
+        format: "zenod-agent-skill-bundle-v1",
+        url: "/.well-known/agent-skill-bundle.json",
+      },
     });
     expect(JSON.stringify(manifest)).not.toMatch(
       /tenant-one|secret|connectorCredentials|installedDirectives|directive/,
