@@ -55,6 +55,17 @@ interface TelegramMessage {
   photo?: Array<{ file_id: string; width: number; height: number }>;
   document?: { file_id: string; mime_type?: string; file_name?: string };
 }
+
+export interface TelegramPortedInbound {
+  sender: string;
+  chatId: string;
+  messageId: string;
+  text: string;
+  media?: { bytes: Buffer; mimeType: string | null; fileName: string | null };
+  transcription?: { provider?: string; failed?: { code: string; message: string } };
+}
+
+export type TelegramPortedInboundHandler = (input: TelegramPortedInbound) => Promise<{ replyText: string }>;
 interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
@@ -106,6 +117,7 @@ export class TelegramGateway {
       getEngine: () => Promise<BrainEngine>;
       dataDir?: string;
       fetchImpl?: typeof fetch;
+      portedInboundHandler?: TelegramPortedInboundHandler;
     },
   ) {}
 
@@ -262,6 +274,11 @@ export class TelegramGateway {
     // Remember this owner's chat so the monitor can push proactive pings here.
     this.rememberChat(chatId);
 
+    if (this.options.portedInboundHandler) {
+      await this.handlePortedInbound(message);
+      return;
+    }
+
     let text = (message.text ?? message.caption ?? "").trim();
     // Audio bytes of a voice note, retained so a substantive one can be
     // archived after the reply (the agent's keep decision drives this).
@@ -373,6 +390,49 @@ export class TelegramGateway {
     }
   }
 
+  private async handlePortedInbound(message: TelegramMessage): Promise<void> {
+    const chatId = message.chat.id;
+    const sender = message.from?.username ? `@${message.from.username}` : String(message.from?.id ?? chatId);
+    let text = (message.text ?? message.caption ?? "").trim();
+    let media: TelegramPortedInbound["media"];
+    let transcription: TelegramPortedInbound["transcription"];
+    const voice = message.voice ?? message.audio;
+    if (voice?.file_id) {
+      try {
+        const downloaded = await this.downloadFile(voice.file_id);
+        const filename = `${voice.file_unique_id ?? voice.file_id}.${downloaded.ext}`;
+        media = { bytes: downloaded.data, mimeType: voice.mime_type ?? "audio/ogg", fileName: filename };
+        const result = await transcribeChannelAudio(this.options.settings, downloaded.data, filename);
+        if (result.success && result.transcript?.trim()) {
+          text = result.transcript.trim();
+          transcription = { ...(result.provider ? { provider: result.provider } : {}) };
+        } else {
+          transcription = {
+            ...(result.provider ? { provider: result.provider } : {}),
+            failed: { code: result.noSpeech ? "no_speech" : "unavailable", message: result.error ?? "transcription failed" },
+          };
+        }
+      } catch (error) {
+        transcription = { failed: { code: "unavailable", message: error instanceof Error ? error.message : String(error) } };
+      }
+    }
+    try {
+      await this.sendChatAction(chatId, "typing");
+      const forwarded = await this.options.portedInboundHandler!({
+        sender,
+        chatId: String(chatId),
+        messageId: String(message.message_id),
+        text,
+        ...(media ? { media } : {}),
+        ...(transcription ? { transcription } : {}),
+      });
+      if (!forwarded.replyText.trim()) throw new Error("tenant downstream returned no reply");
+      await this.sendReply(chatId, forwarded.replyText);
+    } catch (error) {
+      await this.sendReply(chatId, `⚠️ ${error instanceof Error ? error.message : String(error)}`).catch(() => {});
+    }
+  }
+
   /**
    * Download a Telegram voice/audio file and transcribe it through the shared
    * pipeline. Reuses the SAME global whisper model and provider settings the
@@ -439,6 +499,15 @@ export class TelegramGateway {
       }
     }
     return { sent: recipients.length, recipients };
+  }
+
+  /** Ported Bot API send primitive used by Phylax's tenant-scoped MCP face. */
+  async sendText(recipient: string, text: string): Promise<{ sentMessageId: string }> {
+    const chatId = Number(recipient);
+    if (!Number.isFinite(chatId) || !text.trim()) throw new Error("Telegram recipient and text are required");
+    const result = await this.callApi<{ message_id?: number }>("sendMessage", { chat_id: chatId, text });
+    if (!result?.message_id) throw new Error("Telegram provider returned no delivery receipt");
+    return { sentMessageId: String(result.message_id) };
   }
 
   /**
