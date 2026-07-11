@@ -228,6 +228,8 @@ export interface PeerMutationGuardContext {
   owner?: string | undefined;
   /** Advertised MCP description, used only to bind natural intent to an operation family. */
   description?: string | undefined;
+  /** Advertised operation is a commit-only confirmation surface, not a draft-producing mutation. */
+  requiresStandingApproval?: boolean | undefined;
 }
 
 const MUTATION_FAMILIES = [
@@ -295,6 +297,9 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
     if (resolution === "allowed") return null;
     if (resolution === "ambiguous") return `Blocked ${tool}: more than one standing action matches; ask the user which exact draft to approve.`;
     if (resolution === "mismatch") return `Blocked ${tool}: the selected peer, operation, or exact arguments do not match the standing action.`;
+    return NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL;
+  }
+  if (context?.forceMutation && !legacyMutationTool && context.requiresStandingApproval) {
     return NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL;
   }
   const explicitDynamicMutation = Boolean(

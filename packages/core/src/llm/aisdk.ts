@@ -1018,6 +1018,9 @@ export class AiSdkBrainLlm implements BrainLlm {
               : undefined;
             const approvalFields = Object.entries(schema?.properties ?? {})
               .filter(([key]) => /(?:approval|approve|confirmation|confirm|authorized|authorised)/i.test(key));
+            const commitOnlyApproval = approvalFields.length === 0 &&
+              /\b(?:approve|confirm|commit)\w*\b/i.test(`${name.replace(/[_-]/g, " ")} ${peer.description}`) &&
+              /(?:standing\s+(?:action|draft)|after[\s\S]{0,50}(?:approval|confirmation)|explicit[\s\S]{0,30}(?:approval|confirmation))/i.test(peer.description);
             if (approvalFields.length) {
               args = Object.fromEntries(Object.entries(args).filter(([key]) => !approvalFields.some(([field]) => field === key)));
             }
@@ -1041,6 +1044,7 @@ export class AiSdkBrainLlm implements BrainLlm {
                   forceMutation: peer.annotations?.readOnlyHint === false || !isKnownTool(name),
                   owner: peer.owner,
                   description: peer.description,
+                  requiresStandingApproval: commitOnlyApproval,
                 });
             if (guardFailure) {
               if (isOutboundSend) {

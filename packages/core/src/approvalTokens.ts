@@ -17,7 +17,7 @@ const TOKEN_TTL_MS = 15 * 60 * 1000;
 const tokensByConversation = new Map<string, ApprovalToken[]>();
 const NEGATION_RE = /\b(?:no|not|don'?t|won'?t|never|cancel|stop|abort|nvm|nevermind|hold on|wait)\b/i;
 const EDIT_RE = /\b(?:change|edit|revise|rewrite|replace|instead|make it|update the (?:draft|text|message|post))\b/i;
-const APPROVAL_RE = /(?:^|\b)(?:a?pprove(?:d)?|confirm(?:ed)?|go\s*ahead|do\s+it|send\s+it|post\s+it|publish\s+it|ship\s+it|yes|yep|yeah|ok(?:ay)?|sounds?\s+good|looks?\s+good)(?:\b|\s*:)/i;
+const APPROVAL_RE = /(?:^|\b)(?:a?pprove(?:d)?|confirm(?:ed)?|go\s*ahead|do\s+it|(?:send|post|publish|ship)\s+(?:it|now)|yes|yep|yeah|ok(?:ay)?|sounds?\s+good|looks?\s+good)(?:\b|\s*:)/i;
 const APPROVAL_REQUIRED_RE = /(?:\[(?:draft_not_approved|approval_required|confirmation_required)\]|\b(?:approval|confirmation)\s+(?:is\s+)?required\b|\bnot[_ -]approved\b)/i;
 const INTERNAL_APPROVAL_KEY_RE = /(?:approval|approve|confirmation|confirm|token|secret|password)/i;
 

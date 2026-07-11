@@ -278,6 +278,10 @@ describe("generic discovered MCP standing actions", () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     const cid = "tenant-a:web:generic";
 
+    await llm.answer({ question: "Post this now: Hello world", conversationId: cid, vaultBriefing: "brief", conversation: [] }, readTools, undefined, undefined, peer);
+    expect(await captured.config.tools.calli__approve_send__hash.execute({ channel: "x", text: "Hello world" })).toBe("Nothing pending to approve.");
+    expect(calls).toHaveLength(0);
+
     await llm.answer({ question: "Draft this for X and stop before publishing: Hello world", conversationId: cid, vaultBriefing: "brief", conversation: [] }, readTools, undefined, undefined, peer);
     expect(await captured.config.tools.calli__createposts__hash.execute({ text: "Hello world" })).toContain("draft_not_approved");
 
