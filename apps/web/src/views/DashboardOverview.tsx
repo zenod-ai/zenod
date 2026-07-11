@@ -180,7 +180,9 @@ export function DashboardOverview({
   const mcpAccess = resolveMcpAccess(connections.token, account)
   const mcpUrl = mcpAccess.url
   const isRing = overview?.unit?.name === "ring"
-  const snippets = mcpClientSnippets(mcpUrl, isRing ? "ring" : "zenod")
+  const isHerald = overview?.unit?.name === "herald"
+  const isCouncilUnit = isRing || isHerald
+  const snippets = mcpClientSnippets(mcpUrl, isHerald ? "herald" : isRing ? "ring" : "zenod")
 
   return (
     <div className="flex flex-col gap-4">
@@ -197,7 +199,7 @@ export function DashboardOverview({
           </div>
           <CardTitle className="text-lg">Connect your agent</CardTitle>
           <CardDescription>
-            Use this {overview?.unit?.name === "ring" ? "Ring Council" : "Zenod"} endpoint and bearer token from Claude Code, Codex, or any
+            Use this {isHerald ? "Herald" : isRing ? "Ring Council" : "Zenod"} endpoint and bearer token from Claude Code, Codex, or any
             HTTP MCP client.
           </CardDescription>
         </CardHeader>
@@ -267,8 +269,8 @@ export function DashboardOverview({
         </CardContent>
       </Card>
 
-      <div className={isRing ? "grid gap-4" : "grid gap-4 md:grid-cols-2"}>
-        {!isRing && (
+      <div className={isCouncilUnit ? "grid gap-4" : "grid gap-4 md:grid-cols-2"}>
+        {!isCouncilUnit && (
           <Card className="rounded-lg">
             <CardHeader>
               <FolderGit2Icon className="size-5 text-muted-foreground" />

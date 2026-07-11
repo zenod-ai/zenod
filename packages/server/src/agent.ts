@@ -160,6 +160,14 @@ export const RING_AGENT: AgentDefinition = {
   tagline: "Your council — one chat, wired to all your agents",
 };
 
+/** Herald duplicates the Ring and adds its briefing-driven publishing loop. */
+export const HERALD_AGENT: AgentDefinition = {
+  ...RING_AGENT,
+  name: "herald",
+  displayName: "Herald",
+  tagline: "Your project's voice, on a loop — it drafts, you approve, it posts, it learns",
+};
+
 /** Known agents, selectable at the entry point so one image can run as any of them. */
 export const AGENTS: Record<string, AgentDefinition> = {
   zenod: ZENOD_AGENT,
@@ -169,6 +177,7 @@ export const AGENTS: Record<string, AgentDefinition> = {
   phylax: PHYLAX_AGENT,
   console: CONSOLE_AGENT,
   ring: RING_AGENT,
+  herald: HERALD_AGENT,
 };
 
 /** Resolve the agent for this process from an id (e.g. the AGENT env var); defaults to Zenod. */
