@@ -30,6 +30,7 @@ import { mcpClientSnippets, resolveMcpAccess } from "@/views/dashboard-navigatio
 
 export type DashboardOverviewData = {
   tenant: { id: string; name?: string }
+  unit?: { name: string; version: string }
   usage: { units: number } | null
 }
 
@@ -195,7 +196,7 @@ export function DashboardOverview({
           </div>
           <CardTitle className="text-lg">Connect your agent</CardTitle>
           <CardDescription>
-            Use this endpoint and bearer token from Claude Code, Codex, or any
+            Use this {overview?.unit?.name === "ring" ? "Ring Council" : "Zenod"} endpoint and bearer token from Claude Code, Codex, or any
             HTTP MCP client.
           </CardDescription>
         </CardHeader>

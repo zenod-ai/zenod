@@ -152,6 +152,14 @@ export const CONSOLE_AGENT: AgentDefinition = {
   vaultless: true,
 };
 
+/** The Ring is the hosted, tenant-scoped face of the existing Council console. */
+export const RING_AGENT: AgentDefinition = {
+  ...CONSOLE_AGENT,
+  name: "ring",
+  displayName: "The Ring",
+  tagline: "Your council — one chat, wired to all your agents",
+};
+
 /** Known agents, selectable at the entry point so one image can run as any of them. */
 export const AGENTS: Record<string, AgentDefinition> = {
   zenod: ZENOD_AGENT,
@@ -160,6 +168,7 @@ export const AGENTS: Record<string, AgentDefinition> = {
   outbound: OUTBOUND_AGENT,
   phylax: PHYLAX_AGENT,
   console: CONSOLE_AGENT,
+  ring: RING_AGENT,
 };
 
 /** Resolve the agent for this process from an id (e.g. the AGENT env var); defaults to Zenod. */
