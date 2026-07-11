@@ -84,12 +84,12 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: R-S5e authoritative stream completion lap
-Last verified: 2026-07-11T05:22:00+02:00
+Phase: SHIP — journey and package complete
+Last verified: 2026-07-11T05:48:00+02:00
 Integration target: main
-Fresh base commit: `b7c0ca55ffd699db3c502e1a3598aeca909537c1` — PINNED; no rebases until the journey passes (D19c)
-Next action: make the stream completion event carry the authoritative gated reply, replace the transient model draft in the Council UI, then rerun SHIP 7.
-Blockers: none — live logs prove the generic reply gate intercepted correctly; the remaining seam is stream finalization.
+Fresh base commit: `5ac9f37652a3efddf79248bb8027530380f10bca` — FINAL DEPLOYED SHA (D19c)
+Next action: hand Jordi the screenshot package and final live receipts.
+Blockers: none.
 
 ## Role Goals
 
@@ -148,11 +148,11 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#836](https://github.com/zenod-ai/zenod/issues/836) | Ticket worker | R-S2-worker | R-S2 council middle (ChatTab + persona + Keys, tenant-scoped) | done | - | [#842](https://github.com/zenod-ai/zenod/pull/842) / `codex/r-s2-council-middle` | `fcac83f` | SHIP 5–6 | CI green; Ring namespace fix; merged `4ed9440` | 2026-07-11T02:33:31+02:00 | integrated |
 | [#838](https://github.com/zenod-ai/zenod/issues/838) | Ticket worker | R-S3-worker | R-S3 wallet (peers surface → per-tenant unit wallet) | done | #837, #836 done | [#850](https://github.com/zenod-ai/zenod/pull/850) / `codex/r-s3-wallet` | `4ed9440` | SHIP 7 | CI green; 46 focused tests; merged `9e5862c` | 2026-07-11T02:46:31+02:00 | integrated |
 | [#839](https://github.com/zenod-ai/zenod/issues/839) | Ticket worker | R-S4-worker | R-S4 billing + domain (duplicate recipe) | done | #837 done | [#849](https://github.com/zenod-ai/zenod/pull/849) / `codex/r-s4-billing-domain` | `4ed9440` | SHIP 2, 4 live | CI green; guarded runbook/script; merged `6352ee1` | 2026-07-11T02:46:31+02:00 | integrated; manager cutover |
-| [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | blocked | #837, #836, #838, #839 done | `main` / manager journey; fixes [#852](https://github.com/zenod-ai/zenod/pull/852), [#853](https://github.com/zenod-ai/zenod/pull/853), [#856](https://github.com/zenod-ai/zenod/pull/856), [#857](https://github.com/zenod-ai/zenod/pull/857) | `a729d08` live | SHIP 1–10 | 1–6 pass; 7 wallet pass/receipt timeout; 8 external chat pass; 9 persistence+isolation pass | 2026-07-11T04:31:00+02:00 | BLOCKED ON JORDI: another focused lap or stop |
+| [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | done | #837, #836, #838, #839 done | `main`; final fixes [#869](https://github.com/zenod-ai/zenod/pull/869), [#882](https://github.com/zenod-ai/zenod/pull/882) | `5ac9f37` live | SHIP 1–10 | all steps pass; exact commit receipt visible without reload; external MCP + isolation reproved | 2026-07-11T05:48:00+02:00 | package delivered |
 | [#854](https://github.com/zenod-ai/zenod/issues/854) | Ticket worker | R-S5a-worker | Surface downstream Zenod commit receipt in Council chat | done (code) | #840 | [#856](https://github.com/zenod-ai/zenod/pull/856) / `codex/r-s5a-zenod-receipt` | `527023c` | SHIP 7 receipt within 180s | CI + review pass; live still times out | 2026-07-11T04:31:00+02:00 | epic blocker remains |
 | [#855](https://github.com/zenod-ai/zenod/issues/855) | Ticket worker | R-S5b-worker | Make `chat_with_ring` satisfy conduct-kit receipt gate | done | #840 | [#857](https://github.com/zenod-ai/zenod/pull/857) / `codex/r-s5b-mcp-receipt` | `527023c` | SHIP 8 external chat reply | live HTTP 200 + Council reply + `chat_audit` evidence | 2026-07-11T04:31:00+02:00 | integrated |
 | [#858](https://github.com/zenod-ai/zenod/issues/858) | Ticket worker | R-S5d-worker | Diagnose and close live Zenod receipt timeout | done (code) | #840, #854 | [#869](https://github.com/zenod-ai/zenod/pull/869) / `codex/r-s5d-generic-receipt-gate` | `0e06e6b` | exact SHIP 7 receipt within 180s; generic Calli-style peer receipt regression | CI + independent review pass; merged `cc47b3a`; live gate intercept confirmed | 2026-07-11T05:22:00+02:00 | integrated; UI stream seam moved to #879 |
-| [#879](https://github.com/zenod-ai/zenod/issues/879) | Ticket worker | R-S5e-worker | Make streamed Council reply authoritative after receipt gate | in progress | #858 | `codex/r-s5e-authoritative-stream` / `../wt-r-s5e` | `b7c0ca5` | stream `done` carries final text; UI replaces draft; exact live commit receipt | live `b7c0ca5` logs show reply-gate interception but UI retained discarded delta text | 2026-07-11T05:22:00+02:00 | implement + tests + independent review |
+| [#879](https://github.com/zenod-ai/zenod/issues/879) | Ticket worker | R-S5e-worker | Make streamed Council reply authoritative after receipt gate | done | #858 | [#882](https://github.com/zenod-ai/zenod/pull/882) / `codex/r-s5e-authoritative-stream` | `b7c0ca5` | stream `done` carries final text; UI replaces draft; exact live commit receipt | CI + independent review pass; final browser commit `45e22e2` visible without reload | 2026-07-11T05:48:00+02:00 | integrated |
 | [#863](https://github.com/zenod-ai/zenod/issues/863) | Ticket worker | R-H1-worker | Generic MCP discovery + dynamic Council tools | ready | - | `codex/r-h1-generic-mcp-discovery` / `../wt-r-h1` | `2fe2289` | arbitrary peers expose real schemas/tools; auto-refresh; tools-ready state | issue minted | 2026-07-11T04:34:35+02:00 | dispatch after Ring steward sequences with #858 |
 | [#860](https://github.com/zenod-ai/zenod/issues/860) | Ticket worker | R-H2-worker | Tenant skill artifact store + attachment API | ready | - | `codex/r-h2-peer-skill-artifacts` / `../wt-r-h2` | `2fe2289` | immutable/versioned/path-safe/tenant-isolated bundles + APIs | issue minted | 2026-07-11T04:34:35+02:00 | dispatch after Ring steward sequences with #858 |
 | [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | blocked | #863, #860 | `codex/r-h3-peer-skill-ui` | wave 1 merge | transport vs tools-ready; attach/replace/download/detach | issue minted | 2026-07-11T04:34:35+02:00 | wave 2 |
@@ -201,8 +201,14 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Authorized receipt fix lap | `a729d08` | ring.zenod.dev live | real Chrome SHIP 7–9, external MCP chat, two bearer-authenticated tenants | BLOCKED: SHIP 7 still lacks commit receipt; SHIP 8–9 pass | `docs/evidence/ring-ship-2026-07-11/11`–`14`; `TEST-PACKAGE.md` |
 | 2026-07-11 | Focused poll-path diagnosis lap | `fae4f33` | ring.zenod.dev live | real Chrome exact SHIP 7 phrase + Zenod durable task audit | PARTIAL: poll fixed and commit succeeds; visible reply omits SHA/URL | `docs/evidence/ring-ship-2026-07-11/15-path-fixed-commit-omitted.png`; `TEST-PACKAGE.md` |
 | 2026-07-11 | Generic receipt gate live reprove | `b7c0ca5` | ring.zenod.dev live | real Chrome exact SHIP 7 phrase + Ring runtime logs | PARTIAL: gate intercepted `add_memory` and selected the verified receipt; stream UI retained the discarded model delta because `done` omitted final text | `docs/evidence/ring-ship-2026-07-11/17-gate-intercept-stream-draft-visible.png`; issue #879 |
+| 2026-07-11 | Final SHIP journey | `5ac9f37` | ring.zenod.dev live | real browser exact SHIP 7; external MCP SDK client; bearer-isolated beta tenant | PASS: commit `45e22e2` + GitHub links visible without reload; `ring-face-ok`; alpha peers/key hidden from beta; beta cleaned up | `docs/evidence/ring-ship-2026-07-11/19-ship7-live-authoritative-receipt.png`; `TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T05:48:00+02:00 - Ring delivery manager - SHIP journey complete
+
+Context: PR #882 merged after full CI and independent review, published, and deployed only to the Ring application as immutable SHA `5ac9f37`. The fully initialized dashboard then completed the exact phrase `remember this: the ring is alive` without reload and visibly rendered commit `45e22e251391b5233a5987fd3ae0a06a93d1347c` plus both GitHub links. An external MCP SDK client received exact `ring-face-ok` with correlation-backed `chat_audit` evidence. A fresh beta bearer could not see alpha's Zenod/Calli wallet or OpenRouter setting even when it supplied alpha's id; the beta tenant was deleted after proof.
+Next: package delivered in `docs/evidence/ring-ship-2026-07-11/TEST-PACKAGE.md`.
 
 ### 2026-07-11T05:22:00+02:00 - Ring delivery manager - Generic gate passes; stream finalization is the exact blocker
 
