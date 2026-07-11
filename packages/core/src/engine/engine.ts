@@ -36,6 +36,7 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
 import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
+import { sanitizeGroundedAnswer } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import {
   isAffirmativeApproval,
@@ -1227,12 +1228,30 @@ export function createEngine(options: EngineOptions): BrainEngine {
     await syncForRead();
     const briefing = await vaultBriefing();
     reportTokenCost("ask", [briefing.text, question], briefing);
+    const tools = readTools();
+    const readSpans = new Map<string, string>();
+    const groundedTools: VaultReadTools = {
+      ...tools,
+      ...(tools.readNote
+        ? {
+            readNote: async (path: string) => {
+              const text = await tools.readNote!(path);
+              readSpans.set(normalizeMarkdownNotePath(path), text);
+              return text;
+            },
+          }
+        : {}),
+    };
     const result = await llm.answer(
       { question, vaultBriefing: briefing.text, conversation: [] },
-      readTools(),
+      groundedTools,
     );
     return {
-      text: result.text,
+      text: sanitizeGroundedAnswer({
+        question,
+        text: result.text,
+        readSpans: [...readSpans].map(([path, text]) => ({ path, text })),
+      }),
       sources: result.readPaths.map((path) => ({ path, githubUrl: githubUrl(location, path) })),
     };
   }

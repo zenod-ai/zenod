@@ -36,6 +36,7 @@ class FakeLlm implements BrainLlm {
   failComposeAttempts = 0;
   classifyPath = "Areas/Insurance.md";
   answerInputs: AnswerInput[] = [];
+  answerOverride: ((input: AnswerInput, tools: VaultReadTools) => Promise<AnswerResult>) | null = null;
   workInputs: WorkLoopInput[] = [];
 
   async classify(_input: ClassifyInput): Promise<Classification> {
@@ -75,6 +76,7 @@ class FakeLlm implements BrainLlm {
 
   async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools, _driveTools?: unknown, peerTools?: PeerTools): Promise<AnswerResult> {
     this.answerInputs.push(input);
+    if (this.answerOverride) return this.answerOverride(input, tools);
     if (taskTools && input.question.startsWith("BACKLOG:")) {
       const result = await taskTools.digestBacklog({
         rawText: input.question.slice(8).trim(),
@@ -508,6 +510,75 @@ describe("BrainEngine", () => {
     expect(answer.text).toContain("Axa");
     expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
     expect(answer.sources[0]?.githubUrl).toContain("github.com/zenod-ai/fixture");
+  });
+
+  it("removes an invented exact literal and invalid anchor from a same-log distractor replay", async () => {
+    const logPath = "Log/2026-07-11.md";
+    await writeFile(
+      join(repo.path, logPath),
+      [
+        "# 2026-07-11",
+        "",
+        "## 01:10 Aurora Kestrel fixture ^e-06dada",
+        "- source: mcp",
+        "",
+        "> ZNMT-I1-20260711-A-L2 says Aurora Kestrel uses Amber-902.",
+        "",
+        "## 01:20 Later distractor ^e-c0ba17",
+        "- source: mcp",
+        "",
+        "> An unrelated L3 fixture mentions Cobalt-471.",
+        "",
+      ].join("\n"),
+    );
+    llm.answerOverride = async (_input, tools) => {
+      await tools.readNote!(logPath);
+      return {
+        text: [
+          "Aurora Kestrel uses Amber-902. [[2026-07-11#^e-06dada]]",
+          "It also uses Cobalt-471. [[2026-07-11#^e-06cada]]",
+        ].join("\n"),
+        readPaths: [logPath],
+      };
+    };
+
+    const answer = await engine().ask("For ZNMT-I1-20260711-A-L2, what code belongs to Aurora Kestrel?");
+
+    expect(answer.text).toContain("Amber-902");
+    expect(answer.text).toContain("^e-06dada");
+    expect(answer.text).not.toContain("Cobalt-471");
+    expect(answer.text).not.toContain("^e-06cada");
+    expect(answer.text).not.toContain("It also uses");
+    expect(answer.sources).toEqual([
+      expect.objectContaining({ path: logPath, githubUrl: expect.stringContaining(logPath) }),
+    ]);
+  });
+
+  it("retains supported exact literals and valid evidence links from the scoped entry", async () => {
+    const logPath = "Log/2026-07-11.md";
+    await writeFile(
+      join(repo.path, logPath),
+      [
+        "# 2026-07-11",
+        "",
+        "## 01:10 Aurora Kestrel fixture ^e-06dada",
+        "",
+        "> Aurora Kestrel uses Amber-902.",
+        "",
+      ].join("\n"),
+    );
+    llm.answerOverride = async (_input, tools) => {
+      await tools.readNote!(logPath);
+      return {
+        text: "Aurora Kestrel uses Amber-902 ([evidence](https://github.com/zenod-ai/fixture/blob/main/Log/2026-07-11.md#^e-06dada)).",
+        readPaths: [logPath],
+      };
+    };
+
+    const answer = await engine().ask("What code belongs to Aurora Kestrel?");
+
+    expect(answer.text).toContain("Amber-902");
+    expect(answer.text).toContain("https://github.com/zenod-ai/fixture/blob/main/Log/2026-07-11.md#^e-06dada");
   });
 
   it("bounds vaultBriefing and reports briefing token cost separately", async () => {
