@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import { applyReplyGate, isActionTool } from "../src/replyGate.js";
 import type { TaskingAction } from "../src/types.js";
 
-const action = (tool: string, result: string, input: Record<string, unknown> = {}): TaskingAction => ({ tool, input, result });
+const action = (
+  tool: string,
+  result: string,
+  input: Record<string, unknown> = {},
+  verifiedMutationReceipt = false,
+): TaskingAction => ({
+  tool,
+  input,
+  result,
+  ...(verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
+});
 
 describe("isActionTool", () => {
   it("recognizes the outbound send tools and the standing-draft approval verb regardless of naming convention", () => {
@@ -86,6 +96,45 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     const out = applyReplyGate("Nothing has run for that one yet.", actions);
     expect(out.isActionTurn).toBe(false);
     expect(out.text).toBe("Nothing has run for that one yet.");
+  });
+
+  it("relays a verified Zenod-style wallet mutation receipt with its exact commit evidence", () => {
+    const receipt = [
+      "Stored.",
+      "evidence: Log/2026-07-11.md#^e-ring",
+      `commit: ${"a".repeat(40)}`,
+      "https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Ring.md",
+    ].join("\n");
+    const out = applyReplyGate("I remembered that for you.", [action("memory_store", receipt, {}, true)]);
+
+    expect(out.isActionTurn).toBe(true);
+    expect(out.intercepted).toBe(true);
+    expect(out.text).toBe(receipt);
+  });
+
+  it("relays a verified Calli-style wallet mutation receipt without a product or tool-name profile", () => {
+    const receipt = "Posted to X. Live URL: https://x.com/i/web/status/2075755544816595012";
+    const out = applyReplyGate("Done — your campaign is live.", [action("peer_mutation_42", receipt, {}, true)]);
+
+    expect(out.text).toBe(receipt);
+    expect(out.text).not.toContain("campaign");
+  });
+
+  it("relays a wallet mutation failure verbatim instead of an optimistic model claim", () => {
+    const failure = "ERROR: explicit approval is required; no post was created.";
+    const out = applyReplyGate("Posted successfully.", [action("portable_write", failure, {}, true)]);
+
+    expect(out.text).toBe(failure);
+    expect(out.text).not.toContain("successfully");
+  });
+
+  it("leaves wallet peer reads model-drafted when they are not marked as mutation receipts", () => {
+    const out = applyReplyGate("The latest post is about the Ring.", [
+      action("peer_read_42", '{"data":[{"text":"the Ring"}]}'),
+    ]);
+
+    expect(out.isActionTurn).toBe(false);
+    expect(out.text).toBe("The latest post is about the Ring.");
   });
 
   // A1 / C-22: ask_outbound is a gated action tool — its result (Callistheness's own

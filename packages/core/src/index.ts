@@ -73,6 +73,7 @@ export {
   normalizedToolName,
 } from "./taskingPolicy.js";
 export { applyReplyGate, isActionTool, type ReplyGateInterceptedEvent, type ReplyGateOutcome } from "./replyGate.js";
+export { isKnownTool, toolKind, type ToolKind } from "./toolKinds.js";
 export { SqliteStateStore } from "./state/sqlite.js";
 export {
   AiSdkBrainLlm,

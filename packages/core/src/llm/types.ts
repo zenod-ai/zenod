@@ -122,7 +122,12 @@ export interface AnswerInput {
    * here. Engine uses this to capture peer tool results into the actions array
    * so the UUID returned by z2's async tools can be extracted for job polling.
    */
-  onPeerAction?: (tool: string, input: Record<string, unknown>, result: string) => void;
+  onPeerAction?: (
+    tool: string,
+    input: Record<string, unknown>,
+    result: string,
+    metadata?: { verifiedMutationReceipt?: boolean },
+  ) => void;
   /**
    * FP4 · #548 ledger completeness — every READ tool invocation (vault/conversation
    * search, read_note, list_pages, search_chats) is delivered here so the engine records
@@ -155,6 +160,11 @@ export interface VaultReadTools {
 export interface PeerTool {
   description: string;
   inputSchema?: unknown;
+  /**
+   * This wallet peer tool mutates its owner and returns the owner's verified
+   * receipt. The reply boundary relays that result verbatim instead of model prose.
+   */
+  verifiedMutationReceipt?: boolean;
   /**
    * Repository this peer is allowed to mutate directly. For Archus this is the
    * central backlog repo, not arbitrary product/code repos.
