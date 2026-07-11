@@ -42,9 +42,14 @@ export function issueCustomerSession(
 
 export function clearCustomerSession(c: Context, env: NodeJS.ProcessEnv = process.env): void {
   const cookieDomain = env.ZC_COOKIE_DOMAIN || (env.NODE_ENV === "production" ? ".zenod.dev" : undefined);
+  // Clear a host-only cookie as well as the production parent-domain cookie.
+  // This keeps logout working across a cutover where an earlier build issued
+  // the same cookie name without ZC_COOKIE_DOMAIN/NODE_ENV configured.
+  deleteCookie(c, CUSTOMER_SESSION_COOKIE, { path: "/" });
+  if (!cookieDomain) return;
   deleteCookie(c, CUSTOMER_SESSION_COOKIE, {
     path: "/",
-    ...(cookieDomain ? { domain: cookieDomain } : {}),
+    domain: cookieDomain,
   });
 }
 
