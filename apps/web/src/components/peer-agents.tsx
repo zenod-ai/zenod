@@ -73,10 +73,10 @@ export function PeerAgents() {
         body: { peers: next },
       })
       setPeers(r.peers)
-      return true
+      return r.peers
     } catch (err) {
       toast.error("Could not save units", { description: errorMessage(err) })
-      return false
+      return null
     } finally {
       setSaving(false)
     }
@@ -91,13 +91,32 @@ export function PeerAgents() {
       ...(peers ?? []).map((p) => ({ name: p.name, url: p.url })),
       { name: name.trim(), url: url.trim(), token: token.trim() },
     ]
-    if (await save(next)) {
+    const saved = await save(next)
+    if (saved) {
+      const added = peerFromResponse(saved, name.trim())
       setName("")
       setUrl("")
       setToken("")
-      toast.success(`Unit "${name.trim()}" connected`, {
-        description: `The Council can now route work to it.`,
-      })
+      if (
+        added?.transportStatus === "connected" &&
+        added.toolsStatus === "ready" &&
+        added.toolCount > 0
+      ) {
+        toast.success(`Unit "${added.name}" tools ready`, {
+          description: `${added.toolCount} discovered ${added.toolCount === 1 ? "tool" : "tools"}.`,
+        })
+      } else {
+        toast.warning(
+          `Unit "${added?.name ?? name.trim()}" saved, but tools are unavailable`,
+          {
+            description:
+              added?.toolsError ??
+              (added?.transportStatus === "error"
+                ? "The MCP transport could not be reached."
+                : "No usable tools were advertised."),
+          }
+        )
+      }
     }
   }
 
@@ -292,6 +311,8 @@ export function PeerAgents() {
         ) : (
           <div className="flex flex-col gap-3">
             {peers.map((p) => (
+              // A second explicit refresh is allowed while the first is in flight;
+              // generation guards ensure the older response cannot win.
               <div
                 key={p.name}
                 className="flex items-start justify-between gap-3 rounded-lg border p-3"
@@ -368,7 +389,11 @@ export function PeerAgents() {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={saving || Boolean(peerActivity[p.name])}
+                      disabled={
+                        saving ||
+                        (Boolean(peerActivity[p.name]) &&
+                          peerActivity[p.name] !== "Refreshing tools")
+                      }
                       onClick={() => refreshPeer(p.name)}
                     >
                       <RefreshCwIcon /> Refresh tools
