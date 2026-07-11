@@ -1,0 +1,44 @@
+# Herald deploys and sells as one container. The public application owns the
+# landing, customer dashboard, tenant data, MCP face, and health receipt.
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  herald-data:
+
+services:
+  herald:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:?required}
+    image: ${HERALD_IMAGE:-zenod-herald}
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      ZENOD_UNIT: herald
+      ZENOD_DATA_DIR: /data
+      ZENOD_WEB_DIST: /app/apps/web/dist
+      ZENOD_SITE_DIST: /app/apps/herald-site/dist
+      CUSTOMER_APP_URL: https://herald.zenod.dev
+      DOMAIN: https://herald.zenod.dev
+      GITHUB_OAUTH_CALLBACK_URL: https://herald.zenod.dev/auth/github/callback
+      ZC_COOKIE_DOMAIN: herald.zenod.dev
+      STRIPE_MODE: test
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:?required}
+      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:?required}
+      ACCOUNT_STATE_SECRET: ${ACCOUNT_STATE_SECRET:?required}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?required}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?required}
+      PRICE_MONTHLY: ${PRICE_MONTHLY:?required}
+      PRICE_YEARLY: ${PRICE_YEARLY:?required}
+      CHASSIS_VAULT_MASTER_KEY: ${CHASSIS_VAULT_MASTER_KEY:?required}
+      CONTROL_PLANE_TOKEN: ${CONTROL_PLANE_TOKEN:?required}
+    volumes:
+      - herald-data:/data
+    expose: ["8080"]
+    networks: [dokploy-network]
+    restart: unless-stopped

@@ -105,6 +105,8 @@ export function Settings({
     null
   )
   const isRing = overview?.unit?.name === "ring"
+  const isHerald = overview?.unit?.name === "herald"
+  const isCouncilUnit = isRing || isHerald
   const isPhylax = overview?.unit?.name === "phylax"
 
   React.useEffect(() => {
@@ -132,17 +134,17 @@ export function Settings({
             <BrainIcon className="size-4.5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold">{isRing ? "The Ring" : isPhylax ? "Phylax" : "Zenod"}</h1>
+            <h1 className="text-xl font-semibold">{isRing ? "The Ring" : isHerald ? "Herald" : isPhylax ? "Phylax" : "Zenod"}</h1>
             <p className="truncate text-sm text-muted-foreground">
               {overview
                 ? `${overview.tenant.name ?? overview.tenant.id} · ${overview.usage?.units ?? 0} usage units`
-                : isRing ? "Your council — one chat, wired to all your agents" : "Your memory through MCP"}
+                : isRing ? "Your council — one chat, wired to all your agents" : isHerald ? "Your project's voice, on a loop" : "Your memory through MCP"}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
           <Button asChild variant="ghost" size="sm">
-            <a href={isRing ? "https://ring.zenod.dev/" : isPhylax ? "https://phylax.zenod.dev/" : PUBLIC_LANDING_URL}>
+            <a href={isRing ? "https://ring.zenod.dev/" : isHerald ? "https://herald.zenod.dev/" : isPhylax ? "https://phylax.zenod.dev/" : PUBLIC_LANDING_URL}>
               <ArrowLeftIcon data-icon="inline-start" />
               Landing
             </a>
@@ -159,12 +161,12 @@ export function Settings({
         </div>
       </header>
 
-      {isPhylax ? <main><PhylaxTenantSettings /></main> : isRing ? (
+      {isPhylax ? <main><PhylaxTenantSettings /></main> : isCouncilUnit ? (
         <main className="flex flex-col gap-6">
           <section aria-labelledby="council-chat-heading" className="flex flex-col gap-2">
             <div>
-              <h2 id="council-chat-heading" className="text-lg font-semibold">Council chat</h2>
-              <p className="text-sm text-muted-foreground">One conversation with the council wired to your units.</p>
+              <h2 id="council-chat-heading" className="text-lg font-semibold">{isHerald ? "Herald chat" : "Council chat"}</h2>
+              <p className="text-sm text-muted-foreground">{isHerald ? "Brief, approve, and follow every publishing receipt in one conversation." : "One conversation with the council wired to your units."}</p>
             </div>
             <ChatTab vaultless />
           </section>
@@ -178,7 +180,7 @@ export function Settings({
                 <h2 id="ring-keys-heading" className="text-lg font-semibold">Keys</h2>
                 <p className="text-sm text-muted-foreground">Your tenant-scoped Council model key.</p>
               </div>
-              <KeysTab initial={settings} onSaved={setSettings} vaultless unitLabel="Ring Council" />
+              <KeysTab initial={settings} onSaved={setSettings} vaultless unitLabel={isHerald ? "Herald" : "Ring Council"} />
             </section>
           </div>
         </main>

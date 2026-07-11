@@ -9,6 +9,7 @@ import { compileAllToolOutputSchemas } from "./toolOutput.js";
 import { createZenodUnit } from "./zenodUnit.js";
 import { createCallisthenesUnit } from "./callisthenesUnit.js";
 import { createRingUnit } from "./ringUnit.js";
+import { createHeraldUnit } from "./heraldUnit.js";
 import { createPhylaxUnit } from "./phylaxUnit.js";
 import { resolveServerMode } from "./serverMode.js";
 
@@ -52,6 +53,13 @@ const unit = mode === "callisthenes"
     })
   : mode === "ring"
   ? createRingUnit({
+      dataDir,
+      ...(hasWeb ? { webDist } : {}),
+      ...(hasSite ? { siteDist } : {}),
+      env: process.env,
+    })
+  : mode === "herald"
+  ? createHeraldUnit({
       dataDir,
       ...(hasWeb ? { webDist } : {}),
       ...(hasSite ? { siteDist } : {}),
