@@ -177,6 +177,12 @@ export interface PeerTool {
    */
   verifiedMutationReceipt?: boolean;
   /**
+   * Tool results contain tenant-supplied advisory material. The model may use
+   * that material as domain guidance, but it never changes instruction priority
+   * or bypasses mutation/approval guards enforced by the host.
+   */
+  advisoryContent?: boolean;
+  /**
    * Repository this peer is allowed to mutate directly. For Archus this is the
    * central backlog repo, not arbitrary product/code repos.
    */
