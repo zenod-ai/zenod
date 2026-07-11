@@ -28,7 +28,7 @@ import server as xmcp_server  # upstream xdevplatform/xmcp, pinned + patched
 
 from throttle import build_throttle_middleware
 from draft_guard import build_draft_guard_middleware
-from tenant_context import build_tenant_context_middleware
+from tenant_context import build_tenant_context_middleware, current_tenant
 
 
 def log(msg: str) -> None:
@@ -44,7 +44,11 @@ def build_app():
     # default and configured from env inside their builders.
     mcp.add_middleware(build_tenant_context_middleware())
     mcp.add_middleware(build_draft_guard_middleware())
-    mcp.add_middleware(build_throttle_middleware())
+    # Resolve from the request-local binding installed immediately above. Calling
+    # the auth package's transport resolver from inside tool middleware can wait
+    # on the same in-flight request; the ContextVar is already the authoritative
+    # bearer identity at this point.
+    mcp.add_middleware(build_throttle_middleware(tenant_resolver=current_tenant))
     log("installed middleware: tenant-context + draft-guard (C-22) + throttle")
 
     # SHARED CONTRACT with C-2 — auth package is optional at this stage.
