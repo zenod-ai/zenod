@@ -161,6 +161,9 @@ export interface CreateZenodUnitOptions {
   defaultTenantName?: string;
   panels?: string[];
   customerProduct?: CustomerProductConfig;
+  /** Register unit-specific tools on the same instrumented MCP server. */
+  registerAdditionalTools?: (server: McpServer, context: UnitContext) => void;
+  additionalReadTools?: readonly string[];
 }
 
 export const ZENOD_READ_TOOLS = [
@@ -201,7 +204,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     name: unitName,
     version: VERSION,
     conduct: {
-      toolKinds: { read: ZENOD_READ_TOOLS },
+      toolKinds: { read: [...ZENOD_READ_TOOLS, ...(options.additionalReadTools ?? [])] },
       longTools: ZENOD_LONG_TOOLS,
     },
     tenantAuth: { store: tenantStore },
@@ -238,6 +241,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
     tools(server, context) {
       registerZenodTools(server, runtimes.forContext(context), agent);
+      options.registerAdditionalTools?.(server, context);
     },
     routes(routes) {
       routes.all("/api/*", async (c, next) => {

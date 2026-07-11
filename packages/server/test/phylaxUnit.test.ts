@@ -44,4 +44,27 @@ describe("Phylax customer unit mount", () => {
       unit.close();
     }
   });
+
+  it("serves artifacts only to the matching tenant token and rejects traversal", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-artifact-"));
+    dirs.push(dataDir);
+    const tenantStore = createMemoryTenantStore([
+      { token: "alpha-token", tenant: { id: "alpha", name: "Alpha" } },
+      { token: "beta-token", tenant: { id: "beta", name: "Beta" } },
+    ]);
+    const unit = createPhylaxUnit({ dataDir, tenantStore, env: { CHASSIS_VAULT_MASTER_KEY: MASTER_KEY } });
+    const artifactDir = join(dataDir, "whatsapp", "artifacts", "alpha");
+    await mkdir(artifactDir, { recursive: true });
+    await writeFile(join(artifactDir, "voice.ogg"), "alpha-audio");
+    try {
+      const own = await unit.app.request("/mcp/alpha-token/artifacts/alpha/voice.ogg");
+      expect(own.status).toBe(200);
+      expect(own.headers.get("content-type")).toContain("audio/ogg");
+      expect(await own.text()).toBe("alpha-audio");
+      expect((await unit.app.request("/mcp/beta-token/artifacts/alpha/voice.ogg")).status).toBe(404);
+      expect((await unit.app.request("/mcp/alpha-token/artifacts/alpha/%2e%2e")).status).toBe(404);
+    } finally {
+      unit.close();
+    }
+  });
 });
