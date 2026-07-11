@@ -181,7 +181,7 @@ export async function callPeerTool(
 export async function callPeerWithArgs(peer: PeerConfig, mcpTool: string, args: Record<string, unknown>): Promise<string> {
   const result = await callPeerTool(peer, mcpTool, args);
   const text = extractText(result);
-  if (mcpTool === "store_memory" && !result.isError) {
+  if (peer.wallet && mcpTool === "store_memory" && !result.isError) {
     const structuredJobId = typeof result.structuredContent?.jobId === "string" ? result.structuredContent.jobId : null;
     const jobId = structuredJobId ?? text.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i)?.[0];
     if (jobId) {
