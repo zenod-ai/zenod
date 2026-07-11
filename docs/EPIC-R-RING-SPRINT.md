@@ -84,12 +84,12 @@ HARDEN (after Jordi approves SHIP): multiple units in the wallet exercised end-t
 
 ## Current State
 
-Phase: R-S5 deployment and live journey
-Last verified: 2026-07-11T02:46:31+02:00
+Phase: R-S5 blocked at live receipt gate
+Last verified: 2026-07-11T04:01:00+02:00
 Integration target: main
 Fresh base commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92` — PINNED; no rebases until the journey passes (D19c)
-Next action: publish and deploy frozen code commit `9e5862c`, then walk SHIP 1–10 on `ring.zenod.dev` in one browser loop.
-Blockers: none — decisions pre-answered; inputs have absence-rules.
+Next action: BLOCKED ON JORDI — authorize one additional fix lap for the downstream commit-receipt and MCP `silent_ack` seams.
+Blockers: SHIP 7 did not surface the Zenod commit receipt within 180 seconds; SHIP 8 mutating chat returned receipt-middleware `silent_ack`. Final allowed fix lap is exhausted.
 
 ## Role Goals
 
@@ -143,7 +143,7 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#836](https://github.com/zenod-ai/zenod/issues/836) | Ticket worker | R-S2-worker | R-S2 council middle (ChatTab + persona + Keys, tenant-scoped) | done | - | [#842](https://github.com/zenod-ai/zenod/pull/842) / `codex/r-s2-council-middle` | `fcac83f` | SHIP 5–6 | CI green; Ring namespace fix; merged `4ed9440` | 2026-07-11T02:33:31+02:00 | integrated |
 | [#838](https://github.com/zenod-ai/zenod/issues/838) | Ticket worker | R-S3-worker | R-S3 wallet (peers surface → per-tenant unit wallet) | done | #837, #836 done | [#850](https://github.com/zenod-ai/zenod/pull/850) / `codex/r-s3-wallet` | `4ed9440` | SHIP 7 | CI green; 46 focused tests; merged `9e5862c` | 2026-07-11T02:46:31+02:00 | integrated |
 | [#839](https://github.com/zenod-ai/zenod/issues/839) | Ticket worker | R-S4-worker | R-S4 billing + domain (duplicate recipe) | done | #837 done | [#849](https://github.com/zenod-ai/zenod/pull/849) / `codex/r-s4-billing-domain` | `4ed9440` | SHIP 2, 4 live | CI green; guarded runbook/script; merged `6352ee1` | 2026-07-11T02:46:31+02:00 | integrated; manager cutover |
-| [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | testing | #837, #836, #838, #839 done | `main` / manager journey | `9e5862c` frozen | SHIP 1–10 | implementation CI green | 2026-07-11T02:46:31+02:00 | deploy and walk live journey |
+| [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | blocked | #837, #836, #838, #839 done | `main` / manager journey; fixes [#852](https://github.com/zenod-ai/zenod/pull/852), [#853](https://github.com/zenod-ai/zenod/pull/853) | `fde458f` live | SHIP 1–10 | steps 1–6 pass; 7 wallet pass/receipt fail; 8 initialize/read pass/chat `silent_ack`; 9 persistence+isolation pass | 2026-07-11T04:01:00+02:00 | BLOCKED ON JORDI: authorize one additional fix lap |
 
 ## Branch And Integration
 
@@ -182,9 +182,16 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
-| pending | SHIP journey clean pass | - | ring.zenod.dev live | real browser walk + MCP client check, screenshots | pending | test package |
+| 2026-07-11 | SHIP live gate | `fde458f` | ring.zenod.dev live | real Chrome walk, external MCP client, two bearer-authenticated tenants | BLOCKED: SHIP 7 receipt missing after 180s; SHIP 8 mutating call `silent_ack`; all other gates pass | `docs/evidence/ring-ship-2026-07-11/TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T04:01:00+02:00 - Ring delivery manager - Live gate frozen; final fix budget exhausted
+
+Context: Final live image `fde458f` passed CI, published, and was guardedly deployed to the isolated Ring application. The manager completed GitHub OAuth, Stripe TEST checkout, dashboard, a $1-capped OpenRouter key entered and tested through the UI, Zenod wallet connection, external MCP initialize/read, logout/login persistence, and live bearer-scoped two-tenant isolation. The dashboard and tenant state persist on Ring's `/data`; existing Zenod and Callisthenes services were not redeployed.
+Blocker: `remember this: the ring is alive` routed to Zenod and stayed at “Saving to Zenod’s memory” without a commit receipt after 180 seconds. External `chat_with_ring` reached Ring but the receipt middleware returned `silent_ack` because its successful mutating result had no `evidence[]`; initialize and `read_llm_timeline` passed. D19's final allowed fix lap is exhausted.
+Evidence: `docs/evidence/ring-ship-2026-07-11/TEST-PACKAGE.md` and screenshots `01`–`10`.
+Next: BLOCKED ON JORDI — authorize exactly one additional fix lap for these two receipt-path seams, then rerun only SHIP 7–10 and freeze a new exact SHA.
 
 ### 2026-07-11T02:46:31+02:00 - Ring delivery manager - Wave 2 integrated; R-S5 frozen
 
