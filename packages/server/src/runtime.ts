@@ -690,6 +690,10 @@ export class Runtime {
               };
               return this.recordPeerDelegation(peer, spec, forwarded, () => callPeerWithArgs(peer, spec.mcp, forwarded));
             }
+            if (peer.wallet && spec.mcp === "store_memory") {
+              const args = { [spec.arg]: textInput };
+              return this.recordPeerDelegation(peer, spec, args, () => callPeerWithArgs(peer, spec.mcp, args));
+            }
             if (!shouldForwardConsoleContext || !spec.mcp.startsWith("chat_with_")) {
               return this.recordPeerDelegation(peer, spec, textInput, () => callPeer(peer, spec.mcp, spec.arg, textInput));
             }
