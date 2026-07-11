@@ -30,6 +30,11 @@ import { readCustomerSession } from "./customerSession.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
+import {
+  ZENOD_PUBLISHED_SKILL,
+  ZENOD_SKILL_BUNDLE_PATH,
+  zenodSkillBundle,
+} from "./zenodSkill.js";
 
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
@@ -211,6 +216,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const unit = createUnit({
     name: unitName,
     version: VERSION,
+    ...(agent.name === "zenod" ? { skill: ZENOD_PUBLISHED_SKILL } : {}),
     conduct: {
       toolKinds: { read: [...ZENOD_READ_TOOLS, ...(options.additionalReadTools ?? [])] },
       longTools: ZENOD_LONG_TOOLS,
@@ -282,6 +288,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
   );
   const app = new Hono<{ Bindings: HttpBindings }>();
+  if (agent.name === "zenod") {
+    app.get("/.well-known/atomic-unit-skill.json", (c) =>
+      unit.app.fetch(c.req.raw, c.env),
+    );
+    app.get(ZENOD_SKILL_BUNDLE_PATH, (c) =>
+      c.json(zenodSkillBundle(), 200, {
+        "Content-Type":
+          "application/vnd.zenod.agent-skill+json; charset=utf-8",
+      }),
+    );
+  }
   app.get("/api/health", (c) =>
     c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
   );

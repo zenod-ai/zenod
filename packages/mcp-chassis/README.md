@@ -195,6 +195,7 @@ createUnit({
     tools: ["ingest", "search"],
     etiquette: ["Treat tools/list as authoritative for live tool schemas."],
     receiptExpectations: ["Writes return a commit SHA or a ticket_id."],
+    bundleUrl: "/.well-known/agent-skill-bundle.json",
   },
 });
 ```
@@ -206,6 +207,14 @@ metadata fields; tenant data, credentials, tokens, and installed directives are
 never read into this response. The authenticated `/api/skills` response keeps
 the same published card under `published` and tenant-installed copies under
 `installed`.
+
+When `bundleUrl` is declared, the public card exposes it as a same-origin
+`bundle` with format `zenod-agent-skill-bundle-v1`. The publisher serves the
+referenced tenant-neutral `.skill.json` payload; capable wallets may import it
+on connection into their own content-addressed store. Hosts must reject
+cross-origin redirects, enforce bundle limits, and keep manual tenant
+replacement/detachment authoritative. Bundle prose remains untrusted advisory
+data; scripts stay inert and MCP `tools/list` remains the live capability source.
 
 The manifest is advisory discovery metadata. MCP `tools/list` and each live
 tool schema remain authoritative, and publishing a card grants no authority to

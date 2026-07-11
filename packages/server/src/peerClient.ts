@@ -5,7 +5,11 @@ import { createHash } from "node:crypto";
 import { VERSION } from "zenod";
 import { pollPeerJob } from "./pollPeerJob.js";
 import { validateWalletUrl } from "./walletUrl.js";
-import type { PeerSkillAttachmentRef } from "./peerSkillStore.js";
+import {
+  PEER_SKILL_LIMITS,
+  type PeerSkillAttachmentRef,
+  type PeerSkillFileInput,
+} from "./peerSkillStore.js";
 
 /**
  * The mesh: one agent calling another over MCP. A peer agent exposes its tools at
@@ -63,6 +67,8 @@ export interface PeerConfig {
   };
   /** Tenant-local immutable skill artifact reference. The bundle itself is never stored in settings. */
   skillArtifact?: PeerSkillAttachmentRef;
+  /** False after an explicit manual detach; refresh must not silently re-import. */
+  skillAutoImport?: boolean;
 }
 
 async function validatePeerTarget(peer: PeerConfig): Promise<void> {
@@ -103,6 +109,68 @@ export interface PeerDiscoveryResult {
 const MAX_DISCOVERED_TOOLS = 64;
 const MAX_TOOL_DESCRIPTION_CHARS = 4_000;
 const MAX_TOOL_SCHEMA_BYTES = 64 * 1024;
+const PUBLISHED_SKILL_MANIFEST_PATH =
+  "/.well-known/atomic-unit-skill.json";
+
+async function boundedJson(response: Response): Promise<unknown> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > PEER_SKILL_LIMITS.maxBundleBytes) {
+    throw new Error("advertised skill response is too large");
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.byteLength > PEER_SKILL_LIMITS.maxBundleBytes) {
+    throw new Error("advertised skill response is too large");
+  }
+  return JSON.parse(bytes.toString("utf8")) as unknown;
+}
+
+/**
+ * Importable peer guidance is optional advisory metadata. Discovery is public,
+ * same-origin and redirect-free; MCP tools remain usable when it is absent or bad.
+ */
+export async function discoverAdvertisedPeerSkill(
+  peer: PeerConfig,
+): Promise<PeerSkillFileInput[] | null> {
+  try {
+    await validatePeerTarget(peer);
+    const peerUrl = new URL(peer.url);
+    const manifestUrl = new URL(PUBLISHED_SKILL_MANIFEST_PATH, peerUrl.origin);
+    const manifestResponse = await fetch(manifestUrl, {
+      redirect: "error",
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!manifestResponse.ok) return null;
+    const manifest = await boundedJson(manifestResponse) as {
+      bundle?: { format?: unknown; url?: unknown };
+    };
+    if (
+      manifest?.bundle?.format !== "zenod-agent-skill-bundle-v1" ||
+      typeof manifest.bundle.url !== "string"
+    ) {
+      return null;
+    }
+    const bundleUrl = new URL(manifest.bundle.url, manifestUrl);
+    if (bundleUrl.origin !== peerUrl.origin) return null;
+    const bundleResponse = await fetch(bundleUrl, {
+      redirect: "error",
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!bundleResponse.ok) return null;
+    const bundle = await boundedJson(bundleResponse) as {
+      format?: unknown;
+      files?: unknown;
+    };
+    if (
+      bundle?.format !== "zenod-agent-skill-bundle-v1" ||
+      !Array.isArray(bundle.files)
+    ) {
+      return null;
+    }
+    return bundle.files as PeerSkillFileInput[];
+  } catch {
+    return null;
+  }
+}
 
 function boundedSchema(value: unknown, label: string): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;

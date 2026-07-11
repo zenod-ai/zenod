@@ -17,6 +17,7 @@ import {
   ZENOD_READ_TOOLS,
   ZenodRuntimePool,
 } from "../src/zenodUnit.js";
+import { PeerSkillStore } from "../src/peerSkillStore.js";
 
 const tempDirs: string[] = [];
 const CHASSIS_VAULT_MASTER_KEY = "11".repeat(32);
@@ -146,6 +147,54 @@ describe("Zenod chassis unit", () => {
       expect(JSON.stringify(tenants.snapshot())).not.toContain(
         (await provisioned.json() as { token: string }).token,
       );
+    } finally {
+      unit.close();
+    }
+  });
+
+  it("publishes the canonical Zenod skill card and downloadable bundle", async () => {
+    const dataDir = await tempDir();
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env: { CHASSIS_VAULT_MASTER_KEY },
+    });
+    try {
+      const manifestResponse = await unit.app.request(
+        "/.well-known/atomic-unit-skill.json",
+      );
+      expect(manifestResponse.status).toBe(200);
+      await expect(manifestResponse.json()).resolves.toMatchObject({
+        schemaVersion: "1.0",
+        id: "zenod.memory",
+        name: "Zenod",
+        bundle: {
+          format: "zenod-agent-skill-bundle-v1",
+          url: "/.well-known/agent-skill-bundle.json",
+        },
+      });
+
+      const bundleResponse = await unit.app.request(
+        "/.well-known/agent-skill-bundle.json",
+      );
+      expect(bundleResponse.status).toBe(200);
+      expect(bundleResponse.headers.get("content-type")).toContain(
+        "application/vnd.zenod.agent-skill+json",
+      );
+      const bundle = await bundleResponse.json() as {
+        format: string;
+        files: Array<{ path: string; contentBase64: string }>;
+      };
+      expect(bundle.format).toBe("zenod-agent-skill-bundle-v1");
+      expect(bundle.files.map((file) => file.path)).toEqual([
+        "SKILL.md",
+        "references/EXAMPLES.md",
+        "references/WORKFLOW.md",
+      ]);
+      expect(Buffer.from(bundle.files[0]!.contentBase64, "base64").toString("utf8"))
+        .toContain("name: zenod");
+      const stored = await new PeerSkillStore(await tempDir()).put(bundle.files);
+      expect(stored).toMatchObject({ name: "zenod", version: "1.0.0" });
     } finally {
       unit.close();
     }

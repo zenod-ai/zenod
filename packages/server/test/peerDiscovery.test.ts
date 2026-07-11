@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RING_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
-import { callPeerTool, callPeerWithArgs, councilToolName, discoverPeerTools } from "../src/peerClient.js";
+import { callPeerTool, callPeerWithArgs, councilToolName, discoverAdvertisedPeerSkill, discoverPeerTools } from "../src/peerClient.js";
 import { Runtime } from "../src/runtime.js";
 import type { PeerTools } from "zenod";
 
@@ -74,6 +74,59 @@ describe("generic wallet MCP discovery", () => {
       preserveFullResult: true,
     })]);
     expect(fetcher.mock.calls.some(([, init]) => new Headers(init?.headers).get("authorization") === "Bearer secret")).toBe(true);
+  });
+
+  it("discovers only a same-origin advertised Agent Skill bundle", async () => {
+    const skill = `---\nname: zenod\ndescription: Durable memory.\nmetadata:\n  version: "1.0.0"\n---\n\n# Zenod\n`;
+    const fetcher = vi.fn(async (url: RequestInfo | URL) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/.well-known/atomic-unit-skill.json") {
+        return Response.json({
+          schemaVersion: "1.0",
+          bundle: {
+            format: "zenod-agent-skill-bundle-v1",
+            url: "/.well-known/agent-skill-bundle.json",
+          },
+        });
+      }
+      if (parsed.pathname === "/.well-known/agent-skill-bundle.json") {
+        return Response.json({
+          format: "zenod-agent-skill-bundle-v1",
+          files: [{ path: "SKILL.md", contentBase64: Buffer.from(skill).toString("base64") }],
+        });
+      }
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(discoverAdvertisedPeerSkill({
+      name: "Zenod",
+      url: "https://peer.example/mcp/token",
+      token: "secret",
+    })).resolves.toEqual([
+      { path: "SKILL.md", contentBase64: Buffer.from(skill).toString("base64") },
+    ]);
+
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      bundle: {
+        format: "zenod-agent-skill-bundle-v1",
+        url: "https://other.example/skill.json",
+      },
+    })));
+    await expect(discoverAdvertisedPeerSkill({
+      name: "Zenod",
+      url: "https://peer.example/mcp/token",
+      token: "secret",
+    })).resolves.toBeNull();
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", {
+      headers: { "content-length": String(4_194_305) },
+    })));
+    await expect(discoverAdvertisedPeerSkill({
+      name: "Zenod",
+      url: "https://peer.example/mcp/token",
+      token: "secret",
+    })).resolves.toBeNull();
   });
 
   it("forwards exact arguments and retains structured and non-text tool results", async () => {
@@ -285,6 +338,86 @@ describe("generic wallet MCP discovery", () => {
       expect(refreshedPayload.peers[0]).not.toHaveProperty("tool");
       expect((runtime.settings.peers()[0] as any).skillArtifact).toEqual({ artifactId: "sha256:calli-skill-v1", version: "v1" });
       expect(fetcher.mock.calls.some(([, init]) => new Headers(init?.headers).get("authorization") === "Bearer downstream-secret")).toBe(true);
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("auto-attaches an advertised peer skill without overwriting manual attachments", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "ring-peer-auto-skill-"));
+    dirs.push(dataDir);
+    const skill = `---\nname: zenod\ndescription: Durable memory.\nmetadata:\n  version: "1.0.0"\n---\n\n# Zenod\nUse cited memory.\n`;
+    const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/.well-known/atomic-unit-skill.json") {
+        return Response.json({
+          bundle: {
+            format: "zenod-agent-skill-bundle-v1",
+            url: "/.well-known/agent-skill-bundle.json",
+          },
+        });
+      }
+      if (parsed.pathname === "/.well-known/agent-skill-bundle.json") {
+        return Response.json({
+          format: "zenod-agent-skill-bundle-v1",
+          files: [{ path: "SKILL.md", contentBase64: Buffer.from(skill).toString("base64") }],
+        });
+      }
+      const body = JSON.parse(String(init?.body ?? "{}")) as { id?: number; method?: string };
+      if (body.method === "initialize") return Response.json({
+        jsonrpc: "2.0",
+        id: body.id,
+        result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "peer", version: "1" } },
+      });
+      if (body.method === "tools/list") return Response.json({
+        jsonrpc: "2.0",
+        id: body.id,
+        result: { tools: [{ name: "search_memory", inputSchema: { type: "object" } }] },
+      });
+      return new Response(null, { status: 202 });
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    const runtime = new Runtime(dataDir, RING_AGENT, { seedFromEnv: false, credentialMasterKey: "33".repeat(32) });
+    runtime.settings.setRaw("api_token", "ring-test-token");
+    runtime.settings.setPeers([{
+      name: "Zenod",
+      url: "https://1.1.1.1/mcp/token",
+      token: "downstream-secret",
+      wallet: true,
+      tools: [],
+    }]);
+    const app = createApp(runtime, { agent: RING_AGENT });
+    try {
+      const response = await app.request("/api/peers", {
+        headers: { authorization: "Bearer ring-test-token" },
+      });
+      const payload = await response.json() as { peers: Array<{ skill?: { name?: string; version?: string } }> };
+      expect(payload.peers[0]?.skill).toMatchObject({ name: "zenod", version: "1.0.0" });
+      const attached = runtime.settings.peers()[0]?.skillArtifact;
+      expect(attached).toMatchObject({ version: "1.0.0" });
+
+      await app.request("/api/peers/refresh", {
+        method: "POST",
+        headers: { authorization: "Bearer ring-test-token", "content-type": "application/json" },
+        body: JSON.stringify({ name: "Zenod" }),
+      });
+      expect(runtime.settings.peers()[0]?.skillArtifact).toEqual(attached);
+      expect(fetcher.mock.calls.filter(([url]) => new URL(String(url)).pathname === "/.well-known/agent-skill-bundle.json")).toHaveLength(1);
+
+      const detached = await app.request("/api/peers/Zenod/skill", {
+        method: "DELETE",
+        headers: { authorization: "Bearer ring-test-token" },
+      });
+      expect(detached.status).toBe(200);
+      await app.request("/api/peers/refresh", {
+        method: "POST",
+        headers: { authorization: "Bearer ring-test-token", "content-type": "application/json" },
+        body: JSON.stringify({ name: "Zenod" }),
+      });
+      expect(runtime.settings.peers()[0]?.skillArtifact).toBeUndefined();
+      expect(runtime.settings.peers()[0]?.skillAutoImport).toBe(false);
+      expect(fetcher.mock.calls.filter(([url]) => new URL(String(url)).pathname === "/.well-known/agent-skill-bundle.json")).toHaveLength(1);
     } finally {
       runtime.close();
     }

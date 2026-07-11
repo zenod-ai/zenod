@@ -58,7 +58,7 @@ import { runExecutionIngestSweep, type MemoryJobStatus } from "./executionIngest
 import { detectStuckIngestJobs, formatStuckIngestAlert, STUCK_INGEST_THRESHOLD_MS } from "./ingestWatchdog.js";
 import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
-import { callPeer, callPeerTool, callPeerWithArgs, discoverPeerTools, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
+import { callPeer, callPeerTool, callPeerWithArgs, discoverAdvertisedPeerSkill, discoverPeerTools, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
 import { MCP_CATALOG_TOOL_NAME, renderMcpCatalog } from "./peerCatalog.js";
 import { PeerSkillStore, type LoadedPeerSkill, type PeerSkillArtifactMetadata } from "./peerSkillStore.js";
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
@@ -364,11 +364,34 @@ export class Runtime {
   refreshWalletPeerTools(peers?: PeerConfig[], names?: ReadonlySet<string>): Promise<PeerConfig[]> {
     const refresh = async (): Promise<PeerConfig[]> => {
       const source = peers ?? this.settings.peers();
+      const sourceByName = new Map(source.map((peer) => [peer.name, peer]));
+      const importedSkills = new Map<string, PeerConfig["skillArtifact"]>();
+      const skillStore = new PeerSkillStore(this.dataDir);
       const next = await Promise.all(source.map(async (peer) => {
         if (!peer.wallet || (names && !names.has(peer.name))) return peer;
         const result = await discoverPeerTools(peer);
+        let skillArtifact = peer.skillArtifact;
+        if (
+          !skillArtifact &&
+          peer.skillAutoImport !== false &&
+          result.transport === "connected" &&
+          result.tools === "ready"
+        ) {
+          const advertised = await discoverAdvertisedPeerSkill(peer);
+          if (advertised) {
+            const artifact = await skillStore.put(advertised).catch(() => null);
+            if (artifact) {
+              skillArtifact = {
+                artifactId: artifact.artifactId,
+                version: artifact.version,
+              };
+              importedSkills.set(peer.name, skillArtifact);
+            }
+          }
+        }
         return {
           ...peer,
+          ...(skillArtifact ? { skillArtifact } : {}),
           tools: result.specs,
           discovery: {
             transport: result.transport,
@@ -378,13 +401,17 @@ export class Runtime {
           },
         } satisfies PeerConfig;
       }));
-      // Skill attach/detach has its own API and may complete while tools/list is
-      // in flight. Re-read that server-owned reference at commit time.
+      // Manual skill attach/detach has its own API and remains authoritative.
+      // A discovery import is committed only when this refresh started without
+      // an attachment; it never overwrites an existing/manual artifact.
       const latest = this.settings.peers();
       const reconciled = next.map((peer) => {
         const skillArtifact = latest.find((candidate) => candidate.name === peer.name)?.skillArtifact;
+        const importedSkill = importedSkills.get(peer.name);
+        const startedWithSkill = Boolean(sourceByName.get(peer.name)?.skillArtifact);
         const { skillArtifact: _staleSkill, ...rest } = peer;
-        return { ...rest, ...(skillArtifact ? { skillArtifact } : {}) };
+        const selectedSkill = skillArtifact ?? (!startedWithSkill ? importedSkill : undefined);
+        return { ...rest, ...(selectedSkill ? { skillArtifact: selectedSkill } : {}) };
       });
       this.settings.setPeers(reconciled);
       this.invalidate();
