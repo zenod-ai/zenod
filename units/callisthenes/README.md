@@ -14,6 +14,12 @@ guardrail middlewares before serving. One MCP server over Streamable HTTP at
 `$MCP_HOST:$MCP_PORT/mcp`. Conformant to [`../../docs/SEAM-SPEC.md`](../../docs/SEAM-SPEC.md)
 (see [`SEAM-SURFACE.md`](SEAM-SURFACE.md)).
 
+The provider-independent [Callisthenes Agent Skill](skill/callisthenes/SKILL.md) can be
+attached to this MCP peer in a skills-compatible host. It teaches the host agent the
+guarded draft → exact-content confirmation → exactly-once approval → permalink receipt
+workflow. The bundle contains prose and references only: no credentials, tenant URL, or
+executable scripts.
+
 ---
 
 ## Stranger-grade: from zero to your first post
