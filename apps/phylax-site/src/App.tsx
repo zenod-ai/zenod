@@ -11,6 +11,7 @@ import {
   type PaidTier,
   PRICING_OPTIONS,
   readCustomerSession,
+  SELF_HOST_URL,
   SIGN_IN_PATH,
   SignInRequiredError,
 } from "@/lib/customer"
@@ -111,7 +112,7 @@ function Pricing({ subscribe, busyTier, error }: ReturnType<typeof useCustomerJo
                   {busyTier === plan.tier ? "Opening checkout…" : "Subscribe"}
                 </Button>
               ) : (
-                <Button asChild variant="outline"><a href="https://github.com/zenod-ai/zenod/blob/main/docker-compose.phylax.yml">Self-host</a></Button>
+                <Button asChild variant="outline"><a href={SELF_HOST_URL}>Self-host</a></Button>
               )}
             </article>
           ))}

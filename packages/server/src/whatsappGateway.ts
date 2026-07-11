@@ -937,17 +937,9 @@ export class WhatsAppGateway {
         const data = await streamToBuffer(stream);
         const filename = `${event.messageId}.${event.mimeType?.includes("mpeg") ? "mp3" : "ogg"}`;
         media = { bytes: data, mimeType: event.mimeType ?? "audio/ogg", fileName: filename };
-        const result = await transcribeChannelAudio(this.options.settings, data, filename);
-        if (result.success && result.transcript?.trim()) {
-          text = result.transcript.trim();
-          transcription = { ...(result.provider ? { provider: result.provider } : {}) };
-          this.options.store.recordInboundTranscript(event.messageId, text);
-        } else {
-          transcription = {
-            ...(result.provider ? { provider: result.provider } : {}),
-            failed: { code: result.noSpeech ? "no_speech" : "unavailable", message: result.error ?? "transcription failed" },
-          };
-        }
+        // Phylax resolves the sender before transcription so provider keys and
+        // policy come from that tenant. The organ owns this edge step; the
+        // legacy fused path below keeps its existing global settings behavior.
       }
       this.options.store.markMessageStatus(event.messageId, "processing");
       const forwarded = await handler({ event, text, ...(media ? { media } : {}), ...(transcription ? { transcription } : {}) });

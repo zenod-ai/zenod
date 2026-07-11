@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { Hono } from "hono";
+import type { Env, Hono } from "hono";
 import { SqliteStateStore } from "zenod";
 import { Settings } from "./settings.js";
 import { WhatsAppGateway, type SocketFactory } from "./whatsappGateway.js";
@@ -29,7 +29,11 @@ export class PhylaxPortedRuntime {
     readonly dataDir: string,
     readonly organ: PhylaxChannelsOrgan,
     env: NodeJS.ProcessEnv = process.env,
-    adapters: { whatsappSocketFactory?: SocketFactory; telegramFetch?: typeof fetch } = {},
+    adapters: {
+      whatsappSocketFactory?: SocketFactory;
+      telegramFetch?: typeof fetch;
+      verifyInbound?: (input: { channel: "whatsapp"; sender: string; text: string }) => Promise<string | null> | string | null;
+    } = {},
   ) {
     this.state = new SqliteStateStore(join(dataDir, "phylax-channels.sqlite"));
     this.settings = new Settings(this.state);
@@ -50,6 +54,12 @@ export class PhylaxPortedRuntime {
       store: this.whatsappStore,
       getEngine: unavailableEngine,
       portedInboundHandler: async ({ event, text, media, transcription }) => {
+        const verificationReply = await adapters.verifyInbound?.({
+          channel: "whatsapp",
+          sender: event.senderId,
+          text,
+        });
+        if (verificationReply) return { replyText: verificationReply };
         const forwarded = await this.organ.receive({
           channel: "whatsapp",
           sender: event.senderId,
@@ -131,7 +141,7 @@ export class PhylaxPortedRuntime {
 }
 
 /** Existing whatsapp-connect.tsx calls these exact ported API shapes. */
-export function mountPhylaxAdminChannelRoutes(app: Hono, runtime: PhylaxPortedRuntime): void {
+export function mountPhylaxAdminChannelRoutes<E extends Env>(app: Hono<E>, runtime: PhylaxPortedRuntime): void {
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
   app.get("/api/telegram/status", (c) => c.json(runtime.telegram.status()));
   app.put("/api/whatsapp/settings", async (c) => {

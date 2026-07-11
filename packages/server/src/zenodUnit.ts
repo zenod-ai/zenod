@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { HttpBindings } from "@hono/node-server";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
+import { serveStatic } from "@hono/node-server/serve-static";
 import {
   ChassisStorage,
   createSqliteTenantStore,
@@ -148,6 +149,8 @@ function registerZenodTools(
 
 export interface CreateZenodUnitOptions {
   dataDir?: string;
+  /** Reuse one storage owner when a composed unit must build adapters first. */
+  storage?: ChassisStorage;
   webDist?: string;
   siteDist?: string;
   tenantStore?: TenantProvisioningStore;
@@ -161,6 +164,14 @@ export interface CreateZenodUnitOptions {
   defaultTenantName?: string;
   panels?: string[];
   customerProduct?: CustomerProductConfig;
+  /** Register unit-specific tools on the same instrumented MCP server. */
+  registerAdditionalTools?: (server: McpServer, context: UnitContext) => void;
+  additionalReadTools?: readonly string[];
+  customerAdmin?: {
+    githubLogin: string;
+    mountRoutes?: (app: Hono<{ Bindings: HttpBindings }>) => void;
+    close?: () => void;
+  };
 }
 
 export const ZENOD_READ_TOOLS = [
@@ -185,7 +196,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const env = options.env ?? process.env;
   const agent = options.agent ?? ZENOD_AGENT;
   const unitName = options.unitName ?? "zenod";
-  const storage = new ChassisStorage({
+  const storage = options.storage ?? new ChassisStorage({
     dataDir: options.dataDir,
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
   });
@@ -201,7 +212,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     name: unitName,
     version: VERSION,
     conduct: {
-      toolKinds: { read: ZENOD_READ_TOOLS },
+      toolKinds: { read: [...ZENOD_READ_TOOLS, ...(options.additionalReadTools ?? [])] },
       longTools: ZENOD_LONG_TOOLS,
     },
     tenantAuth: { store: tenantStore },
@@ -238,6 +249,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
     tools(server, context) {
       registerZenodTools(server, runtimes.forContext(context), agent);
+      options.registerAdditionalTools?.(server, context);
     },
     routes(routes) {
       routes.all("/api/*", async (c, next) => {
@@ -273,6 +285,30 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   app.get("/api/health", (c) =>
     c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
   );
+  if (options.customerAdmin) {
+    const admin = options.customerAdmin;
+    const adminOnly: MiddlewareHandler<{ Bindings: HttpBindings }> = async (c, next) => {
+      const session = readCustomerSession(c, env);
+      if (!session || session.login !== admin.githubLogin) {
+        return c.req.path.startsWith("/api/")
+          ? c.json({ error: "not found" }, 404)
+          : c.text("Not Found", 404);
+      }
+      await next();
+    };
+    app.use("/admin", adminOnly);
+    app.use("/admin/*", adminOnly);
+    app.use("/api/whatsapp/*", adminOnly);
+    app.use("/api/telegram/*", adminOnly);
+    admin.mountRoutes?.(app);
+    if (options.webDist) {
+      app.get("/admin", serveStatic({
+        root: options.webDist,
+        path: "index.html",
+        onFound: (_path, c) => c.header("Cache-Control", "no-cache, no-store, must-revalidate"),
+      }));
+    }
+  }
   app.route("/", customer.app);
   const publicSiteHost = (options.customerProduct ?? options.customer?.product)?.defaultDomain;
   mountStaticSurfaces(app, {
@@ -329,6 +365,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     customerAccounts: customer.accounts,
     customerTokenVault: customer.tokenVault,
     close() {
+      options.customerAdmin?.close?.();
       runtimes.close();
       if ("close" in tenantStore && typeof tenantStore.close === "function") {
         tenantStore.close();

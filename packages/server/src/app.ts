@@ -2488,7 +2488,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(enc.encode(JSON.stringify({ type: "delta", text: cleanSlate.text }) + "\n"));
-          controller.enqueue(enc.encode(JSON.stringify({ type: "done", sources: cleanSlate.sources }) + "\n"));
+          controller.enqueue(
+            enc.encode(JSON.stringify({ type: "done", text: cleanSlate.text, sources: cleanSlate.sources }) + "\n"),
+          );
           controller.close();
         },
       });
@@ -2521,7 +2523,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
               send({ type: "tool", phase: event.phase, tool: event.tool, label: event.label });
             },
           });
-          send({ type: "done", sources: reply.sources, ...(reply.stored ? { stored: reply.stored } : {}) });
+          send({
+            type: "done",
+            text: reply.text,
+            sources: reply.sources,
+            ...(reply.stored ? { stored: reply.stored } : {}),
+          });
         } catch (err) {
           console.error("[chat] stream failed:", err);
           send({ type: "error", message: err instanceof Error ? err.message : "chat failed" });

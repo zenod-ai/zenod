@@ -529,7 +529,11 @@ export type ChatToolEvent = {
 export type ChatStreamHandlers = {
   onDelta: (text: string) => void
   onTool?: (event: ChatToolEvent) => void
-  onDone: (done: { sources: ChatSource[]; stored?: ChatStored }) => void
+  onDone: (done: {
+    text: string
+    sources: ChatSource[]
+    stored?: ChatStored
+  }) => void
 }
 
 /**
@@ -571,7 +575,12 @@ export async function chatStream(
     const event = JSON.parse(trimmed) as
       | { type: "delta"; text: string }
       | { type: "tool"; phase: ChatToolEvent["phase"]; tool: string; label: string }
-      | { type: "done"; sources: ChatSource[]; stored?: ChatStored }
+      | {
+          type: "done"
+          text: string
+          sources: ChatSource[]
+          stored?: ChatStored
+        }
       | { type: "error"; message: string }
       | { type: "ping" }
     if (event.type === "ping") return // keep-alive; nothing to render
@@ -579,7 +588,11 @@ export async function chatStream(
     else if (event.type === "tool")
       handlers.onTool?.({ phase: event.phase, tool: event.tool, label: event.label })
     else if (event.type === "done")
-      handlers.onDone({ sources: event.sources, ...(event.stored ? { stored: event.stored } : {}) })
+      handlers.onDone({
+        text: event.text,
+        sources: event.sources,
+        ...(event.stored ? { stored: event.stored } : {}),
+      })
     else if (event.type === "error") throw new ApiError(500, event.message)
   }
 
