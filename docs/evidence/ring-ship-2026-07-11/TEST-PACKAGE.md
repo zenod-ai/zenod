@@ -2,34 +2,32 @@
 
 URL: https://ring.zenod.dev
 
-Deployed immutable commit: `fde458fa50818b9b125572d01fa4eb613f7f867c` (`/api/health` reports `fde458f`).
+Final immutable deployment: `5ac9f37652a3efddf79248bb8027530380f10bca` (`/api/health` reports `5ac9f37`).
 
 ## Result
 
-The live journey is **not yet SHIP**. Jordi subsequently authorized a focused diagnosis lap. Exact build `fae4f3373f2e4057b9245104d9da4ca1eb2dc68a` fixed the hosted `/mcp/<credential>` task-poll URL: the browser returned in ~25 seconds and Zenod durably committed in ~14 seconds. The visible Council reply still omitted the required commit SHA/URL because `add_memory` is not included in the existing hard reply gate and the model paraphrased the verified tool receipt.
+**SHIP — PASS.** The real customer journey is complete: landing and pricing, GitHub account, Stripe TEST subscription, Council-first dashboard, tenant OpenRouter key entered through the UI, Zenod wired through My Units, visible durable commit receipt in Council chat, Ring's authenticated MCP face answering an external SDK client, persisted account state, and bearer-enforced two-tenant isolation.
 
-The authorized lap fixed SHIP 8: external `initialize` returned Ring `0.0.1`, and `chat_with_ring` returned HTTP 200, `isError=false`, a Council reply, and correlation-backed `chat_audit` evidence. Step 9 persistence and live two-tenant wallet/key isolation passed again on the same build.
+The final SHIP 7 browser turn used the exact phrase `remember this: the ring is alive`. After the dashboard was fully initialized, the reply completed without a reload and visibly contained commit `45e22e251391b5233a5987fd3ae0a06a93d1347c` plus the Log and Inbox GitHub links.
 
 ## Journey ledger
 
 | Step | Result | Evidence |
 |---|---|---|
-| 1–2 landing + pricing | PASS | `01-landing-pricing.png` |
-| 3 GitHub sign-in | PASS | `02-github-signed-in.png` |
-| 4 Stripe TEST subscription | PASS | `03-stripe-test-checkout.png` |
-| 5 dashboard | PASS | `04-dashboard.png` |
-| 6 capped OpenRouter key through UI | PASS | `05-openrouter-key.png`; key accepted and persisted masked |
-| 7 Zenod wallet | PARTIAL | `06-wallet-zenod-connected.png` passed; `07-remember-receipt.png` captures the missing receipt after 180 seconds |
-| 8 external MCP face | PARTIAL | initialize returned Ring server info and `read_llm_timeline` returned HTTP 200; mutating chat returned `silent_ack`; `08-ring-mcp-external.png` is the live Ring endpoint/usage reference |
-| 9 logout/login persistence | PASS | `09-relogin-persistence.png` |
-| 9 two-tenant isolation | PASS | `10-two-tenant-isolation-alpha.png` plus the redacted live API proof below |
-| Authorized-lap SHIP 7 | FAIL | `11-authorized-lap-receipt-timeout.png`; no commit receipt after the full polling window |
-| Authorized-lap SHIP 8 | PASS | `12-external-mcp-chat-pass.png`; external response recorded below |
-| Authorized-lap SHIP 9 persistence | PASS | `13-authorized-lap-relogin.png` |
-| Authorized-lap SHIP 9 isolation | PASS | `14-authorized-lap-isolation-alpha.png` plus redacted API proof below |
-| Focused path-fix SHIP 7 | PARTIAL | `15-path-fixed-commit-omitted.png`; durable commit succeeded but UI omitted SHA/URL |
+| 1 landing + pricing | PASS | `01-landing-pricing.png` |
+| 2 GitHub sign-in | PASS | `02-github-signed-in.png` |
+| 3 Stripe TEST subscription | PASS | `03-stripe-test-checkout.png` |
+| 4 Council-first dashboard | PASS | `04-dashboard.png`; final-build dashboard `16-final-dashboard-b7c0ca5.png` |
+| 5 capped OpenRouter key through UI | PASS | `05-openrouter-key.png`; key persisted masked |
+| 6 Zenod wired through My Units | PASS | `06-wallet-zenod-connected.png`; final dashboard shows Zenod and Calli connected |
+| 7 exact memory route + visible commit receipt | PASS | `19-ship7-live-authoritative-receipt.png`; commit and two GitHub links visible without reload |
+| 8 Ring MCP face from external client | PASS | `12-external-mcp-chat-pass.png`; final-build SDK receipt below |
+| 9 logout/login persistence | PASS | `13-authorized-lap-relogin.png`; final deployment preserved the same tenant state on `/data` |
+| 10 two-tenant isolation | PASS | `14-authorized-lap-isolation-alpha.png`; final-build redacted API receipt below |
 
-## Authorized-lap external MCP proof
+## Final-build external MCP receipt
+
+An external `@modelcontextprotocol/sdk` client connected to the authenticated Ring URL, listed `chat_with_ring`, and called it on `5ac9f37`.
 
 ```json
 {
@@ -38,16 +36,20 @@ The authorized lap fixed SHIP 8: external `initialize` returned Ring `0.0.1`, an
     "server": { "name": "ring", "version": "0.0.1" }
   },
   "chat": {
-    "status": 200,
     "isError": false,
-    "evidence": [{ "kind": "chat_audit", "conversationId": "mcp:ring-ship-final-a729d08" }]
+    "text": "ring-face-ok",
+    "conversationId": "mcp:ring-ship-5ac9f37-exact",
+    "evidence": [{
+      "kind": "chat_audit",
+      "correlationId": "test_0427e20f7843459f9fa61c90f5a631d5"
+    }]
   }
 }
 ```
 
-## Live two-tenant proof
+## Final-build two-tenant receipt
 
-Two bearer-authenticated tenants queried the same exact deployment. A tenant-B request deliberately supplied tenant A's id in the query string; server-side bearer scoping prevailed.
+Two independently authenticated tenants queried the same deployment. Tenant B deliberately supplied tenant A's id in the query string; bearer scoping prevailed. The temporary beta tenant was deleted after the proof.
 
 ```json
 {
@@ -62,20 +64,21 @@ Two bearer-authenticated tenants queried the same exact deployment. A tenant-B r
     "provider": null,
     "openrouterKeyPresent": false
   },
-  "isolated": true
+  "isolated": true,
+  "cleanupStatus": 200
 }
 ```
 
-## Automated and deployment evidence
+## Code, review, and deployment evidence
 
-- PR #856 and #857 CI: PASS; independent receipt/security review: PASS after per-poll wallet SSRF validation was added.
-- Publish-image workflow for `a729d08`: PASS.
-- Guarded Dokploy cutover receipt: `/var/tmp/r-s5-cutover-a729d08/health-receipt.json`.
-- Live routes: `/` 200, `/app` 200, `/healthz` 200, `/api/health` exact SHA, unauthenticated `/mcp` 401.
-- External MCP initialize: HTTP 200, protocol `2025-03-26`, server `ring` `0.0.1`.
-- External read-only tool call: HTTP 200 with Ring's OpenRouter usage timeline.
-- `fae4f33` live diagnosis: Ring returned in ~25s; Zenod job `18cfa656-798d-4215-9976-e8c83be3e688` completed with commit `43ab417da540cae5b6b18ae4de9b2e52810ce38a`; visible reply omitted that evidence.
+- Generic wallet mutation receipt gate: PR #869, merged `cc47b3a`; full CI passed; independent review passed.
+- Authoritative stream completion: PR #882, merged `5ac9f37`; full CI passed; independent review passed.
+- PR #882 focused validation: web 8/8, server health 20/20, web/server typechecks, web/server production builds; full repository CI build, Docker build, and tests passed.
+- Publish-image workflow for `5ac9f37`: PASS, including runtime boot smoke.
+- Guarded Ring-only cutover receipt: `/var/tmp/r-s5e-cutover-5ac9f37/health-receipt.json`.
+- Live guarded routes: `/` 200, `/app` 200, `/healthz` 200, `/api/health` exact SHA, unauthenticated `/mcp` 401, GitHub OAuth callback pinned to `https://ring.zenod.dev/auth/github/callback`.
+- Persistent `/data` was preserved. Existing Zenod, Calli, and customer services were not redeployed by this cutover.
 
-## BLOCKED ON JORDI
+## Diagnostic trail retained
 
-The focused path-fix lap is exhausted. Authorize one final reply-gate-only lap (`add_memory` verified receipt rendered verbatim), or stop Ring SHIP here.
+Earlier screenshots `07`, `11`, `15`, and `17` intentionally retain the sequence of live failures: downstream timeout, malformed poll path, omitted receipt, and streamed draft winning over the authoritative reply. `18-reload-shows-authoritative-receipt.png` proved persistence before PR #882; `19` is the final no-reload browser pass.
