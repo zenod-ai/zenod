@@ -84,11 +84,11 @@ HARDEN (after Jordi approves SHIP): multiple units in the wallet exercised end-t
 
 ## Current State
 
-Phase: wave 2 dispatched
-Last verified: 2026-07-11T02:33:31+02:00
+Phase: R-S5 deployment and live journey
+Last verified: 2026-07-11T02:46:31+02:00
 Integration target: main
 Fresh base commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92` — PINNED; no rebases until the journey passes (D19c)
-Next action: R-S3 and R-S4 execute in parallel from integrated wave-2 base `4ed9440`; manager monitors the wallet hard budget and integrates passing work.
+Next action: publish and deploy frozen code commit `9e5862c`, then walk SHIP 1–10 on `ring.zenod.dev` in one browser loop.
 Blockers: none — decisions pre-answered; inputs have absence-rules.
 
 ## Role Goals
@@ -141,9 +141,9 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | [#837](https://github.com/zenod-ai/zenod/issues/837) | Ticket worker | R-S1-worker | R-S1 front duplicate (landing, auth, tenants) | done | - | [#841](https://github.com/zenod-ai/zenod/pull/841) / `codex/r-s1-front-duplicate` | `fcac83f` | SHIP 1–4 | CI green; merged `0bbd045` | 2026-07-11T02:33:31+02:00 | integrated |
 | [#836](https://github.com/zenod-ai/zenod/issues/836) | Ticket worker | R-S2-worker | R-S2 council middle (ChatTab + persona + Keys, tenant-scoped) | done | - | [#842](https://github.com/zenod-ai/zenod/pull/842) / `codex/r-s2-council-middle` | `fcac83f` | SHIP 5–6 | CI green; Ring namespace fix; merged `4ed9440` | 2026-07-11T02:33:31+02:00 | integrated |
-| [#838](https://github.com/zenod-ai/zenod/issues/838) | Ticket worker | R-S3-worker | R-S3 wallet (peers surface → per-tenant unit wallet) | in progress | #837, #836 done | `codex/r-s3-wallet` / `../wt-r-s3` | `4ed9440` | SHIP 7 | dispatched; hard 90-minute budget | 2026-07-11T02:33:31+02:00 | evolve, validate, PR or escalate |
-| [#839](https://github.com/zenod-ai/zenod/issues/839) | Ticket worker | R-S4-worker | R-S4 billing + domain (duplicate recipe) | in progress | #837 done | `codex/r-s4-billing-domain` / `../wt-r-s4` | `4ed9440` | SHIP 2, 4 live | dispatched | 2026-07-11T02:33:31+02:00 | duplicate, validate, PR |
-| [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | ready | #837, #836, #838, #839 | - | `fcac83f` | SHIP 1–10 | - | 2026-07-11T02:20:29+02:00 | last |
+| [#838](https://github.com/zenod-ai/zenod/issues/838) | Ticket worker | R-S3-worker | R-S3 wallet (peers surface → per-tenant unit wallet) | done | #837, #836 done | [#850](https://github.com/zenod-ai/zenod/pull/850) / `codex/r-s3-wallet` | `4ed9440` | SHIP 7 | CI green; 46 focused tests; merged `9e5862c` | 2026-07-11T02:46:31+02:00 | integrated |
+| [#839](https://github.com/zenod-ai/zenod/issues/839) | Ticket worker | R-S4-worker | R-S4 billing + domain (duplicate recipe) | done | #837 done | [#849](https://github.com/zenod-ai/zenod/pull/849) / `codex/r-s4-billing-domain` | `4ed9440` | SHIP 2, 4 live | CI green; guarded runbook/script; merged `6352ee1` | 2026-07-11T02:46:31+02:00 | integrated; manager cutover |
+| [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | testing | #837, #836, #838, #839 done | `main` / manager journey | `9e5862c` frozen | SHIP 1–10 | implementation CI green | 2026-07-11T02:46:31+02:00 | deploy and walk live journey |
 
 ## Branch And Integration
 
@@ -185,6 +185,12 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | pending | SHIP journey clean pass | - | ring.zenod.dev live | real browser walk + MCP client check, screenshots | pending | test package |
 
 ## Handoff Journal
+
+### 2026-07-11T02:46:31+02:00 - Ring delivery manager - Wave 2 integrated; R-S5 frozen
+
+Context: R-S4 passed CI and merged as `6352ee1`; R-S3 stayed within its hard budget, passed CI after scoping terminal receipt polling to Ring wallet peers, and merged as `9e5862c`. The live baseline still serves only the old Ring static root; `/app`, `/healthz`, and `/mcp` are 404, so no prior deployment is being mistaken for SHIP.
+Frozen test commit: `9e5862ced52d5b7dd7abcde69f51ee4003d8cdb7`. One full live gate will run on its immutable image per D19c/D21.
+Next: create the empty Ring Dokploy application, execute the guarded cutover without mutating existing units, then run the browser/MCP/two-tenant journey and package screenshots.
 
 ### 2026-07-11T02:33:31+02:00 - Ring delivery manager - Wave 1 integrated; wave 2 dispatched
 
