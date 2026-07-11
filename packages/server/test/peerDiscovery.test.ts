@@ -180,7 +180,7 @@ describe("generic wallet MCP discovery", () => {
       .resolves.toMatchObject({ transport: "connected", tools: "error", error: expect.stringContaining("discovery limit") });
   });
 
-  it("keeps usable tools when one optional output schema exceeds the discovery bound", async () => {
+  it("fails loudly instead of silently dropping an oversized output schema", async () => {
     vi.stubGlobal("fetch", mcpFetch([
       {
         name: "getPostsByIds",
@@ -208,26 +208,12 @@ describe("generic wallet MCP discovery", () => {
 
     const result = await discoverPeerTools({ name: "Calli", url: "https://peer.example/mcp", token: "secret" });
 
-    expect(result).toMatchObject({ transport: "connected", tools: "ready" });
-    expect(result.specs).toHaveLength(2);
-    expect(result.specs[0]).toEqual(expect.objectContaining({
-      mcp: "getPostsByIds",
-      description: "Read posts by id",
-      inputSchema: {
-        type: "object",
-        required: ["ids"],
-        properties: { ids: { type: "array", items: { type: "string" } } },
-      },
-      annotations: { readOnlyHint: true, destructiveHint: false },
-      preserveFullResult: true,
-    }));
-    expect(result.specs[0]).not.toHaveProperty("outputSchema");
-    expect(result.specs[1]).toEqual(expect.objectContaining({
-      mcp: "createPosts",
-      outputSchema: { type: "object", properties: { draftId: { type: "string" } } },
-      annotations: { readOnlyHint: false, destructiveHint: true },
-      preserveFullResult: true,
-    }));
+    expect(result).toMatchObject({
+      transport: "connected",
+      tools: "error",
+      specs: [],
+      error: expect.stringContaining("getPostsByIds outputSchema exceeds"),
+    });
   });
 
   it("refreshes saved peers on startup and through the token-free refresh API", async () => {
@@ -272,6 +258,7 @@ describe("generic wallet MCP discovery", () => {
         toolsStatus: "ready",
         toolCount: 1,
         tools: [{ mcpName: "searchPostsRecent", annotations: { readOnlyHint: true } }],
+        refreshedAt: expect.any(String),
       }] });
       expect(bootPayload.peers[0]).not.toHaveProperty("tool");
       expect((runtime.settings.peers()[0] as any).skillArtifact).toEqual({ artifactId: "sha256:calli-skill-v1", version: "v1" });
@@ -293,6 +280,7 @@ describe("generic wallet MCP discovery", () => {
         toolsStatus: "ready",
         toolCount: 1,
         tools: [{ name: councilToolName("Calli", "getUsersMe") }],
+        refreshedAt: expect.any(String),
       }] });
       expect(refreshedPayload.peers[0]).not.toHaveProperty("tool");
       expect((runtime.settings.peers()[0] as any).skillArtifact).toEqual({ artifactId: "sha256:calli-skill-v1", version: "v1" });

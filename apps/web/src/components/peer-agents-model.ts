@@ -2,6 +2,9 @@ export type PeerTool = {
   name: string
   mcpName: string
   description?: string
+  inputSchema?: Record<string, unknown>
+  outputSchema?: Record<string, unknown>
+  annotations?: Record<string, unknown>
 }
 
 export type PeerSkill = {
@@ -27,6 +30,7 @@ export type Peer = {
   transportStatus: "connected" | "error"
   toolsStatus: "ready" | "error"
   toolsError?: string
+  refreshedAt?: string
   toolCount: number
   tools: PeerTool[]
   skill: PeerSkill | null

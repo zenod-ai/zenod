@@ -1082,6 +1082,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       transportStatus: peer.discovery?.transport ?? (agent.name === "ring" ? "error" : "connected"),
       toolsStatus: peer.discovery?.tools ?? (peer.tools ? "ready" : "error"),
       ...(peer.discovery?.error ? { toolsError: peer.discovery.error } : {}),
+      ...(peer.discovery?.refreshedAt ? { refreshedAt: peer.discovery.refreshedAt } : {}),
       toolCount: peer.tools?.length ?? 0,
       tools: (peer.tools ?? []).map((tool) => ({
         name: tool.as,

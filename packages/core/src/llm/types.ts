@@ -182,6 +182,8 @@ export interface PeerTool {
    * or bypasses mutation/approval guards enforced by the host.
    */
   advisoryContent?: boolean;
+  /** Host-owned read output that must not be paraphrased by the model. */
+  authoritativeReadResult?: boolean;
   /**
    * Repository this peer is allowed to mutate directly. For Archus this is the
    * central backlog repo, not arbitrary product/code repos.

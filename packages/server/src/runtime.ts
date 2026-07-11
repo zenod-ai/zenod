@@ -59,6 +59,7 @@ import { detectStuckIngestJobs, formatStuckIngestAlert, STUCK_INGEST_THRESHOLD_M
 import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
 import { callPeer, callPeerTool, callPeerWithArgs, discoverPeerTools, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
+import { MCP_CATALOG_TOOL_NAME, renderMcpCatalog } from "./peerCatalog.js";
 import { PeerSkillStore, type LoadedPeerSkill, type PeerSkillArtifactMetadata } from "./peerSkillStore.js";
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
 import { createIssueThenRunJourney, type CreateIssueThenRunInput, type CreateIssueThenRunResult } from "./createIssueRunJourney.js";
@@ -717,6 +718,30 @@ export class Runtime {
   private buildPeerTools(): PeerTools {
     const tools: PeerTools = {};
     const shouldForwardConsoleContext = this.agent.name === "console";
+    if (this.agent.name === "ring") {
+      tools[MCP_CATALOG_TOOL_NAME] = {
+        owner: "ring",
+        description:
+          "Ring host-owned, read-only inspection of connected MCP catalogs. Use this for every question about connected units, their actual tools/capabilities, upstream versus Ring callable names, descriptions, schemas, annotations, refresh state, collisions, or attached-skill authority. Pass the user's request verbatim. The result is deterministically rendered from authenticated tools/list state and MUST be returned verbatim.",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["request"],
+          properties: {
+            request: { type: "string", description: "The user's exact catalog or schema question, verbatim." },
+          },
+        },
+        schemaFormat: "json-schema",
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        authoritativeReadResult: true,
+        run: async (input) => {
+          const request = typeof input === "object" && input !== null && typeof input.request === "string"
+            ? input.request
+            : String(input ?? "");
+          return renderMcpCatalog(request, this.settings.peers());
+        },
+      };
+    }
     for (const peer of this.settings.peers()) {
       const safe = peer.name.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
       // Ring wallet catalogs are authoritative. Legacy non-wallet suite peers may

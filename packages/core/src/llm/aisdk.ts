@@ -120,6 +120,19 @@ export const MIN_MAX_STEPS = 2;
 export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
 export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
+
+/**
+ * Conservative intent boundary for host-owned MCP catalog inspection. It does
+ * not authorize or invoke an upstream peer tool; it only reads Ring's saved,
+ * authenticated tools/list snapshot through an authoritative read tool.
+ */
+export function isMcpCatalogInspectionQuestion(question: string): boolean {
+  const normalized = question.replace(/[’']/g, "'");
+  if (/\bwhat can (?:this|the|my|a|an) (?:connected )?(?:mcp|peer|unit) do\b/i.test(normalized)) return true;
+  if (/\bskill\b/i.test(normalized) && /\b(tool|mcp|publish|authorit|receipt|detect|load)\w*\b/i.test(normalized)) return true;
+  return /\b(mcp|peer|unit|connected|connection|tool|tools|capabilit(?:y|ies)|advertis(?:e|ed|es)|expos(?:e|ed|es)|refresh(?:ed)?|schema|schemas|annotation|annotations|skill)\b/i.test(normalized)
+    && /\b(what|which|show|list|inspect|describe|actual|really|available|change|changed|require|requires|detected|loaded|does|can)\b/i.test(normalized);
+}
 export const MAX_WORK_OUTPUT_TOKENS = 4096;
 
 /** Clamp a configured step budget to a sane range; falls back to the default. */
@@ -647,6 +660,22 @@ export class AiSdkBrainLlm implements BrainLlm {
     // the top search hits the model consulted. Never empty when the vault had hits.
     const sourcePaths = (): string[] =>
       readPaths.size > 0 ? [...readPaths] : searchedPaths.slice(0, 3);
+    const authoritativeCatalog = Object.entries(peerTools ?? {}).find(([, peer]) => peer.authoritativeReadResult);
+    if (authoritativeCatalog && isMcpCatalogInspectionQuestion(input.question)) {
+      const [toolName, peer] = authoritativeCatalog;
+      const args = { request: input.question };
+      input.onToolEvent?.({ phase: "start", tool: toolName, label: "Inspect connected MCP catalog" });
+      try {
+        const text = await peer.run(args);
+        input.onPeerAction?.(toolName, args, text);
+        input.onToolEvent?.({ phase: "end", tool: toolName, label: "Inspect connected MCP catalog" });
+        input.onTextDelta?.(text);
+        return { text, readPaths: [] };
+      } catch (error) {
+        input.onToolEvent?.({ phase: "error", tool: toolName, label: "Inspect connected MCP catalog" });
+        throw error;
+      }
+    }
     const messages: ModelMessage[] = [
       ...input.conversation.map((m): ModelMessage => ({ role: m.role, content: m.text })),
       { role: "user", content: input.question },
@@ -932,6 +961,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     // tool (e.g. `ask_zenod`) that forwards a free-form request to that peer and
     // returns its answer. The model sees them as ordinary tools.
     const peerEntries = Object.entries(peerTools ?? {});
+    let authoritativePeerResult: string | null = null;
     const sameTurnPeerMutations = new Map<string, Promise<string>>();
     // M-1 — retry-stop: the FIRST Blocked result from an outbound send tool ends the
     // turn. Without this, the model retries the same blocked call (or tries another
@@ -1087,6 +1117,7 @@ export class AiSdkBrainLlm implements BrainLlm {
               if (input.conversationId && peer.owner) {
                 registerStandingApproval(input.conversationId, peer.owner, name, args, result, peer.description);
               }
+              if (peer.authoritativeReadResult) authoritativePeerResult = result;
               input.onPeerAction?.(name, args, result, receiptMetadata);
               return result;
             });
@@ -1272,7 +1303,7 @@ export class AiSdkBrainLlm implements BrainLlm {
           input.onTextDelta,
         );
       }
-      return { text, readPaths: sourcePaths() };
+      return { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
     }
 
     const result = await generateText(config);
@@ -1286,7 +1317,7 @@ export class AiSdkBrainLlm implements BrainLlm {
         result.reasoningText ?? "",
       );
     }
-    return { text, readPaths: sourcePaths() };
+    return { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
   }
 
   async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {

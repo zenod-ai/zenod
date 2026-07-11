@@ -15,7 +15,7 @@ vi.mock("ai", async (importActual) => {
   };
 });
 
-import { createBrainLlm } from "../src/llm/aisdk.js";
+import { createBrainLlm, isMcpCatalogInspectionQuestion } from "../src/llm/aisdk.js";
 
 const readTools = {
   searchVault: async () => "no hits",
@@ -24,6 +24,54 @@ const readTools = {
 };
 
 describe("answer tool-step budget", () => {
+  it("bypasses the model and returns host-owned catalog facts verbatim", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const actions: unknown[] = [];
+    const events: unknown[] = [];
+    const deltas: string[] = [];
+    captured.config = undefined;
+
+    const result = await llm.answer(
+      {
+        question: "What can the connected Calli MCP actually do? Show its real tools.",
+        vaultBriefing: "brief",
+        conversation: [],
+        onPeerAction: (tool, input, text) => actions.push({ tool, input, text }),
+        onToolEvent: (event) => events.push(event),
+        onTextDelta: (delta) => deltas.push(delta),
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        inspect_connected_mcp_catalog: {
+          description: "Host catalog",
+          authoritativeReadResult: true,
+          annotations: { readOnlyHint: true },
+          run: async () => "EXACT HOST CATALOG",
+        },
+      },
+    );
+
+    expect(result.text).toBe("EXACT HOST CATALOG");
+    expect(deltas).toEqual(["EXACT HOST CATALOG"]);
+    expect(actions).toEqual([{
+      tool: "inspect_connected_mcp_catalog",
+      input: { request: "What can the connected Calli MCP actually do? Show its real tools." },
+      text: "EXACT HOST CATALOG",
+    }]);
+    expect(events).toEqual([
+      { phase: "start", tool: "inspect_connected_mcp_catalog", label: "Inspect connected MCP catalog" },
+      { phase: "end", tool: "inspect_connected_mcp_catalog", label: "Inspect connected MCP catalog" },
+    ]);
+    expect(captured.config).toBeUndefined();
+  });
+
+  it("does not misroute an operational MCP request into catalog inspection", () => {
+    expect(isMcpCatalogInspectionQuestion("Use the connected MCP to draft a post")).toBe(false);
+    expect(isMcpCatalogInspectionQuestion("Show the actual tools this connected MCP exposes")).toBe(true);
+  });
+
   it("tells the model its budget and forces a final answer on the last step", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     await llm.answer({ question: "hi", vaultBriefing: "brief", conversation: [] }, readTools);

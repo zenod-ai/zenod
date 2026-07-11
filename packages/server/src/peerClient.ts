@@ -113,18 +113,6 @@ function boundedSchema(value: unknown, label: string): Record<string, unknown> |
   return JSON.parse(encoded) as Record<string, unknown>;
 }
 
-/**
- * Output schemas are optional MCP metadata, not required to invoke a tool. Keep
- * the same prompt/storage bound without making one oversized output contract
- * discard the peer's entire otherwise-usable catalog.
- */
-function boundedOutputSchema(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const encoded = JSON.stringify(value);
-  if (Buffer.byteLength(encoded, "utf8") > MAX_TOOL_SCHEMA_BYTES) return undefined;
-  return JSON.parse(encoded) as Record<string, unknown>;
-}
-
 function stableToolSegment(value: string): string {
   const safe = value
     .normalize("NFKD")
@@ -174,7 +162,7 @@ export async function discoverPeerTools(peer: PeerConfig): Promise<PeerDiscovery
       throw new Error("tools/list returned duplicate tool names");
     }
     const specs = listed.tools.map((tool) => {
-      const outputSchema = boundedOutputSchema(tool.outputSchema);
+      const outputSchema = boundedSchema(tool.outputSchema, `${tool.name} outputSchema`);
       return {
         as: councilToolName(peer.name, tool.name),
         mcp: tool.name,

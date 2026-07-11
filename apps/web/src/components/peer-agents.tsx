@@ -343,6 +343,11 @@ export function PeerAgents() {
                   {p.toolsError && (
                     <p className="text-xs text-destructive">{p.toolsError}</p>
                   )}
+                  {p.refreshedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Catalog refreshed {new Date(p.refreshedAt).toLocaleString()}
+                    </p>
+                  )}
                   {p.toolsStatus === "ready" && (
                     <details className="text-xs text-muted-foreground">
                       <summary className="cursor-pointer">
@@ -351,14 +356,37 @@ export function PeerAgents() {
                           : "Discovered tools"}
                       </summary>
                       {p.tools.length > 0 && (
-                        <ul className="mt-1 list-inside list-disc font-mono">
+                        <div className="mt-2 flex flex-col gap-2">
                           {p.tools.map((tool) => (
-                            <li key={tool.name}>
-                              {tool.name}
-                              {tool.mcpName !== tool.name && ` → ${tool.mcpName}`}
-                            </li>
+                            <details key={tool.name} className="rounded border p-2">
+                              <summary className="cursor-pointer font-mono">
+                                {tool.mcpName}
+                                {tool.mcpName !== tool.name && ` → ${tool.name}`}
+                              </summary>
+                              <div className="mt-2 flex flex-col gap-2 font-sans">
+                                <p>{tool.description || "No description advertised."}</p>
+                                <div>
+                                  <div className="font-medium">Annotations</div>
+                                  <pre className="overflow-x-auto whitespace-pre-wrap font-mono">
+                                    {JSON.stringify(tool.annotations ?? {}, null, 2)}
+                                  </pre>
+                                </div>
+                                <div>
+                                  <div className="font-medium">Input schema</div>
+                                  <pre className="overflow-x-auto whitespace-pre-wrap font-mono">
+                                    {JSON.stringify(tool.inputSchema ?? null, null, 2)}
+                                  </pre>
+                                </div>
+                                <div>
+                                  <div className="font-medium">Output schema</div>
+                                  <pre className="overflow-x-auto whitespace-pre-wrap font-mono">
+                                    {JSON.stringify(tool.outputSchema ?? null, null, 2)}
+                                  </pre>
+                                </div>
+                              </div>
+                            </details>
                           ))}
-                        </ul>
+                        </div>
                       )}
                     </details>
                   )}

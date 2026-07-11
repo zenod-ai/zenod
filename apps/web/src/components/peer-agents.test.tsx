@@ -47,8 +47,16 @@ function peer(overrides: Partial<Peer> = {}): Peer {
     hasToken: true,
     transportStatus: "connected",
     toolsStatus: "ready",
+    refreshedAt: "2026-07-11T12:34:56.000Z",
     toolCount: 1,
-    tools: [{ name: "calli__search_chats", mcpName: "search_chats" }],
+    tools: [{
+      name: "calli__search_chats",
+      mcpName: "search_chats",
+      description: "Search exact upstream chats.",
+      inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" } } },
+      outputSchema: { type: "object", properties: { matches: { type: "array" } } },
+      annotations: { readOnlyHint: true },
+    }],
     skill: null,
     ...overrides,
   }
@@ -95,6 +103,19 @@ afterEach(() => {
 })
 
 describe("PeerAgents", () => {
+  it("shows refresh provenance and exact upstream/callable contracts separately", async () => {
+    mocks.api.mockResolvedValueOnce({ peers: [peer()] })
+    render(<PeerAgents />)
+
+    expect(await screen.findByText(/Catalog refreshed/)).toBeTruthy()
+    fireEvent.click(screen.getByText("Discovered tools"))
+    expect(screen.getByText(/search_chats → calli__search_chats/)).toBeTruthy()
+    fireEvent.click(screen.getByText(/search_chats → calli__search_chats/))
+    expect(screen.getByText("Search exact upstream chats.")).toBeTruthy()
+    expect(screen.getByText(/"required": \[/)).toBeTruthy()
+    expect(screen.getByText(/"readOnlyHint": true/)).toBeTruthy()
+  })
+
   it("renders transport and tool errors independently without a synthetic tool or token", async () => {
     mocks.api.mockResolvedValueOnce({
       peers: [
