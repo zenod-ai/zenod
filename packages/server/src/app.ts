@@ -1118,6 +1118,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           token,
           ...(agent.name !== "ring" && p.tool ? { tool: p.tool } : {}),
           ...(prior?.skillArtifact !== undefined ? { skillArtifact: prior.skillArtifact } : {}),
+          ...(prior?.skillAutoImport !== undefined ? { skillAutoImport: prior.skillAutoImport } : {}),
         };
       })
       .filter((p) => p.name && p.url && p.token);
@@ -1211,6 +1212,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         currentPeers[currentIndex] = {
           ...currentPeers[currentIndex]!,
           skillArtifact: { artifactId: artifact.artifactId, version: artifact.version },
+          skillAutoImport: false,
         };
         settings.setPeers(currentPeers);
         runtime.invalidate();
@@ -1245,7 +1247,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const peerIndex = peers.findIndex((candidate) => candidate.name === c.req.param("peerName"));
     if (peerIndex < 0) return c.json({ error: "peer not found" }, 404);
     const { skillArtifact: _skillArtifact, ...peer } = peers[peerIndex]!;
-    peers[peerIndex] = peer;
+    peers[peerIndex] = { ...peer, skillAutoImport: false };
     settings.setPeers(peers);
     runtime.invalidate();
     return c.json({ attachment: null });

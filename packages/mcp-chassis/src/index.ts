@@ -259,6 +259,8 @@ export interface UnitSkillManifest {
   tools: string[];
   etiquette: string[];
   receiptExpectations: string[];
+  /** Optional same-origin public bundle imported by capable hosts on connection. */
+  bundleUrl?: string;
 }
 
 export interface PublishedUnitSkillManifest extends UnitSkillManifest {
@@ -266,6 +268,10 @@ export interface PublishedUnitSkillManifest extends UnitSkillManifest {
   unit: {
     name: string;
     version: string;
+  };
+  bundle?: {
+    format: "zenod-agent-skill-bundle-v1";
+    url: string;
   };
 }
 
@@ -868,6 +874,9 @@ function normalizeSkillManifest(skill: UnitSkillManifest): UnitSkillManifest {
       skill.receiptExpectations,
       "receiptExpectations",
     ),
+    ...(skill.bundleUrl?.trim()
+      ? { bundleUrl: normalizeSkillText(skill.bundleUrl, "bundleUrl") }
+      : {}),
   };
 }
 
@@ -875,10 +884,15 @@ function publishSkillManifest(
   skill: UnitSkillManifest,
   unit: { name: string; version: string },
 ): PublishedUnitSkillManifest {
+  const normalized = normalizeSkillManifest(skill);
+  const { bundleUrl, ...published } = normalized;
   return {
     schemaVersion: ATOMIC_UNIT_SKILL_SCHEMA_VERSION,
-    ...normalizeSkillManifest(skill),
+    ...published,
     unit: { ...unit },
+    ...(bundleUrl
+      ? { bundle: { format: "zenod-agent-skill-bundle-v1", url: bundleUrl } }
+      : {}),
   };
 }
 
