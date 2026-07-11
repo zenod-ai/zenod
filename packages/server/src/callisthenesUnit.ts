@@ -32,21 +32,117 @@ interface RpcRequest {
 interface RpcResponse {
   jsonrpc?: "2.0";
   id?: string | number | null;
-  result?: { tools?: Array<{ name?: string }>; content?: Array<{ type?: string; text?: string }> };
+  result?: { tools?: McpToolDescriptor[]; content?: Array<{ type?: string; text?: string }> };
   error?: { message?: string; data?: unknown };
 }
 
+interface McpToolDescriptor {
+  name?: string;
+  title?: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+const READ_TOOL_NAMES = new Set([
+  "searchPostsRecent",
+  "getPostsById",
+  "getPostsByIds",
+  "getUsersMe",
+  "getUsersById",
+  "getUsersByUsername",
+  "getUsersPosts",
+  "getUsersMentions",
+]);
+
+const READ_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
+const WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
+const APPROVAL_PROPERTY = {
+  description: "Explicit approval for this outward mutation. Omit it to create a held draft; never infer approval.",
+};
+
 const APPROVE_SEND_TOOL = {
   name: "approve_send",
-  description: "Commit an explicitly approved standing X draft exactly once and return its verified canonical permalink receipt.",
+  title: "Approve and send an exact X draft",
+  description: "After the user explicitly confirms the exact final text, commit that standing X draft exactly once. Safe retries with the same tenant and text return the stored canonical permalink receipt without posting again.",
   inputSchema: {
     type: "object",
+    additionalProperties: false,
+    required: ["channel", "text"],
     properties: {
-      channel: { type: "string", enum: ["x", "reddit", "email"] },
-      text: { type: "string", description: "The exact final approved text." },
+      channel: { type: "string", enum: ["x"], description: "The approved outbound channel." },
+      text: { type: "string", minLength: 1, description: "The exact final text already shown to and explicitly confirmed by the user. Do not rewrite it." },
     },
   },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
 };
+
+function objectSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
+  return schema && schema.type === "object" ? schema : { type: "object", properties: {} };
+}
+
+function withApprovalProperty(schema: Record<string, unknown> | undefined): Record<string, unknown> {
+  const normalized = objectSchema(schema);
+  const properties = normalized.properties && typeof normalized.properties === "object"
+    ? normalized.properties as Record<string, unknown>
+    : {};
+  return {
+    ...normalized,
+    properties: {
+      ...properties,
+      callisthenes_approve: {
+        ...(properties.callisthenes_approve && typeof properties.callisthenes_approve === "object"
+          ? properties.callisthenes_approve as Record<string, unknown>
+          : {}),
+        ...APPROVAL_PROPERTY,
+      },
+    },
+  };
+}
+
+function describePublicTool(tool: McpToolDescriptor): McpToolDescriptor {
+  if (!tool.name) return tool;
+  if (READ_TOOL_NAMES.has(tool.name)) {
+    return { ...tool, annotations: READ_ANNOTATIONS };
+  }
+  if (tool.name === "createPosts") {
+    return {
+      ...tool,
+      title: "Draft or create an X post",
+      description: "Draft an X post when explicit approval is absent (returns [draft_not_approved] and does not publish). Only a valid callisthenes_approve value may create the post; success returns the created post id used for its canonical permalink.",
+      inputSchema: withApprovalProperty(tool.inputSchema),
+      annotations: WRITE_ANNOTATIONS,
+    };
+  }
+  if (tool.name === "deletePosts") {
+    return {
+      ...tool,
+      title: "Delete an X post",
+      description: "Delete the specified X post only with explicit callisthenes_approve. This is destructive and returns the deleted post handle; do not treat retries as guaranteed safe.",
+      inputSchema: withApprovalProperty(tool.inputSchema),
+      annotations: WRITE_ANNOTATIONS,
+    };
+  }
+  return tool;
+}
 
 function parseRpc(body: string): RpcRequest | null {
   try {
@@ -144,6 +240,7 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
     if (!payload) return new Response(responseText, { status: response.status, headers: response.headers });
     if (rpc.method === "tools/list" && payload.result?.tools) {
       if (!payload.result.tools.some((tool) => tool.name === "approve_send")) payload.result.tools.push(APPROVE_SEND_TOOL);
+      payload.result.tools = payload.result.tools.map(describePublicTool);
     }
     if (rpc.method === "tools/call") {
       const text = resultText(payload);
