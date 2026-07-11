@@ -382,6 +382,12 @@ export function PeerAgents() {
                                   <pre className="overflow-x-auto whitespace-pre-wrap font-mono">
                                     {JSON.stringify(tool.outputSchema ?? null, null, 2)}
                                   </pre>
+                                  {tool.outputSchemaError && (
+                                    <p className="mt-1 text-destructive">
+                                      {tool.outputSchemaError}. The tool remains available;
+                                      Ring did not truncate or invent a schema.
+                                    </p>
+                                  )}
                                 </div>
                               </div>
                             </details>

@@ -1,0 +1,134 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ring — Final Positioning · Multi-Tenant Config</title>
+<style>
+  :root{--bg:#0d0f12;--panel:#14171c;--ink:#e8e6e1;--dim:#a5a19a;--accent:#d4a24e;--accent2:#6ea8a0;--line:#2a2e35;--bad:#c96a5a;--ok:#7fb069}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;overflow:hidden}
+  .deck{height:100vh;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;padding:5vh 7vw;overflow-y:auto}
+  .slide.active{display:flex}
+  .kicker{font-family:ui-monospace,Menlo,monospace;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin-bottom:1.2rem}
+  h1{font-size:clamp(2.8rem,6.5vw,5rem);font-weight:400;line-height:1.1;margin-bottom:1.4rem}
+  h2{font-size:clamp(2rem,4.4vw,3.2rem);font-weight:400;line-height:1.16;margin-bottom:1.2rem}
+  h1 em,h2 em,p em{font-style:italic;color:var(--accent)}
+  p.lede{font-size:clamp(1.25rem,2.1vw,1.6rem);color:var(--dim);line-height:1.55;max-width:58ch}
+  blockquote{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;font-size:clamp(1.4rem,2.6vw,1.9rem);font-style:italic;line-height:1.45;margin:1.2rem 0;max-width:56ch}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.4rem;margin-top:1.6rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:1.4rem}
+  .card h3{font-size:1.15rem;font-weight:400;color:var(--accent);margin-bottom:.6rem}
+  .card p{color:var(--dim);line-height:1.5;font-size:1rem}
+  .steps{margin-top:1.6rem;display:flex;flex-direction:column;gap:1rem;max-width:70ch}
+  .step{display:flex;gap:1.1rem;align-items:baseline}
+  .step .n{font-family:ui-monospace,Menlo,monospace;color:var(--accent);min-width:2ch}
+  .step p{color:var(--dim);line-height:1.5}
+  .step p strong{color:var(--ink);font-weight:400}
+  ul.clean{list-style:none;margin-top:1.4rem;max-width:64ch}
+  ul.clean li{padding-left:1.6rem;position:relative;margin-bottom:.9rem;color:var(--dim);line-height:1.5}
+  ul.clean li::before{content:"—";position:absolute;left:0;color:var(--accent)}
+  ul.clean li strong{color:var(--ink);font-weight:400}
+  .pill{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;border:1px solid var(--line);border-radius:999px;padding:.35rem .9rem;color:var(--dim);margin:.3rem .4rem .3rem 0}
+  .tagline{font-family:ui-monospace,Menlo,monospace;font-size:.9rem;color:var(--dim);margin-top:2rem;letter-spacing:.08em}
+  .status{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.8rem;border-radius:999px;padding:.3rem .8rem;margin-left:.8rem;vertical-align:middle}
+  .status.live{border:1px solid var(--ok);color:var(--ok)}
+  .status.building{border:1px solid var(--accent);color:var(--accent)}
+  .tool{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:.3rem .7rem;margin:.25rem .35rem 0 0;color:var(--accent2)}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);width:0;z-index:10;transition:width .3s}
+  .nav{position:fixed;bottom:1.2rem;right:1.4rem;display:flex;gap:.6rem;align-items:center;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;color:var(--dim);z-index:10}
+  .nav button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:.35rem .8rem;cursor:pointer;font-size:1rem}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+</style></head>
+<body><div class="progress" id="bar"></div><div class="deck" id="deck">
+
+<section class="slide active">
+  <div class="kicker">Final positioning · Ring · July 2026</div>
+  <h1>Ring<br><em>the Door · your router</em> <span class="status building">◐ respawning from Zenod</span></h1>
+  <p class="lede">The human front door to your Council. One place authenticated to all your units, with the routing brains to send every message — WhatsApp, Telegram, web chat — to the right one.</p>
+  <div class="tagline">ring.zenod.dev &nbsp;·&nbsp; one door · every unit &nbsp;·&nbsp; the aggregation is the product</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">What it is</div>
+  <h2>A guy authenticated to <em>all the other guys</em>.</h2>
+  <p class="lede">Ring holds a wallet of agent-to-unit tokens on your behalf — Zenod, Callisthenes, Epaminon, Phylax — plus the intelligence to route. Pure aggregation; it owns no pipes.</p>
+  <blockquote>The Ring's product is the aggregation, not the pipes.</blockquote>
+</section>
+
+<section class="slide">
+  <div class="kicker">Key positioning points</div>
+  <h2>Why Ring, in five lines</h2>
+  <ul class="clean">
+    <li><strong>One door.</strong> Message your whole Council from any channel; Ring knows who you are and where it goes.</li>
+    <li><strong>The wallet is the product.</strong> Your unit tokens live in one tenant-scoped wallet — the "My Units" panel.</li>
+    <li><strong>Skills, self-described.</strong> Every wired unit publishes a skill manifest; Ring imports it and routes accordingly. Add a unit, gain its skills.</li>
+    <li><strong>No channel code.</strong> Channels live in Phylax; web chat is just another channel. Ring stays pure intelligence.</li>
+    <li><strong>Suites are tenants.</strong> Herald or any composed agent is just a machine tenant with its own wallet — no special code, ever.</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <div class="kicker">The multi-tenant config</div>
+  <h2>One Ring container, tenant-keyed wallets.</h2>
+  <div class="cols">
+    <div class="card"><h3>A customer is a row</h3><p>One always-on Ring serves every tenant. Pairing tables map senders to tenants; wallets are rows, not deploys.</p></div>
+    <div class="card"><h3>Standard MCP everywhere</h3><p>Inbound arrives from Phylax as sender-tagged MCP tool calls; outbound goes to units over their tokened MCP URLs. No bespoke protocol anywhere.</p></div>
+    <div class="card"><h3>Self-host = same image</h3><p>The identical container with one tenant, wallet UI included.</p></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">In the suite</div>
+  <h2>Where every message finds its owner.</h2>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><p>A WhatsApp voice note lands at <strong>Phylax</strong>, is transcribed at the edge, and forwarded sender-tagged.</p></div>
+    <div class="step"><span class="n">2</span><p><strong>Ring</strong> maps sender → tenant, reads the intent, and picks the unit: file it (<strong>Zenod</strong>), post it (<strong>Callisthenes</strong>), run it (<strong>Epaminon</strong>).</p></div>
+    <div class="step"><span class="n">3</span><p>The unit returns a receipt; Ring acks you through <strong>Phylax</strong> — one honest voice, with the receipt trail attached.</p></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Boundaries</div>
+  <h2>What Ring owns — and refuses.</h2>
+  <ul class="clean">
+    <li><strong>Owns:</strong> the wallet, sender→tenant pairing, routing intelligence, the conversation surface.</li>
+    <li><strong>Never:</strong> holds channel credentials (Phylax), writes memory (Zenod), holds outbound keys (Callisthenes), executes code (Epaminon).</li>
+    <li><strong>Routes with receipts.</strong> Every hop is a standard MCP call carrying its origin ticket.</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <div class="kicker">Surface</div>
+  <h2>Humans get the door.<br>Agents get the endpoint.</h2>
+  <p class="lede">You use the Ring UI — chat plus the My Units wallet panel. Agents and suites use the tokened MCP URL like any other unit.</p>
+  <div style="margin-top:1.4rem">
+    <span class="tool">my units · wallet</span><span class="tool">pairing</span><span class="tool">web chat</span><span class="tool">/mcp/&lt;token&gt;</span>
+  </div>
+  <div class="tagline">ring.zenod.dev</div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Status &amp; access</div>
+  <h2>Last to respawn — <em>by design.</em></h2>
+  <p class="lede">Ring composes the others, so it lands after them: rebuilt by duplicating the shipped Zenod container pattern once its downstream units are live multi-tenant. The wallet seam is already the suite law.</p>
+  <div style="margin-top:1.6rem">
+    <span class="pill">hosted · subscription</span><span class="pill">self-hosted · free</span><span class="pill">sign-in · GitHub</span>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Close</div>
+  <h2>Stop being the context bus.<br><em>Run your Council.</em></h2>
+  <blockquote>Six governors, one door. You make the calls.</blockquote>
+  <div class="tagline">ring.zenod.dev &nbsp;·&nbsp; one door · every unit</div>
+</section>
+
+</div>
+<div class="nav"><span id="counter">1 / 9</span><button onclick="go(-1)">←</button><button onclick="go(1)">→</button></div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];let i=0;
+  function show(n){slides[i].classList.remove('active');i=(n+slides.length)%slides.length;slides[i].classList.add('active');document.getElementById('counter').textContent=(i+1)+' / '+slides.length;document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';}
+  function go(d){show(i+d)}
+  addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(1);if(e.key==='ArrowLeft'||e.key==='PageUp')go(-1);if(e.key==='Home')show(0);if(e.key==='End')show(slides.length-1);});
+  document.getElementById('deck').addEventListener('click',e=>{if(e.target.closest('button')||getSelection().toString())return;go(1);});
+  show(0);
+</script></body></html>

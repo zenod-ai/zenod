@@ -4,6 +4,7 @@ export type PeerTool = {
   description?: string
   inputSchema?: Record<string, unknown>
   outputSchema?: Record<string, unknown>
+  outputSchemaError?: string
   annotations?: Record<string, unknown>
 }
 

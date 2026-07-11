@@ -75,6 +75,20 @@ describe("host-owned MCP catalog", () => {
     expect(exact).toContain('"required": [\n    "record"');
     expect(exact).toContain('"openWorldHint":false');
 
+    const degraded = peer("Alpha");
+    degraded.tools![0] = {
+      ...degraded.tools![0]!,
+      outputSchema: undefined,
+      outputSchemaError: "shared_leaf outputSchema exceeds the 65536-byte discovery limit",
+    };
+    const degradedOutput = renderMcpCatalog(
+      "For Alpha shared_leaf, show its required input and output schema",
+      [degraded],
+    );
+    expect(degradedOutput).toContain("Output schema warning:");
+    expect(degradedOutput).toContain("tool remains usable");
+    expect(degradedOutput).toContain("did not invent or truncate");
+
     const ambiguous: PeerConfig = {
       ...alpha,
       tools: [

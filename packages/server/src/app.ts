@@ -1090,6 +1090,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         description: tool.description,
         ...(typeof tool.inputSchema === "object" ? { inputSchema: tool.inputSchema } : {}),
         ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+        ...(tool.outputSchemaError ? { outputSchemaError: tool.outputSchemaError } : {}),
         ...(tool.annotations ? { annotations: tool.annotations } : {}),
       })),
       skill: skills[index] ?? null,

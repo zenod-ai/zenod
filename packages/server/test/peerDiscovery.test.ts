@@ -233,7 +233,7 @@ describe("generic wallet MCP discovery", () => {
       .resolves.toMatchObject({ transport: "connected", tools: "error", error: expect.stringContaining("discovery limit") });
   });
 
-  it("fails loudly instead of silently dropping an oversized output schema", async () => {
+  it("keeps the catalog usable while loudly marking one oversized optional output schema", async () => {
     vi.stubGlobal("fetch", mcpFetch([
       {
         name: "getPostsByIds",
@@ -263,10 +263,19 @@ describe("generic wallet MCP discovery", () => {
 
     expect(result).toMatchObject({
       transport: "connected",
-      tools: "error",
-      specs: [],
-      error: expect.stringContaining("getPostsByIds outputSchema exceeds"),
+      tools: "ready",
+      specs: [
+        expect.objectContaining({
+          mcp: "getPostsByIds",
+          outputSchemaError: expect.stringContaining("getPostsByIds outputSchema exceeds"),
+        }),
+        expect.objectContaining({
+          mcp: "createPosts",
+          outputSchema: { type: "object", properties: { draftId: { type: "string" } } },
+        }),
+      ],
     });
+    expect(result.specs[0]).not.toHaveProperty("outputSchema");
   });
 
   it("refreshes saved peers on startup and through the token-free refresh API", async () => {

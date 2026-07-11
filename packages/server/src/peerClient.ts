@@ -29,6 +29,8 @@ export interface PeerToolSpec {
   inputSchema?: string | Record<string, unknown>;
   /** Optional MCP output schema, retained verbatim for inspection/refresh. */
   outputSchema?: Record<string, unknown>;
+  /** Loud per-field degradation when an optional output schema exceeds Ring's bound. */
+  outputSchemaError?: string;
   /** What the tool does (the model reads this). */
   description: string;
   /** MCP tool behavior hints copied from tools/list when discovery is available. */
@@ -181,6 +183,18 @@ function boundedSchema(value: unknown, label: string): Record<string, unknown> |
   return JSON.parse(encoded) as Record<string, unknown>;
 }
 
+function boundedOptionalOutputSchema(
+  value: unknown,
+  label: string,
+): { schema?: Record<string, unknown>; error?: string } {
+  try {
+    const schema = boundedSchema(value, label);
+    return schema ? { schema } : {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : `${label} is unavailable` };
+  }
+}
+
 function stableToolSegment(value: string): string {
   const safe = value
     .normalize("NFKD")
@@ -230,13 +244,14 @@ export async function discoverPeerTools(peer: PeerConfig): Promise<PeerDiscovery
       throw new Error("tools/list returned duplicate tool names");
     }
     const specs = listed.tools.map((tool) => {
-      const outputSchema = boundedSchema(tool.outputSchema, `${tool.name} outputSchema`);
+      const output = boundedOptionalOutputSchema(tool.outputSchema, `${tool.name} outputSchema`);
       return {
         as: councilToolName(peer.name, tool.name),
         mcp: tool.name,
         arg: "input",
         inputSchema: boundedSchema(tool.inputSchema, `${tool.name} inputSchema`) ?? { type: "object" },
-        ...(outputSchema ? { outputSchema } : {}),
+        ...(output.schema ? { outputSchema: output.schema } : {}),
+        ...(output.error ? { outputSchemaError: output.error } : {}),
         description: (tool.description?.trim() || `Call ${tool.name} on the ${peer.name} peer.`).slice(0, MAX_TOOL_DESCRIPTION_CHARS),
         ...(tool.annotations ? { annotations: { ...tool.annotations } } : {}),
         preserveFullResult: true,

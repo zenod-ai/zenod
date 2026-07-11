@@ -91,6 +91,9 @@ function renderTool(tool: PeerToolSpec, includeSchemas: boolean): string {
       "```json",
       json(tool.outputSchema),
       "```",
+      ...(tool.outputSchemaError
+        ? [`  Output schema warning: ${tool.outputSchemaError}. The tool remains usable; Ring did not invent or truncate a replacement schema.`]
+        : []),
     );
   }
   return lines.join("\n");

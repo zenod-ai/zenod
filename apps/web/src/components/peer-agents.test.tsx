@@ -137,6 +137,24 @@ describe("PeerAgents", () => {
     expect(document.body.textContent).not.toContain("downstream-secret")
   })
 
+  it("keeps a tool visible when only its optional output schema exceeds the host bound", async () => {
+    mocks.api.mockResolvedValueOnce({
+      peers: [peer({
+        tools: [{
+          ...peer().tools[0]!,
+          outputSchema: undefined,
+          outputSchemaError: "search_chats outputSchema exceeds the discovery limit",
+        }],
+      })],
+    })
+    render(<PeerAgents />)
+
+    fireEvent.click(await screen.findByText("Discovered tools"))
+    fireEvent.click(screen.getByText(/search_chats → calli__search_chats/))
+    expect(screen.getByText(/tool remains available/)).toBeTruthy()
+    expect(screen.getByText(/did not truncate or invent a schema/)).toBeTruthy()
+  })
+
   it("reports a saved unit truthfully when discovery fails", async () => {
     const user = userEvent.setup()
     mocks.api.mockResolvedValueOnce({ peers: [] }).mockResolvedValueOnce({
