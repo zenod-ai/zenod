@@ -1,6 +1,6 @@
 # EPIC C · Callisthenes Sprint — duplicate Zenod, swap the middle, sell the mouth
 
-Status: active
+Status: shipped
 Created: 2026-07-11
 Updated: 2026-07-11
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Callisthenes delivery manager
 Steward since: 2026-07-11T01:40:00+02:00
-Last reconciled commit: 28904a1939f0cbfaa2733a525cbb15e244c14b06
+Last reconciled commit: 21623d4
 Planner: Jordi + Epic 3.0 planner
 Worker: Callisthenes delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -61,15 +61,15 @@ Stand up Callisthenes — "one mouth for all your agents" — as the second self
 
 SHIP — the journey, nothing else counts. The manager walks it in a REAL BROWSER on the LIVE deployment, in a loop (walk → first breakage → fix → deploy → walk again from step 1), until ONE uninterrupted clean pass, screenshots per step:
 
-- [ ] 1. Open `calli.zenod.dev` logged out → a normal landing page: what Callisthenes is ("one mouth for all your agents — your keys, your throttle, receipts for every send"), Get started, Pricing, Sign in. No token field anywhere public.
-- [ ] 2. Pricing: exactly three options — Self-hosted (free) / Monthly / Yearly, Stripe TEST.
-- [ ] 3. Sign in with GitHub — same account system as Zenod (one identity across units), sign-in returns to the landing showing name + Dashboard link.
-- [ ] 4. Subscribe (monthly, TEST card): server-side checkout session with `client_reference_id` = account id → webhook inserts the tenant row in THIS container → land in the dashboard.
-- [ ] 5. Dashboard: **MCP URL + token front and center** with copy button and Claude/Codex snippets; Connect X card with the EXISTING three-credential inputs + Authorize + PIN flow; Drafts & receipts panel (read view); throttle state; usage; link back to landing. NO tabs from other units.
-- [ ] 6. Connect X through the UI: paste the three app credentials → Authorize → approve on X → enter PIN → "Connected ✓", token pair in per-tenant custody.
-- [ ] 7. Agent seam: an MCP client using the minted URL creates a post → held as draft (`[draft_not_approved]`, C-22); draft visible in the dashboard; `approve_send` via MCP posts EXACTLY ONCE → **canonical x.com permalink receipt** in the agent reply and dashboard history; throttle counter increments.
-- [ ] 8. Logout/login persists everything. Second tenant provisioned by the manager cannot see the first tenant's connection, drafts, or receipts.
-- [ ] 9. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test." Every element Jordi will click was clicked by the manager in the same deployed build.
+- [x] 1. Open `calli.zenod.dev` logged out → a normal landing page: what Callisthenes is ("one mouth for all your agents — your keys, your throttle, receipts for every send"), Get started, Pricing, Sign in. No token field anywhere public.
+- [x] 2. Pricing: exactly three options — Self-hosted (free) / Monthly / Yearly, Stripe TEST.
+- [x] 3. Sign in with GitHub — same account system as Zenod (one identity across units), sign-in returns to the landing showing name + Dashboard link.
+- [x] 4. Subscribe (monthly, TEST card): server-side checkout session with `client_reference_id` = account id → webhook inserts the tenant row in THIS container → land in the dashboard.
+- [x] 5. Dashboard: **MCP URL + token front and center** with copy button and Claude/Codex snippets; Connect X card with the EXISTING three-credential inputs + Authorize + PIN flow; Drafts & receipts panel (read view); throttle state; usage; link back to landing. NO tabs from other units.
+- [x] 6. Connect X through the UI: paste the three app credentials → Authorize → approve on X → enter PIN → "Connected ✓", token pair in per-tenant custody.
+- [x] 7. Agent seam: an MCP client using the minted URL creates a post → held as draft (`[draft_not_approved]`, C-22); draft visible in the dashboard; `approve_send` via MCP posts EXACTLY ONCE → **canonical x.com permalink receipt** in the agent reply and dashboard history; throttle counter increments.
+- [x] 8. Logout/login persists everything. Second tenant provisioned by the manager cannot see the first tenant's connection, drafts, or receipts.
+- [x] 9. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test." Every element Jordi will click was clicked by the manager in the same deployed build.
 
 HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via MCP `approve_send` — existing code), Reddit/email connectors, Google sign-in, self-host README polish, retirement of the old x-mcp/callisthenes 2.x service (route to 3.7).
 
@@ -81,12 +81,12 @@ HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via 
 
 ## Current State
 
-Phase: wave 2 dispatched
-Last verified: 2026-07-11T01:54:00+02:00
+Phase: SHIP complete; awaiting Jordi test
+Last verified: 2026-07-11T03:32:00+02:00
 Integration target: main
 Fresh base commit: `28904a1939f0cbfaa2733a525cbb15e244c14b06` — pinned; no rebases until the journey passes (D19c)
 Wave 2 base commit: `fcd37f89d0e5c6c514dd115ae3ba3dce135f3eaa` — integrated wave 1, pinned.
-Next action: C-S3 and C-S4 execute in parallel worktrees; manager monitors, integrates, deploys, then starts C-S5.
+Next action: Jordi tests the delivered package; HARDEN remains gated on approval.
 Blockers: none — decisions pre-answered below; inputs have absence-rules.
 
 ## Role Goals
@@ -145,9 +145,9 @@ Pre-answered; the manager invents nothing:
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | [#821](https://github.com/zenod-ai/zenod/issues/821) | Ticket worker | C-S1-worker | C-S1 front duplicate (DUPLICATE zenod customer layer + landing) | done | - | [#826](https://github.com/zenod-ai/zenod/pull/826) / `codex/c-s1-front-duplicate` | `28904a1` | SHIP 1–4 render/flow | CI + targeted checks; merged `34a1398` | 2026-07-11T01:54:00+02:00 | integrated |
 | [#823](https://github.com/zenod-ai/zenod/issues/823) | Ticket worker | C-S2-worker | C-S2 engine port (PORT units/callisthenes, behavior frozen) | done | - | [#827](https://github.com/zenod-ai/zenod/pull/827) / `codex/c-s2-engine-port` | `28904a1` | connect/draft/send/receipt work per tenant | CI + 98 tests; merged `fcd37f8` | 2026-07-11T01:54:00+02:00 | integrated |
-| [#825](https://github.com/zenod-ai/zenod/issues/825) | Ticket worker | C-S3-worker | C-S3 dashboard panels (PORT connect_page + DUPLICATE MCP-first panel) | in progress | #821, #823 done | `codex/c-s3-dashboard` / `../wt-c-s3` | `fcd37f8` | SHIP 5–6 | dispatched | 2026-07-11T01:54:00+02:00 | implement, validate, PR |
-| [#824](https://github.com/zenod-ai/zenod/issues/824) | Ticket worker | C-S4-worker | C-S4 billing + domain (DUPLICATE Z-N3/Z-N5 recipe) | in progress | #821 done | `codex/c-s4-billing-domain` / `../wt-c-s4` | `fcd37f8` | SHIP 2, 4; calli.zenod.dev live, guarded | dispatched | 2026-07-11T01:54:00+02:00 | implement, validate, PR |
-| [#822](https://github.com/zenod-ai/zenod/issues/822) | Epic worker | Callisthenes delivery manager | C-S5 journey loop + two-tenant isolation + test package | ready | #821, #823, #825, #824 | - | `28904a1` | SHIP 1–9 | - | 2026-07-11T01:40:00+02:00 | last |
+| [#825](https://github.com/zenod-ai/zenod/issues/825) | Ticket worker | C-S3-worker | C-S3 dashboard panels (PORT connect_page + DUPLICATE MCP-first panel) | done | #821, #823 done | [#830](https://github.com/zenod-ai/zenod/pull/830) / `codex/c-s3-dashboard` | `fcd37f8` | SHIP 5–6 | merged; live browser Connect X + PIN passed | 2026-07-11T03:23:00+02:00 | integrated |
+| [#824](https://github.com/zenod-ai/zenod/issues/824) | Ticket worker | C-S4-worker | C-S4 billing + domain (DUPLICATE Z-N3/Z-N5 recipe) | done | #821 done | [#829](https://github.com/zenod-ai/zenod/pull/829) / `codex/c-s4-billing-domain` | `fcd37f8` | SHIP 2, 4; calli.zenod.dev live, guarded | merged; Dokploy API service + Stripe TEST product/prices/webhook live | 2026-07-11T03:23:00+02:00 | integrated |
+| [#822](https://github.com/zenod-ai/zenod/issues/822) | Epic worker | Callisthenes delivery manager | C-S5 journey loop + two-tenant isolation + test package | done | #821, #823, #825, #824 | `main` | `28904a1` | SHIP 1–9 | full real-browser journey passed on live `21623d4`; package delivered | 2026-07-11T03:32:00+02:00 | Jordi tests |
 
 ## Branch And Integration
 
@@ -190,9 +190,24 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
-| pending | SHIP journey clean pass | - | calli.zenod.dev live | real browser walk, screenshots per step | pending | test package |
+| 2026-07-11 | Landing, GitHub, Stripe TEST, dashboard, X PIN, held draft | `2cce21c` | calli.zenod.dev live | Chrome real-browser walk | pass | `docs/evidence/callisthenes-ship-2026-07-11/01`–`05` |
+| 2026-07-11 | MCP approve exactly once + canonical receipt + delete | `2cce21c` | public `/mcp` + live X | approve, replay, browser permalink, approved deletePosts | pass | `06-x-permalink-receipt.png`, `07-dashboard-receipt.png` |
+| 2026-07-11 | Two-tenant isolation | `2cce21c` | public `/mcp` + durable tenant/X custody stores | two independent sessions, cross-credential negative test | pass | `08-two-tenant-isolation.md` |
+| 2026-07-11 | Final same-build lap | `21623d4` | calli.zenod.dev + Stripe TEST + X | logout/login, branded paid checkout, held draft, approve replay, live receipt, dashboard history, approved deletion | pass | `02b`, `10`, `11`, `13` screenshots; Stripe event `evt_1Trpl876yJ3p1J6Xcfy1iaf6` |
 
 ## Handoff Journal
+
+### 2026-07-11T03:32:00+02:00 - Callisthenes delivery manager - SHIP passed on final build
+
+Context: One same-build real-browser lap passed on live `21623d4`: logged-out landing and pricing; GitHub sign-in; branded Callisthenes Stripe TEST monthly subscription (paid/complete with `client_reference_id=github-63050995`); dashboard; persisted `Connected ✓ @CryptoEsp`; held MCP draft; exactly-once approval replay returning `https://x.com/i/web/status/2075755544816595012`; receipt visible on X and in the dashboard; approved deletion; logout; GitHub login; persisted connection/drafts/receipts. The separately provisioned second tenant remained isolated. All test posts were deleted after permalink capture.
+Evidence: `docs/evidence/callisthenes-ship-2026-07-11/`, with final-build evidence in `02b`, `10`, `11`, `13` and the sanitized isolation receipt in `08-two-tenant-isolation.md`. Dashboard screenshots that displayed the tenant credential were deliberately excluded; that token was rotated after the walk and its X custody file migrated to the replacement tenant hash.
+Next: Jordi tests. Do not start HARDEN or retire the old 2.x service before approval.
+
+### 2026-07-11T03:23:00+02:00 - Callisthenes delivery manager - Live C-S5 journey converged
+
+Context: C-S3/C-S4 merged and the new Dokploy compose was created and bound to this repository through the Dokploy API with auto-deploy enabled. Dokploy accepted deploy/redeploy requests but its source webhook reported `Branch Not Match`; the manager preserved the API-owned compose and synchronized/recreated its generated runtime directly. Stripe TEST now has a Callisthenes product, monthly/yearly prices, and a calli webhook. The real Chrome journey passed landing, GitHub, checkout, dashboard, three-input X authorization + PIN, draft hold, exactly-once `approve_send`, canonical receipt, approved deletion, and two-tenant isolation. The only new front↔engine defect was a duplicated-customer-layer proxy forwarding the caller's stale `Content-Length` after rewriting the approval envelope; `2cce21c` removes that transport header without changing engine/send semantics.
+Evidence: `docs/evidence/callisthenes-ship-2026-07-11/`; live receipt `https://x.com/i/web/status/2075749752700837959` was captured and the test post was then deleted.
+Next: finish the final navigation-safe logout/login and branded Stripe checkout lap on `a88c010`, mark SHIP, deliver Jordi's test package.
 
 ### 2026-07-11T01:54:00+02:00 - Callisthenes delivery manager - Wave 1 integrated; wave 2 dispatched
 
