@@ -73,6 +73,13 @@ export {
   normalizedToolName,
 } from "./taskingPolicy.js";
 export { applyReplyGate, isActionTool, type ReplyGateInterceptedEvent, type ReplyGateOutcome } from "./replyGate.js";
+export {
+  hasMutationSuccessClaim,
+  renderVerifiedMutationReceipt,
+  validateMutationReceipt,
+  type MutationReceiptEvidence,
+  type MutationReceiptValidation,
+} from "./mutationReceipt.js";
 export { isKnownTool, toolKind, type ToolKind } from "./toolKinds.js";
 export { SqliteStateStore } from "./state/sqlite.js";
 export {

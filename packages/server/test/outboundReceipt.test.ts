@@ -37,6 +37,15 @@ describe("parseOutboundReceipt — X (Twitter)", () => {
     expect(receipt.verified).toBe(false);
     expect(renderOutboundReceipt(receipt)).toMatch(/^FAILED to send to X/);
   });
+
+  it.each(["{POST_ID}", "<id>", "abc", "123abc", "post_id"]) (
+    "rejects placeholder and non-numeric X ids: %s",
+    (id) => {
+      const receipt = parseOutboundReceipt("x", JSON.stringify({ data: { id } }));
+      expect(receipt.verified).toBe(false);
+      expect(renderOutboundReceipt(receipt)).toMatch(/^FAILED to send to X/);
+    },
+  );
 });
 
 describe("parseOutboundReceipt — Reddit", () => {
@@ -59,6 +68,11 @@ describe("parseOutboundReceipt — Reddit", () => {
     const receipt = parseOutboundReceipt("reddit", JSON.stringify({ ok: true }));
     expect(receipt.verified).toBe(false);
   });
+
+  it("rejects a templated permalink", () => {
+    const receipt = parseOutboundReceipt("reddit", JSON.stringify({ data: { url: "https://reddit.com/r/test/comments/{POST_ID}/" } }));
+    expect(receipt.verified).toBe(false);
+  });
 });
 
 describe("parseOutboundReceipt — email", () => {
@@ -67,8 +81,8 @@ describe("parseOutboundReceipt — email", () => {
     expect(receipt.verified).toBe(true);
     expect(receipt.id).toBe("<abc@mail>");
   });
-  it("a plain 'sent' acknowledgement (no JSON) is accepted", () => {
-    expect(parseOutboundReceipt("email", "Sent.").verified).toBe(true);
+  it("a plain 'sent' acknowledgement (no concrete handle) is rejected", () => {
+    expect(parseOutboundReceipt("email", "Sent.").verified).toBe(false);
   });
   it("an unrelated blob is NOT accepted as a send", () => {
     expect(parseOutboundReceipt("email", JSON.stringify({ foo: "bar" })).verified).toBe(false);

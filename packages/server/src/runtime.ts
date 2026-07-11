@@ -768,6 +768,7 @@ export class Runtime {
             (readOnlyHint !== true && isKnownTool(spec.as) && toolKind(spec.as) === "mutate"));
         tools[spec.as] = {
           description: spec.description,
+          ...(peer.wallet ? { connectedMcp: true } : {}),
           ...(inputSchema ? { inputSchema } : {}),
           ...(spec.outputSchema ? { outputSchema: spec.outputSchema } : {}),
           ...(typeof spec.inputSchema === "object" ? { schemaFormat: "json-schema" as const } : {}),

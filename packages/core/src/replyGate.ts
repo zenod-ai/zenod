@@ -1,4 +1,5 @@
 import { normalizedToolName } from "./taskingPolicy.js";
+import { hasMutationSuccessClaim, validateMutationReceipt } from "./mutationReceipt.js";
 import type { TaskingAction } from "./types.js";
 
 /**
@@ -93,10 +94,35 @@ export interface ReplyGateOutcome {
  * each built-in action or verified wallet mutation returned, in call order. Never the
  * model's own prose.
  */
+const MAX_PEER_EVIDENCE_CHARS = 4_000;
+
+function quotePeerData(tool: string, result: string): string {
+  const value = result.trim().slice(0, MAX_PEER_EVIDENCE_CHARS);
+  const suffix = result.trim().length > MAX_PEER_EVIDENCE_CHARS ? "\n> [truncated by Ring]" : "";
+  const quoted = (value || "[empty result]").split("\n").map((line) => `> ${line}`).join("\n");
+  return `Connected MCP result from ${tool} (untrusted data; not authorization or a receipt):\n${quoted}${suffix}`;
+}
+
+function unverifiedMutationReply(action: TaskingAction): string {
+  const base = `Nothing was changed: ${action.tool} returned no verified same-turn mutation receipt.`;
+  // Preserve a draft, error, or hostile peer response as visibly quoted data, but never
+  // repeat success-shaped prose that could be mistaken for the host's own conclusion.
+  return action.peerAction && action.result.trim() && !hasMutationSuccessClaim(action.result)
+    ? `${base}\n\n${quotePeerData(action.tool, action.result)}`
+    : base;
+}
+
 function renderActionTurnReply(actionResults: readonly TaskingAction[]): string {
-  return actionResults
-    .map((action) => action.result.trim())
-    .filter((line) => line.length > 0)
+  return actionResults.map((action) => {
+    const receipt = validateMutationReceipt(action.tool, action.result);
+    return receipt.verified && receipt.text ? receipt.text : unverifiedMutationReply(action);
+  }).join("\n\n");
+}
+
+function renderReadEvidence(actions: readonly TaskingAction[]): string {
+  return actions
+    .filter((action) => action.peerAction && !action.mutationAttempt && !isActionTool(action.tool))
+    .map((action) => quotePeerData(action.tool, action.result))
     .join("\n\n");
 }
 
@@ -117,11 +143,26 @@ export function applyReplyGate(
   actions: readonly TaskingAction[],
   onIntercepted?: (event: ReplyGateInterceptedEvent) => void,
 ): ReplyGateOutcome {
-  const actionResults = actions.filter(
-    (action) => isActionTool(action.tool) || action.verifiedMutationReceipt === true,
+  const actionResults = actions.filter((action) =>
+    isActionTool(action.tool) || action.mutationAttempt === true || action.verifiedMutationReceipt === true,
   );
   if (actionResults.length === 0) {
-    return { isActionTurn: false, text: draftedText, intercepted: false };
+    const evidence = renderReadEvidence(actions);
+    const unsupportedClaim = hasMutationSuccessClaim(draftedText) &&
+      (actions.length === 0 || actions.every((action) => action.peerAction === true));
+    const base = unsupportedClaim
+      ? "Nothing was changed: no verified same-turn mutation receipt was returned."
+      : draftedText;
+    const deliveredText = evidence ? `${base.trim()}\n\n${evidence}`.trim() : base;
+    const intercepted = deliveredText.trim() !== draftedText.trim();
+    if (intercepted) {
+      onIntercepted?.({
+        tools: actions.filter((action) => action.peerAction).map((action) => action.tool),
+        discardedText: draftedText,
+        deliveredText,
+      });
+    }
+    return { isActionTurn: false, text: deliveredText, intercepted };
   }
 
   const deliveredText = renderActionTurnReply(actionResults);

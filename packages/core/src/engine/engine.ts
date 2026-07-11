@@ -1299,7 +1299,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   function finalizeReply(rawText: string, actions: TaskingAction[], userMessage: string, cid: string): string {
     const gate = applyReplyGate(rawText, actions, (event) => {
       console.warn(
-        `[reply-gate] intercepted on action turn (${event.tools.join(", ")}) — discarded model text, delivered the receipt instead. discarded=${JSON.stringify(event.discardedText)}`,
+        `[reply-gate] intercepted final reply (${event.tools.join(", ") || "no tools"}) — discarded unsupported model text or preserved MCP evidence. discarded=${JSON.stringify(event.discardedText)}`,
       );
     });
     if (gate.isActionTurn) return gate.text;
@@ -1317,8 +1317,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         : NOTHING_PENDING_TO_APPROVE_TEXT;
     }
 
-    const drafted = rawText.trim()
-      ? rawText
+    const drafted = gate.text.trim()
+      ? gate.text
       : summarizeActionsForReply(actions)
         ? `${summarizeActionsForReply(actions)}\n\n(That's what I did — I ran out of room to write a fuller reply.)`
         : "I couldn't compose a reply to that one — mind rephrasing or sending it again?";
@@ -1368,7 +1368,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
           tool,
           input: inp,
           result: res,
+          ...(metadata?.peerAction ? { peerAction: true } : {}),
+          ...(metadata?.mutationAttempt ? { mutationAttempt: true } : {}),
           ...(metadata?.verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
+          ...(metadata?.verifiedReceiptText ? { verifiedReceiptText: metadata.verifiedReceiptText } : {}),
         }),
         onReadAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
       },
@@ -1427,7 +1430,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
           tool,
           input: inp,
           result: res,
+          ...(metadata?.peerAction ? { peerAction: true } : {}),
+          ...(metadata?.mutationAttempt ? { mutationAttempt: true } : {}),
           ...(metadata?.verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
+          ...(metadata?.verifiedReceiptText ? { verifiedReceiptText: metadata.verifiedReceiptText } : {}),
         }),
         onReadAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
       },

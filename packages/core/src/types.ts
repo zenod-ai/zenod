@@ -135,12 +135,20 @@ export interface TaskingAction {
   tool: string;
   input: Record<string, unknown>;
   result: string;
+  /** This action came from a connected MCP peer, rather than a Ring-owned tool. */
+  peerAction?: boolean;
   /**
-   * The result came from a mutating wallet peer tool and is the verified receipt
-   * that must reach the user verbatim. This is explicit call metadata rather than
-   * a tool-name rule so backlog/execution mutations keep their reconciliation path.
+   * The connected tool was classified as mutating. This records intent only: MCP
+   * annotations are advisory classification metadata and never prove success.
+   */
+  mutationAttempt?: boolean;
+  /**
+   * The host validated concrete same-turn evidence in the mutating tool result.
+   * This must never be set from a tool annotation alone.
    */
   verifiedMutationReceipt?: boolean;
+  /** Host-owned rendering of the validated evidence; raw peer prose is never a receipt. */
+  verifiedReceiptText?: string;
 }
 
 export interface TaskingReply {

@@ -22,6 +22,7 @@ import {
 } from "../taskingPolicy.js";
 import { registerStandingApproval } from "../approvalTokens.js";
 import { isKnownTool } from "../toolKinds.js";
+import { validateMutationReceipt } from "../mutationReceipt.js";
 import type {
   AnswerInput,
   AnswerResult,
@@ -1054,9 +1055,17 @@ export class AiSdkBrainLlm implements BrainLlm {
             if (approvalFields.length) {
               args = Object.fromEntries(Object.entries(args).filter(([key]) => !approvalFields.some(([field]) => field === key)));
             }
-            const receiptMetadata = peer.verifiedMutationReceipt
-              ? { verifiedMutationReceipt: true as const }
-              : undefined;
+            const mutationAttempt = peer.verifiedMutationReceipt === true;
+            const receiptMetadata = (result: string) => {
+              if (!mutationAttempt && !peer.connectedMcp) return undefined;
+              const receipt = validateMutationReceipt(name, result);
+              return {
+                ...(peer.connectedMcp ? { peerAction: true as const } : {}),
+                ...(mutationAttempt ? { mutationAttempt: true as const } : {}),
+                ...(mutationAttempt && receipt.verified ? { verifiedMutationReceipt: true as const } : {}),
+                ...(mutationAttempt && receipt.text ? { verifiedReceiptText: receipt.text } : {}),
+              };
+            };
             const normalized = normalizedToolName(name);
             const isOutboundSend = OUTBOUND_SEND_TOOL_NAMES.has(normalized);
 
@@ -1085,13 +1094,13 @@ export class AiSdkBrainLlm implements BrainLlm {
                 console.warn(`[peer-guard] blocked ${name}: ${guardFailure}`);
                 const text = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL ? NOTHING_PENDING_TEXT : friendlyDraftBlock();
                 blockedOutboundTurn = { tool: name, text };
-                input.onPeerAction?.(name, args, text, receiptMetadata);
+                input.onPeerAction?.(name, args, text, receiptMetadata(text));
                 return text;
               }
               const result = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL
                 ? NOTHING_PENDING_TEXT
                 : `ERROR: ${guardFailure}`;
-              input.onPeerAction?.(name, args, result, receiptMetadata);
+              input.onPeerAction?.(name, args, result, receiptMetadata(result));
               return result;
             }
             if (isAffirmativeApproval(input.question)) {
@@ -1102,7 +1111,7 @@ export class AiSdkBrainLlm implements BrainLlm {
             const boundaryFailure = archusWriteBoundaryFailure(name, peer, args);
             if (boundaryFailure) {
               const result = `ERROR: ${boundaryFailure}`;
-              input.onPeerAction?.(name, args, result, receiptMetadata);
+              input.onPeerAction?.(name, args, result, receiptMetadata(result));
               return result;
             }
             // P-1 — ask_outbound composes a draft through Callistheness but never sends,
@@ -1118,7 +1127,7 @@ export class AiSdkBrainLlm implements BrainLlm {
                 registerStandingApproval(input.conversationId, peer.owner, name, args, result, peer.description);
               }
               if (peer.authoritativeReadResult) authoritativePeerResult = result;
-              input.onPeerAction?.(name, args, result, receiptMetadata);
+              input.onPeerAction?.(name, args, result, receiptMetadata(result));
               return result;
             });
             if (dedupeKey) sameTurnPeerMutations.set(dedupeKey, pending);

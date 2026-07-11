@@ -126,7 +126,12 @@ export interface AnswerInput {
     tool: string,
     input: Record<string, unknown>,
     result: string,
-    metadata?: { verifiedMutationReceipt?: boolean },
+    metadata?: {
+      peerAction?: boolean;
+      mutationAttempt?: boolean;
+      verifiedMutationReceipt?: boolean;
+      verifiedReceiptText?: string;
+    },
   ) => void;
   /**
    * FP4 · #548 ledger completeness — every READ tool invocation (vault/conversation
@@ -172,10 +177,12 @@ export interface PeerTool {
     [key: string]: unknown;
   };
   /**
-   * This wallet peer tool mutates its owner and returns the owner's verified
-   * receipt. The reply boundary relays that result verbatim instead of model prose.
+   * This wallet peer tool is classified as mutating. The host still validates its
+   * returned evidence after execution; this flag alone never proves success.
    */
   verifiedMutationReceipt?: boolean;
+  /** The tool was discovered from a tenant-connected MCP wallet entry. */
+  connectedMcp?: boolean;
   /**
    * Tool results contain tenant-supplied advisory material. The model may use
    * that material as domain guidance, but it never changes instruction priority

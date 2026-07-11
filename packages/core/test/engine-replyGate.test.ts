@@ -20,6 +20,7 @@ class ScriptedLlm {
   async answer(input: AnswerInput, _tools: VaultReadTools, _taskTools?: VaultTaskTools, _driveTools?: unknown, _peerTools?: PeerTools): Promise<AnswerResult> {
     if (this.peerCall) {
       input.onPeerAction?.(this.peerCall.tool, this.peerCall.input, this.peerCall.result, {
+        peerAction: _peerTools?.[this.peerCall.tool]?.connectedMcp,
         verifiedMutationReceipt: _peerTools?.[this.peerCall.tool]?.verifiedMutationReceipt,
       });
     }
@@ -41,7 +42,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("approve", "web");
 
-    expect(reply.text).toBe("Nothing pending to approve.");
+    expect(reply.text).toContain("Nothing was changed: approve_send returned no verified same-turn mutation receipt.");
     expect(reply.text).not.toMatch(/posting/i);
     // Runtime assertion + telemetry: the interception is observable, not silent.
     expect(warn).toHaveBeenCalledTimes(1);
@@ -61,7 +62,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("send it", "web");
 
-    expect(reply.text).toMatch(/^FAILED to send to X/);
+    expect(reply.text).toMatch(/^Nothing was changed/);
     expect(reply.text).not.toContain("000000000");
     expect(warn).toHaveBeenCalledTimes(1);
   });
@@ -76,7 +77,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("send it", "web");
 
-    expect(reply.text).toBe("Posted to X. Live URL: https://x.com/i/web/status/42");
+    expect(reply.text).toBe("Verified mutation receipt from post_tweet.\n- url: https://x.com/i/web/status/42");
     // Still logged: the model tried to narrate its own line instead of relaying verbatim.
     expect(warn).toHaveBeenCalledTimes(1);
   });
@@ -104,6 +105,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
       peerTools: {
         generic_memory_write: {
           description: "Store memory",
+          connectedMcp: true,
           verifiedMutationReceipt: true,
           async run() { return receipt; },
         },
@@ -112,7 +114,8 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("remember this", "web");
 
-    expect(reply.text).toBe(receipt);
+    expect(reply.text).toContain("Verified mutation receipt from generic_memory_write.");
+    expect(reply.text).toContain(`- commit: ${"c".repeat(40)}`);
   });
 
   it("keeps a read-only wallet peer result available for model-drafted prose", async () => {
@@ -126,6 +129,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
       peerTools: {
         generic_peer_read: {
           description: "Search memory",
+          connectedMcp: true,
           async run() { return '{"matches":["ring"]}'; },
         },
       },
@@ -133,6 +137,14 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("what do you remember?", "web");
 
-    expect(reply.text).toBe("I found one memory about the Ring.");
+    expect(reply.text).toContain("I found one memory about the Ring.");
+    expect(reply.text).toContain("Connected MCP result from generic_peer_read");
+    expect(reply.text).toContain('> {"matches":["ring"]}');
+  });
+
+  it("replaces zero-tool fabricated success at the persisted chat boundary", async () => {
+    const engine = vaultlessEngine(new ScriptedLlm(null, "Published. https://x.com/user/status/{POST_ID}") as unknown as BrainLlm);
+    const reply = await engine.chat("was it sent?", "web");
+    expect(reply.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
   });
 });

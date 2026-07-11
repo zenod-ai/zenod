@@ -51,6 +51,23 @@ export function tweetUrl(id: string): string {
   return `https://x.com/i/web/status/${id}`;
 }
 
+function isConcreteId(value: string, channel?: OutboundChannel): boolean {
+  if (/^(?:\{.*\}|<\s*(?:post_?|tweet_?)?id\s*>|post_id|tweet_id|id|todo)$/i.test(value.trim())) return false;
+  if (channel === "x") return /^\d+$/.test(value);
+  if (channel === "email" && /^<[^<>@\s]+@[^<>\s]+>$/.test(value)) return true;
+  return /^[a-z0-9][a-z0-9._:@-]{1,255}$/i.test(value);
+}
+
+function isConcreteUrl(value: string): boolean {
+  if (/[<{][^>}]*id[^>}]*[>}]|\bTODO\b/i.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.includes(".") && url.pathname !== "/";
+  } catch {
+    return false;
+  }
+}
+
 function firstString(...vals: unknown[]): string | undefined {
   for (const v of vals) {
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -122,7 +139,7 @@ export function parseOutboundReceipt(channel: OutboundChannel, raw: string): Out
 
   if (channel === "x") {
     const id = firstString(data.id, (data as Record<string, unknown>).media_id, parsed?.id);
-    if (id) return { channel, verified: true, id, url: tweetUrl(id) };
+    if (id && isConcreteId(id, "x")) return { channel, verified: true, id, url: tweetUrl(id) };
     // No id → we cannot prove a post happened; fail rather than guess a URL.
     return { channel, verified: false, reason: scrubVendorNoise(text) || "the X connector did not return a post id" };
   }
@@ -132,18 +149,15 @@ export function parseOutboundReceipt(channel: OutboundChannel, raw: string): Out
       firstString(data.url, data.permalink, (data as Record<string, unknown>).post_url) ??
       deepFindUrl(parsed ?? text, /reddit\.com\/[^\s"']+/i);
     const id = firstString(data.id, data.name, (data as Record<string, unknown>).post_id);
-    if (url) return { channel, verified: true, url, ...(id ? { id } : {}) };
-    if (id) return { channel, verified: true, id }; // a real id is proof enough even without a permalink
+    if (url && isConcreteUrl(url)) return { channel, verified: true, url, ...(id && isConcreteId(id, "reddit") ? { id } : {}) };
+    if (id && isConcreteId(id, "reddit")) return { channel, verified: true, id }; // a real id is proof enough even without a permalink
     return { channel, verified: false, reason: scrubVendorNoise(text) || "the Reddit connector did not return a post url or id" };
   }
 
   // email: there is no public URL; a message/thread id (or an explicit ok) is the receipt.
   const id = firstString(data.id, (data as Record<string, unknown>).message_id, (data as Record<string, unknown>).threadId);
-  if (id) return { channel, verified: true, id };
-  // Some mail connectors just return a plain "sent" acknowledgement with no id.
-  if (/\b(sent|delivered|queued|accepted|ok)\b/i.test(text) && !parsed) {
-    return { channel, verified: true };
-  }
+  if (id && isConcreteId(id, "email")) return { channel, verified: true, id };
+  // A success word is not evidence. SEAM-SPEC requires an owning-authority handle.
   return { channel, verified: false, reason: scrubVendorNoise(text) || "the email connector did not confirm the send" };
 }
 
