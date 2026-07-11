@@ -52,6 +52,20 @@ describe("MCP access details", () => {
     expect(snippets.claude).not.toContain("Authorization")
   })
 
+  it("names Ring client snippets for the Ring", () => {
+    const snippets = mcpClientSnippets(
+      "https://ring.zenod.dev/mcp/token",
+      "ring"
+    )
+
+    expect(snippets.claude).toContain(
+      "http ring https://ring.zenod.dev/mcp/token"
+    )
+    expect(snippets.codex).toContain(
+      "add ring --url https://ring.zenod.dev/mcp/token"
+    )
+  })
+
   it("uses the hosted account token instead of the self-host runtime token", () => {
     expect(
       resolveMcpAccess("", {
