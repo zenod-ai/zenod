@@ -144,6 +144,37 @@ function caught(run: () => Promise<string>): Promise<string> {
   return run().catch((err: unknown) => `ERROR: ${(err as Error).message}`);
 }
 
+const RETRIEVAL_STOP_WORDS = new Set([
+  "about", "after", "again", "also", "answer", "before", "could", "does", "from", "have", "into", "memory",
+  "only", "please", "should", "stored", "that", "their", "them", "there", "these", "thing", "this", "those",
+  "unknown", "vault", "what", "when", "where", "which", "with", "would", "your",
+]);
+
+function normalizedSearchText(value: string): string {
+  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+/** Pick one high-signal, deterministic retry query from the user's question. */
+function retrievalRetryQuery(question: string, attemptedQuery: string): string | null {
+  const candidates: string[] = [];
+  for (const match of question.matchAll(/["“]([^"”]{2,80})["”]/g)) candidates.push(match[1]!.trim());
+  for (const match of question.matchAll(/\b(?=[A-Za-z0-9-]*\d)[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+\b/g)) candidates.push(match[0]);
+  for (const match of question.matchAll(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g)) candidates.push(match[0]);
+  const contentTerms = question.match(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu)
+    ?.filter((term) => term.length >= 4 && !RETRIEVAL_STOP_WORDS.has(term.toLocaleLowerCase())) ?? [];
+  if (contentTerms.length > 0) candidates.push([...new Set(contentTerms)].slice(0, 4).join(" "));
+
+  const attempted = normalizedSearchText(attemptedQuery);
+  return candidates.find((candidate) => normalizedSearchText(candidate) !== attempted) ?? null;
+}
+
+function weakSearchResult(result: string, question: string): boolean {
+  const normalized = normalizedSearchText(result);
+  if (!normalized || /^(?:no (?:hits|results)|error\b)/i.test(result.trim())) return true;
+  const identifier = retrievalRetryQuery(question, "");
+  return identifier ? !normalized.includes(normalizedSearchText(identifier)) : false;
+}
+
 /** Pull a readable message out of a provider error part (shapes vary by SDK/provider). */
 function extractErrorMessage(err: unknown): string {
   if (typeof err === "string") return err;
@@ -605,6 +636,9 @@ export class AiSdkBrainLlm implements BrainLlm {
     // answered without opening a note (readPaths empty), these are the honest
     // citation trail — a synthesized answer must never come back source-less.
     const searchedPaths: string[] = [];
+    // An empty or off-topic first search gets one deterministic retry inside
+    // the tool execution. This does not consume another model/tool round.
+    let deterministicRetrievalRetryUsed = false;
     // Sources for the answer: the notes actually read in full, else a fallback to
     // the top search hits the model consulted. Never empty when the vault had hits.
     const sourcePaths = (): string[] =>
@@ -1047,8 +1081,11 @@ export class AiSdkBrainLlm implements BrainLlm {
     // Log/ evidence preserve. For any factual question, read the top hit(s) in full
     // (read_note) — including the Log/ receipt when a fact seems missing from the
     // composed page — before answering, and ground the answer in what you read.
-    const citationNote =
-      "GROUNDING: don't answer factual questions from search snippets alone — open the top hit(s) with read_note (and the Log/ evidence when a detail seems missing from a summary) before you conclude, then base your answer on what you read.";
+    const citationNote = [
+      "GROUNDING: don't answer factual questions from search snippets alone — open the top hit(s) with read_note (and the Log/ evidence when a detail seems missing from a summary) before you conclude, then base your answer on what you read.",
+      "ABSENCE GUARD: never say requested information is absent after only one empty, weak, or off-topic search. The search tool automatically performs one deterministic retry for a weak first result; consider both results and read relevant evidence before concluding unknown.",
+      "SYNTHETIC EVIDENCE: 'synthetic test data' or quarantine in Inbox means it is not a real user fact; it does NOT mean the evidence is absent or forbidden to recall. When the user explicitly asks about a synthetic fixture, answer from its evidence and clearly label the answer synthetic. Do not promote it to a real user fact. Attributes not present in that evidence remain unknown.",
+    ].join(" ");
     const systemText = [input.vaultBriefing, ...briefingExtras, budgetNote, citationNote]
       .filter(Boolean)
       .join("\n\n");
@@ -1083,17 +1120,29 @@ export class AiSdkBrainLlm implements BrainLlm {
                   "Search the vault. Call this first for any question about the user's knowledge — returns ranked paths with snippets. Covers meaning pages, Log/ evidence files (verbatim transcripts, source links), and _attachments/ artifact filenames. If the first query misses, retry with different terms before giving up.",
                 inputSchema: z.object({ query: z.string() }),
                 execute: async ({ query }) => {
+                  const recordSearch = (searchQuery: string, result: string): void => {
+                    input.onReadAction?.("search_vault", { query: searchQuery }, result);
+                    // Result lines are "<path> (score N) — <snippet>".
+                    for (const line of result.split("\n")) {
+                      if (!line.includes(" (score ")) continue;
+                      const path = line.split(" (score ")[0]?.trim();
+                      if (path && !searchedPaths.includes(path)) searchedPaths.push(path);
+                    }
+                  };
                   const result = await tools.searchVault!(query);
-                  // Z-9: capture the hit paths so the answer can cite what it consulted
-                  // even if the model doesn't open a note. Result lines are
-                  // "<path> (score N) — <snippet>"; a "no results" line yields nothing.
-                  for (const line of result.split("\n")) {
-                    const path = line.split(" (score ")[0]?.trim();
-                    if (path && path !== "no results" && !searchedPaths.includes(path)) {
-                      searchedPaths.push(path);
+                  recordSearch(query, result);
+                  if (!deterministicRetrievalRetryUsed && weakSearchResult(result, input.question)) {
+                    const retryQuery = retrievalRetryQuery(input.question, query);
+                    if (retryQuery) {
+                      deterministicRetrievalRetryUsed = true;
+                      const retryResult = await tools.searchVault!(retryQuery);
+                      recordSearch(retryQuery, retryResult);
+                      return [
+                        `Initial search (${JSON.stringify(query)}):`, result,
+                        `Deterministic retry (${JSON.stringify(retryQuery)}):`, retryResult,
+                      ].join("\n");
                     }
                   }
-                  input.onReadAction?.("search_vault", { query }, result);
                   return result;
                 },
               }),
