@@ -73,7 +73,7 @@ SHIP — the journey, walked in a REAL BROWSER on the LIVE deployment, loop unti
 - [ ] 9. Logout/login persists chat wallet keys; second tenant sees none of the first tenant's wallet, chat history, or keys.
 - [ ] 10. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test."
 
-HARDEN (after Jordi approves SHIP): multiple units in the wallet exercised end-to-end (Callisthenes drafting via the council), skill auto-import from unit manifests (D16), routing rules UI, Google sign-in, standing-directives panel.
+HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now approved and tracked as R-H1..R-H5 below. Multiple-unit routing rules, Google sign-in, and standing-directives remain future work.
 
 ## Non-Goals
 
@@ -134,6 +134,9 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | 2026-07-11 | Pricing | Self-hosted (free) / Monthly / Yearly, Stripe TEST, same account. |
 | 2026-07-11 | Conduct kit | Register async ticket shapes with any receipt middleware BEFORE walking (the Zenod silent_ack lesson). |
 | 2026-07-11 | Anything unanswered | Simplest option, journal it, keep moving. |
+| 2026-07-11 | Generic wallet tools | Ring discovers every peer through MCP `tools/list`; it never assumes `ask_brain` and never carries product-specific profiles. Names are collision-safe; descriptions and JSON Schemas reach the Council; saved peers auto-refresh on boot and edit without reconnecting. |
+| 2026-07-11 | Per-peer skills | The tenant attaches a versioned Agent Skills bundle in My Units. The MCP server does not advertise or choose it. Ring stores it as a tenant artifact and exposes it through progressive `load_peer_skill` disclosure. |
+| 2026-07-11 | Skill runtime boundary | Current AI SDK 6 provider-independent pattern first. AI SDK 7 `uploadSkill` and provider containers are a separate future decision. Scripts stay inert; skill prose cannot override authority or mutation guards. |
 
 ## Issue Ledger
 
@@ -147,6 +150,11 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#854](https://github.com/zenod-ai/zenod/issues/854) | Ticket worker | R-S5a-worker | Surface downstream Zenod commit receipt in Council chat | done (code) | #840 | [#856](https://github.com/zenod-ai/zenod/pull/856) / `codex/r-s5a-zenod-receipt` | `527023c` | SHIP 7 receipt within 180s | CI + review pass; live still times out | 2026-07-11T04:31:00+02:00 | epic blocker remains |
 | [#855](https://github.com/zenod-ai/zenod/issues/855) | Ticket worker | R-S5b-worker | Make `chat_with_ring` satisfy conduct-kit receipt gate | done | #840 | [#857](https://github.com/zenod-ai/zenod/pull/857) / `codex/r-s5b-mcp-receipt` | `527023c` | SHIP 8 external chat reply | live HTTP 200 + Council reply + `chat_audit` evidence | 2026-07-11T04:31:00+02:00 | integrated |
 | [#858](https://github.com/zenod-ai/zenod/issues/858) | Ticket worker | R-S5c-worker | Diagnose and close live Zenod receipt timeout | in progress | #840, #854 | `codex/r-s5c-live-receipt` / `../wt-r-s5c` | `de327ac` | exact SHIP 7 receipt within 180s | focused lap authorized | 2026-07-11T04:38:00+02:00 | live evidence diagnosis, smallest fix, PR |
+| [#863](https://github.com/zenod-ai/zenod/issues/863) | Ticket worker | R-H1-worker | Generic MCP discovery + dynamic Council tools | ready | - | `codex/r-h1-generic-mcp-discovery` / `../wt-r-h1` | `2fe2289` | arbitrary peers expose real schemas/tools; auto-refresh; tools-ready state | issue minted | 2026-07-11T04:34:35+02:00 | dispatch after Ring steward sequences with #858 |
+| [#860](https://github.com/zenod-ai/zenod/issues/860) | Ticket worker | R-H2-worker | Tenant skill artifact store + attachment API | ready | - | `codex/r-h2-peer-skill-artifacts` / `../wt-r-h2` | `2fe2289` | immutable/versioned/path-safe/tenant-isolated bundles + APIs | issue minted | 2026-07-11T04:34:35+02:00 | dispatch after Ring steward sequences with #858 |
+| [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | blocked | #863, #860 | `codex/r-h3-peer-skill-ui` | wave 1 merge | transport vs tools-ready; attach/replace/download/detach | issue minted | 2026-07-11T04:34:35+02:00 | wave 2 |
+| [#865](https://github.com/zenod-ai/zenod/issues/865) | Ticket worker | R-H4-worker | Progressive `load_peer_skill` runtime + safety | blocked | #863, #860 | `codex/r-h4-peer-skill-runtime` | wave 1 merge | metadata-only baseline; on-demand skill; no authority escalation/scripts | issue minted | 2026-07-11T04:34:35+02:00 | wave 2 |
+| [#864](https://github.com/zenod-ai/zenod/issues/864) | Epic worker / tester | Ring delivery manager | Generic MCP + skills integration and live Calli validation | blocked | #862, #865, #866, #861 | `main` | integrated wave 2 | existing Calli auto-refresh, held draft only, two-tenant isolation | issue minted | 2026-07-11T04:34:35+02:00 | final integration |
 
 ## Branch And Integration
 
@@ -171,11 +179,12 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 ## Planner Queue
 
-- None. The spine is the planner.
+- Sequence approved R-H1/R-H2 around the active #858 receipt lap; no shared-file overlap may be silently accepted.
 
 ## Worker Queue
 
 - Wave 1: R-S1, R-S2. Wave 2: R-S3, R-S4. Then R-S5.
+- Approved HARDEN: R-H1 ∥ R-H2, then R-H3 ∥ R-H4, then R-H5. Calli-side prerequisites are #866/#861.
 
 ## Tester Queue
 
@@ -189,6 +198,11 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Authorized receipt fix lap | `a729d08` | ring.zenod.dev live | real Chrome SHIP 7–9, external MCP chat, two bearer-authenticated tenants | BLOCKED: SHIP 7 still lacks commit receipt; SHIP 8–9 pass | `docs/evidence/ring-ship-2026-07-11/11`–`14`; `TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T04:34:35+02:00 - Generic MCP Skills delivery manager - Generic peers + attached skills added to Ring backlog
+
+Context: Jordi rejected a Calli-specific Ring profile and approved the generic contract: MCP tools are discovered from every connected peer; the tenant attaches a separate Agent Skills artifact in My Units; full instructions load progressively. Issues #863/#860/#862/#865/#864 own the Ring side. Because #858 is already active on Ring files, the Ring steward must sequence wave 1 rather than accept hidden overlap. Calli readiness is independently dispatched under #866/#861.
+Next: Calli manager delivers the attachable skill and MCP contract; Ring steward dispatches R-H1/R-H2 from a fresh post-#858 base.
 
 ### 2026-07-11T04:38:00+02:00 - Ring delivery manager - Focused SHIP 7 diagnosis lap authorized
 
