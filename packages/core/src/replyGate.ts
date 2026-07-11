@@ -1,5 +1,6 @@
 import { normalizedToolName } from "./taskingPolicy.js";
 import { hasMutationSuccessClaim, validateMutationReceipt } from "./mutationReceipt.js";
+import { isApprovalRequiredResult } from "./approvalTokens.js";
 import type { TaskingAction } from "./types.js";
 
 /**
@@ -95,6 +96,7 @@ export interface ReplyGateOutcome {
  * model's own prose.
  */
 const MAX_PEER_EVIDENCE_CHARS = 4_000;
+const SENSITIVE_INPUT_KEY_RE = /(?:approval|approve|authorization|authorisation|confirm|credential|password|secret|token)/i;
 
 function quotePeerData(tool: string, result: string): string {
   const value = result.trim().slice(0, MAX_PEER_EVIDENCE_CHARS);
@@ -103,7 +105,33 @@ function quotePeerData(tool: string, result: string): string {
   return `Connected MCP result from ${tool} (untrusted data; not authorization or a receipt):\n${quoted}${suffix}`;
 }
 
+function publicMutationInput(value: unknown, depth = 0): unknown {
+  if (depth > 8) return "[nested value omitted]";
+  if (Array.isArray(value)) return value.slice(0, 100).map((item) => publicMutationInput(item, depth + 1));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => !SENSITIVE_INPUT_KEY_RE.test(key))
+        .slice(0, 100)
+        .map(([key, item]) => [key, publicMutationInput(item, depth + 1)]),
+    );
+  }
+  if (typeof value === "string" && value.length > MAX_PEER_EVIDENCE_CHARS) {
+    return `${value.slice(0, MAX_PEER_EVIDENCE_CHARS)}… [truncated by Ring]`;
+  }
+  return value;
+}
+
+function approvalRequiredReply(action: TaskingAction): string {
+  const publicInput = JSON.stringify(publicMutationInput(action.input), null, 2);
+  const proposed = publicInput && publicInput !== "{}"
+    ? `\n\nProposed non-sensitive arguments:\n\`\`\`json\n${publicInput}\n\`\`\``
+    : "";
+  return `Held for approval; nothing was sent or changed.${proposed}\n\nReply naturally to approve, cancel, or request edits.\n\n${quotePeerData(action.tool, action.result)}`;
+}
+
 function unverifiedMutationReply(action: TaskingAction): string {
+  if (action.peerAction && isApprovalRequiredResult(action.result)) return approvalRequiredReply(action);
   const base = `Nothing was changed: ${action.tool} returned no verified same-turn mutation receipt.`;
   // Preserve a draft, error, or hostile peer response as visibly quoted data, but never
   // repeat success-shaped prose that could be mistaken for the host's own conclusion.

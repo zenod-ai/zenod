@@ -127,9 +127,22 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
 
   it("relays a wallet mutation failure verbatim instead of an optimistic model claim", () => {
     const failure = "ERROR: explicit approval is required; no post was created.";
-    const out = applyReplyGate("Posted successfully.", [action("portable_write", failure, {}, true)]);
+    const out = applyReplyGate("Posted successfully.", [{
+      ...action("portable_write", failure, {
+        text: "Exact draft text",
+        apiToken: "must-not-render",
+        nested: { password: "also-secret", audience: "public" },
+      }, true),
+      peerAction: true,
+      mutationAttempt: true,
+    }]);
 
-    expect(out.text).toBe("Nothing was changed: portable_write returned no verified same-turn mutation receipt.");
+    expect(out.text).toContain("Held for approval; nothing was sent or changed.");
+    expect(out.text).toContain('"text": "Exact draft text"');
+    expect(out.text).toContain('"audience": "public"');
+    expect(out.text).not.toContain("must-not-render");
+    expect(out.text).not.toContain("also-secret");
+    expect(out.text).toContain("untrusted data; not authorization or a receipt");
     expect(out.text).not.toContain("successfully");
   });
 
