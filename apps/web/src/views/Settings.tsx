@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner"
 
 import { api, errorMessage, type SettingsValues } from "@/lib/api"
+import { PeerAgents } from "@/components/peer-agents"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -164,6 +165,9 @@ export function Settings({
               <p className="text-sm text-muted-foreground">One conversation with the council wired to your units.</p>
             </div>
             <ChatTab vaultless />
+          </section>
+          <section aria-label="My Units">
+            <PeerAgents />
           </section>
           <div className="grid gap-6 lg:grid-cols-2">
             <DashboardOverview overview={overview} />
