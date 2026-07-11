@@ -22,6 +22,8 @@ export interface PeerToolSpec {
   inputSchema?: string;
   /** What the tool does (the model reads this). */
   description: string;
+  /** MCP tool behavior hints copied from tools/list when discovery is available. */
+  annotations?: { readOnlyHint?: boolean; [key: string]: unknown };
 }
 
 export interface PeerConfig {

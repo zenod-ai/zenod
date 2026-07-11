@@ -19,7 +19,9 @@ class ScriptedLlm {
 
   async answer(input: AnswerInput, _tools: VaultReadTools, _taskTools?: VaultTaskTools, _driveTools?: unknown, _peerTools?: PeerTools): Promise<AnswerResult> {
     if (this.peerCall) {
-      input.onPeerAction?.(this.peerCall.tool, this.peerCall.input, this.peerCall.result);
+      input.onPeerAction?.(this.peerCall.tool, this.peerCall.input, this.peerCall.result, {
+        verifiedMutationReceipt: _peerTools?.[this.peerCall.tool]?.verifiedMutationReceipt,
+      });
     }
     return { text: this.draftedText, readPaths: [] };
   }
@@ -88,5 +90,49 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     expect(reply.text).toBe("Sure — here's a draft for you to review.");
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("relays a wallet peer mutation receipt verbatim through the real chat boundary", async () => {
+    const receipt = `Stored.\ncommit: ${"c".repeat(40)}\nhttps://github.com/AlfaBlok/obsidian-brain/commit/${"c".repeat(40)}`;
+    const llm = new ScriptedLlm(
+      { tool: "generic_memory_write", input: { content: "the ring is alive" }, result: receipt },
+      "I remembered it.",
+    );
+    const engine = createEngine({
+      llm: llm as unknown as BrainLlm,
+      state: new SqliteStateStore(":memory:"),
+      peerTools: {
+        generic_memory_write: {
+          description: "Store memory",
+          verifiedMutationReceipt: true,
+          async run() { return receipt; },
+        },
+      },
+    });
+
+    const reply = await engine.chat("remember this", "web");
+
+    expect(reply.text).toBe(receipt);
+  });
+
+  it("keeps a read-only wallet peer result available for model-drafted prose", async () => {
+    const llm = new ScriptedLlm(
+      { tool: "generic_peer_read", input: { query: "ring" }, result: '{"matches":["ring"]}' },
+      "I found one memory about the Ring.",
+    );
+    const engine = createEngine({
+      llm: llm as unknown as BrainLlm,
+      state: new SqliteStateStore(":memory:"),
+      peerTools: {
+        generic_peer_read: {
+          description: "Search memory",
+          async run() { return '{"matches":["ring"]}'; },
+        },
+      },
+    });
+
+    const reply = await engine.chat("what do you remember?", "web");
+
+    expect(reply.text).toBe("I found one memory about the Ring.");
   });
 });
