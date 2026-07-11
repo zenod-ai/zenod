@@ -158,13 +158,17 @@ describe("Ring council unit", () => {
         body: JSON.stringify({ peers: [{ name: "Zenod", url: "https://alpha-zenod.internal/mcp", token: "downstream-alpha" }] }),
       });
       expect(saved.status).toBe(200);
-      expect(await saved.json()).toMatchObject({
+      const savedPayload = await saved.json() as { peers: Array<Record<string, unknown>> };
+      expect(savedPayload).toMatchObject({
         peers: [{ name: "Zenod", hasToken: true, status: "error" }],
       });
+      expect(savedPayload.peers[0]).not.toHaveProperty("tool");
 
       const alpha = await unit.app.request("/api/peers", { headers: { authorization: "Bearer ring-alpha" } });
       const beta = await unit.app.request("/api/peers?tenantId=tenant-alpha", { headers: { authorization: "Bearer ring-beta" } });
-      expect(await alpha.json()).toMatchObject({ peers: [{ name: "Zenod", hasToken: true }] });
+      const alphaPayload = await alpha.json() as { peers: Array<Record<string, unknown>> };
+      expect(alphaPayload).toMatchObject({ peers: [{ name: "Zenod", hasToken: true }] });
+      expect(alphaPayload.peers[0]).not.toHaveProperty("tool");
       expect(await beta.json()).toEqual({ peers: [] });
 
       const denied = await unit.app.request("/api/peers", {

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 export type RingRouteReason = "named" | "memory_write" | "memory_read" | "media_ingest" | "execution_task" | "default";
 export type RingRouteStatus = "ok" | "error" | "refused";
@@ -57,11 +58,7 @@ export interface RingToolCall {
   arguments: Record<string, unknown>;
 }
 
-export interface RingToolResult {
-  content: Array<{ type: "text"; text: string }>;
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
-}
+export type RingToolResult = CallToolResult;
 
 export type RingMcpCaller = (call: RingToolCall) => Promise<RingToolResult>;
 
@@ -171,7 +168,7 @@ function isMemoryRead(text: string): boolean {
 
 function textContent(result: RingToolResult): string {
   return result.content
-    .filter((item) => item.type === "text" && typeof item.text === "string")
+    .filter((item): item is Extract<(typeof result.content)[number], { type: "text" }> => item.type === "text")
     .map((item) => item.text)
     .join("\n")
     .trim();

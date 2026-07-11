@@ -70,7 +70,7 @@ import { validateStepCallback, type StepCallbackResult } from "./journeyContract
 import type { DeliverableManifest } from "./executionQueue.js";
 import { creditHeadroomDecision } from "./sessionLog.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
-import { callPeerTool, probePeer } from "./peerClient.js";
+import { callPeerTool } from "./peerClient.js";
 import { validateWalletUrl, walletFleetAllowlist } from "./walletUrl.js";
 import { RingRouterCore, type RingConnectedServer, type RingInboundMessage, type RingToolCall } from "./ringRouter.js";
 import type { PhylaxChannel } from "./phylaxGateway.js";
@@ -232,6 +232,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   runtime.taskJobQueue.resume();
   // Mark any delegated journey steps whose callback deadline has expired.
   runtime.journeyMonitor.start();
+  // Saved Ring wallets refresh their authenticated MCP catalogs on process boot.
+  if (agent.name === "ring") void runtime.ensureWalletPeerTools().catch((err: unknown) => {
+    console.error("[wallet] startup discovery failed:", err);
+  });
 
   app.onError((err, c) => {
     if (err instanceof NotConfiguredError) return c.json({ error: err.message, code: "not_configured" }, 409);
@@ -1061,27 +1065,39 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   // --- Mesh: peer agents this agent can delegate to ---
   // GET never returns tokens (only whether one is set). PUT replaces the whole list.
-  app.get("/api/peers", async (c) => {
-    const peers = settings.peers();
-    const [statuses, skills] = await Promise.all([
-      agent.name === "ring" ? Promise.all(peers.map(probePeer)) : Promise.resolve(peers.map(() => "connected" as const)),
-      agent.name === "ring"
-        ? Promise.all(peers.map(async (peer) => {
-            if (!peer.skillArtifact) return null;
-            return new PeerSkillStore(runtime.dataDir).get(peer.skillArtifact).catch(() => null);
-          }))
-        : Promise.resolve(peers.map(() => null)),
-    ]);
-    return c.json({
-      peers: peers.map((p, index) => ({
-        name: p.name,
-        url: p.url,
-        tool: p.tool ?? "ask_brain",
-        hasToken: Boolean(p.token),
-        status: statuses[index] ?? "error",
-        skill: skills[index] ?? null,
+  const peerApiPayload = async (peers: import("./peerClient.js").PeerConfig[]) => {
+    const skillStore = agent.name === "ring" ? new PeerSkillStore(runtime.dataDir) : null;
+    const skills = await Promise.all(peers.map(async (peer) => {
+      if (!skillStore || !peer.skillArtifact) return null;
+      return skillStore.get(peer.skillArtifact).catch(() => null);
+    }));
+    return peers.map((peer, index) => ({
+      name: peer.name,
+      url: peer.url,
+      // Legacy suite peers keep their single-tool hint. A Ring wallet's only
+      // truthful surface is its discovered catalog; never imply ask_brain.
+      ...(agent.name !== "ring" ? { tool: peer.tool ?? "ask_brain" } : {}),
+      hasToken: Boolean(peer.token),
+      status: peer.discovery?.transport ?? (agent.name === "ring" ? "error" : "connected"),
+      transportStatus: peer.discovery?.transport ?? (agent.name === "ring" ? "error" : "connected"),
+      toolsStatus: peer.discovery?.tools ?? (peer.tools ? "ready" : "error"),
+      ...(peer.discovery?.error ? { toolsError: peer.discovery.error } : {}),
+      toolCount: peer.tools?.length ?? 0,
+      tools: (peer.tools ?? []).map((tool) => ({
+        name: tool.as,
+        mcpName: tool.mcp,
+        description: tool.description,
+        ...(typeof tool.inputSchema === "object" ? { inputSchema: tool.inputSchema } : {}),
+        ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+        ...(tool.annotations ? { annotations: tool.annotations } : {}),
       })),
-    });
+      skill: skills[index] ?? null,
+    }));
+  };
+
+  app.get("/api/peers", async (c) => {
+    const peers = agent.name === "ring" ? await runtime.ensureWalletPeerTools() : settings.peers();
+    return c.json({ peers: await peerApiPayload(peers) });
   });
 
   app.put("/api/peers", async (c) => {
@@ -1092,11 +1108,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       .map((p) => {
         const name = (p.name ?? "").trim();
         const url = (p.url ?? "").trim();
+        const prior = existing.find((e) => e.name === name);
         // A masked/blank token on edit means "keep the existing one" for that peer.
         const token =
-          p.token && !p.token.includes("••••") ? p.token : existing.find((e) => e.name === name)?.token ?? "";
-        const skillArtifact = existing.find((e) => e.name === name)?.skillArtifact;
-        return { name, url, token, ...(p.tool ? { tool: p.tool } : {}), ...(skillArtifact ? { skillArtifact } : {}) };
+          p.token && !p.token.includes("••••") ? p.token : prior?.token ?? "";
+        return {
+          name,
+          url,
+          token,
+          ...(agent.name !== "ring" && p.tool ? { tool: p.tool } : {}),
+          ...(prior?.skillArtifact !== undefined ? { skillArtifact: prior.skillArtifact } : {}),
+        };
       })
       .filter((p) => p.name && p.url && p.token);
     const peerNames = candidates.map((peer) => peer.name.toLowerCase());
@@ -1116,7 +1138,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     // URL validation yields. Re-read server-owned skill attachments at commit
     // time so a concurrent attach/detach is never overwritten by this peer edit.
     const latestPeers = settings.peers();
-    const next = candidates.map((peer) => {
+    const next: import("./peerClient.js").PeerConfig[] = candidates.map((peer) => {
       const hostname = new URL(peer.url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
       const latestSkill = latestPeers.find((candidate) => candidate.name === peer.name)?.skillArtifact;
       const { skillArtifact: _staleSkill, ...candidate } = peer;
@@ -1124,23 +1146,30 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         ...candidate,
         wallet: agent.name === "ring",
         ...(fleetHosts.has(hostname) ? { allowPrivateHost: true } : {}),
-        ...(peer.name.toLowerCase() === "zenod" ? { tools: ZENOD_MEMORY_TOOLS } : {}),
         ...(latestSkill ? { skillArtifact: latestSkill } : {}),
       };
     });
-    settings.setPeers(next);
-    runtime.invalidate(); // rebuild the engine so the new peer tools take effect
-    const statuses = agent.name === "ring" ? await Promise.all(next.map(probePeer)) : next.map(() => "connected" as const);
-    return c.json({
-      peers: next.map((p, index) => ({
-        name: p.name,
-        url: p.url,
-        tool: p.tool ?? "ask_brain",
-        hasToken: true,
-        status: statuses[index] ?? "error",
-        skill: p.skillArtifact ?? null,
-      })),
-    });
+    const refreshed = agent.name === "ring" ? await runtime.refreshWalletPeerTools(next) : next;
+    if (agent.name !== "ring") {
+      settings.setPeers(next);
+      runtime.invalidate();
+    }
+    return c.json({ peers: await peerApiPayload(refreshed) });
+  });
+
+  // Refresh one or every saved catalog without asking for the write-only token
+  // again. Calls share Runtime's serialized refresh queue, so a slow older probe
+  // cannot overwrite a newer wallet edit.
+  app.post("/api/peers/refresh", async (c) => {
+    if (agent.name !== "ring") return c.json({ error: "Peer discovery refresh is available on Ring." }, 400);
+    const body: { name?: string } = await c.req.json<{ name?: string }>().catch(() => ({}));
+    const names = body.name?.trim() ? new Set([body.name.trim()]) : undefined;
+    if (names && !settings.peers().some((peer) => names.has(peer.name))) {
+      return c.json({ error: `Unknown unit: ${body.name}` }, 404);
+    }
+    await runtime.refreshWalletPeerTools(undefined, names);
+    const peers = settings.peers();
+    return c.json({ peers: await peerApiPayload(peers) });
   });
 
   // Ring stores tenant-attached Agent Skills separately from peer settings. The
