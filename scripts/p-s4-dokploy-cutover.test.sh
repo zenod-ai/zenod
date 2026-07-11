@@ -23,8 +23,8 @@ cat >"$FAKE/curl" <<'EOF'
 set -euo pipefail
 url="${@: -1}"; printf '%s\n' "$url" >>"$P_S4_FAKE_LOG"
 case "$url" in
-  */application.one*new-phylax*) printf '%s\n' '{"applicationId":"new-phylax","name":"phylax","dockerImage":"old","env":"ACCOUNT_STATE_SECRET=state\nCHASSIS_VAULT_MASTER_KEY=vault\nCONTROL_PLANE_TOKEN=control\nPHYLAX_FULL_CUSTOMER_UNIT=1","mounts":[{"mountId":"m1","type":"volume","volumeName":"phylax-data-new","mountPath":"/data","applicationId":"new-phylax"}]}' ;;
-  */application.one*2dkayH_eAur427leH64MT*) printf '%s\n' '{"applicationId":"2dkayH_eAur427leH64MT","name":"zenod-mt","env":"GITHUB_OAUTH_CLIENT_ID=gid\nGITHUB_OAUTH_CLIENT_SECRET=gsecret\nSTRIPE_SECRET_KEY=sk_test_secret\nSTRIPE_WEBHOOK_SECRET=whsec_secret\nPRICE_MONTHLY=price_month\nPRICE_YEARLY=price_year"}' ;;
+  */application.one*new-phylax*) printf '%s\n' '{"applicationId":"new-phylax","name":"phylax","dockerImage":"old","env":"ACCOUNT_STATE_SECRET=state\nCHASSIS_VAULT_MASTER_KEY=vault\nCONTROL_PLANE_TOKEN=control\nPHYLAX_FULL_CUSTOMER_UNIT=1\nSTRIPE_WEBHOOK_ENDPOINT_ID=we_phylax\nSTRIPE_WEBHOOK_SECRET=whsec_phylax","mounts":[{"mountId":"m1","type":"volume","volumeName":"phylax-data-new","mountPath":"/data","applicationId":"new-phylax"}]}' ;;
+  */application.one*2dkayH_eAur427leH64MT*) printf '%s\n' '{"applicationId":"2dkayH_eAur427leH64MT","name":"zenod-mt","env":"GITHUB_OAUTH_CLIENT_ID=gid\nGITHUB_OAUTH_CLIENT_SECRET=gsecret\nSTRIPE_SECRET_KEY=sk_test_secret\nPRICE_MONTHLY=price_month\nPRICE_YEARLY=price_year"}' ;;
   */domain.byApplicationId*new-phylax*) printf '%s\n' '[]' ;;
   *) printf '%s\n' '{"ok":true}' ;;
 esac
@@ -36,8 +36,8 @@ output="$(PATH="$FAKE:$PATH" P_S4_FAKE_LOG="$LOG" DOKPLOY_API_KEY=x DOKPLOY_API_
 grep -Fq 'PLAN 1/4' <<<"$output"; grep -Fq 'PLAN 4/4' <<<"$output"
 grep -Fq 'attach phylax.zenod.dev only to the new full-customer application' <<<"$output"
 grep -Fq 'exact-SHA /api/health' <<<"$output"
-grep -Fq 'ACCOUNT_STATE_SECRET,CHASSIS_VAULT_MASTER_KEY,CONTROL_PLANE_TOKEN,CUSTOMER_APP_URL,DOMAIN,GITHUB_OAUTH_CALLBACK_URL,GITHUB_OAUTH_CLIENT_ID,GITHUB_OAUTH_CLIENT_SECRET,GIT_SHA,NODE_ENV,PHYLAX_ADMIN_GITHUB_LOGIN,PHYLAX_FULL_CUSTOMER_UNIT,PHYLAX_SITE_DIST,PORT,PRICE_MONTHLY,PRICE_YEARLY,STRIPE_MODE,STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET,ZC_COOKIE_DOMAIN,ZENOD_DATA_DIR,ZENOD_UNIT,ZENOD_WEB_DIST' <<<"$output"
-! grep -Eq 'gsecret|sk_test_secret|whsec_secret|vault|control|state' <<<"$output"
+grep -Fq 'ACCOUNT_STATE_SECRET,CHASSIS_VAULT_MASTER_KEY,CONTROL_PLANE_TOKEN,CUSTOMER_APP_URL,DOMAIN,GITHUB_OAUTH_CALLBACK_URL,GITHUB_OAUTH_CLIENT_ID,GITHUB_OAUTH_CLIENT_SECRET,GIT_SHA,NODE_ENV,PHYLAX_ADMIN_GITHUB_LOGIN,PHYLAX_FULL_CUSTOMER_UNIT,PHYLAX_SITE_DIST,PORT,PRICE_MONTHLY,PRICE_YEARLY,STRIPE_MODE,STRIPE_SECRET_KEY,STRIPE_WEBHOOK_ENDPOINT_ID,STRIPE_WEBHOOK_SECRET,ZC_COOKIE_DOMAIN,ZENOD_DATA_DIR,ZENOD_UNIT,ZENOD_WEB_DIST' <<<"$output"
+! grep -Eq 'gsecret|sk_test_secret|whsec_phylax|vault|control|state' <<<"$output"
 ! grep -Eq '/(compose|application)\.(stop|start)' "$LOG"
 [[ ! -e "$TMP/state" ]]
 

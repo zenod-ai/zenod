@@ -88,7 +88,10 @@ build_target_env() {
       PRICE_YEARLY: $s.PRICE_YEARLY,
       STRIPE_MODE: "test",
       STRIPE_SECRET_KEY: $s.STRIPE_SECRET_KEY,
-      STRIPE_WEBHOOK_SECRET: $s.STRIPE_WEBHOOK_SECRET,
+      # Stripe signing secrets are endpoint-specific. Preserve the dedicated
+      # Phylax TEST endpoint created for https://phylax.zenod.dev/webhook.
+      STRIPE_WEBHOOK_ENDPOINT_ID: $t.STRIPE_WEBHOOK_ENDPOINT_ID,
+      STRIPE_WEBHOOK_SECRET: $t.STRIPE_WEBHOOK_SECRET,
       ZC_COOKIE_DOMAIN: "phylax.zenod.dev",
       ZENOD_DATA_DIR: "/data",
       ZENOD_UNIT: "phylax",
@@ -152,15 +155,15 @@ apply_cutover() {
   [[ "$(jq -r '[.mounts[]?|select(.mountPath=="/data")]|length' <<<"$target")" == 1 ]] || die "target must have exactly one fresh persistent /data mount"
   [[ "$(jq -r '[.mounts[]?|select(.mountPath=="/data")|.applicationId]|unique|length' <<<"$target")" == 1 ]] || die "target /data mount ownership is ambiguous"
   [[ "$(jq -r '[.mounts[]?|select(.mountPath=="/data")|.applicationId][0]' <<<"$target")" == "$TARGET_APP_ID" ]] || die "target /data mount must be owned by the new application"
-  for key in ACCOUNT_STATE_SECRET CHASSIS_VAULT_MASTER_KEY CONTROL_PLANE_TOKEN PHYLAX_FULL_CUSTOMER_UNIT; do require_env "$target" "$key"; done
+  for key in ACCOUNT_STATE_SECRET CHASSIS_VAULT_MASTER_KEY CONTROL_PLANE_TOKEN PHYLAX_FULL_CUSTOMER_UNIT STRIPE_WEBHOOK_ENDPOINT_ID STRIPE_WEBHOOK_SECRET; do require_env "$target" "$key"; done
   [[ "$(env_value "$target" PHYLAX_FULL_CUSTOMER_UNIT)" == 1 ]] || die "target must be pre-marked PHYLAX_FULL_CUSTOMER_UNIT=1"
-  for key in GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET PRICE_MONTHLY PRICE_YEARLY; do require_env "$source" "$key"; done
+  for key in GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET STRIPE_SECRET_KEY PRICE_MONTHLY PRICE_YEARLY; do require_env "$source" "$key"; done
   [[ "$(env_value "$source" STRIPE_SECRET_KEY)" == *'_test_'* ]] || die "Zenod source Stripe key is not TEST"
   env="$(build_target_env "$target" "$source")"
   log "PLAN 1/4 snapshot only the new Phylax Docker target; preserve its fresh /data"
   [[ "$DRY_RUN" == 1 ]] || snapshot_once "$target" "$domains"
   log "PLAN 2/4 transplant allowlisted OAuth + Stripe TEST values in memory"
-  api_post /application.update "$(jq -n --arg applicationId "$TARGET_APP_ID" --arg dockerImage "$IMAGE" --arg env "$env" '{applicationId:$applicationId,dockerImage:$dockerImage,env:$env}')" "set immutable image + Phylax env; values redacted"
+  api_post /application.update "$(jq -n --arg applicationId "$TARGET_APP_ID" --arg dockerImage "$IMAGE" --arg env "$env" '{applicationId:$applicationId,sourceType:"docker",dockerImage:$dockerImage,env:$env}')" "set immutable image + Phylax env; values redacted"
   api_post /application.deploy "$(jq -n --arg applicationId "$TARGET_APP_ID" '{applicationId:$applicationId,title:"P-S4 guarded Phylax full-customer deploy"}')" "deploy only the new Phylax application"
   log "PLAN 3/4 attach only phylax.zenod.dev; never detach, stop, or reuse another unit"
   attach_domain "$domains"
