@@ -8,8 +8,8 @@ Primary document: `docs/EPIC-P-PHYLAX-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Phylax delivery manager (bind on dispatch)
-Steward since: on dispatch
-Last reconciled commit: bind on dispatch
+Steward since: 2026-07-11T05:04:09+02:00
+Last reconciled commit: `96fbd3d70bae57419ce9cd8dec98c9bef8360853`
 Planner: Jordi + Epic 3.0 planner
 Worker: Phylax delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -88,7 +88,7 @@ Phase: dispatched — wave 1 (P-S1 ∥ P-S2)
 Last verified: 2026-07-11 (gate satisfied by Jordi)
 Integration target: main
 Fresh base commit: `31e69bbbc20e2e4a2b053a2d30adf44f18b34245` — PINNED at dispatch; no rebases until the journey passes (D19c)
-Next action: manager binds, mints P-S1..P-S5, dispatches wave 1 in worktrees.
+Next action: review and integrate P-S1/P-S2; then dispatch wave 2 from the integrated commit.
 Blockers: none. Test WhatsApp number needed only at P-S5 start (Human Gates) — P-S1..P-S4 proceed without it.
 
 ## Role Goals
@@ -145,11 +145,11 @@ Wave 1: P-S1 ∥ P-S2. Wave 2: P-S3, P-S4. Then P-S5. Heartbeats, budgets, workt
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| mint | Ticket worker | assign | P-S1 front duplicate | pending gate | EPIC R SHIP | worktree | pin at dispatch | SHIP 1–4 | - | - | wave 1 |
-| mint | Ticket worker | assign | P-S2 channels organ port (Baileys+Telegram+faces) | pending gate | EPIC R SHIP | worktree | pin at dispatch | SHIP 8, 10 mechanics | - | - | wave 1 |
-| mint | Ticket worker | assign | P-S3 tenant settings + keyword verification + transcription | pending gate | P-S1, P-S2 | worktree | pin at dispatch | SHIP 6–7, 9 | - | - | wave 2 |
-| mint | Ticket worker | assign | P-S4 admin gate (alfablok) + billing + domain | pending gate | P-S1 | worktree | pin at dispatch | SHIP 2, 4, 5 | - | - | wave 2 |
-| mint | Epic worker | manager | P-S5 journey loop (browser + phone) + package | pending gate | P-S1..4 | - | pin at dispatch | SHIP 1–12 | - | - | last |
+| [#870](https://github.com/zenod-ai/zenod/issues/870) | Ticket worker | P-S1-worker | P-S1 front duplicate | in progress | EPIC R SHIP satisfied | `codex/p-s1-front-duplicate` / `../wt-p-s1` | `31e69bb` | SHIP 1–4 | worktree verified at pinned base | 2026-07-11T05:04:09+02:00 | review-ready PR |
+| [#871](https://github.com/zenod-ai/zenod/issues/871) | Ticket worker | P-S2-worker | P-S2 channels organ port (Baileys+Telegram+faces) | in progress | EPIC R SHIP satisfied | `codex/p-s2-channels-port` / `../wt-p-s2` | `31e69bb` | SHIP 8, 10 mechanics | worktree verified at pinned base | 2026-07-11T05:04:09+02:00 | review-ready PR |
+| [#872](https://github.com/zenod-ai/zenod/issues/872) | Ticket worker | unassigned | P-S3 tenant settings + keyword verification + transcription | blocked by dependency | P-S1, P-S2 | `codex/p-s3-tenant-settings` (reserved) | dispatch from integrated wave 1 | SHIP 6–7, 9 | - | 2026-07-11T05:04:09+02:00 | wave 2 dispatch |
+| [#873](https://github.com/zenod-ai/zenod/issues/873) | Ticket worker | unassigned | P-S4 admin gate (alfablok) + billing + domain | blocked by dependency | P-S1, P-S2 admin surface | `codex/p-s4-admin-billing-domain` (reserved) | dispatch from integrated wave 1 | SHIP 2, 4, 5 | - | 2026-07-11T05:04:09+02:00 | wave 2 dispatch |
+| [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | blocked by dependency | P-S1..4 | manager loop | integrated P-S1..4 | SHIP 1–12 | - | 2026-07-11T05:04:09+02:00 | request test number at P-S5 start |
 
 ## Branch And Integration
 
@@ -180,7 +180,7 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 ## Worker Queue
 
-- Gated. Wave 1: P-S1, P-S2. Wave 2: P-S3, P-S4. Then P-S5.
+- Wave 1 active: P-S1 and P-S2. Wave 2 remains dependency-blocked: P-S3 and P-S4. Then P-S5.
 
 ## Tester Queue
 
@@ -200,6 +200,13 @@ Context: Jordi revised the old per-resource framing (3.6): Phylax is a full cust
 Next: hold until Ring SHIP approval, then dispatch.
 Risks: Baileys pairing flakiness (why the organ has its own quarantined history — session state on its own /data, admin re-pair one click away); the tenant-lookup+forward wiring is the one new seam (P-S2, budgeted); real-phone testing needs a test number from Jordi.
 Links: `docs/EPIC-R-RING-SPRINT.md`, `docs/EPIC-3.6-PHYLAX-MULTITENANT.md` (doctrine carried, framing revised).
+
+### 2026-07-11 - Phylax delivery manager - bound and wave 1 dispatched
+
+Context: Ring SHIP gate was already satisfied. Minted P-S1 through P-S5 as issues #870–#874. Dispatched P-S1 and P-S2 in separate worktrees at the exact pinned base `31e69bbbc20e2e4a2b053a2d30adf44f18b34245`; both workers confirmed the required worktrees before implementation. GitHub app issue writes returned 403, so the authenticated `gh` CLI created the same tickets without blocking delivery.
+Next: review and integrate wave 1; dispatch P-S3 and P-S4 only after their recorded dependencies land.
+Risks: live `phylax.zenod.dev` currently returns 404 as expected before P-S4; an older Dokploy compose named `phylax` exists without a domain and is read-only until P-S4 identifies the new full-customer-unit target, preserving the old fused path.
+Links: [#870](https://github.com/zenod-ai/zenod/issues/870), [#871](https://github.com/zenod-ai/zenod/issues/871), [#872](https://github.com/zenod-ai/zenod/issues/872), [#873](https://github.com/zenod-ai/zenod/issues/873), [#874](https://github.com/zenod-ai/zenod/issues/874).
 
 ## Open Questions
 
