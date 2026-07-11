@@ -1,6 +1,8 @@
 export const SIGN_IN_PATH = "/auth/signin"
 export const DASHBOARD_URL = "/app"
 export const CHECKOUT_PATH = "/create-checkout-session"
+export const SELF_HOST_URL =
+  "https://github.com/zenod-ai/zenod/blob/main/units/phylax/docker-compose.phylax.yml"
 
 export type PaidTier = "monthly" | "yearly"
 
