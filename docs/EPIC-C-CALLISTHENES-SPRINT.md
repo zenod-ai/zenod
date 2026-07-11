@@ -81,12 +81,12 @@ HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via 
 
 ## Current State
 
-Phase: HARDEN wave 1 complete and live — generic peer readiness handed to Ring
-Last verified: 2026-07-11T05:02:20+02:00
+Phase: HARDEN wave 1 complete and live — generic peer readiness handed to Ring; autodeploy bound
+Last verified: 2026-07-11T05:12:00+02:00
 Integration target: main
 Fresh base commit: `28904a1939f0cbfaa2733a525cbb15e244c14b06` — pinned; no rebases until the journey passes (D19c)
 Wave 2 base commit: `fcd37f89d0e5c6c514dd115ae3ba3dce135f3eaa` — integrated wave 1, pinned.
-Next action: none on Calli; Ring steward consumes the canonical skill and live generic MCP contract through #864.
+Next action: none on Calli; Dokploy drains the queued webhook deploy while Ring consumes the canonical skill and live generic MCP contract through #864.
 Blockers: none — decisions pre-answered below; inputs have absence-rules.
 
 ## Role Goals
@@ -200,15 +200,15 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Two-tenant isolation | `2cce21c` | public `/mcp` + durable tenant/X custody stores | two independent sessions, cross-credential negative test | pass | `08-two-tenant-isolation.md` |
 | 2026-07-11 | Final same-build lap | `21623d4` | calli.zenod.dev + Stripe TEST + X | logout/login, branded paid checkout, held draft, approve replay, live receipt, dashboard history, approved deletion | pass | `02b`, `10`, `11`, `13` screenshots; Stripe event `evt_1Trpl876yJ3p1J6Xcfy1iaf6` |
 | 2026-07-11 | Generic peer readiness | `82977b6` | merged `main` | skill validation, focused tests, server typecheck/full suite, CI | pass | PRs #867 and #868; Ring handoff on #858 |
-| 2026-07-11 | Generic peer readiness live | `82977b6` | canonical Dokploy compose at `calli.zenod.dev` | API-trigger attempted; preserved generated compose, rebuilt/recreated only `calli-front`; `/healthz`; authenticated read-only MCP initialize + `tools/list` | pass | health reports exact SHA; 18 tools; read/write/destructive/idempotent annotations and approval schemas verified; no tool call/post |
+| 2026-07-11 | Generic peer readiness live + autodeploy | `82977b6` live; `78c678b` webhook proof | canonical Dokploy compose at `calli.zenod.dev` | preserved generated compose, rebuilt/recreated only `calli-front`; `/healthz`; authenticated read-only MCP initialize + `tools/list`; repository push webhook | pass / queued | health reports exact SHA; 18 tools and approval contracts verified; GitHub delivery HTTP 200 queued the exact commit in Dokploy; platform queue had 171 waiting, redundant manager probes removed; no tool call/post |
 
 ## Handoff Journal
 
 ### 2026-07-11T05:02:20+02:00 - Callisthenes delivery manager - Readiness contract live
 
 Context: The canonical Calli compose had auto-deploy enabled but no deployment after the C-H merges, matching the recorded Dokploy branch-webhook mismatch. The manager invoked the Dokploy API, then used the established generated-runtime recovery path: preserved Dokploy's converted compose and tenant volume, synchronized only the merged Calli readiness files, rebuilt and recreated only `calli-front`, and left `calli-engine` untouched. The compose source was then normalized through the Dokploy API to the already-authorized GitHub provider for `zenod-ai/zenod`, branch `main`, push-triggered auto-deploy, with the provider's required idle-ready status. The missing repository push webhook for this compose's Dokploy refresh token was added through the GitHub API; no browser was used.
-Evidence: `https://calli.zenod.dev/healthz` reports `status=ok`, `name=callisthenes`, SHA `82977b6bc9d66d934f6d1517753cfee9be64082a`. An authenticated read-only MCP session returned 18 tools; `createPosts` and `deletePosts` advertise destructive/non-idempotent plus explicit approval fields, `approve_send` advertises destructive/idempotent with required exact `channel`/`text`, and `getUsersMe` advertises read-only/idempotent. No mutation or live post occurred.
-Next: Calli has no remaining work for Ring's generic peer/skill integration.
+Evidence: `https://calli.zenod.dev/healthz` reports `status=ok`, `name=callisthenes`, SHA `82977b6bc9d66d934f6d1517753cfee9be64082a`. An authenticated read-only MCP session returned 18 tools; `createPosts` and `deletePosts` advertise destructive/non-idempotent plus explicit approval fields, `approve_send` advertises destructive/idempotent with required exact `channel`/`text`, and `getUsersMe` advertises read-only/idempotent. GitHub delivered the real `main` push to the new hook with HTTP 200, and Dokploy queued commit `78c678b0ed3501fbe0a520c45cb399b2d34b6abf`; the worker was behind a platform-wide queue of 171. Five redundant API verification jobs created during diagnosis were removed, leaving one genuine webhook job. No mutation tool or live post occurred.
+Next: Calli has no remaining product work for Ring's generic peer/skill integration; Dokploy drains the proven autodeploy job asynchronously.
 
 ### 2026-07-11T04:45:54+02:00 - Callisthenes delivery manager - Generic-peer readiness integrated
 
