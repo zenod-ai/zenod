@@ -7,9 +7,9 @@ Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-R-RING-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
-Active spine steward: Ring delivery manager (bind on dispatch)
-Steward since: on dispatch
-Last reconciled commit: bind on dispatch
+Active spine steward: Ring delivery manager
+Steward since: 2026-07-11T02:20:29+02:00
+Last reconciled commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92`
 Planner: Jordi + Epic 3.0 planner
 Worker: Ring delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -84,11 +84,11 @@ HARDEN (after Jordi approves SHIP): multiple units in the wallet exercised end-t
 
 ## Current State
 
-Phase: dispatch-ready
-Last verified: 2026-07-11
+Phase: wave 1 dispatched
+Last verified: 2026-07-11T02:20:29+02:00
 Integration target: main
-Fresh base commit: current `main` at dispatch — PIN IT; no rebases until the journey passes (D19c)
-Next action: manager pulls main, binds, mints R-S1..R-S5, dispatches wave 1.
+Fresh base commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92` — PINNED; no rebases until the journey passes (D19c)
+Next action: R-S1 and R-S2 execute in parallel; manager monitors the 90-minute budgets and integrates passing work.
 Blockers: none — decisions pre-answered; inputs have absence-rules.
 
 ## Role Goals
@@ -139,11 +139,11 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| mint | Ticket worker | assign | R-S1 front duplicate (landing, auth, tenants) | ready | - | worktree | pinned main | SHIP 1–4 | - | dispatch | wave 1 |
-| mint | Ticket worker | assign | R-S2 council middle (ChatTab + persona + Keys, tenant-scoped) | ready | - | worktree | pinned main | SHIP 5–6 | - | dispatch | wave 1 |
-| mint | Ticket worker | assign | R-S3 wallet (peers surface → per-tenant unit wallet) | ready | R-S1, R-S2 | worktree | pinned main | SHIP 7 | - | dispatch | wave 2 |
-| mint | Ticket worker | assign | R-S4 billing + domain (duplicate recipe) | ready | R-S1 | worktree | pinned main | SHIP 2, 4 live | - | dispatch | wave 2 |
-| mint | Epic worker | manager | R-S5 journey loop + MCP-face check + isolation + package | ready | R-S1..4 | - | pinned main | SHIP 1–10 | - | dispatch | last |
+| [#837](https://github.com/zenod-ai/zenod/issues/837) | Ticket worker | R-S1-worker | R-S1 front duplicate (landing, auth, tenants) | in progress | - | `codex/r-s1-front-duplicate` / `../wt-r-s1` | `fcac83f` | SHIP 1–4 | dispatched | 2026-07-11T02:20:29+02:00 | implement, validate, PR |
+| [#836](https://github.com/zenod-ai/zenod/issues/836) | Ticket worker | R-S2-worker | R-S2 council middle (ChatTab + persona + Keys, tenant-scoped) | in progress | - | `codex/r-s2-council-middle` / `../wt-r-s2` | `fcac83f` | SHIP 5–6 | dispatched | 2026-07-11T02:20:29+02:00 | implement, validate, PR |
+| [#838](https://github.com/zenod-ai/zenod/issues/838) | Ticket worker | assign wave 2 | R-S3 wallet (peers surface → per-tenant unit wallet) | ready | #837, #836 | `codex/r-s3-wallet` / `../wt-r-s3` | `fcac83f` | SHIP 7 | - | 2026-07-11T02:20:29+02:00 | wait for wave 1 integration |
+| [#839](https://github.com/zenod-ai/zenod/issues/839) | Ticket worker | assign wave 2 | R-S4 billing + domain (duplicate recipe) | ready | #837 | `codex/r-s4-billing-domain` / `../wt-r-s4` | `fcac83f` | SHIP 2, 4 live | - | 2026-07-11T02:20:29+02:00 | wait for R-S1 integration |
+| [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | ready | #837, #836, #838, #839 | - | `fcac83f` | SHIP 1–10 | - | 2026-07-11T02:20:29+02:00 | last |
 
 ## Branch And Integration
 
@@ -185,6 +185,12 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | pending | SHIP journey clean pass | - | ring.zenod.dev live | real browser walk + MCP client check, screenshots | pending | test package |
 
 ## Handoff Journal
+
+### 2026-07-11T02:20:29+02:00 - Ring delivery manager - Steward bound and wave 1 dispatched
+
+Context: stewardship transferred from the planner to the Ring delivery manager before concurrent ticket work. `main` and `origin/main` are aligned at pinned base `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92`; the shared checkout's unrelated pre-existing edits to `docs/EPIC-4.0-HERALD.md` and `docs/EPIC-4.2-POC-LOOP-CORE.md` remain untouched. R-S1..R-S5 were minted as issues #837, #836, #838, #839, and #840.
+Assignments: R-S1-worker / `codex/r-s1-front-duplicate` / `../wt-r-s1`; R-S2-worker / `codex/r-s2-council-middle` / `../wt-r-s2`.
+Next: monitor the 90-minute budgets, integrate passing PRs, dispatch R-S3/R-S4 from the integrated wave-2 base, deploy the one Ring app, then walk R-S5 from `https://ring.zenod.dev/`.
 
 ### 2026-07-11 - Planner - Ring sprint spine created
 
