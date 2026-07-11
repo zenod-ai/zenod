@@ -247,7 +247,7 @@ function operationWords(tool: string, description = ""): string {
 
 /** Bind ordinary human mutation language to the discovered operation family. */
 function hasNaturalDynamicMutationIntent(tool: string, request: string, description?: string): boolean {
-  if (READ_ONLY_REQUEST_RE.test(request) || EXECUTION_STATUS_REQUEST_RE.test(request) || /\b(?:run|execute|invoke|call)\b/i.test(request)) return false;
+  if (EXECUTION_STATUS_REQUEST_RE.test(request) || /\b(?:run|execute|invoke|call)\b/i.test(request)) return false;
   const operation = operationWords(tool, description);
   const leaf = tool.split("__")[1] ?? "";
   const leafOperation = operationWords(tool);
@@ -315,15 +315,16 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
       !EXECUTION_STATUS_REQUEST_RE.test(userRequest) &&
       hasExplicitDynamicMutationVerb(tool, userRequest),
   );
-  const explicitMutation = hasExplicitMutationIntent(tool, userRequest) || explicitDynamicMutation;
+  const naturalDynamicMutation = Boolean(
+    context?.forceMutation &&
+      !legacyMutationTool &&
+      hasNaturalDynamicMutationIntent(tool, userRequest, context.description),
+  );
+  const explicitMutation = hasExplicitMutationIntent(tool, userRequest) || explicitDynamicMutation || naturalDynamicMutation;
   if (READ_ONLY_REQUEST_RE.test(userRequest) && !explicitMutation) {
     return `Blocked ${tool}: the user's current request is read-only/status-oriented, so mutating peer tools are not allowed this turn.`;
   }
   if (explicitMutation) return null;
-
-  if (context?.forceMutation && !legacyMutationTool && hasNaturalDynamicMutationIntent(tool, userRequest, context.description)) {
-    return null;
-  }
 
   if (OUTBOUND_SEND_TOOL_NAMES.has(normalized) && context?.conversationId) {
     const { conversationId, args } = context;

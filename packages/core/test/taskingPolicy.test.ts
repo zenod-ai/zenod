@@ -1039,6 +1039,34 @@ describe("peerMutationGuardFailure", () => {
       ).toBeNull();
     });
 
+    it("allows a natural draft request that also asks to show the held result", () => {
+      expect(
+        peerMutationGuardFailure(
+          createPosts,
+          'Please draft an X post saying "exact" and show me the held draft for approval.',
+          { forceMutation: true, description: "Create social posts as held drafts." },
+        ),
+      ).toBeNull();
+    });
+
+    it("keeps capability questions read-only even when a mutation tool is selected", () => {
+      expect(
+        peerMutationGuardFailure("fixture__publishToLinkedIn__abc123", "Can this connected peer publish to LinkedIn?", {
+          forceMutation: true,
+          description: "Publish a post to LinkedIn.",
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+
+    it("allows drafting while preserving an explicit instruction not to publish", () => {
+      expect(
+        peerMutationGuardFailure(createPosts, "Please draft this, but do not publish it.", {
+          forceMutation: true,
+          description: "Create social posts as held drafts.",
+        }),
+      ).toBeNull();
+    });
+
     it("blocks held-draft prose without an explicit mutation instruction", () => {
       expect(
         peerMutationGuardFailure(createPosts, "Here is a held draft for review. Do not publish it.", { forceMutation: true }),
