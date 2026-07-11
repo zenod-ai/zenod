@@ -81,12 +81,12 @@ HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via 
 
 ## Current State
 
-Phase: HARDEN wave 1 — generic peer readiness
-Last verified: 2026-07-11T04:34:35+02:00
+Phase: HARDEN wave 1 complete — generic peer readiness handed to Ring
+Last verified: 2026-07-11T04:45:54+02:00
 Integration target: main
 Fresh base commit: `28904a1939f0cbfaa2733a525cbb15e244c14b06` — pinned; no rebases until the journey passes (D19c)
 Wave 2 base commit: `fcd37f89d0e5c6c514dd115ae3ba3dce135f3eaa` — integrated wave 1, pinned.
-Next action: dispatch C-H1 canonical Agent Skill and C-H2 MCP contract audit in parallel; preserve shipped behavior.
+Next action: Ring steward consumes the canonical skill and generic MCP contract through #864; Calli behavior remains frozen.
 Blockers: none — decisions pre-answered below; inputs have absence-rules.
 
 ## Role Goals
@@ -150,8 +150,8 @@ Pre-answered; the manager invents nothing:
 | [#825](https://github.com/zenod-ai/zenod/issues/825) | Ticket worker | C-S3-worker | C-S3 dashboard panels (PORT connect_page + DUPLICATE MCP-first panel) | done | #821, #823 done | [#830](https://github.com/zenod-ai/zenod/pull/830) / `codex/c-s3-dashboard` | `fcd37f8` | SHIP 5–6 | merged; live browser Connect X + PIN passed | 2026-07-11T03:23:00+02:00 | integrated |
 | [#824](https://github.com/zenod-ai/zenod/issues/824) | Ticket worker | C-S4-worker | C-S4 billing + domain (DUPLICATE Z-N3/Z-N5 recipe) | done | #821 done | [#829](https://github.com/zenod-ai/zenod/pull/829) / `codex/c-s4-billing-domain` | `fcd37f8` | SHIP 2, 4; calli.zenod.dev live, guarded | merged; Dokploy API service + Stripe TEST product/prices/webhook live | 2026-07-11T03:23:00+02:00 | integrated |
 | [#822](https://github.com/zenod-ai/zenod/issues/822) | Epic worker | Callisthenes delivery manager | C-S5 journey loop + two-tenant isolation + test package | done | #821, #823, #825, #824 | `main` | `28904a1` | SHIP 1–9 | full real-browser journey passed on live `21623d4`; package delivered | 2026-07-11T03:32:00+02:00 | Jordi tests |
-| [#866](https://github.com/zenod-ai/zenod/issues/866) | Ticket worker | C-H1-worker | Canonical Calli Agent Skill bundle | ready | - | `codex/c-h1-calli-agent-skill` / `../wt-c-h1` | `2fe2289` | format-valid attachable skill; exact safe draft→approve→receipt workflow | issue minted | 2026-07-11T04:34:35+02:00 | dispatch |
-| [#861](https://github.com/zenod-ai/zenod/issues/861) | Ticket worker | C-H2-worker | Calli MCP contract readiness audit | ready | - | `codex/c-h2-calli-mcp-contract` / `../wt-c-h2` | `2fe2289` | truthful schemas/descriptions/annotations; behavior unchanged | issue minted | 2026-07-11T04:34:35+02:00 | dispatch |
+| [#866](https://github.com/zenod-ai/zenod/issues/866) | Ticket worker | C-H1-worker | Canonical Calli Agent Skill bundle | done | - | [#867](https://github.com/zenod-ai/zenod/pull/867) / `codex/c-h1-calli-agent-skill` | `6eb80ef` | format-valid attachable skill; exact safe draft→approve→receipt workflow | 21 focused tests + skill validation + CI; merged `f06d0f7` | 2026-07-11T04:45:54+02:00 | Ring #864 consumes artifact |
+| [#861](https://github.com/zenod-ai/zenod/issues/861) | Ticket worker | C-H2-worker | Calli MCP contract readiness audit | done | - | [#868](https://github.com/zenod-ai/zenod/pull/868) / `codex/c-h2-calli-mcp-contract` | `6eb80ef` | truthful schemas/descriptions/annotations; behavior unchanged | 627 server tests + typecheck + CI; merged `82977b6` | 2026-07-11T04:45:54+02:00 | integrated |
 
 ## Branch And Integration
 
@@ -199,8 +199,15 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | MCP approve exactly once + canonical receipt + delete | `2cce21c` | public `/mcp` + live X | approve, replay, browser permalink, approved deletePosts | pass | `06-x-permalink-receipt.png`, `07-dashboard-receipt.png` |
 | 2026-07-11 | Two-tenant isolation | `2cce21c` | public `/mcp` + durable tenant/X custody stores | two independent sessions, cross-credential negative test | pass | `08-two-tenant-isolation.md` |
 | 2026-07-11 | Final same-build lap | `21623d4` | calli.zenod.dev + Stripe TEST + X | logout/login, branded paid checkout, held draft, approve replay, live receipt, dashboard history, approved deletion | pass | `02b`, `10`, `11`, `13` screenshots; Stripe event `evt_1Trpl876yJ3p1J6Xcfy1iaf6` |
+| 2026-07-11 | Generic peer readiness | `82977b6` | merged `main` | skill validation, focused tests, server typecheck/full suite, CI | pass | PRs #867 and #868; Ring handoff on #858 |
 
 ## Handoff Journal
+
+### 2026-07-11T04:45:54+02:00 - Callisthenes delivery manager - Generic-peer readiness integrated
+
+Context: C-H1 and C-H2 are merged to `main`. Calli now ships a provider-independent, prose-only Agent Skill at `units/callisthenes/skill/callisthenes/` and truthfully advertises read/write/destructive/exactly-once semantics through `tools/list`; no Ring-specific adapter or peer profile was added, and engine behavior remains frozen.
+Evidence: PR #867 merged as `f06d0f7` after 21 focused tests, skill validation, and CI. PR #868 merged as `82977b6` after typecheck, 627 server tests, and CI. The active Ring steward was pinged on #858 with the generic backlog and #864 handoff.
+Next: Ring owns discovery, user skill attachment, progressive loading, and auto-refresh. Calli requires no reconnect-side special case.
 
 ### 2026-07-11T04:34:35+02:00 - Callisthenes delivery manager - Generic-peer readiness approved and dispatched
 
