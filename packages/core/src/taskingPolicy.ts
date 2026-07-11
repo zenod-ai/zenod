@@ -250,11 +250,17 @@ function hasNaturalDynamicMutationIntent(tool: string, request: string, descript
   if (READ_ONLY_REQUEST_RE.test(request) || EXECUTION_STATUS_REQUEST_RE.test(request) || /\b(?:run|execute|invoke|call)\b/i.test(request)) return false;
   const operation = operationWords(tool, description);
   const leaf = tool.split("__")[1] ?? "";
+  const leafOperation = operationWords(tool);
   const humanRequest = leaf
     ? request.replace(new RegExp(`\b(?:using|via|with)\s+(?:the\s+)?(?:\w+\s+)?${escapeRegex(leaf)}(?:\s+tool)?\b`, "gi"), " ")
     : request;
-  return MUTATION_FAMILIES.some((family) => {
-    if (!family.tool.test(operation)) return false;
+  // The terminal discovered operation is authoritative when it names a family.
+  // Descriptions are fallback context only; this prevents e.g. a delete tool whose
+  // prose mentions "saved records" from being authorized by a request to save.
+  const family = MUTATION_FAMILIES.find((candidate) => candidate.tool.test(leafOperation))
+    ?? MUTATION_FAMILIES.find((candidate) => candidate.tool.test(operation));
+  if (!family) return false;
+  return [family].some((family) => {
     const verbs = new RegExp(family.request.source, "gi");
     for (const match of humanRequest.matchAll(verbs)) {
       const lead = humanRequest.slice(0, match.index!);

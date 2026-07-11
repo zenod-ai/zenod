@@ -1054,6 +1054,22 @@ describe("peerMutationGuardFailure", () => {
       ).toContain("require an explicit write/run/send instruction");
     });
 
+    it("binds natural intent to the terminal operation, not incidental words in its description", () => {
+      const deleteDocs = "fixture__deleteDocuments__abc123";
+      expect(
+        peerMutationGuardFailure(deleteDocs, "Please save this document", {
+          forceMutation: true,
+          description: "Delete previously saved documents.",
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+      expect(
+        peerMutationGuardFailure(deleteDocs, "Please delete this document", {
+          forceMutation: true,
+          description: "Delete previously saved documents.",
+        }),
+      ).toBeNull();
+    });
+
     it("binds run intent to the exact tool leaf and rejects cross-tool negation", () => {
       const deletePosts = "calli__deleteposts__78b44fe21a3d23bb";
       for (const request of [
