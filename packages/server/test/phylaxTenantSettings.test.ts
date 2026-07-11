@@ -25,9 +25,11 @@ describe("PhylaxTenantSettingsStore", () => {
     const { store } = await setup();
     const registration = store.registerPhone("alpha", "+34 611 111 111", "number-1", 1_000);
     expect(registration.settings).toMatchObject({ phoneNumber: "34611111111", verified: false, numberId: "number-1" });
+    expect(registration.keyword).toMatch(/^\d{2}-[a-z]+$/);
+    expect(registration.keyword).toBe(registration.keyword.toLowerCase());
     expect(store.verifyInbound("34622222222@s.whatsapp.net", registration.keyword, 2_000)).toBeNull();
-    expect(store.verifyInbound("34611111111@s.whatsapp.net", "PHYLAX-WRONG", 2_000)).toBeNull();
-    expect(store.verifyInbound("+34 611 111 111@s.whatsapp.net", registration.keyword, 2_000)).toMatchObject({ tenantId: "alpha", verified: true });
+    expect(store.verifyInbound("34611111111@s.whatsapp.net", "99-wrong", 2_000)).toBeNull();
+    expect(store.verifyInbound("+34 611 111 111@s.whatsapp.net", registration.keyword.toUpperCase(), 2_000)).toMatchObject({ tenantId: "alpha", verified: true });
     expect(store.verifyInbound("34611111111", registration.keyword, 2_001)).toBeNull();
   });
 
