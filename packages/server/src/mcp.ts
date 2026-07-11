@@ -487,9 +487,33 @@ export function buildMcpServer(
         `conversationId: ${result.conversationId}`,
         `toolEvents: ${result.toolEvents.length}`,
       ];
+      const structuredContent =
+        result.status === "ok"
+          ? {
+              ...result,
+              evidence: [
+                {
+                  kind: "chat_audit",
+                  id: result.correlationId,
+                  correlationId: result.correlationId,
+                  conversationId: result.conversationId,
+                },
+              ],
+            }
+          : {
+              ...result,
+              error: {
+                code: "chat_failed",
+                message: result.error ?? "Chat failed",
+                currentState: {
+                  correlationId: result.correlationId,
+                  conversationId: result.conversationId,
+                },
+              },
+            };
       return {
         content: [{ type: "text", text: lines.join("\n") }],
-        structuredContent: result as unknown as { [key: string]: unknown },
+        structuredContent,
         isError: result.status === "error",
       };
     },
