@@ -35,13 +35,8 @@ import {
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-
-type Peer = {
-  name: string
-  url: string
-  tool: string
-  hasToken: boolean
-}
+import { isPeerToolsReady, type Peer } from "@/components/peer-agents-model"
+import { ringPeerStatus } from "@/components/ring-control-surface-model"
 
 type TeamAgent = {
   name: string
@@ -180,13 +175,6 @@ function healthUrlForPeer(peer: Peer | undefined): string | null {
   }
 }
 
-function peerStatus(peer: Peer | undefined, teamAgent: TeamAgent | undefined): SurfaceStatus {
-  if (peer && !peer.hasToken) return "missing-token"
-  if (peer) return "connected"
-  if (teamAgent?.enabled) return "disconnected"
-  return "disabled"
-}
-
 function channelStatus(
   enabled: boolean,
   state: "disabled" | "disconnected" | "pairing" | "connected" | "error" | undefined,
@@ -259,10 +247,10 @@ function ProductRow({
   test: TestState | undefined
   onTest: (product: ProductDefinition) => void
 }) {
-  const status = test?.status === "error" ? "unhealthy" : peerStatus(peer, teamAgent)
+  const status = test?.status === "error" ? "unhealthy" : ringPeerStatus(peer, teamAgent?.enabled ?? false)
   const settingsUrl = settingsUrlForPeer(peer)
   const healthUrl = healthUrlForPeer(peer)
-  const canTest = status === "connected" || status === "missing-token"
+  const canTest = status === "connected"
 
   return (
     <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -270,9 +258,28 @@ function ProductRow({
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{product.displayName}</span>
           <StatusBadge status={status} />
-          <Badge variant="outline" className="font-mono">
-            {peer?.tool ?? `ask_${product.peerName}`}
-          </Badge>
+          {peer && (
+            <>
+              <Badge
+                variant={
+                  peer.transportStatus === "connected"
+                    ? "secondary"
+                    : "destructive"
+                }
+              >
+                transport {peer.transportStatus}
+              </Badge>
+              <Badge
+                variant={
+                  peer.toolsStatus === "ready" ? "secondary" : "destructive"
+                }
+              >
+                {peer.toolsStatus === "ready"
+                  ? `tools ready · ${peer.toolCount}`
+                  : "tools unavailable"}
+              </Badge>
+            </>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">{product.job}</p>
         <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
@@ -292,6 +299,16 @@ function ProductRow({
           <span className={cn("truncate", statusTone(status))}>
             Health: {test?.message ?? (healthUrl ? "Health URL available" : "No route test run yet")}
           </span>
+          {peer?.toolsError && (
+            <span className="text-destructive">Tools: {peer.toolsError}</span>
+          )}
+          {peer?.tools.length ? (
+            <span className="truncate font-mono">
+              Tools: {peer.tools.map((tool) => tool.name).join(", ")}
+            </span>
+          ) : peer?.toolsStatus === "ready" ? (
+            <span>Tools: none advertised</span>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-wrap items-start gap-2 sm:justify-end">
@@ -473,7 +490,9 @@ export function RingControlSurface({ enabled }: { enabled: boolean }) {
     peer: peersByName.get(product.peerName),
     teamAgent: teamByName.get(product.peerName),
   }))
-  const connectedProducts = productRows.filter(({ peer }) => peer?.hasToken).length
+  const connectedProducts = productRows.filter(({ peer }) =>
+    isPeerToolsReady(peer)
+  ).length
   const whatsappStatus = channelStatus(
     snapshot.whatsapp?.enabled ?? false,
     snapshot.whatsapp?.state,
@@ -517,7 +536,7 @@ export function RingControlSurface({ enabled }: { enabled: boolean }) {
             <Stat
               label="Products"
               value={`${connectedProducts}/${PRODUCT_DEFINITIONS.length}`}
-              hint="Connected MCP servers with tokens"
+              hint="Tools-ready MCP servers"
             />
             <Stat
               label="Default route"
