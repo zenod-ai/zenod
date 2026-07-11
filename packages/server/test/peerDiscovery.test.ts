@@ -6,6 +6,7 @@ import { RING_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { callPeerTool, callPeerWithArgs, councilToolName, discoverPeerTools } from "../src/peerClient.js";
 import { Runtime } from "../src/runtime.js";
+import type { PeerTools } from "zenod";
 
 function mcpFetch(tools: Array<Record<string, unknown>>, onCall?: (args: Record<string, unknown>) => unknown) {
   return vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -112,15 +113,36 @@ describe("generic wallet MCP discovery", () => {
       isError: true,
       _meta: { upstreamCode: "held_not_approved", retryable: false },
     })));
-    const peer = { name: "Calli", url: "https://peer.example/mcp", token: "secret" };
-
-    const serialized = await callPeerWithArgs(peer, "createPosts", { text: "draft" }, { preserveFullResult: true });
-
-    expect(JSON.parse(serialized)).toEqual({
-      content: [{ type: "text", text: "upstream rejected the call" }],
-      isError: true,
-      _meta: { upstreamCode: "held_not_approved", retryable: false },
-    });
+    const dataDir = await mkdtemp(join(tmpdir(), "ring-discovered-result-"));
+    dirs.push(dataDir);
+    const runtime = new Runtime(dataDir, RING_AGENT, { seedFromEnv: false, credentialMasterKey: "44".repeat(32) });
+    const as = councilToolName("Calli", "createPosts");
+    runtime.settings.setPeers([{
+      name: "Calli",
+      url: "https://1.1.1.1/mcp",
+      token: "secret",
+      wallet: true,
+      tools: [{
+        as,
+        mcp: "createPosts",
+        arg: "text",
+        description: "Create a held draft.",
+        inputSchema: { type: "object", properties: { text: { type: "string" } } },
+        annotations: { readOnlyHint: false },
+        preserveFullResult: true,
+      }],
+    }]);
+    try {
+      const tools = (runtime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+      const serialized = await tools[as]!.run({ text: "draft" });
+      expect(JSON.parse(serialized)).toEqual({
+        content: [{ type: "text", text: "upstream rejected the call" }],
+        isError: true,
+        _meta: { upstreamCode: "held_not_approved", retryable: false },
+      });
+    } finally {
+      runtime.close();
+    }
   });
 
   it("separates a connected transport from a failed tools catalog", async () => {
