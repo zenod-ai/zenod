@@ -84,11 +84,11 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: HARDEN wave 1 — generic discovery ∥ tenant skill artifacts
-Last verified: 2026-07-11T06:10:00+02:00
+Phase: HARDEN wave 2 — tools-ready UI ∥ progressive skill runtime
+Last verified: 2026-07-11T06:30:00+02:00
 Integration target: main
-Fresh base commit: `af1cfdf9eb85a3d95f07a9039bcc0cee820f795e` — PINNED wave-1 base (D19c)
-Next action: integrate R-H1 and R-H2, then dispatch R-H3 and R-H4 from the merged wave-1 base.
+Fresh base commit: `ddab094b52defa0997596b38898f82d5e111e982` — PINNED wave-2 base (D19c)
+Next action: integrate R-H3 and R-H4, then run R-H5 live against the existing Calli peer without reconnecting.
 Blockers: none.
 
 ## Role Goals
@@ -153,10 +153,10 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#855](https://github.com/zenod-ai/zenod/issues/855) | Ticket worker | R-S5b-worker | Make `chat_with_ring` satisfy conduct-kit receipt gate | done | #840 | [#857](https://github.com/zenod-ai/zenod/pull/857) / `codex/r-s5b-mcp-receipt` | `527023c` | SHIP 8 external chat reply | live HTTP 200 + Council reply + `chat_audit` evidence | 2026-07-11T04:31:00+02:00 | integrated |
 | [#858](https://github.com/zenod-ai/zenod/issues/858) | Ticket worker | R-S5d-worker | Diagnose and close live Zenod receipt timeout | done (code) | #840, #854 | [#869](https://github.com/zenod-ai/zenod/pull/869) / `codex/r-s5d-generic-receipt-gate` | `0e06e6b` | exact SHIP 7 receipt within 180s; generic Calli-style peer receipt regression | CI + independent review pass; merged `cc47b3a`; live gate intercept confirmed | 2026-07-11T05:22:00+02:00 | integrated; UI stream seam moved to #879 |
 | [#879](https://github.com/zenod-ai/zenod/issues/879) | Ticket worker | R-S5e-worker | Make streamed Council reply authoritative after receipt gate | done | #858 | [#882](https://github.com/zenod-ai/zenod/pull/882) / `codex/r-s5e-authoritative-stream` | `b7c0ca5` | stream `done` carries final text; UI replaces draft; exact live commit receipt | CI + independent review pass; final browser commit `45e22e2` visible without reload | 2026-07-11T05:48:00+02:00 | integrated |
-| [#863](https://github.com/zenod-ai/zenod/issues/863) | Ticket worker | R-H1-worker | Generic MCP discovery + dynamic Council tools | in progress | - | `codex/r-h1-generic-mcp-discovery` / `../wt-r-h1` | `af1cfdf` | arbitrary peers expose real schemas/tools; auto-refresh; tools-ready state | dispatched from fresh post-SHIP base | 2026-07-11T06:10:00+02:00 | implement + tests + PR |
-| [#860](https://github.com/zenod-ai/zenod/issues/860) | Ticket worker | R-H2-worker | Tenant skill artifact store + attachment API | in progress | - | `codex/r-h2-peer-skill-artifacts` / `../wt-r-h2` | `af1cfdf` | immutable/versioned/path-safe/tenant-isolated bundles + APIs | dispatched from fresh post-SHIP base | 2026-07-11T06:10:00+02:00 | implement + tests + PR |
-| [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | blocked | #863, #860 | `codex/r-h3-peer-skill-ui` | wave 1 merge | transport vs tools-ready; attach/replace/download/detach | issue minted | 2026-07-11T04:34:35+02:00 | wave 2 |
-| [#865](https://github.com/zenod-ai/zenod/issues/865) | Ticket worker | R-H4-worker | Progressive `load_peer_skill` runtime + safety | blocked | #863, #860 | `codex/r-h4-peer-skill-runtime` | wave 1 merge | metadata-only baseline; on-demand skill; no authority escalation/scripts | issue minted | 2026-07-11T04:34:35+02:00 | wave 2 |
+| [#863](https://github.com/zenod-ai/zenod/issues/863) | Ticket worker | R-H1-worker | Generic MCP discovery + dynamic Council tools | done | - | [#886](https://github.com/zenod-ai/zenod/pull/886) / `codex/r-h1-generic-mcp-discovery` | `af1cfdf` | arbitrary peers expose real schemas/tools; auto-refresh; tools-ready state | CI + independent review pass; merged `ddab094` with H2 reconciliation | 2026-07-11T06:30:00+02:00 | integrated |
+| [#860](https://github.com/zenod-ai/zenod/issues/860) | Ticket worker | R-H2-worker | Tenant skill artifact store + attachment API | done | - | [#885](https://github.com/zenod-ai/zenod/pull/885) / `codex/r-h2-peer-skill-artifacts` | `af1cfdf` | immutable/versioned/path-safe/tenant-isolated bundles + APIs | CI + independent security review pass; merged `19c45fa` | 2026-07-11T06:30:00+02:00 | integrated |
+| [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | in progress | #863, #860 done | `codex/r-h3-peer-skill-ui` / `../wt-r-h3` | `ddab094` | transport vs tools-ready; attach/replace/download/detach | dispatched from combined wave-1 base | 2026-07-11T06:30:00+02:00 | implement + tests + PR |
+| [#865](https://github.com/zenod-ai/zenod/issues/865) | Ticket worker | R-H4-worker | Progressive `load_peer_skill` runtime + safety | in progress | #863, #860 done | `codex/r-h4-peer-skill-runtime` / `../wt-r-h4` | `ddab094` | metadata-only baseline; on-demand skill; no authority escalation/scripts | dispatched from combined wave-1 base | 2026-07-11T06:30:00+02:00 | implement + tests + PR |
 | [#864](https://github.com/zenod-ai/zenod/issues/864) | Epic worker / tester | Ring delivery manager | Generic MCP + skills integration and live Calli validation | blocked | #862, #865, #866, #861 | `main` | integrated wave 2 | existing Calli auto-refresh, held draft only, two-tenant isolation | issue minted | 2026-07-11T04:34:35+02:00 | final integration |
 
 ## Branch And Integration
@@ -204,6 +204,11 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Final SHIP journey | `5ac9f37` | ring.zenod.dev live | real browser exact SHIP 7; external MCP SDK client; bearer-isolated beta tenant | PASS: commit `45e22e2` + GitHub links visible without reload; `ring-face-ok`; alpha peers/key hidden from beta; beta cleaned up | `docs/evidence/ring-ship-2026-07-11/19-ship7-live-authoritative-receipt.png`; `TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T06:30:00+02:00 - Ring delivery manager - HARDEN wave 1 merged; wave 2 dispatched
+
+Context: R-H2 merged first as `19c45fa` after CI and independent quota/security review. R-H1 then reconciled onto that exact main, preserving skill attachments and concurrency, and merged as `ddab094` after CI and independent review. Ring now has authenticated generic discovery, truthful transport/tools state, collision-safe names, bounded schemas/catalogs, annotation-aware guards, rich result preservation, refresh without reconnect, and tenant-isolated skill artifacts. R-H3 and R-H4 start in parallel from `ddab094` with disjoint UI vs runtime write scopes.
+Next: integrate R-H3/R-H4, publish/deploy one exact SHA, and execute R-H5 with the already-saved Calli peer, canonical skill, held draft only, and second-tenant isolation.
 
 ### 2026-07-11T06:10:00+02:00 - Ring delivery manager - HARDEN wave 1 dispatched
 
