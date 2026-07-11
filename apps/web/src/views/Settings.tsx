@@ -32,6 +32,7 @@ import { KeysTab } from "@/views/settings/KeysTab"
 import { OperatingRulesTab } from "@/views/settings/OperatingRulesTab"
 import { SkillSettingsTab } from "@/views/settings/SkillSettingsTab"
 import { VaultTab } from "@/views/settings/VaultTab"
+import { ChatTab } from "@/views/ChatTab"
 
 const SECTION_ICONS = {
   connect: PlugZapIcon,
@@ -101,6 +102,7 @@ export function Settings({
   const [overview, setOverview] = React.useState<DashboardOverviewData | null>(
     null
   )
+  const isRing = overview?.unit?.name === "ring"
 
   React.useEffect(() => {
     api<DashboardOverviewData>("/api/overview")
@@ -127,11 +129,11 @@ export function Settings({
             <BrainIcon className="size-4.5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold">Zenod</h1>
+            <h1 className="text-xl font-semibold">{isRing ? "The Ring" : "Zenod"}</h1>
             <p className="truncate text-sm text-muted-foreground">
               {overview
                 ? `${overview.tenant.name ?? overview.tenant.id} · ${overview.usage?.units ?? 0} usage units`
-                : "Your memory through MCP"}
+                : isRing ? "Your council — one chat, wired to all your agents" : "Your memory through MCP"}
             </p>
           </div>
         </div>
@@ -154,7 +156,27 @@ export function Settings({
         </div>
       </header>
 
-      <Tabs defaultValue={dashboardSectionForTab(initialTab)}>
+      {isRing ? (
+        <main className="flex flex-col gap-6">
+          <section aria-labelledby="council-chat-heading" className="flex flex-col gap-2">
+            <div>
+              <h2 id="council-chat-heading" className="text-lg font-semibold">Council chat</h2>
+              <p className="text-sm text-muted-foreground">One conversation with the council wired to your units.</p>
+            </div>
+            <ChatTab vaultless />
+          </section>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <DashboardOverview overview={overview} />
+            <section aria-labelledby="ring-keys-heading" className="flex flex-col gap-2">
+              <div>
+                <h2 id="ring-keys-heading" className="text-lg font-semibold">Keys</h2>
+                <p className="text-sm text-muted-foreground">Your tenant-scoped Council model key.</p>
+              </div>
+              <KeysTab initial={settings} onSaved={setSettings} vaultless />
+            </section>
+          </div>
+        </main>
+      ) : <Tabs defaultValue={dashboardSectionForTab(initialTab)}>
         <TabsList className="max-w-full overflow-x-auto">
           {DASHBOARD_SECTIONS.map(({ id, label }) => {
             const Icon = SECTION_ICONS[id]
@@ -178,7 +200,7 @@ export function Settings({
         <TabsContent value="settings" className="mt-4">
           <SettingsPanel settings={settings} onSaved={setSettings} />
         </TabsContent>
-      </Tabs>
+      </Tabs>}
     </div>
   )
 }

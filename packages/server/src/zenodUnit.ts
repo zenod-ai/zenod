@@ -15,7 +15,7 @@ import {
   createGithubIssue,
   editGithubIssue,
 } from "zenod";
-import { ZENOD_AGENT } from "./agent.js";
+import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { createApp, resolvedGitSha } from "./app.js";
 import { ChassisCredentialVault } from "./credentialVault.js";
 import { buildDriveTools } from "./driveTools.js";
@@ -35,6 +35,7 @@ export class ZenodRuntimePool {
   constructor(
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly sharedGithubApp: SharedGithubApp | null = null,
+    private readonly agent: AgentDefinition = ZENOD_AGENT,
   ) {}
 
   forContext(context: UnitContext): Runtime {
@@ -49,7 +50,7 @@ export class ZenodRuntimePool {
       }
       return existing;
     }
-    const runtime = new Runtime(context.storage.rootDir, ZENOD_AGENT, {
+    const runtime = new Runtime(context.storage.rootDir, this.agent, {
       seedFromEnv: false,
       tenantId,
       credentialVault: new ChassisCredentialVault(context.storage, {
@@ -77,7 +78,7 @@ export class ZenodRuntimePool {
     const existing = this.apps.get(context.tenant.id);
     if (existing) return existing;
     const app = createApp(this.forContext(context), {
-      agent: ZENOD_AGENT,
+      agent: this.agent,
       trustedChassisAuth: true,
     });
     this.apps.set(context.tenant.id, app);
@@ -94,6 +95,7 @@ export class ZenodRuntimePool {
 function registerZenodTools(
   server: McpServer,
   runtime: Runtime,
+  agent: AgentDefinition = ZENOD_AGENT,
 ): void {
   const { settings } = runtime;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
@@ -108,7 +110,7 @@ function registerZenodTools(
     },
     (input) => editGithubIssue(settings, input),
     (input) => createGithubIssue(settings, input),
-    ZENOD_AGENT.name,
+    agent.name,
     undefined,
     undefined,
     undefined,
@@ -149,6 +151,12 @@ export interface CreateZenodUnitOptions {
   controlPlane?: Omit<ControlPlaneOptions, "store">;
   customer?: CustomerLayerOptions;
   env?: NodeJS.ProcessEnv;
+  /** Internal port seam used by units that duplicate Zenod's proven chassis. */
+  agent?: AgentDefinition;
+  unitName?: string;
+  tokenEnvVar?: string;
+  defaultTenantName?: string;
+  panels?: string[];
 }
 
 export const ZENOD_READ_TOOLS = [
@@ -171,6 +179,8 @@ export const ZENOD_LONG_TOOLS = {
 
 export function createZenodUnit(options: CreateZenodUnitOptions) {
   const env = options.env ?? process.env;
+  const agent = options.agent ?? ZENOD_AGENT;
+  const unitName = options.unitName ?? "zenod";
   const storage = new ChassisStorage({
     dataDir: options.dataDir,
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
@@ -182,9 +192,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       busyTimeoutMs: 30_000,
     });
   const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
-  const runtimes = new ZenodRuntimePool(env, sharedGithubApp);
+  const runtimes = new ZenodRuntimePool(env, sharedGithubApp, agent);
   const unit = createUnit({
-    name: "zenod",
+    name: unitName,
     version: VERSION,
     conduct: {
       toolKinds: { read: ZENOD_READ_TOOLS },
@@ -198,11 +208,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
     singleTenant: {
       store: tenantStore,
-      tokenEnvVar: "ZENOD_API_TOKEN",
+      tokenEnvVar: options.tokenEnvVar ?? "ZENOD_API_TOKEN",
       env,
       tenant: {
         id: env.ZENOD_TENANT_ID?.trim() || "self-host",
-        name: env.ZENOD_TENANT_NAME?.trim() || "Self-hosted Zenod",
+        name: env.ZENOD_TENANT_NAME?.trim() || options.defaultTenantName || "Self-hosted Zenod",
         plan: "self-hosted",
       },
     },
@@ -210,9 +220,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     metering: { dataDir: storage.dataDir },
     ui: {
       ...(options.webDist ? { webDist: options.webDist } : {}),
-      displayName: ZENOD_AGENT.displayName,
-      tagline: ZENOD_AGENT.tagline,
-      panels: [
+      displayName: agent.displayName,
+      tagline: agent.tagline,
+      panels: options.panels ?? [
         "chat",
         "vault",
         "keys",
@@ -223,7 +233,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       ],
     },
     tools(server, context) {
-      registerZenodTools(server, runtimes.forContext(context));
+      registerZenodTools(server, runtimes.forContext(context), agent);
     },
     routes(routes) {
       routes.all("/api/*", async (c, next) => {
@@ -252,7 +262,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   );
   const app = new Hono<{ Bindings: HttpBindings }>();
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: ZENOD_AGENT.name, version: VERSION, sha: resolvedGitSha() }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
   );
   app.route("/", customer.app);
   mountStaticSurfaces(app, { webDist: options.webDist, siteDist: options.siteDist });

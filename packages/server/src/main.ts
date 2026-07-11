@@ -8,6 +8,7 @@ import { resolveAgent } from "./agent.js";
 import { compileAllToolOutputSchemas } from "./toolOutput.js";
 import { createZenodUnit } from "./zenodUnit.js";
 import { createCallisthenesUnit } from "./callisthenesUnit.js";
+import { createRingUnit } from "./ringUnit.js";
 import { resolveServerMode } from "./serverMode.js";
 
 const port = Number(process.env.PORT ?? 8080);
@@ -40,6 +41,13 @@ compileAllToolOutputSchemas();
 const mode = resolveServerMode(process.env, agent.name);
 const unit = mode === "callisthenes"
   ? createCallisthenesUnit({
+      dataDir,
+      ...(hasWeb ? { webDist } : {}),
+      ...(hasSite ? { siteDist } : {}),
+      env: process.env,
+    })
+  : mode === "ring"
+  ? createRingUnit({
       dataDir,
       ...(hasWeb ? { webDist } : {}),
       ...(hasSite ? { siteDist } : {}),
