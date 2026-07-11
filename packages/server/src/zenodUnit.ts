@@ -274,7 +274,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
   );
   app.route("/", customer.app);
-  mountStaticSurfaces(app, { webDist: options.webDist, siteDist: options.siteDist });
+  const publicSiteHost = (options.customerProduct ?? options.customer?.product)?.defaultDomain;
+  mountStaticSurfaces(app, {
+    webDist: options.webDist,
+    siteDist: options.siteDist,
+    ...(publicSiteHost ? { publicSiteHost: new URL(publicSiteHost).hostname } : {}),
+  });
   app.all("*", async (c) => {
     const session = readCustomerSession(c, env);
     if (session) {

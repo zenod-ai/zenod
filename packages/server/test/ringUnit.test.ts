@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -22,6 +22,32 @@ describe("Ring council unit", () => {
   it("ports the Console persona and selects Ring mode explicitly", () => {
     expect(RING_AGENT.persona).toBe(CONSOLE_AGENT.persona);
     expect(resolveServerMode({ ZENOD_UNIT: "ring" }, RING_AGENT.name)).toBe("ring");
+  });
+
+  it("serves the Ring landing on its canonical host and the customer app at /app", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "ring-static-"));
+    dirs.push(dataDir);
+    const siteDist = join(dataDir, "site");
+    const webDist = join(dataDir, "web");
+    await mkdir(siteDist);
+    await mkdir(webDist);
+    await writeFile(join(siteDist, "index.html"), "RING LANDING");
+    await writeFile(join(webDist, "index.html"), "RING APP");
+    const unit = createRingUnit({
+      dataDir: join(dataDir, "data"),
+      siteDist,
+      webDist,
+      tenantStore: createMemoryTenantStore(),
+      env: { CHASSIS_VAULT_MASTER_KEY: MASTER_KEY },
+    });
+    try {
+      expect(await (await unit.app.request("/", { headers: { host: "ring.zenod.dev" } })).text())
+        .toContain("RING LANDING");
+      expect(await (await unit.app.request("/app", { headers: { host: "ring.zenod.dev" } })).text())
+        .toContain("RING APP");
+    } finally {
+      unit.close();
+    }
   });
 
   it("keeps Council keys, settings and overview tenant-scoped", async () => {

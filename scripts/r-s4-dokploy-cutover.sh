@@ -113,11 +113,13 @@ attach_domain() {
 health_sha() { jq -r '.sha // .git_sha // .gitSha // empty' <<<"$1"; }
 http_code() { curl -sS -o /dev/null -w '%{http_code}' "$1" || true; }
 final_world_ready() {
-  local health sha mcp oauth
+  local health runtime_health sha mcp oauth
   [[ "$(http_code "https://$RING_HOST/")" == 200 ]] || return 1
   [[ "$(http_code "https://$RING_HOST/app")" =~ ^(200|302|303)$ ]] || return 1
   health="$(curl -fsS "https://$RING_HOST/healthz")" || return 1
-  sha="$(health_sha "$health")"; [[ "$sha" == "$EXPECTED_SHA"* ]] || return 1
+  [[ "$(jq -r '.status // empty' <<<"$health")" == ok ]] || return 1
+  runtime_health="$(curl -fsS "https://$RING_HOST/api/health")" || return 1
+  sha="$(health_sha "$runtime_health")"; [[ "$sha" == "$EXPECTED_SHA"* ]] || return 1
   mcp="$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
     --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "https://$RING_HOST/mcp")"
   [[ "$mcp" == 401 ]] || return 1
