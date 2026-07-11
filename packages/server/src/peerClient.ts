@@ -1,8 +1,11 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { createHash } from "node:crypto";
 import { VERSION } from "zenod";
 import { pollPeerJob } from "./pollPeerJob.js";
 import { validateWalletUrl } from "./walletUrl.js";
+import type { PeerSkillAttachmentRef } from "./peerSkillStore.js";
 
 /**
  * The mesh: one agent calling another over MCP. A peer agent exposes its tools at
@@ -19,11 +22,15 @@ export interface PeerToolSpec {
   /** The single argument key that MCP tool takes, e.g. "content". */
   arg: string;
   /** Optional schema key for typed peer tools whose arguments should pass through unchanged. */
-  inputSchema?: string;
+  inputSchema?: string | Record<string, unknown>;
+  /** Optional MCP output schema, retained verbatim for inspection/refresh. */
+  outputSchema?: Record<string, unknown>;
   /** What the tool does (the model reads this). */
   description: string;
   /** MCP tool behavior hints copied from tools/list when discovery is available. */
   annotations?: { readOnlyHint?: boolean; [key: string]: unknown };
+  /** Discovered tools retain the complete MCP CallToolResult envelope. */
+  preserveFullResult?: boolean;
 }
 
 export interface PeerConfig {
@@ -47,6 +54,15 @@ export interface PeerConfig {
   wallet?: boolean;
   /** Set only by server policy when the exact host belongs to the private unit fleet. */
   allowPrivateHost?: boolean;
+  /** Last authenticated discovery state. Transport and catalog readiness differ. */
+  discovery?: {
+    transport: "connected" | "error";
+    tools: "ready" | "error";
+    error?: string;
+    refreshedAt: string;
+  };
+  /** Tenant-local immutable skill artifact reference. The bundle itself is never stored in settings. */
+  skillArtifact?: PeerSkillAttachmentRef;
 }
 
 async function validatePeerTarget(peer: PeerConfig): Promise<void> {
@@ -74,6 +90,100 @@ export async function probePeer(peer: PeerConfig): Promise<"connected" | "error"
     }
   } catch {
     return "error";
+  }
+}
+
+export interface PeerDiscoveryResult {
+  transport: "connected" | "error";
+  tools: "ready" | "error";
+  specs: PeerToolSpec[];
+  error?: string;
+}
+
+const MAX_DISCOVERED_TOOLS = 64;
+const MAX_TOOL_DESCRIPTION_CHARS = 4_000;
+const MAX_TOOL_SCHEMA_BYTES = 64 * 1024;
+
+function boundedSchema(value: unknown, label: string): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const encoded = JSON.stringify(value);
+  if (Buffer.byteLength(encoded, "utf8") > MAX_TOOL_SCHEMA_BYTES) {
+    throw new Error(`${label} exceeds the ${MAX_TOOL_SCHEMA_BYTES}-byte discovery limit`);
+  }
+  return JSON.parse(encoded) as Record<string, unknown>;
+}
+
+function stableToolSegment(value: string): string {
+  const safe = value
+    .normalize("NFKD")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^[-_]+|[-_]+$/g, "")
+    .toLowerCase();
+  return (safe || "tool").slice(0, 22);
+}
+
+/** Deterministic namespace prevents one wallet peer from shadowing another. */
+export function councilToolName(peerName: string, mcpToolName: string): string {
+  const digest = createHash("sha256")
+    .update(peerName)
+    .update("\0")
+    .update(mcpToolName)
+    .digest("hex")
+    .slice(0, 16);
+  return `${stableToolSegment(peerName)}__${stableToolSegment(mcpToolName)}__${digest}`;
+}
+
+/**
+ * Authenticated MCP discovery for one wallet peer. The advertised catalog is the
+ * authority: descriptions, schemas and annotations are copied without profiles.
+ */
+export async function discoverPeerTools(peer: PeerConfig): Promise<PeerDiscoveryResult> {
+  try {
+    await validatePeerTarget(peer);
+  } catch (err) {
+    return { transport: "error", tools: "error", specs: [], error: (err as Error).message };
+  }
+  const client = new Client({ name: "zenod-wallet-discovery", version: VERSION }, { capabilities: {} });
+  const transport = new StreamableHTTPClientTransport(new URL(peer.url), {
+    requestInit: {
+      headers: { Authorization: `Bearer ${peer.token}` },
+      signal: AbortSignal.timeout(10_000),
+    },
+  });
+  let connected = false;
+  try {
+    await client.connect(transport);
+    connected = true;
+    const listed = await client.listTools();
+    if (listed.tools.length > MAX_DISCOVERED_TOOLS) {
+      throw new Error(`tools/list returned ${listed.tools.length} tools; maximum is ${MAX_DISCOVERED_TOOLS}`);
+    }
+    if (new Set(listed.tools.map((tool) => tool.name)).size !== listed.tools.length) {
+      throw new Error("tools/list returned duplicate tool names");
+    }
+    const specs = listed.tools.map((tool) => ({
+      as: councilToolName(peer.name, tool.name),
+      mcp: tool.name,
+      arg: "input",
+      inputSchema: boundedSchema(tool.inputSchema, `${tool.name} inputSchema`) ?? { type: "object" },
+      ...(tool.outputSchema ? { outputSchema: boundedSchema(tool.outputSchema, `${tool.name} outputSchema`) } : {}),
+      description: (tool.description?.trim() || `Call ${tool.name} on the ${peer.name} peer.`).slice(0, MAX_TOOL_DESCRIPTION_CHARS),
+      ...(tool.annotations ? { annotations: { ...tool.annotations } } : {}),
+      preserveFullResult: true,
+    }));
+    if (new Set(specs.map((spec) => spec.as)).size !== specs.length) {
+      throw new Error("tools/list produced colliding Council tool names");
+    }
+    return { transport: "connected", tools: "ready", specs };
+  } catch (err) {
+    return {
+      transport: connected ? "connected" : "error",
+      tools: "error",
+      specs: [],
+      error: (err as Error).message,
+    };
+  } finally {
+    await client.close().catch(() => {});
   }
 }
 
@@ -126,12 +236,7 @@ export async function callPeer(
  * (CallToolResult), so a gateway execute can return it directly. The index
  * signature mirrors the SDK's result type (it carries optional _meta etc.).
  */
-export interface PeerToolResult {
-  content: Array<{ type: "text"; text: string }>;
-  structuredContent?: { [key: string]: unknown };
-  isError?: boolean;
-  [key: string]: unknown;
-}
+export type PeerToolResult = CallToolResult;
 
 /**
  * Call a peer's MCP tool with a FULL argument object and relay its result
@@ -161,11 +266,10 @@ export async function callPeerTool(
     await client.connect(transport);
     const result = await client.callTool({ name: mcpTool, arguments: args });
     const rawContent = Array.isArray(result.content) ? result.content : [];
-    const content = rawContent
-      .filter((c): c is { type: "text"; text: string } => (c as { type?: string })?.type === "text" && typeof (c as { text?: unknown }).text === "string")
-      .map((c) => ({ type: "text" as const, text: c.text }));
+    const content = rawContent.map((item) => ({ ...item }));
     return {
-      content: content.length ? content : [{ type: "text", text: `(${peer.name} returned no text)` }],
+      ...result,
+      content: content.length ? content : [{ type: "text", text: `(${peer.name} returned no content)` }],
       ...(result.structuredContent ? { structuredContent: result.structuredContent as { [key: string]: unknown } } : {}),
       ...(result.isError ? { isError: true } : {}),
     };
@@ -180,7 +284,12 @@ export async function callPeerTool(
 }
 
 /** Call a peer tool with full structured arguments, returning readable text for the chat loop. */
-export async function callPeerWithArgs(peer: PeerConfig, mcpTool: string, args: Record<string, unknown>): Promise<string> {
+export async function callPeerWithArgs(
+  peer: PeerConfig,
+  mcpTool: string,
+  args: Record<string, unknown>,
+  options: { preserveFullResult?: boolean } = {},
+): Promise<string> {
   const result = await callPeerTool(peer, mcpTool, args);
   const text = extractText(result);
   if (peer.wallet && mcpTool === "store_memory" && !result.isError) {
@@ -207,6 +316,10 @@ export async function callPeerWithArgs(peer: PeerConfig, mcpTool: string, args: 
       if (completed.status === "error") return `Zenod filing failed: ${completed.error ?? "unknown error"}`;
       return `Zenod filing receipt timed out for job ${jobId}.`;
     }
+  }
+  if (options.preserveFullResult) return JSON.stringify(result);
+  if (result.structuredContent || result.content.some((item) => item.type !== "text")) {
+    return JSON.stringify(result);
   }
   if (text) return text;
   if (result.structuredContent) return JSON.stringify(result.structuredContent);

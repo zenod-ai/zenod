@@ -160,6 +160,17 @@ export interface VaultReadTools {
 export interface PeerTool {
   description: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
+  /** Discovered MCP schemas are already JSON Schema, not Zod schemas. */
+  schemaFormat?: "json-schema";
+  /** MCP behavior hints retained from the owner's tools/list response. */
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+    [key: string]: unknown;
+  };
   /**
    * This wallet peer tool mutates its owner and returns the owner's verified
    * receipt. The reply boundary relays that result verbatim instead of model prose.

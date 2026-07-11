@@ -190,6 +190,8 @@ export interface PeerMutationGuardContext {
   conversationId?: string | undefined;
   /** The tool-call arguments this attempt carries (the draft content, for outbound sends). */
   args?: Record<string, unknown> | undefined;
+  /** Dynamic MCP tools are classified by their advertised annotations. */
+  forceMutation?: boolean | undefined;
 }
 
 /**
@@ -199,7 +201,7 @@ export interface PeerMutationGuardContext {
  * undo a closed issue or sent message.
  */
 export function peerMutationGuardFailure(tool: string, userRequest: string, context?: PeerMutationGuardContext): string | null {
-  if (!isPeerMutationTool(tool)) return null;
+  if (!context?.forceMutation && !isPeerMutationTool(tool)) return null;
   const normalized = normalizedToolName(tool);
   if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest) && !READ_ONLY_REQUEST_RE.test(userRequest)) {
     return `Blocked ${tool}: explicit backlog writes/runs must use the dedicated Archus write/run tool, not ask_archus.`;

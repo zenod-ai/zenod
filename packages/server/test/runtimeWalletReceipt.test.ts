@@ -110,7 +110,7 @@ describe("Ring wallet receipt", () => {
       expect(tools.future_write_tool.verifiedMutationReceipt).toBe(true);
       expect(tools.future_read_tool.verifiedMutationReceipt).toBeUndefined();
       expect(tools.unknown_unannotated_tool.verifiedMutationReceipt).toBeUndefined();
-      expect(tools.ask_default_peer.verifiedMutationReceipt).toBeUndefined();
+      expect(tools.ask_default_peer).toBeUndefined();
     } finally {
       ringRuntime.close();
       await rm(ringDir, { recursive: true, force: true });
