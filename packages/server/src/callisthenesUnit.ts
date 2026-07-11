@@ -191,7 +191,13 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
         },
       },
     };
-    const response = await fetcher(target, { method: "POST", headers, body: JSON.stringify(engineRpc) });
+    // The public approve_send envelope and the rewritten createPosts envelope do
+    // not have the same byte length. Never forward the caller's Content-Length;
+    // undici must calculate it for the rewritten body or the engine receives a
+    // truncated request and closes the socket before dispatching the tool.
+    const engineHeaders = new Headers(headers);
+    engineHeaders.delete("content-length");
+    const response = await fetcher(target, { method: "POST", headers: engineHeaders, body: JSON.stringify(engineRpc) });
     const payload = parseRpcResponse(await response.text());
     if (!payload) return rpcText(rpc.id, "FAILED to send to X (Twitter): the engine returned no readable MCP result. Do NOT tell the user it was sent.", response.headers);
     const raw = resultText(payload);

@@ -82,6 +82,7 @@ describe("Callisthenes front unit", () => {
       { token: "beta-secret", tenant: { id: "tenant-beta" } },
     ]);
     let approvedCalls = 0;
+    let approvedContentLength: string | null = "not-called";
     const fetcher = vi.fn(async (_request: RequestInfo | URL, init?: RequestInit) => {
       const rpc = JSON.parse(String(init?.body ?? "{}")) as {
         id: number;
@@ -92,6 +93,7 @@ describe("Callisthenes front unit", () => {
         return Response.json({ jsonrpc: "2.0", id: rpc.id, result: { tools: [{ name: "createPosts" }] } });
       }
       if (rpc.params?.name === "createPosts" && rpc.params.arguments?.callisthenes_approve) {
+        approvedContentLength = new Headers(init?.headers).get("content-length");
         approvedCalls += 1;
         return Response.json({
           jsonrpc: "2.0",
@@ -133,6 +135,7 @@ describe("Callisthenes front unit", () => {
       expect(first.result.content[0].text).toBe("Posted to X. Live URL: https://x.com/i/web/status/1900123456789");
       expect(retry.result.content[0].text).toBe(first.result.content[0].text);
       expect(approvedCalls).toBe(1);
+      expect(approvedContentLength).toBeNull();
       expect(unit.observationLedger.read("tenant-alpha").receipts).toMatchObject([
         { url: "https://x.com/i/web/status/1900123456789" },
       ]);
