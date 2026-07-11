@@ -8,23 +8,55 @@ import { githubUrl, type VaultLocation } from "../vault/github.js";
 
 const MAX_HITS = 20;
 
+interface SearchScore {
+  score: number;
+  snippet: string;
+  matchedTerms: Set<string>;
+  exactPhrase: boolean;
+}
+
+function normalizePhrase(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function queryTerms(query: string): string[] {
+  const lexicalTerms = query.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}_]+(?:[-'][\p{L}\p{N}_]+)*/gu) ?? [];
+  return [...new Set(lexicalTerms.map(normalizePhrase).filter(Boolean))];
+}
+
 /**
  * Deterministic two-pass search — no LLM, target <500ms.
  * Pass 1 scores the frontmatter index (title, tags, summary, filename);
  * pass 2 greps note bodies (ripgrep when available, JS scan otherwise).
  */
 export async function searchVault(vaultPath: string, query: string, location: VaultLocation = {}): Promise<Hit[]> {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = queryTerms(query);
   if (terms.length === 0) return [];
+  const normalizedQuery = normalizePhrase(query);
 
-  const scores = new Map<string, { score: number; snippet: string }>();
-  const bump = (path: string, score: number, snippet: string) => {
+  const scores = new Map<string, SearchScore>();
+  const bump = (path: string, score: number, snippet: string, matchedText: string) => {
+    const normalizedText = normalizePhrase(matchedText);
     const cur = scores.get(path);
     if (cur) {
       cur.score += score;
       if (!cur.snippet && snippet) cur.snippet = snippet;
+      for (const term of terms) {
+        if (normalizedText.includes(term)) cur.matchedTerms.add(term);
+      }
+      if (normalizedText.includes(normalizedQuery)) cur.exactPhrase = true;
     } else {
-      scores.set(path, { score, snippet });
+      scores.set(path, {
+        score,
+        snippet,
+        matchedTerms: new Set(terms.filter((term) => normalizedText.includes(term))),
+        exactPhrase: normalizedText.includes(normalizedQuery),
+      });
     }
   };
 
@@ -35,11 +67,12 @@ export async function searchVault(vaultPath: string, query: string, location: Va
     const summary = page.summary.toLowerCase();
     const base = page.path.toLowerCase();
     for (const term of terms) {
-      if (title === term) bump(page.path, 10, page.summary);
-      else if (title.includes(term)) bump(page.path, 5, page.summary);
-      if (page.tags.some((t) => t.toLowerCase() === term)) bump(page.path, 4, page.summary);
-      if (summary.includes(term)) bump(page.path, 2, page.summary);
-      if (base.includes(term)) bump(page.path, 3, page.summary);
+      if (normalizePhrase(title) === term) bump(page.path, 10, page.summary, title);
+      else if (normalizePhrase(title).includes(term)) bump(page.path, 5, page.summary, title);
+      const matchingTag = page.tags.find((tag) => normalizePhrase(tag) === term);
+      if (matchingTag) bump(page.path, 4, page.summary, matchingTag);
+      if (normalizePhrase(summary).includes(term)) bump(page.path, 2, page.summary, summary);
+      if (normalizePhrase(base).includes(term)) bump(page.path, 3, page.summary, base);
     }
   }
 
@@ -50,27 +83,42 @@ export async function searchVault(vaultPath: string, query: string, location: Va
     if (tierOf(file) !== "evidence") continue;
     const lower = file.toLowerCase();
     for (const term of terms) {
-      if (lower.includes(term)) bump(file, 3, "(evidence log)");
+      if (normalizePhrase(lower).includes(term)) bump(file, 3, "(evidence log)", lower);
     }
   }
   for (const file of await listAttachmentFiles(vaultPath)) {
     const lower = file.toLowerCase();
     for (const term of terms) {
-      if (lower.includes(term)) bump(file, 3, "(attachment artifact)");
+      if (normalizePhrase(lower).includes(term)) bump(file, 3, "(attachment artifact)", lower);
     }
   }
 
   // Pass 2: bodies.
-  const bodyHits = await grepBodies(vaultPath, terms).catch(() => scanBodies(vaultPath, terms));
-  for (const hit of bodyHits) bump(hit.path, 1, hit.line.trim().slice(0, 200));
+  const grepTerms = [...new Set(terms.flatMap((term) => term.split(" ")))];
+  const bodyHits = await grepBodies(vaultPath, grepTerms).catch(() => scanBodies(vaultPath, grepTerms));
+  for (const hit of bodyHits) bump(hit.path, 1, hit.line.trim().slice(0, 200), hit.line);
 
+  const rankBand = Math.max(...[...scores.values()].map(({ score }) => score), 0) + 1;
   return [...scores.entries()]
-    .sort((a, b) => b[1].score - a[1].score)
+    .map(([path, result]) => ({
+      path,
+      ...result,
+      allTerms: result.matchedTerms.size === terms.length,
+      rankedScore:
+        result.score +
+        (result.exactPhrase ? rankBand * 2 : 0) +
+        (result.matchedTerms.size === terms.length ? rankBand : 0),
+    }))
+    .sort((a, b) => {
+      if (a.exactPhrase !== b.exactPhrase) return a.exactPhrase ? -1 : 1;
+      if (a.allTerms !== b.allTerms) return a.allTerms ? -1 : 1;
+      return b.rankedScore - a.rankedScore || a.path.localeCompare(b.path);
+    })
     .slice(0, MAX_HITS)
-    .map(([path, { score, snippet }]) => ({
+    .map(({ path, rankedScore, snippet }) => ({
       path,
       snippet,
-      score,
+      score: rankedScore,
       githubUrl: githubUrl(location, path),
     }));
 }
