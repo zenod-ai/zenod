@@ -65,7 +65,8 @@ require_env() { [[ -n "$(env_value "$1" "$2")" ]] || die "source is missing requ
 build_target_env() {
   local target="$1" zenod="$2" xmcp="$3"
   jq -nr --arg target "$(jq -r '.env//""' <<<"$target")" \
-    --arg zenod "$(jq -r '.env//""' <<<"$zenod")" --arg xmcp "$(jq -r '.env//""' <<<"$xmcp")" '
+    --arg zenod "$(jq -r '.env//""' <<<"$zenod")" --arg xmcp "$(jq -r '.env//""' <<<"$xmcp")" \
+    --arg sha "$EXPECTED_SHA" '
     def parsed($raw): $raw|split("\n")|map(select(length>0)|capture("^(?<key>[^=]+)=(?<value>.*)$"))|map({key:.key,value:.value})|from_entries;
     parsed($target) as $t|parsed($zenod) as $z|parsed($xmcp) as $x|{
       ACCOUNT_STATE_SECRET: ($t.ACCOUNT_STATE_SECRET // $z.STRIPE_WEBHOOK_SECRET),
@@ -74,6 +75,7 @@ build_target_env() {
       CONTROL_PLANE_TOKEN: $t.CONTROL_PLANE_TOKEN,
       GITHUB_OAUTH_CLIENT_ID: $z.GITHUB_OAUTH_CLIENT_ID,
       GITHUB_OAUTH_CLIENT_SECRET: $z.GITHUB_OAUTH_CLIENT_SECRET,
+      GIT_SHA: $sha,
       PRICE_MONTHLY: $z.PRICE_MONTHLY,
       PRICE_YEARLY: $z.PRICE_YEARLY,
       STRIPE_MODE: "test",

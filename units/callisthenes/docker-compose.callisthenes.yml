@@ -3,6 +3,8 @@
 
 networks:
   callisthenes-private:
+  dokploy-network:
+    external: true
 
 volumes:
   callisthenes-data:
@@ -12,6 +14,8 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:?required}
     image: ${CALLISTHENES_FRONT_IMAGE:-zenod-callisthenes-front}
     environment:
       NODE_ENV: production
@@ -37,12 +41,11 @@ services:
       CONTROL_PLANE_TOKEN: ${CONTROL_PLANE_TOKEN:?required}
     volumes:
       - callisthenes-data:/data
-    ports:
-      - "${CALLISTHENES_FRONT_PORT:-8080}:8080"
+    expose: ["8080"]
     depends_on:
       calli-engine:
         condition: service_started
-    networks: [callisthenes-private]
+    networks: [callisthenes-private, dokploy-network]
     restart: unless-stopped
 
   calli-engine:
