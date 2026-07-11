@@ -356,7 +356,22 @@ describe("server API", () => {
       body: JSON.stringify({ message: "/clean-slate" }),
     });
     expect(preview.status).toBe(200);
-    expect((await preview.json()).text).toContain("/clean-slate confirm");
+    const previewText = (await preview.json()).text as string;
+    expect(previewText).toContain("/clean-slate confirm");
+
+    const streamedPreview = await app.request("/api/chat/stream", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ message: "/clean-slate" }),
+    });
+    const previewEvents = (await streamedPreview.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(previewEvents).toEqual([
+      { type: "delta", text: previewText },
+      { type: "done", text: previewText, sources: [] },
+    ]);
 
     const confirmed = await app.request("/api/chat", {
       method: "POST",
@@ -377,9 +392,9 @@ describe("server API", () => {
           calls.push({ message, surface });
           if (typeof options === "object") {
             options.onToolEvent?.({ phase: "start", tool: "search_vault", label: "Searching the vault" });
-            options.onDelta?.("Found ");
+            options.onDelta?.("Draft ");
             options.onToolEvent?.({ phase: "end", tool: "search_vault", label: "Searching the vault" });
-            options.onDelta?.("notes.");
+            options.onDelta?.("answer.");
           }
           return {
             text: "Found notes.",
@@ -405,11 +420,12 @@ describe("server API", () => {
 
     expect(events).toEqual([
       { type: "tool", phase: "start", tool: "search_vault", label: "Searching the vault" },
-      { type: "delta", text: "Found " },
+      { type: "delta", text: "Draft " },
       { type: "tool", phase: "end", tool: "search_vault", label: "Searching the vault" },
-      { type: "delta", text: "notes." },
+      { type: "delta", text: "answer." },
       {
         type: "done",
+        text: "Found notes.",
         sources: [{ path: "Projects/Zenod.md", githubUrl: "https://example.test/Projects/Zenod.md" }],
       },
     ]);

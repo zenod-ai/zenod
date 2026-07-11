@@ -374,8 +374,14 @@ export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
                   steps: [...(last.steps ?? []), event.label],
                 }
           ),
-        onDone: ({ sources, stored }) =>
-          patchStreaming((last) => ({ ...last, activity: null, sources, ...(stored ? { stored } : {}) })),
+        onDone: ({ text, sources, stored }) =>
+          patchStreaming((last) => ({
+            ...last,
+            text,
+            activity: null,
+            sources,
+            ...(stored ? { stored } : {}),
+          })),
       })
     } catch (err) {
       const text = isNotConfigured(err)
