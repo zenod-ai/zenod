@@ -84,12 +84,12 @@ HARDEN (after Jordi approves SHIP): multiple units in the wallet exercised end-t
 
 ## Current State
 
-Phase: R-S5 blocked after authorized receipt fix lap
-Last verified: 2026-07-11T04:31:00+02:00
+Phase: R-S5 authorized live receipt diagnosis lap
+Last verified: 2026-07-11T04:38:00+02:00
 Integration target: main
 Fresh base commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92` — PINNED; no rebases until the journey passes (D19c)
-Next action: BLOCKED ON JORDI — decide whether to authorize another focused diagnosis/fix lap for the remaining SHIP 7 live timeout, or stop Ring SHIP.
-Blockers: exact build `a729d08` still returned a queued acknowledgement without a Zenod commit SHA/URL after the full polling window. SHIP 8–9 pass.
+Next action: diagnose from live durable audit/job evidence, land only the smallest receipt-contract fix, then rerun SHIP 7 on one exact build.
+Blockers: none — Jordi authorized the focused SHIP 7 diagnosis/fix lap.
 
 ## Role Goals
 
@@ -146,6 +146,7 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | blocked | #837, #836, #838, #839 done | `main` / manager journey; fixes [#852](https://github.com/zenod-ai/zenod/pull/852), [#853](https://github.com/zenod-ai/zenod/pull/853), [#856](https://github.com/zenod-ai/zenod/pull/856), [#857](https://github.com/zenod-ai/zenod/pull/857) | `a729d08` live | SHIP 1–10 | 1–6 pass; 7 wallet pass/receipt timeout; 8 external chat pass; 9 persistence+isolation pass | 2026-07-11T04:31:00+02:00 | BLOCKED ON JORDI: another focused lap or stop |
 | [#854](https://github.com/zenod-ai/zenod/issues/854) | Ticket worker | R-S5a-worker | Surface downstream Zenod commit receipt in Council chat | done (code) | #840 | [#856](https://github.com/zenod-ai/zenod/pull/856) / `codex/r-s5a-zenod-receipt` | `527023c` | SHIP 7 receipt within 180s | CI + review pass; live still times out | 2026-07-11T04:31:00+02:00 | epic blocker remains |
 | [#855](https://github.com/zenod-ai/zenod/issues/855) | Ticket worker | R-S5b-worker | Make `chat_with_ring` satisfy conduct-kit receipt gate | done | #840 | [#857](https://github.com/zenod-ai/zenod/pull/857) / `codex/r-s5b-mcp-receipt` | `527023c` | SHIP 8 external chat reply | live HTTP 200 + Council reply + `chat_audit` evidence | 2026-07-11T04:31:00+02:00 | integrated |
+| [#858](https://github.com/zenod-ai/zenod/issues/858) | Ticket worker | R-S5c-worker | Diagnose and close live Zenod receipt timeout | in progress | #840, #854 | `codex/r-s5c-live-receipt` / `../wt-r-s5c` | `de327ac` | exact SHIP 7 receipt within 180s | focused lap authorized | 2026-07-11T04:38:00+02:00 | live evidence diagnosis, smallest fix, PR |
 
 ## Branch And Integration
 
@@ -188,6 +189,11 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Authorized receipt fix lap | `a729d08` | ring.zenod.dev live | real Chrome SHIP 7–9, external MCP chat, two bearer-authenticated tenants | BLOCKED: SHIP 7 still lacks commit receipt; SHIP 8–9 pass | `docs/evidence/ring-ship-2026-07-11/11`–`14`; `TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T04:38:00+02:00 - Ring delivery manager - Focused SHIP 7 diagnosis lap authorized
+
+Context: Jordi authorized continuation after the `a729d08` live receipt timeout. #858 is pinned to `de327ac` in `codex/r-s5c-live-receipt` / `../wt-r-s5c`. This lap begins from the live Ring/Zenod durable audit and job records; code changes are limited to the smallest proven receipt-contract correction.
+Next: reproduce the precise live failure, merge only reviewed passing code, deploy one exact SHA, and rerun the exact SHIP 7 browser phrase.
 
 ### 2026-07-11T04:31:00+02:00 - Ring delivery manager - Authorized lap consumed; SHIP 7 remains blocked
 
