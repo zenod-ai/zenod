@@ -9,6 +9,7 @@ import { compileAllToolOutputSchemas } from "./toolOutput.js";
 import { createZenodUnit } from "./zenodUnit.js";
 import { createCallisthenesUnit } from "./callisthenesUnit.js";
 import { createRingUnit } from "./ringUnit.js";
+import { createPhylaxUnit } from "./phylaxUnit.js";
 import { resolveServerMode } from "./serverMode.js";
 
 const port = Number(process.env.PORT ?? 8080);
@@ -16,11 +17,14 @@ const dataDir = resolve(process.env.ZENOD_DATA_DIR ?? "./data");
 mkdirSync(dataDir, { recursive: true });
 
 const callisthenesMode = process.env.ZENOD_UNIT?.trim().toLowerCase() === "callisthenes";
+const phylaxMode = process.env.ZENOD_UNIT?.trim().toLowerCase() === "phylax";
 const webDist = callisthenesMode
   ? process.env.CALLISTHENES_WEB_DIST ?? resolve(import.meta.dirname, "../../../apps/calli-web/dist")
   : process.env.ZENOD_WEB_DIST ?? resolve(import.meta.dirname, "../../../apps/web/dist");
 const siteDist = callisthenesMode
   ? process.env.CALLISTHENES_SITE_DIST ?? resolve(import.meta.dirname, "../../../apps/calli-site/dist")
+  : phylaxMode
+  ? process.env.PHYLAX_SITE_DIST ?? resolve(import.meta.dirname, "../../../apps/phylax-site/dist")
   : process.env.ZENOD_SITE_DIST ?? resolve(import.meta.dirname, "../../../apps/site/dist");
 let hasWeb = true;
 let hasSite = true;
@@ -48,6 +52,13 @@ const unit = mode === "callisthenes"
     })
   : mode === "ring"
   ? createRingUnit({
+      dataDir,
+      ...(hasWeb ? { webDist } : {}),
+      ...(hasSite ? { siteDist } : {}),
+      env: process.env,
+    })
+  : mode === "phylax"
+  ? createPhylaxUnit({
       dataDir,
       ...(hasWeb ? { webDist } : {}),
       ...(hasSite ? { siteDist } : {}),

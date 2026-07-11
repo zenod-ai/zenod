@@ -21,6 +21,7 @@ COPY apps/site/package.json apps/site/
 COPY apps/calli-web/package.json apps/calli-web/
 COPY apps/calli-site/package.json apps/calli-site/
 COPY apps/ring-site/package.json apps/ring-site/
+COPY apps/phylax-site/package.json apps/phylax-site/
 RUN npm ci
 
 COPY tsconfig.base.json ./
@@ -31,6 +32,7 @@ COPY apps ./apps
 RUN npm run build
 RUN npm run build -w calli-site && npm run build -w calli-web
 RUN npm run build -w ring-site
+RUN npm run build -w phylax-site
 
 # drop dev dependencies for the runtime copy
 RUN npm prune --omit=dev
@@ -81,6 +83,7 @@ COPY --from=build /app/apps/site/dist ./apps/site/dist
 COPY --from=build /app/apps/calli-web/dist ./apps/calli-web/dist
 COPY --from=build /app/apps/calli-site/dist ./apps/calli-site/dist
 COPY --from=build /app/apps/ring-site/dist ./apps/ring-site/dist
+COPY --from=build /app/apps/phylax-site/dist ./apps/phylax-site/dist
 
 VOLUME /data
 EXPOSE 8080

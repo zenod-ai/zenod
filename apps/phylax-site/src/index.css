@@ -1,0 +1,197 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/bodoni-moda";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-sans: 'Geist Variable', sans-serif;
+    --font-mono: 'Geist Mono Variable', monospace;
+    --font-display: 'Bodoni Moda Variable', 'Didot', 'Bodoni 72', Georgia, serif;
+    --font-heading: var(--font-display);
+    --color-rust: var(--rust);
+    --color-rust-foreground: var(--rust-foreground);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Duplicated parchment theme — ink on papyrus with a terracotta accent.
+ * Single fixed (light) theme; the .dark block intentionally mirrors :root.
+ */
+:root {
+    --background: oklch(0.958 0.013 90);
+    --foreground: oklch(0.275 0.024 60);
+    --card: oklch(0.972 0.011 90);
+    --card-foreground: oklch(0.275 0.024 60);
+    --popover: oklch(0.972 0.011 90);
+    --popover-foreground: oklch(0.275 0.024 60);
+    --primary: oklch(0.275 0.024 60);
+    --primary-foreground: oklch(0.962 0.012 90);
+    --secondary: oklch(0.925 0.016 88);
+    --secondary-foreground: oklch(0.275 0.024 60);
+    --muted: oklch(0.925 0.016 88);
+    --muted-foreground: oklch(0.49 0.022 70);
+    --accent: oklch(0.912 0.02 85);
+    --accent-foreground: oklch(0.275 0.024 60);
+    --destructive: oklch(0.55 0.19 28);
+    --rust: oklch(0.49 0.125 40);
+    --rust-foreground: oklch(0.962 0.012 90);
+    --border: oklch(0.862 0.02 85);
+    --input: oklch(0.862 0.02 85);
+    --ring: oklch(0.49 0.125 40);
+    --chart-1: oklch(0.87 0.02 85);
+    --chart-2: oklch(0.556 0.04 70);
+    --chart-3: oklch(0.49 0.125 40);
+    --chart-4: oklch(0.371 0.03 60);
+    --chart-5: oklch(0.269 0.02 60);
+    --radius: 0.375rem;
+    --sidebar: oklch(0.972 0.011 90);
+    --sidebar-foreground: oklch(0.275 0.024 60);
+    --sidebar-primary: oklch(0.275 0.024 60);
+    --sidebar-primary-foreground: oklch(0.962 0.012 90);
+    --sidebar-accent: oklch(0.925 0.016 88);
+    --sidebar-accent-foreground: oklch(0.275 0.024 60);
+    --sidebar-border: oklch(0.862 0.02 85);
+    --sidebar-ring: oklch(0.49 0.125 40);
+}
+
+.dark {
+    --background: oklch(0.958 0.013 90);
+    --foreground: oklch(0.275 0.024 60);
+    --card: oklch(0.972 0.011 90);
+    --card-foreground: oklch(0.275 0.024 60);
+    --popover: oklch(0.972 0.011 90);
+    --popover-foreground: oklch(0.275 0.024 60);
+    --primary: oklch(0.275 0.024 60);
+    --primary-foreground: oklch(0.962 0.012 90);
+    --secondary: oklch(0.925 0.016 88);
+    --secondary-foreground: oklch(0.275 0.024 60);
+    --muted: oklch(0.925 0.016 88);
+    --muted-foreground: oklch(0.49 0.022 70);
+    --accent: oklch(0.912 0.02 85);
+    --accent-foreground: oklch(0.275 0.024 60);
+    --destructive: oklch(0.55 0.19 28);
+    --rust: oklch(0.49 0.125 40);
+    --rust-foreground: oklch(0.962 0.012 90);
+    --border: oklch(0.862 0.02 85);
+    --input: oklch(0.862 0.02 85);
+    --ring: oklch(0.49 0.125 40);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    scroll-behavior: smooth;
+    }
+}
+
+/* Letterspaced mono caps — the archival label voice used for nav, eyebrows, table heads. */
+@utility label-caps {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+/* Subtle paper grain over everything. */
+.paper-grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Connector lines in the memory diagram — dashes flow toward the librarian. */
+.flow-line {
+  fill: none;
+  stroke: var(--rust);
+  stroke-width: 1.25;
+  stroke-dasharray: 5 5;
+  opacity: 0.55;
+  animation: flow-dash 1.4s linear infinite;
+}
+
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Read channel — open, unguarded, solid grey. */
+.read-line {
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1.25;
+  opacity: 0.45;
+}
+
+/* Dead-end comparison lines — static and grey on purpose. */
+.dead-line {
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1;
+  stroke-dasharray: 4 6;
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-line {
+    animation: none;
+  }
+}
+
+/* Duotone treatment for the engraving — ink lines on parchment. */
+.duotone {
+  filter: grayscale(1) sepia(0.38) contrast(0.92) brightness(1.06);
+  mix-blend-mode: multiply;
+}
