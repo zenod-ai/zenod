@@ -84,12 +84,12 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: R-S5 authorized live receipt diagnosis lap
-Last verified: 2026-07-11T04:38:00+02:00
+Phase: R-S5 blocked at final receipt rendering gate
+Last verified: 2026-07-11T04:45:00+02:00
 Integration target: main
 Fresh base commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92` — PINNED; no rebases until the journey passes (D19c)
-Next action: diagnose from live durable audit/job evidence, land only the smallest receipt-contract fix, then rerun SHIP 7 on one exact build.
-Blockers: none — Jordi authorized the focused SHIP 7 diagnosis/fix lap.
+Next action: BLOCKED ON JORDI — authorize one reply-gate-only lap for `add_memory`, or stop Ring SHIP.
+Blockers: `fae4f33` fixed task polling and Zenod committed in ~14s, but the Council paraphrased the result and omitted its commit SHA/URL because `add_memory` is absent from the existing hard reply gate.
 
 ## Role Goals
 
@@ -149,7 +149,7 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#840](https://github.com/zenod-ai/zenod/issues/840) | Epic worker | Ring delivery manager | R-S5 journey loop + MCP-face check + isolation + package | blocked | #837, #836, #838, #839 done | `main` / manager journey; fixes [#852](https://github.com/zenod-ai/zenod/pull/852), [#853](https://github.com/zenod-ai/zenod/pull/853), [#856](https://github.com/zenod-ai/zenod/pull/856), [#857](https://github.com/zenod-ai/zenod/pull/857) | `a729d08` live | SHIP 1–10 | 1–6 pass; 7 wallet pass/receipt timeout; 8 external chat pass; 9 persistence+isolation pass | 2026-07-11T04:31:00+02:00 | BLOCKED ON JORDI: another focused lap or stop |
 | [#854](https://github.com/zenod-ai/zenod/issues/854) | Ticket worker | R-S5a-worker | Surface downstream Zenod commit receipt in Council chat | done (code) | #840 | [#856](https://github.com/zenod-ai/zenod/pull/856) / `codex/r-s5a-zenod-receipt` | `527023c` | SHIP 7 receipt within 180s | CI + review pass; live still times out | 2026-07-11T04:31:00+02:00 | epic blocker remains |
 | [#855](https://github.com/zenod-ai/zenod/issues/855) | Ticket worker | R-S5b-worker | Make `chat_with_ring` satisfy conduct-kit receipt gate | done | #840 | [#857](https://github.com/zenod-ai/zenod/pull/857) / `codex/r-s5b-mcp-receipt` | `527023c` | SHIP 8 external chat reply | live HTTP 200 + Council reply + `chat_audit` evidence | 2026-07-11T04:31:00+02:00 | integrated |
-| [#858](https://github.com/zenod-ai/zenod/issues/858) | Ticket worker | R-S5c-worker | Diagnose and close live Zenod receipt timeout | in progress | #840, #854 | `codex/r-s5c-live-receipt` / `../wt-r-s5c` | `de327ac` | exact SHIP 7 receipt within 180s | focused lap authorized | 2026-07-11T04:38:00+02:00 | live evidence diagnosis, smallest fix, PR |
+| [#858](https://github.com/zenod-ai/zenod/issues/858) | Ticket worker | R-S5c-worker | Diagnose and close live Zenod receipt timeout | blocked | #840, #854 | [#859](https://github.com/zenod-ai/zenod/pull/859) / `codex/r-s5c-live-receipt` | `de327ac` | exact SHIP 7 receipt within 180s | poll path fixed; live commit succeeds; UI omits receipt evidence | 2026-07-11T04:45:00+02:00 | BLOCKED ON JORDI: reply-gate-only lap |
 | [#863](https://github.com/zenod-ai/zenod/issues/863) | Ticket worker | R-H1-worker | Generic MCP discovery + dynamic Council tools | ready | - | `codex/r-h1-generic-mcp-discovery` / `../wt-r-h1` | `2fe2289` | arbitrary peers expose real schemas/tools; auto-refresh; tools-ready state | issue minted | 2026-07-11T04:34:35+02:00 | dispatch after Ring steward sequences with #858 |
 | [#860](https://github.com/zenod-ai/zenod/issues/860) | Ticket worker | R-H2-worker | Tenant skill artifact store + attachment API | ready | - | `codex/r-h2-peer-skill-artifacts` / `../wt-r-h2` | `2fe2289` | immutable/versioned/path-safe/tenant-isolated bundles + APIs | issue minted | 2026-07-11T04:34:35+02:00 | dispatch after Ring steward sequences with #858 |
 | [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | blocked | #863, #860 | `codex/r-h3-peer-skill-ui` | wave 1 merge | transport vs tools-ready; attach/replace/download/detach | issue minted | 2026-07-11T04:34:35+02:00 | wave 2 |
@@ -196,8 +196,16 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 |---|---|---|---|---|---|---|
 | 2026-07-11 | SHIP live gate | `fde458f` | ring.zenod.dev live | real Chrome walk, external MCP client, two bearer-authenticated tenants | BLOCKED: SHIP 7 receipt missing after 180s; SHIP 8 mutating call `silent_ack`; all other gates pass | `docs/evidence/ring-ship-2026-07-11/TEST-PACKAGE.md` |
 | 2026-07-11 | Authorized receipt fix lap | `a729d08` | ring.zenod.dev live | real Chrome SHIP 7–9, external MCP chat, two bearer-authenticated tenants | BLOCKED: SHIP 7 still lacks commit receipt; SHIP 8–9 pass | `docs/evidence/ring-ship-2026-07-11/11`–`14`; `TEST-PACKAGE.md` |
+| 2026-07-11 | Focused poll-path diagnosis lap | `fae4f33` | ring.zenod.dev live | real Chrome exact SHIP 7 phrase + Zenod durable task audit | PARTIAL: poll fixed and commit succeeds; visible reply omits SHA/URL | `docs/evidence/ring-ship-2026-07-11/15-path-fixed-commit-omitted.png`; `TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T04:45:00+02:00 - Ring delivery manager - Poll fixed; reply gate now the sole blocker
+
+Context: Live evidence proved that Zenod had completed the prior store in ~8s while Ring polled a malformed `/mcp/<credential>/api/tasks/...` route. PR #859 normalized hosted MCP paths, passed CI and independent security review, and deployed as `fae4f33`. The exact browser phrase then returned in ~25s; Zenod task `18cfa656-798d-4215-9976-e8c83be3e688` completed in ~14s with commit `43ab417da540cae5b6b18ae4de9b2e52810ce38a` and GitHub URLs.
+Blocker: Council chat displayed a model paraphrase naming the filed Inbox page but omitted the commit SHA/URL. `add_memory` is mutate-classified but absent from `replyGate.ts`'s verified-receipt action set, so the tool receipt was not rendered verbatim. The authorized live reprove lap is consumed.
+Evidence: `docs/evidence/ring-ship-2026-07-11/15-path-fixed-commit-omitted.png`, Zenod durable task above, and issue #858.
+Next: BLOCKED ON JORDI — authorize one final reply-gate-only lap for `add_memory`, or stop Ring SHIP.
 
 ### 2026-07-11T04:34:35+02:00 - Generic MCP Skills delivery manager - Generic peers + attached skills added to Ring backlog
 

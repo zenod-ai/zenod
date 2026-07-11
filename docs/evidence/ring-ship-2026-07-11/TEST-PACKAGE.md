@@ -6,7 +6,7 @@ Deployed immutable commit: `fde458fa50818b9b125572d01fa4eb613f7f867c` (`/api/hea
 
 ## Result
 
-The live journey is **not yet SHIP**. Jordi authorized one additional receipt-only fix lap. The resulting exact build `a729d08304ef49412e72fe5739fb3b51762721d2` passed CI, guarded deployment, SHIP 8 external MCP chat, logout/login persistence, and two-tenant isolation. SHIP 7 still failed: `remember this: the ring is alive` held the Council UI for the complete polling window, then returned “queued … I'll confirm once it's filed” without the required Zenod commit SHA/URL.
+The live journey is **not yet SHIP**. Jordi subsequently authorized a focused diagnosis lap. Exact build `fae4f3373f2e4057b9245104d9da4ca1eb2dc68a` fixed the hosted `/mcp/<credential>` task-poll URL: the browser returned in ~25 seconds and Zenod durably committed in ~14 seconds. The visible Council reply still omitted the required commit SHA/URL because `add_memory` is not included in the existing hard reply gate and the model paraphrased the verified tool receipt.
 
 The authorized lap fixed SHIP 8: external `initialize` returned Ring `0.0.1`, and `chat_with_ring` returned HTTP 200, `isError=false`, a Council reply, and correlation-backed `chat_audit` evidence. Step 9 persistence and live two-tenant wallet/key isolation passed again on the same build.
 
@@ -27,6 +27,7 @@ The authorized lap fixed SHIP 8: external `initialize` returned Ring `0.0.1`, an
 | Authorized-lap SHIP 8 | PASS | `12-external-mcp-chat-pass.png`; external response recorded below |
 | Authorized-lap SHIP 9 persistence | PASS | `13-authorized-lap-relogin.png` |
 | Authorized-lap SHIP 9 isolation | PASS | `14-authorized-lap-isolation-alpha.png` plus redacted API proof below |
+| Focused path-fix SHIP 7 | PARTIAL | `15-path-fixed-commit-omitted.png`; durable commit succeeded but UI omitted SHA/URL |
 
 ## Authorized-lap external MCP proof
 
@@ -73,7 +74,8 @@ Two bearer-authenticated tenants queried the same exact deployment. A tenant-B r
 - Live routes: `/` 200, `/app` 200, `/healthz` 200, `/api/health` exact SHA, unauthenticated `/mcp` 401.
 - External MCP initialize: HTTP 200, protocol `2025-03-26`, server `ring` `0.0.1`.
 - External read-only tool call: HTTP 200 with Ring's OpenRouter usage timeline.
+- `fae4f33` live diagnosis: Ring returned in ~25s; Zenod job `18cfa656-798d-4215-9976-e8c83be3e688` completed with commit `43ab417da540cae5b6b18ae4de9b2e52810ce38a`; visible reply omitted that evidence.
 
 ## BLOCKED ON JORDI
 
-The authorized additional lap is exhausted. Decide whether to authorize another focused diagnosis/fix lap for the remaining live Zenod async receipt timeout, or stop Ring SHIP here.
+The focused path-fix lap is exhausted. Authorize one final reply-gate-only lap (`add_memory` verified receipt rendered verbatim), or stop Ring SHIP here.
