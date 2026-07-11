@@ -47,6 +47,14 @@ export interface PeerSkillBundleDownload {
   files: Array<{ path: string; contentBase64: string }>;
 }
 
+export interface LoadedPeerSkill {
+  artifact: PeerSkillArtifactMetadata;
+  /** The only artifact body disclosed automatically by the runtime loader. */
+  skillMarkdown: string;
+  /** Safe relative references only; reference/script bodies remain undisclosed. */
+  inventory: PeerSkillFileMetadata[];
+}
+
 type PreparedFile = PeerSkillFileMetadata & { bytes: Buffer };
 
 const writeQueues = new Map<string, Promise<void>>();
@@ -242,6 +250,42 @@ export class PeerSkillStore {
       return { path: file.path, contentBase64: bytes.toString("base64") };
     }));
     return { format: "zenod-agent-skill-bundle-v1", artifact, files };
+  }
+
+  /**
+   * Integrity-check an attached artifact for progressive runtime disclosure.
+   * SKILL.md is the only body returned. References, assets and scripts remain an
+   * inert, relative-path inventory until a future explicitly-scoped reader exists.
+   */
+  async load(ref: PeerSkillAttachmentRef): Promise<LoadedPeerSkill> {
+    const artifact = await this.get(ref);
+    const base = join(this.artifactDir(artifact.artifactId), "files");
+    const seen = new Set<string>();
+    let skillMarkdown: string | null = null;
+    for (const file of artifact.files) {
+      const path = safeRelativePath(file.path);
+      if (seen.has(path)) throw new Error("Stored skill artifact has duplicate paths.");
+      seen.add(path);
+      if (!Number.isSafeInteger(file.size) || file.size < 0 || !/^[a-f0-9]{64}$/.test(file.sha256) || file.executable !== false) {
+        throw new Error("Stored skill artifact inventory is invalid.");
+      }
+      if (path !== "SKILL.md") continue;
+      const target = join(base, "SKILL.md");
+      const info = await lstat(target);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error("Stored skill artifact is invalid.");
+      const bytes = await readFile(target);
+      if (bytes.byteLength !== file.size || createHash("sha256").update(bytes).digest("hex") !== file.sha256) {
+        throw new Error("Stored skill artifact failed integrity verification.");
+      }
+      const parsed = parseSkillManifest(bytes);
+      const expectedVersion = parsed.version ?? artifact.artifactId.slice("sha256:".length, "sha256:".length + 12);
+      if (parsed.name !== artifact.name || parsed.description !== artifact.description || expectedVersion !== artifact.version) {
+        throw new Error("Stored skill artifact metadata failed integrity verification.");
+      }
+      skillMarkdown = bytes.toString("utf8");
+    }
+    if (skillMarkdown === null) throw new Error("Stored skill artifact has no SKILL.md.");
+    return { artifact, skillMarkdown, inventory: artifact.files.map((file) => ({ ...file })) };
   }
 
   private validateRef(ref: PeerSkillAttachmentRef): string {
