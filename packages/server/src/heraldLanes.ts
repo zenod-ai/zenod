@@ -236,9 +236,41 @@ export class HeraldLaneService {
           };
     if (approved.status === "error") return { ...approved, published: [] };
 
+    return this.publishApproved(tenantId, ids);
+  }
+
+  /** Poster-only hook for the chat command `publish approved`. Never approves rows. */
+  async publishApproved(
+    tenantId: string,
+    itemIds: string[],
+  ): Promise<HeraldApprovalReceipt> {
+    const ids = [...new Set(itemIds)];
+    const invalidId = ids.find((itemId) => {
+      const item = this.store.getBoardItem(tenantId, itemId);
+      return !item || item.state !== "approved";
+    });
+    if (invalidId) {
+      return {
+        status: "error",
+        code: "invalid_board_transition",
+        message: `Board item ${invalidId} must already be approved before publishing.`,
+        tenantId,
+        published: [],
+      };
+    }
+    if (ids.length === 0) {
+      return {
+        status: "error",
+        code: "no_board_items",
+        message: "No approved board items were selected for publishing.",
+        tenantId,
+        published: [],
+      };
+    }
+
     const published: HeraldPublishReceipt[] = [];
     for (const itemId of ids) {
-      published.push(await this.publishApproved(tenantId, itemId));
+      published.push(await this.publishOneApproved(tenantId, itemId));
     }
     const message = published.map((entry) => entry.permalink).join("\n");
     await this.appendChatReceipt(
@@ -246,9 +278,10 @@ export class HeraldLaneService {
       `Published ${published.length} approved item${published.length === 1 ? "" : "s"}:\n${message}`,
     );
     return {
-      ...approved,
+      status: "ok",
       code: "items_posted",
       message: `Published ${published.length} approved item${published.length === 1 ? "" : "s"} with canonical permalink receipts.`,
+      tenantId,
       ids,
       published,
     };
@@ -335,7 +368,7 @@ export class HeraldLaneService {
     });
   }
 
-  private async publishApproved(
+  private async publishOneApproved(
     tenantId: string,
     itemId: string,
   ): Promise<HeraldPublishReceipt> {

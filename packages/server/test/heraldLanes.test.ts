@@ -201,7 +201,7 @@ describe("Herald proposer and poster lanes", () => {
       });
 
       await expect(
-        service.approveAndPublish("alpha", [item.id]),
+        service.publishApproved("alpha", [item.id]),
       ).resolves.toMatchObject({
         status: "ok",
         code: "items_posted",
@@ -218,6 +218,27 @@ describe("Herald proposer and poster lanes", () => {
         "approve_send",
       ]);
       expect(service.getBoard("alpha").items[0].state).toBe("posted");
+    } finally {
+      service.close();
+    }
+  });
+
+  it("keeps proposal approval separate from the poster-only hook", async () => {
+    const { service, callTool } = await fixture();
+    try {
+      await service.proposeNow("alpha");
+      const item = service.getBoard("alpha").items[0];
+      await expect(
+        service.publishApproved("alpha", [item.id]),
+      ).resolves.toMatchObject({
+        status: "error",
+        code: "invalid_board_transition",
+        published: [],
+      });
+      expect(service.getBoard("alpha").items[0].state).toBe("proposed");
+      expect(
+        callTool.mock.calls.filter((call) => call[1] === "createPosts"),
+      ).toHaveLength(0);
     } finally {
       service.close();
     }
