@@ -54,6 +54,11 @@ export interface HeraldChatDependencies {
     receipt: HeraldMutationReceipt;
   };
   fileToMemory: HeraldFileToMemory;
+  listApproved?: (tenantId: string) => HeraldBoardItem[];
+  publishApproved?: (
+    tenantId: string,
+    itemIds: string[],
+  ) => Promise<{ status: "ok" | "error"; message: string; published: Array<{ permalink: string }> }>;
 }
 
 export interface HeraldApprovalSelection {
@@ -265,6 +270,29 @@ export function createHeraldChatHandler(dependencies: HeraldChatDependencies) {
       return next
         ? { handled: true, text: `Briefing draft receipt: captured ${missing}.\n${questionFor(next)}` }
         : { handled: true, text: `Briefing draft receipt: captured ${missing}.\n${renderDraft(draft, 1)}` };
+    }
+
+    if (/^publish approved$/i.test(message)) {
+      if (!dependencies.listApproved || !dependencies.publishApproved) {
+        return loudError(new Error("Herald's poster lane is unavailable."));
+      }
+      const approvedItems = dependencies.listApproved(tenantId);
+      if (approvedItems.length === 0) {
+        return { handled: true, text: "Nothing changed: there are no approved items to publish." };
+      }
+      try {
+        const receipt = await dependencies.publishApproved(
+          tenantId,
+          approvedItems.map((item) => item.id),
+        );
+        if (receipt.status !== "ok") throw new Error(receipt.message);
+        return {
+          handled: true,
+          text: [receipt.message, ...receipt.published.map((entry) => entry.permalink)].join("\n"),
+        };
+      } catch (error) {
+        return loudError(error);
+      }
     }
 
     if (!message.startsWith("✓")) return { handled: false };

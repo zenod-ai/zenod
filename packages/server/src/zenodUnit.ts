@@ -18,7 +18,7 @@ import {
   editGithubIssue,
 } from "zenod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
-import { createApp, resolvedGitSha } from "./app.js";
+import { createApp, resolvedGitSha, type AppOptions } from "./app.js";
 import { ChassisCredentialVault } from "./credentialVault.js";
 import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
@@ -45,6 +45,7 @@ export class ZenodRuntimePool {
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly sharedGithubApp: SharedGithubApp | null = null,
     private readonly agent: AgentDefinition = ZENOD_AGENT,
+    private readonly appOptionsForTenant?: (tenantId: string, runtime: Runtime) => Pick<AppOptions, "chatInterceptor">,
   ) {}
 
   forContext(context: UnitContext): Runtime {
@@ -90,10 +91,12 @@ export class ZenodRuntimePool {
     }
     const existing = this.apps.get(context.tenant.id);
     if (existing) return existing;
-    const app = createApp(this.forContext(context), {
+    const runtime = this.forContext(context);
+    const app = createApp(runtime, {
       agent: this.agent,
       trustedChassisAuth: true,
       walletFleetAllowlist: walletFleetAllowlist(this.env),
+      ...this.appOptionsForTenant?.(context.tenant.id, runtime),
     });
     this.apps.set(context.tenant.id, app);
     return app;
@@ -181,6 +184,8 @@ export interface CreateZenodUnitOptions {
     routes: Hono<UnitHonoEnv>,
     runtimes: ZenodRuntimePool,
   ) => void;
+  /** Bind tenant-aware hooks into the duplicated chat application. */
+  appOptionsForTenant?: (tenantId: string, runtime: Runtime) => Pick<AppOptions, "chatInterceptor">;
   additionalReadTools?: readonly string[];
   customerAdmin?: {
     githubLogin: string;
@@ -222,7 +227,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       busyTimeoutMs: 30_000,
     });
   const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
-  const runtimes = new ZenodRuntimePool(env, sharedGithubApp, agent);
+  const runtimes = new ZenodRuntimePool(env, sharedGithubApp, agent, options.appOptionsForTenant);
   const unit = createUnit({
     name: unitName,
     version: VERSION,

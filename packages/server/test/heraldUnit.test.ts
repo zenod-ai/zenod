@@ -112,6 +112,24 @@ describe("Herald council unit", () => {
       expect(refused.status).toBe(409);
       expect(await refused.json()).toMatchObject({ code: "briefing_required", status: "refused" });
 
+      const setup = await unit.app.request("/api/chat/stream", {
+        method: "POST",
+        headers: { authorization: "Bearer alpha-token", "content-type": "application/json" },
+        body: JSON.stringify({ message: "hello" }),
+      });
+      expect(setup.status).toBe(200);
+      const setupBody = await setup.text();
+      expect(setupBody).toContain("Briefing setup started");
+      expect(setupBody).toContain('"type":"done"');
+      const setupHistory = await unit.app.request("/api/chat/history", {
+        headers: { authorization: "Bearer alpha-token" },
+      });
+      const setupHistoryPayload = await setupHistory.json() as { messages: Array<{ role: string; text: string }> };
+      expect(setupHistoryPayload.messages.slice(-2)).toMatchObject([
+          { role: "user", text: "hello" },
+          { role: "assistant", text: expect.stringContaining("No loop action can run before approval") },
+      ]);
+
       const runtime = unit.runtimes.get("tenant-alpha");
       expect(runtime).not.toBeNull();
       runtime!.getEngine = async () => ({

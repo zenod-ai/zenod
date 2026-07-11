@@ -18,7 +18,10 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function storeFixture(fileToMemory: HeraldChatDependencies["fileToMemory"]) {
+async function storeFixture(
+  fileToMemory: HeraldChatDependencies["fileToMemory"],
+  extra: Partial<Pick<HeraldChatDependencies, "listApproved" | "publishApproved">> = {},
+) {
   const dir = await mkdtemp(join(tmpdir(), "herald-chat-"));
   dirs.push(dir);
   const store = new HeraldLoopStore(join(dir, "loop.sqlite"));
@@ -32,6 +35,7 @@ async function storeFixture(fileToMemory: HeraldChatDependencies["fileToMemory"]
     decideItems: (tenantId, input) => store.decideItems(tenantId, input),
     recordFiling: (input) => store.recordFiling(input),
     fileToMemory,
+    ...extra,
   };
   return { store, handle: createHeraldChatHandler(dependencies) };
 }
@@ -175,6 +179,37 @@ describe("Herald briefing chat", () => {
       expect(result.text).toContain("nothing changed");
       expect(store.listBoardItems("alpha").map((item) => item.state)).toEqual(["proposed", "proposed"]);
       expect(fileToMemory).not.toHaveBeenCalled();
+    } finally {
+      store.close();
+    }
+  });
+
+  it("publishes only the already-approved current items on the separate chat command", async () => {
+    const published = vi.fn(async (_tenantId: string, itemIds: string[]) => ({
+      status: "ok" as const,
+      message: `Published ${itemIds.length} approved items.`,
+      published: itemIds.map((_, index) => ({ permalink: `https://x.com/i/web/status/${index + 10}` })),
+    }));
+    let store!: HeraldLoopStore;
+    const fixture = await storeFixture(
+      async () => "Stored.\ncommit: cab1234",
+      {
+        listApproved: (tenantId) => store.listBoardItems(tenantId, ["approved"]),
+        publishApproved: published,
+      },
+    );
+    store = fixture.store;
+    try {
+      await negotiate(fixture.handle);
+      await fixture.handle({ tenantId: "alpha", text: "✓ approve briefing" });
+      const wakeId = store.tryStartWake("alpha", "run_now")!;
+      const created = store.createProposals("alpha", wakeId, [proposal(1), proposal(2)]);
+      store.finishWake(wakeId, { status: "completed", code: "wake_completed", message: "ready" });
+      store.approveItems("alpha", created.items.map((item) => item.id));
+
+      const result = await fixture.handle({ tenantId: "alpha", text: "publish approved" });
+      expect(result).toMatchObject({ handled: true, text: expect.stringContaining("https://x.com/i/web/status/10") });
+      expect(published).toHaveBeenCalledWith("alpha", created.items.map((item) => item.id));
     } finally {
       store.close();
     }

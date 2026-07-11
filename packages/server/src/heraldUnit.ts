@@ -1,4 +1,5 @@
 import { HERALD_AGENT } from "./agent.js";
+import { createHeraldChatHandler, createZenodWalletFiler } from "./heraldChat.js";
 import { HeraldLaneService, registerHeraldLoopTools } from "./heraldLanes.js";
 import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 
@@ -11,6 +12,7 @@ export function createHeraldUnit(options: CreateZenodUnitOptions = {}) {
   let lanes: HeraldLaneService;
   const inheritedTools = options.registerAdditionalTools;
   const inheritedRoutes = options.mountAdditionalRoutes;
+  const inheritedAppOptions = options.appOptionsForTenant;
   const unit = createZenodUnit({
     ...options,
     agent: HERALD_AGENT,
@@ -19,6 +21,30 @@ export function createHeraldUnit(options: CreateZenodUnitOptions = {}) {
     defaultTenantName: "Self-hosted Herald",
     panels: ["chat", "briefing", "board", "keys", "connections", "costs", "mcp"],
     additionalReadTools: [...(options.additionalReadTools ?? []), "get_board", "get_briefing"],
+    appOptionsForTenant(tenantId, runtime) {
+      const inherited = inheritedAppOptions?.(tenantId, runtime);
+      const handler = createHeraldChatHandler({
+        getApprovedBriefing: (id) => lanes.store.getApprovedBriefing(id),
+        getBriefingDraft: (id) => lanes.store.getBriefingDraft(id),
+        saveBriefingDraft: (id, patch) => lanes.store.saveBriefingDraft(id, patch),
+        clearBriefingDraft: (id) => lanes.store.clearBriefingDraft(id),
+        approveBriefing: (input) => lanes.store.approveBriefing(input),
+        listProposed: (id) => lanes.store.listBoardItems(id, ["proposed"]),
+        decideItems: (id, decision) => lanes.store.decideItems(id, decision),
+        recordFiling: (input) => lanes.store.recordFiling(input),
+        fileToMemory: createZenodWalletFiler(() => runtime.settings.peers()),
+        listApproved: (id) => lanes.store.listBoardItems(id, ["approved"]),
+        publishApproved: (id, itemIds) => lanes.publishApproved(id, itemIds, { appendChatReceipt: false }),
+      });
+      return {
+        ...inherited,
+        chatInterceptor: async (message) => {
+          const result = await handler({ tenantId, text: message });
+          if (result.handled || !inherited?.chatInterceptor) return result;
+          return inherited.chatInterceptor(message);
+        },
+      };
+    },
     registerAdditionalTools(server, context, runtime) {
       inheritedTools?.(server, context, runtime);
       registerHeraldLoopTools(server, context, lanes);

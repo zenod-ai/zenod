@@ -243,6 +243,7 @@ export class HeraldLaneService {
   async publishApproved(
     tenantId: string,
     itemIds: string[],
+    options: { appendChatReceipt?: boolean } = {},
   ): Promise<HeraldApprovalReceipt> {
     const ids = [...new Set(itemIds)];
     const invalidId = ids.find((itemId) => {
@@ -273,10 +274,12 @@ export class HeraldLaneService {
       published.push(await this.publishOneApproved(tenantId, itemId));
     }
     const message = published.map((entry) => entry.permalink).join("\n");
-    await this.appendChatReceipt(
-      tenantId,
-      `Published ${published.length} approved item${published.length === 1 ? "" : "s"}:\n${message}`,
-    );
+    if (options.appendChatReceipt !== false) {
+      await this.appendChatReceipt(
+        tenantId,
+        `Published ${published.length} approved item${published.length === 1 ? "" : "s"}:\n${message}`,
+      );
+    }
     return {
       status: "ok",
       code: "items_posted",

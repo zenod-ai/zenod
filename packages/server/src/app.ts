@@ -107,6 +107,8 @@ export interface AppOptions {
   trustedChassisAuth?: boolean;
   /** Exact hostnames allowed to resolve privately for the managed unit fleet. */
   walletFleetAllowlist?: readonly string[];
+  /** Unit-owned conversation state handled before the ported chat/model path. */
+  chatInterceptor?: (message: string) => Promise<{ handled: boolean; text?: string }>;
 }
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
@@ -2527,6 +2529,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/chat", async (c) => {
     const { message } = await c.req.json<{ message?: string }>();
     if (!message) return c.json({ error: "message is required" }, 400);
+    const intercepted = await options.chatInterceptor?.(message);
+    if (intercepted?.handled) {
+      const text = intercepted.text ?? "";
+      await runtime.state.appendMessage(conversationId("web"), "user", message, "web");
+      await runtime.state.appendMessage(conversationId("web"), "assistant", text, "web");
+      return c.json({ text, sources: [], actions: [] });
+    }
     const cleanSlate = await handleCleanSlateChat(message, runtime);
     if (cleanSlate) return c.json(cleanSlate);
     const engine = await runtime.getEngine();
@@ -2632,6 +2641,23 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/chat/stream", async (c) => {
     const { message } = await c.req.json<{ message?: string }>();
     if (!message) return c.json({ error: "message is required" }, 400);
+    const intercepted = await options.chatInterceptor?.(message);
+    if (intercepted?.handled) {
+      const text = intercepted.text ?? "";
+      await runtime.state.appendMessage(conversationId("web"), "user", message, "web");
+      await runtime.state.appendMessage(conversationId("web"), "assistant", text, "web");
+      const enc = new TextEncoder();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(enc.encode(JSON.stringify({ type: "delta", text }) + "\n"));
+          controller.enqueue(enc.encode(JSON.stringify({ type: "done", text, sources: [] }) + "\n"));
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache" },
+      });
+    }
     const cleanSlate = await handleCleanSlateChat(message, runtime);
     if (cleanSlate) {
       const enc = new TextEncoder();
