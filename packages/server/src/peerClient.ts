@@ -3,6 +3,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { VERSION } from "zenod";
 import { pollPeerJob } from "./pollPeerJob.js";
 import { validateWalletUrl } from "./walletUrl.js";
+import type { PeerSkillAttachmentRef } from "./peerSkillStore.js";
 
 /**
  * The mesh: one agent calling another over MCP. A peer agent exposes its tools at
@@ -47,6 +48,8 @@ export interface PeerConfig {
   wallet?: boolean;
   /** Set only by server policy when the exact host belongs to the private unit fleet. */
   allowPrivateHost?: boolean;
+  /** Tenant-local immutable skill artifact reference. The bundle itself is never stored in settings. */
+  skillArtifact?: PeerSkillAttachmentRef;
 }
 
 async function validatePeerTarget(peer: PeerConfig): Promise<void> {

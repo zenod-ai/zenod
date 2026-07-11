@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import type { HttpBindings } from "@hono/node-server";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -73,6 +74,12 @@ import { callPeerTool, probePeer } from "./peerClient.js";
 import { validateWalletUrl, walletFleetAllowlist } from "./walletUrl.js";
 import { RingRouterCore, type RingConnectedServer, type RingInboundMessage, type RingToolCall } from "./ringRouter.js";
 import type { PhylaxChannel } from "./phylaxGateway.js";
+import {
+  PeerSkillNotFoundError,
+  PeerSkillQuotaError,
+  PeerSkillStore,
+  type PeerSkillFileInput,
+} from "./peerSkillStore.js";
 
 // #532/#548 — the running commit SHA for /api/health. Prefer an explicit GIT_SHA env
 // (GHCR/CI builds pass it); otherwise fall back to the `.gitsha` file the Docker build
@@ -1056,7 +1063,15 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // GET never returns tokens (only whether one is set). PUT replaces the whole list.
   app.get("/api/peers", async (c) => {
     const peers = settings.peers();
-    const statuses = agent.name === "ring" ? await Promise.all(peers.map(probePeer)) : peers.map(() => "connected" as const);
+    const [statuses, skills] = await Promise.all([
+      agent.name === "ring" ? Promise.all(peers.map(probePeer)) : Promise.resolve(peers.map(() => "connected" as const)),
+      agent.name === "ring"
+        ? Promise.all(peers.map(async (peer) => {
+            if (!peer.skillArtifact) return null;
+            return new PeerSkillStore(runtime.dataDir).get(peer.skillArtifact).catch(() => null);
+          }))
+        : Promise.resolve(peers.map(() => null)),
+    ]);
     return c.json({
       peers: peers.map((p, index) => ({
         name: p.name,
@@ -1064,6 +1079,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         tool: p.tool ?? "ask_brain",
         hasToken: Boolean(p.token),
         status: statuses[index] ?? "error",
+        skill: skills[index] ?? null,
       })),
     });
   });
@@ -1079,9 +1095,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         // A masked/blank token on edit means "keep the existing one" for that peer.
         const token =
           p.token && !p.token.includes("••••") ? p.token : existing.find((e) => e.name === name)?.token ?? "";
-        return { name, url, token, ...(p.tool ? { tool: p.tool } : {}) };
+        const skillArtifact = existing.find((e) => e.name === name)?.skillArtifact;
+        return { name, url, token, ...(p.tool ? { tool: p.tool } : {}), ...(skillArtifact ? { skillArtifact } : {}) };
       })
       .filter((p) => p.name && p.url && p.token);
+    const peerNames = candidates.map((peer) => peer.name.toLowerCase());
+    if (new Set(peerNames).size !== peerNames.length) {
+      return c.json({ error: "Peer names must be unique." }, 400);
+    }
     if (agent.name === "ring") {
       try {
         await Promise.all(candidates.map((peer) => validateWalletUrl(peer.url, {
@@ -1092,21 +1113,113 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       }
     }
     const fleetHosts = new Set((options.walletFleetAllowlist ?? walletFleetAllowlist()).map((host) => host.toLowerCase()));
+    // URL validation yields. Re-read server-owned skill attachments at commit
+    // time so a concurrent attach/detach is never overwritten by this peer edit.
+    const latestPeers = settings.peers();
     const next = candidates.map((peer) => {
       const hostname = new URL(peer.url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+      const latestSkill = latestPeers.find((candidate) => candidate.name === peer.name)?.skillArtifact;
+      const { skillArtifact: _staleSkill, ...candidate } = peer;
       return {
-        ...peer,
+        ...candidate,
         wallet: agent.name === "ring",
         ...(fleetHosts.has(hostname) ? { allowPrivateHost: true } : {}),
         ...(peer.name.toLowerCase() === "zenod" ? { tools: ZENOD_MEMORY_TOOLS } : {}),
+        ...(latestSkill ? { skillArtifact: latestSkill } : {}),
       };
     });
     settings.setPeers(next);
     runtime.invalidate(); // rebuild the engine so the new peer tools take effect
     const statuses = agent.name === "ring" ? await Promise.all(next.map(probePeer)) : next.map(() => "connected" as const);
     return c.json({
-      peers: next.map((p, index) => ({ name: p.name, url: p.url, tool: p.tool ?? "ask_brain", hasToken: true, status: statuses[index] ?? "error" })),
+      peers: next.map((p, index) => ({
+        name: p.name,
+        url: p.url,
+        tool: p.tool ?? "ask_brain",
+        hasToken: true,
+        status: statuses[index] ?? "error",
+        skill: p.skillArtifact ?? null,
+      })),
     });
+  });
+
+  // Ring stores tenant-attached Agent Skills separately from peer settings. The
+  // settings row holds only a content-addressed reference; files are never loaded
+  // or executed by this API (including files under scripts/).
+  app.get("/api/peers/:peerName/skill", async (c) => {
+    if (agent.name !== "ring") return c.json({ error: "not found" }, 404);
+    const peer = settings.peers().find((candidate) => candidate.name === c.req.param("peerName"));
+    if (!peer) return c.json({ error: "peer not found" }, 404);
+    if (!peer.skillArtifact) return c.json({ attachment: null });
+    try {
+      const artifact = await new PeerSkillStore(runtime.dataDir).get(peer.skillArtifact);
+      return c.json({ attachment: artifact });
+    } catch (error) {
+      if (error instanceof PeerSkillNotFoundError) return c.json({ error: "skill artifact not found" }, 404);
+      throw error;
+    }
+  });
+
+  app.put(
+    "/api/peers/:peerName/skill",
+    bodyLimit({
+      maxSize: 8 * 1024 * 1024,
+      onError: (c) => c.json({ error: "Skill bundle request is too large." }, 413),
+    }),
+    async (c) => {
+      if (agent.name !== "ring") return c.json({ error: "not found" }, 404);
+      const peers = settings.peers();
+      const peerIndex = peers.findIndex((candidate) => candidate.name === c.req.param("peerName"));
+      if (peerIndex < 0) return c.json({ error: "peer not found" }, 404);
+      const body = await c.req.json<{ files?: PeerSkillFileInput[] }>().catch((): { files?: PeerSkillFileInput[] } => ({}));
+      try {
+        const artifact = await new PeerSkillStore(runtime.dataDir).put(body.files ?? []);
+        // The upload yields to the event loop. Re-read settings so an edit or
+        // deletion completed during that time is never reverted by a stale snapshot.
+        const currentPeers = settings.peers();
+        const currentIndex = currentPeers.findIndex((candidate) => candidate.name === c.req.param("peerName"));
+        if (currentIndex < 0) return c.json({ error: "peer changed while the skill was uploading" }, 409);
+        currentPeers[currentIndex] = {
+          ...currentPeers[currentIndex]!,
+          skillArtifact: { artifactId: artifact.artifactId, version: artifact.version },
+        };
+        settings.setPeers(currentPeers);
+        runtime.invalidate();
+        return c.json({ attachment: artifact });
+      } catch (error) {
+        if (error instanceof PeerSkillQuotaError) return c.json({ error: error.message }, 413);
+        return c.json({ error: error instanceof Error ? error.message : "Invalid skill bundle." }, 400);
+      }
+    },
+  );
+
+  app.get("/api/peers/:peerName/skill/download", async (c) => {
+    if (agent.name !== "ring") return c.json({ error: "not found" }, 404);
+    const peer = settings.peers().find((candidate) => candidate.name === c.req.param("peerName"));
+    if (!peer) return c.json({ error: "peer not found" }, 404);
+    if (!peer.skillArtifact) return c.json({ error: "peer has no attached skill" }, 404);
+    try {
+      const bundle = await new PeerSkillStore(runtime.dataDir).download(peer.skillArtifact);
+      return c.json(bundle, 200, {
+        "Content-Type": "application/vnd.zenod.agent-skill+json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(bundle.artifact.name)}-${encodeURIComponent(bundle.artifact.version)}.skill.json"`,
+      });
+    } catch (error) {
+      if (error instanceof PeerSkillNotFoundError) return c.json({ error: "skill artifact not found" }, 404);
+      throw error;
+    }
+  });
+
+  app.delete("/api/peers/:peerName/skill", (c) => {
+    if (agent.name !== "ring") return c.json({ error: "not found" }, 404);
+    const peers = settings.peers();
+    const peerIndex = peers.findIndex((candidate) => candidate.name === c.req.param("peerName"));
+    if (peerIndex < 0) return c.json({ error: "peer not found" }, 404);
+    const { skillArtifact: _skillArtifact, ...peer } = peers[peerIndex]!;
+    peers[peerIndex] = peer;
+    settings.setPeers(peers);
+    runtime.invalidate();
+    return c.json({ attachment: null });
   });
 
   // --- Team: enable/disable suite agents. The Console MINTS each agent's token and
