@@ -9,6 +9,34 @@ import type { PhylaxPortedChannel, PhylaxTenantRoute } from "./phylaxChannels.js
 const DOWNSTREAM_TOKEN_KEY = "phylax_downstream_token";
 const TRANSCRIPTION_TOKEN_KEY = "phylax_transcription_token";
 const VERIFY_TTL_MS = 30 * 60_000;
+const VERIFICATION_ANIMALS = [
+  "badger",
+  "bear",
+  "bison",
+  "cat",
+  "deer",
+  "dolphin",
+  "eagle",
+  "falcon",
+  "fox",
+  "gecko",
+  "heron",
+  "koala",
+  "lemur",
+  "lion",
+  "lynx",
+  "otter",
+  "owl",
+  "panda",
+  "puma",
+  "raven",
+  "seal",
+  "shark",
+  "tiger",
+  "turtle",
+  "whale",
+  "wolf",
+] as const;
 
 export interface PhylaxTenantSettings {
   tenantId: string;
@@ -52,7 +80,14 @@ function defaultSettings(tenantId: string): PhylaxTenantSettings {
 }
 
 function verificationDigest(keyword: string): Buffer {
-  return createHash("sha256").update(keyword.trim().toUpperCase(), "utf8").digest();
+  return createHash("sha256").update(keyword.trim().toLowerCase(), "utf8").digest();
+}
+
+function friendlyVerificationKeyword(): string {
+  const entropy = randomBytes(2);
+  const number = 10 + ((entropy[0] ?? 0) % 90);
+  const animal = VERIFICATION_ANIMALS[(entropy[1] ?? 0) % VERIFICATION_ANIMALS.length] ?? "otter";
+  return `${number}-${animal}`;
 }
 
 function normalizedDownstreamUrl(value: string): string {
@@ -139,7 +174,7 @@ export class PhylaxTenantSettingsStore {
       (entry) => entry.tenantId !== tenantId && entry.phoneNumber === normalized,
     );
     if (collision) throw new Error("phone number is already registered");
-    const keyword = `PHYLAX-${randomBytes(4).toString("hex").toUpperCase()}`;
+    const keyword = friendlyVerificationKeyword();
     this.put({
       ...this.get(tenantId),
       phoneNumber: normalized,
