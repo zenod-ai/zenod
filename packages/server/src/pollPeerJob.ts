@@ -59,14 +59,16 @@ export async function pollPeerJob(
 
     for (const peer of peers) {
       const pollUrl = peerApiUrl(peer.url, jobId);
-      const hostname = new URL(pollUrl).hostname.toLowerCase().replace(/^\[|\]$/g, "");
-      try {
-        await validateWalletUrl(pollUrl, { allowHosts: peer.allowPrivateHost ? [hostname] : [] });
-      } catch (error) {
-        return {
-          status: "error",
-          error: `Peer job polling refused: ${error instanceof Error ? error.message : String(error)}`,
-        };
+      if (peer.wallet) {
+        const hostname = new URL(pollUrl).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+        try {
+          await validateWalletUrl(pollUrl, { allowHosts: peer.allowPrivateHost ? [hostname] : [] });
+        } catch (error) {
+          return {
+            status: "error",
+            error: `Peer job polling refused: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
       }
       try {
         const res = await fetch(pollUrl, {

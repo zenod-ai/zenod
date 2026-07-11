@@ -95,4 +95,23 @@ describe("pollPeerJob", () => {
       { headers: { Authorization: "Bearer fleet-token" } },
     );
   });
+
+  it("preserves legacy non-wallet polling without applying wallet URL policy", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ job: { status: "done", kind: "store", result: { commitSha: "d".repeat(40) } } }),
+    );
+
+    const result = await pollPeerJob(
+      [{ name: "legacy-gateway", url: "http://127.0.0.1:8080/mcp", token: "legacy-token" }],
+      "14ff5e91-c12b-4e1f-8c30-ecdc8dc2d3d3",
+      0,
+      100,
+    );
+
+    expect(result).toEqual({ status: "done", kind: "store", result: { commitSha: "d".repeat(40) } });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://127.0.0.1:8080/api/tasks/jobs/14ff5e91-c12b-4e1f-8c30-ecdc8dc2d3d3",
+      { headers: { Authorization: "Bearer legacy-token" } },
+    );
+  });
 });
