@@ -69,7 +69,8 @@ import { validateStepCallback, type StepCallbackResult } from "./journeyContract
 import type { DeliverableManifest } from "./executionQueue.js";
 import { creditHeadroomDecision } from "./sessionLog.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
-import { callPeerTool } from "./peerClient.js";
+import { callPeerTool, probePeer } from "./peerClient.js";
+import { validateWalletUrl, walletFleetAllowlist } from "./walletUrl.js";
 import { RingRouterCore, type RingConnectedServer, type RingInboundMessage, type RingToolCall } from "./ringRouter.js";
 import type { PhylaxChannel } from "./phylaxGateway.js";
 
@@ -97,6 +98,8 @@ export interface AppOptions {
   agent?: AgentDefinition;
   /** Chassis route middleware has already authenticated and bound this tenant. */
   trustedChassisAuth?: boolean;
+  /** Exact hostnames allowed to resolve privately for the managed unit fleet. */
+  walletFleetAllowlist?: readonly string[];
 }
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
@@ -1051,17 +1054,25 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
 
   // --- Mesh: peer agents this agent can delegate to ---
   // GET never returns tokens (only whether one is set). PUT replaces the whole list.
-  app.get("/api/peers", (c) =>
-    c.json({
-      peers: settings.peers().map((p) => ({ name: p.name, url: p.url, tool: p.tool ?? "ask_brain", hasToken: Boolean(p.token) })),
-    }),
-  );
+  app.get("/api/peers", async (c) => {
+    const peers = settings.peers();
+    const statuses = agent.name === "ring" ? await Promise.all(peers.map(probePeer)) : peers.map(() => "connected" as const);
+    return c.json({
+      peers: peers.map((p, index) => ({
+        name: p.name,
+        url: p.url,
+        tool: p.tool ?? "ask_brain",
+        hasToken: Boolean(p.token),
+        status: statuses[index] ?? "error",
+      })),
+    });
+  });
 
   app.put("/api/peers", async (c) => {
     type PeerInput = { name?: string; url?: string; token?: string; tool?: string };
     const body = await c.req.json<{ peers?: PeerInput[] }>().catch(() => ({ peers: [] as PeerInput[] }));
     const existing = settings.peers();
-    const next = (body.peers ?? [])
+    const candidates = (body.peers ?? [])
       .map((p) => {
         const name = (p.name ?? "").trim();
         const url = (p.url ?? "").trim();
@@ -1071,10 +1082,30 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         return { name, url, token, ...(p.tool ? { tool: p.tool } : {}) };
       })
       .filter((p) => p.name && p.url && p.token);
+    if (agent.name === "ring") {
+      try {
+        await Promise.all(candidates.map((peer) => validateWalletUrl(peer.url, {
+          allowHosts: options.walletFleetAllowlist ?? walletFleetAllowlist(),
+        })));
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : "Invalid MCP URL." }, 400);
+      }
+    }
+    const fleetHosts = new Set((options.walletFleetAllowlist ?? walletFleetAllowlist()).map((host) => host.toLowerCase()));
+    const next = candidates.map((peer) => {
+      const hostname = new URL(peer.url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+      return {
+        ...peer,
+        wallet: agent.name === "ring",
+        ...(fleetHosts.has(hostname) ? { allowPrivateHost: true } : {}),
+        ...(peer.name.toLowerCase() === "zenod" ? { tools: ZENOD_MEMORY_TOOLS } : {}),
+      };
+    });
     settings.setPeers(next);
     runtime.invalidate(); // rebuild the engine so the new peer tools take effect
+    const statuses = agent.name === "ring" ? await Promise.all(next.map(probePeer)) : next.map(() => "connected" as const);
     return c.json({
-      peers: next.map((p) => ({ name: p.name, url: p.url, tool: p.tool ?? "ask_brain", hasToken: true })),
+      peers: next.map((p, index) => ({ name: p.name, url: p.url, tool: p.tool ?? "ask_brain", hasToken: true, status: statuses[index] ?? "error" })),
     });
   });
 
