@@ -6,6 +6,7 @@ import type Stripe from "stripe";
 import { createCallisthenesCustomerLayer } from "../src/callisthenesCustomerLayer.js";
 import { createCustomerCheckout, type CustomerStripeClient } from "../src/customerBilling.js";
 import { signState, type IdentityProvider } from "../src/customerIdentity.js";
+import { createMemoryTenantStore, hashToken } from "@zenod/mcp-chassis";
 
 const dirs: string[] = [];
 const env = {
@@ -90,5 +91,68 @@ describe("Callisthenes customer-layer duplicate", () => {
     expect(checkoutInput()?.success_url).toBe(
       "https://calli.zenod.dev/checkout/complete?session_id={CHECKOUT_SESSION_ID}",
     );
+  });
+
+  it("turns a signed TEST webhook into a local Callisthenes tenant row", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "calli-webhook-"));
+    dirs.push(dataDir);
+    const tenantStore = createMemoryTenantStore();
+    const session = {
+      id: "cs_test_paid",
+      client_reference_id: "github-42",
+      metadata: {
+        product: "callisthenes",
+        unit: "callisthenes",
+        tier: "monthly",
+        account_id: "github-42",
+      },
+      subscription: "sub_test",
+      customer_details: { email: "owner@example.test" },
+      payment_status: "paid",
+      status: "complete",
+    } as Stripe.Checkout.Session;
+    const stripe = {
+      checkout: { sessions: { create: async () => session, retrieve: async () => session } },
+      webhooks: {
+        constructEvent: () => ({
+          id: "evt_test",
+          livemode: false,
+          type: "checkout.session.completed",
+          data: { object: session },
+        }) as Stripe.Event,
+      },
+    } as CustomerStripeClient;
+    const layer = createCallisthenesCustomerLayer(
+      { dataDir },
+      { env: { ...env, STRIPE_WEBHOOK_SECRET: "whsec_test" }, stripe, tenantStore },
+    );
+    layer.accounts.upsert(session.id, {
+      account_id: "github-42",
+      github_id: 42,
+      github_login: "calli-owner",
+      tier: "monthly",
+      stripe_client_reference_id: "github-42",
+      subscription_status: "checkout_pending",
+    });
+
+    const response = await layer.app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "signed-test-event" },
+      body: "signed payload",
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ received: true, result: "completed" });
+    const account = layer.accounts.get(session.id);
+    expect(account).toMatchObject({
+      tenant_id: "github-42",
+      tenant_slug: "calli-owner-42",
+      subscription_status: "active",
+    });
+    const token = layer.tokenVault.get("github-42");
+    expect(token).toBeTruthy();
+    expect(await tenantStore.resolveTokenHash(hashToken(token!))).toMatchObject({
+      tenant: { id: "github-42" },
+      status: "active",
+    });
   });
 });

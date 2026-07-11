@@ -1,90 +1,75 @@
-# units/callisthenes/docker-compose.callisthenes.yml — the Callisthenes atomic unit.
-#
-# ONE container (unlike services/x-mcp's two-instance readonly/postread split): the
-# posting gate is no longer topology-only. Callisthenes exposes read + post tools on
-# a SINGLE endpoint, but every send passes through in-unit middleware:
-#   - drafts-never-send (C-22): a createPosts/deletePosts/mediaUpload call is refused
-#     unless it carries the approval arg (default `callisthenes_approve`); and
-#   - throttle: at most CALLISTHENES_THROTTLE_PER_HOUR approved sends per rolling hour.
-# So a raw/unapproved or over-rate send never reaches X even on the post endpoint.
-#
-# Creds: the five X_* values are interpolated from the environment. Standalone, put
-# them in units/callisthenes/.env (compose auto-loads it); under Dokploy, set them in
-# the compose's Environment. See .env.example. Per-tenant PIN chat-auth (C-2) will
-# supersede the single-owner X_OAUTH_ACCESS_TOKEN for hosted; single-owner stays for
-# dogfood.
+# Callisthenes deploys and sells as one atomic Dokploy compose. Only calli-front
+# is public; calli-engine stays on the private unit network.
 
 networks:
-  zenod-x-net:
-    name: zenod-x-net
+  callisthenes-private:
+  dokploy-network:
+    external: true
 
 volumes:
   callisthenes-data:
 
 services:
-  callisthenes:
+  calli-front:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:?required}
+    image: ${CALLISTHENES_FRONT_IMAGE:-zenod-callisthenes-front}
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      ZENOD_UNIT: callisthenes
+      ZENOD_DATA_DIR: /data
+      CALLISTHENES_SITE_DIST: /app/apps/calli-site/dist
+      CALLISTHENES_WEB_DIST: /app/apps/calli-web/dist
+      CALLISTHENES_ENGINE_URL: http://calli-engine:8000
+      CUSTOMER_APP_URL: https://calli.zenod.dev
+      DOMAIN: https://calli.zenod.dev
+      GITHUB_OAUTH_CALLBACK_URL: https://calli.zenod.dev/auth/github/callback
+      ZC_COOKIE_DOMAIN: calli.zenod.dev
+      STRIPE_MODE: test
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:?required}
+      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:?required}
+      ACCOUNT_STATE_SECRET: ${ACCOUNT_STATE_SECRET:?required}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?required}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?required}
+      PRICE_MONTHLY: ${PRICE_MONTHLY:?required}
+      PRICE_YEARLY: ${PRICE_YEARLY:?required}
+      CHASSIS_VAULT_MASTER_KEY: ${CHASSIS_VAULT_MASTER_KEY:?required}
+      CONTROL_PLANE_TOKEN: ${CONTROL_PLANE_TOKEN:?required}
+    volumes:
+      - callisthenes-data:/data
+    expose: ["8080"]
+    depends_on:
+      calli-engine:
+        condition: service_started
+    networks: [callisthenes-private, dokploy-network]
+    restart: unless-stopped
+
+  calli-engine:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         XMCP_REF: "63d34362d88ed9f94d54ccd5ecd5bb4d12e11759"
-    image: zenod-callisthenes
-    container_name: ${CALLISTHENES_CONTAINER_NAME:-callisthenes}
-    volumes:
-      - callisthenes-data:/data
+    image: ${CALLISTHENES_ENGINE_IMAGE:-zenod-callisthenes-engine}
     environment:
       MCP_HOST: "0.0.0.0"
       MCP_PORT: "8000"
-      CALLISTHENES_DATA_DIR: ${CALLISTHENES_DATA_DIR:-/data}
-
-      # --- Hosted provisioner handoff ---
-      # Injected by zenod-cloud. /connect displays the MCP URL/token and uses the
-      # owner tenant for connector custody.
-      CALLISTHENES_MCP_URL: ${CALLISTHENES_MCP_URL:-}
-      CALLISTHENES_MCP_TOKEN: ${CALLISTHENES_MCP_TOKEN:-}
-      CALLISTHENES_OWNER_TENANT: ${CALLISTHENES_OWNER_TENANT:-}
-      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
-
-      # --- X OAuth2 hosted connect flow ---
-      # The cloud provisioner sets the redirect URI to https://c-<slug>.zenod.dev/oauth/callback.
-      X_OAUTH2_CLIENT_ID: ${X_OAUTH2_CLIENT_ID:-}
-      X_OAUTH2_CLIENT_SECRET: ${X_OAUTH2_CLIENT_SECRET:-}
-      X_OAUTH2_REDIRECT_URI: ${X_OAUTH2_REDIRECT_URI:-}
-      X_OAUTH2_SCOPES: ${X_OAUTH2_SCOPES:-tweet.read tweet.write users.read offline.access}
-
-      # --- X app + single-owner OAuth1 (dogfood; C-2 PIN chat-auth supersedes for hosted) ---
-      X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY}
-      X_OAUTH_CONSUMER_SECRET: ${X_OAUTH_CONSUMER_SECRET}
-      X_BEARER_TOKEN: ${X_BEARER_TOKEN}
-      X_OAUTH_ACCESS_TOKEN: ${X_OAUTH_ACCESS_TOKEN}
-      X_OAUTH_ACCESS_TOKEN_SECRET: ${X_OAUTH_ACCESS_TOKEN_SECRET}
-
-      # --- Tool allowlist: read + post on ONE endpoint (the send GATE is the in-unit
-      #     draft-guard + throttle middleware, not topology). Confirm ids against the
-      #     "Loaded N tools" boot log. ---
-      X_API_TOOL_ALLOWLIST: "getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions,createPosts,deletePosts,mediaUpload"
-
-      # --- Reddit send connector (C-8, via Composio; issue #650) ---
-      # Reddit dev-apps are gated, so Reddit is reached through Composio's hosted
-      # toolkit (same pattern as the Outbound agent, #420). COMPOSIO_API_KEY is the
-      # account-wide key; COMPOSIO_USER_ID is the single-owner connected Reddit account
-      # (per-tenant ids come from the custody store once the auth writer lands, C-8 seam).
-      # Unset => post_reddit refuses loudly; it never fabricates a permalink.
-      COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:-}
-      COMPOSIO_USER_ID: ${COMPOSIO_USER_ID:-}
-      COMPOSIO_BASE_URL: ${COMPOSIO_BASE_URL:-https://backend.composio.dev}
-
-      # --- Callisthenes guardrails (ON by default) ---
-      # Conservative hourly send cap. 0 = fully closed; unset/negative => default 10.
+      CALLISTHENES_DATA_DIR: /data/engine
+      CALLISTHENES_MCP_URL: https://calli.zenod.dev/mcp
+      X_OAUTH_CONSUMER_KEY: ${X_OAUTH_CONSUMER_KEY:?required}
+      X_OAUTH_CONSUMER_SECRET: ${X_OAUTH_CONSUMER_SECRET:?required}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN:?required}
+      X_API_TOOL_ALLOWLIST: getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions,createPosts,deletePosts,mediaUpload
       CALLISTHENES_THROTTLE_PER_HOUR: ${CALLISTHENES_THROTTLE_PER_HOUR:-10}
-      # Tools treated as "sends" for BOTH throttle and draft-guard. post_reddit (C-8)
-      # is a send just like the X write ops, so it passes the same gate.
-      CALLISTHENES_SEND_TOOLS: ${CALLISTHENES_SEND_TOOLS:-createPosts,deletePosts,mediaUpload,post_reddit}
-      CALLISTHENES_GUARDED_TOOLS: ${CALLISTHENES_GUARDED_TOOLS:-createPosts,deletePosts,mediaUpload,post_reddit}
-      # Approval arg a send must carry to be allowed (drafts never send).
-      CALLISTHENES_APPROVE_ARG: ${CALLISTHENES_APPROVE_ARG:-callisthenes_approve}
-      # Optional shared approve token: if set, the approval arg must EQUAL it (not
-      # just be truthy). Leave empty for the truthy-flag mode.
-      CALLISTHENES_APPROVE_TOKEN: ${CALLISTHENES_APPROVE_TOKEN:-}
-    networks: [zenod-x-net]
+      CALLISTHENES_SEND_TOOLS: createPosts,deletePosts,mediaUpload,post_reddit
+      CALLISTHENES_GUARDED_TOOLS: createPosts,deletePosts,mediaUpload,post_reddit
+      CALLISTHENES_APPROVE_ARG: callisthenes_approve
+    volumes:
+      - callisthenes-data:/data
+    expose: ["8000"]
+    networks: [callisthenes-private]
     restart: unless-stopped
