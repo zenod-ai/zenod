@@ -84,11 +84,11 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: dispatched — wave 1 (P-S1 ∥ P-S2)
-Last verified: 2026-07-11 (gate satisfied by Jordi)
+Phase: dispatched — wave 2 (P-S3 ∥ P-S4)
+Last verified: 2026-07-11T05:17:00+02:00 (wave 1 CI + manager review passed; integrated)
 Integration target: main
 Fresh base commit: `31e69bbbc20e2e4a2b053a2d30adf44f18b34245` — PINNED at dispatch; no rebases until the journey passes (D19c)
-Next action: review and integrate P-S1/P-S2; then dispatch wave 2 from the integrated commit.
+Next action: review and integrate P-S3/P-S4; deploy one exact SHA; start P-S5 Human Gate.
 Blockers: none. Test WhatsApp number needed only at P-S5 start (Human Gates) — P-S1..P-S4 proceed without it.
 
 ## Role Goals
@@ -145,10 +145,10 @@ Wave 1: P-S1 ∥ P-S2. Wave 2: P-S3, P-S4. Then P-S5. Heartbeats, budgets, workt
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#870](https://github.com/zenod-ai/zenod/issues/870) | Ticket worker | P-S1-worker | P-S1 front duplicate | in progress | EPIC R SHIP satisfied | `codex/p-s1-front-duplicate` / `../wt-p-s1` | `31e69bb` | SHIP 1–4 | worktree verified at pinned base | 2026-07-11T05:04:09+02:00 | review-ready PR |
-| [#871](https://github.com/zenod-ai/zenod/issues/871) | Ticket worker | P-S2-worker | P-S2 channels organ port (Baileys+Telegram+faces) | in progress | EPIC R SHIP satisfied | `codex/p-s2-channels-port` / `../wt-p-s2` | `31e69bb` | SHIP 8, 10 mechanics | worktree verified at pinned base | 2026-07-11T05:04:09+02:00 | review-ready PR |
-| [#872](https://github.com/zenod-ai/zenod/issues/872) | Ticket worker | unassigned | P-S3 tenant settings + keyword verification + transcription | blocked by dependency | P-S1, P-S2 | `codex/p-s3-tenant-settings` (reserved) | dispatch from integrated wave 1 | SHIP 6–7, 9 | - | 2026-07-11T05:04:09+02:00 | wave 2 dispatch |
-| [#873](https://github.com/zenod-ai/zenod/issues/873) | Ticket worker | unassigned | P-S4 admin gate (alfablok) + billing + domain | blocked by dependency | P-S1, P-S2 admin surface | `codex/p-s4-admin-billing-domain` (reserved) | dispatch from integrated wave 1 | SHIP 2, 4, 5 | - | 2026-07-11T05:04:09+02:00 | wave 2 dispatch |
+| [#870](https://github.com/zenod-ai/zenod/issues/870) | Ticket worker | P-S1-worker | P-S1 front duplicate | done | EPIC R SHIP satisfied | [#876](https://github.com/zenod-ai/zenod/pull/876) / `codex/p-s1-front-duplicate` | `31e69bb` | SHIP 1–4 | 11 focused tests + builds + CI; manager review; merged `4f4a140` | 2026-07-11T05:17:00+02:00 | integrated |
+| [#871](https://github.com/zenod-ai/zenod/issues/871) | Ticket worker | P-S2-worker | P-S2 channels organ port (Baileys+Telegram+faces) | done | EPIC R SHIP satisfied | [#877](https://github.com/zenod-ai/zenod/pull/877) / `codex/p-s2-channels-port` | `31e69bb` | SHIP 8, 10 mechanics | 45 focused tests + typecheck + CI; manager review; merged `c0a2f6b` | 2026-07-11T05:17:00+02:00 | integrated |
+| [#872](https://github.com/zenod-ai/zenod/issues/872) | Ticket worker | P-S3-worker | P-S3 tenant settings + keyword verification + transcription | in progress | P-S1, P-S2 done | `codex/p-s3-tenant-settings` / `../wt-p-s3` | `c0a2f6b` | SHIP 6–7, 9 | worktree verified at integrated base | 2026-07-11T05:17:00+02:00 | review-ready PR |
+| [#873](https://github.com/zenod-ai/zenod/issues/873) | Ticket worker | P-S4-worker | P-S4 admin gate (alfablok) + billing + domain | in progress | P-S1, P-S2 admin surface done | `codex/p-s4-admin-billing-domain` / `../wt-p-s4` | `c0a2f6b` | SHIP 2, 4, 5 | worktree verified at integrated base; old compose protected | 2026-07-11T05:17:00+02:00 | review-ready PR + deploy handoff |
 | [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | blocked by dependency | P-S1..4 | manager loop | integrated P-S1..4 | SHIP 1–12 | - | 2026-07-11T05:04:09+02:00 | request test number at P-S5 start |
 
 ## Branch And Integration
@@ -180,7 +180,7 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 ## Worker Queue
 
-- Wave 1 active: P-S1 and P-S2. Wave 2 remains dependency-blocked: P-S3 and P-S4. Then P-S5.
+- Wave 1 integrated. Wave 2 active: P-S3 and P-S4. Then P-S5.
 
 ## Tester Queue
 
@@ -207,6 +207,12 @@ Context: Ring SHIP gate was already satisfied. Minted P-S1 through P-S5 as issue
 Next: review and integrate wave 1; dispatch P-S3 and P-S4 only after their recorded dependencies land.
 Risks: live `phylax.zenod.dev` currently returns 404 as expected before P-S4; an older Dokploy compose named `phylax` exists without a domain and is read-only until P-S4 identifies the new full-customer-unit target, preserving the old fused path.
 Links: [#870](https://github.com/zenod-ai/zenod/issues/870), [#871](https://github.com/zenod-ai/zenod/issues/871), [#872](https://github.com/zenod-ai/zenod/issues/872), [#873](https://github.com/zenod-ai/zenod/issues/873), [#874](https://github.com/zenod-ai/zenod/issues/874).
+
+### 2026-07-11 - Phylax delivery manager - wave 1 integrated; wave 2 dispatched
+
+Context: P-S1 PR #876 and P-S2 PR #877 both passed CI and independent manager review. Review caught and fixed a broken Self-host link and required the channels PR to compose the shipped WhatsAppGateway, WhatsAppStore, TelegramGateway, shared transcription, and pairing API/UI rather than stopping at a scratch seam. Manager reran 11 customer/unit checks and builds plus the 45-test channel battery. Wave 1 merged as `4f4a140` and `c0a2f6b`.
+Assignments: P-S3-worker / `codex/p-s3-tenant-settings` / `../wt-p-s3`; P-S4-worker / `codex/p-s4-admin-billing-domain` / `../wt-p-s4`; both start from integrated base `c0a2f6b524c53c69dedcd812739916bf8b26272d` without rebasing wave 1.
+Next: integrate wave 2, publish/deploy one exact SHA into a new full-customer-unit application, then request the test WhatsApp number at the P-S5 Human Gate.
 
 ## Open Questions
 

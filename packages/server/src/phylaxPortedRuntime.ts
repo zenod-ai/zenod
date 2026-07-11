@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { Hono } from "hono";
+import type { Env, Hono } from "hono";
 import { SqliteStateStore } from "zenod";
 import { Settings } from "./settings.js";
 import { WhatsAppGateway, type SocketFactory } from "./whatsappGateway.js";
@@ -141,7 +141,7 @@ export class PhylaxPortedRuntime {
 }
 
 /** Existing whatsapp-connect.tsx calls these exact ported API shapes. */
-export function mountPhylaxAdminChannelRoutes(app: Hono, runtime: PhylaxPortedRuntime): void {
+export function mountPhylaxAdminChannelRoutes<E extends Env>(app: Hono<E>, runtime: PhylaxPortedRuntime): void {
   app.get("/api/whatsapp/status", (c) => c.json(runtime.whatsapp.status()));
   app.get("/api/telegram/status", (c) => c.json(runtime.telegram.status()));
   app.put("/api/whatsapp/settings", async (c) => {
