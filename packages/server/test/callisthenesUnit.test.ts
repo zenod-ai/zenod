@@ -90,7 +90,12 @@ describe("Callisthenes front unit", () => {
         params?: { name?: string; arguments?: Record<string, unknown> };
       };
       if (rpc.method === "tools/list") {
-        return Response.json({ jsonrpc: "2.0", id: rpc.id, result: { tools: [{ name: "createPosts" }] } });
+        return Response.json({ jsonrpc: "2.0", id: rpc.id, result: { tools: [
+          { name: "createPosts", inputSchema: { type: "object", required: ["text"], properties: { text: { type: "string" } } } },
+          { name: "deletePosts", inputSchema: { type: "object", required: ["id"], properties: { id: { type: "string" } } } },
+          { name: "searchPostsRecent", description: "upstream read", inputSchema: { type: "object", properties: { query: { type: "string" } } } },
+          { name: "unknownFutureTool", description: "preserve upstream metadata", annotations: { readOnlyHint: false } },
+        ] } });
       }
       if (rpc.params?.name === "createPosts" && rpc.params.arguments?.callisthenes_approve) {
         approvedContentLength = new Headers(init?.headers).get("content-length");
@@ -116,6 +121,28 @@ describe("Callisthenes front unit", () => {
     try {
       const listed = await (await call("alpha-secret", { jsonrpc: "2.0", id: 1, method: "tools/list" })).json() as any;
       expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toContain("approve_send");
+      const byName = Object.fromEntries(listed.result.tools.map((tool: { name: string }) => [tool.name, tool]));
+      expect(byName.createPosts).toMatchObject({
+        inputSchema: { required: ["text"], properties: { text: { type: "string" }, callisthenes_approve: { description: expect.stringContaining("Explicit approval") } } },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+      });
+      expect(byName.deletePosts).toMatchObject({
+        inputSchema: { required: ["id"], properties: { id: { type: "string" }, callisthenes_approve: { description: expect.stringContaining("Explicit approval") } } },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+      });
+      expect(byName.searchPostsRecent).toMatchObject({
+        description: "upstream read",
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      });
+      expect(byName.approve_send).toMatchObject({
+        inputSchema: { required: ["channel", "text"], properties: { channel: { enum: ["x"] }, text: { minLength: 1 } } },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+      });
+      expect(byName.approve_send.description).toContain("explicitly confirms the exact final text");
+      expect(byName.unknownFutureTool).toMatchObject({
+        description: "preserve upstream metadata",
+        annotations: { readOnlyHint: false },
+      });
 
       await call("alpha-secret", {
         jsonrpc: "2.0", id: 2, method: "tools/call",
