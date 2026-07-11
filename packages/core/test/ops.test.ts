@@ -41,6 +41,48 @@ describe("searchVault", () => {
     expect(hits.map((h) => h.path)).toContain("Areas/Insurance.md");
   });
 
+  it("ranks the exact normalized phrase above noisy all-term matches", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-search-phrase-"));
+    try {
+      await writeFile(
+        join(dir, "Exact.md"),
+        "---\ntitle: Exact fixture\ntags: []\nsummary: Acceptance fixture.\n---\n\nLANTERN-48271 observatory access code\n",
+      );
+      await writeFile(
+        join(dir, "Noisy.md"),
+        `---\ntitle: Noisy fixture\ntags: []\nsummary: All terms in a different order.\n---\n\n${"access observatory code LANTERN-48271\n".repeat(150)}`,
+      );
+
+      const hits = await searchVault(dir, "lantern-48271, OBSERVATORY access code!");
+
+      expect(hits[0]!.path).toBe("Exact.md");
+      expect(hits[0]!.score).toBeGreaterThan(hits[1]!.score);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("ranks an all-term acceptance fixture above repeated partial matches", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-search-all-terms-"));
+    try {
+      await writeFile(
+        join(dir, "Acceptance.md"),
+        "---\ntitle: Synthetic fixture\ntags: []\nsummary: Narrow retrieval acceptance.\n---\n\nThe synthetic observatory access code is LANTERN-48271.\n",
+      );
+      await writeFile(
+        join(dir, "Distractor.md"),
+        `---\ntitle: Common observatory notes\ntags: []\nsummary: Repeated common terms.\n---\n\n${"observatory access code\n".repeat(150)}`,
+      );
+
+      const hits = await searchVault(dir, "LANTERN-48271 observatory access code");
+
+      expect(hits[0]!.path).toBe("Acceptance.md");
+      expect(hits).toHaveLength(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("returns nothing for nonsense queries", async () => {
     expect(await searchVault(FIXTURE, "xyzzy-nonexistent-9000")).toEqual([]);
   });
