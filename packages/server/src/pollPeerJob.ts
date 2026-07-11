@@ -22,7 +22,10 @@ export function extractJobId(reply: { text: string; actions: Array<{ result: str
 
 function peerApiUrl(peerUrl: string, jobId: string): string {
   const url = new URL(peerUrl);
-  url.pathname = url.pathname.replace(/\/mcp\/?$/, "");
+  // Hosted customer MCP URLs carry the tenant credential in the path
+  // (`/mcp/<token>`), but task receipts live on the unit's authenticated REST
+  // API. Drop the complete MCP endpoint before appending that API route.
+  url.pathname = url.pathname.replace(/\/mcp(?:\/[^/]+)?\/?$/, "");
   url.pathname = `${url.pathname.replace(/\/$/, "")}/api/tasks/jobs/${jobId}`;
   url.search = "";
   url.hash = "";
