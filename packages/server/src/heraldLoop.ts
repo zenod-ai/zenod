@@ -29,6 +29,18 @@ export interface HeraldBriefing {
   createdAt: number;
 }
 
+export interface HeraldBriefingDraft {
+  tenantId: string;
+  theme: string | null;
+  objectives: string[];
+  cadenceMinutes: number | null;
+  proposalCount: number | null;
+  tone: string | null;
+  replyPolicy: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface HeraldBoardItem {
   id: string;
   tenantId: string;
@@ -97,6 +109,18 @@ interface BriefingRow {
   created_at: number;
 }
 
+interface BriefingDraftRow {
+  tenant_id: string;
+  theme: string | null;
+  objectives_json: string;
+  cadence_minutes: number | null;
+  proposal_count: number | null;
+  tone: string | null;
+  reply_policy: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
 interface BoardRow {
   id: string;
   tenant_id: string;
@@ -144,6 +168,20 @@ function briefingFromRow(row: BriefingRow): HeraldBriefing {
     proposalCount: row.proposal_count,
     approvedAt: row.approved_at,
     createdAt: row.created_at,
+  };
+}
+
+function briefingDraftFromRow(row: BriefingDraftRow): HeraldBriefingDraft {
+  return {
+    tenantId: row.tenant_id,
+    theme: row.theme,
+    objectives: JSON.parse(row.objectives_json) as string[],
+    cadenceMinutes: row.cadence_minutes,
+    proposalCount: row.proposal_count,
+    tone: row.tone,
+    replyPolicy: row.reply_policy,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -232,6 +270,18 @@ export class HeraldLoopStore {
       );
       CREATE INDEX IF NOT EXISTS herald_briefings_current
         ON herald_briefings (tenant_id, version DESC);
+
+      CREATE TABLE IF NOT EXISTS herald_briefing_drafts (
+        tenant_id TEXT PRIMARY KEY,
+        theme TEXT,
+        objectives_json TEXT NOT NULL DEFAULT '[]',
+        cadence_minutes INTEGER,
+        proposal_count INTEGER,
+        tone TEXT,
+        reply_policy TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS herald_wakes (
         id TEXT PRIMARY KEY,
@@ -326,6 +376,75 @@ export class HeraldLoopStore {
     return row ? briefingFromRow(row) : null;
   }
 
+  getBriefingDraft(tenantId: string): HeraldBriefingDraft | null {
+    const row = this.db.prepare(`
+      SELECT * FROM herald_briefing_drafts WHERE tenant_id=?
+    `).get(requireText(tenantId, "tenantId")) as BriefingDraftRow | undefined;
+    return row ? briefingDraftFromRow(row) : null;
+  }
+
+  saveBriefingDraft(
+    tenantId: string,
+    patch: Partial<Pick<HeraldBriefingDraft,
+      "theme" | "objectives" | "cadenceMinutes" | "proposalCount" | "tone" | "replyPolicy">>,
+    now: number = Date.now(),
+  ): HeraldBriefingDraft {
+    const normalizedTenant = requireText(tenantId, "tenantId");
+    const current = this.getBriefingDraft(normalizedTenant);
+    const next = {
+      theme: patch.theme === undefined ? current?.theme ?? null : patch.theme?.trim() || null,
+      objectives: patch.objectives === undefined
+        ? current?.objectives ?? []
+        : patch.objectives.map((objective) => objective.trim()).filter(Boolean),
+      cadenceMinutes: patch.cadenceMinutes === undefined
+        ? current?.cadenceMinutes ?? null
+        : normalizeCadence(patch.cadenceMinutes ?? HERALD_MIN_CADENCE_MINUTES),
+      proposalCount: patch.proposalCount === undefined
+        ? current?.proposalCount ?? null
+        : normalizeProposalCount(patch.proposalCount ?? undefined),
+      tone: patch.tone === undefined ? current?.tone ?? null : patch.tone?.trim() || null,
+      replyPolicy: patch.replyPolicy === undefined
+        ? current?.replyPolicy ?? null
+        : patch.replyPolicy?.trim() || null,
+    };
+    this.db.prepare(`
+      INSERT INTO herald_briefing_drafts (
+        tenant_id, theme, objectives_json, cadence_minutes, proposal_count,
+        tone, reply_policy, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(tenant_id) DO UPDATE SET
+        theme=excluded.theme,
+        objectives_json=excluded.objectives_json,
+        cadence_minutes=excluded.cadence_minutes,
+        proposal_count=excluded.proposal_count,
+        tone=excluded.tone,
+        reply_policy=excluded.reply_policy,
+        updated_at=excluded.updated_at
+    `).run(
+      normalizedTenant,
+      next.theme,
+      JSON.stringify(next.objectives),
+      next.cadenceMinutes,
+      next.proposalCount,
+      next.tone,
+      next.replyPolicy,
+      current?.createdAt ?? now,
+      now,
+    );
+    return this.getBriefingDraft(normalizedTenant)!;
+  }
+
+  clearBriefingDraft(tenantId: string): HeraldMutationReceipt {
+    const normalizedTenant = requireText(tenantId, "tenantId");
+    this.db.prepare(`DELETE FROM herald_briefing_drafts WHERE tenant_id=?`).run(normalizedTenant);
+    return {
+      status: "ok",
+      code: "briefing_draft_cleared",
+      message: "Approved briefing draft cleared.",
+      tenantId: normalizedTenant,
+    };
+  }
+
   listApprovedTenantIds(): string[] {
     const rows = this.db.prepare(`
       SELECT DISTINCT tenant_id FROM herald_briefings ORDER BY tenant_id
@@ -387,12 +506,12 @@ export class HeraldLoopStore {
       const rows = this.db.prepare(`
         SELECT * FROM herald_board_items
         WHERE tenant_id=? AND state IN (${placeholders})
-        ORDER BY created_at ASC, id ASC
+        ORDER BY created_at ASC, rowid ASC
       `).all(normalizedTenant, ...states) as unknown as BoardRow[];
       return rows.map(boardFromRow);
     }
     const rows = this.db.prepare(`
-      SELECT * FROM herald_board_items WHERE tenant_id=? ORDER BY created_at ASC, id ASC
+      SELECT * FROM herald_board_items WHERE tenant_id=? ORDER BY created_at ASC, rowid ASC
     `).all(normalizedTenant) as unknown as BoardRow[];
     return rows.map(boardFromRow);
   }
@@ -417,6 +536,59 @@ export class HeraldLoopStore {
 
   rejectItems(tenantId: string, itemIds: string[], now: number = Date.now()): HeraldMutationReceipt {
     return this.transitionItems(tenantId, itemIds, "proposed", "rejected", now);
+  }
+
+  decideItems(
+    tenantId: string,
+    input: { approveIds: string[]; rejectIds: string[] },
+    now: number = Date.now(),
+  ): HeraldMutationReceipt {
+    const normalizedTenant = requireText(tenantId, "tenantId");
+    const approveIds = [...new Set(input.approveIds.map((id) => requireText(id, "itemId")))];
+    const rejectIds = [...new Set(input.rejectIds.map((id) => requireText(id, "itemId")))];
+    if (approveIds.some((id) => rejectIds.includes(id))) {
+      return { status: "error", code: "invalid_board_decision", message: "An item cannot be both approved and rejected.", tenantId: normalizedTenant };
+    }
+    if (approveIds.length + rejectIds.length === 0) {
+      return { status: "error", code: "no_board_items", message: "No board items were selected.", tenantId: normalizedTenant };
+    }
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const approve = this.db.prepare(`
+        UPDATE herald_board_items SET state='approved', approved_at=?, updated_at=?
+        WHERE tenant_id=? AND id=? AND state='proposed'
+      `);
+      const reject = this.db.prepare(`
+        UPDATE herald_board_items SET state='rejected', rejected_at=?, updated_at=?
+        WHERE tenant_id=? AND id=? AND state='proposed'
+      `);
+      for (const id of approveIds) {
+        if (Number(approve.run(now, now, normalizedTenant, id).changes) !== 1) {
+          throw new Error(`board item ${id} is not proposed for this tenant`);
+        }
+      }
+      for (const id of rejectIds) {
+        if (Number(reject.run(now, now, normalizedTenant, id).changes) !== 1) {
+          throw new Error(`board item ${id} is not proposed for this tenant`);
+        }
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      return {
+        status: "error",
+        code: "invalid_board_decision",
+        message: error instanceof Error ? error.message : String(error),
+        tenantId: normalizedTenant,
+      };
+    }
+    return {
+      status: "ok",
+      code: "board_decision_applied",
+      message: `Approved ${approveIds.length}; rejected ${rejectIds.length}.`,
+      tenantId: normalizedTenant,
+      ids: [...approveIds, ...rejectIds],
+    };
   }
 
   markPosted(tenantId: string, itemId: string, permalink: string, now: number = Date.now()): HeraldMutationReceipt {
