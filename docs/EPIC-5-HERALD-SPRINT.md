@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Herald delivery manager
 Steward since: 2026-07-11T19:50:29+02:00
-Last reconciled commit: `bf366b5939492af1417814bfae1daf30006b3cf4`
+Last reconciled commit: `cfc13e2eed1c4cefb069e76d6334d3ddc8ca9e3f`
 Planner: Jordi + Epic 3.0 planner
 Worker: Herald delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -89,11 +89,11 @@ HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Ca
 
 ## Current State
 
-Phase: Wave 1 dispatch
-Last verified: 2026-07-11T19:50:29+02:00
+Phase: Wave 2 dispatch
+Last verified: 2026-07-11T20:07:57+02:00
 Integration target: main
 Fresh base commit: `bf366b5939492af1417814bfae1daf30006b3cf4` — pinned from `origin/main` at dispatch (D19c); no rebases until the journey passes
-Next action: mint H-S1..H-S5, dispatch H-S1 and H-S2 in parallel from the pinned base, then monitor 30-minute heartbeats and 90-minute budgets.
+Next action: dispatch H-S3 and H-S4 in parallel from integrated Wave 1 commit `cfc13e2`, then monitor 30-minute heartbeats and 90-minute budgets.
 Blockers: none. Ring is shipped (the duplicate source), Calli is shipped (the mouth), Zenod is live (the memory). Wallet tokens for the manager's laps are minted from those units' own dashboards during the walk — no input from Jordi required.
 
 ## Role Goals
@@ -159,10 +159,10 @@ Pre-answered — the planner is asleep.
 
 | Issue | Role | Owner / Assignment | Title | Marking | Status | Depends On | Wave | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| [#897](https://github.com/zenod-ai/zenod/issues/897) | Ticket worker | H-S1-worker | H-S1 front duplicate (landing, pricing, billing, domain) | DUPLICATE from ring | dispatched | pinned base | 1 | `codex/h-s1-front-duplicate` | `bf366b5` | issue minted; worker dispatched | 2026-07-11T19:50:29+02:00 | create worktree, implement, validate, PR |
-| [#895](https://github.com/zenod-ai/zenod/issues/895) | Ticket worker | H-S2-worker | H-S2 loop organ (scheduler + boards + briefing store + no-briefing-no-fire gate) | BUILD (verified absent everywhere) | dispatched | pinned base | 1 | `codex/h-s2-loop-organ` | `bf366b5` | issue minted; worker dispatched | 2026-07-11T19:50:29+02:00 | create worktree, implement, validate, PR |
-| [#898](https://github.com/zenod-ai/zenod/issues/898) | Ticket worker | H-S3-worker | H-S3 briefing setup mode + ✓ parsing + filings via wallet | BUILD on PORTed ring chat | blocked by Wave 1 | H-S1, H-S2 | 2 | `codex/h-s3-briefing-chat` | assign after Wave 1 | issue minted | 2026-07-11T19:50:29+02:00 | dispatch from integrated Wave 1 base |
-| [#899](https://github.com/zenod-ai/zenod/issues/899) | Ticket worker | H-S4-worker | H-S4 proposer/poster lanes + Board & Briefing dashboard panels + Run now | BUILD on DUPLICATEd wallet/dashboard | blocked by Wave 1 | H-S1, H-S2 | 2 | `codex/h-s4-loop-lanes-dashboard` | assign after Wave 1 | issue minted | 2026-07-11T19:50:29+02:00 | dispatch from integrated Wave 1 base |
+| [#897](https://github.com/zenod-ai/zenod/issues/897) | Ticket worker | H-S1-worker | H-S1 front duplicate (landing, pricing, billing, domain) | DUPLICATE from ring | done | pinned base | 1 | [#900](https://github.com/zenod-ai/zenod/pull/900) / `codex/h-s1-front-duplicate` | `bf366b5` | CI + manager review; merged `f7b10b0` | 2026-07-11T20:07:57+02:00 | integrated |
+| [#895](https://github.com/zenod-ai/zenod/issues/895) | Ticket worker | H-S2-worker | H-S2 loop organ (scheduler + boards + briefing store + no-briefing-no-fire gate) | BUILD (verified absent everywhere) | done | pinned base | 1 | [#901](https://github.com/zenod-ai/zenod/pull/901) / `codex/h-s2-loop-organ` | `bf366b5` | 685 server tests + manager integration tests; merged `cfc13e2` | 2026-07-11T20:07:57+02:00 | integrated |
+| [#898](https://github.com/zenod-ai/zenod/issues/898) | Ticket worker | H-S3-worker | H-S3 briefing setup mode + ✓ parsing + filings via wallet | BUILD on PORTed ring chat | dispatched | H-S1, H-S2 | 2 | `codex/h-s3-briefing-chat` | `cfc13e2` | Wave 1 integrated; worker dispatching | 2026-07-11T20:07:57+02:00 | create worktree, implement, validate, PR |
+| [#899](https://github.com/zenod-ai/zenod/issues/899) | Ticket worker | H-S4-worker | H-S4 proposer/poster lanes + Board & Briefing dashboard panels + Run now | BUILD on DUPLICATEd wallet/dashboard | dispatched | H-S1, H-S2 | 2 | `codex/h-s4-loop-lanes-dashboard` | `cfc13e2` | Wave 1 integrated; worker dispatching | 2026-07-11T20:07:57+02:00 | create worktree, implement, validate, PR |
 | [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | blocked by H-S1..4 | H-S1..4 | last | `main` | freeze after H-S1..4 | issue minted | 2026-07-11T19:50:29+02:00 | integrate, deploy, walk live journey |
 
 Budgets: 90 min per ticket; manager reassigns anything silent past budget. Heartbeat every 30 min: `lap/state | blocker | ETA`.
@@ -199,6 +199,12 @@ None permitted. Anything that surfaces: H-D15 — simplest option, journal it, k
 | - | - | - | - | - | - | journey screenshots land here |
 
 ## Handoff Journal
+
+### 2026-07-11T20:07:57+02:00 — Herald delivery manager — Wave 1 integrated; Wave 2 pinned
+
+Context: H-S1 duplicated the shipped Ring body with provenance recorded in [#900](https://github.com/zenod-ai/zenod/pull/900); CI passed and it merged as `f7b10b0`. H-S2 added the in-unit tenant loop store and shared scheduled/Run-now path; its 685-test server pass and CI passed. The manager resolved the only overlap—additive `packages/server/src/index.ts` exports—without rebasing, then ran typecheck plus 24 integrated Herald/wallet tests and merged as `cfc13e2eed1c4cefb069e76d6334d3ddc8ca9e3f`.
+Assignments: H-S3-worker / `codex/h-s3-briefing-chat` / `../wt-h-s3`; H-S4-worker / `codex/h-s4-loop-lanes-dashboard` / `../wt-h-s4`; both pinned to integrated Wave 1 commit `cfc13e2eed1c4cefb069e76d6334d3ddc8ca9e3f`.
+Next: dispatch H-S3/H-S4, integrate reviewed passing work, freeze the exact live build, then execute H-S5 personally from `https://herald.zenod.dev/`.
 
 ### 2026-07-11T19:50:29+02:00 — Herald delivery manager — Steward bound and base pinned
 
