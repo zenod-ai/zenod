@@ -74,4 +74,72 @@ describe("Callisthenes front unit", () => {
       unit.close();
     }
   });
+
+  it("observes rejected drafts and exposes approve_send with exactly-once canonical receipts per tenant", async () => {
+    const dataDir = await tempDir();
+    const tenantStore = createMemoryTenantStore([
+      { token: "alpha-secret", tenant: { id: "tenant-alpha" } },
+      { token: "beta-secret", tenant: { id: "tenant-beta" } },
+    ]);
+    let approvedCalls = 0;
+    const fetcher = vi.fn(async (_request: RequestInfo | URL, init?: RequestInit) => {
+      const rpc = JSON.parse(String(init?.body ?? "{}")) as {
+        id: number;
+        method: string;
+        params?: { name?: string; arguments?: Record<string, unknown> };
+      };
+      if (rpc.method === "tools/list") {
+        return Response.json({ jsonrpc: "2.0", id: rpc.id, result: { tools: [{ name: "createPosts" }] } });
+      }
+      if (rpc.params?.name === "createPosts" && rpc.params.arguments?.callisthenes_approve) {
+        approvedCalls += 1;
+        return Response.json({
+          jsonrpc: "2.0",
+          id: rpc.id,
+          result: { content: [{ type: "text", text: '{"data":{"id":"1900123456789"}}' }] },
+        });
+      }
+      return Response.json({
+        jsonrpc: "2.0",
+        id: rpc.id,
+        result: { content: [{ type: "text", text: "[draft_not_approved] drafts never send" }], isError: true },
+      });
+    });
+    const unit = createCallisthenesUnit({ dataDir, tenantStore, fetcher: fetcher as typeof fetch });
+    const call = (token: string, body: unknown) => unit.app.request("/mcp", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    try {
+      const listed = await (await call("alpha-secret", { jsonrpc: "2.0", id: 1, method: "tools/list" })).json() as any;
+      expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toContain("approve_send");
+
+      await call("alpha-secret", {
+        jsonrpc: "2.0", id: 2, method: "tools/call",
+        params: { name: "createPosts", arguments: { text: "Ship the observable seam." } },
+      });
+      expect(unit.observationLedger.read("tenant-alpha").drafts).toMatchObject([
+        { text: "Ship the observable seam.", status: "pending" },
+      ]);
+      expect(unit.observationLedger.read("tenant-beta").drafts).toEqual([]);
+
+      const approval = {
+        jsonrpc: "2.0", id: 3, method: "tools/call",
+        params: { name: "approve_send", arguments: { channel: "x", text: "Ship the observable seam." } },
+      };
+      const first = await (await call("alpha-secret", approval)).json() as any;
+      const retry = await (await call("alpha-secret", { ...approval, id: 4 })).json() as any;
+      expect(first.result.content[0].text).toBe("Posted to X. Live URL: https://x.com/i/web/status/1900123456789");
+      expect(retry.result.content[0].text).toBe(first.result.content[0].text);
+      expect(approvedCalls).toBe(1);
+      expect(unit.observationLedger.read("tenant-alpha").receipts).toMatchObject([
+        { url: "https://x.com/i/web/status/1900123456789" },
+      ]);
+      expect(unit.observationLedger.read("tenant-alpha").usage).toMatchObject({ calls: 3, sends: 1, rejected_drafts: 1 });
+      expect(unit.observationLedger.read("tenant-beta").receipts).toEqual([]);
+    } finally {
+      unit.close();
+    }
+  });
 });
