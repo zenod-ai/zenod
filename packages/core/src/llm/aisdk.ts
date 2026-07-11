@@ -1000,6 +1000,9 @@ export class AiSdkBrainLlm implements BrainLlm {
           inputSchema: (peer.inputSchema ?? z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") })) as never,
           execute: async (peerInput) => {
             const args = (peerInput ?? {}) as Record<string, unknown>;
+            const receiptMetadata = peer.verifiedMutationReceipt
+              ? { verifiedMutationReceipt: true as const }
+              : undefined;
             const normalized = normalizedToolName(name);
             const isOutboundSend = OUTBOUND_SEND_TOOL_NAMES.has(normalized);
 
@@ -1019,17 +1022,17 @@ export class AiSdkBrainLlm implements BrainLlm {
                 console.warn(`[peer-guard] blocked ${name}: ${guardFailure}`);
                 const text = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL ? NOTHING_PENDING_TEXT : friendlyDraftBlock();
                 blockedOutboundTurn = { tool: name, text };
-                input.onPeerAction?.(name, args, text);
+                input.onPeerAction?.(name, args, text, receiptMetadata);
                 return text;
               }
               const result = `ERROR: ${guardFailure}`;
-              input.onPeerAction?.(name, args, result);
+              input.onPeerAction?.(name, args, result, receiptMetadata);
               return result;
             }
             const boundaryFailure = archusWriteBoundaryFailure(name, peer, args);
             if (boundaryFailure) {
               const result = `ERROR: ${boundaryFailure}`;
-              input.onPeerAction?.(name, args, result);
+              input.onPeerAction?.(name, args, result, receiptMetadata);
               return result;
             }
             // P-1 — ask_outbound composes a draft through Callistheness but never sends,
@@ -1041,7 +1044,7 @@ export class AiSdkBrainLlm implements BrainLlm {
             const existing = dedupeKey ? sameTurnPeerMutations.get(dedupeKey) : undefined;
             if (existing) return existing;
             const pending = caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? "")))).then((result) => {
-              input.onPeerAction?.(name, args, result);
+              input.onPeerAction?.(name, args, result, receiptMetadata);
               return result;
             });
             if (dedupeKey) sameTurnPeerMutations.set(dedupeKey, pending);

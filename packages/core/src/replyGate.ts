@@ -26,7 +26,7 @@ import type { TaskingAction } from "./types.js";
  */
 
 /**
- * Side-effect tools whose result text is ALREADY a receipt — a pure function of a
+ * Built-in side-effect tools whose result text is ALREADY a receipt — a pure function of a
  * verified result object, never LLM prose (see outboundReceipt.ts's renderOutboundReceipt
  * / renderApproveAffordance / renderNothingPendingToApprove). Matched against the tool
  * name after normalizedToolName() so "post_tweet", "postTweet", and "POST_TWEET" all
@@ -43,7 +43,9 @@ import type { TaskingAction } from "./types.js";
  * NEITHER of which had any grounding mechanism at all before this change. Widening the
  * hard gate to backlog/execution tools too would just re-implement reconcileTaskingReply
  * under a new name; folding those categories into this same hard-discard gate is future
- * work, not this fix.
+ * work, not this fix. Mutating wallet peer tools join the gate through the explicit
+ * TaskingAction.verifiedMutationReceipt bit supplied by their runtime contract; they are
+ * intentionally not added to this name registry.
  */
 const ACTION_TOOL_NAMES = new Set(
   [
@@ -87,8 +89,9 @@ export interface ReplyGateOutcome {
 }
 
 /**
- * The ONLY reply an action turn may deliver: the concatenation of the receipt text each
- * side-effect tool call already returned, in call order. Never the model's own prose.
+ * The ONLY reply a gated action turn may deliver: the concatenation of the receipt text
+ * each built-in action or verified wallet mutation returned, in call order. Never the
+ * model's own prose.
  */
 function renderActionTurnReply(actionResults: readonly TaskingAction[]): string {
   return actionResults
@@ -99,9 +102,10 @@ function renderActionTurnReply(actionResults: readonly TaskingAction[]): string 
 
 /**
  * The runtime gate: detects an action turn deterministically from the tools that
- * ACTUALLY ran this turn (never from the model's prose), and when one did, replaces the
- * delivered text with the pure-function renderer output regardless of what the model
- * drafted. Non-action turns pass `draftedText` through untouched.
+ * ACTUALLY ran this turn (never from the model's prose), or from explicit verified wallet
+ * receipt metadata, and replaces the delivered text with the pure-function renderer
+ * output regardless of what the model drafted. Non-action turns pass `draftedText`
+ * through untouched.
  *
  * When the model's drafted text differs from the renderer output, `onIntercepted` fires
  * with the discarded text — live evidence of how often the model still tries to narrate
@@ -113,7 +117,9 @@ export function applyReplyGate(
   actions: readonly TaskingAction[],
   onIntercepted?: (event: ReplyGateInterceptedEvent) => void,
 ): ReplyGateOutcome {
-  const actionResults = actions.filter((action) => isActionTool(action.tool));
+  const actionResults = actions.filter(
+    (action) => isActionTool(action.tool) || action.verifiedMutationReceipt === true,
+  );
   if (actionResults.length === 0) {
     return { isActionTurn: false, text: draftedText, intercepted: false };
   }

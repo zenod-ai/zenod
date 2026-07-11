@@ -48,6 +48,7 @@ describe("Ring wallet receipt", () => {
       ]);
 
       const tools = (ringRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+      expect(tools.add_memory.verifiedMutationReceipt).toBe(true);
       const result = await tools.add_memory.run("remember this: the ring is alive");
 
       expect(result).toContain("Stored.");
@@ -59,6 +60,59 @@ describe("Ring wallet receipt", () => {
       zenodRuntime.close();
       ringRuntime.close();
       await rm(zenodDir, { recursive: true, force: true });
+      await rm(ringDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses MCP readOnlyHint generically for wallet receipt gating", async () => {
+    const ringDir = await mkdtemp(join(tmpdir(), "zenod-runtime-wallet-contract-ring-"));
+    const ringRuntime = new Runtime(ringDir, RING_AGENT);
+    try {
+      ringRuntime.settings.setPeers([
+        {
+          name: "portable-peer",
+          url: "https://unit.example/mcp",
+          token: "test-token",
+          wallet: true,
+          tools: [
+            {
+              as: "future_write_tool",
+              mcp: "createPosts",
+              arg: "text",
+              description: "Create a post and return its verified receipt.",
+              annotations: { readOnlyHint: false, destructiveHint: true },
+            },
+            {
+              as: "future_read_tool",
+              mcp: "searchPostsRecent",
+              arg: "query",
+              description: "Search recent posts.",
+              annotations: { readOnlyHint: true, destructiveHint: false },
+            },
+            {
+              as: "unknown_unannotated_tool",
+              mcp: "ask_brain",
+              arg: "question",
+              description: "A future unannotated delegation tool.",
+            },
+          ],
+        },
+        {
+          name: "default-peer",
+          url: "https://default.example/mcp",
+          token: "test-token",
+          wallet: true,
+        },
+      ]);
+
+      const tools = (ringRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+
+      expect(tools.future_write_tool.verifiedMutationReceipt).toBe(true);
+      expect(tools.future_read_tool.verifiedMutationReceipt).toBeUndefined();
+      expect(tools.unknown_unannotated_tool.verifiedMutationReceipt).toBeUndefined();
+      expect(tools.ask_default_peer.verifiedMutationReceipt).toBeUndefined();
+    } finally {
+      ringRuntime.close();
       await rm(ringDir, { recursive: true, force: true });
     }
   });

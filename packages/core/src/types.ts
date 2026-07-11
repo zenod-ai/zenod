@@ -135,6 +135,12 @@ export interface TaskingAction {
   tool: string;
   input: Record<string, unknown>;
   result: string;
+  /**
+   * The result came from a mutating wallet peer tool and is the verified receipt
+   * that must reach the user verbatim. This is explicit call metadata rather than
+   * a tool-name rule so backlog/execution mutations keep their reconciliation path.
+   */
+  verifiedMutationReceipt?: boolean;
 }
 
 export interface TaskingReply {
