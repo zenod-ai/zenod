@@ -1,0 +1,209 @@
+# EPIC R · Ring Sprint — duplicate Zenod, the middle is the Council
+
+Status: active
+Created: 2026-07-11
+Updated: 2026-07-11
+Repository: `/Users/jordi/Documents/GitHub/zenod`
+Primary document: `docs/EPIC-R-RING-SPRINT.md`
+GitHub issues: same repository
+Integration branch: main
+Active spine steward: Ring delivery manager (bind on dispatch)
+Steward since: on dispatch
+Last reconciled commit: bind on dispatch
+Planner: Jordi + Epic 3.0 planner
+Worker: Ring delivery manager + parallel ticket workers
+Tester: the delivery manager itself (journey walker)
+
+## Role Bindings
+
+| Identity | Assignment Identity | Bound Issue / Scope | Authority | Handoff |
+|---|---|---|---|---|
+| Planner | Jordi + Epic 3.0 planner | This spine | Wrote it; every decision pre-answered below. | This document. |
+| Epic worker | Ring delivery manager | This spine | MANAGER: mint tickets, dispatch parallel worktree workers, integrate, walk the journey, iterate until SHIP. | The test package. |
+| Ticket worker | assigned per ticket | One ticket, own worktree | FIRST ACTION: `git worktree add ../wt-<ticket> -b <branch> main`. Never checkout in the shared clone. PORT/DUPLICATE means move code, adapt only imports/config — a scratch-written duplicate line is a failing review. | PR + one-line result. |
+
+## Write Scope
+
+Bound spine: `docs/EPIC-R-RING-SPRINT.md`
+Active steward: Ring delivery manager
+
+Writable by default:
+
+- The steward reconciles this spine; ticket workers write to their issues.
+- Explicit narrow delegation: none.
+
+Read-only linked spines:
+
+- `docs/EPIC-Z-NIGHT-SPRINT.md` — the completed Zenod template.
+- `docs/EPIC-C-CALLISTHENES-SPRINT.md` — the first duplicate; copy its answers where they apply.
+- `docs/EPIC-P-PHYLAX-SPRINT.md` — depends on THIS epic's MCP face; do not block on it.
+- `docs/EPIC-3.0-CHASSIS-REPLATFORM.md` — D14/D15/D16/D19–D21 apply verbatim.
+- `docs/EPIC-3.4-RING-MULTITENANT.md` — superseded by this spine.
+
+Cross-spine change rule: read linked spines for context, but record proposed edits here unless explicitly granted write authority for the target spine.
+
+Stewardship transfer rule: record outgoing steward, incoming steward, absolute time, current commit, and next action before concurrent writing begins.
+
+## Authority By Artifact
+
+| Artifact | Authoritative For |
+|---|---|
+| This EpicSpine | Product shape, journey, PORT/DUPLICATE markings, pre-made decisions |
+| The live zenod unit + `docs/EPIC-Z-NIGHT-SPRINT.md` | The customer-layer template being duplicated |
+| `apps/web/src/views/ChatTab.tsx`, the console persona, `peer-agents.tsx` + `/api/peers` `/api/team/*` | The product middle being ported/evolved |
+| GitHub issue | One ticket's execution detail |
+| Validation evidence | The journey screenshots |
+
+## Mission
+
+Stand up the Ring — the front door: a web chat with your own Council, wired to your other units — as the next self-contained unit at `ring.zenod.dev`. DUPLICATE the proven Zenod customer layer (landing, GitHub sign-in, Stripe, tenants, dashboard shell). The product middle is code that already lives in this codebase: the Council web chat (`ChatTab` — streaming, markdown, tool testing), the console persona brain, and the wallet (an evolution of the existing peers/team surface: which units this tenant's council holds MCP URL+token for). Per D14 the Ring owns ZERO channel code — webchat is its only channel at SHIP; WhatsApp arrives later via Phylax calling the Ring's own MCP face. Done = the journey walked clean by the manager, then Jordi.
+
+## Definition Of Done
+
+SHIP — the journey, walked in a REAL BROWSER on the LIVE deployment, loop until ONE uninterrupted clean pass, screenshots per step:
+
+- [ ] 1. Open `ring.zenod.dev` logged out → normal landing: what the Ring is ("your council — one chat, wired to all your agents"), Get started, Pricing, Sign in. No public token field. (DUPLICATE)
+- [ ] 2. Pricing: Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
+- [ ] 3. Sign in with GitHub — same account system as Zenod/Callisthenes, one identity across units. (DUPLICATE)
+- [ ] 4. Subscribe (TEST card) → `client_reference_id` binding → tenant row in THIS container → land in the dashboard. (DUPLICATE)
+- [ ] 5. Dashboard: the COUNCIL CHAT front and center (ported ChatTab); **My Units wallet** panel (add a unit by pasting its MCP URL + token; status per unit); **Keys** (tenant's OpenRouter key via UI — never env); the Ring's own MCP URL + token with copy button (this is what Phylax and external agents will call); usage; back-link to landing. No channel tabs, no other units' panels. (PORT ChatTab + persona; EVOLVE peers→wallet; DUPLICATE the rest)
+- [ ] 6. Enter OpenRouter key → chat answers as the council. (PORT — existing chat path)
+- [ ] 7. Wallet: paste the tenant's own Zenod MCP URL + token → unit shows connected. Tell the council "remember this: the ring is alive" → council routes to that Zenod → the Zenod commit receipt appears in the chat reply. THE golden-path moment. (PORT peer-call machinery)
+- [ ] 8. The Ring's MCP FACE works: an external MCP client `initialize`s against the tenant's Ring URL and one chat tool call gets a council reply — this is the exact contract Phylax will consume. (PORT — existing /mcp plumbing)
+- [ ] 9. Logout/login persists chat wallet keys; second tenant sees none of the first tenant's wallet, chat history, or keys.
+- [ ] 10. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test."
+
+HARDEN (after Jordi approves SHIP): multiple units in the wallet exercised end-to-end (Callisthenes drafting via the council), skill auto-import from unit manifests (D16), routing rules UI, Google sign-in, standing-directives panel.
+
+## Non-Goals
+
+- ANY channel code (D14 — Phylax's job). Webchat is the only channel at SHIP.
+- New chat UI design — ChatTab moves as-is.
+- Suite composition, Herald, machine tenants.
+- Touching live Zenod/Callisthenes units beyond reading code as template.
+
+## Current State
+
+Phase: dispatch-ready
+Last verified: 2026-07-11
+Integration target: main
+Fresh base commit: current `main` at dispatch — PIN IT; no rebases until the journey passes (D19c)
+Next action: manager pulls main, binds, mints R-S1..R-S5, dispatches wave 1.
+Blockers: none — decisions pre-answered; inputs have absence-rules.
+
+## Role Goals
+
+| Identity | Goal | Terminal State |
+|---|---|---|
+| Epic worker | Journey passes clean; test package delivered. | Package posted, or "BLOCKED ON JORDI: <one question>" as entire status. |
+| Ticket worker | Ticket done in own worktree, PR opened. | PR + one-line result. |
+
+## Bootstrap Map
+
+Read in this order:
+
+| Priority | Link | Why It Matters | When To Read |
+|---|---|---|---|
+| 1 | This spine, top to bottom | Everything is here. | Always |
+| 2 | `docs/EPIC-Z-NIGHT-SPRINT.md` + `docs/EPIC-C-CALLISTHENES-SPRINT.md` (ledgers/journals) | The template and the first duplicate — copy their answers. | Always |
+| 3 | Live zenod unit customer-layer code | Being DUPLICATED. | R-S1 worker |
+| 4 | `apps/web/src/views/ChatTab.tsx`, console persona in `packages/server/src/agent.ts`, `peer-agents.tsx`, `/api/peers`, `/api/team/*`, `peerClient.ts` | Being PORTED/EVOLVED. | R-S2/R-S3 workers |
+| 5 | `docs/EPIC-3.0-CHASSIS-REPLATFORM.md` D14/D15/D16/D19–D21 | The laws. | Manager |
+
+## Architecture And Context
+
+One Dokploy application `ring`, one hostname `ring.zenod.dev`, one container. Tickets:
+
+- **R-S1 · Front duplicate** (DUPLICATE) — Zenod customer layer + landing, Ring branding/pricing copy, its own tenants table.
+- **R-S2 · Council middle** (PORT) — ChatTab as the dashboard centerpiece; console-persona chat path tenant-scoped; per-tenant OpenRouter key via Keys (existing pattern); per-tenant chat history on the tenant storage.
+- **R-S3 · Wallet** (EVOLVE peers/team surface — the ONE genuinely new-ish seam, flagged: budget 90 min, escalate rather than invent) — per-tenant list of {unit name, MCP URL, token(vault), status}; council brain gets the wallet as its tool surface (the existing peer-call machinery pointed at wallet entries). SECURITY (2026 MCP-gateway guidance): validate wallet URLs — https only, hostname must not resolve to private/loopback ranges except the unit fleet's own allowlist (SSRF guard); downstream tokens live in the vault and the tenant's Ring bearer is NEVER passed through to units (per-hop, audience-bound credentials — already the design, now stated as a check).
+- **R-S4 · Billing + domain** (DUPLICATE Z-N3/Z-N5/C-S4 recipe) — three TEST prices; webhook → tenant row; Traefik `ring.zenod.dev`; guarded cutover.
+- **R-S5 · Journey loop** (manager) — SHIP 1–10 including the MCP-face check (step 8) that Phylax depends on.
+
+Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/state | blocker | ETA`. 90-min ticket budgets; silence past budget = reassign.
+
+## Decisions
+
+| Date | Decision | Rule |
+|---|---|---|
+| 2026-07-11 | Domain | `ring.zenod.dev`. Landing at root, dashboard `/app`, `/mcp`, `/healthz`. |
+| 2026-07-11 | Accounts | Same GitHub OAuth app + account system as Zenod (DUPLICATE; creds from the zenod unit's Dokploy env). Callback addition if needed → BLOCKED ON JORDI with the exact URL. GitHub only. |
+| 2026-07-11 | SHIP scope | Chat + wallet + ONE wired unit (the tenant's Zenod) with one routed action returning a receipt (SHIP 7). Chat-only is NOT ship. (Jordi 2026-07-11.) |
+| 2026-07-11 | Channels | NONE in the Ring (D14). Webchat only. Phylax integrates later by calling the Ring's MCP face — which is why SHIP 8 exists. |
+| 2026-07-11 | LLM key | Per tenant, entered via the Keys UI. Never injected. Manager's laps use the capped TEST OpenRouter key entered through the UI. |
+| 2026-07-11 | Pricing | Self-hosted (free) / Monthly / Yearly, Stripe TEST, same account. |
+| 2026-07-11 | Conduct kit | Register async ticket shapes with any receipt middleware BEFORE walking (the Zenod silent_ack lesson). |
+| 2026-07-11 | Anything unanswered | Simplest option, journal it, keep moving. |
+
+## Issue Ledger
+
+| Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| mint | Ticket worker | assign | R-S1 front duplicate (landing, auth, tenants) | ready | - | worktree | pinned main | SHIP 1–4 | - | dispatch | wave 1 |
+| mint | Ticket worker | assign | R-S2 council middle (ChatTab + persona + Keys, tenant-scoped) | ready | - | worktree | pinned main | SHIP 5–6 | - | dispatch | wave 1 |
+| mint | Ticket worker | assign | R-S3 wallet (peers surface → per-tenant unit wallet) | ready | R-S1, R-S2 | worktree | pinned main | SHIP 7 | - | dispatch | wave 2 |
+| mint | Ticket worker | assign | R-S4 billing + domain (duplicate recipe) | ready | R-S1 | worktree | pinned main | SHIP 2, 4 live | - | dispatch | wave 2 |
+| mint | Epic worker | manager | R-S5 journey loop + MCP-face check + isolation + package | ready | R-S1..4 | - | pinned main | SHIP 1–10 | - | dispatch | last |
+
+## Branch And Integration
+
+- Base pinned at dispatch; no rebases until the journey passes (D19c).
+- One worktree per worker; shared clone read-only on main.
+- Manager integrates passing PRs; deploy = rebuild the ONE ring app. Targeted tests + journey only.
+
+## Human Gates
+
+| Gate | Human Owner | Trigger | Exact Approval / Input Required | What May Continue |
+|---|---|---|---|---|
+| GitHub OAuth callback addition | Jordi | Only if manager can't edit the app | Paste the exact URL | Everything else |
+| Anything touching live Zenod/Callisthenes/paying tenants | Jordi | Should not occur | BLOCKED ON JORDI | All else |
+
+## Recovery And Takeover
+
+Stale assignment policy: manager reassigns any ticket silent past its 90-minute budget.
+
+| Issue | Previous Assignment | Takeover Assignment | Starting Commit | Unverified Work | Recorded At |
+|---|---|---|---|---|---|
+| none | - | - | - | - | - |
+
+## Planner Queue
+
+- None. The spine is the planner.
+
+## Worker Queue
+
+- Wave 1: R-S1, R-S2. Wave 2: R-S3, R-S4. Then R-S5.
+
+## Tester Queue
+
+- R-S5 includes SHIP 8 (MCP face) — the contract Phylax consumes next.
+
+## Validation Evidence
+
+| Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
+|---|---|---|---|---|---|---|
+| pending | SHIP journey clean pass | - | ring.zenod.dev live | real browser walk + MCP client check, screenshots | pending | test package |
+
+## Handoff Journal
+
+### 2026-07-11 - Planner - Ring sprint spine created
+
+Context: Third unit on the duplicate-and-adapt recipe. The one new-ish seam is the wallet (R-S3, evolving the existing peers surface) — flagged with a hard budget and escalation rule. SHIP 8 (MCP face) deliberately included because EPIC-P (Phylax) forwards inbound WhatsApp to exactly that contract.
+Next: dispatch the manager.
+Risks: wallet seam; per-tenant chat-history storage paths.
+Links: `docs/EPIC-Z-NIGHT-SPRINT.md`, `docs/EPIC-C-CALLISTHENES-SPRINT.md`, `docs/EPIC-P-PHYLAX-SPRINT.md`.
+
+## Open Questions
+
+- None permitted. Decisions table or simplest option + journal.
+
+## Proposed Cross-Spine Updates
+
+| Date | Target Spine | Proposed Change | Evidence | Suggested Owner | Status |
+|---|---|---|---|---|---|
+| 2026-07-11 | `docs/EPIC-3.4-RING-MULTITENANT.md` | Mark superseded by this spine. | this spine | manager on bind | proposed |
+| 2026-07-11 | `docs/EPIC-P-PHYLAX-SPRINT.md` | Notify on SHIP approval — unblocks Phylax dispatch. | this spine | manager | proposed |
+
+## Appendix
+
+Inputs from Jordi: none required. OAuth/Stripe creds read from existing Dokploy envs; the manager's journey uses the capped TEST OpenRouter key via the Keys UI.
