@@ -19,6 +19,7 @@ import { HostedAccount } from "@/views/HostedAccount"
 import { HostedLogin } from "@/views/HostedLogin"
 import { Settings } from "@/views/Settings"
 import { SetupWizard } from "@/views/SetupWizard"
+import { PhylaxAdminWhatsAppPairing } from "@/components/phylax-admin-channels"
 
 type View =
   | { kind: "loading" }
@@ -51,7 +52,7 @@ function initialTabFromHash(): "connections" | undefined {
     : undefined
 }
 
-export function App() {
+function CustomerApp() {
   const [view, setView] = React.useState<View>({ kind: "loading" })
   const [githubReturn] = React.useState(consumeGithubReturn)
 
@@ -156,6 +157,29 @@ export function App() {
       <Toaster />
     </>
   )
+}
+
+function PhylaxAdmin() {
+  return (
+    <>
+      <main className="mx-auto flex min-h-svh max-w-5xl flex-col gap-6 p-6 lg:p-10">
+        <header className="flex flex-col gap-2 border-b pb-5">
+          <p className="text-sm font-medium text-muted-foreground">Phylax admin</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Channel number</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Pair the Phylax-owned WhatsApp number, inspect session health, and review the linked number.
+            Tenant phone verification happens separately in each tenant dashboard.
+          </p>
+        </header>
+        <PhylaxAdminWhatsAppPairing />
+      </main>
+      <Toaster />
+    </>
+  )
+}
+
+export function App() {
+  return window.location.pathname === "/admin" ? <PhylaxAdmin /> : <CustomerApp />
 }
 
 export default App

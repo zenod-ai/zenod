@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { HttpBindings } from "@hono/node-server";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
+import { serveStatic } from "@hono/node-server/serve-static";
 import {
   ChassisStorage,
   createSqliteTenantStore,
@@ -161,6 +162,11 @@ export interface CreateZenodUnitOptions {
   defaultTenantName?: string;
   panels?: string[];
   customerProduct?: CustomerProductConfig;
+  customerAdmin?: {
+    githubLogin: string;
+    mountRoutes?: (app: Hono<{ Bindings: HttpBindings }>) => void;
+    close?: () => void;
+  };
 }
 
 export const ZENOD_READ_TOOLS = [
@@ -273,6 +279,30 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   app.get("/api/health", (c) =>
     c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
   );
+  if (options.customerAdmin) {
+    const admin = options.customerAdmin;
+    const adminOnly: MiddlewareHandler<{ Bindings: HttpBindings }> = async (c, next) => {
+      const session = readCustomerSession(c, env);
+      if (!session || session.login !== admin.githubLogin) {
+        return c.req.path.startsWith("/api/")
+          ? c.json({ error: "not found" }, 404)
+          : c.text("Not Found", 404);
+      }
+      await next();
+    };
+    app.use("/admin", adminOnly);
+    app.use("/admin/*", adminOnly);
+    app.use("/api/whatsapp/*", adminOnly);
+    app.use("/api/telegram/*", adminOnly);
+    admin.mountRoutes?.(app);
+    if (options.webDist) {
+      app.get("/admin", serveStatic({
+        root: options.webDist,
+        path: "index.html",
+        onFound: (_path, c) => c.header("Cache-Control", "no-cache, no-store, must-revalidate"),
+      }));
+    }
+  }
   app.route("/", customer.app);
   const publicSiteHost = (options.customerProduct ?? options.customer?.product)?.defaultDomain;
   mountStaticSurfaces(app, {
@@ -329,6 +359,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     customerAccounts: customer.accounts,
     customerTokenVault: customer.tokenVault,
     close() {
+      options.customerAdmin?.close?.();
       runtimes.close();
       if ("close" in tenantStore && typeof tenantStore.close === "function") {
         tenantStore.close();
