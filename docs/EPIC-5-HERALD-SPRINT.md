@@ -2,7 +2,7 @@
 
 Status: active — H-S5 paused during final live walk (Jordi, 2026-07-11)
 Created: 2026-07-11
-Updated: 2026-07-11
+Updated: 2026-07-12
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-5-HERALD-SPRINT.md`
 GitHub issues: same repository
@@ -89,14 +89,14 @@ HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Ca
 
 ## Current State
 
-Phase: H-S5 live journey — paused by Jordi during the final clean lap
-Last verified: 2026-07-11T21:47:58+02:00
+Phase: planner review — PR-5.1 plus proposed repair backlog before H-S5 resumes
+Last verified: 2026-07-12T01:55:51+02:00
 Integration target: main
 Fresh base commit: `bf366b5939492af1417814bfae1daf30006b3cf4` — pinned from `origin/main` at dispatch (D19c); no rebases until the journey passes
 Live deployment: `https://herald.zenod.dev/` is serving exact commit `17e3f30319371fbc4750c8790ff4ce1f45377dea`; CI and image publication passed.
 Paused point: tenant one is paid and authenticated; the duplicated wallet contains live Zenod + Calli tenants; Calli is connected to `@ZenodAgent`; the corrected active test model key is stored; Herald loop/chat state was reset for the final uninterrupted lap. The final lap had re-verified the logged-out landing and GitHub return and was entering the dashboard when Jordi paused it. Existing screenshots cover steps 1–7, but they are partial-lap evidence and do not yet constitute SHIP.
-Next action on resume: restart H-S5 at step 1, walk steps 1–12 without interruption, delete test posts after permalink capture, then write the test package. Do not resume from the paused browser step because Definition Of Done requires a clean pass from step 1.
-Blockers: none requiring Jordi. The first Ring test OpenRouter key reached its provider-side total limit; under H-D15 the manager rotated Herald to an already-custodied, active test OpenRouter key from the live Zenod tenant without minting a key or requesting credentials.
+Next action: planner reviews PR-5.1 and the H-S6–H-S9 backlog below. If accepted, the manager mints the draft GitHub issues, pins fresh `origin/main`, dispatches the repair waves, integrates and deploys one exact SHA, passes the pre-test gate, then restarts H-S5 at step 1. Do not resume from the paused browser step because Definition Of Done requires a clean pass from step 1.
+Blockers: H-S5 is intentionally held at the PR-5.1 planner gate because the live test revealed a product-identity and authority divergence. No credential or infrastructure input is required.
 
 ## Role Goals
 
@@ -128,6 +128,84 @@ The one new organ — the loop — lives entirely inside Herald:
 - **Boards**: tenant-scoped SQLite tables (`board_items`: state proposed|approved|posted|rejected, text, rationale, memory_citation, permalink, timestamps). Local-first (simplest thing that ships); FILINGS go to the tenant's Zenod memory via the wallet — memory is the loop's long-term substrate, the board is its working queue.
 - **Briefing**: versioned rows (`briefings`: version, content, approved_at); on ✓ also filed to Zenod memory. The briefing is the UI; there is no user-facing YAML.
 - **Lanes v0**: two mission prompts (proposer, poster) as code-side prompt templates with the tenant's briefing interpolated — no YAML runtime, no loader, no generic schema. That's HARDEN-or-later extraction territory.
+
+## Planner Review Queue
+
+### PR-5.1 — One Herald, one personality, one authority
+
+Status: proposed by Jordi from first-setup live testing on 2026-07-12; planner acceptance required before implementation.
+
+Evidence: `/Users/jordi/.codex/attachments/0ebd2a14-d6fa-4aea-be10-613c7bee6f50/pasted-text.txt`. The briefing interview and exact ✓ filing worked, but the subsequent generic chat produced uncited, non-board drafts, invented an unsupported `✓ approve post` command, and then the authoritative board parser correctly reported that no proposals existed.
+
+Proposed identity invariant:
+
+- There is exactly one visible personality and operational authority: **Herald**. The user is talking to him at all times.
+- Ring is implementation provenance only — the shipped body duplicated to create Herald. Ring/Council must not appear as a second persona, product layer, or user-facing concept inside Herald.
+- Herald is himself an MCP server that Ring or any other authorized agent may call. He is also a specialized Ring-like agent with extended capacity around one domain's goals, state, and tools.
+- Herald is pre-wired/configured with the downstream MCP servers required by his domain. For SHIP those are Zenod (memory) and Calli (publishing), reached through tenant-scoped wallet custody.
+
+Proposed topology:
+
+```text
+User chat ───────────────┐
+                        ▼
+Ring or another agent ─▶ Herald MCP / Herald personality
+                              │
+                              ├── approved briefing + objectives
+                              ├── current board + approvals + receipts
+                              ├── recent filings/outcomes
+                              ├── Zenod MCP (memory)
+                              └── Calli MCP (publishing)
+```
+
+Proposed turn contract:
+
+1. Every chat and MCP turn is handled as Herald, with no generic Ring/Council fallback personality.
+2. Before answering or acting, Herald is grounded in the approved briefing and current operational state: board items, approvals, recent filings, and posting receipts. He is "obsessed with the briefing and current state."
+3. Natural-language requests and explicit controls are two entrances to the same authoritative lanes. "Show me proposed posts" must create/read real numbered board items through the same proposer path as Run now; it must never emit disposable chat-only drafts.
+4. Every proposed post remains governed by the briefing and carries its WHY plus a Zenod memory citation. Herald must not invent product claims merely because they sound persuasive.
+5. Feedback such as "dial down the slang" must become durable iteration state — a rejection/lesson filing and, where the planner permits, a briefing refinement — so the next wake is visibly shaped by it.
+6. Publishing language must resolve against real board state. Herald never invents approval syntax. He asks for the supported current-list selection (`✓ 1`, `✓ 1,3`, `✓ all`) and uses `publish approved` only after items are actually approved.
+7. All mutation replies stay in Herald's voice while returning authoritative receipts or a clear human explanation. Internal phrases such as "verified same-turn mutation receipt" are not customer copy.
+8. Reply policy may be captured as part of the briefing, but SHIP must state that automated X replies are not active until the HARDEN reply lane exists. PR-5.1 does not pull that lane into SHIP.
+
+Proposed UI/copy consequences:
+
+- Remove inherited copy such as "Talk to your brain" and "Wire the Council to your agents."
+- Present the wallet as Herald's connected tools/capabilities, not a Council roster.
+- Board and chat are two views of the same Herald state, never parallel realities.
+
+Planner decision requested: accept this invariant as a correction to H-D2/H-D13's product interpretation and add its turn contract to SHIP acceptance. Recommendation: **accept**; it narrows authority and removes an observed split-brain behavior without changing the existing Zenod, Calli, board, scheduler, or tenant architecture.
+
+### Proposed backlog and path to the next test phase
+
+These are draft tickets until the planner accepts PR-5.1. After acceptance the manager creates the GitHub issues, records exact branches/bases, and dispatches in the waves below.
+
+| Draft | Title | Scope | Depends On | Acceptance Gate | Wave |
+|---|---|---|---|---|---|
+| H-S6 | One-Herald state kernel | Server-side identity/authority repair. Remove the generic post-briefing fallback as an independent personality; assemble approved briefing, current board, recent filings and receipts as Herald's mandatory turn state for chat and MCP; keep deterministic mutation receipts behind Herald's single voice. | PR-5.1 | Every post-briefing turn is handled as Herald and can name the current briefing/board state; no generic Ring/Council persona can emit domain output outside Herald authority. | R1 |
+| H-S7 | Authoritative natural-language loop control | Route natural requests into existing lanes: show/propose → the real proposer/board; numbered approvals → current board parser; feedback → rejection/lesson filing that shapes the next wake; send/publish → actual approved board state and Calli. Prevent invented approval commands and chat-only drafts. | H-S6 | Jordi's transcript can be replayed through chat: proposed copy exists as cited board rows, feedback is durable, unsupported `✓ approve post` is never suggested, and publishing cannot occur without real board approval. | R2 |
+| H-S8 | Herald-only product language | Remove inherited "Council" / "Talk to your brain" language; present wallet peers as Herald's connected tools/capabilities; make chat, briefing and board read as one agent's state; disclose that reply policy is recorded while automated X replies remain HARDEN. | PR-5.1 | No Ring/Council/second-persona product copy remains on Herald surfaces; the dashboard makes one Herald and one state model obvious. | R1 |
+| H-S9 | Transcript-derived contract and integration gate | Add regression tests from Jordi's first-setup evidence across briefing, natural proposal request, style feedback, approval guidance and publish intent. Assert citations/WHY, board persistence, memory receipts, unsupported-feature disclosure and zero off-board mutations. Run full server/web/build validation. | H-S6, H-S7, H-S8 | Automated replay passes; 100% of domain proposals are authoritative board rows; every mutation has a receipt or clear Herald-voice error; full relevant CI is green. | R3 |
+
+Dispatch sequence:
+
+1. **Planner gate:** accept/amend/reject PR-5.1 and this backlog. No code work begins before acceptance because this changes SHIP identity/acceptance.
+2. **Pin:** fetch `origin/main`, record one fresh base SHA, and create H-S6–H-S9 GitHub issues with dedicated worktrees/branches.
+3. **Wave R1:** H-S6 ∥ H-S8. Their file surfaces are expected to be server runtime/chat versus Herald web copy/components.
+4. **Wave R2:** H-S7 on the integrated R1 commit. This is sequenced after H-S6 so natural intent cannot recreate a second authority path.
+5. **Wave R3:** H-S9 tests the integrated behavior using Jordi's transcript as the contract fixture; fix/retest until green.
+6. **Pre-test gate:** merge to `main`; CI + image publication pass; deploy one exact SHA; `/api/health` matches; live tenant wallet/model/Calli connectivity passes; reset only Herald test loop/chat state; recapture or redact any evidence containing token-bearing URLs.
+7. **Next test phase:** set H-S5 back to `testing` and restart the complete real-browser journey at step 1. A test phase may not begin earlier.
+
+Entry criteria for the next H-S5 test phase:
+
+- PR-5.1 accepted and reflected as a final decision/acceptance update.
+- H-S6–H-S9 issues are done and integrated.
+- Transcript-derived regression is green on the deployed SHA.
+- Natural "show me posts" creates real cited board items; feedback persists; publish intent resolves against real approvals.
+- Herald UI and replies contain no visible Ring/Council second personality.
+- Live Zenod and Calli wallet catalogs, model key, X connection, and exact deployment SHA are verified.
 
 Waves (file-surface disjoint):
 
@@ -165,7 +243,11 @@ Pre-answered — the planner is asleep.
 | [#895](https://github.com/zenod-ai/zenod/issues/895) | Ticket worker | H-S2-worker | H-S2 loop organ (scheduler + boards + briefing store + no-briefing-no-fire gate) | BUILD (verified absent everywhere) | done | pinned base | 1 | [#901](https://github.com/zenod-ai/zenod/pull/901) / `codex/h-s2-loop-organ` | `bf366b5` | 685 server tests + manager integration tests; merged `cfc13e2` | 2026-07-11T20:07:57+02:00 | integrated |
 | [#898](https://github.com/zenod-ai/zenod/issues/898) | Ticket worker | H-S3-worker | H-S3 briefing setup mode + ✓ parsing + filings via wallet | BUILD on PORTed ring chat | done | H-S1, H-S2 | 2 | [#902](https://github.com/zenod-ai/zenod/pull/902) / `codex/h-s3-briefing-chat` | `cfc13e2` | CI + 13 focused tests; merged `ea005cb` | 2026-07-11T20:42:28+02:00 | integrated |
 | [#899](https://github.com/zenod-ai/zenod/issues/899) | Ticket worker | H-S4-worker | H-S4 proposer/poster lanes + Board & Briefing dashboard panels + Run now | BUILD on DUPLICATEd wallet/dashboard | done | H-S1, H-S2 | 2 | [#903](https://github.com/zenod-ai/zenod/pull/903) / `codex/h-s4-loop-lanes-dashboard` | `cfc13e2` | CI + 699 server tests + web/build/typecheck; merged `7d9dad1`; chat seam fixed `0820167` | 2026-07-11T20:42:28+02:00 | integrated |
-| [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | paused | H-S1..4 | last | `main` | `17e3f30` live | 709 server tests + typecheck; CI + image publish pass; live screenshots through briefing receipt are partial-lap only | 2026-07-11T21:47:58+02:00 | on resume restart the real-browser walk at step 1 |
+| [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | planner review | H-S1..4 + PR-5.1 | last | `main` | `17e3f30` live | first-setup transcript proves briefing receipt but exposes chat/board split personality and authority | 2026-07-12T01:54:37+02:00 | planner reviews PR-5.1; accepted refinement becomes a bounded fix ticket before H-S5 restarts |
+| draft H-S6 | Ticket worker | unassigned | One-Herald state kernel | BUILD repair | planner review | PR-5.1 | R1 | branch/worktree after approval | fresh pinned `origin/main` after approval | first-setup transcript | 2026-07-12T01:55:51+02:00 | planner accepts backlog, then manager mints issue and dispatches |
+| draft H-S7 | Ticket worker | unassigned | Authoritative natural-language loop control | BUILD repair | planner review | H-S6 | R2 | branch/worktree after approval | integrated R1 commit | first-setup transcript | 2026-07-12T01:55:51+02:00 | dispatch only after H-S6 integrates |
+| draft H-S8 | Ticket worker | unassigned | Herald-only product language | PORT cleanup + BUILD | planner review | PR-5.1 | R1 | branch/worktree after approval | fresh pinned `origin/main` after approval | live dashboard copy | 2026-07-12T01:55:51+02:00 | planner accepts backlog, then manager mints issue and dispatches |
+| draft H-S9 | Tester / ticket worker | unassigned | Transcript-derived contract and integration gate | TEST + bounded fixes | planner review | H-S6, H-S7, H-S8 | R3 | branch/worktree after approval | integrated R2 commit | Jordi transcript contract | 2026-07-12T01:55:51+02:00 | dispatch after repair integration; green is required before H-S5 |
 
 Budgets: 90 min per ticket; manager reassigns anything silent past budget. Heartbeat every 30 min: `lap/state | blocker | ETA`.
 
@@ -180,6 +262,7 @@ Budgets: 90 min per ticket; manager reassigns anything silent past budget. Heart
 
 | Gate | Human Owner | Trigger | Exact Approval / Input Required | What May Continue |
 |---|---|---|---|---|
+| PR-5.1 Herald identity + repair backlog | Epic 5 planner | First-setup transcript shows generic chat and authoritative board diverge | Accept, amend, or reject the one-Herald invariant, turn contract, H-S6–H-S9 backlog, and next-test entry criteria | Issue minting and repair dispatch; H-S5 remains held until the pre-test gate passes |
 | SHIP approval | Jordi | Test package delivered | Jordi walks the identical journey and approves | Nothing in HARDEN |
 | HARDEN reply lane | Jordi | After SHIP approval | Jordi routes the X-read ask to Calli's track | All other HARDEN items |
 | Customer #0 flip (D-H1 dogfood) | Jordi personally | HARDEN, his call | Jordi connects Zenod's own X account and approves the first real morning-N | Everything else |
@@ -192,7 +275,7 @@ Stale policy: the manager reassigns any ticket silent past its budget. Record ta
 
 ## Open Questions
 
-None permitted. Anything that surfaces: H-D15 — simplest option, journal it, keep moving.
+PR-5.1 only: does the planner accept the one-Herald identity invariant, its eight-part turn contract, the H-S6–H-S9 backlog, and the listed next-test entry criteria as SHIP acceptance? Recommendation: accept. Anything else that surfaces follows H-D15.
 
 ## Validation Evidence
 
@@ -203,6 +286,14 @@ None permitted. Anything that surfaces: H-D15 — simplest option, journal it, k
 | 2026-07-11 | H-S5 partial browser laps | `17e3f30319371fbc4750c8790ff4ce1f45377dea` | live Chrome session | landing, pricing, GitHub, Stripe TEST, dashboard/wallet, no-briefing refusal, briefing + Zenod commit receipt | partial — not SHIP; final uninterrupted pass still required | local-only `docs/evidence/herald-ship-2026-07-11/`; redact credential-bearing wallet URLs before committing any image |
 
 ## Handoff Journal
+
+### 2026-07-12T01:54:37+02:00 — Herald delivery manager — first-setup evidence routed to planner
+
+Context: Jordi's first-setup transcript proves that briefing capture, exact approval, versioning, Zenod filing, and commit receipts work. It also proves a deeper divergence: after approval, inherited generic chat generated uncited posts that never entered the board, accepted style feedback without durable state, invented a `✓ approve post` command, and spoke as though a separate Calli-routing assistant existed. The real board parser then correctly refused because no authoritative proposals existed.
+
+Proposed correction PR-5.1 is recorded above for planner review: one Herald personality and authority; Ring as code provenance only; Herald as a specialized MCP server callable by Ring; every turn grounded in briefing/current state; natural chat and buttons using the same authoritative lanes; no chat-only drafts or invented mutations; inherited Council/brain copy removed. The reply lane remains HARDEN. Draft backlog H-S6–H-S9 and an explicit pre-test gate now carry this correction through server authority, natural-language control, UI identity, transcript regression, integration and deployment before H-S5 can return to `testing`.
+
+Next: planner accepts/amends/rejects PR-5.1. On acceptance, mint one bounded repair ticket, deploy it, and restart H-S5 from step 1.
 
 ### 2026-07-11T21:47:58+02:00 — Herald delivery manager — H-S5 paused by Jordi
 
