@@ -70,7 +70,7 @@ describe("Phylax customer unit mount", () => {
     }
   });
 
-  it("returns 404 for /admin and its channel APIs unless the GitHub session login is exactly alfablok", async () => {
+  it("returns 404 for /admin and its channel APIs unless the GitHub session login is alfablok, case-insensitively", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-admin-"));
     dirs.push(dataDir);
     const webDist = join(dataDir, "web");
@@ -98,6 +98,10 @@ describe("Phylax customer unit mount", () => {
       const adminCookie = await cookieFor("alfablok");
       const page = await unit.app.request("/admin", { headers: { cookie: adminCookie } });
       expect(page.status).toBe(200);
+
+      const canonicalGithubCookie = await cookieFor("AlfaBlok");
+      const canonicalGithubPage = await unit.app.request("/admin", { headers: { cookie: canonicalGithubCookie } });
+      expect(canonicalGithubPage.status).toBe(200);
       expect(await page.text()).toContain("PHYLAX ADMIN");
       const status = await unit.app.request("/api/whatsapp/status", { headers: { cookie: adminCookie } });
       expect(status.status).toBe(200);

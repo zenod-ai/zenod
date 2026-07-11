@@ -289,7 +289,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     const admin = options.customerAdmin;
     const adminOnly: MiddlewareHandler<{ Bindings: HttpBindings }> = async (c, next) => {
       const session = readCustomerSession(c, env);
-      if (!session || session.login !== admin.githubLogin) {
+      if (!session || session.login.toLowerCase() !== admin.githubLogin.toLowerCase()) {
         return c.req.path.startsWith("/api/")
           ? c.json({ error: "not found" }, 404)
           : c.text("Not Found", 404);

@@ -84,12 +84,12 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: dispatched — wave 2 (P-S3 ∥ P-S4)
-Last verified: 2026-07-11T05:17:00+02:00 (wave 1 CI + manager review passed; integrated)
+Phase: P-S5 Human Gate — live exact SHA ready; test-number pairing required
+Last verified: 2026-07-11T05:54:31+02:00 (live exact-SHA preflight passed)
 Integration target: main
 Fresh base commit: `31e69bbbc20e2e4a2b053a2d30adf44f18b34245` — PINNED at dispatch; no rebases until the journey passes (D19c)
-Next action: review and integrate P-S3/P-S4; deploy one exact SHA; start P-S5 Human Gate.
-Blockers: none. Test WhatsApp number needed only at P-S5 start (Human Gates) — P-S1..P-S4 proceed without it.
+Next action: Jordi supplies the manager's test WhatsApp number; manager opens `/admin`, pairs it by fresh QR, and starts the P-S5 journey from step 1.
+Blockers: P-S5 Human Gate — a spare/test WhatsApp number the manager may pair and message.
 
 ## Role Goals
 
@@ -147,9 +147,9 @@ Wave 1: P-S1 ∥ P-S2. Wave 2: P-S3, P-S4. Then P-S5. Heartbeats, budgets, workt
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | [#870](https://github.com/zenod-ai/zenod/issues/870) | Ticket worker | P-S1-worker | P-S1 front duplicate | done | EPIC R SHIP satisfied | [#876](https://github.com/zenod-ai/zenod/pull/876) / `codex/p-s1-front-duplicate` | `31e69bb` | SHIP 1–4 | 11 focused tests + builds + CI; manager review; merged `4f4a140` | 2026-07-11T05:17:00+02:00 | integrated |
 | [#871](https://github.com/zenod-ai/zenod/issues/871) | Ticket worker | P-S2-worker | P-S2 channels organ port (Baileys+Telegram+faces) | done | EPIC R SHIP satisfied | [#877](https://github.com/zenod-ai/zenod/pull/877) / `codex/p-s2-channels-port` | `31e69bb` | SHIP 8, 10 mechanics | 45 focused tests + typecheck + CI; manager review; merged `c0a2f6b` | 2026-07-11T05:17:00+02:00 | integrated |
-| [#872](https://github.com/zenod-ai/zenod/issues/872) | Ticket worker | P-S3-worker | P-S3 tenant settings + keyword verification + transcription | in progress | P-S1, P-S2 done | `codex/p-s3-tenant-settings` / `../wt-p-s3` | `c0a2f6b` | SHIP 6–7, 9 | worktree verified at integrated base | 2026-07-11T05:17:00+02:00 | review-ready PR |
-| [#873](https://github.com/zenod-ai/zenod/issues/873) | Ticket worker | P-S4-worker | P-S4 admin gate (alfablok) + billing + domain | in progress | P-S1, P-S2 admin surface done | `codex/p-s4-admin-billing-domain` / `../wt-p-s4` | `c0a2f6b` | SHIP 2, 4, 5 | worktree verified at integrated base; old compose protected | 2026-07-11T05:17:00+02:00 | review-ready PR + deploy handoff |
-| [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | blocked by dependency | P-S1..4 | manager loop | integrated P-S1..4 | SHIP 1–12 | - | 2026-07-11T05:04:09+02:00 | request test number at P-S5 start |
+| [#872](https://github.com/zenod-ai/zenod/issues/872) | Ticket worker | P-S3-worker | P-S3 tenant settings + keyword verification + transcription | done | P-S1, P-S2 done | [#881](https://github.com/zenod-ai/zenod/pull/881) / `codex/p-s3-tenant-settings` | `c0a2f6b` | SHIP 6–7, 9 | 645 full + 24 post-merge focused tests; CI; manager review; merged `78aaee6` | 2026-07-11T05:34:00+02:00 | integrated |
+| [#873](https://github.com/zenod-ai/zenod/issues/873) | Ticket worker | P-S4-worker | P-S4 admin gate (alfablok) + billing + domain | done | P-S1, P-S2 admin surface done | [#880](https://github.com/zenod-ai/zenod/pull/880), [#883](https://github.com/zenod-ai/zenod/pull/883) / `codex/p-s4-admin-billing-domain` | `c0a2f6b` | SHIP 2, 4, 5 | CI + focused checks; live `51242ac`; root/health 200, MCP 401, logged-out admin 404 | 2026-07-11T05:54:31+02:00 | integrated and deployed |
+| [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | blocked on named Human Gate | P-S1..4 done | manager loop | live `51242ac` | SHIP 1–12 | exact-SHA live preflight passed; no session paired | 2026-07-11T05:54:31+02:00 | request test number, then fresh QR |
 
 ## Branch And Integration
 
@@ -190,7 +190,8 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
-| pending | SHIP journey clean pass | - | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending | test package |
+| 2026-07-11 | Pre-P-S5 live deployment receipt | `51242ac` | `https://phylax.zenod.dev` | guarded Dokploy target + exact-SHA HTTP probes | PASS: root and health 200; MCP unauthenticated 401; logged-out `/admin` 404; OAuth redirect targets Phylax callback | `/var/tmp/p-s4-cutover-2026-07-11`; application `urbFsgl6eImbQ4MTIZl5N` |
+| pending | SHIP journey clean pass | `51242ac` | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending Human Gate | test package |
 
 ## Handoff Journal
 
@@ -213,6 +214,12 @@ Links: [#870](https://github.com/zenod-ai/zenod/issues/870), [#871](https://gith
 Context: P-S1 PR #876 and P-S2 PR #877 both passed CI and independent manager review. Review caught and fixed a broken Self-host link and required the channels PR to compose the shipped WhatsAppGateway, WhatsAppStore, TelegramGateway, shared transcription, and pairing API/UI rather than stopping at a scratch seam. Manager reran 11 customer/unit checks and builds plus the 45-test channel battery. Wave 1 merged as `4f4a140` and `c0a2f6b`.
 Assignments: P-S3-worker / `codex/p-s3-tenant-settings` / `../wt-p-s3`; P-S4-worker / `codex/p-s4-admin-billing-domain` / `../wt-p-s4`; both start from integrated base `c0a2f6b524c53c69dedcd812739916bf8b26272d` without rebasing wave 1.
 Next: integrate wave 2, publish/deploy one exact SHA into a new full-customer-unit application, then request the test WhatsApp number at the P-S5 Human Gate.
+
+### 2026-07-11 - Phylax delivery manager - wave 2 integrated and live target ready
+
+Context: P-S4 PR #880 and P-S3 PR #881 passed CI and manager review. P-S3 merged P-S4 without rebasing and resolved the shared hooks onto exactly one Baileys/Telegram runtime. A dedicated Stripe TEST webhook endpoint was created for `https://phylax.zenod.dev/webhook`; #883 preserves its endpoint-specific signing secret. Final image `sha-51242ac` passed publish smoke. The new application owns a fresh `phylax-data` volume and no migrated session; the protected legacy compose was untouched. Dokploy's deployment queue was backed up behind an unrelated active job, so the manager created only the reviewed new Swarm service from the exact target config, then used Dokploy's start action to reconcile application status to done.
+Evidence: live `/api/health` reports `phylax` / `51242ac`; root 200; unauthenticated MCP 401; logged-out `/admin` 404; OAuth authorization redirect carries `https://phylax.zenod.dev/auth/github/callback`.
+Next: P-S5 Human Gate — obtain the manager's spare/test WhatsApp number, pair it by fresh QR, then walk from step 1 until one uninterrupted clean browser-and-phone pass.
 
 ## Open Questions
 
