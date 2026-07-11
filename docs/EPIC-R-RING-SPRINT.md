@@ -84,11 +84,11 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: HARDEN wave 2 — tools-ready UI ∥ progressive skill runtime
-Last verified: 2026-07-11T06:30:00+02:00
+Phase: HARDEN R-H5 — exact-SHA deploy + live Calli validation
+Last verified: 2026-07-11T06:53:42+02:00
 Integration target: main
-Fresh base commit: `ddab094b52defa0997596b38898f82d5e111e982` — PINNED wave-2 base (D19c)
-Next action: integrate R-H3 and R-H4, then run R-H5 live against the existing Calli peer without reconnecting.
+Fresh base commit: `062e91ef63147b48560b76fc6462a74979ac1472` — PINNED R-H5 integration base (D19c)
+Next action: publish and deploy exact `062e91e`, then validate saved Calli discovery, canonical skill load, held draft, refresh, and two-tenant isolation.
 Blockers: none.
 
 ## Role Goals
@@ -155,9 +155,9 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#879](https://github.com/zenod-ai/zenod/issues/879) | Ticket worker | R-S5e-worker | Make streamed Council reply authoritative after receipt gate | done | #858 | [#882](https://github.com/zenod-ai/zenod/pull/882) / `codex/r-s5e-authoritative-stream` | `b7c0ca5` | stream `done` carries final text; UI replaces draft; exact live commit receipt | CI + independent review pass; final browser commit `45e22e2` visible without reload | 2026-07-11T05:48:00+02:00 | integrated |
 | [#863](https://github.com/zenod-ai/zenod/issues/863) | Ticket worker | R-H1-worker | Generic MCP discovery + dynamic Council tools | done | - | [#886](https://github.com/zenod-ai/zenod/pull/886) / `codex/r-h1-generic-mcp-discovery` | `af1cfdf` | arbitrary peers expose real schemas/tools; auto-refresh; tools-ready state | CI + independent review pass; merged `ddab094` with H2 reconciliation | 2026-07-11T06:30:00+02:00 | integrated |
 | [#860](https://github.com/zenod-ai/zenod/issues/860) | Ticket worker | R-H2-worker | Tenant skill artifact store + attachment API | done | - | [#885](https://github.com/zenod-ai/zenod/pull/885) / `codex/r-h2-peer-skill-artifacts` | `af1cfdf` | immutable/versioned/path-safe/tenant-isolated bundles + APIs | CI + independent security review pass; merged `19c45fa` | 2026-07-11T06:30:00+02:00 | integrated |
-| [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | in progress | #863, #860 done | `codex/r-h3-peer-skill-ui` / `../wt-r-h3` | `ddab094` | transport vs tools-ready; attach/replace/download/detach | dispatched from combined wave-1 base | 2026-07-11T06:30:00+02:00 | implement + tests + PR |
-| [#865](https://github.com/zenod-ai/zenod/issues/865) | Ticket worker | R-H4-worker | Progressive `load_peer_skill` runtime + safety | in progress | #863, #860 done | `codex/r-h4-peer-skill-runtime` / `../wt-r-h4` | `ddab094` | metadata-only baseline; on-demand skill; no authority escalation/scripts | dispatched from combined wave-1 base | 2026-07-11T06:30:00+02:00 | implement + tests + PR |
-| [#864](https://github.com/zenod-ai/zenod/issues/864) | Epic worker / tester | Ring delivery manager | Generic MCP + skills integration and live Calli validation | blocked | #862, #865, #866, #861 | `main` | integrated wave 2 | existing Calli auto-refresh, held draft only, two-tenant isolation | issue minted | 2026-07-11T04:34:35+02:00 | final integration |
+| [#862](https://github.com/zenod-ai/zenod/issues/862) | Ticket worker | R-H3-worker | My Units discovery + skill attachment UI | done | #863, #860 done | [#888](https://github.com/zenod-ai/zenod/pull/888) / `codex/r-h3-peer-skill-ui` | `ddab094` | transport vs tools-ready; attach/replace/download/detach | CI + independent review pass; 23 web tests; merged `062e91e` | 2026-07-11T06:53:42+02:00 | integrated |
+| [#865](https://github.com/zenod-ai/zenod/issues/865) | Ticket worker | R-H4-worker | Progressive `load_peer_skill` runtime + safety | done | #863, #860 done | [#887](https://github.com/zenod-ai/zenod/pull/887) / `codex/r-h4-peer-skill-runtime` | `ddab094` | metadata-only baseline; on-demand skill; no authority escalation/scripts | CI + independent security review pass; merged `e1c257b` | 2026-07-11T06:53:42+02:00 | integrated |
+| [#864](https://github.com/zenod-ai/zenod/issues/864) | Epic worker / tester | Ring delivery manager | Generic MCP + skills integration and live Calli validation | in progress | #862, #865, #866, #861 done | `main` | `062e91e` | existing Calli auto-refresh, held draft only, two-tenant isolation | wave 2 integrated; exact-SHA live lap next | 2026-07-11T06:53:42+02:00 | deploy + final integration |
 
 ## Branch And Integration
 
@@ -204,6 +204,11 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Final SHIP journey | `5ac9f37` | ring.zenod.dev live | real browser exact SHIP 7; external MCP SDK client; bearer-isolated beta tenant | PASS: commit `45e22e2` + GitHub links visible without reload; `ring-face-ok`; alpha peers/key hidden from beta; beta cleaned up | `docs/evidence/ring-ship-2026-07-11/19-ship7-live-authoritative-receipt.png`; `TEST-PACKAGE.md` |
 
 ## Handoff Journal
+
+### 2026-07-11T06:53:42+02:00 - Ring delivery manager - HARDEN wave 2 merged; R-H5 active
+
+Context: R-H4 merged as `e1c257b` after CI and independent security review. R-H3 then merged as `062e91e` after CI, independent review, and 23 web interaction/model regressions. The wallet and Ring product surface now share one truthful readiness predicate: transport connected, discovery ready, and at least one usable tool. The host-owned `load_peer_skill` exposes only tenant-attached, integrity-checked advisory skill content and never inlines or executes scripts.
+Next: publish and deploy exact `062e91e`, refresh the existing Calli peer without reconnecting, attach/load the canonical Calli skill, create one held draft only, and reprove tenant isolation.
 
 ### 2026-07-11T06:30:00+02:00 - Ring delivery manager - HARDEN wave 1 merged; wave 2 dispatched
 
