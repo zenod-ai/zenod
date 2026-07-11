@@ -179,7 +179,8 @@ export function DashboardOverview({
 
   const mcpAccess = resolveMcpAccess(connections.token, account)
   const mcpUrl = mcpAccess.url
-  const snippets = mcpClientSnippets(mcpUrl)
+  const isRing = overview?.unit?.name === "ring"
+  const snippets = mcpClientSnippets(mcpUrl, isRing ? "ring" : "zenod")
 
   return (
     <div className="flex flex-col gap-4">
@@ -266,19 +267,21 @@ export function DashboardOverview({
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="rounded-lg">
-          <CardHeader>
-            <FolderGit2Icon className="size-5 text-muted-foreground" />
-            <CardTitle>Connect your vault</CardTitle>
-            <CardDescription>
-              Authorize the GitHub App and choose any repository it can access.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <GithubConnect compact />
-          </CardContent>
-        </Card>
+      <div className={isRing ? "grid gap-4" : "grid gap-4 md:grid-cols-2"}>
+        {!isRing && (
+          <Card className="rounded-lg">
+            <CardHeader>
+              <FolderGit2Icon className="size-5 text-muted-foreground" />
+              <CardTitle>Connect your vault</CardTitle>
+              <CardDescription>
+                Authorize the GitHub App and choose any repository it can access.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <GithubConnect compact />
+            </CardContent>
+          </Card>
+        )}
         <CreditSummary account={account} overview={overview} />
       </div>
     </div>

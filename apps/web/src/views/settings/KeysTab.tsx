@@ -216,10 +216,12 @@ export function KeysTab({
   initial,
   onSaved,
   vaultless = false,
+  unitLabel = "Zenod",
 }: {
   initial: SettingsValues
   onSaved?: (settings: SettingsValues) => void
   vaultless?: boolean
+  unitLabel?: string
 }) {
   const [form, setForm] = React.useState<FormState>(() => toFormState(initial))
   const [saving, setSaving] = React.useState(false)
@@ -317,7 +319,7 @@ export function KeysTab({
         <CardHeader>
           <CardTitle>Keys &amp; models</CardTitle>
           <CardDescription>
-            Credentials and model choices for this Zenod server. Saved secrets
+            Credentials and model choices for this {unitLabel}. Saved secrets
             are shown masked; leave them as-is to keep the stored value.
           </CardDescription>
         </CardHeader>

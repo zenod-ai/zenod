@@ -37,9 +37,9 @@ export function resolveMcpAccess(
   }
 }
 
-export function mcpClientSnippets(mcpUrl: string) {
+export function mcpClientSnippets(mcpUrl: string, name = "zenod") {
   return {
-    claude: `claude mcp add --transport http zenod ${mcpUrl}`,
-    codex: `codex mcp add zenod --url ${mcpUrl}`,
+    claude: `claude mcp add --transport http ${name} ${mcpUrl}`,
+    codex: `codex mcp add ${name} --url ${mcpUrl}`,
   }
 }

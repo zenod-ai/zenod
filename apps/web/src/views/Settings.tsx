@@ -140,7 +140,7 @@ export function Settings({
         </div>
         <div className="flex items-center gap-1">
           <Button asChild variant="ghost" size="sm">
-            <a href={PUBLIC_LANDING_URL}>
+            <a href={isRing ? "https://ring.zenod.dev/" : PUBLIC_LANDING_URL}>
               <ArrowLeftIcon data-icon="inline-start" />
               Landing
             </a>
@@ -176,7 +176,7 @@ export function Settings({
                 <h2 id="ring-keys-heading" className="text-lg font-semibold">Keys</h2>
                 <p className="text-sm text-muted-foreground">Your tenant-scoped Council model key.</p>
               </div>
-              <KeysTab initial={settings} onSaved={setSettings} vaultless />
+              <KeysTab initial={settings} onSaved={setSettings} vaultless unitLabel="Ring Council" />
             </section>
           </div>
         </main>
