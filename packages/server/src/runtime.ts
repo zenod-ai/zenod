@@ -347,17 +347,29 @@ export class Runtime {
           },
         } satisfies PeerConfig;
       }));
-      this.settings.setPeers(next);
+      // Skill attach/detach has its own API and may complete while tools/list is
+      // in flight. Re-read that server-owned reference at commit time.
+      const latest = this.settings.peers();
+      const reconciled = next.map((peer) => {
+        const skillArtifact = latest.find((candidate) => candidate.name === peer.name)?.skillArtifact;
+        const { skillArtifact: _staleSkill, ...rest } = peer;
+        return { ...rest, ...(skillArtifact ? { skillArtifact } : {}) };
+      });
+      this.settings.setPeers(reconciled);
       this.invalidate();
-      return next;
+      return reconciled;
     };
     const queued = (this.walletPeerRefresh ?? Promise.resolve([])).catch(() => []).then(refresh);
     this.walletPeerRefresh = queued;
     return queued;
   }
 
-  ensureWalletPeerTools(): Promise<PeerConfig[]> {
-    return this.walletPeerRefresh ?? this.refreshWalletPeerTools();
+  async ensureWalletPeerTools(): Promise<PeerConfig[]> {
+    if (!this.walletPeerRefresh) await this.refreshWalletPeerTools();
+    else await this.walletPeerRefresh;
+    // Skill attachment and other server-owned metadata may change after the
+    // startup discovery promise resolves; settings is the current authority.
+    return this.settings.peers();
   }
 
   async getRepo(options: { ensureSchema?: boolean } = {}): Promise<VaultRepo> {
@@ -725,9 +737,13 @@ export class Runtime {
                   verbatim: true,
                   ...(hints.length ? { hints } : {}),
                 };
-                return this.recordPeerDelegation(peer, spec, forwarded, () => callPeerWithArgs(peer, spec.mcp, forwarded));
+                return this.recordPeerDelegation(peer, spec, forwarded, () => callPeerWithArgs(peer, spec.mcp, forwarded, {
+                  preserveFullResult: spec.preserveFullResult,
+                }));
               }
-              return this.recordPeerDelegation(peer, spec, args, () => callPeerWithArgs(peer, spec.mcp, args));
+              return this.recordPeerDelegation(peer, spec, args, () => callPeerWithArgs(peer, spec.mcp, args, {
+                preserveFullResult: spec.preserveFullResult,
+              }));
             }
             const textInput = typeof input === "string" ? input : String(input.input ?? "");
             const rawEvidence = this.taskingContext.getStore()?.rawEvidence;
@@ -738,11 +754,15 @@ export class Runtime {
                 verbatim: true,
                 ...(hints.length ? { hints } : {}),
               };
-              return this.recordPeerDelegation(peer, spec, forwarded, () => callPeerWithArgs(peer, spec.mcp, forwarded));
+              return this.recordPeerDelegation(peer, spec, forwarded, () => callPeerWithArgs(peer, spec.mcp, forwarded, {
+                preserveFullResult: spec.preserveFullResult,
+              }));
             }
             if (peer.wallet && spec.mcp === "store_memory") {
               const args = { [spec.arg]: textInput };
-              return this.recordPeerDelegation(peer, spec, args, () => callPeerWithArgs(peer, spec.mcp, args));
+              return this.recordPeerDelegation(peer, spec, args, () => callPeerWithArgs(peer, spec.mcp, args, {
+                preserveFullResult: spec.preserveFullResult,
+              }));
             }
             if (!shouldForwardConsoleContext || !spec.mcp.startsWith("chat_with_")) {
               return this.recordPeerDelegation(peer, spec, textInput, () => callPeer(peer, spec.mcp, spec.arg, textInput));

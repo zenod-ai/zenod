@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { VERSION } from "zenod";
 import { pollPeerJob } from "./pollPeerJob.js";
 import { validateWalletUrl } from "./walletUrl.js";
+import type { PeerSkillAttachmentRef } from "./peerSkillStore.js";
 
 /**
  * The mesh: one agent calling another over MCP. A peer agent exposes its tools at
@@ -28,6 +29,8 @@ export interface PeerToolSpec {
   description: string;
   /** MCP tool behavior hints copied from tools/list when discovery is available. */
   annotations?: { readOnlyHint?: boolean; [key: string]: unknown };
+  /** Discovered tools retain the complete MCP CallToolResult envelope. */
+  preserveFullResult?: boolean;
 }
 
 export interface PeerConfig {
@@ -58,8 +61,8 @@ export interface PeerConfig {
     error?: string;
     refreshedAt: string;
   };
-  /** Tenant-attached skill metadata is owned by R-H2 and survives discovery. */
-  skillArtifact?: unknown;
+  /** Tenant-local immutable skill artifact reference. The bundle itself is never stored in settings. */
+  skillArtifact?: PeerSkillAttachmentRef;
 }
 
 async function validatePeerTarget(peer: PeerConfig): Promise<void> {
@@ -126,7 +129,7 @@ export function councilToolName(peerName: string, mcpToolName: string): string {
     .update("\0")
     .update(mcpToolName)
     .digest("hex")
-    .slice(0, 10);
+    .slice(0, 16);
   return `${stableToolSegment(peerName)}__${stableToolSegment(mcpToolName)}__${digest}`;
 }
 
@@ -166,7 +169,11 @@ export async function discoverPeerTools(peer: PeerConfig): Promise<PeerDiscovery
       ...(tool.outputSchema ? { outputSchema: boundedSchema(tool.outputSchema, `${tool.name} outputSchema`) } : {}),
       description: (tool.description?.trim() || `Call ${tool.name} on the ${peer.name} peer.`).slice(0, MAX_TOOL_DESCRIPTION_CHARS),
       ...(tool.annotations ? { annotations: { ...tool.annotations } } : {}),
+      preserveFullResult: true,
     }));
+    if (new Set(specs.map((spec) => spec.as)).size !== specs.length) {
+      throw new Error("tools/list produced colliding Council tool names");
+    }
     return { transport: "connected", tools: "ready", specs };
   } catch (err) {
     return {
@@ -277,7 +284,12 @@ export async function callPeerTool(
 }
 
 /** Call a peer tool with full structured arguments, returning readable text for the chat loop. */
-export async function callPeerWithArgs(peer: PeerConfig, mcpTool: string, args: Record<string, unknown>): Promise<string> {
+export async function callPeerWithArgs(
+  peer: PeerConfig,
+  mcpTool: string,
+  args: Record<string, unknown>,
+  options: { preserveFullResult?: boolean } = {},
+): Promise<string> {
   const result = await callPeerTool(peer, mcpTool, args);
   const text = extractText(result);
   if (peer.wallet && mcpTool === "store_memory" && !result.isError) {
@@ -305,6 +317,7 @@ export async function callPeerWithArgs(peer: PeerConfig, mcpTool: string, args: 
       return `Zenod filing receipt timed out for job ${jobId}.`;
     }
   }
+  if (options.preserveFullResult) return JSON.stringify(result);
   if (result.structuredContent || result.content.some((item) => item.type !== "text")) {
     return JSON.stringify(result);
   }

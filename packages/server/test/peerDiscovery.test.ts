@@ -70,6 +70,7 @@ describe("generic wallet MCP discovery", () => {
       inputSchema: { type: "object", required: ["text"], properties: { text: { type: "string", minLength: 1 } } },
       outputSchema: { type: "object", properties: { draftId: { type: "string" } } },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+      preserveFullResult: true,
     })]);
     expect(fetcher.mock.calls.some(([, init]) => new Headers(init?.headers).get("authorization") === "Bearer secret")).toBe(true);
   });
@@ -103,6 +104,23 @@ describe("generic wallet MCP discovery", () => {
       _meta: { receipt: "opaque" },
     });
     expect(JSON.parse(chat)).toMatchObject(raw);
+  });
+
+  it("retains isError and _meta for a discovered pure-text result", async () => {
+    vi.stubGlobal("fetch", mcpFetch([], () => ({
+      content: [{ type: "text", text: "upstream rejected the call" }],
+      isError: true,
+      _meta: { upstreamCode: "held_not_approved", retryable: false },
+    })));
+    const peer = { name: "Calli", url: "https://peer.example/mcp", token: "secret" };
+
+    const serialized = await callPeerWithArgs(peer, "createPosts", { text: "draft" }, { preserveFullResult: true });
+
+    expect(JSON.parse(serialized)).toEqual({
+      content: [{ type: "text", text: "upstream rejected the call" }],
+      isError: true,
+      _meta: { upstreamCode: "held_not_approved", retryable: false },
+    });
   });
 
   it("separates a connected transport from a failed tools catalog", async () => {
@@ -170,19 +188,21 @@ describe("generic wallet MCP discovery", () => {
       wallet: true,
       tools: [],
       // Future H2 fields survive because refresh spreads the stored peer object.
-      skillArtifact: { id: "calli-skill-v1" },
+      skillArtifact: { artifactId: "sha256:calli-skill-v1", version: "v1" },
     } as any]);
     const app = createApp(runtime, { agent: RING_AGENT });
     const headers = { authorization: "Bearer ring-test-token" };
     try {
       const boot = await app.request("/api/peers", { headers });
-      expect(await boot.json()).toMatchObject({ peers: [{
+      const bootPayload = await boot.json() as { peers: Array<Record<string, unknown>> };
+      expect(bootPayload).toMatchObject({ peers: [{
         transportStatus: "connected",
         toolsStatus: "ready",
         toolCount: 1,
         tools: [{ mcpName: "searchPostsRecent", annotations: { readOnlyHint: true } }],
       }] });
-      expect((runtime.settings.peers()[0] as any).skillArtifact).toEqual({ id: "calli-skill-v1" });
+      expect(bootPayload.peers[0]).not.toHaveProperty("tool");
+      expect((runtime.settings.peers()[0] as any).skillArtifact).toEqual({ artifactId: "sha256:calli-skill-v1", version: "v1" });
 
       advertised = [{
         name: "getUsersMe",
@@ -195,13 +215,15 @@ describe("generic wallet MCP discovery", () => {
         headers: { ...headers, "content-type": "application/json" },
         body: JSON.stringify({ name: "Calli" }),
       });
-      expect(await refreshed.json()).toMatchObject({ peers: [{
+      const refreshedPayload = await refreshed.json() as { peers: Array<Record<string, unknown>> };
+      expect(refreshedPayload).toMatchObject({ peers: [{
         transportStatus: "connected",
         toolsStatus: "ready",
         toolCount: 1,
-        toolNames: [councilToolName("Calli", "getUsersMe")],
+        tools: [{ name: councilToolName("Calli", "getUsersMe") }],
       }] });
-      expect((runtime.settings.peers()[0] as any).skillArtifact).toEqual({ id: "calli-skill-v1" });
+      expect(refreshedPayload.peers[0]).not.toHaveProperty("tool");
+      expect((runtime.settings.peers()[0] as any).skillArtifact).toEqual({ artifactId: "sha256:calli-skill-v1", version: "v1" });
       expect(fetcher.mock.calls.some(([, init]) => new Headers(init?.headers).get("authorization") === "Bearer downstream-secret")).toBe(true);
     } finally {
       runtime.close();
