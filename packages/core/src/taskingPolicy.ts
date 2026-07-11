@@ -106,6 +106,21 @@ function hasUnnegatedVerb(request: string, verbs: RegExp): boolean {
 
 const POST_VERB_RE = /\b(?:post|publish|send)\b/gi;
 const EMAIL_VERB_RE = /\b(?:send|email|mail)\b/gi;
+const DYNAMIC_MUTATION_VERB_RE = /\b(?:run|execute|write|create|update|delete|send|post|publish)\b/gi;
+const INTENT_CLAUSE_BOUNDARY_RE = /[.;!?]|\b(?:but|however|instead|then)\b/gi;
+
+/** A positive dynamic-tool verb whose current clause has not entered a negated scope. */
+function hasExplicitDynamicMutationVerb(request: string): boolean {
+  for (const match of request.matchAll(DYNAMIC_MUTATION_VERB_RE)) {
+    const beforeVerb = request.slice(0, match.index!);
+    let clauseStart = 0;
+    for (const boundary of beforeVerb.matchAll(INTENT_CLAUSE_BOUNDARY_RE)) {
+      clauseStart = boundary.index! + boundary[0].length;
+    }
+    if (!NEGATION_RE.test(beforeVerb.slice(clauseStart))) return true;
+  }
+  return false;
+}
 
 function hasExplicitMutationIntent(tool: string, request: string): boolean {
   const normalized = normalizedToolName(tool);
@@ -201,7 +216,8 @@ export interface PeerMutationGuardContext {
  * undo a closed issue or sent message.
  */
 export function peerMutationGuardFailure(tool: string, userRequest: string, context?: PeerMutationGuardContext): string | null {
-  if (!context?.forceMutation && !isPeerMutationTool(tool)) return null;
+  const legacyMutationTool = isPeerMutationTool(tool);
+  if (!context?.forceMutation && !legacyMutationTool) return null;
   const normalized = normalizedToolName(tool);
   if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest) && !READ_ONLY_REQUEST_RE.test(userRequest)) {
     return `Blocked ${tool}: explicit backlog writes/runs must use the dedicated Archus write/run tool, not ask_archus.`;
@@ -210,7 +226,14 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
   if (normalized === "archusrunissue" && !QUALIFIED_ISSUE_REF_RE.test(userRequest)) {
     return `Blocked ${tool}: running requires an exact work issue already named by the user as owner/repo#N. For create-and-run requests, send the full natural-language request to Archus instead of inventing a target.`;
   }
-  const explicitMutation = hasExplicitMutationIntent(tool, userRequest);
+  const explicitDynamicMutation = Boolean(
+    context?.forceMutation &&
+      !legacyMutationTool &&
+      !READ_ONLY_REQUEST_RE.test(userRequest) &&
+      !EXECUTION_STATUS_REQUEST_RE.test(userRequest) &&
+      hasExplicitDynamicMutationVerb(userRequest),
+  );
+  const explicitMutation = hasExplicitMutationIntent(tool, userRequest) || explicitDynamicMutation;
   if (READ_ONLY_REQUEST_RE.test(userRequest) && !explicitMutation) {
     return `Blocked ${tool}: the user's current request is read-only/status-oriented, so mutating peer tools are not allowed this turn.`;
   }

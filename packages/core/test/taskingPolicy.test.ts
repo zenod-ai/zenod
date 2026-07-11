@@ -1026,6 +1026,49 @@ describe("peerMutationGuardFailure", () => {
     expect(failure).toContain("create-and-run");
   });
 
+  describe("dynamic MCP mutation intent", () => {
+    const createPosts = "calli__createposts__2c00e9c77473c663";
+
+    it("allows an explicit unnegated run of a namespaced mutation tool", () => {
+      expect(
+        peerMutationGuardFailure(
+          createPosts,
+          "Explicitly run the discovered Calli createPosts tool exactly once to create one held draft; no approval and do not publish.",
+          { forceMutation: true },
+        ),
+      ).toBeNull();
+    });
+
+    it("blocks held-draft prose without an explicit mutation instruction", () => {
+      expect(
+        peerMutationGuardFailure(createPosts, "Here is a held draft for review. Do not publish it.", { forceMutation: true }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+
+    it("blocks read-only/status and negated-only turns", () => {
+      expect(
+        peerMutationGuardFailure(createPosts, "Read-only: what is the status of the held posts? Do not create anything.", {
+          forceMutation: true,
+        }),
+      ).toContain("read-only/status-oriented");
+      expect(
+        peerMutationGuardFailure(createPosts, "Don't run, create, post, send, update, delete, or publish anything.", {
+          forceMutation: true,
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+
+    it("does not let forceMutation bypass legacy outbound approval behavior", () => {
+      expect(
+        peerMutationGuardFailure("post_tweet", "Create a held draft for my review.", {
+          conversationId: "dynamic-legacy-outbound",
+          args: { text: "held draft" },
+          forceMutation: true,
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+  });
+
   describe("M-1 — stateful approval token for outbound sends", () => {
     beforeEach(() => __resetApprovalTokens());
 
