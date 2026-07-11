@@ -28,6 +28,7 @@ import type { CustomerProductConfig } from "./customerBilling.js";
 import { readCustomerSession } from "./customerSession.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
+import { walletFleetAllowlist } from "./walletUrl.js";
 
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
@@ -81,6 +82,7 @@ export class ZenodRuntimePool {
     const app = createApp(this.forContext(context), {
       agent: this.agent,
       trustedChassisAuth: true,
+      walletFleetAllowlist: walletFleetAllowlist(this.env),
     });
     this.apps.set(context.tenant.id, app);
     return app;

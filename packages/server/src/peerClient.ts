@@ -1,6 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { VERSION } from "zenod";
+import { pollPeerJob } from "./pollPeerJob.js";
+import { validateWalletUrl } from "./walletUrl.js";
 
 /**
  * The mesh: one agent calling another over MCP. A peer agent exposes its tools at
@@ -39,6 +41,38 @@ export interface PeerConfig {
    * "Manage" affordance in the Team tab; the agent remains the source of truth.
    */
   repo?: string;
+  /** Ring tenant wallet entry; requires downstream SSRF validation on every call. */
+  wallet?: boolean;
+  /** Set only by server policy when the exact host belongs to the private unit fleet. */
+  allowPrivateHost?: boolean;
+}
+
+async function validatePeerTarget(peer: PeerConfig): Promise<void> {
+  if (!peer.wallet) return;
+  const hostname = new URL(peer.url).hostname.replace(/^\[|\]$/g, "");
+  await validateWalletUrl(peer.url, { allowHosts: peer.allowPrivateHost ? [hostname] : [] });
+}
+
+export async function probePeer(peer: PeerConfig): Promise<"connected" | "error"> {
+  try {
+    await validatePeerTarget(peer);
+    const client = new Client({ name: "zenod-wallet-probe", version: VERSION }, { capabilities: {} });
+    const transport = new StreamableHTTPClientTransport(new URL(peer.url), {
+      requestInit: {
+        headers: { Authorization: `Bearer ${peer.token}` },
+        signal: AbortSignal.timeout(5_000),
+      },
+    });
+    try {
+      await client.connect(transport);
+      await client.listTools();
+      return "connected";
+    } finally {
+      await client.close().catch(() => {});
+    }
+  } catch {
+    return "error";
+  }
 }
 
 function extractText(result: unknown): string {
@@ -64,6 +98,11 @@ export async function callPeer(
   input: string,
   extraArgs: Record<string, unknown> = {},
 ): Promise<string> {
+  try {
+    await validatePeerTarget(peer);
+  } catch (err) {
+    return `Could not reach peer agent "${peer.name}": ${(err as Error).message}`;
+  }
   const client = new Client({ name: "zenod-mesh-client", version: VERSION }, { capabilities: {} });
   const transport = new StreamableHTTPClientTransport(new URL(peer.url), {
     requestInit: { headers: { Authorization: `Bearer ${peer.token}` } },
@@ -104,6 +143,14 @@ export async function callPeerTool(
   mcpTool: string,
   args: Record<string, unknown>,
 ): Promise<PeerToolResult> {
+  try {
+    await validatePeerTarget(peer);
+  } catch (err) {
+    return {
+      content: [{ type: "text", text: `Could not reach peer agent "${peer.name}": ${(err as Error).message}` }],
+      isError: true,
+    };
+  }
   const client = new Client({ name: "zenod-mesh-client", version: VERSION }, { capabilities: {} });
   const transport = new StreamableHTTPClientTransport(new URL(peer.url), {
     requestInit: { headers: { Authorization: `Bearer ${peer.token}` } },
@@ -134,6 +181,31 @@ export async function callPeerTool(
 export async function callPeerWithArgs(peer: PeerConfig, mcpTool: string, args: Record<string, unknown>): Promise<string> {
   const result = await callPeerTool(peer, mcpTool, args);
   const text = extractText(result);
+  if (peer.wallet && mcpTool === "store_memory" && !result.isError) {
+    const structuredJobId = typeof result.structuredContent?.jobId === "string" ? result.structuredContent.jobId : null;
+    const jobId = structuredJobId ?? text.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i)?.[0];
+    if (jobId) {
+      const completed = await pollPeerJob([peer], jobId, 1_000, 180_000);
+      if (completed.status === "done" && completed.result && typeof completed.result === "object") {
+        const receipt = completed.result as {
+          evidenceRef?: string;
+          pagesTouched?: string[];
+          commitSha?: string;
+          githubUrls?: string[];
+          question?: string;
+        };
+        return [
+          receipt.question ? `QUESTION FOR THE USER: ${receipt.question}` : "Stored.",
+          receipt.evidenceRef ? `evidence: ${receipt.evidenceRef}` : "",
+          receipt.pagesTouched?.length ? `pages: ${receipt.pagesTouched.join(", ")}` : "",
+          receipt.commitSha ? `commit: ${receipt.commitSha}` : "",
+          ...(receipt.githubUrls ?? []),
+        ].filter(Boolean).join("\n");
+      }
+      if (completed.status === "error") return `Zenod filing failed: ${completed.error ?? "unknown error"}`;
+      return `Zenod filing receipt timed out for job ${jobId}.`;
+    }
+  }
   if (text) return text;
   if (result.structuredContent) return JSON.stringify(result.structuredContent);
   return `(${peer.name} returned no text)`;

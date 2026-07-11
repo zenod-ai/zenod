@@ -98,6 +98,48 @@ describe("Ring council unit", () => {
     }
   });
 
+  it("keeps My Units and downstream credentials tenant-scoped", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "ring-wallet-"));
+    dirs.push(dataDir);
+    const tenants = createMemoryTenantStore([
+      { token: "ring-alpha", tenant: { id: "tenant-alpha", name: "Alpha" } },
+      { token: "ring-beta", tenant: { id: "tenant-beta", name: "Beta" } },
+    ]);
+    const unit = createRingUnit({
+      dataDir,
+      tenantStore: tenants,
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        RING_UNIT_FLEET_ALLOWLIST: "alpha-zenod.internal",
+      },
+    });
+    try {
+      const saved = await unit.app.request("/api/peers", {
+        method: "PUT",
+        headers: { authorization: "Bearer ring-alpha", "content-type": "application/json" },
+        body: JSON.stringify({ peers: [{ name: "Zenod", url: "https://alpha-zenod.internal/mcp", token: "downstream-alpha" }] }),
+      });
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toMatchObject({
+        peers: [{ name: "Zenod", hasToken: true, status: "error" }],
+      });
+
+      const alpha = await unit.app.request("/api/peers", { headers: { authorization: "Bearer ring-alpha" } });
+      const beta = await unit.app.request("/api/peers?tenantId=tenant-alpha", { headers: { authorization: "Bearer ring-beta" } });
+      expect(await alpha.json()).toMatchObject({ peers: [{ name: "Zenod", hasToken: true }] });
+      expect(await beta.json()).toEqual({ peers: [] });
+
+      const denied = await unit.app.request("/api/peers", {
+        method: "PUT",
+        headers: { authorization: "Bearer ring-beta", "content-type": "application/json" },
+        body: JSON.stringify({ peers: [{ name: "bad", url: "https://127.0.0.1/mcp", token: "secret" }] }),
+      });
+      expect(denied.status).toBe(400);
+    } finally {
+      unit.close();
+    }
+  });
+
   it("uses the Ring namespace, checkout metadata, domain and default OAuth callback", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "ring-customer-"));
     dirs.push(dataDir);

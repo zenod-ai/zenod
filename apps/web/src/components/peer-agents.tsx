@@ -28,10 +28,11 @@ interface Peer {
   url: string
   tool: string
   hasToken: boolean
+  status: "connected" | "error"
 }
 
 /**
- * The mesh: peer agents this agent can delegate to. Each becomes an `ask_<name>`
+ * My Units wallet: downstream agents this Council can delegate to. Each becomes an `ask_<name>`
  * tool in the chat — e.g. the vaultless Console asks Zenod for memory. The token
  * is write-only (never returned by the API); we only show whether one is set.
  */
@@ -55,7 +56,7 @@ export function PeerAgents() {
       setPeers(r.peers)
       return true
     } catch (err) {
-      toast.error("Could not save peers", { description: errorMessage(err) })
+      toast.error("Could not save units", { description: errorMessage(err) })
       return false
     } finally {
       setSaving(false)
@@ -75,7 +76,7 @@ export function PeerAgents() {
       setName("")
       setUrl("")
       setToken("")
-      toast.success(`Peer "${name.trim()}" connected`, { description: `Available in chat as ask_${name.trim().toLowerCase()}.` })
+      toast.success(`Unit "${name.trim()}" connected`, { description: `The Council can now route work to it.` })
     }
   }
 
@@ -83,17 +84,16 @@ export function PeerAgents() {
     const next = (peers ?? [])
       .filter((p) => p.name !== target)
       .map((p) => ({ name: p.name, url: p.url, tool: p.tool }))
-    if (await save(next)) toast.success(`Peer "${target}" removed`)
+    if (await save(next)) toast.success(`Unit "${target}" removed`)
   }
 
   return (
     <Card>
       <CardHeader>
         <NetworkIcon className="size-5 text-muted-foreground" />
-        <CardTitle>Peer agents (mesh)</CardTitle>
+        <CardTitle>My Units</CardTitle>
         <CardDescription>
-          Connect another agent&apos;s MCP endpoint so this one can delegate to it. Each peer
-          becomes an <span className="font-mono">ask_&lt;name&gt;</span> tool in the chat.
+          Wire the Council to your agents with their MCP URL and downstream token.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -105,8 +105,8 @@ export function PeerAgents() {
               <EmptyMedia variant="icon">
                 <NetworkIcon />
               </EmptyMedia>
-              <EmptyTitle>No peers yet</EmptyTitle>
-              <EmptyDescription>Add one below — e.g. Zenod for memory.</EmptyDescription>
+              <EmptyTitle>No units yet</EmptyTitle>
+              <EmptyDescription>Add Zenod below to give the Council durable memory.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -118,6 +118,7 @@ export function PeerAgents() {
                     <span className="truncate font-medium">{p.name}</span>
                     <Badge variant="secondary" className="font-mono">ask_{p.name.toLowerCase()}</Badge>
                     {p.hasToken && <Badge variant="outline">token set</Badge>}
+                    <Badge variant={p.status === "connected" ? "secondary" : "destructive"}>{p.status}</Badge>
                   </div>
                   <span className="truncate font-mono text-xs text-muted-foreground">{p.url}</span>
                 </div>
@@ -137,9 +138,9 @@ export function PeerAgents() {
 
         <form onSubmit={addPeer} className="flex flex-col gap-4 border-t pt-5">
           <Field>
-            <FieldLabel htmlFor="peer-name">Name</FieldLabel>
+            <FieldLabel htmlFor="peer-name">Unit name</FieldLabel>
             <Input id="peer-name" placeholder="zenod" value={name} onChange={(e) => setName(e.target.value)} />
-            <FieldDescription>Short id — exposed to the chat as ask_&lt;name&gt;.</FieldDescription>
+            <FieldDescription>A short label, such as Zenod.</FieldDescription>
           </Field>
           <Field>
             <FieldLabel htmlFor="peer-url">MCP URL</FieldLabel>
@@ -156,7 +157,7 @@ export function PeerAgents() {
             <Input
               id="peer-token"
               type="password"
-              placeholder="the peer's MCP token"
+              placeholder="the unit's MCP token"
               value={token}
               onChange={(e) => setToken(e.target.value)}
               className="font-mono text-xs"
@@ -166,7 +167,7 @@ export function PeerAgents() {
           <div>
             <Button type="submit" disabled={saving || !name.trim() || !url.trim() || !token.trim()}>
               {saving ? <Spinner /> : <NetworkIcon data-icon="inline-start" />}
-              Connect peer
+              Add unit
             </Button>
           </div>
         </form>

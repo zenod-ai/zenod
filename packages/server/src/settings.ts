@@ -129,6 +129,10 @@ const CREDENTIAL_SECRET_KEYS: ReadonlySet<string> = new Set([
   "google_oauth_refresh_token",
 ]);
 
+function peerTokenKey(name: string): string {
+  return `peer_token_${name.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, "_").slice(0, 80)}`;
+}
+
 const ENV_SEEDS: Record<SettingKey, string> = {
   instance_name: "ZENOD_INSTANCE_NAME",
   vault_repo: "VAULT_REPO",
@@ -313,14 +317,45 @@ export class Settings {
     if (!raw) return [];
     try {
       const arr = JSON.parse(raw);
-      return Array.isArray(arr) ? (arr as PeerConfig[]).filter((p) => p && p.name && p.url && p.token) : [];
+      if (!Array.isArray(arr)) return [];
+      return (arr as PeerConfig[])
+        .map((peer) => {
+          if (!peer || !peer.name || !peer.url || !peer.token) return null;
+          const token = isCredentialHandle(peer.token)
+            ? this.credentialVault?.materialize(peerTokenKey(peer.name), peer.token) ?? null
+            : peer.token;
+          return token ? { ...peer, token } : null;
+        })
+        .filter((peer): peer is PeerConfig => peer !== null);
     } catch {
       return [];
     }
   }
 
   setPeers(peers: PeerConfig[]): void {
-    this.setRaw("peers", JSON.stringify(peers));
+    if (!this.credentialVault) {
+      this.setRaw("peers", JSON.stringify(peers));
+      return;
+    }
+    const current = this.getRaw("peers");
+    let prior: PeerConfig[] = [];
+    try {
+      const parsed = current ? JSON.parse(current) : [];
+      prior = Array.isArray(parsed) ? (parsed as PeerConfig[]) : [];
+    } catch {
+      prior = [];
+    }
+    const nextNames = new Set(peers.map((peer) => peer.name));
+    for (const peer of prior) {
+      if (!nextNames.has(peer.name) && isCredentialHandle(peer.token)) {
+        this.credentialVault.delete(peerTokenKey(peer.name), peer.token);
+      }
+    }
+    const vaulted = peers.map((peer) => ({
+      ...peer,
+      token: this.credentialVault!.put(peerTokenKey(peer.name), peer.token),
+    }));
+    this.setRaw("peers", JSON.stringify(vaulted));
   }
 
   ringTenantConfig(): RingTenantConfig {
