@@ -1045,6 +1045,15 @@ describe("peerMutationGuardFailure", () => {
       ).toContain("require an explicit write/run/send instruction");
     });
 
+    it("does not authorize a dynamic tool from an unrelated mutation verb", () => {
+      expect(
+        peerMutationGuardFailure(createPosts, "Please update me with the latest headlines.", { forceMutation: true }),
+      ).toContain("require an explicit write/run/send instruction");
+      expect(
+        peerMutationGuardFailure(createPosts, "Write a summary using the Calli createPosts tool.", { forceMutation: true }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+
     it("blocks read-only/status and negated-only turns", () => {
       expect(
         peerMutationGuardFailure(createPosts, "Read-only: what is the status of the held posts? Do not create anything.", {

@@ -109,15 +109,27 @@ const EMAIL_VERB_RE = /\b(?:send|email|mail)\b/gi;
 const DYNAMIC_MUTATION_VERB_RE = /\b(?:run|execute|write|create|update|delete|send|post|publish)\b/gi;
 const INTENT_CLAUSE_BOUNDARY_RE = /[.;!?]|\b(?:but|however|instead|then)\b/gi;
 
-/** A positive dynamic-tool verb whose current clause has not entered a negated scope. */
-function hasExplicitDynamicMutationVerb(request: string): boolean {
+/** A positive verb bound to the named dynamic tool in the same request clause. */
+function hasExplicitDynamicMutationVerb(tool: string, request: string): boolean {
+  const toolLeaf = normalizedToolName(tool.split("__")[1] ?? "");
+  if (toolLeaf.length < 4) return false;
   for (const match of request.matchAll(DYNAMIC_MUTATION_VERB_RE)) {
     const beforeVerb = request.slice(0, match.index!);
     let clauseStart = 0;
     for (const boundary of beforeVerb.matchAll(INTENT_CLAUSE_BOUNDARY_RE)) {
       clauseStart = boundary.index! + boundary[0].length;
     }
-    if (!NEGATION_RE.test(beforeVerb.slice(clauseStart))) return true;
+    if (NEGATION_RE.test(beforeVerb.slice(clauseStart))) continue;
+    const afterVerb = request.slice(match.index!);
+    let clauseEnd = request.length;
+    for (const boundary of afterVerb.matchAll(INTENT_CLAUSE_BOUNDARY_RE)) {
+      clauseEnd = match.index! + boundary.index!;
+      break;
+    }
+    const clause = normalizedToolName(request.slice(clauseStart, clauseEnd));
+    if (!clause.includes(toolLeaf)) continue;
+    const verb = match[0].toLowerCase();
+    if (verb === "run" || verb === "execute" || toolLeaf.startsWith(verb)) return true;
   }
   return false;
 }
@@ -231,7 +243,7 @@ export function peerMutationGuardFailure(tool: string, userRequest: string, cont
       !legacyMutationTool &&
       !READ_ONLY_REQUEST_RE.test(userRequest) &&
       !EXECUTION_STATUS_REQUEST_RE.test(userRequest) &&
-      hasExplicitDynamicMutationVerb(userRequest),
+      hasExplicitDynamicMutationVerb(tool, userRequest),
   );
   const explicitMutation = hasExplicitMutationIntent(tool, userRequest) || explicitDynamicMutation;
   if (READ_ONLY_REQUEST_RE.test(userRequest) && !explicitMutation) {
