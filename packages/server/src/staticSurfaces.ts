@@ -5,6 +5,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 export interface StaticSurfaceOptions {
   webDist?: string;
   siteDist?: string;
+  publicSiteHost?: string;
 }
 
 type ServerEnv = { Bindings: HttpBindings };
@@ -13,9 +14,9 @@ function requestHost(value: string | undefined): string {
   return (value ?? "").split(",")[0]!.trim().split(":")[0]!.toLowerCase();
 }
 
-export function isPublicSiteHost(value: string | undefined): boolean {
+export function isPublicSiteHost(value: string | undefined, configuredHost?: string): boolean {
   const host = requestHost(value);
-  const configured = (process.env.ZENOD_PUBLIC_SITE_HOST ?? "zenod.dev").toLowerCase();
+  const configured = (configuredHost ?? process.env.ZENOD_PUBLIC_SITE_HOST ?? "zenod.dev").toLowerCase();
   return host === configured || host === "localhost" || host === "127.0.0.1" || host === "::1";
 }
 
@@ -62,13 +63,13 @@ export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurface
     (handler: MiddlewareHandler<ServerEnv>): MiddlewareHandler<ServerEnv> =>
     async (c, next) => {
       const host = c.req.header("x-forwarded-host") ?? c.req.header("host") ?? new URL(c.req.url).hostname;
-      return isPublicSiteHost(host) ? handler(c, next) : next();
+      return isPublicSiteHost(host, options.publicSiteHost) ? handler(c, next) : next();
     };
   const nonPublicHostOnly =
     (handler: MiddlewareHandler<ServerEnv>): MiddlewareHandler<ServerEnv> =>
     async (c, next) => {
       const host = c.req.header("x-forwarded-host") ?? c.req.header("host") ?? new URL(c.req.url).hostname;
-      return isPublicSiteHost(host) ? next() : handler(c, next);
+      return isPublicSiteHost(host, options.publicSiteHost) ? next() : handler(c, next);
     };
 
   app.get("/favicon.svg", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));

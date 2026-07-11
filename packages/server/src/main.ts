@@ -7,13 +7,20 @@ import { Runtime } from "./runtime.js";
 import { resolveAgent } from "./agent.js";
 import { compileAllToolOutputSchemas } from "./toolOutput.js";
 import { createZenodUnit } from "./zenodUnit.js";
+import { createCallisthenesUnit } from "./callisthenesUnit.js";
+import { resolveServerMode } from "./serverMode.js";
 
 const port = Number(process.env.PORT ?? 8080);
 const dataDir = resolve(process.env.ZENOD_DATA_DIR ?? "./data");
 mkdirSync(dataDir, { recursive: true });
 
-const webDist = process.env.ZENOD_WEB_DIST ?? resolve(import.meta.dirname, "../../../apps/web/dist");
-const siteDist = process.env.ZENOD_SITE_DIST ?? resolve(import.meta.dirname, "../../../apps/site/dist");
+const callisthenesMode = process.env.ZENOD_UNIT?.trim().toLowerCase() === "callisthenes";
+const webDist = callisthenesMode
+  ? process.env.CALLISTHENES_WEB_DIST ?? resolve(import.meta.dirname, "../../../apps/calli-web/dist")
+  : process.env.ZENOD_WEB_DIST ?? resolve(import.meta.dirname, "../../../apps/web/dist");
+const siteDist = callisthenesMode
+  ? process.env.CALLISTHENES_SITE_DIST ?? resolve(import.meta.dirname, "../../../apps/calli-site/dist")
+  : process.env.ZENOD_SITE_DIST ?? resolve(import.meta.dirname, "../../../apps/site/dist");
 let hasWeb = true;
 let hasSite = true;
 try {
@@ -30,8 +37,15 @@ try {
 // One image can run as any agent — pick it from the AGENT env var (default zenod).
 const agent = resolveAgent(process.env.AGENT);
 compileAllToolOutputSchemas();
-const useChassisZenod = !process.env.AGENT || agent.name === "zenod";
-const unit = useChassisZenod
+const mode = resolveServerMode(process.env, agent.name);
+const unit = mode === "callisthenes"
+  ? createCallisthenesUnit({
+      dataDir,
+      ...(hasWeb ? { webDist } : {}),
+      ...(hasSite ? { siteDist } : {}),
+      env: process.env,
+    })
+  : mode === "zenod"
   ? createZenodUnit({
       dataDir,
       ...(hasWeb ? { webDist } : {}),
