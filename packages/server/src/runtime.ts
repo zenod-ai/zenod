@@ -27,6 +27,7 @@ import {
   type PeerTools,
   type TaskingInput,
   type TokenCostMeasurement,
+  isKnownTool,
   toolKind,
 } from "zenod";
 import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue, setExecutionState } from "zenod";
@@ -656,7 +657,8 @@ export class Runtime {
         const readOnlyHint = spec.annotations?.readOnlyHint;
         const verifiedMutationReceipt =
           peer.wallet === true &&
-          (readOnlyHint === false || (readOnlyHint !== true && toolKind(spec.as) === "mutate"));
+          (readOnlyHint === false ||
+            (readOnlyHint !== true && isKnownTool(spec.as) && toolKind(spec.as) === "mutate"));
         tools[spec.as] = {
           description: spec.description,
           ...(inputSchema ? { inputSchema } : {}),
