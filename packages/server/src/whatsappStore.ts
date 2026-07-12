@@ -457,7 +457,7 @@ export class WhatsAppStore {
              THEN 'forwarded_reply' ELSE 'interrupted_failure' END,
            'pending',
            COALESCE(NULLIF(TRIM(a.reply_text), ''),
-             '⚠️ I received your media, but processing was interrupted by a service restart. It was not sent to Ring again; please resend it.'),
+             '⚠️ I received your media, but a service restart interrupted processing before I could record a safe delivery receipt. I will not retry it automatically to avoid duplicate delivery. Please check the conversation before resending.'),
            ?, ?
          FROM whatsapp_messages m
          LEFT JOIN whatsapp_channel_audit a ON a.provider_message_id = m.message_id

@@ -635,7 +635,7 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.mediaRecovery(event.messageId)?.state).toBe("failure_notified"));
       expect(sent).toHaveLength(1);
       expect(sent[0]).toMatchObject({ jid: event.senderId });
-      expect(sent[0]?.text).toContain("processing was interrupted by a service restart");
+      expect(sent[0]?.text).toContain("will not retry it automatically to avoid duplicate delivery");
       expect(runtime.whatsappStore.recentTranscript({ messageId: event.messageId, sinceMs: 0 })).toEqual(expect.arrayContaining([
         expect.objectContaining({
           direction: "inbound",
