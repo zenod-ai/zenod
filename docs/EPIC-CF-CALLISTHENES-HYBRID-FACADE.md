@@ -1,6 +1,6 @@
 # EPIC CF: Callisthenes Hybrid Agentic Façade
 
-Status: draft — recommended architecture ready for planner approval
+Status: draft — architecture amended and accepted by planner 2026-07-12; DISPATCH ONLY AFTER (a) Jordi approves Herald SHIP (EPIC 5) and (b) W-C1/W-C2 of `docs/EPIC-WHATSAPP-COUNCIL-INTEGRATION-TESTS.md` are integrated (CF-S2 PORTs from their result)
 Created: 2026-07-12
 Updated: 2026-07-12
 Repository: `zenod-ai/zenod`
@@ -71,7 +71,14 @@ SHIP:
 - [ ] A valid approval publishes the exact server-stored draft once and returns a provider-derived canonical permalink; replay returns the stored receipt without a second post.
 - [ ] Calli's intelligence cannot mint approval, bypass throttle/custody, call raw mutators directly outside the controller, or create success receipts. Every state transition and receipt is structurally evidenced.
 - [ ] Existing self-host/advanced clients retain an explicit scoped path to the raw connector catalog; the default Ring integration is migrated without a Calli-specific Ring profile.
-- [ ] One exact live build passes: Ring natural-language draft → Calli held draft → natural-language revision → approval → canonical X permalink → approved deletion, plus zero-tool/fabricated-receipt negative tests and two-tenant isolation.
+- [ ] One exact live build passes the walked journey (CF-S6, the epic worker personally, in Ring chat on the live deployment, walk → fix → deploy → walk again from step 1, screenshots per step):
+  1. "Draft a post about <topic>" → one held draft returned with WHY, no publication.
+  2. "Make it shorter, less slang" → revised draft, prior approval invalidated.
+  3. "approve" (literal token, CF-D10 fast-path) → exactly one publication, canonical numeric X permalink receipt.
+  4. Repeat the approval → stored receipt returned, no second post.
+  5. "Delete it" → held deletion proposal; "approve" → deletion receipt; provider readback confirms.
+  6. Negative walk: "did it post?" on a never-approved draft → truthful held-state answer, no fabricated receipt; an off-catalog raw tool call under `calli:operate` → structurally absent.
+  7. Two-tenant isolation: tenant B sees none of tenant A's drafts, receipts, or connections.
 
 HARDEN:
 
@@ -95,8 +102,8 @@ Phase: planning
 Last verified: 2026-07-12 22:08 CEST
 Integration target: `main`
 Fresh base commit: `e5599b3c8e9ce0dcb8201711e9f6fe49cedfe921`
-Next action: Jordi approves, amends, or rejects the recommended CF-D1–CF-D9 decisions; planner then mints CF-S1..CF-S6 and dispatches the first independent wave.
-Blockers: product architecture approval only; no implementation blocker investigated yet.
+Next action: architecture approved as amended (CF-D1–CF-D13, Jordi via planner, 2026-07-12). HOLD at the dispatch gate: wait for (a) Jordi's Herald SHIP walk and (b) W-C1/W-C2 integration, then mint CF-S1..CF-S6 per CF-D13 and dispatch wave 1.
+Blockers: the two named gate conditions only.
 
 ## Role Goals
 
@@ -207,6 +214,10 @@ Protocol basis:
 | 2026-07-12 | CF-D7: Provider-derived receipts are the only success authority. | Prevent model-authored placeholders or prose from becoming outcome claims. | `outboundReceipt.ts`; live fabricated `{POST_ID}` incident. |
 | 2026-07-12 | CF-D8: Sampling-first intelligence with fail-closed fallback. | Keeps model choice/key with the client while making domain behavior Calli-owned. | MCP 2025-11-25 sampling specification. |
 | 2026-07-12 | CF-D9: X proves the architecture before Reddit/email expansion. | One real channel and one real journey are stronger than a broad untested façade. | Epic C SHIP discipline. |
+| 2026-07-12 | CF-D10: Deterministic approval fast-path. Reserved literal tokens (`approve`, `✓`, `cancel`) on a named draft are honored by the controller directly, interpreter bypassed. The interpreter handles only the messy human middle; the happy path is code-only and never requires an LLM round-trip. | Approval of exact held state must not depend on a probabilistic component being up, fast, or right. | Planner amendment; Herald PR-5.1 lesson. |
+| 2026-07-12 | CF-D11: Sampling reality-check before CF-S3 is minted. Verify (≤1 h, evidence in the issue) whether Ring's MCP client actually implements sampling today. If not, the provider adapter IS the first implementation and sampling becomes HARDEN; fail-closed-to-clarification unchanged. | "Preferred first implementation" must not be dead on arrival. | Planner amendment. |
+| 2026-07-12 | CF-D12: Herald is a second consumer of Calli's face. CF dispatch is gated on Herald SHIP approval; `approve_send` compatibility (or Herald's migration ticket) is part of CF-S5's acceptance, alongside Ring. | A pinned proof in flight quiesces provider-surface changes (dialect law 7). | `docs/EPIC-5-HERALD-SPRINT.md` step 9. |
+| 2026-07-12 | CF-D13: Dialect furniture at mint time. CF-S1..CF-S6 carry PORT/DUPLICATE/BUILD markings (CF-S2 = PORT from the W-C1/W-C2 result; ledger/guard code = PORT from `units/callisthenes/` + `outboundReceipt.ts`), 90-min budgets (CF-S3's eval corpus is explicitly budget-capped: ships smaller, never later), and SHIP is walked as the numbered live conversation journey below, screenshots per step. | Property checklists drift toward green-tests-blank-page; the walk is the gate. | EpicSpine dialect laws 1, 3, 6. |
 
 ## Issue Ledger
 

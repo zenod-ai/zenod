@@ -210,6 +210,7 @@ Write scope: detailed work goes to lane issues. Do not edit shared mission/curre
 Base: fetch fresh origin/main after this spine lands; record the exact SHA before creating worktrees. Integration target: main.
 Required reads: this spine; docs/EPIC-RING-CALLISTHENES-INTEGRATION-TESTS.md; Callisthenes unit, observation ledger, skill workflow, and receipt tests.
 Acceptance: approval without exact held action fails; altered text fails; exact pending action succeeds once; 20 concurrent identical approvals produce one upstream post and one canonical permalink; unknown outcome cannot auto-retry; later explicit same-text action is distinguishable from retry.
+Sequencing law (spine Decisions): your work PRECEDES EPIC-CF — the CF controller will PORT from your result; do not read CF as scope. Herald's frozen SHIP candidate publishes via the current draft→approve_send flow: keep that flow back-compatible, or hold production deploy until /root confirms Jordi's Herald walk is complete.
 Human gates: no public post/delete and no production deploy. /root owns the authorized WhatsApp WJ-2 test using exact text Hey still testing.
 Handoff: issue/PR links, branches/bases/latest commits, concurrency/restart tests, migration/idempotency semantics, deploy candidate SHA, residual risks.
 ```
@@ -221,6 +222,8 @@ Handoff: issue/PR links, branches/bases/latest commits, concurrency/restart test
 | 2026-07-12 | Ownership follows the failed seam, not the observed surface. | Phylax owns transport/artifacts; Ring owns routing/state/rendering; Zenod/Calli own portable evidence and mutation safety. | Recent provider, Ring, and unit traces. |
 | 2026-07-12 | Do not infer WhatsApp tweet acceptance from Ring web success. | Cross-channel standing-action persistence is part of the product contract. | WJ-2. |
 | 2026-07-12 | Existing recent messages count as acceptance evidence where prompts match. | They are real user journeys with provider IDs and durable correlations. | WJ-1, WJ-3, WJ-4, WJ-5, WJ-6. |
+| 2026-07-12 | W-C1/W-C2 land BEFORE EPIC-CF; the CF controller (CF-S2) then PORTs from their result. | Two tracks converging on Calli's approval seam must not rebuild the same organ in parallel; safety fix first, façade wraps it. | Planner ruling (Jordi + Epic 3.0 planner); `docs/EPIC-CF-CALLISTHENES-HYBRID-FACADE.md`. |
+| 2026-07-12 | W-C1 keeps back-compat with the existing draft→`approve_send` flow, OR its production deploy waits until Jordi's Herald SHIP walk completes. | Herald's frozen SHIP candidate (`7cf13ae`) publishes via the current `approve_send` contract; a pinned proof in flight quiesces provider-surface changes (dialect law 7). | `docs/EPIC-5-HERALD-SPRINT.md` step 9. |
 
 ## Branch And Integration
 
