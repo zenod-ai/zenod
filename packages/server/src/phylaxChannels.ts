@@ -62,6 +62,8 @@ export interface PhylaxDownstreamCall {
     sender: string;
     text_transcript?: string;
     artifact_ref?: string;
+    artifact_mime_type?: string;
+    artifact_file_name?: string;
     transcription_usage?: Record<string, unknown>;
     transcription_failed?: { code: string; message: string };
     transcription_source?: string;
@@ -185,6 +187,8 @@ export class PhylaxChannelsOrgan {
       sender,
       ...(text ? { text_transcript: text } : {}),
       ...(artifactRef ? { artifact_ref: artifactRef } : {}),
+      ...(artifactRef && input.media?.mimeType ? { artifact_mime_type: input.media.mimeType } : {}),
+      ...(artifactRef && input.media?.fileName ? { artifact_file_name: input.media.fileName } : {}),
       ...(transcription.transcription_usage ? { transcription_usage: transcription.transcription_usage } : {}),
       ...(transcription.transcription_failed ? { transcription_failed: transcription.transcription_failed } : {}),
       ...(transcription.transcription_source ? { transcription_source: transcription.transcription_source } : {}),

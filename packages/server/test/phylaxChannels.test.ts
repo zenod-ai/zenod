@@ -6,7 +6,7 @@ import { createMemoryTenantStore, createUnit } from "@zenod/mcp-chassis";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { serve } from "@hono/node-server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PhylaxChannelError,
   PhylaxChannelsOrgan,
@@ -18,6 +18,16 @@ import { PhylaxPortedRuntime } from "../src/phylaxPortedRuntime.js";
 import type { WhatsAppInboundEvent } from "../src/whatsappStore.js";
 
 const dirs: string[] = [];
+
+vi.mock("@whiskeysockets/baileys", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@whiskeysockets/baileys")>();
+  return {
+    ...actual,
+    downloadContentFromMessage: vi.fn(async function* () {
+      yield Buffer.from("immutable-image-bytes");
+    }),
+  };
+});
 
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
@@ -234,6 +244,83 @@ describe("ported gateway integration", () => {
         expect.objectContaining({ direction: "inbound", status: "replied" }),
         expect.objectContaining({ direction: "outbound", sentMessageId: "sent-1", status: "sent" }),
       ]));
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("forwards captioned and uncaptioned images once with authenticated artifacts and metadata", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-ported-images-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const sent: Array<{ jid: string; text: string }> = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.zenod.dev/mcp/alpha", downstreamToken: "ring-alpha" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/customer-unit-token/artifacts/${tenantId}/${artifactId}`,
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: `Council image reply ${calls.length}` }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(jid, content) {
+          sent.push({ jid, text: content.text });
+          return { key: { id: `sent-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const image = (messageId: string, body: string, mimeType: string): WhatsAppInboundEvent => ({
+      messageId,
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body,
+      hasMedia: true,
+      mediaType: "image",
+      mimeType,
+      fileName: null,
+      mediaRaw: {},
+    });
+    try {
+      await runtime.whatsapp.handleEvent(image("wa-image-captioned", "please inspect this", "image/png"));
+      await runtime.whatsapp.handleEvent(image("wa-image-plain", "", "image/jpeg"));
+
+      expect(calls).toHaveLength(2);
+      expect(sent).toEqual([
+        { jid: "34611111111@s.whatsapp.net", text: "Council image reply 1" },
+        { jid: "34611111111@s.whatsapp.net", text: "Council image reply 2" },
+      ]);
+      expect(calls[0].handoff).toMatchObject({
+        text_transcript: "please inspect this",
+        artifact_mime_type: "image/png",
+        artifact_file_name: "wa-image-captioned.png",
+      });
+      expect(calls[1].handoff).toMatchObject({
+        artifact_mime_type: "image/jpeg",
+        artifact_file_name: "wa-image-plain.jpg",
+      });
+      expect(calls[1].arguments.message).toContain("A channel artifact was received.");
+      for (const call of calls) {
+        expect(call.handoff.artifact_ref).toMatch(/^https:\/\/phylax\.zenod\.dev\/mcp\/customer-unit-token\/artifacts\/alpha\//);
+        expect(call.arguments.message).toContain(call.handoff.artifact_ref!);
+      }
+      const artifactDir = join(phylaxWhatsAppPaths(dataDir).artifacts, "alpha");
+      const { readdir, readFile } = await import("node:fs/promises");
+      const artifacts = await readdir(artifactDir);
+      expect(artifacts).toHaveLength(2);
+      await Promise.all(artifacts.map(async (file) => {
+        expect(await readFile(join(artifactDir, file))).toEqual(Buffer.from("immutable-image-bytes"));
+      }));
+      expect(runtime.whatsappStore.recentTranscript({ sinceMs: 0 }).filter((entry) => entry.direction === "outbound")).toHaveLength(2);
     } finally {
       runtime.close();
     }

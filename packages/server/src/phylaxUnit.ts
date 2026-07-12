@@ -137,6 +137,10 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
       const contentType = extension === "ogg" ? "audio/ogg"
         : extension === "mp3" ? "audio/mpeg"
         : extension === "wav" ? "audio/wav"
+        : extension === "png" ? "image/png"
+        : extension === "jpg" || extension === "jpeg" ? "image/jpeg"
+        : extension === "webp" ? "image/webp"
+        : extension === "gif" ? "image/gif"
         : "application/octet-stream";
       return c.body(bytes, 200, { "content-type": contentType, "cache-control": "private, no-store" });
     } catch {

@@ -940,6 +940,16 @@ export class WhatsAppGateway {
         // Phylax resolves the sender before transcription so provider keys and
         // policy come from that tenant. The organ owns this edge step; the
         // legacy fused path below keeps its existing global settings behavior.
+      } else if (event.mediaType === "image" && event.mediaRaw) {
+        const stream = await downloadContentFromMessage(event.mediaRaw as never, "image");
+        const data = await streamToBuffer(stream);
+        const mimeType = event.mimeType?.startsWith("image/") ? event.mimeType : "image/jpeg";
+        const extension = mimeType.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+        media = {
+          bytes: data,
+          mimeType,
+          fileName: event.fileName?.trim() || `${event.messageId}.${extension}`,
+        };
       }
       this.options.store.markMessageStatus(event.messageId, "processing");
       const forwarded = await handler({ event, text, ...(media ? { media } : {}), ...(transcription ? { transcription } : {}) });
