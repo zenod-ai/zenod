@@ -1,6 +1,6 @@
 # EPIC 5 · Herald Sprint — duplicate the Ring, give it an agenda
 
-Status: active — capped PR-5.1 repair Wave R3 deterministic gate dispatched
+Status: SHIP candidate — manager journey complete; Jordi test package ready
 Created: 2026-07-11
 Updated: 2026-07-12
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Herald delivery manager
 Steward since: 2026-07-11T19:50:29+02:00
-Last reconciled commit: `6ce6e95fc97795d5ceca3df8ccd15deb1527a0ac`
+Last reconciled commit: `f6cc22c` (current `origin/main`); Herald release remains frozen at `7cf13aed387f25fadc96d55e952e56f3e92725d0`
 Planner: Jordi + Epic 3.0 planner
 Worker: Herald delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -63,18 +63,18 @@ Stand up Herald — "a council member with an agenda" — as the next self-conta
 
 SHIP — the journey, nothing else counts. The manager walks it in a REAL BROWSER on the LIVE deployment, in a loop (walk → first breakage → fix exactly that → deploy → walk again FROM STEP 1), until ONE uninterrupted clean pass, screenshots per step:
 
-- [ ] 1. Open `herald.zenod.dev` logged out → a normal landing page: what Herald is ("your project's voice, on a loop — it drafts, you approve, it posts, it learns"), Get started, Pricing, Sign in. No token field anywhere public. (DUPLICATE from ring)
-- [ ] 2. Pricing: exactly three options — Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
-- [ ] 3. Sign in with GitHub — same account system as the other units; sign-in returns showing name + Dashboard link. (DUPLICATE)
-- [ ] 4. Subscribe (monthly, TEST card): server-side checkout, `client_reference_id` = account id → webhook inserts the tenant row in THIS container → land in the dashboard. (DUPLICATE)
-- [ ] 5. Dashboard: Herald's chat front and center (Ring's ported chat); wallet card (add Zenod memory URL+token and Calli mouth URL+token — same wallet UX as Ring, same SSRF rules); **Board panel** (read view: proposed / approved / posted, each item showing its WHY + memory citation + permalink when posted); **Briefing card** showing "no briefing approved — Herald will not loop" until step 6; Herald's own MCP URL + token; usage. NO tabs from other units. (DUPLICATE + board/briefing panels BUILD)
-- [ ] 6. Briefing negotiation in chat: Herald interviews for theme, objectives, posting cadence, tone, reply policy; refuses any loop action until the human replies "✓ approve briefing"; on ✓, briefing v1 is committed (versioned row) and filed to the tenant's Zenod memory via the wallet with a commit receipt in chat. (BUILD — conversation state on the ported chat)
-- [ ] 7. The wake: the scheduler fires per the briefing cadence (walk uses a "Run now" button on the Board panel — same code path as cron, no simulation); the proposer lane reads memory via the wallet and writes N proposals to the board, EACH carrying a one-line rationale + a citation to the memory page that inspired it. Board panel and chat both show them. No approved briefing → the scheduler visibly refuses (that refusal is part of this step: walk it once before step 6's ✓). (BUILD — the loop organ)
-- [ ] 8. Approve in chat: "✓ 1,3" parses; approved items move to approved on the board; rejected/ignored items stay, with the rejection filed to memory via the wallet. (BUILD)
-- [ ] 9. Publish: each approved item goes wallet → Calli (draft → `approve_send`, C-22 — Herald never bypasses the mouth's discipline) → **canonical x.com permalink receipt** in chat AND on the board item (state: posted). Test posts deleted after permalink capture, as in EPIC C. (BUILD on existing wallet plumbing — the Calli MCP contract already proven in EPIC R/C)
-- [ ] 10. The loop closes: trigger "Run now" again → the new proposals visibly reference the filings from steps 8–9 (e.g. avoid the rejected theme, build on the posted one). Screenshot both boards side by side. (BUILD — this step IS the product)
-- [ ] 11. Logout/login persists briefing, board, wallet, receipts. A second tenant provisioned by the manager sees an empty Herald: no briefing, no board items, no wallet entries from tenant one.
-- [ ] 12. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test." Every element Jordi will click was clicked by the manager in the same deployed build.
+- [x] 1. Open `herald.zenod.dev` logged out → a normal landing page: what Herald is ("your project's voice, on a loop — it drafts, you approve, it posts, it learns"), Get started, Pricing, Sign in. No token field anywhere public. (DUPLICATE from ring)
+- [x] 2. Pricing: exactly three options — Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
+- [x] 3. Sign in with GitHub — same account system as the other units; sign-in returns showing name + Dashboard link. (DUPLICATE)
+- [x] 4. Subscribe (monthly, TEST card): server-side checkout, `client_reference_id` = account id → webhook inserts the tenant row in THIS container → land in the dashboard. (DUPLICATE)
+- [x] 5. Dashboard: Herald's chat front and center (Ring's ported chat); wallet card (add Zenod memory URL+token and Calli mouth URL+token — same wallet UX as Ring, same SSRF rules); **Board panel** (read view: proposed / approved / posted, each item showing its WHY + memory citation + permalink when posted); **Briefing card** showing "no briefing approved — Herald will not loop" until step 6; Herald's own MCP URL + token; usage. NO tabs from other units. (DUPLICATE + board/briefing panels BUILD)
+- [x] 6. Briefing negotiation in chat: Herald interviews for theme, objectives, posting cadence, tone, reply policy; refuses any loop action until the human replies "✓ approve briefing"; on ✓, briefing v1 is committed (versioned row) and filed to the tenant's Zenod memory via the wallet with a commit receipt in chat. (BUILD — conversation state on the ported chat)
+- [x] 7. The wake: the scheduler fires per the briefing cadence (walk uses a "Run now" button on the Board panel — same code path as cron, no simulation); the proposer lane reads memory via the wallet and writes N proposals to the board, EACH carrying a one-line rationale + a citation to the memory page that inspired it. Board panel and chat both show them. No approved briefing → the scheduler visibly refuses (that refusal is part of this step: walk it once before step 6's ✓). (BUILD — the loop organ)
+- [x] 8. Approve in chat: "✓ 1,3" parses; approved items move to approved on the board; rejected/ignored items stay, with the rejection filed to memory via the wallet. (BUILD)
+- [x] 9. Publish: each approved item goes wallet → Calli (draft → `approve_send`, C-22 — Herald never bypasses the mouth's discipline) → **canonical x.com permalink receipt** in chat AND on the board item (state: posted). Test posts deleted after permalink capture, as in EPIC C. (BUILD on existing wallet plumbing — the Calli MCP contract already proven in EPIC R/C)
+- [x] 10. The loop closes: trigger "Run now" again → the new proposals visibly reference the filings from steps 8–9 (e.g. avoid the rejected theme, build on the posted one). Screenshot both boards side by side. (BUILD — this step IS the product)
+- [x] 11. Logout/login persists briefing, board, wallet, receipts. A second tenant provisioned by the manager sees an empty Herald: no briefing, no board items, no wallet entries from tenant one.
+- [x] 12. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test." Every element Jordi will click was clicked by the manager in the same deployed build.
 
 HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Calli — a cross-unit ask routed through Jordi, never built by this epic inside Calli's repo without its own ticket), weekly scorecard lane (reads receipts + briefing goals, reports in chat), approve/reject buttons on the Board panel, briefing re-negotiation ("change the briefing" re-enters setup mode), Phylax as a wallet channel (morning-N arrives on WhatsApp), Herald as customer #0 on Zenod's own X account (D-H1 dogfood — Jordi flips it personally), self-host README.
 
@@ -89,16 +89,18 @@ HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Ca
 
 ## Current State
 
-Phase: capped PR-5.1 repair — R2 integrated; Wave R3 H-S9 deterministic gate dispatched
-Last verified: 2026-07-12T14:44:41+02:00
+Phase: SHIP candidate — clean live journey complete
+Last verified: 2026-07-12T17:24:00+02:00
 Integration target: main
 Fresh repair base commit: `b86a28b33e4783c7441ddfa00f9dccb4c1b17c77` — pinned from `origin/main` immediately before R1 dispatch; no rebases inside the wave
 Repair clock: started 2026-07-12T14:08:00+02:00; H-D17 stop time is 2026-07-12T18:08:00+02:00.
-Live deployment: `https://herald.zenod.dev/` is serving exact commit `17e3f30319371fbc4750c8790ff4ce1f45377dea`; CI and image publication passed.
-Paused point: tenant one is paid and authenticated; the duplicated wallet contains live Zenod + Calli tenants; Calli is connected to `@ZenodAgent`; the corrected active test model key is stored; Herald loop/chat state was reset for the final uninterrupted lap. The final lap had re-verified the logged-out landing and GitHub return and was entering the dashboard when Jordi paused it. Existing screenshots cover steps 1–7, but they are partial-lap evidence and do not yet constitute SHIP.
+Live deployment: `https://herald.zenod.dev/` is serving exact commit `7cf13aed387f25fadc96d55e952e56f3e92725d0`; CI and image publication passed. Later unrelated `main` commits are deliberately not deployed into this frozen test package.
+Journey result: manager walked landing/pricing/GitHub/Stripe TEST, Herald-only dashboard and loading identity, no-briefing refusal, briefing + Zenod commit receipt, natural-language cited proposals, `✓ 1,3`, rejection filing, `publish approved`, two canonical X receipts, deletion of both TEST posts, a filing-shaped next wake, logout/login persistence, and temporary second-tenant isolation. Tenant one remains intact; temporary tenant `herald-isolation-beta-20260712` was deleted after proving zero briefing, zero board/wakes, zero wallet entries, no provider, and no model key.
 Integrated R1 commit: `6a13591fe63aca4a5df196ed9e1a6708a2b2cb25` — H-S8 PR #910 merged first, then H-S6 PR #909; this exact SHA is the frozen H-S7 base.
 Integrated R2 commit: `6ce6e95fc97795d5ceca3df8ccd15deb1527a0ac` — H-S7 PR #911 merged after 720/720 server tests and CI; this exact SHA is the frozen H-S9 base.
-Next action: H-S9-worker runs the deterministic seam contract only, capped at 90 minutes, then the manager integrates passing tests and executes the live deployment preflight.
+Integrated R3 commit: `4902c9b3949fb21c74913a2dcffe669d4f9e9c60` — H-S9 PR #912; 721 server tests, 31 web tests, typechecks/builds and CI green.
+Live repair commits: `80c5806a3663cc35d4850e0c3a11cf96df9ad5d3` — H-S10 C-22 held-draft envelope fix; `7cf13aed387f25fadc96d55e952e56f3e92725d0` — H-S11 Herald-only loading shell and final frozen release.
+Next action: Jordi walks the identical package at `https://herald.zenod.dev/`; no HARDEN work begins before SHIP approval.
 Blockers: none. PR-5.1 is accepted with the deterministic-test and half-day-cap amendments below. No credential or infrastructure input is required.
 
 ## Role Goals
@@ -249,17 +251,19 @@ Pre-answered — the planner is asleep.
 | [#895](https://github.com/zenod-ai/zenod/issues/895) | Ticket worker | H-S2-worker | H-S2 loop organ (scheduler + boards + briefing store + no-briefing-no-fire gate) | BUILD (verified absent everywhere) | done | pinned base | 1 | [#901](https://github.com/zenod-ai/zenod/pull/901) / `codex/h-s2-loop-organ` | `bf366b5` | 685 server tests + manager integration tests; merged `cfc13e2` | 2026-07-11T20:07:57+02:00 | integrated |
 | [#898](https://github.com/zenod-ai/zenod/issues/898) | Ticket worker | H-S3-worker | H-S3 briefing setup mode + ✓ parsing + filings via wallet | BUILD on PORTed ring chat | done | H-S1, H-S2 | 2 | [#902](https://github.com/zenod-ai/zenod/pull/902) / `codex/h-s3-briefing-chat` | `cfc13e2` | CI + 13 focused tests; merged `ea005cb` | 2026-07-11T20:42:28+02:00 | integrated |
 | [#899](https://github.com/zenod-ai/zenod/issues/899) | Ticket worker | H-S4-worker | H-S4 proposer/poster lanes + Board & Briefing dashboard panels + Run now | BUILD on DUPLICATEd wallet/dashboard | done | H-S1, H-S2 | 2 | [#903](https://github.com/zenod-ai/zenod/pull/903) / `codex/h-s4-loop-lanes-dashboard` | `cfc13e2` | CI + 699 server tests + web/build/typecheck; merged `7d9dad1`; chat seam fixed `0820167` | 2026-07-11T20:42:28+02:00 | integrated |
-| [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | held for capped repair | H-S6–H-S9 or H-D17 cap + preflight | last | `main` | `17e3f30` live | PR-5.1 accepted; first-setup transcript is the repair evidence | 2026-07-12T02:02:00+02:00 | resume from step 1 after repair completion or four-hour cap, green merge, deploy and preflight |
+| [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | done — SHIP candidate | H-S6–H-S11 + preflight | last | `main` | `7cf13ae` live | full journey, receipts, deleted TEST posts, shaped wake, persistence and isolation | 2026-07-12T17:24:00+02:00 | Jordi test package |
 | [#905](https://github.com/zenod-ai/zenod/issues/905) | Ticket worker | H-S6-worker | One-Herald state kernel | BUILD repair | done | H-D16 | R1 | [#909](https://github.com/zenod-ai/zenod/pull/909) / `codex/h-s6-state-kernel` | `b86a28b` | 713 server tests + core context test + CI; merged `6a13591` | 2026-07-12T14:25:04+02:00 | integrated |
 | [#908](https://github.com/zenod-ai/zenod/issues/908) | Ticket worker | H-S7-worker | Authoritative natural-language loop control | BUILD repair | done | H-S6 | R2 | [#911](https://github.com/zenod-ai/zenod/pull/911) / `codex/h-s7-natural-loop` | `6a13591` | 720 server tests + typecheck/build + CI; merged `6ce6e95` | 2026-07-12T14:44:41+02:00 | integrated |
 | [#906](https://github.com/zenod-ai/zenod/issues/906) | Ticket worker | H-S8-worker | Herald-only product language | PORT cleanup + BUILD | done | H-D16 | R1 | [#910](https://github.com/zenod-ai/zenod/pull/910) / `codex/h-s8-herald-language` | `b86a28b` | 31 web tests + typecheck/build/lint + CI; merged `130f0bd` | 2026-07-12T14:25:04+02:00 | integrated |
-| [#907](https://github.com/zenod-ai/zenod/issues/907) | Tester / ticket worker | H-S9-worker | Deterministic seam contract and integration gate | TEST + bounded fixes | dispatched | H-S6, H-S7, H-S8 | R3 | `codex/h-s9-deterministic-seams` / `../wt-h-s9` | `6ce6e95` | deterministic seam list + integrated R2 behavior | 2026-07-12T14:44:41+02:00 | hard 90-minute cap; add only highest-value deterministic tests, validate, open PR and hand off |
+| [#907](https://github.com/zenod-ai/zenod/issues/907) | Tester / ticket worker | H-S9-worker | Deterministic seam contract and integration gate | TEST + bounded fixes | done | H-S6, H-S7, H-S8 | R3 | [#912](https://github.com/zenod-ai/zenod/pull/912) / `codex/h-s9-deterministic-seams` | `6ce6e95` | 721 server + 31 web tests, builds/typechecks, CI; merged `4902c9b` | 2026-07-12 | integrated |
+| [#913](https://github.com/zenod-ai/zenod/issues/913) | Epic worker / repair | Herald delivery manager | H-S10 accept Calli C-22 held-draft `isError` before `approve_send` | BUILD repair | done | H-S9 live walk | repair | [#914](https://github.com/zenod-ai/zenod/pull/914) / `codex/h-s10-c22-held` | `4902c9b` | real Calli envelope regression, focused tests/typecheck, CI; merged `80c5806` | 2026-07-12 | integrated and live-verified |
+| [#915](https://github.com/zenod-ai/zenod/issues/915) | Epic worker / repair | Herald delivery manager | H-S11 hold dashboard shell until Herald identity resolves | BUILD repair | done | H-S10 live walk | repair | [#916](https://github.com/zenod-ai/zenod/pull/916) / `codex/h-s11-herald-loading` | `80c5806` | 32 web tests, typecheck/build/lint, CI; merged `7cf13ae` | 2026-07-12 | integrated and live-verified |
 
 Budgets: 90 min per ticket; manager reassigns anything silent past budget. Heartbeat every 30 min: `lap/state | blocker | ETA`.
 
 ## Branch And Integration
 
-- Integration target: protected `main`; repair R1 base was `b86a28b33e4783c7441ddfa00f9dccb4c1b17c77`; R2 base was `6a13591fe63aca4a5df196ed9e1a6708a2b2cb25`; exact integrated R2 / R3 base is `6ce6e95fc97795d5ceca3df8ccd15deb1527a0ac`.
+- Integration target: protected `main`; repair R1 base was `b86a28b33e4783c7441ddfa00f9dccb4c1b17c77`; R2 base was `6a13591fe63aca4a5df196ed9e1a6708a2b2cb25`; R3 landed at `4902c9b3949fb21c74913a2dcffe669d4f9e9c60`; exact frozen live journey release is `7cf13aed387f25fadc96d55e952e56f3e92725d0`.
 - Every ticket worker uses its dedicated branch and worktree; the shared checkout remains the steward's integration surface.
 - The manager reviews and integrates passing Wave 1 work, pins the resulting exact commit for Wave 2, then integrates H-S3/H-S4 and freezes one exact live journey commit.
 - No rebases during a pinned wave. Targeted tests precede integration; the full acceptance test runs only on the live Herald deployment per D19–D21.
@@ -292,8 +296,22 @@ None. PR-5.1 was accepted with amendments on 2026-07-12. Anything else that surf
 | 2026-07-11 | H-S5 partial browser laps | `17e3f30319371fbc4750c8790ff4ce1f45377dea` | live Chrome session | landing, pricing, GitHub, Stripe TEST, dashboard/wallet, no-briefing refusal, briefing + Zenod commit receipt | partial — not SHIP; final uninterrupted pass still required | local-only `docs/evidence/herald-ship-2026-07-11/`; redact credential-bearing wallet URLs before committing any image |
 | 2026-07-12 | PR-5.1 repair R1 integration | `6a13591fe63aca4a5df196ed9e1a6708a2b2cb25` | isolated manager integration worktree + GitHub Actions | 713 server tests, focused core context test, 31 web tests, server/web typechecks and builds, core build, both PR CIs | pass | [H-S6 PR #909](https://github.com/zenod-ai/zenod/pull/909), [H-S8 PR #910](https://github.com/zenod-ai/zenod/pull/910) |
 | 2026-07-12 | PR-5.1 repair R2 integration | `6ce6e95fc97795d5ceca3df8ccd15deb1527a0ac` | H-S7 worktree + GitHub Actions | 720 server tests, server typecheck/build, Docker build check, CI | pass | [H-S7 PR #911](https://github.com/zenod-ai/zenod/pull/911) |
+| 2026-07-12 | PR-5.1 deterministic R3 gate | `4902c9b3949fb21c74913a2dcffe669d4f9e9c60` | local + GitHub Actions | 721 server tests, 31 web tests, server/web typechecks and builds, CI + runtime image publish | pass | [H-S9 PR #912](https://github.com/zenod-ai/zenod/pull/912), CI `29193484401`, image `29193484447` |
+| 2026-07-12 | H-S10 Calli C-22 envelope repair | `80c5806a3663cc35d4850e0c3a11cf96df9ad5d3` | focused test + GitHub Actions + live Calli | require `isError:true` and `[draft_not_approved]`, then `approve_send`; two canonical X receipts | pass | [PR #914](https://github.com/zenod-ai/zenod/pull/914), CI `29195447212` |
+| 2026-07-12 | H-S11 Herald-only loading identity | `7cf13aed387f25fadc96d55e952e56f3e92725d0` | web tests/build + GitHub Actions + live browser | 32 web tests; no generic Zenod shell before Herald overview; exact-SHA health | pass | [PR #916](https://github.com/zenod-ai/zenod/pull/916), CI `29196452049`, image `29196576454` |
+| 2026-07-12 | H-S5 final live journey | `7cf13aed387f25fadc96d55e952e56f3e92725d0` | `https://herald.zenod.dev/`, real browser + live MCP downstreams | steps 1–12; two permalink receipts captured; both TEST posts deleted; next wake shaped; logout/login persistence; temporary second tenant empty then deleted | pass — SHIP candidate | local-only redacted-safe evidence `docs/evidence/herald-ship-2026-07-12/08`–`15`; key package: `13-final-published-receipts.png`, `14-final-next-wake-shaped.png`, `15-final-persistence.png` |
 
 ## Handoff Journal
+
+### 2026-07-12T17:24:00+02:00 — Herald delivery manager — SHIP candidate package complete
+
+Context: H-S9 passed its deterministic-only gate and merged through PR #912 as `4902c9b`. The first live publishing lap then found H-S10: Herald rejected Calli's correct C-22 held-draft envelope because the real refusal carries `isError:true`; PR #914 corrected the inverted proof and merged as `80c5806`. The persistence lap found H-S11: unresolved unit overview briefly rendered the generic Zenod dashboard; PR #916 replaced that with a Herald-aware loading shell and froze the release at `7cf13aed387f25fadc96d55e952e56f3e92725d0`. Dokploy application records updated correctly but its queued deploy twice left Swarm service drift; the manager updated only `herald-zzwyab`, verified convergence, and normalized the app record to the workflow's short image tag. `/api/health` returns the exact full SHA; root/app are 200 and unauthenticated MCP is 401.
+
+Journey: the manager clicked the logged-out landing, pricing, GitHub sign-in, Stripe TEST checkout, dashboard, Run now refusal, the five-field briefing interview, exact briefing approval, natural-language proposal request, `✓ 1,3`, `publish approved`, next Run now, logout/login and the returning Dashboard. The authoritative state produced three cited/WHY proposals, two approvals, one rejection filing, two Calli canonical X receipts (`2076326876763537720`, `2076327082091483179`), and three filing-shaped next proposals. Both TEST posts were deleted immediately after permalink capture with `deleted:true` receipts. Logout/login restored briefing v1, two posted rows/receipts, one rejected row, three proposed rows, Zenod/Calli wallet catalogs and the masked model key. Temporary manager tenant `herald-isolation-beta-20260712` proved zero briefing, board items, wakes, wallet entries, provider and model key, then deleted with HTTP 200.
+
+Operational note: repeated test retries temporarily queued Zenod async filings behind a slow classification job. Herald preserved the invariant—Board state stayed Proposed until a real commit receipt arrived. The manager stopped retries, inspected the live queue read-only, waited for zero queued/running jobs, reset only Herald test state, and completed the clean lap. This was external queue latency, not a silent mutation. Current `origin/main` later advanced to `f6cc22c` through unrelated work; the tested Herald deployment remains deliberately frozen at `7cf13ae`.
+
+Next: Jordi walks `https://herald.zenod.dev/` from the package below. HARDEN remains gated on Jordi's SHIP approval.
 
 ### 2026-07-12T14:44:41+02:00 — Herald delivery manager — R2 integrated; deterministic R3 pinned
 
