@@ -93,6 +93,12 @@ describe("HeraldLoopStore", () => {
         }),
       ]);
       expect(store.getBoardItem("alpha", beta.items[0].id)).toBeNull();
+      expect(store.decideItems("alpha", {
+        approveIds: [alpha.items[0].id],
+        rejectIds: [beta.items[0].id],
+      }, 55)).toMatchObject({ status: "error", code: "invalid_board_decision" });
+      expect(store.getBoardItem("alpha", alpha.items[0].id)?.state).toBe("proposed");
+      expect(store.getBoardItem("beta", beta.items[0].id)?.state).toBe("proposed");
       expect(store.approveItems("beta", [alpha.items[0].id], 60)).toMatchObject({ status: "error", code: "invalid_board_transition" });
 
       expect(store.approveItems("alpha", [alpha.items[0].id], 70)).toMatchObject({ status: "ok", code: "items_approved" });
