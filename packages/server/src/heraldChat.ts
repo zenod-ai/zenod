@@ -31,7 +31,7 @@ export interface HeraldTurnState {
 
 export interface HeraldMemoryFilingInput {
   tenantId: string;
-  kind: "briefing" | "proposal_rejection" | "proposal_outcome";
+  kind: "briefing" | "proposal_rejection" | "proposal_outcome" | "lesson";
   content: string;
   memoryCitation?: string;
 }
@@ -68,6 +68,7 @@ export interface HeraldChatDependencies {
     tenantId: string,
     itemIds: string[],
   ) => Promise<{ status: "ok" | "error"; message: string; published: Array<{ permalink: string }> }>;
+  proposeNow?: (tenantId: string) => Promise<HeraldWakeReceipt>;
   /** Authoritative tenant snapshot loaded at the boundary of every model-backed turn. */
   getTurnState(tenantId: string): HeraldTurnState;
 }
@@ -76,6 +77,12 @@ export interface HeraldApprovalSelection {
   approveIndexes: number[];
   rejectIndexes: number[];
 }
+
+export type HeraldNaturalLoopIntent =
+  | { kind: "propose" }
+  | { kind: "approve"; command: string }
+  | { kind: "feedback" }
+  | { kind: "publish"; boardNumber?: number; allApproved: boolean };
 
 const EXACT_BRIEFING_APPROVAL = "✓ approve briefing";
 
@@ -103,6 +110,49 @@ export function parseHeraldApproval(text: string, proposalCount: number): Herald
     rejectIndexes: Array.from({ length: proposalCount }, (_, index) => index + 1)
       .filter((index) => !approveIndexes.includes(index)),
   };
+}
+
+/** Deterministic routing only; ordinary conversation remains on H-S6's grounded model path. */
+export function classifyHeraldNaturalLoopIntent(text: string): HeraldNaturalLoopIntent | null {
+  const normalized = text.trim();
+  const approval = normalized.match(
+    /^(?:please\s+)?approve\s+(all|\d+(?:\s*(?:,|and)\s*\d+)*)(?:\s*\+?\s*reject\s+the\s+rest)?[.!]?$/i,
+  );
+  if (approval) {
+    const selection = approval[1]!.toLowerCase() === "all"
+      ? "all"
+      : approval[1]!.replace(/\s+and\s+/gi, ",").replace(/\s+/g, "");
+    const rejectRest = /reject\s+the\s+rest/i.test(normalized) ? " + reject the rest" : "";
+    return { kind: "approve", command: `✓ ${selection}${rejectRest}` };
+  }
+  if (
+    /\b(?:show|list|give|generate|draft|propose|suggest)\b[^.!?]{0,80}\b(?:posts?|proposals?|drafts?)\b/i.test(normalized) ||
+    /\b(?:posts?|proposals?|drafts?)\b[^.!?]{0,80}\b(?:propose|suggest)\b/i.test(normalized)
+  ) {
+    return { kind: "propose" };
+  }
+  if (
+    /^(?:feedback|lesson|note)\s*:/i.test(normalized) ||
+    /\b(?:dial|tone)\s+(?:it\s+)?(?:down|up)\b/i.test(normalized) ||
+    /\b(?:make|keep|be|sound|write)(?:\s+\w+){0,4}\s+(?:less|more)\s+(?:slang|corny|serious|sharp|informative|playful|formal|casual)\b/i.test(normalized) ||
+    /\b(?:do not|don't)\s+(?:sound|use|write)\b/i.test(normalized) ||
+    /\b(?:do not|don't)\s+(?:want\s+to\s+)?(?:post|publish|send)\b/i.test(normalized) ||
+    /\bkeep\s+(?:these|this|them)\b[^.!?]{0,100}\b(?:base|sample|iterate)\w*/i.test(normalized)
+  ) {
+    return { kind: "feedback" };
+  }
+  const publish = normalized.match(
+    /^(?:please\s+)?(?:send|publish|post)(?:\s+out)?\s+(approved|all|it|(?:board\s+)?(?:item\s+)?\d+)(?:\s+now)?[.!]?$/i,
+  );
+  if (publish) {
+    const number = publish[1]!.match(/(\d+)/);
+    return {
+      kind: "publish",
+      ...(number ? { boardNumber: Number(number[1]) } : {}),
+      allApproved: /^(?:approved|all)$/i.test(publish[1]!),
+    };
+  }
+  return null;
 }
 
 function nextMissingField(draft: HeraldBriefingDraft): "theme" | "objectives" | "cadence" | "tone" | "replyPolicy" | null {
@@ -232,6 +282,190 @@ export function buildHeraldTurnContext(state: HeraldTurnState): string {
   ].join("\n\n");
 }
 
+function renderCurrentProposals(items: HeraldBoardItem[]): string {
+  if (items.length === 0) return "Current proposed board: empty.";
+  return [
+    "Current proposed board:",
+    ...items.map((item, index) => [
+      `${index + 1}. ${item.text}`,
+      `WHY: ${item.rationale}`,
+      `Memory: ${item.memoryCitation}`,
+    ].join("\n")),
+    `Approve from this exact list with ${items.length === 1 ? "“✓ 1”" : "“✓ 1,3” or “✓ all”"}.`,
+  ].join("\n\n");
+}
+
+async function applyBoardSelection(
+  dependencies: HeraldChatDependencies,
+  tenantId: string,
+  command: string,
+): Promise<HeraldChatResult> {
+  const proposals = dependencies.listProposed(tenantId);
+  if (proposals.length === 0) {
+    return { handled: true, text: "Nothing changed: there are no current proposed items to approve." };
+  }
+  const selection = parseHeraldApproval(command, proposals.length);
+  if (!selection) {
+    return {
+      handled: true,
+      text: `I could not parse that approval, so nothing changed. Use “✓ 1,3”, “✓ all”, or “✓ 2 + reject the rest” against the current ${proposals.length}-item list.`,
+    };
+  }
+
+  const approveItems = selection.approveIndexes.map((index) => proposals[index - 1]!);
+  const rejectItems = selection.rejectIndexes.map((index) => proposals[index - 1]!);
+  const echo = `Approving ${joinIndexes(selection.approveIndexes)}, rejecting ${joinIndexes(selection.rejectIndexes)}.`;
+  try {
+    let memoryReceipt: string | null = null;
+    let filingReceipt: HeraldMutationReceipt | null = null;
+    if (rejectItems.length > 0) {
+      const content = [
+        `Herald proposal decision: rejected current items ${joinIndexes(selection.rejectIndexes)}.`,
+        ...rejectItems.map((item, index) => `Rejected ${selection.rejectIndexes[index]!}: ${item.text}\nWhy it was proposed: ${item.rationale}\nSource: ${item.memoryCitation}`),
+      ].join("\n\n");
+      memoryReceipt = requireCommitReceipt(await dependencies.fileToMemory({
+        tenantId,
+        kind: "proposal_rejection",
+        content,
+        memoryCitation: rejectItems.map((item) => item.memoryCitation).join(", "),
+      }));
+      filingReceipt = dependencies.recordFiling({
+        tenantId,
+        kind: "proposal_rejection",
+        content,
+        memoryCitation: rejectItems.map((item) => item.memoryCitation).join(", "),
+        commitReceipt: memoryReceipt,
+      }).receipt;
+    }
+    const decision = dependencies.decideItems(tenantId, {
+      approveIds: approveItems.map((item) => item.id),
+      rejectIds: rejectItems.map((item) => item.id),
+    });
+    if (decision.status !== "ok") throw new Error(`${decision.code}: ${decision.message}`);
+    return {
+      handled: true,
+      text: [echo, decision.message, memoryReceipt, filingReceipt?.message].filter(Boolean).join("\n"),
+    };
+  } catch (error) {
+    return loudError(error);
+  }
+}
+
+async function proposeFromNaturalIntent(
+  dependencies: HeraldChatDependencies,
+  tenantId: string,
+): Promise<HeraldChatResult> {
+  if (!dependencies.proposeNow) return loudError(new Error("Herald's proposer lane is unavailable."));
+  try {
+    const receipt = await dependencies.proposeNow(tenantId);
+    const proposals = dependencies.listProposed(tenantId);
+    return {
+      handled: true,
+      text: [receipt.message, renderCurrentProposals(proposals)].join("\n\n"),
+    };
+  } catch (error) {
+    return loudError(error);
+  }
+}
+
+async function fileNaturalFeedback(
+  dependencies: HeraldChatDependencies,
+  tenantId: string,
+  feedback: string,
+): Promise<HeraldChatResult> {
+  const proposals = dependencies.listProposed(tenantId);
+  const citations = [...new Set(proposals.map((item) => item.memoryCitation))];
+  const content = [
+    `Herald iteration lesson: ${feedback}`,
+    proposals.length > 0
+      ? `Reject these current proposals before the next wake:\n${proposals.map((item, index) => `${index + 1}. ${item.text}\nWHY: ${item.rationale}\nSource: ${item.memoryCitation}`).join("\n\n")}`
+      : "No current proposals were attached; apply this lesson to the next wake.",
+  ].join("\n\n");
+  try {
+    const memoryReceipt = requireCommitReceipt(await dependencies.fileToMemory({
+      tenantId,
+      kind: "lesson",
+      content,
+      ...(citations.length ? { memoryCitation: citations.join(", ") } : {}),
+    }));
+    const filing = dependencies.recordFiling({
+      tenantId,
+      kind: "lesson",
+      content,
+      memoryCitation: citations.join(", ") || null,
+      commitReceipt: memoryReceipt,
+    });
+    let decision: HeraldMutationReceipt | null = null;
+    if (proposals.length > 0) {
+      decision = dependencies.decideItems(tenantId, {
+        approveIds: [],
+        rejectIds: proposals.map((item) => item.id),
+      });
+      if (decision.status !== "ok") throw new Error(`${decision.code}: ${decision.message}`);
+    }
+    return {
+      handled: true,
+      text: [
+        "Herald filed that feedback as a durable iteration lesson for the next wake.",
+        memoryReceipt,
+        filing.receipt.message,
+        decision?.message ?? "No current proposed items needed rejection.",
+      ].join("\n"),
+    };
+  } catch (error) {
+    return loudError(error);
+  }
+}
+
+async function publishFromNaturalIntent(
+  dependencies: HeraldChatDependencies,
+  tenantId: string,
+  intent: Extract<HeraldNaturalLoopIntent, { kind: "publish" }>,
+): Promise<HeraldChatResult> {
+  if (!dependencies.listApproved || !dependencies.publishApproved) {
+    return loudError(new Error("Herald's poster lane is unavailable."));
+  }
+  const approved = dependencies.listApproved(tenantId);
+  if (approved.length === 0) {
+    return {
+      handled: true,
+      text: "Nothing changed: there are no approved board items to publish. Approve the current proposed list with “✓ 1”, “✓ 1,3”, or “✓ all”; then say “publish approved”.",
+    };
+  }
+  let selected: HeraldBoardItem[];
+  if (intent.boardNumber !== undefined) {
+    const item = dependencies.getTurnState(tenantId).board[intent.boardNumber - 1];
+    if (!item || item.state !== "approved") {
+      return {
+        handled: true,
+        text: `Nothing changed: board item ${intent.boardNumber} is not approved. Publishing never approves an item implicitly.`,
+      };
+    }
+    selected = [item];
+  } else if (intent.allApproved) {
+    selected = approved;
+  } else if (approved.length === 1) {
+    selected = approved;
+  } else {
+    const state = dependencies.getTurnState(tenantId);
+    const numbers = approved.map((item) => state.board.findIndex((candidate) => candidate.id === item.id) + 1);
+    return {
+      handled: true,
+      text: `Nothing changed: ${approved.length} board items are approved (${numbers.join(", ")}). Say “publish approved” for all, or “publish <board number>” for one.`,
+    };
+  }
+  try {
+    const receipt = await dependencies.publishApproved(tenantId, selected.map((item) => item.id));
+    if (receipt.status !== "ok") throw new Error(receipt.message);
+    return {
+      handled: true,
+      text: [receipt.message, ...receipt.published.map((entry) => entry.permalink)].join("\n"),
+    };
+  } catch (error) {
+    return loudError(error);
+  }
+}
+
 function isPrematureLoopAction(text: string): boolean {
   return /^(?:run now|wake(?: now)?|start (?:the )?loop|propose now|publish(?: now)?|post now)$/i.test(text.trim()) ||
     (/^✓/.test(text.trim()) && text.trim() !== EXACT_BRIEFING_APPROVAL);
@@ -328,29 +562,6 @@ export function createHeraldChatHandler(dependencies: HeraldChatDependencies) {
         : { handled: true, text: `Briefing draft receipt: captured ${missing}.\n${renderDraft(draft, 1)}` };
     }
 
-    if (/^publish approved$/i.test(message)) {
-      if (!dependencies.listApproved || !dependencies.publishApproved) {
-        return loudError(new Error("Herald's poster lane is unavailable."));
-      }
-      const approvedItems = dependencies.listApproved(tenantId);
-      if (approvedItems.length === 0) {
-        return { handled: true, text: "Nothing changed: there are no approved items to publish." };
-      }
-      try {
-        const receipt = await dependencies.publishApproved(
-          tenantId,
-          approvedItems.map((item) => item.id),
-        );
-        if (receipt.status !== "ok") throw new Error(receipt.message);
-        return {
-          handled: true,
-          text: [receipt.message, ...receipt.published.map((entry) => entry.permalink)].join("\n"),
-        };
-      } catch (error) {
-        return loudError(error);
-      }
-    }
-
     // The briefing approval crosses a real asynchronous Zenod filing boundary.
     // A client retry after that commit must be idempotent and must never fall
     // through to the board-selection parser just because the briefing is now
@@ -362,61 +573,18 @@ export function createHeraldChatHandler(dependencies: HeraldChatDependencies) {
       };
     }
 
-    if (!message.startsWith("✓")) {
-      return {
-        handled: false,
-        contextNote: buildHeraldTurnContext(dependencies.getTurnState(tenantId)),
-      };
-    }
-    const proposals = dependencies.listProposed(tenantId);
-    if (proposals.length === 0) {
-      return { handled: true, text: "Nothing changed: there are no current proposed items to approve." };
-    }
-    const selection = parseHeraldApproval(message, proposals.length);
-    if (!selection) {
-      return {
-        handled: true,
-        text: `I could not parse that approval, so nothing changed. Use “✓ 1,3”, “✓ all”, or “✓ 2 + reject the rest” against the current ${proposals.length}-item list.`,
-      };
-    }
+    if (message.startsWith("✓")) return applyBoardSelection(dependencies, tenantId, message);
 
-    const approveItems = selection.approveIndexes.map((index) => proposals[index - 1]!);
-    const rejectItems = selection.rejectIndexes.map((index) => proposals[index - 1]!);
-    const echo = `Approving ${joinIndexes(selection.approveIndexes)}, rejecting ${joinIndexes(selection.rejectIndexes)}.`;
-    try {
-      let memoryReceipt: string | null = null;
-      let filingReceipt: HeraldMutationReceipt | null = null;
-      if (rejectItems.length > 0) {
-        const content = [
-          `Herald proposal decision: rejected current items ${joinIndexes(selection.rejectIndexes)}.`,
-          ...rejectItems.map((item, index) => `Rejected ${selection.rejectIndexes[index]!}: ${item.text}\nWhy it was proposed: ${item.rationale}\nSource: ${item.memoryCitation}`),
-        ].join("\n\n");
-        memoryReceipt = requireCommitReceipt(await dependencies.fileToMemory({
-          tenantId,
-          kind: "proposal_rejection",
-          content,
-          memoryCitation: rejectItems.map((item) => item.memoryCitation).join(", "),
-        }));
-        filingReceipt = dependencies.recordFiling({
-          tenantId,
-          kind: "proposal_rejection",
-          content,
-          memoryCitation: rejectItems.map((item) => item.memoryCitation).join(", "),
-          commitReceipt: memoryReceipt,
-        }).receipt;
-      }
-      const decision = dependencies.decideItems(tenantId, {
-        approveIds: approveItems.map((item) => item.id),
-        rejectIds: rejectItems.map((item) => item.id),
-      });
-      if (decision.status !== "ok") throw new Error(`${decision.code}: ${decision.message}`);
-      return {
-        handled: true,
-        text: [echo, decision.message, memoryReceipt, filingReceipt?.message].filter(Boolean).join("\n"),
-      };
-    } catch (error) {
-      return loudError(error);
-    }
+    const intent = classifyHeraldNaturalLoopIntent(message);
+    if (intent?.kind === "propose") return proposeFromNaturalIntent(dependencies, tenantId);
+    if (intent?.kind === "approve") return applyBoardSelection(dependencies, tenantId, intent.command);
+    if (intent?.kind === "feedback") return fileNaturalFeedback(dependencies, tenantId, message);
+    if (intent?.kind === "publish") return publishFromNaturalIntent(dependencies, tenantId, intent);
+
+    return {
+      handled: false,
+      contextNote: buildHeraldTurnContext(dependencies.getTurnState(tenantId)),
+    };
   };
 }
 

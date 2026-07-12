@@ -35,6 +35,7 @@ export function createHeraldUnit(options: CreateZenodUnitOptions = {}) {
         fileToMemory: createZenodWalletFiler(() => runtime.settings.peers()),
         listApproved: (id) => lanes.store.listBoardItems(id, ["approved"]),
         publishApproved: (id, itemIds) => lanes.publishApproved(id, itemIds, { appendChatReceipt: false }),
+        proposeNow: (id) => lanes.proposeNow(id),
         getTurnState: (id) => {
           const briefing = lanes.store.getApprovedBriefing(id);
           if (!briefing) throw new Error("Herald turn state requires an approved briefing.");
