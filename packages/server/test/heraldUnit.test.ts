@@ -23,8 +23,10 @@ afterEach(async () => {
 });
 
 describe("Herald council unit", () => {
-  it("ports the Console persona and selects Herald mode explicitly", () => {
-    expect(HERALD_AGENT.persona).toBe(CONSOLE_AGENT.persona);
+  it("uses one Herald persona instead of inheriting the generic Console authority", () => {
+    expect(HERALD_AGENT.persona).not.toBe(CONSOLE_AGENT.persona);
+    expect(HERALD_AGENT.persona).toContain("single project-voice agent and operational authority");
+    expect(HERALD_AGENT.persona).not.toMatch(/\b(?:Ring|Council)\b/);
     expect(resolveServerMode({ ZENOD_UNIT: "herald" }, HERALD_AGENT.name)).toBe("herald");
   });
 
@@ -61,10 +63,15 @@ describe("Herald council unit", () => {
       { token: "alpha-token", tenant: { id: "tenant-alpha", name: "Alpha" } },
       { token: "beta-token", tenant: { id: "tenant-beta", name: "Beta" } },
     ]);
+    const inheritedFallback = vi.fn(async () => ({
+      handled: true,
+      text: "Generic inherited authority answered independently.",
+    }));
     const unit = createHeraldUnit({
       dataDir,
       tenantStore: tenants,
       env: { CHASSIS_VAULT_MASTER_KEY: MASTER_KEY },
+      appOptionsForTenant: () => ({ chatInterceptor: inheritedFallback }),
     });
     try {
       const save = await unit.app.request("/api/settings", {
@@ -132,11 +139,99 @@ describe("Herald council unit", () => {
 
       const runtime = unit.runtimes.get("tenant-alpha");
       expect(runtime).not.toBeNull();
+      unit.lanes.store.approveBriefing({
+        tenantId: "tenant-alpha",
+        content: {
+          theme: "Own your context",
+          objectives: ["Build a thoughtful community"],
+          tone: "sharp and informative",
+          replyPolicy: "substantive questions only",
+        },
+        cadenceMinutes: 60,
+        proposalCount: 1,
+      }, 100);
+      const wakeId = unit.lanes.store.tryStartWake("tenant-alpha", "run_now", 110)!;
+      const proposal = unit.lanes.store.createProposals("tenant-alpha", wakeId, [{
+        text: "Knowledge compounds when context remains yours.",
+        rationale: "The approved briefing centers context ownership.",
+        memoryCitation: "https://memory.example/context",
+      }], 120);
+      unit.lanes.store.finishWake(wakeId, {
+        status: "completed",
+        code: "wake_completed",
+        message: "Created one cited board proposal.",
+        proposalIds: [proposal.items[0]!.id],
+      }, 130);
+      unit.lanes.store.recordFiling({
+        tenantId: "tenant-alpha",
+        kind: "lesson",
+        content: "Prefer sharp, informative language over slang.",
+        memoryCitation: "https://memory.example/context",
+        commitReceipt: "commit: abc1234",
+      }, 140);
+      const groundedCalls: Array<{ message: string; surface: string; contextNote?: string }> = [];
+      const groundedTaskingCalls: Array<{ message: string; contextNote?: string }> = [];
       runtime!.getEngine = async () => ({
-        async chat(message) {
-          return { text: `Council reply: ${message}`, sources: [] };
+        async chat(message, surface, chatOptions) {
+          const contextNote = typeof chatOptions === "object" ? chatOptions.contextNote : undefined;
+          groundedCalls.push({ message, surface, ...(contextNote ? { contextNote } : {}) });
+          return { text: `Herald reply: ${message}`, sources: [] };
+        },
+        async handleTasking(input) {
+          groundedTaskingCalls.push({
+            message: input.text,
+            ...(input.contextNote ? { contextNote: input.contextNote } : {}),
+          });
+          return { text: `Herald tasking reply: ${input.text}`, actions: [] };
         },
       }) as BrainEngine;
+
+      const groundedWeb = await unit.app.request("/api/chat/stream", {
+        method: "POST",
+        headers: { authorization: "Bearer alpha-token", "content-type": "application/json" },
+        body: JSON.stringify({ message: "what is our current state?" }),
+      });
+      expect(await groundedWeb.text()).toContain("Herald reply: what is our current state?");
+      expect(groundedCalls[0]).toMatchObject({
+        message: "what is our current state?",
+        surface: "web",
+        contextNote: expect.stringContaining("Own your context"),
+      });
+      expect(groundedCalls[0]!.contextNote).toContain("Knowledge compounds when context remains yours");
+      expect(groundedCalls[0]!.contextNote).toContain("commit: abc1234");
+      expect(inheritedFallback).not.toHaveBeenCalled();
+
+      const groundedJson = await unit.app.request("/api/chat", {
+        method: "POST",
+        headers: { authorization: "Bearer alpha-token", "content-type": "application/json" },
+        body: JSON.stringify({ message: "name the approved briefing" }),
+      });
+      expect(await groundedJson.json()).toMatchObject({
+        text: "Herald tasking reply: name the approved briefing",
+      });
+      expect(groundedTaskingCalls[0]).toMatchObject({
+        message: "name the approved briefing",
+        contextNote: expect.stringContaining("sharp and informative"),
+      });
+
+      const groundedTest = await unit.app.request("/api/test/chat", {
+        method: "POST",
+        headers: { authorization: "Bearer alpha-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          message: "test the current Herald state",
+          surface: "cli",
+          conversationKey: "state-kernel-test",
+        }),
+      });
+      expect(await groundedTest.json()).toMatchObject({
+        status: "ok",
+        text: "Herald reply: test the current Herald state",
+      });
+      expect(groundedCalls[1]).toMatchObject({
+        message: "test the current Herald state",
+        surface: "cli",
+        contextNote: expect.stringContaining("Created one cited board proposal"),
+      });
 
       const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
         const started = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(started));
@@ -158,16 +253,21 @@ describe("Herald council unit", () => {
 
       const chat = await client.callTool({
         name: "chat_with_herald",
-        arguments: { message: "is the council available?" },
+        arguments: { message: "summarize our current state" },
       });
       expect(chat.isError).not.toBe(true);
       expect(chat.content).toEqual(expect.arrayContaining([
-        expect.objectContaining({ type: "text", text: expect.stringContaining("Council reply: is the council available?") }),
+        expect.objectContaining({ type: "text", text: expect.stringContaining("Herald reply: summarize our current state") }),
       ]));
       expect(chat.structuredContent).toMatchObject({
         status: "ok",
-        text: "Council reply: is the council available?",
+        text: "Herald reply: summarize our current state",
         evidence: [{ kind: "chat_audit", id: expect.stringMatching(/^test_/), conversationId: expect.any(String) }],
+      });
+      expect(groundedCalls[2]).toMatchObject({
+        message: "summarize our current state",
+        surface: "mcp",
+        contextNote: expect.stringContaining("Prefer sharp, informative language over slang"),
       });
       await client.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));

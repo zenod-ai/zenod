@@ -3,7 +3,12 @@ import { z } from "zod";
 import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
 import type { CreateGithubIssueInput, CreateGithubIssueResult, EditGithubIssueInput, EditGithubIssueResult } from "zenod";
 import type { IngestJob } from "./ingestStore.js";
-import { runSyntheticChat, type ChatTestAuditInput, type ChatTestAuditRecord } from "./testHarness.js";
+import {
+  runSyntheticChat,
+  type ChatTestAuditInput,
+  type ChatTestAuditRecord,
+  type ChatTurnInterceptor,
+} from "./testHarness.js";
 import type { MediaIngestReceipt, TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
 import type { ExecutionTicket } from "./executionQueue.js";
 import {
@@ -447,6 +452,7 @@ export function buildMcpServer(
   serverName: string = "",
   mediaIngest?: MediaIngestJobs,
   existingServer?: McpServer,
+  chatInterceptor?: ChatTurnInterceptor,
 ): McpServer {
   const server =
     existingServer ??
@@ -479,6 +485,7 @@ export function buildMcpServer(
         defaultSurface: "mcp",
         getEngine,
         recordAudit: recordChatTestRun,
+        ...(chatInterceptor ? { interceptChat: chatInterceptor } : {}),
       });
       const lines = [
         result.status === "ok" ? result.text : `ERROR: ${result.error}`,
