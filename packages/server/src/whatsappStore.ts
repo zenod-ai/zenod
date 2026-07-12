@@ -74,6 +74,7 @@ export interface WhatsAppTranscriptEntry {
   linkedFollowUps?: WhatsAppTranscriptFollowUp[];
   channelAudit?: WhatsAppChannelAuditRecord;
   mediaRecovery?: WhatsAppMediaRecoveryRecord;
+  mediaCoalescing?: WhatsAppMediaCoalescingRecord;
 }
 
 export interface WhatsAppTranscriptMedia {
@@ -141,7 +142,7 @@ export interface WhatsAppNotificationQuery {
   limit?: number;
 }
 
-export type WhatsAppChannelLifecycle = "forwarded" | "replied" | "failed" | "interrupted";
+export type WhatsAppChannelLifecycle = "forwarded" | "replied" | "failed" | "interrupted" | "coalesced";
 
 export interface WhatsAppChannelAuditInput {
   providerMessageId: string;
@@ -155,6 +156,8 @@ export interface WhatsAppChannelAuditInput {
   downstreamCorrelationId?: string | null;
   downstreamReceipt?: Record<string, unknown> | null;
   replyText?: string | null;
+  canonicalProviderMessageId?: string | null;
+  coalescingState?: "owner" | null;
 }
 
 export interface WhatsAppChannelAuditRecord {
@@ -169,11 +172,28 @@ export interface WhatsAppChannelAuditRecord {
   downstreamCorrelationId: string | null;
   downstreamReceipt: Record<string, unknown> | null;
   replyText: string | null;
+  canonicalProviderMessageId: string | null;
+  coalescingState: "owner" | "coalesced" | null;
   mediaRecovery?: WhatsAppMediaRecoveryRecord;
   lifecycleState: WhatsAppChannelLifecycle;
   outboundProviderId: string | null;
   outboundStatus: string | null;
   forwardedAt: number;
+  updatedAt: number;
+}
+
+export interface WhatsAppMediaCoalescingClaim {
+  providerMessageId: string;
+  canonicalProviderMessageId: string;
+  artifactSha256: string;
+  role: "owner" | "duplicate";
+  state: "processing" | "completed" | "failed";
+}
+
+export interface WhatsAppMediaCoalescingRecord extends WhatsAppMediaCoalescingClaim {
+  tenantId: string;
+  channel: "whatsapp" | "telegram";
+  createdAt: number;
   updatedAt: number;
 }
 
@@ -357,6 +377,8 @@ export class WhatsAppStore {
         downstream_correlation_id TEXT,
         downstream_receipt_json TEXT,
         reply_text TEXT,
+        canonical_provider_message_id TEXT,
+        coalescing_state TEXT,
         lifecycle_state TEXT NOT NULL,
         outbound_provider_id TEXT,
         outbound_status TEXT,
@@ -365,6 +387,20 @@ export class WhatsAppStore {
       );
       CREATE INDEX IF NOT EXISTS idx_whatsapp_channel_audit_correlation
         ON whatsapp_channel_audit(downstream_correlation_id);
+
+      CREATE TABLE IF NOT EXISTS whatsapp_media_coalescing (
+        provider_message_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        artifact_sha256 TEXT NOT NULL,
+        canonical_provider_message_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('owner', 'duplicate')),
+        outcome_state TEXT NOT NULL CHECK (outcome_state IN ('processing', 'completed', 'failed')),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_media_coalescing_scope
+        ON whatsapp_media_coalescing(tenant_id, channel, artifact_sha256, created_at);
 
       CREATE TABLE IF NOT EXISTS whatsapp_media_recovery (
         provider_message_id TEXT PRIMARY KEY,
@@ -388,6 +424,12 @@ export class WhatsAppStore {
     if (!auditColumns.some((column) => column.name === "reply_text")) {
       this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN reply_text TEXT");
     }
+    if (!auditColumns.some((column) => column.name === "canonical_provider_message_id")) {
+      this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN canonical_provider_message_id TEXT");
+    }
+    if (!auditColumns.some((column) => column.name === "coalescing_state")) {
+      this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN coalescing_state TEXT");
+    }
 
     // Recover the durable boundary, never the Ring call. If the provider send
     // was already audited, reconcile it as replied. Otherwise queue exactly one
@@ -396,6 +438,21 @@ export class WhatsAppStore {
     const now = Date.now();
     this.db.exec("BEGIN IMMEDIATE");
     try {
+      this.db.prepare(
+        `UPDATE whatsapp_media_coalescing
+         SET outcome_state = 'completed', updated_at = ?
+         WHERE outcome_state = 'processing'
+           AND canonical_provider_message_id IN (
+             SELECT provider_message_id FROM whatsapp_channel_audit
+             WHERE outbound_provider_id IS NOT NULL
+               AND outbound_status IN ('sent', 'delivered', 'read', 'recovery_sent')
+           )`,
+      ).run(now);
+      this.db.prepare(
+        `UPDATE whatsapp_media_coalescing
+         SET outcome_state = 'failed', updated_at = ?
+         WHERE outcome_state = 'processing'`,
+      ).run(now);
       this.db.prepare(
         `INSERT INTO whatsapp_outbound_audit (
            audit_id, message_id, chat_id, contact_id, body_text, status,
@@ -587,14 +644,124 @@ export class WhatsAppStore {
     }
   }
 
+  claimMediaCoalescing(input: {
+    providerMessageId: string;
+    tenantId: string;
+    channel: "whatsapp" | "telegram";
+    artifactSha256: string;
+    windowMs: number;
+    now?: number;
+  }): WhatsAppMediaCoalescingClaim {
+    const now = input.now ?? Date.now();
+    const cutoff = now - Math.max(1, input.windowMs);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const existing = this.db.prepare(
+        `SELECT provider_message_id AS canonicalProviderMessageId, outcome_state AS state
+         FROM whatsapp_media_coalescing
+         WHERE tenant_id = ? AND channel = ? AND artifact_sha256 = ?
+           AND role = 'owner' AND created_at >= ?
+         ORDER BY created_at ASC, provider_message_id ASC
+         LIMIT 1`,
+      ).get(input.tenantId, input.channel, input.artifactSha256, cutoff) as
+        | { canonicalProviderMessageId: string; state: WhatsAppMediaCoalescingClaim["state"] }
+        | undefined;
+      const canonicalProviderMessageId = existing?.canonicalProviderMessageId ?? input.providerMessageId;
+      const role = existing ? "duplicate" : "owner";
+      const state = existing?.state ?? "processing";
+      this.db.prepare(
+        `INSERT INTO whatsapp_media_coalescing (
+           provider_message_id, tenant_id, channel, artifact_sha256,
+           canonical_provider_message_id, role, outcome_state, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        input.providerMessageId,
+        input.tenantId,
+        input.channel,
+        input.artifactSha256,
+        canonicalProviderMessageId,
+        role,
+        state,
+        now,
+        now,
+      );
+      this.db.exec("COMMIT");
+      return {
+        providerMessageId: input.providerMessageId,
+        canonicalProviderMessageId,
+        artifactSha256: input.artifactSha256,
+        role,
+        state,
+      };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  completeMediaCoalescing(canonicalProviderMessageId: string, state: "completed" | "failed"): void {
+    this.db.prepare(
+      `UPDATE whatsapp_media_coalescing SET outcome_state = ?, updated_at = ?
+       WHERE canonical_provider_message_id = ?`,
+    ).run(state, Date.now(), canonicalProviderMessageId);
+  }
+
+  mediaCoalescing(providerMessageId: string): WhatsAppMediaCoalescingRecord | null {
+    return (this.db.prepare(
+      `SELECT provider_message_id AS providerMessageId,
+         tenant_id AS tenantId, channel, artifact_sha256 AS artifactSha256,
+         canonical_provider_message_id AS canonicalProviderMessageId,
+         role, outcome_state AS state, created_at AS createdAt, updated_at AS updatedAt
+       FROM whatsapp_media_coalescing WHERE provider_message_id = ?`,
+    ).get(providerMessageId) as WhatsAppMediaCoalescingRecord | undefined) ?? null;
+  }
+
+  recordCoalescedChannelForwarding(input: {
+    providerMessageId: string;
+    canonicalProviderMessageId: string;
+    artifactSha256: string;
+    senderId: string;
+  }): WhatsAppChannelAuditRecord {
+    const canonical = this.channelAudit(input.canonicalProviderMessageId);
+    if (!canonical) {
+      throw new Error("canonical media outcome is not safely reusable");
+    }
+    const now = Date.now();
+    this.db.prepare(
+      `INSERT INTO whatsapp_channel_audit (
+         provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance,
+         artifact_ref, artifact_sha256, downstream_destination, downstream_correlation_id,
+         downstream_receipt_json, reply_text, canonical_provider_message_id, coalescing_state,
+         lifecycle_state, forwarded_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'coalesced', 'coalesced', ?, ?)`,
+    ).run(
+      input.providerMessageId,
+      canonical.tenantId,
+      input.senderId,
+      canonical.transcriptText,
+      canonical.transcriptProvenance,
+      canonical.artifactRef,
+      input.artifactSha256,
+      canonical.downstreamDestination,
+      canonical.downstreamCorrelationId,
+      canonical.downstreamReceipt ? safeJson(canonical.downstreamReceipt) : null,
+      canonical.replyText,
+      input.canonicalProviderMessageId,
+      now,
+      now,
+    );
+    return this.channelAudit(input.providerMessageId)!;
+  }
+
   recordChannelForwarding(input: WhatsAppChannelAuditInput): void {
     const now = Date.now();
     this.db.prepare(
       `INSERT INTO whatsapp_channel_audit (
          provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance,
          artifact_ref, artifact_sha256, downstream_destination, downstream_correlation_id,
-         downstream_receipt_json, reply_text, lifecycle_state, forwarded_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'forwarded', ?, ?)
+         downstream_receipt_json, reply_text, canonical_provider_message_id, coalescing_state,
+         lifecycle_state, forwarded_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'forwarded', ?, ?)
        ON CONFLICT(provider_message_id) DO UPDATE SET
          tenant_id=excluded.tenant_id,
          sender_id=excluded.sender_id,
@@ -606,6 +773,8 @@ export class WhatsAppStore {
          downstream_correlation_id=excluded.downstream_correlation_id,
          downstream_receipt_json=excluded.downstream_receipt_json,
          reply_text=excluded.reply_text,
+         canonical_provider_message_id=excluded.canonical_provider_message_id,
+         coalescing_state=excluded.coalescing_state,
          lifecycle_state='forwarded',
          updated_at=excluded.updated_at`,
     ).run(
@@ -620,6 +789,8 @@ export class WhatsAppStore {
       input.downstreamCorrelationId ?? null,
       input.downstreamReceipt ? safeJson(input.downstreamReceipt) : null,
       boundedRecoveryReply(input.replyText),
+      input.canonicalProviderMessageId ?? null,
+      input.coalescingState ?? null,
       now, now,
     );
   }
@@ -632,6 +803,8 @@ export class WhatsAppStore {
          artifact_sha256 AS artifactSha256, downstream_destination AS downstreamDestination,
          downstream_correlation_id AS downstreamCorrelationId,
          downstream_receipt_json AS downstreamReceiptJson, reply_text AS replyText,
+         canonical_provider_message_id AS canonicalProviderMessageId,
+         coalescing_state AS coalescingState,
          lifecycle_state AS lifecycleState,
          outbound_provider_id AS outboundProviderId, outbound_status AS outboundStatus,
          forwarded_at AS forwardedAt, updated_at AS updatedAt
@@ -742,6 +915,13 @@ export class WhatsAppStore {
         now,
         claim.providerMessageId,
       );
+      if (sent && claim.kind === "forwarded_reply") {
+        this.db.prepare(
+          `UPDATE whatsapp_media_coalescing
+           SET outcome_state = 'completed', updated_at = ?
+           WHERE canonical_provider_message_id = ?`,
+        ).run(now, claim.providerMessageId);
+      }
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -1070,6 +1250,7 @@ export class WhatsAppStore {
     const followUpsByMessage = new Map<string, WhatsAppTranscriptFollowUp[]>();
     const channelAuditByMessage = new Map<string, WhatsAppChannelAuditRecord>();
     const mediaRecoveryByMessage = new Map<string, WhatsAppMediaRecoveryRecord>();
+    const mediaCoalescingByMessage = new Map<string, WhatsAppMediaCoalescingRecord>();
     if (inboundMessageIds.length > 0) {
       const placeholders = inboundMessageIds.map(() => "?").join(",");
       const mediaRows = this.db
@@ -1160,6 +1341,8 @@ export class WhatsAppStore {
         if (audit) channelAuditByMessage.set(messageId, audit);
         const recovery = this.mediaRecovery(messageId);
         if (recovery) mediaRecoveryByMessage.set(messageId, recovery);
+        const coalescing = this.mediaCoalescing(messageId);
+        if (coalescing) mediaCoalescingByMessage.set(messageId, coalescing);
       }
     }
 
@@ -1183,6 +1366,9 @@ export class WhatsAppStore {
         : {}),
       ...(row.direction === "inbound" && row.messageId && mediaRecoveryByMessage.has(row.messageId)
         ? { mediaRecovery: mediaRecoveryByMessage.get(row.messageId) }
+        : {}),
+      ...(row.direction === "inbound" && row.messageId && mediaCoalescingByMessage.has(row.messageId)
+        ? { mediaCoalescing: mediaCoalescingByMessage.get(row.messageId) }
         : {}),
     }));
   }

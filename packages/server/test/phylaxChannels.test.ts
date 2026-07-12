@@ -24,8 +24,8 @@ vi.mock("@whiskeysockets/baileys", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@whiskeysockets/baileys")>();
   return {
     ...actual,
-    downloadContentFromMessage: vi.fn(async function* () {
-      yield Buffer.from("immutable-image-bytes");
+    downloadContentFromMessage: vi.fn(async function* (input?: { testBytes?: string }) {
+      yield Buffer.from(input?.testBytes ?? "immutable-image-bytes");
     }),
   };
 });
@@ -782,7 +782,7 @@ describe("ported gateway integration", () => {
       mediaType: "image",
       mimeType,
       fileName: null,
-      mediaRaw: {},
+      mediaRaw: { testBytes: messageId },
     });
     try {
       await runtime.whatsapp.handleEvent(image("wa-image-captioned", "please inspect this", "image/png"));
@@ -812,12 +812,209 @@ describe("ported gateway integration", () => {
       const { readdir, readFile } = await import("node:fs/promises");
       const artifacts = await readdir(artifactDir);
       expect(artifacts).toHaveLength(2);
-      await Promise.all(artifacts.map(async (file) => {
-        expect(await readFile(join(artifactDir, file))).toEqual(Buffer.from("immutable-image-bytes"));
-      }));
+      const archived = await Promise.all(artifacts.map(async (file) => (await readFile(join(artifactDir, file))).toString()));
+      expect(archived.sort()).toEqual(["wa-image-captioned", "wa-image-plain"]);
       expect(runtime.whatsappStore.recentTranscript({ sinceMs: 0 }).filter((entry) => entry.direction === "outbound")).toHaveLength(2);
     } finally {
       runtime.close();
     }
+  });
+
+  it("atomically coalesces 20 identical media contenders to one downstream call and one provider reply", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-media-coalescing-"));
+    dirs.push(dataDir);
+    let downstreamCalls = 0;
+    const sent: Array<{ jid: string; text: string }> = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.zenod.dev/mcp/alpha", downstreamToken: "ring-alpha" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/customer-token/artifacts/${tenantId}/${artifactId}`,
+      async callDownstream() {
+        downstreamCalls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return {
+          content: [{ type: "text", text: "strawberry banana" }],
+          structuredContent: { correlationId: "ring-coalesced-001", receipt: { kind: "ring_reply", id: "receipt-001" } },
+        };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, { PHYLAX_MEDIA_COALESCE_WINDOW_MS: "60000" }, {
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(jid, content) {
+          sent.push({ jid, text: content.text });
+          return { key: { id: `sent-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const event = (index: number): WhatsAppInboundEvent => ({
+      messageId: `wa-coalesce-${String(index).padStart(2, "0")}`,
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: index + 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "image",
+      mimeType: "image/png",
+      fileName: "same.png",
+      mediaRaw: {},
+    });
+    try {
+      await Promise.all(Array.from({ length: 20 }, (_, index) => runtime.whatsapp.handleEvent(event(index))));
+      expect(downstreamCalls).toBe(1);
+      expect(sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "strawberry banana" }]);
+      const traces = Array.from({ length: 20 }, (_, index) =>
+        runtime.whatsappStore.recentTranscript({ messageId: event(index).messageId, sinceMs: 0 })
+          .find((entry) => entry.direction === "inbound")!,
+      );
+      const owners = traces.filter((trace) => trace.mediaCoalescing?.role === "owner");
+      expect(owners).toHaveLength(1);
+      const canonicalId = owners[0].messageId;
+      expect(traces.map((trace) => trace.mediaCoalescing)).toEqual(
+        expect.arrayContaining(Array.from({ length: 20 }, () => expect.objectContaining({
+          canonicalProviderMessageId: canonicalId,
+          artifactSha256: "941e94c100343d71b0d41608c8bf1c469eddfc8e1097768348f9a5d7d7a054f3",
+          state: "completed",
+        }))),
+      );
+      expect(traces.filter((trace) => trace.channelAudit?.lifecycleState === "coalesced")).toHaveLength(19);
+      expect(new Set(traces.map((trace) => trace.channelAudit?.downstreamCorrelationId))).toEqual(new Set(["ring-coalesced-001"]));
+      const { readdir } = await import("node:fs/promises");
+      expect(await readdir(join(phylaxWhatsAppPaths(dataDir).artifacts, "alpha"))).toHaveLength(1);
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("retains linked failed traces for 20 contenders when the canonical downstream call fails", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-media-coalescing-failed-"));
+    dirs.push(dataDir);
+    let downstreamCalls = 0;
+    const sent: string[] = [];
+    const runtime = new PhylaxPortedRuntime(dataDir, new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.zenod.dev/mcp/alpha", downstreamToken: "ring-alpha" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/customer-token/artifacts/${tenantId}/${artifactId}`,
+      async callDownstream() {
+        downstreamCalls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        throw new Error("Ring unavailable");
+      },
+    }), { PHYLAX_MEDIA_COALESCE_WINDOW_MS: "60000" }, {
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: `sent-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const event = (index: number): WhatsAppInboundEvent => ({
+      messageId: `wa-failed-${index}`, chatId: "34611111111@s.whatsapp.net", senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha", chatName: "Alpha", isGroup: false, timestamp: index + 1, body: "", hasMedia: true,
+      mediaType: "image", mimeType: "image/png", fileName: "same.png", mediaRaw: {},
+    });
+    try {
+      await Promise.all(Array.from({ length: 20 }, (_, index) => runtime.whatsapp.handleEvent(event(index))));
+      expect(downstreamCalls).toBe(1);
+      expect(sent).toHaveLength(1);
+      const records = Array.from({ length: 20 }, (_, index) => runtime.whatsappStore.mediaCoalescing(event(index).messageId)!);
+      const owner = records.find((record) => record.role === "owner")!;
+      expect(records).toEqual(expect.arrayContaining(Array.from({ length: 20 }, () => expect.objectContaining({
+        canonicalProviderMessageId: owner.providerMessageId,
+        state: "failed",
+      }))));
+      for (let index = 0; index < 20; index += 1) {
+        expect(runtime.whatsappStore.recentTranscript({ messageId: event(index).messageId, sinceMs: 0 })[0]?.mediaCoalescing)
+          .toMatchObject({ canonicalProviderMessageId: owner.providerMessageId, state: "failed" });
+      }
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("scopes payload coalescing by tenant, channel, and a finite window", () => {
+    const store = new WhatsAppStore(":memory:");
+    const claim = (providerMessageId: string, tenantId: string, channel: "whatsapp" | "telegram", now: number) =>
+      store.claimMediaCoalescing({ providerMessageId, tenantId, channel, artifactSha256: "a".repeat(64), windowMs: 1_000, now });
+    expect(claim("alpha-wa-owner", "alpha", "whatsapp", 10_000).role).toBe("owner");
+    expect(claim("alpha-wa-duplicate", "alpha", "whatsapp", 10_500)).toMatchObject({
+      role: "duplicate", canonicalProviderMessageId: "alpha-wa-owner",
+    });
+    expect(claim("beta-wa-owner", "beta", "whatsapp", 10_500).role).toBe("owner");
+    expect(claim("alpha-tg-owner", "alpha", "telegram", 10_500).role).toBe("owner");
+    expect(claim("alpha-wa-later-owner", "alpha", "whatsapp", 11_001).role).toBe("owner");
+    store.close();
+  });
+
+  it("marks restart-orphan followers failed without Ring and preserves their provider-ID trace", () => {
+    const path = join(tmpdir(), `phylax-coalescing-orphan-${Date.now()}.sqlite`);
+    dirs.push(path);
+    const event = (messageId: string): WhatsAppInboundEvent => ({
+      messageId, chatId: "34611111111@s.whatsapp.net", senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha", chatName: "Alpha", isGroup: false, timestamp: 1, body: "", hasMedia: true,
+      mediaType: "image", mimeType: "image/png", fileName: "same.png",
+    });
+    const before = new WhatsAppStore(path);
+    before.recordInbound(event("orphan-owner"));
+    before.markMessageStatus("orphan-owner", "processing");
+    before.claimMediaCoalescing({
+      providerMessageId: "orphan-owner", tenantId: "alpha", channel: "whatsapp",
+      artifactSha256: "b".repeat(64), windowMs: 60_000, now: 10_000,
+    });
+    before.close();
+
+    const after = new WhatsAppStore(path);
+    after.recordInbound(event("orphan-follower"));
+    after.markMessageStatus("orphan-follower", "coalesced");
+    expect(after.claimMediaCoalescing({
+      providerMessageId: "orphan-follower", tenantId: "alpha", channel: "whatsapp",
+      artifactSha256: "b".repeat(64), windowMs: 60_000, now: 10_100,
+    })).toMatchObject({ role: "duplicate", canonicalProviderMessageId: "orphan-owner", state: "failed" });
+    expect(after.recentTranscript({ messageId: "orphan-follower", sinceMs: 0 })[0]).toMatchObject({
+      status: "coalesced",
+      mediaCoalescing: { canonicalProviderMessageId: "orphan-owner", state: "failed" },
+    });
+    expect(after.mediaRecovery("orphan-owner")).toMatchObject({ state: "pending", kind: "interrupted_failure" });
+    after.close();
+  });
+
+  it("reconciles a crash after provider send as completed coalescing on restart", () => {
+    const path = join(tmpdir(), `phylax-coalescing-sent-${Date.now()}.sqlite`);
+    dirs.push(path);
+    const event: WhatsAppInboundEvent = {
+      messageId: "sent-owner", chatId: "34611111111@s.whatsapp.net", senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha", chatName: "Alpha", isGroup: false, timestamp: 1, body: "", hasMedia: true,
+      mediaType: "image", mimeType: "image/png", fileName: "same.png",
+    };
+    const before = new WhatsAppStore(path);
+    before.recordInbound(event);
+    before.markMessageStatus(event.messageId, "processing");
+    before.claimMediaCoalescing({
+      providerMessageId: event.messageId, tenantId: "alpha", channel: "whatsapp",
+      artifactSha256: "c".repeat(64), windowMs: 60_000,
+    });
+    before.recordChannelForwarding({
+      providerMessageId: event.messageId, tenantId: "alpha", senderId: event.senderId,
+      downstreamDestination: "ring.zenod.dev#tenant:alpha", replyText: "done",
+    });
+    before.recordOutboundAudit({
+      messageId: event.messageId, chatId: event.chatId, contactId: event.senderId,
+      bodyText: "done", status: "sent", sentMessageId: "wa-sent-before-crash",
+    });
+    before.close();
+
+    const after = new WhatsAppStore(path);
+    expect(after.mediaCoalescing(event.messageId)).toMatchObject({ state: "completed" });
+    expect(after.channelAudit(event.messageId)).toMatchObject({ lifecycleState: "replied", outboundProviderId: "wa-sent-before-crash" });
+    after.close();
   });
 });

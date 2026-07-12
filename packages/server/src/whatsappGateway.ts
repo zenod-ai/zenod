@@ -114,7 +114,10 @@ export interface WhatsAppPortedInbound {
   transcription?: { provider?: string; failed?: { code: string; message: string } };
 }
 
-export type WhatsAppPortedInboundHandler = (input: WhatsAppPortedInbound) => Promise<{ replyText: string }>;
+export type WhatsAppPortedInboundHandler = (input: WhatsAppPortedInbound) => Promise<{
+  replyText: string;
+  suppressReply?: boolean;
+}>;
 
 function normalizedJid(value: unknown): string {
   if (!value) return "";
@@ -975,6 +978,10 @@ export class WhatsAppGateway {
       }
       this.options.store.markMessageStatus(event.messageId, "processing");
       const forwarded = await handler({ event, text, ...(media ? { media } : {}), ...(transcription ? { transcription } : {}) });
+      if (forwarded.suppressReply) {
+        this.options.store.markMessageStatus(event.messageId, "coalesced");
+        return;
+      }
       if (!forwarded.replyText.trim()) throw new Error("tenant downstream returned no reply");
       await this.sendReply(event, forwarded.replyText, "sent");
       this.options.store.markMessageStatus(event.messageId, "replied");
