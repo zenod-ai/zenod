@@ -7,7 +7,7 @@ import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { formatStorageReceipt } from "./storageReceipt.js";
 import { agentKeptNote, archiveVoiceNote, driveArchiveUnavailableReason, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
-import { normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
+import { normalizeTelegramEntry, normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 import { linkifyGithubRefs } from "./githubLinks.js";
 
 export type TelegramConnectionState = "disabled" | "disconnected" | "connected" | "error";
@@ -495,7 +495,18 @@ export class TelegramGateway {
 
   /** Ported Bot API send primitive used by Phylax's tenant-scoped MCP face. */
   async sendText(recipient: string, text: string): Promise<{ sentMessageId: string }> {
-    const chatId = Number(recipient);
+    const normalized = normalizeTelegramEntry(recipient);
+    const settings = this.settings();
+    const numericAllowed = settings.allowedUsers.filter((entry) => /^-?\d+$/.test(entry));
+    // The tenant UI accepts a friendly @handle, while Telegram sendMessage
+    // requires a numeric chat_id. A one-owner bot can bootstrap that mapping
+    // unambiguously when its allowlist contains the handle and one numeric ID.
+    const target = /^-?\d+$/.test(normalized)
+      ? normalized
+      : settings.allowedUsers.includes(normalized) && numericAllowed.length === 1
+        ? numericAllowed[0]
+        : "";
+    const chatId = Number(target);
     if (!Number.isFinite(chatId) || !text.trim()) throw new Error("Telegram recipient and text are required");
     const result = await this.callApi<{ message_id?: number }>("sendMessage", { chat_id: chatId, text });
     if (!result?.message_id) throw new Error("Telegram provider returned no delivery receipt");
