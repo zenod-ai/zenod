@@ -1,9 +1,11 @@
 # Ring generic MCP safe-contract fix lap
 
-Date: 2026-07-11 (Europe/Madrid)  
-Live surface: `https://ring.zenod.dev/app`  
-Tenant: `AlfaBlok`  
-Final live SHA: `4e09029ac7634a818cadf3ecb285a32581d47eeb`
+Date: 2026-07-11 (Europe/Madrid)
+Updated: 2026-07-12 02:25 CEST
+Live surface: `https://ring.zenod.dev/app`
+Tenant: `AlfaBlok`
+Original safe-contract SHA: `4e09029ac7634a818cadf3ecb285a32581d47eeb`
+Current live repair SHA: `bf6b5e610bf28717129121daede3d2aea6234b35`
 
 ## Outcome
 
@@ -25,6 +27,27 @@ No Callisthenes name, tool hash, approval field, or X-specific route was added t
 
 Earlier in the same fix lap, the final contract also passed live catalog inspection with exact upstream/namespaced names, oversized optional-schema degradation with an explicit warning, and a generic Zenod read returning a real path (`Log/2026-06-21.md`).
 
+## 2026-07-12 provider-failure and catalog repair lap
+
+The current live SHA fixes two generic Ring host defects discovered in the latest conversation:
+
+- Host-owned authenticated catalog inspection is classified as read-only, so status-like words inside MCP descriptions no longer trigger the execution correction gate.
+- Casual tool discovery uses progressive disclosure: exact authenticated upstream names and counts are compact by default; one exact tool's provenance, metadata, or schema expands only on request.
+- Model-provider failures are typed, sanitized, and durably paired with the user turn. Raw provider URLs and key resource identifiers remain operator-only.
+- A zero-tool provider failure may say nothing changed. A failure after any tool activity instead requires receipt/state verification and never makes that no-change claim.
+
+Live browser results on `bf6b5e6`:
+
+| Check | Result | Evidence |
+|---|---|---|
+| Compact generic MCP discovery | PASS — Zenod `17`; Calli `18`; both connected/ready; upstream names only; no false execution correction | `04-compact-catalog-bf6b5e6.png` |
+| Normal model turn | BLOCKED — OpenRouter still returned `Key limit exceeded (total limit)` before any tool call | live Ring chat |
+| Safe zero-tool outcome | PASS — Ring stated that no connected tool ran and nothing was sent/changed; no provider management URL or key identifier rendered | `05-safe-key-limit-bf6b5e6.png` |
+| Durable paired history | PASS — after reload, both `hi` and the safe assistant failure remained; no orphaned user turn | browser DOM verification |
+| Exact deployment | PASS — `/api/health` returned `bf6b5e610bf28717129121daede3d2aea6234b35`; `/`, `/app`, `/mcp` returned `200`, `200`, `401` | live route checks |
+
+The OpenRouter account has credit, but the Keys UI independently shows per-key `TOTAL` limits. The Ring key's provider response identifies that separate control as exhausted. This lap did not raise, replace, or copy a key because the wallet budget is human-owned and no replacement limit was authorized. Consequently, compact discovery and failure safety are live-passed, while model-routed Callisthenes draft/approval replay remains blocked on the existing key limit.
+
 ## Automated validation
 
 Commands on the final contract:
@@ -42,6 +65,13 @@ Results:
 - Image publish workflow `29162997261` passed before deployment.
 - Live health returned the exact final SHA.
 
+Repair-lap validation on `bf6b5e6`:
+
+- `npm test && npm run typecheck && npm run build` passed.
+- Core: `374 passed`, `6 skipped`; server: `712 passed`; script tests: `193 passed`.
+- All schema checks, workspace typechecks, and production builds passed.
+- Image publish workflow `29173473978` passed boot smoke and publication.
+
 Key negative coverage includes zero-tool fabricated success, placeholder/noncanonical URLs, failed mutation results, secret/approval-field suppression, capability questions selecting a mutation tool, negation, tenant/conversation-bound standing approval, one-time token consumption, and hostile peer output remaining quoted untrusted data.
 
 ## Fix commits
@@ -52,6 +82,7 @@ Key negative coverage includes zero-tool fabricated success, placeholder/noncano
 - `bf366b5` — per-tool safe degradation for oversized optional output schemas.
 - `eb0f095` — preserve natural mutation intent when a request also asks to show the result.
 - `4e09029` — render generic MCP approval-required results as held, with recursively redacted arguments.
+- `bf6b5e6` — compact progressive catalog discovery plus sanitized, durable, evidence-safe provider failures.
 
 ## Screenshots
 
@@ -60,3 +91,7 @@ Key negative coverage includes zero-tool fabricated success, placeholder/noncano
 ![Held draft](02-held-for-approval.png)
 
 ![Natural approval receipt](03-natural-approval-receipt.png)
+
+![Compact authenticated MCP catalog](04-compact-catalog-bf6b5e6.png)
+
+![Safe OpenRouter key-limit outcome](05-safe-key-limit-bf6b5e6.png)

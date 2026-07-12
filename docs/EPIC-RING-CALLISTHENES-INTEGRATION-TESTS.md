@@ -1,6 +1,6 @@
 # EPIC: Ring ↔ Callisthenes Generic MCP Integration Tests
 
-Status: provider-failure/catalog repair validated locally; deployment and browser acceptance pending
+Status: provider-failure/catalog repair live-passed; model-routed acceptance blocked on key total limit
 Created: 2026-07-11
 Updated: 2026-07-12
 Repository: zenod-ai/zenod
@@ -9,8 +9,8 @@ GitHub issues: draft test/fix lanes completed; residual acceptance remains in th
 Integration branch: main
 Active spine steward: `/root`
 Steward since: 2026-07-11 14:01 CEST
-Last reconciled commit: `f1ed86c` plus the uncommitted repair lap recorded below
-Last accepted live Ring commit: `4e09029ac7634a818cadf3ecb285a32581d47eeb`
+Last reconciled commit: `bf6b5e610bf28717129121daede3d2aea6234b35`
+Last accepted live Ring commit: `bf6b5e610bf28717129121daede3d2aea6234b35` for F4; `4e09029ac7634a818cadf3ecb285a32581d47eeb` for the last successful model-routed mutation journey
 Planner: `/root`
 Worker: `/root` plus dispatched ticket workers
 Tester: `/root` plus dispatched tester agents
@@ -69,13 +69,13 @@ Historical scope note: this began as a diagnosis-only campaign. Jordi subsequent
 
 ## Current State
 
-Phase: repair validated locally; publish/deploy/browser acceptance pending
-Last verified: 2026-07-12 02:16 CEST
-Integration target: shared `main` worktree at `f1ed86c` plus the repair diff; no repair branch or checkout
-Accepted live Ring SHA: `4e09029ac7634a818cadf3ecb285a32581d47eeb`
-Next action: commit and publish the repair from `main`, deploy Ring at the exact image SHA, then browser-test compact tool discovery plus a normal model turn. If OpenRouter still rejects the turn, preserve the safe durable error as evidence and leave the key-specific spending limit as a named human gate. Separately provision disposable collision, timeout, unauthorized, hostile-result, and second-tenant mutation fixtures before claiming full T01–T24 acceptance.
+Phase: F4 live acceptance complete; residual model-routed and fixture acceptance blocked
+Last verified: 2026-07-12 02:25 CEST
+Integration target: shared `main` worktree and live Ring at `bf6b5e610bf28717129121daede3d2aea6234b35`; no repair branch or checkout
+Accepted live Ring SHA: `bf6b5e610bf28717129121daede3d2aea6234b35` for compact discovery/provider failure safety; `4e09029ac7634a818cadf3ecb285a32581d47eeb` remains the last successful model-routed mutation proof
+Next action: Jordi sets or authorizes the intended total limit for the existing Ring OpenRouter key. Then rerun one normal greeting and a held draft only; do not publish. Separately provision disposable collision, timeout, unauthorized, hostile-result, and second-tenant mutation fixtures before claiming full T01–T24 acceptance.
 Blockers: The provider account having credit does not disprove the observed OpenRouter `Key limit exceeded (total limit)` response; account balance and a key-specific total limit are distinct controls. The repair must not silently raise or replace that budget. T03/T05/T19–T21/T23 also need controlled live fixtures. T22 read-side tenant isolation already passed with a temporary beta tenant; T23 cross-tenant standing-action consumption remains unproved live.
-Repository/live drift: commits after `4e09029` are primarily Herald work and touch shared web/server files. They are reconciled as repository state, not Ring acceptance evidence; production health still reports `4e09029`.
+Repository/live drift: none for F4; production health reports exact repair SHA `bf6b5e6`. Historical model-routed mutation acceptance still belongs to `4e09029` because the current key limit prevents repeating that path on `bf6b5e6`.
 
 ## Steward Commentary On The Changes
 
@@ -229,14 +229,14 @@ Testers may vary names and nonce text, but must preserve the human intent. Promp
 | draft-F2 | Ticket worker | `safe-contract-approval` | Durable semantic standing-action approval | integrated and live-tested | T07–T13,T15,T23 | `a121ee7`, `7d8129e`, `885fc8a`, `eb0f095`; main through `4e09029` | `0e3c145` | Natural draft/approval/edit/cancel maps to one tenant/conversation-bound exact tool call without magic words | Natural held draft and conversational approval passed live; replay live blocked by provider quota after zero tools | 2026-07-11 20:25 CEST | Re-run live replay after Jordi replenishes/raises the OpenRouter key limit |
 | draft-F3 | Ticket worker | `safe-contract-truth` | Universal evidence and receipt gate | integrated and live-tested | T14,T16–T21,T24 | `b5ff620`, `4e09029`; main through `4e09029` | `0e3c145` | No zero-action or failed-action success claims; placeholders rejected; generic peer results remain authoritative | Canonical receipt only; approval-required result held; generic Zenod read grounded; 373 core pass / 6 skipped | 2026-07-11 20:25 CEST | Done |
 | draft-A1 | Tester | `/root` | Residual live acceptance | blocked on named inputs | T03,T05,T09,T11–T13,T15,T19–T21,T23,T24 | current spine; no worker branch | `4e09029` live | Close remaining human-chat/fixture gaps without new public mutation | OpenRouter hard-limit error before tool call; fixture gaps listed below | 2026-07-12 02:01 CEST | Jordi: replenish/raise existing OpenRouter limit; steward: provision disposable fixtures |
-| draft-F4 | Ticket worker/tester | `/root` | Compact catalog and safe durable provider-failure boundary | validated locally; deployment pending | T02,T16,T17,T19,T24 | shared `main` worktree; no branch checkout | `f1ed86c` | Casual discovery is compact/read-only; provider errors are sanitized, durable, typed, and make only evidence-safe side-effect claims | full workspace tests, schema checks, typechecks, and builds pass | 2026-07-12 02:16 CEST | Commit/push main, deploy exact SHA, browser-walk discovery and failure/success path |
+| draft-F4 | Ticket worker/tester | `/root` | Compact catalog and safe durable provider-failure boundary | integrated and live-tested | T02,T16,T17,T19,T24 | `bf6b5e6`; shared `main`, no branch checkout | `f1ed86c` | Casual discovery is compact/read-only; provider errors are sanitized, durable, typed, and make only evidence-safe side-effect claims | exact-SHA deployment; compact catalog and durable safe failure browser-passed | 2026-07-12 02:25 CEST | Done; normal model/MCP routing remains blocked by the named key limit, not F4 |
 
 ## Branch And Integration
 
-- Default integration branch: `main` at `6f72b26775d51f3e51165379446ce13435ad1c1a` as of 2026-07-12 reconciliation.
-- Accepted live Ring release: `4e09029ac7634a818cadf3ecb285a32581d47eeb`; `/api/health` reports this exact SHA.
+- Default integration branch: `main` at `bf6b5e610bf28717129121daede3d2aea6234b35` for the F4 repair deployment.
+- Current live Ring release: `bf6b5e610bf28717129121daede3d2aea6234b35`; `/api/health` reports this exact SHA. The earlier `4e09029` remains the last successful model-routed mutation acceptance proof.
 - Historical fix-lap branches/worktrees are merged and no longer active. Their commits remain recorded in the ledger and evidence package.
-- Commits after `4e09029` contain Herald work, including shared web/server changes. Do not treat current `main` as Ring acceptance evidence until an exact SHA is deployed and the relevant Ring browser path is rerun.
+- Commits after `4e09029` include Herald work in shared web/server files. F4 is now independently accepted at exact deployed SHA `bf6b5e6` for compact discovery and provider-failure safety; do not extend that evidence to model-routed mutation paths that the key limit prevented rerunning.
 - Validation must name the exact tested commit and surface; live evidence must include absolute time and tenant/account label without exposing credentials.
 - Any required fix becomes a separate implementation ticket after `/root` reconciles the test evidence.
 
@@ -269,6 +269,7 @@ Stale assignment policy: after 30 minutes without a handoff or progress signal, 
 | 2026-07-11 | Final automated contract | `4e09029ac7634a818cadf3ecb285a32581d47eeb` | local monorepo | core suite + workspace typecheck | 373 passed / 6 skipped; all typechecks passed | image workflow `29162997261` passed |
 | 2026-07-12 | State reconciliation | repository `6f72b26`; live `4e09029` | local Git + `https://ring.zenod.dev/api/health` | fetch main, inspect post-fix diff, read live health | Repository advanced with Herald work; accepted Ring deployment unchanged | this spine; fix-lap test package |
 | 2026-07-12 | F4 generic repair validation | `f1ed86c` + repair working tree | local monorepo on shared `main` worktree | `npm test && npm run typecheck && npm run build` | PASS: all workspace suites; core 374 pass / 6 skip, server 712 pass, script tests 193 pass, schemas/typechecks/builds pass | terminal transcript; focused catalog/error regressions in source |
+| 2026-07-12 | F4 exact-SHA live acceptance | `bf6b5e610bf28717129121daede3d2aea6234b35` | Ring web chat, AlfaBlok | compact discovery → normal `hi` → reload | PASS for compact discovery and safe durable error; model turn BLOCKED before tools by key total limit | `docs/evidence/ring-calli-safe-contract-2026-07-11/TEST-PACKAGE.md`; screenshots 04–05 |
 
 ### Post-fix retest rollup
 
@@ -400,14 +401,15 @@ Context: The latest Ring chat looked erratic for two independent reasons. Host-o
 Changes recorded: Classified authenticated catalog inspection as read-only; changed catalog rendering to compact progressive disclosure with exact-tool expansion; added typed, sanitized provider failures; persisted safe assistant failure state; tracked whether any tool activity occurred before failure so Ring never makes a false no-change claim; taught the web client to retain the safe error code.
 Reasoning summary: These are host-wide MCP and provider boundaries, not Callisthenes routing hacks. Any connected MCP benefits from bounded authenticated discovery. Any model provider failure gets an evidence-safe outcome. Account budget settings remain human-owned and are not mutated by the repair.
 Validation: Complete repository tests, schema checks, workspace typechecks, and production builds pass on the shared `main` worktree. New regressions cover compact/provenance/schema catalog modes, catalog read classification, status-word non-interference, safe zero-tool persistence, provider-internal redaction, and conservative post-tool failure wording.
-Next: Commit and push only the Ring repair plus this spine, publish/deploy the exact SHA, then browser-test. Do not create/switch branches in the shared worktree and do not stage `docs/evidence/herald-ship-2026-07-11/`.
-Risks: A positive account balance does not clear a per-key total limit. If the exact deployed browser turn is still rejected, the safe error UX can pass while model-routed MCP acceptance remains blocked on the existing key control.
+Next: Jordi sets or authorizes the intended total limit for the existing Ring key; rerun one greeting and one held draft without publication. Do not create/switch branches in the shared worktree and do not stage `docs/evidence/herald-ship-2026-07-11/`.
+Risks: The exact deployed browser turn is still rejected by the per-key total limit. The safe error UX and compact discovery pass, while model-routed MCP acceptance remains blocked on that human-owned control.
 Assignment identity: `/root`
-Branch / latest commit: shared `main` worktree / base `f1ed86c`; repair commit pending
-Last verified: 2026-07-12 02:16 CEST
+Branch / latest commit: shared `main` worktree / `bf6b5e610bf28717129121daede3d2aea6234b35`
+Last verified: 2026-07-12 02:25 CEST
+Links: `docs/evidence/ring-calli-safe-contract-2026-07-11/TEST-PACKAGE.md`, `https://ring.zenod.dev/api/health`, image workflow `29173473978`
 
 ## Open Questions
 
 - T22 read isolation is resolved by the temporary beta-tenant proof. What disposable second tenant should be used for T23's cross-tenant standing-action mutation attempt? Owner: `/root`; human gate: Jordi if a new tenant/credential must be created.
 - Which disposable generic MCP fixture should cover live same-leaf collision, timeout, revoked credential, hostile result, and non-Callisthenes guarded mutation without adding product-specific configuration? Owner: `/root`.
-- When will the existing AlfaBlok OpenRouter key total limit be replenished or raised so the one remaining replay prompt can run? Owner: Jordi. The fix lap must not replace or expand that budget implicitly.
+- What total limit should the existing AlfaBlok Ring OpenRouter key have? Owner: Jordi. Account credit is present, but the provider still reports the key-specific `total limit` as exhausted; the fix lap must not replace or expand that budget implicitly.
