@@ -757,6 +757,10 @@ export class WhatsAppGateway {
         this.notifyStatusChange();
         if (wasReconnecting) this.logHealthEvent("reconnect_succeeded");
         void this.refreshAllowedSenderAliases();
+        void this.recoverInterruptedMedia(socket).catch((error: unknown) => {
+          this.lastError = `WhatsApp media recovery failed: ${error instanceof Error ? error.message : String(error)}`;
+          console.error("[whatsapp] media recovery failed:", error);
+        });
       }
 
       if (update.connection === "close") {
@@ -782,6 +786,24 @@ export class WhatsAppGateway {
         console.error("[whatsapp] message handler failed:", err);
       });
     });
+  }
+
+  private async recoverInterruptedMedia(socket: SocketLike): Promise<void> {
+    for (;;) {
+      const claim = this.options.store.claimInterruptedMediaRecovery();
+      if (!claim) return;
+      const recipient = claim.contactId || claim.chatId;
+      try {
+        const sent = await socket.sendMessage(recipient, { text: claim.replyText });
+        const sentMessageId = sent?.key?.id?.trim() ?? "";
+        if (!sentMessageId) throw new Error("WhatsApp provider returned no recovery delivery receipt");
+        this.options.store.completeInterruptedMediaRecovery(claim, { sentMessageId, raw: sent });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.options.store.completeInterruptedMediaRecovery(claim, { error: message });
+        this.recoverFromSendError(error);
+      }
+    }
   }
 
   async handleMessages(messages: WAMessage[], type: string): Promise<void> {

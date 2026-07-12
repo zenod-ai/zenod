@@ -89,6 +89,7 @@ export class PhylaxPortedRuntime {
           downstreamDestination: forwarded.downstreamDestination,
           downstreamCorrelationId: forwarded.downstreamCorrelationId,
           downstreamReceipt: forwarded.downstreamReceipt,
+          replyText: forwarded.replyText,
         });
         return { replyText: forwarded.replyText };
       },
