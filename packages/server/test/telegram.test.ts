@@ -159,6 +159,40 @@ describe("TelegramGateway", () => {
     }
   });
 
+  it("allows only one gateway object to poll a bot token at a time", async () => {
+    const firstDir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
+    const secondDir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
+    const firstRuntime = new Runtime(firstDir);
+    const secondRuntime = new Runtime(secondDir);
+    const { fetchImpl, calls } = fakeBotApi(null);
+    firstRuntime.settings.setTelegramSettings({ botToken: "SHARED:TOKEN", allowedUsers: ["555"], enabled: true });
+    secondRuntime.settings.setTelegramSettings({ botToken: "SHARED:TOKEN", allowedUsers: ["555"], enabled: true });
+    const owner = new TelegramGateway({ settings: firstRuntime.settings, getEngine: async () => fakeEngine([]), fetchImpl });
+    const contender = new TelegramGateway({ settings: secondRuntime.settings, getEngine: async () => fakeEngine([]), fetchImpl });
+    try {
+      await owner.start();
+      await contender.start();
+      expect(owner.status().state).toBe("connected");
+      expect(contender.status()).toMatchObject({
+        state: "error",
+        lastError: "Telegram polling is already owned by another gateway in this process.",
+      });
+      expect(calls.filter((call) => call.method === "getMe")).toHaveLength(1);
+
+      await owner.close();
+      await contender.start();
+      expect(contender.status().state).toBe("connected");
+      expect(calls.filter((call) => call.method === "getMe")).toHaveLength(2);
+    } finally {
+      await owner.close();
+      await contender.close();
+      firstRuntime.close();
+      secondRuntime.close();
+      await rm(firstDir, { recursive: true, force: true });
+      await rm(secondDir, { recursive: true, force: true });
+    }
+  });
+
   it("delivers to a tenant-bound handle using the sole numeric owner allowlist entry", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
     const runtime = new Runtime(dir);

@@ -79,6 +79,7 @@ interface ApiResponse<T> {
 
 const POLL_TIMEOUT_SECONDS = 50;
 const PLAIN_MESSAGE_LIMIT = 4096;
+const activePollTokens = new Set<string>();
 
 /**
  * Telegram channel — a third feeder into the shared engine path (alongside the
@@ -102,6 +103,7 @@ export class TelegramGateway {
   private starting: Promise<void> | null = null;
   private abort: AbortController | null = null;
   private loop: Promise<void> | null = null;
+  private pollToken: string | null = null;
 
   /**
    * Owner chat IDs we've actually seen DM the bot. Telegram can only push to a
@@ -200,6 +202,13 @@ export class TelegramGateway {
       this.lastError = "No Telegram bot token configured (set TELEGRAM_BOT_TOKEN).";
       return;
     }
+    if (activePollTokens.has(token)) {
+      this.state = "error";
+      this.lastError = "Telegram polling is already owned by another gateway in this process.";
+      return;
+    }
+    activePollTokens.add(token);
+    this.pollToken = token;
     this.lastError = null;
     // Validate the token and learn the bot's @username before polling.
     const me = await this.callApi<TelegramUser>("getMe", {}).catch((err: unknown) => {
@@ -207,7 +216,10 @@ export class TelegramGateway {
       this.lastError = `Telegram getMe failed: ${err instanceof Error ? err.message : String(err)}`;
       return null;
     });
-    if (!me) return;
+    if (!me) {
+      this.releasePollOwnership();
+      return;
+    }
     this.botUsername = me.username ?? null;
     this.state = "connected";
     // Skip any backlog accumulated while we were down: advance the offset past
@@ -232,6 +244,13 @@ export class TelegramGateway {
     this.loop = null;
     this.state = "disconnected";
     await loop?.catch(() => {});
+    this.releasePollOwnership();
+  }
+
+  private releasePollOwnership(): void {
+    if (!this.pollToken) return;
+    activePollTokens.delete(this.pollToken);
+    this.pollToken = null;
   }
 
   /** Fetch the latest pending update (if any) and set the offset just past it. */
