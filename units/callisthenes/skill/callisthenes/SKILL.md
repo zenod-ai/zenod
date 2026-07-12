@@ -30,17 +30,17 @@ Do not request, display, store, or infer MCP bearer tokens, X credentials, appro
 Follow this sequence exactly:
 
 1. Prepare one final post for one X account. Preserve the user's voice; do not add hype, emojis, hashtags, links, or claims they did not request.
-2. Call `createPosts` with the final `text` and **without** an approval argument. Callisthenes should refuse it with `[draft_not_approved]`; that refusal is the guarded draft step and must not be described as a failure to save the draft.
+2. Call `createPosts` with the final `text` and **without** an approval argument. Callisthenes should refuse it with `[draft_not_approved]` and return a `[held_action]` marker containing an opaque `action_id`; that refusal is the guarded draft step and must not be described as a failure to save the draft.
 3. Show the user the exact final text and target account. Ask for explicit confirmation to publish that exact content.
 4. If the user edits any character or changes the target, repeat the draft step and obtain confirmation again.
-5. After confirmation, call `approve_send` **once** with `channel: "x"` and the byte-for-byte final `text` shown to the user. Do not call approved `createPosts` directly.
+5. After confirmation, call `approve_send` **once** with `channel: "x"`, the returned `action_id`, and the byte-for-byte final `text` shown to the user. Older clients may omit `action_id` only when exactly one matching held action exists. Do not call approved `createPosts` directly.
 6. Relay the returned result faithfully. Success requires a canonical `https://x.com/i/web/status/<id>` permalink. The permalink is the receipt.
 
 A bare “approve”, “yes”, “post now”, “send it”, or “go” is sufficient only when this conversation already contains one unambiguous standing draft with its exact text and target. Otherwise ask one short clarifying question.
 
 ## Exactly-once boundary
 
-`approve_send` deduplicates an identical approved draft for a tenant, but the host must still issue one approval call only.
+`approve_send` replays the stored receipt for the same consumed action, but the host must still issue one approval call only.
 
 - Never retry automatically after a timeout, disconnect, malformed response, or unknown outcome.
 - Never call a second send tool as a fallback.
@@ -69,4 +69,3 @@ Never delete merely because a publish failed, a user disliked a draft, or a rece
 - Any success response without a canonical permalink for publish is unverified and must not be presented as posted.
 
 Read [the workflow contract](references/WORKFLOW.md) when you need exact call/result shapes or edge-case guidance. Read [the examples](references/EXAMPLES.md) when composing a host interaction or testing this skill. These references contain no executable instructions or credentials.
-

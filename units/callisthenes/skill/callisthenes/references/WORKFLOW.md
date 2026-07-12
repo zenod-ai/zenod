@@ -20,14 +20,16 @@ The host may expose names such as `calli_createPosts`. Resolve the attached peer
 ```text
 proposed text
   -> createPosts({ text })
-  -> [draft_not_approved]
+  -> [draft_not_approved] + opaque action_id
   -> show exact text + target
   -> explicit confirmation of that exact content
-  -> approve_send({ channel: "x", text: exactText }) ONCE
+  -> approve_send({ channel: "x", action_id, text: exactText }) ONCE
   -> https://x.com/i/web/status/<id>
 ```
 
 Only the final canonical permalink proves publication. An MCP HTTP success, a tool-start event, model narration, or an X post id embedded in an error is not sufficient.
+
+For backward compatibility, a client may omit `action_id` only when exactly one unexpired pending action has the exact text. If the action is missing, expired, consumed, belongs to another tenant, or the text differs by even one character, nothing is sent.
 
 If the text changes after confirmation, the confirmation is stale. Start again at `createPosts` with the new exact text.
 
@@ -49,4 +51,3 @@ Deletion does not share the publish confirmation. Obtain a new confirmation for 
 ## Throttle
 
 The unit enforces a tenant-scoped rolling mutation limit. The default is conservative but deployment configuration is authoritative. A throttle rejection means the mutation did not run. Waiting is the safe response; using another peer or repeatedly calling the tool is not.
-
