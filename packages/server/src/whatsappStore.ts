@@ -269,6 +269,13 @@ export class WhatsAppStore {
         raw_json TEXT NOT NULL DEFAULT '{}'
       );
     `);
+
+    // A process exit cannot leave an active worker behind. Make that evidence
+    // explicit on boot instead of showing "processing" forever after an OOM or
+    // deploy restart.
+    this.db
+      .prepare("UPDATE whatsapp_messages SET processing_status = 'interrupted' WHERE processing_status = 'processing'")
+      .run();
   }
 
   recordInbound(event: WhatsAppInboundEvent): RecordInboundResult {

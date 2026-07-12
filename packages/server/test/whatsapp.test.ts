@@ -231,6 +231,25 @@ describe("WhatsAppStore", () => {
     expect(store.countOutboundAudits("denied")).toBe(1);
     store.close();
   });
+
+  it("marks in-flight messages interrupted when the process restarts", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-restart-"));
+    const path = join(dir, "whatsapp.sqlite");
+    try {
+      const before = new WhatsAppStore(path);
+      const event = eventFromBaileysMessage(textMessage())!;
+      before.recordInbound(event);
+      before.markMessageStatus(event.messageId, "processing");
+      before.close();
+
+      const after = new WhatsAppStore(path);
+      expect(after.diagnostics().processingCounts.processing).toBeUndefined();
+      expect(after.diagnostics().processingCounts.interrupted).toBe(1);
+      after.close();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("WhatsApp API", () => {
