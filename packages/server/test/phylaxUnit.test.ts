@@ -58,12 +58,18 @@ describe("Phylax customer unit mount", () => {
     const artifactDir = join(dataDir, "whatsapp", "artifacts", "alpha");
     await mkdir(artifactDir, { recursive: true });
     await writeFile(join(artifactDir, "voice.ogg"), "alpha-audio");
+    await writeFile(join(artifactDir, "screenshot.png"), "alpha-image");
     try {
       const own = await unit.app.request("/mcp/alpha-token/artifacts/alpha/voice.ogg");
       expect(own.status).toBe(200);
       expect(own.headers.get("content-type")).toContain("audio/ogg");
       expect(await own.text()).toBe("alpha-audio");
+      const image = await unit.app.request("/mcp/alpha-token/artifacts/alpha/screenshot.png");
+      expect(image.status).toBe(200);
+      expect(image.headers.get("content-type")).toContain("image/png");
+      expect(await image.text()).toBe("alpha-image");
       expect((await unit.app.request("/mcp/beta-token/artifacts/alpha/voice.ogg")).status).toBe(404);
+      expect((await unit.app.request("/mcp/beta-token/artifacts/alpha/screenshot.png")).status).toBe(404);
       expect((await unit.app.request("/mcp/alpha-token/artifacts/alpha/%2e%2e")).status).toBe(404);
     } finally {
       unit.close();

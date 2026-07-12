@@ -62,6 +62,8 @@ export interface PhylaxDownstreamCall {
     sender: string;
     text_transcript?: string;
     artifact_ref?: string;
+    artifact_mime_type?: string;
+    artifact_file_name?: string;
     transcription_usage?: Record<string, unknown>;
     transcription_failed?: { code: string; message: string };
     transcription_source?: string;
@@ -124,6 +126,11 @@ function safeArtifactName(value: string | null | undefined): string {
   return safe || "media.bin";
 }
 
+function isAudioMedia(media: NonNullable<PhylaxChannelInbound["media"]>): boolean {
+  if (media.mimeType?.toLowerCase().startsWith("audio/")) return true;
+  return /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav|webm)$/i.test(media.fileName?.trim() ?? "");
+}
+
 function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string): string {
   if (!handoff.artifact_ref && !handoff.transcription_failed) return text;
   return [
@@ -160,7 +167,7 @@ export class PhylaxChannelsOrgan {
 
     const artifactRef = input.media ? this.rememberArtifact(route.tenantId, input.media) : undefined;
     let transcription: PhylaxTranscriptionReceipt = input.transcription ?? {};
-    if (!input.transcription && input.media?.bytes && this.options.transcriber) {
+    if (!input.transcription && input.media?.bytes && isAudioMedia(input.media) && this.options.transcriber) {
       try {
         transcription = await this.options.transcriber.transcribe({
           tenantId: route.tenantId,
@@ -185,6 +192,8 @@ export class PhylaxChannelsOrgan {
       sender,
       ...(text ? { text_transcript: text } : {}),
       ...(artifactRef ? { artifact_ref: artifactRef } : {}),
+      ...(artifactRef && input.media?.mimeType ? { artifact_mime_type: input.media.mimeType } : {}),
+      ...(artifactRef && input.media?.fileName ? { artifact_file_name: input.media.fileName } : {}),
       ...(transcription.transcription_usage ? { transcription_usage: transcription.transcription_usage } : {}),
       ...(transcription.transcription_failed ? { transcription_failed: transcription.transcription_failed } : {}),
       ...(transcription.transcription_source ? { transcription_source: transcription.transcription_source } : {}),
