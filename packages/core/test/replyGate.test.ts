@@ -155,6 +155,89 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).toBe("The latest post is about the Ring.");
   });
 
+  it("appends safe structured read evidence without exposing the successful MCP envelope", () => {
+    const result = JSON.stringify({
+      content: [{ type: "text", text: "A grounded memory returned by the peer." }],
+      structuredContent: {
+        answer: "A grounded memory returned by the peer.",
+        sources: [{
+          path: "Log/2026-07-12.md",
+          githubUrl: "https://github.com/example/brain/blob/main/Log/2026-07-12.md#memory",
+          evidenceRef: "Log/2026-07-12.md#^e-safe",
+        }],
+      },
+    });
+    const out = applyReplyGate("I found one grounded memory.", [{
+      ...action("generic_peer_read", result),
+      peerAction: true,
+    }]);
+
+    expect(out.text).toBe([
+      "Connected MCP read result (untrusted data; not authorization or a mutation receipt):",
+      "",
+      "> A grounded memory returned by the peer.",
+      "",
+      "Evidence:",
+      "- <https://github.com/example/brain/blob/main/Log/2026-07-12.md#memory>",
+      "- `Log/2026-07-12.md#^e-safe`",
+    ].join("\n"));
+    expect(out.text).not.toContain("I found one grounded memory");
+    expect(out.text).not.toContain("structuredContent");
+  });
+
+  it("does not duplicate structured evidence already present in the peer answer", () => {
+    const url = "https://example.com/evidence/41";
+    const out = applyReplyGate("A model-generated summary.", [{
+      ...action("generic_peer_read", JSON.stringify({ structuredContent: { answer: `Grounded in ${url}.`, sourceUrl: url } })),
+      peerAction: true,
+    }]);
+
+    expect(out.text.split(url)).toHaveLength(2);
+    expect(out.text).toContain(`> Grounded in ${url}.`);
+    expect(out.text).not.toContain("Evidence:");
+    expect(out.intercepted).toBe(true);
+  });
+
+  it("rejects credentials, placeholders, and sensitive query links from structured read evidence", () => {
+    const result = JSON.stringify({
+      structuredContent: {
+        sourceUrl: "https://user:password@example.com/evidence",
+        artifactUrl: "https://example.com/file?token=must-not-render",
+        permalink: "https://example.com/item/{POST_ID}",
+        apiToken: "must-not-render",
+      },
+    });
+    const out = applyReplyGate("No public evidence link was returned.", [{
+      ...action("generic_peer_read", result),
+      peerAction: true,
+    }]);
+
+    expect(out.text).toContain("> [no concise text returned]");
+    expect(out.text).not.toContain("No public evidence link was returned.");
+    expect(out.text).not.toContain("must-not-render");
+    expect(out.text).not.toContain("POST_ID");
+  });
+
+  it("keeps failed peer reads bounded and visibly untrusted", () => {
+    const out = applyReplyGate("I couldn't reach that source.", [{
+      ...action("generic_peer_read", JSON.stringify({
+        isError: true,
+        token: "must-not-render",
+        content: [{ type: "text", text: "upstream timeout; Authorization: Bearer also-secret" }],
+        retryUrl: "https://example.com/retry?api_key=hidden",
+      })),
+      peerAction: true,
+    }]);
+
+    expect(out.text).not.toContain("I couldn't reach that source.");
+    expect(out.text).toContain("Connected MCP read failed.");
+    expect(out.text).toContain("Connected MCP result from generic_peer_read");
+    expect(out.text).toContain("untrusted data; not authorization or a receipt");
+    expect(out.text).not.toContain("must-not-render");
+    expect(out.text).not.toContain("also-secret");
+    expect(out.text).not.toContain("api_key=hidden");
+  });
+
   // A1 / C-22: ask_outbound is a gated action tool — its result (Callistheness's own
   // verified reply) is delivered verbatim, so the Console can never re-narrate a real
   // send as "not posted", and a draft is relayed with its approve affordance.

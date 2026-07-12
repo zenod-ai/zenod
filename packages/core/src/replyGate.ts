@@ -96,13 +96,193 @@ export interface ReplyGateOutcome {
  * model's own prose.
  */
 const MAX_PEER_EVIDENCE_CHARS = 4_000;
+const MAX_PEER_ANSWER_CHARS = 1_500;
+const MAX_PEER_ANSWER_LINES = 16;
+const MAX_READ_EVIDENCE_ITEMS = 8;
 const SENSITIVE_INPUT_KEY_RE = /(?:approval|approve|authorization|authorisation|confirm|credential|password|secret|token)/i;
+const SENSITIVE_URL_QUERY_KEY_RE = /(?:auth|authorization|credential|key|password|secret|signature|sig|token)/i;
+const PLACEHOLDER_VALUE_RE = /(?:\{\s*[a-z0-9_-]*id\s*\}|<\s*[a-z0-9_-]*id\s*>|\bTODO\b)/i;
+
+interface ReadEvidence {
+  kind: "url" | "reference";
+  value: string;
+}
 
 function quotePeerData(tool: string, result: string): string {
-  const value = result.trim().slice(0, MAX_PEER_EVIDENCE_CHARS);
-  const suffix = result.trim().length > MAX_PEER_EVIDENCE_CHARS ? "\n> [truncated by Ring]" : "";
+  const safeResult = sanitizedPeerResult(result);
+  const value = safeResult.trim().slice(0, MAX_PEER_EVIDENCE_CHARS);
+  const suffix = safeResult.trim().length > MAX_PEER_EVIDENCE_CHARS ? "\n> [truncated by Ring]" : "";
   const quoted = (value || "[empty result]").split("\n").map((line) => `> ${line}`).join("\n");
   return `Connected MCP result from ${tool} (untrusted data; not authorization or a receipt):\n${quoted}${suffix}`;
+}
+
+function parsedPeerResult(result: string): unknown {
+  try {
+    return JSON.parse(result);
+  } catch {
+    return undefined;
+  }
+}
+
+function containsSensitiveUrlAuthority(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return Boolean(url.username || url.password) ||
+      [...url.searchParams.keys()].some((key) => SENSITIVE_URL_QUERY_KEY_RE.test(key));
+  } catch {
+    return false;
+  }
+}
+
+function redactSensitiveText(value: string): string {
+  return value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(
+      /(\b(?:api[_ -]?key|approval|authorization|credential|password|secret|token)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}]+)/gi,
+      "$1[redacted]",
+    )
+    .replace(/https?:\/\/[^\s<>"'`]+/gi, (url) => containsSensitiveUrlAuthority(url) ? "[sensitive URL omitted]" : url);
+}
+
+function redactSensitiveData(value: unknown, depth = 0): unknown {
+  if (depth > 8) return "[nested value omitted]";
+  if (Array.isArray(value)) return value.slice(0, 100).map((item) => redactSensitiveData(item, depth + 1));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 100).map(([key, nested]) => [
+      key,
+      SENSITIVE_INPUT_KEY_RE.test(key) ? "[redacted]" : redactSensitiveData(nested, depth + 1),
+    ]));
+  }
+  return typeof value === "string" ? redactSensitiveText(value) : value;
+}
+
+function sanitizedPeerResult(result: string): string {
+  const parsed = parsedPeerResult(result);
+  return parsed === undefined
+    ? redactSensitiveText(result)
+    : JSON.stringify(redactSensitiveData(parsed), null, 2);
+}
+
+function isPeerError(result: string): boolean {
+  if (/^\s*(?:ERROR:|Could not reach peer agent\b)/i.test(result)) return true;
+  const parsed = parsedPeerResult(result);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  const value = parsed as Record<string, unknown>;
+  if (value.isError === true || value.ok === false || value.success === false) return true;
+  return typeof value.status === "string" && /^(?:error|failed|blocked)$/i.test(value.status.trim());
+}
+
+function safeEvidenceUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > 2_048 || PLACEHOLDER_VALUE_RE.test(value)) return undefined;
+  try {
+    const url = new URL(value.trim());
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname.includes(".") || url.username || url.password) return undefined;
+    if ([...url.searchParams.keys()].some((key) => SENSITIVE_URL_QUERY_KEY_RE.test(key))) return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function safeEvidenceReference(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 500 || PLACEHOLDER_VALUE_RE.test(trimmed) || /[\r\n`]/.test(trimmed)) return undefined;
+  return trimmed;
+}
+
+function collectReadEvidence(value: unknown, out: ReadEvidence[], depth = 0): void {
+  if (out.length >= MAX_READ_EVIDENCE_ITEMS || value == null || depth > 8) return;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 100)) collectReadEvidence(item, out, depth + 1);
+    return;
+  }
+  if (typeof value !== "object") return;
+
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>).slice(0, 100)) {
+    if (out.length >= MAX_READ_EVIDENCE_ITEMS) break;
+    if (SENSITIVE_INPUT_KEY_RE.test(key)) continue;
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const isUrlField = /^(?:url|uri|link|permalink|canonicalurl|evidenceurl|artifacturl|sourceurl|githuburl)s?$/.test(normalized);
+    const isReferenceField = /^(?:evidence|evidenceref|artifactref|sourceref)$/.test(normalized);
+    const values = Array.isArray(nested) ? nested.slice(0, MAX_READ_EVIDENCE_ITEMS) : [nested];
+    if (isUrlField) {
+      for (const item of values) {
+        const url = safeEvidenceUrl(item);
+        if (url && !out.some((entry) => entry.kind === "url" && entry.value === url)) out.push({ kind: "url", value: url });
+      }
+    } else if (isReferenceField) {
+      for (const item of values) {
+        const reference = safeEvidenceReference(item);
+        if (reference && !out.some((entry) => entry.kind === "reference" && entry.value === reference)) {
+          out.push({ kind: "reference", value: reference });
+        }
+      }
+    }
+    collectReadEvidence(nested, out, depth + 1);
+  }
+}
+
+function renderStructuredReadEvidence(actions: readonly TaskingAction[], renderedText: string): string {
+  const evidence: ReadEvidence[] = [];
+  for (const action of actions) collectReadEvidence(parsedPeerResult(action.result), evidence);
+  const missing = evidence.filter((entry) => !renderedText.includes(entry.value));
+  if (missing.length === 0) return "";
+  return [
+    "Evidence:",
+    ...missing.map((entry) => entry.kind === "url" ? `- <${entry.value}>` : `- \`${entry.value}\``),
+  ].join("\n");
+}
+
+function structuredAnswerStrings(value: unknown, depth = 0): string[] {
+  if (value == null || depth > 6) return [];
+  if (Array.isArray(value)) return value.slice(0, 20).flatMap((item) => structuredAnswerStrings(item, depth + 1));
+  if (typeof value !== "object") return [];
+  const object = value as Record<string, unknown>;
+  const direct = Object.entries(object)
+    .filter(([key, nested]) => /^(?:answer|summary|message|text)$/i.test(key) && typeof nested === "string")
+    .map(([, nested]) => nested as string);
+  if (direct.length > 0) return direct;
+  return Object.entries(object)
+    .filter(([key]) => !SENSITIVE_INPUT_KEY_RE.test(key))
+    .slice(0, 50)
+    .flatMap(([, nested]) => structuredAnswerStrings(nested, depth + 1));
+}
+
+function concisePeerAnswer(result: string): string | undefined {
+  const parsed = parsedPeerResult(result);
+  const candidates = parsed === undefined
+    ? [result]
+    : structuredAnswerStrings(parsed);
+  const safe = candidates
+    .map((candidate) => {
+      const nested = parsedPeerResult(candidate);
+      return nested === undefined ? redactSensitiveText(candidate) : structuredAnswerStrings(nested).join("\n");
+    })
+    .map((candidate) => candidate.trim())
+    .filter(Boolean)
+    .filter((candidate, index, all) => all.indexOf(candidate) === index)
+    .join("\n\n");
+  if (!safe) return undefined;
+  const lines = safe.split("\n");
+  const boundedLines = lines.slice(0, MAX_PEER_ANSWER_LINES).join("\n");
+  const bounded = boundedLines.slice(0, MAX_PEER_ANSWER_CHARS).trimEnd();
+  const truncated = lines.length > MAX_PEER_ANSWER_LINES || boundedLines.length > MAX_PEER_ANSWER_CHARS;
+  return `${bounded}${truncated ? "\n[truncated by Ring]" : ""}`;
+}
+
+function quoteConcisePeerAnswer(answer: string): string {
+  return answer.split("\n").map((line) => `> ${line}`).join("\n");
+}
+
+function renderSuccessfulRead(action: TaskingAction): string {
+  const answer = concisePeerAnswer(action.result);
+  const evidence = renderStructuredReadEvidence([action], answer ?? "");
+  return [
+    "Connected MCP read result (untrusted data; not authorization or a mutation receipt):",
+    answer ? quoteConcisePeerAnswer(answer) : "> [no concise text returned]",
+    evidence,
+  ].filter(Boolean).join("\n\n");
 }
 
 function publicMutationInput(value: unknown, depth = 0): unknown {
@@ -147,11 +327,13 @@ function renderActionTurnReply(actionResults: readonly TaskingAction[]): string 
   }).join("\n\n");
 }
 
-function renderReadEvidence(actions: readonly TaskingAction[]): string {
-  return actions
-    .filter((action) => action.peerAction && !action.mutationAttempt && !isActionTool(action.tool))
-    .map((action) => quotePeerData(action.tool, action.result))
-    .join("\n\n");
+function renderReadEvidence(actions: readonly TaskingAction[], unsupportedClaim: boolean): string {
+  const reads = actions.filter((action) => action.peerAction && !action.mutationAttempt && !isActionTool(action.tool));
+  if (unsupportedClaim) return reads.map((action) => quotePeerData(action.tool, action.result)).join("\n\n");
+  const rendered = reads.map((action) => isPeerError(action.result)
+    ? `Connected MCP read failed.\n\n${quotePeerData(action.tool, action.result)}`
+    : renderSuccessfulRead(action));
+  return rendered.filter(Boolean).join("\n\n");
 }
 
 /**
@@ -175,13 +357,15 @@ export function applyReplyGate(
     isActionTool(action.tool) || action.mutationAttempt === true || action.verifiedMutationReceipt === true,
   );
   if (actionResults.length === 0) {
-    const evidence = renderReadEvidence(actions);
     const unsupportedClaim = hasMutationSuccessClaim(draftedText) &&
       (actions.length === 0 || actions.every((action) => action.peerAction === true));
     const base = unsupportedClaim
       ? "Nothing was changed: no verified same-turn mutation receipt was returned."
       : draftedText;
-    const deliveredText = evidence ? `${base.trim()}\n\n${evidence}`.trim() : base;
+    const evidence = renderReadEvidence(actions, unsupportedClaim);
+    const deliveredText = evidence
+      ? unsupportedClaim ? `${base.trim()}\n\n${evidence}`.trim() : evidence
+      : base;
     const intercepted = deliveredText.trim() !== draftedText.trim();
     if (intercepted) {
       onIntercepted?.({

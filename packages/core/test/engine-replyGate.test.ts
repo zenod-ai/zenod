@@ -118,10 +118,10 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     expect(reply.text).toContain(`- commit: ${"c".repeat(40)}`);
   });
 
-  it("keeps a read-only wallet peer result available for model-drafted prose", async () => {
+  it("renders a concise peer-grounded read instead of model-drafted prose", async () => {
     const llm = new ScriptedLlm(
-      { tool: "generic_peer_read", input: { query: "ring" }, result: '{"matches":["ring"]}' },
-      "I found one memory about the Ring.",
+      { tool: "generic_peer_read", input: { query: "ring" }, result: '{"answer":"One grounded memory about the Ring."}' },
+      "I invented a polished summary.",
     );
     const engine = createEngine({
       llm: llm as unknown as BrainLlm,
@@ -130,16 +130,16 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
         generic_peer_read: {
           description: "Search memory",
           connectedMcp: true,
-          async run() { return '{"matches":["ring"]}'; },
+          async run() { return '{"answer":"One grounded memory about the Ring."}'; },
         },
       },
     });
 
     const reply = await engine.chat("what do you remember?", "web");
 
-    expect(reply.text).toContain("I found one memory about the Ring.");
-    expect(reply.text).toContain("Connected MCP result from generic_peer_read");
-    expect(reply.text).toContain('> {"matches":["ring"]}');
+    expect(reply.text).toContain("> One grounded memory about the Ring.");
+    expect(reply.text).not.toContain("I invented a polished summary.");
+    expect(reply.text).not.toContain("structuredContent");
   });
 
   it("replaces zero-tool fabricated success at the persisted chat boundary", async () => {
