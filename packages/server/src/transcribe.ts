@@ -1,22 +1,11 @@
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
-
-import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
 
 /**
  * Audio transcription. Three engines:
@@ -101,9 +90,7 @@ const FILLER_WORDS = new Set([
 function isDegenerateTranscript(transcript: string): boolean {
   const normalized = transcript.toLowerCase().replace(/\s+/g, " ").trim();
   if (!normalized) return true;
-  const stripped = normalized
-    .replace(/^[\s.,!?¡¿"'’\-…]+|[\s.,!?¡¿"'’\-…]+$/g, "")
-    .trim();
+  const stripped = normalized.replace(/^[\s.,!?¡¿"'’\-…]+|[\s.,!?¡¿"'’\-…]+$/g, "").trim();
   if (!stripped) return true;
   if (HALLUCINATION_PHRASES.has(stripped)) return true;
   // Nothing but repeated filler ("you you you", "thank you thank you").
@@ -122,42 +109,19 @@ export interface WhisperModelInfo {
 
 export const WHISPER_MODELS: WhisperModelInfo[] = [
   { id: "base", label: "Base", note: "Fastest, lowest accuracy.", sizeMb: 142 },
-  {
-    id: "small",
-    label: "Small",
-    note: "Fast, solid multilingual — best speed/quality tradeoff.",
-    sizeMb: 466,
-  },
-  {
-    id: "medium",
-    label: "Medium",
-    note: "More accurate, noticeably slower.",
-    sizeMb: 1530,
-  },
-  {
-    id: "large-v3-turbo",
-    label: "Large v3 Turbo",
-    note: "Top accuracy, fast for its size; heavy on a small server.",
-    sizeMb: 1560,
-  },
-  {
-    id: "large-v3",
-    label: "Large v3",
-    note: "Max accuracy, slowest.",
-    sizeMb: 3100,
-  },
+  { id: "small", label: "Small", note: "Fast, solid multilingual — best speed/quality tradeoff.", sizeMb: 466 },
+  { id: "medium", label: "Medium", note: "More accurate, noticeably slower.", sizeMb: 1530 },
+  { id: "large-v3-turbo", label: "Large v3 Turbo", note: "Top accuracy, fast for its size; heavy on a small server.", sizeMb: 1560 },
+  { id: "large-v3", label: "Large v3", note: "Max accuracy, slowest.", sizeMb: 3100 },
 ];
 
-export const DEFAULT_WHISPER_MODEL =
-  process.env.ZENOD_WHISPER_MODEL ?? "large-v3-turbo";
+export const DEFAULT_WHISPER_MODEL = process.env.ZENOD_WHISPER_MODEL ?? "large-v3-turbo";
 
 export function isValidWhisperModel(model: string): boolean {
   return WHISPER_MODELS.some((m) => m.id === model);
 }
 
-export function resolveWhisperModel(
-  model: string | null | undefined = DEFAULT_WHISPER_MODEL,
-): string {
+export function resolveWhisperModel(model: string | null | undefined = DEFAULT_WHISPER_MODEL): string {
   return model && isValidWhisperModel(model) ? model : "large-v3-turbo";
 }
 
@@ -165,8 +129,7 @@ const WHISPER_BINARY = process.env.ZENOD_WHISPER_BINARY ?? "whisper-cli";
 const MODEL_DIR = process.env.ZENOD_WHISPER_MODEL_DIR ?? "/data/models";
 const LANGUAGE = process.env.ZENOD_WHISPER_LANGUAGE ?? "auto";
 const THREADS = process.env.ZENOD_WHISPER_THREADS ?? "4";
-const GROQ_STT_MODEL =
-  process.env.ZENOD_GROQ_STT_MODEL ?? "whisper-large-v3-turbo";
+const GROQ_STT_MODEL = process.env.ZENOD_GROQ_STT_MODEL ?? "whisper-large-v3-turbo";
 const GROQ_STT_URL = process.env.ZENOD_GROQ_BASE_URL
   ? `${process.env.ZENOD_GROQ_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
   : "https://api.groq.com/openai/v1/audio/transcriptions";
@@ -193,8 +156,7 @@ const GROQ_SEGMENT_SECONDS = "500";
 const GROQ_MAX_RETRY_ATTEMPTS = 3;
 const GROQ_MAX_RETRY_AFTER_SECONDS = 180;
 // Canonical ggml model host — same source local_whisper's download script uses.
-const MODEL_BASE_URL =
-  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
+const MODEL_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 const TEST_FAKE_FAIL_PROVIDERS = "ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS";
 
 export function isAudioMimeType(mimeType: string): boolean {
@@ -226,9 +188,7 @@ function stateFor(model: string): ModelState {
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  return stat(path)
-    .then(() => true)
-    .catch(() => false);
+  return stat(path).then(() => true).catch(() => false);
 }
 
 /** Ensure the ggml model is present on the volume, downloading it once. */
@@ -261,9 +221,7 @@ async function ensureModel(model: string): Promise<string> {
  * connect, and when the quality is changed, so the fetch to the /data volume
  * happens during setup rather than surprising the first ingest. Fire-and-forget.
  */
-export async function prepareModel(
-  model = DEFAULT_WHISPER_MODEL,
-): Promise<void> {
+export async function prepareModel(model = DEFAULT_WHISPER_MODEL): Promise<void> {
   // Never auto-download in fake/test mode (vitest sets VITEST).
   if (process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT || process.env.VITEST) return;
   const modelName = resolveWhisperModel(model);
@@ -282,19 +240,11 @@ export interface TranscriptionStatus {
   error: string | null;
 }
 
-export async function transcriptionStatus(
-  model = DEFAULT_WHISPER_MODEL,
-): Promise<TranscriptionStatus> {
+export async function transcriptionStatus(model = DEFAULT_WHISPER_MODEL): Promise<TranscriptionStatus> {
   const modelName = resolveWhisperModel(model);
   const ready = await fileExists(modelPath(modelName));
   const s = stateFor(modelName);
-  return {
-    model: modelName,
-    ready,
-    downloading: s.downloading,
-    progress: s.progress,
-    error: s.error,
-  };
+  return { model: modelName, ready, downloading: s.downloading, progress: s.progress, error: s.error };
 }
 
 async function downloadModel(model: string, dest: string): Promise<void> {
@@ -311,8 +261,7 @@ async function downloadModel(model: string, dest: string): Promise<void> {
   const track = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
       received += chunk.byteLength;
-      if (total > 0)
-        s.progress = Math.min(99, Math.round((received / total) * 100));
+      if (total > 0) s.progress = Math.min(99, Math.round((received / total) * 100));
       controller.enqueue(chunk);
     },
   });
@@ -320,10 +269,7 @@ async function downloadModel(model: string, dest: string): Promise<void> {
   // never leaves a truncated model that whisper would choke on.
   const tmp = `${dest}.part`;
   const tracked = response.body.pipeThrough(track);
-  await pipeline(
-    Readable.fromWeb(tracked as Parameters<typeof Readable.fromWeb>[0]),
-    createWriteStream(tmp),
-  );
+  await pipeline(Readable.fromWeb(tracked as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tmp));
   await rename(tmp, dest);
   console.log(`[whisper] model ${model} ready at ${dest}`);
 }
@@ -337,10 +283,7 @@ function run(
   return new Promise((resolve, reject) => {
     // The signal option makes Node kill the child (SIGTERM) on abort — that's
     // how a Cancel from the UI stops a long whisper run mid-file.
-    const child = spawn(command, args, {
-      stdio: ["ignore", "ignore", "pipe"],
-      ...(signal ? { signal } : {}),
-    });
+    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"], ...(signal ? { signal } : {}) });
     let stderr = "";
     let lineBuf = "";
     child.stderr.on("data", (chunk: Buffer) => {
@@ -362,28 +305,15 @@ function run(
       ),
     );
     child.on("close", (code) =>
-      code === 0
-        ? resolve()
-        : reject(
-            new Error(
-              `${command} failed (exit ${code}): ${stderr.slice(-400)}`,
-            ),
-          ),
+      code === 0 ? resolve() : reject(new Error(`${command} failed (exit ${code}): ${stderr.slice(-400)}`)),
     );
   });
 }
 
-function runCapture(
-  command: string,
-  args: string[],
-  opts: { signal?: AbortSignal } = {},
-): Promise<string> {
+function runCapture(command: string, args: string[], opts: { signal?: AbortSignal } = {}): Promise<string> {
   const { signal } = opts;
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      ...(signal ? { signal } : {}),
-    });
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], ...(signal ? { signal } : {}) });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -400,13 +330,7 @@ function runCapture(
       ),
     );
     child.on("close", (code) =>
-      code === 0
-        ? resolve(stdout)
-        : reject(
-            new Error(
-              `${command} failed (exit ${code}): ${stderr.slice(-400)}`,
-            ),
-          ),
+      code === 0 ? resolve(stdout) : reject(new Error(`${command} failed (exit ${code}): ${stderr.slice(-400)}`)),
     );
   });
 }
@@ -425,9 +349,7 @@ function shouldTryOpenRouterFallback(
   // Long-note provider selection is still respected. For short notes, Groq is
   // the fast first choice, and OpenRouter is the paid cloud fallback before the
   // final local whisper.cpp fallback.
-  return Boolean(
-    openrouterApiKey && (longProvider === "openrouter" || !isLongAudio),
-  );
+  return Boolean(openrouterApiKey && (longProvider === "openrouter" || !isLongAudio));
 }
 
 function fakeFailedProviders(): Set<string> {
@@ -451,10 +373,7 @@ class GroqTranscriptionError extends Error {
   }
 }
 
-function parseRetryAfterSeconds(
-  response: Response,
-  body: string,
-): number | null {
+function parseRetryAfterSeconds(response: Response, body: string): number | null {
   const header = response.headers.get("retry-after");
   if (header) {
     const seconds = Number(header);
@@ -462,8 +381,7 @@ function parseRetryAfterSeconds(
   }
   const secondsOnly = /try again in\s+(\d+(?:\.\d+)?)s/i.exec(body);
   if (secondsOnly) return Math.ceil(Number(secondsOnly[1]));
-  const minutesSeconds =
-    /try again in\s+(\d+(?:\.\d+)?)m(?:(\d+(?:\.\d+)?)s)?/i.exec(body);
+  const minutesSeconds = /try again in\s+(\d+(?:\.\d+)?)m(?:(\d+(?:\.\d+)?)s)?/i.exec(body);
   if (minutesSeconds) {
     const minutes = Number(minutesSeconds[1]);
     const seconds = minutesSeconds[2] ? Number(minutesSeconds[2]) : 0;
@@ -472,11 +390,7 @@ function parseRetryAfterSeconds(
   return null;
 }
 
-async function groqTranscribeFile(
-  path: string,
-  apiKey: string,
-  signal?: AbortSignal,
-): Promise<string> {
+async function groqTranscribeFile(path: string, apiKey: string, signal?: AbortSignal): Promise<string> {
   const form = new FormData();
   form.append("file", new Blob([await readFile(path)]), "audio.flac");
   form.append("model", GROQ_STT_MODEL);
@@ -500,17 +414,12 @@ async function groqTranscribeFile(
   return (await response.text()).trim();
 }
 
-async function groqTranscribeFileWithRetry(
-  path: string,
-  apiKey: string,
-  signal?: AbortSignal,
-): Promise<string> {
+async function groqTranscribeFileWithRetry(path: string, apiKey: string, signal?: AbortSignal): Promise<string> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await groqTranscribeFile(path, apiKey, signal);
     } catch (err) {
-      if (!(err instanceof GroqTranscriptionError) || err.status !== 429)
-        throw err;
+      if (!(err instanceof GroqTranscriptionError) || err.status !== 429) throw err;
       const retryAfter = err.retryAfterSeconds;
       if (
         retryAfter === null ||
@@ -519,42 +428,26 @@ async function groqTranscribeFileWithRetry(
       ) {
         throw err;
       }
-      console.warn(
-        `[transcribe] groq rate limited; retrying in ${retryAfter}s`,
-      );
+      console.warn(`[transcribe] groq rate limited; retrying in ${retryAfter}s`);
       await sleep((retryAfter + 1) * 1000, undefined, { signal });
     }
   }
 }
 
-async function probeDurationSeconds(
-  data: Buffer,
-  filename: string,
-  signal?: AbortSignal,
-): Promise<number | null> {
+async function probeDurationSeconds(data: Buffer, filename: string, signal?: AbortSignal): Promise<number | null> {
   const dir = await mkdtemp(join(tmpdir(), "zenod-probe-"));
   const input = join(dir, `in${extname(filename) || ".m4a"}`);
   try {
     await writeFile(input, data);
     const out = await runCapture(
       "ffprobe",
-      [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        input,
-      ],
+      ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input],
       { signal },
     );
     const seconds = Number(out.trim());
     return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
   } catch (err) {
-    console.warn(
-      `[transcribe] could not probe audio duration: ${(err as Error).message}`,
-    );
+    console.warn(`[transcribe] could not probe audio duration: ${(err as Error).message}`);
     return null;
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -574,22 +467,7 @@ async function transcribeWithOpenAI(
     await writeFile(input, data);
     await run(
       "ffmpeg",
-      [
-        "-y",
-        "-i",
-        input,
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        "-map",
-        "0:a:0",
-        "-c:a",
-        "libmp3lame",
-        "-b:a",
-        "32k",
-        mp3,
-      ],
+      ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "32k", mp3],
       { signal },
     );
     const { size } = await stat(mp3);
@@ -601,11 +479,7 @@ async function transcribeWithOpenAI(
       };
     }
     const form = new FormData();
-    form.append(
-      "file",
-      new Blob([await readFile(mp3)], { type: "audio/mpeg" }),
-      "audio.mp3",
-    );
+    form.append("file", new Blob([await readFile(mp3)], { type: "audio/mpeg" }), "audio.mp3");
     form.append("model", OPENAI_STT_MODEL);
     form.append("response_format", "text");
     if (LANGUAGE !== "auto") form.append("language", LANGUAGE);
@@ -618,30 +492,13 @@ async function transcribeWithOpenAI(
     });
     if (!response.ok) {
       const body = (await response.text().catch(() => "")).slice(0, 400);
-      return {
-        success: false,
-        provider: "openai",
-        error: `openai transcription failed (${response.status}): ${body}`,
-      };
+      return { success: false, provider: "openai", error: `openai transcription failed (${response.status}): ${body}` };
     }
     const transcript = (await response.text()).trim();
-    if (!transcript)
-      return {
-        success: false,
-        provider: "openai",
-        error: "transcription returned empty text",
-      };
-    return {
-      success: true,
-      transcript,
-      provider: `openai ${OPENAI_STT_MODEL}`,
-    };
+    if (!transcript) return { success: false, provider: "openai", error: "transcription returned empty text" };
+    return { success: true, transcript, provider: `openai ${OPENAI_STT_MODEL}` };
   } catch (err) {
-    return {
-      success: false,
-      provider: "openai",
-      error: (err as Error).message,
-    };
+    return { success: false, provider: "openai", error: (err as Error).message };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -661,22 +518,7 @@ async function transcribeWithOpenRouter(
     await writeFile(input, data);
     await run(
       "ffmpeg",
-      [
-        "-y",
-        "-i",
-        input,
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        "-map",
-        "0:a:0",
-        "-c:a",
-        "libmp3lame",
-        "-b:a",
-        "32k",
-        mp3,
-      ],
+      ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "32k", mp3],
       { signal },
     );
     const audio = await readFile(mp3);
@@ -692,10 +534,7 @@ async function transcribeWithOpenRouter(
     const timeout = AbortSignal.timeout(300_000);
     const response = await fetch(OPENROUTER_STT_URL, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
@@ -707,23 +546,12 @@ async function transcribeWithOpenRouter(
         error: `openrouter transcription failed (${response.status}): ${text}`,
       };
     }
-    const json = (await response.json().catch(() => null)) as {
-      text?: unknown;
-    } | null;
+    const json = (await response.json().catch(() => null)) as { text?: unknown } | null;
     const transcript = typeof json?.text === "string" ? json.text.trim() : "";
-    if (!transcript)
-      return {
-        success: false,
-        provider: "openrouter",
-        error: "transcription returned empty text",
-      };
+    if (!transcript) return { success: false, provider: "openrouter", error: "transcription returned empty text" };
     return { success: true, transcript, provider: `openrouter ${model}` };
   } catch (err) {
-    return {
-      success: false,
-      provider: "openrouter",
-      error: (err as Error).message,
-    };
+    return { success: false, provider: "openrouter", error: (err as Error).message };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -747,30 +575,12 @@ async function transcribeWithGroq(
   const flac = join(dir, "audio.flac");
   try {
     await writeFile(input, data);
-    await run(
-      "ffmpeg",
-      [
-        "-y",
-        "-i",
-        input,
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        "-map",
-        "0:a:0",
-        "-c:a",
-        "flac",
-        flac,
-      ],
-      {
-        signal,
-        onStderrLine: (line) => {
-          if (/error|invalid|corrupt|parsing/i.test(line))
-            console.warn(`[voice] groq ffmpeg (${filename}): ${line}`);
-        },
+    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "flac", flac], {
+      signal,
+      onStderrLine: (line) => {
+        if (/error|invalid|corrupt|parsing/i.test(line)) console.warn(`[voice] groq ffmpeg (${filename}): ${line}`);
       },
-    );
+    });
     await run(
       "ffmpeg",
       [
@@ -789,18 +599,12 @@ async function transcribeWithGroq(
       ],
       { signal },
     );
-    const parts = (await readdir(dir))
-      .filter((f) => f.startsWith("seg"))
-      .sort()
-      .map((f) => join(dir, f));
-    if (parts.length === 0)
-      throw new Error("segmenting audio produced no chunks");
+    const parts = (await readdir(dir)).filter((f) => f.startsWith("seg")).sort().map((f) => join(dir, f));
+    if (parts.length === 0) throw new Error("segmenting audio produced no chunks");
     for (const part of parts) {
       const { size } = await stat(part);
       if (size > GROQ_MAX_UPLOAD_BYTES) {
-        throw new Error(
-          `groq segment exceeds upload cap (${Math.round(size / 1_000_000)} MB)`,
-        );
+        throw new Error(`groq segment exceeds upload cap (${Math.round(size / 1_000_000)} MB)`);
       }
     }
     const texts: string[] = [];
@@ -850,12 +654,7 @@ export async function transcribeAudio(
 ): Promise<TranscriptionEnvelope> {
   const result = await runTranscription(data, filename, options);
   if (result.success && isDegenerateTranscript(result.transcript ?? "")) {
-    return {
-      success: false,
-      provider: result.provider,
-      error: NO_SPEECH_MESSAGE,
-      noSpeech: true,
-    };
+    return { success: false, provider: result.provider, error: NO_SPEECH_MESSAGE, noSpeech: true };
   }
   return result;
 }
@@ -865,86 +664,46 @@ async function runTranscription(
   filename: string,
   options: TranscribeOptions = {},
 ): Promise<TranscriptionEnvelope> {
-  const modelName = resolveWhisperModel(
-    typeof options === "function" ? DEFAULT_WHISPER_MODEL : options.model,
-  );
-  const onProgress =
-    typeof options === "function" ? options : options.onProgress;
+  const modelName = resolveWhisperModel(typeof options === "function" ? DEFAULT_WHISPER_MODEL : options.model);
+  const onProgress = typeof options === "function" ? options : options.onProgress;
   const signal = typeof options === "function" ? undefined : options.signal;
   // The durable setting (UI-pasted, env-seeded on first boot) wins; the raw
   // env var keeps standalone/test use working without a settings store.
-  const groqApiKey =
-    (typeof options === "function" ? undefined : options.groqApiKey) ??
-    process.env.GROQ_API_KEY;
-  const openaiApiKey =
-    (typeof options === "function" ? undefined : options.openaiApiKey) ??
-    process.env.OPENAI_API_KEY;
+  const groqApiKey = (typeof options === "function" ? undefined : options.groqApiKey) ?? process.env.GROQ_API_KEY;
+  const openaiApiKey = (typeof options === "function" ? undefined : options.openaiApiKey) ?? process.env.OPENAI_API_KEY;
   const openrouterApiKey =
-    (typeof options === "function" ? undefined : options.openrouterApiKey) ??
-    process.env.OPENROUTER_API_KEY;
+    (typeof options === "function" ? undefined : options.openrouterApiKey) ?? process.env.OPENROUTER_API_KEY;
   const openrouterModel =
-    (typeof options === "function" ? undefined : options.openrouterModel) ??
-    DEFAULT_OPENROUTER_STT_MODEL;
-  const explicitLongProvider =
-    typeof options === "function"
-      ? undefined
-      : options.longTranscriptionProvider;
-  const useOpenAiForLongAudio =
-    typeof options === "function"
-      ? false
-      : options.useOpenAiForLongAudio === true;
+    (typeof options === "function" ? undefined : options.openrouterModel) ?? DEFAULT_OPENROUTER_STT_MODEL;
+  const explicitLongProvider = typeof options === "function" ? undefined : options.longTranscriptionProvider;
+  const useOpenAiForLongAudio = typeof options === "function" ? false : options.useOpenAiForLongAudio === true;
   const longProvider =
-    explicitLongProvider ??
-    (openrouterApiKey
-      ? "openrouter"
-      : useOpenAiForLongAudio && openaiApiKey
-        ? "openai"
-        : "local");
-  const fakeTranscript =
-    (process.env.NODE_ENV === "test" || process.env.VITEST) &&
-    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
-  const needsDuration = Boolean(
-    groqApiKey ||
-    (longProvider === "openrouter" && openrouterApiKey) ||
-    (longProvider === "openai" && openaiApiKey),
-  );
+    explicitLongProvider ?? (openrouterApiKey ? "openrouter" : useOpenAiForLongAudio && openaiApiKey ? "openai" : "local");
+  const fakeTranscript = (process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  const needsDuration = Boolean(groqApiKey || (longProvider === "openrouter" && openrouterApiKey) || (longProvider === "openai" && openaiApiKey));
   const durationSeconds =
     typeof options === "function" || fakeTranscript || !needsDuration
       ? typeof options === "function"
         ? undefined
         : options.durationSeconds
-      : (options.durationSeconds ??
-        (await probeDurationSeconds(data, filename, signal)));
-  const isLongAudio =
-    durationSeconds !== null &&
-    durationSeconds !== undefined &&
-    durationSeconds > LONG_AUDIO_SECONDS;
+      : options.durationSeconds ?? (await probeDurationSeconds(data, filename, signal));
+  const isLongAudio = durationSeconds !== null && durationSeconds !== undefined && durationSeconds > LONG_AUDIO_SECONDS;
   if (fakeTranscript) {
     onProgress?.(100);
     const failed = fakeFailedProviders();
-    const canTryOpenRouter = shouldTryOpenRouterFallback(
-      isLongAudio,
-      longProvider,
-      openrouterApiKey,
-    );
+    const canTryOpenRouter = shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey);
     const provider =
-      isLongAudio &&
-      longProvider === "openrouter" &&
-      openrouterApiKey &&
-      !failed.has("openrouter")
+      isLongAudio && longProvider === "openrouter" && openrouterApiKey && !failed.has("openrouter")
         ? `openrouter ${openrouterModel}`
-        : isLongAudio &&
-            longProvider === "openai" &&
-            openaiApiKey &&
-            !failed.has("openai")
-          ? `openai ${OPENAI_STT_MODEL}`
-          : isLongAudio
-            ? `whisper.cpp ${modelName}`
-            : groqApiKey && !failed.has("groq")
-              ? `groq ${GROQ_STT_MODEL}`
-              : canTryOpenRouter && !failed.has("openrouter")
-                ? `openrouter ${openrouterModel}`
-                : `whisper.cpp ${modelName}`;
+        : isLongAudio && longProvider === "openai" && openaiApiKey && !failed.has("openai")
+        ? `openai ${OPENAI_STT_MODEL}`
+        : isLongAudio
+          ? `whisper.cpp ${modelName}`
+          : groqApiKey && !failed.has("groq")
+            ? `groq ${GROQ_STT_MODEL}`
+            : canTryOpenRouter && !failed.has("openrouter")
+              ? `openrouter ${openrouterModel}`
+            : `whisper.cpp ${modelName}`;
     return {
       success: true,
       transcript: process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT,
@@ -954,28 +713,13 @@ async function runTranscription(
 
   if (isLongAudio) {
     if (longProvider === "openrouter" && openrouterApiKey) {
-      const result = await transcribeWithOpenRouter(
-        data,
-        filename,
-        openrouterApiKey,
-        openrouterModel,
-        signal,
-      );
+      const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
       if (result.success || signal?.aborted) return result;
-      console.warn(
-        `[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`,
-      );
+      console.warn(`[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`);
     } else if (longProvider === "openai" && openaiApiKey) {
-      const result = await transcribeWithOpenAI(
-        data,
-        filename,
-        openaiApiKey,
-        signal,
-      );
+      const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
       if (result.success || signal?.aborted) return result;
-      console.warn(
-        `[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`,
-      );
+      console.warn(`[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`);
     }
     console.log(
       `[transcribe] ${Math.round(durationSeconds)}s audio exceeds ${LONG_AUDIO_SECONDS}s; using local whisper.cpp fallback`,
@@ -985,39 +729,15 @@ async function runTranscription(
     // pin the server's CPUs. Any failure (rate limit, network, oversized chunk)
     // falls through to local whisper.cpp so transcription still works offline.
     try {
-      return await transcribeWithGroq(
-        data,
-        filename,
-        groqApiKey,
-        onProgress,
-        signal,
-      );
+      return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
     } catch (err) {
-      if (signal?.aborted)
-        return {
-          success: false,
-          provider: "groq",
-          error: (err as Error).message,
-        };
-      if (
-        openrouterApiKey &&
-        shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey)
-      ) {
-        const result = await transcribeWithOpenRouter(
-          data,
-          filename,
-          openrouterApiKey,
-          openrouterModel,
-          signal,
-        );
+      if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
+      if (openrouterApiKey && shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey)) {
+        const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
         if (result.success || signal?.aborted) return result;
-        console.warn(
-          `[transcribe] openrouter fallback failed, falling back to whisper.cpp: ${result.error}`,
-        );
+        console.warn(`[transcribe] openrouter fallback failed, falling back to whisper.cpp: ${result.error}`);
       }
-      console.warn(
-        `[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`,
-      );
+      console.warn(`[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`);
     }
   } else if (openrouterApiKey) {
     // Short audio, no Groq key, but an OpenRouter key is configured: use OpenRouter STT
@@ -1025,112 +745,47 @@ async function runTranscription(
     // longer shipped in the image — so a voice note errored "whisper-cli is not installed"
     // even though a working cloud key existed. (The fake-transcript path already reported
     // "openrouter" here; the real path now matches it.)
-    const result = await transcribeWithOpenRouter(
-      data,
-      filename,
-      openrouterApiKey,
-      openrouterModel,
-      signal,
-    );
+    const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
     if (result.success || signal?.aborted) return result;
-    console.warn(
-      `[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`,
-    );
+    console.warn(`[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`);
   } else if (openaiApiKey) {
     // Same, for a short-audio-only OpenAI key.
-    const result = await transcribeWithOpenAI(
-      data,
-      filename,
-      openaiApiKey,
-      signal,
-    );
+    const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
     if (result.success || signal?.aborted) return result;
-    console.warn(
-      `[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`,
-    );
+    console.warn(`[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`);
   }
 
   let model: string;
   try {
     model = await ensureModel(modelName);
   } catch (err) {
-    return {
-      success: false,
-      provider: "whisper.cpp",
-      error: `model unavailable: ${(err as Error).message}`,
-    };
+    return { success: false, provider: "whisper.cpp", error: `model unavailable: ${(err as Error).message}` };
   }
 
-  return runLocalTranscriptionSerialized(async () => {
-    const dir = await mkdtemp(join(tmpdir(), "zenod-whisper-"));
-    const input = join(dir, `in${extname(filename) || ".m4a"}`);
-    const wav = join(dir, "audio.wav");
-    const outBase = join(dir, "out");
-    try {
-      await writeFile(input, data);
-      await run(
-        "ffmpeg",
-        [
-          "-y",
-          "-i",
-          input,
-          "-ar",
-          "16000",
-          "-ac",
-          "1",
-          "-c:a",
-          "pcm_s16le",
-          wav,
-        ],
-        { signal },
-      );
-      await run(
-        WHISPER_BINARY,
-        [
-          "-m",
-          model,
-          "-f",
-          wav,
-          "-l",
-          LANGUAGE,
-          "-t",
-          THREADS,
-          "-pp",
-          "-otxt",
-          "-of",
-          outBase,
-        ],
-        {
-          signal,
-          onStderrLine: onProgress
-            ? (line) => {
-                const pct = parseWhisperProgress(line);
-                if (pct !== null) onProgress(pct);
-              }
-            : undefined,
-        },
-      );
-      const transcript = (await readFile(`${outBase}.txt`, "utf8")).trim();
-      if (!transcript) {
-        return {
-          success: false,
-          provider: "whisper.cpp",
-          error: "transcription returned empty text",
-        };
-      }
-      return {
-        success: true,
-        transcript,
-        provider: `whisper.cpp ${modelName}`,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        provider: "whisper.cpp",
-        error: (err as Error).message,
-      };
-    } finally {
-      await rm(dir, { recursive: true, force: true });
+  const dir = await mkdtemp(join(tmpdir(), "zenod-whisper-"));
+  const input = join(dir, `in${extname(filename) || ".m4a"}`);
+  const wav = join(dir, "audio.wav");
+  const outBase = join(dir, "out");
+  try {
+    await writeFile(input, data);
+    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], { signal });
+    await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-pp", "-otxt", "-of", outBase], {
+      signal,
+      onStderrLine: onProgress
+        ? (line) => {
+            const pct = parseWhisperProgress(line);
+            if (pct !== null) onProgress(pct);
+          }
+        : undefined,
+    });
+    const transcript = (await readFile(`${outBase}.txt`, "utf8")).trim();
+    if (!transcript) {
+      return { success: false, provider: "whisper.cpp", error: "transcription returned empty text" };
     }
-  });
+    return { success: true, transcript, provider: `whisper.cpp ${modelName}` };
+  } catch (err) {
+    return { success: false, provider: "whisper.cpp", error: (err as Error).message };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }

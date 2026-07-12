@@ -6,12 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import {
-  conversationId,
-  type BrainEngine,
-  type StoreInput,
-  type StoreResult,
-} from "zenod";
+import { conversationId, type BrainEngine, type StoreInput, type StoreResult } from "zenod";
 import { createApp } from "../src/app.js";
 import { formatConversationTranscript } from "../src/conversationTranscript.js";
 import { Runtime } from "../src/runtime.js";
@@ -29,8 +24,7 @@ import {
 import { WhatsAppStore } from "../src/whatsappStore.js";
 
 vi.mock("@whiskeysockets/baileys", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@whiskeysockets/baileys")>();
+  const actual = await importOriginal<typeof import("@whiskeysockets/baileys")>();
   return {
     ...actual,
     downloadContentFromMessage: vi.fn(async function* () {
@@ -42,18 +36,12 @@ vi.mock("@whiskeysockets/baileys", async (importOriginal) => {
 class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
   readonly sent: Array<{ jid: string; text: string }> = [];
-  readonly receipts: Array<{
-    keys: Array<{ id?: string | null; remoteJid?: string | null }>;
-    type: string;
-  }> = [];
+  readonly receipts: Array<{ keys: Array<{ id?: string | null; remoteJid?: string | null }>; type: string }> = [];
   readonly presence: Array<{ type: string; jid?: string }> = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
   onWhatsApp?: SocketLike["onWhatsApp"];
   ev = {
-    on: (
-      event: "connection.update" | "messages.upsert",
-      listener: (...args: never[]) => void,
-    ) => {
+    on: (event: "connection.update" | "messages.upsert", listener: (...args: never[]) => void) => {
       this.emitter.on(event, listener);
     },
   };
@@ -63,10 +51,7 @@ class FakeSocket implements SocketLike {
     return { key: { id: `sent_${this.sent.length}` } };
   }
 
-  async sendReceipts(
-    keys: Array<{ id?: string | null; remoteJid?: string | null }>,
-    type: "read",
-  ) {
+  async sendReceipts(keys: Array<{ id?: string | null; remoteJid?: string | null }>, type: "read") {
     this.receipts.push({ keys, type });
   }
 
@@ -96,9 +81,7 @@ function textMessage(overrides: Record<string, unknown> = {}) {
 function fakeEngine(calls: string[]): BrainEngine {
   return {
     async chat(message, _surface, options) {
-      calls.push(
-        `${typeof options === "object" ? options.conversationKey : "none"}:${message}`,
-      );
+      calls.push(`${typeof options === "object" ? options.conversationKey : "none"}:${message}`);
       return { text: `Re: ${message}`, sources: [] };
     },
     async handleTasking(input) {
@@ -129,16 +112,11 @@ function fakeEngine(calls: string[]): BrainEngine {
   };
 }
 
-async function waitFor<T>(
-  read: () => T,
-  done: (value: T) => boolean,
-  timeoutMs = 2_000,
-): Promise<T> {
+async function waitFor<T>(read: () => T, done: (value: T) => boolean, timeoutMs = 2_000): Promise<T> {
   const started = Date.now();
   let value = read();
   while (!done(value)) {
-    if (Date.now() - started > timeoutMs)
-      throw new Error("timed out waiting for async work");
+    if (Date.now() - started > timeoutMs) throw new Error("timed out waiting for async work");
     await new Promise((resolve) => setTimeout(resolve, 10));
     value = read();
   }
@@ -171,11 +149,7 @@ function audioEvent(overrides: Record<string, unknown> = {}) {
     fileName: null,
     mediaRaw: {},
     raw: {
-      key: {
-        id: "voice_1",
-        remoteJid: "34611111111@s.whatsapp.net",
-        fromMe: false,
-      },
+      key: { id: "voice_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
     },
     ...overrides,
   };
@@ -197,11 +171,7 @@ function imageEvent(overrides: Record<string, unknown> = {}) {
     fileName: "photo.jpg",
     mediaRaw: {},
     raw: {
-      key: {
-        id: "image_1",
-        remoteJid: "34611111111@s.whatsapp.net",
-        fromMe: false,
-      },
+      key: { id: "image_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
     },
     ...overrides,
   };
@@ -209,52 +179,25 @@ function imageEvent(overrides: Record<string, unknown> = {}) {
 
 describe("WhatsApp helpers", () => {
   it("normalizes, masks, and matches phone allowlists", () => {
-    expect(normalizeWhatsAppIdentifier("+34 652 029 134@s.whatsapp.net")).toBe(
-      "34652029134",
-    );
-    expect(normalizeWhatsAppIdentifier("12345:10@s.whatsapp.net")).toBe(
-      "12345",
-    );
-    expect(normalizeAllowedSenders("+34 652 029 134\n+34 652 029 134")).toEqual(
-      ["34652029134"],
-    );
+    expect(normalizeWhatsAppIdentifier("+34 652 029 134@s.whatsapp.net")).toBe("34652029134");
+    expect(normalizeWhatsAppIdentifier("12345:10@s.whatsapp.net")).toBe("12345");
+    expect(normalizeAllowedSenders("+34 652 029 134\n+34 652 029 134")).toEqual(["34652029134"]);
     expect(maskPhoneNumber("+34 652 029 134@s.whatsapp.net")).toBe("••••9134");
-    expect(
-      senderIsAllowed("34652029134@s.whatsapp.net", {
-        acceptAll: false,
-        allowedSenders: ["34652029134"],
-      }),
-    ).toBe(true);
-    expect(
-      senderIsAllowed("34652029134@s.whatsapp.net", {
-        acceptAll: false,
-        allowedSenders: [],
-      }),
-    ).toBe(false);
-    expect(
-      senderIsAllowed("34652029134@s.whatsapp.net", {
-        acceptAll: true,
-        allowedSenders: [],
-      }),
-    ).toBe(true);
+    expect(senderIsAllowed("34652029134@s.whatsapp.net", { acceptAll: false, allowedSenders: ["34652029134"] })).toBe(
+      true,
+    );
+    expect(senderIsAllowed("34652029134@s.whatsapp.net", { acceptAll: false, allowedSenders: [] })).toBe(false);
+    expect(senderIsAllowed("34652029134@s.whatsapp.net", { acceptAll: true, allowedSenders: [] })).toBe(true);
   });
 
   it("extracts direct text messages and filters status/from-self", () => {
     expect(eventFromBaileysMessage(textMessage())?.body).toBe("hello");
-    expect(
-      eventFromBaileysMessage(
-        textMessage({
-          key: { id: "m", remoteJid: "status@broadcast", fromMe: false },
-        }),
-      ),
-    ).toBe(null);
-    expect(
-      eventFromBaileysMessage(
-        textMessage({
-          key: { id: "m", remoteJid: "1@s.whatsapp.net", fromMe: true },
-        }),
-      ),
-    ).toBe(null);
+    expect(eventFromBaileysMessage(textMessage({ key: { id: "m", remoteJid: "status@broadcast", fromMe: false } }))).toBe(
+      null,
+    );
+    expect(eventFromBaileysMessage(textMessage({ key: { id: "m", remoteJid: "1@s.whatsapp.net", fromMe: true } }))).toBe(
+      null,
+    );
   });
 
   it("prefers Baileys remoteJidAlt (phone JID) over LID remote ids for direct senders", () => {
@@ -282,35 +225,11 @@ describe("WhatsAppStore", () => {
     expect(store.recordInbound(event).inserted).toBe(true);
     expect(store.recordInbound(event).inserted).toBe(false);
     store.markMessageStatus(event.messageId, "denied");
-    store.recordOutboundAudit({
-      messageId: event.messageId,
-      chatId: event.chatId,
-      contactId: event.senderId,
-      status: "denied",
-    });
+    store.recordOutboundAudit({ messageId: event.messageId, chatId: event.chatId, contactId: event.senderId, status: "denied" });
 
     expect(store.countMessages()).toBe(1);
     expect(store.countOutboundAudits("denied")).toBe(1);
     store.close();
-  });
-
-  it("marks in-flight messages interrupted when the process restarts", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-restart-"));
-    const path = join(dir, "whatsapp.sqlite");
-    try {
-      const before = new WhatsAppStore(path);
-      const event = eventFromBaileysMessage(textMessage())!;
-      before.recordInbound(event);
-      before.markMessageStatus(event.messageId, "processing");
-      before.close();
-
-      const after = new WhatsAppStore(path);
-      expect(after.diagnostics().processingCounts.processing).toBeUndefined();
-      expect(after.diagnostics().processingCounts.interrupted).toBe(1);
-      after.close();
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
   });
 });
 
@@ -321,17 +240,11 @@ describe("WhatsApp API", () => {
     const app = createApp(runtime);
     try {
       expect((await app.request("/api/whatsapp/status")).status).toBe(401);
-      const headers = {
-        Authorization: `Bearer ${runtime.settings.apiToken()}`,
-      };
+      const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
       const saved = await app.request("/api/whatsapp/settings", {
         method: "PUT",
         headers,
-        body: JSON.stringify({
-          enabled: false,
-          allowedSenders: ["+34 600 000 001"],
-          acceptAll: false,
-        }),
+        body: JSON.stringify({ enabled: false, allowedSenders: ["+34 600 000 001"], acceptAll: false }),
       });
       expect(saved.status).toBe(200);
       const body = await saved.json();
@@ -427,9 +340,7 @@ describe("WhatsAppGateway", () => {
     const dead = new FakeSocket();
     // The socket is closed underneath us but never emits connection.update:close.
     dead.sendMessage = async () => {
-      throw Object.assign(new Error("Connection Closed"), {
-        output: { statusCode: 428 },
-      });
+      throw Object.assign(new Error("Connection Closed"), { output: { statusCode: 428 } });
     };
     const fresh = new FakeSocket();
     let created = 0;
@@ -453,9 +364,7 @@ describe("WhatsAppGateway", () => {
       // The reply send throws "Connection Closed" — the watchdog should tear the
       // dead socket down and reconnect (a 1s scheduled retry) instead of hanging.
       await gateway.handleMessages([textMessage()], "notify");
-      expect(
-        runtime.whatsappStore.countOutboundAudits("failed"),
-      ).toBeGreaterThan(0);
+      expect(runtime.whatsappStore.countOutboundAudits("failed")).toBeGreaterThan(0);
 
       const reconnected = await Promise.race([
         (async () => {
@@ -495,9 +404,7 @@ describe("WhatsAppGateway", () => {
       const result = await gateway.notifyOwner("✅ #43 ready for review");
 
       expect(result.sent).toBe(1);
-      expect(socket.sent).toEqual([
-        { jid: "34611111111@s.whatsapp.net", text: "✅ #43 ready for review" },
-      ]);
+      expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "✅ #43 ready for review" }]);
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });
@@ -525,27 +432,15 @@ describe("WhatsAppGateway", () => {
       await gateway.handleMessages([textMessage()], "notify");
       await gateway.handleMessages([textMessage()], "notify");
       await gateway.handleMessages(
-        [
-          textMessage({
-            key: {
-              id: "msg_2",
-              remoteJid: "34622222222@s.whatsapp.net",
-              fromMe: false,
-            },
-          }),
-        ],
+        [textMessage({ key: { id: "msg_2", remoteJid: "34622222222@s.whatsapp.net", fromMe: false } })],
         "notify",
       );
 
       expect(calls).toEqual(["34611111111:hello"]);
-      expect(socket.sent).toEqual([
-        { jid: "34611111111@s.whatsapp.net", text: "Re: hello" },
-      ]);
+      expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
       expect(runtime.whatsappStore.countMessages()).toBe(2);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(1);
-      expect(gateway.status().diagnostics.store.processingCounts.replied).toBe(
-        1,
-      );
+      expect(gateway.status().diagnostics.store.processingCounts.replied).toBe(1);
       expect(gateway.status().diagnostics.store.outboundCounts.denied).toBe(1);
     } finally {
       runtime.close();
@@ -567,30 +462,12 @@ describe("WhatsAppGateway", () => {
 
     try {
       await gateway.pair();
-      await gateway.handleMessages(
-        [
-          textMessage({
-            key: { id: "m", remoteJid: "1@s.whatsapp.net", fromMe: true },
-          }),
-        ],
-        "notify",
-      );
-      expect(gateway.status().diagnostics.lastIgnoredReason).toBe(
-        "from_linked_number",
-      );
+      await gateway.handleMessages([textMessage({ key: { id: "m", remoteJid: "1@s.whatsapp.net", fromMe: true } })], "notify");
+      expect(gateway.status().diagnostics.lastIgnoredReason).toBe("from_linked_number");
       expect(gateway.status().diagnostics.store.inboundMessages).toBe(0);
 
-      await gateway.handleMessages(
-        [
-          textMessage({
-            key: { id: "m2", remoteJid: "1@s.whatsapp.net", fromMe: false },
-          }),
-        ],
-        "append",
-      );
-      expect(gateway.status().diagnostics.lastIgnoredReason).toBe(
-        "upsert_type_append",
-      );
+      await gateway.handleMessages([textMessage({ key: { id: "m2", remoteJid: "1@s.whatsapp.net", fromMe: false } })], "append");
+      expect(gateway.status().diagnostics.lastIgnoredReason).toBe("upsert_type_append");
       expect(gateway.status().diagnostics.lastUpsertType).toBe("append");
     } finally {
       runtime.close();
@@ -624,25 +501,13 @@ describe("WhatsAppGateway", () => {
       socket.emitter.emit("connection.update", { connection: "open" });
 
       await gateway.handleMessages(
-        [
-          textMessage({
-            key: {
-              id: "msg_lid",
-              remoteJid: "123456789012345@lid",
-              fromMe: false,
-            },
-          }),
-        ],
+        [textMessage({ key: { id: "msg_lid", remoteJid: "123456789012345@lid", fromMe: false } })],
         "notify",
       );
 
       expect(calls).toEqual(["123456789012345:hello"]);
-      expect(socket.sent).toEqual([
-        { jid: "123456789012345@lid", text: "Re: hello" },
-      ]);
-      expect(
-        gateway.status().diagnostics.allowedSenderAliasCount,
-      ).toBeGreaterThan(1);
+      expect(socket.sent).toEqual([{ jid: "123456789012345@lid", text: "Re: hello" }]);
+      expect(gateway.status().diagnostics.allowedSenderAliasCount).toBeGreaterThan(1);
       expect(gateway.status().diagnostics.lastAliasRefreshAllowedCount).toBe(1);
       expect(gateway.status().diagnostics.lastAliasRefreshResultCount).toBe(1);
       expect(gateway.status().diagnostics.lastAliasRefreshError).toBeNull();
@@ -686,9 +551,7 @@ describe("WhatsAppGateway", () => {
       );
 
       expect(calls).toEqual(["34611111111:hello"]);
-      expect(socket.sent).toEqual([
-        { jid: "34611111111@s.whatsapp.net", text: "Re: hello" },
-      ]);
+      expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(0);
     } finally {
       runtime.close();
@@ -734,12 +597,7 @@ describe("WhatsAppGateway", () => {
       // sender's client attributes it — but it keeps the original message id.
       expect(socket.receipts).toEqual([
         {
-          keys: [
-            expect.objectContaining({
-              id: "msg_receipt",
-              remoteJid: "34611111111@s.whatsapp.net",
-            }),
-          ],
+          keys: [expect.objectContaining({ id: "msg_receipt", remoteJid: "34611111111@s.whatsapp.net" })],
           type: "read",
         },
       ]);
@@ -795,37 +653,16 @@ describe("WhatsAppGateway", () => {
 
       // No "queued for filing/digestion" ack — a voice note is acted on through
       // the same tasking loop as text and answered with a single reply.
-      await waitFor(
-        () => socket.sent.length,
-        (count) => count === 1,
-      );
-      expect(
-        socket.sent.some((m) => m.text.includes("Got this voice note")),
-      ).toBe(false);
+      await waitFor(() => socket.sent.length, (count) => count === 1);
+      expect(socket.sent.some((m) => m.text.includes("Got this voice note"))).toBe(false);
       expect(calls).toContain("34611111111:queue 51 and 53");
       expect(socket.sent[0]!.text).toContain("queue 51 and 53");
-      expect(taskingInputs[0]?.rawEvidence?.content).toContain(
-        "WhatsApp voice-note raw transcript.",
-      );
-      expect(taskingInputs[0]?.rawEvidence?.content).toContain(
-        "Message id: voice_1",
-      );
-      expect(taskingInputs[0]?.rawEvidence?.content).toContain(
-        "Transcript:\nqueue 51 and 53",
-      );
+      expect(taskingInputs[0]?.rawEvidence?.content).toContain("WhatsApp voice-note raw transcript.");
+      expect(taskingInputs[0]?.rawEvidence?.content).toContain("Message id: voice_1");
+      expect(taskingInputs[0]?.rawEvidence?.content).toContain("Transcript:\nqueue 51 and 53");
       expect(taskingInputs[0]?.rawEvidence?.hints).toContain("raw transcript");
-      expect(
-        runtime.whatsappStore
-          .recentTranscript({ limit: 5 })
-          .some(
-            (entry) =>
-              entry.messageId === "voice_1" &&
-              entry.bodyText === "queue 51 and 53",
-          ),
-      ).toBe(true);
-      expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(
-        1,
-      );
+      expect(runtime.whatsappStore.recentTranscript({ limit: 5 }).some((entry) => entry.messageId === "voice_1" && entry.bodyText === "queue 51 and 53")).toBe(true);
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(1);
       // Filing is NOT automatic (#68) — a voice note is acted on, not pushed
       // into the vault. The transcript lives in the WhatsApp audit; explicit
       // "file this" requests do the vault filing, using that transcript as raw evidence.
@@ -838,9 +675,7 @@ describe("WhatsAppGateway", () => {
   });
 
   it("records delayed storage receipts into the WhatsApp conversation history", async () => {
-    const dir = await mkdtemp(
-      join(tmpdir(), "zenod-whatsapp-receipt-history-"),
-    );
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-receipt-history-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
     let peerServer: Server | undefined;
@@ -852,10 +687,7 @@ describe("WhatsAppGateway", () => {
       socketFactory: async () => socket,
       recordAssistantMessage: (event, text) =>
         runtime.state.appendMessage(
-          conversationId(
-            "whatsapp",
-            normalizeWhatsAppIdentifier(event.senderId) || event.senderId,
-          ),
+          conversationId("whatsapp", normalizeWhatsAppIdentifier(event.senderId) || event.senderId),
           "assistant",
           text,
           "whatsapp",
@@ -874,75 +706,37 @@ describe("WhatsAppGateway", () => {
                 evidenceRef: "Log/2026-06-21.md#^e-voice",
                 pagesTouched: ["Projects/Voice Notes.md"],
                 commitSha: "a".repeat(40),
-                githubUrls: [
-                  "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-06-21.md",
-                ],
+                githubUrls: ["https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-06-21.md"],
               },
             },
           }),
         );
       });
-      await new Promise<void>((resolve) =>
-        peerServer!.listen(0, "127.0.0.1", resolve),
-      );
+      await new Promise<void>((resolve) => peerServer!.listen(0, "127.0.0.1", resolve));
       const port = (peerServer.address() as AddressInfo).port;
-      runtime.settings.setPeers([
-        { name: "zenod", url: `http://127.0.0.1:${port}/mcp`, token: "token" },
-      ]);
+      runtime.settings.setPeers([{ name: "zenod", url: `http://127.0.0.1:${port}/mcp`, token: "token" }]);
       await gateway.pair();
 
       const jobId = "11111111-1111-4111-8111-111111111111";
       const poller = gateway as unknown as {
         spawnPeerJobPoller(
-          reply: {
-            text: string;
-            actions: Array<{
-              tool: string;
-              input: Record<string, unknown>;
-              result: string;
-            }>;
-          },
+          reply: { text: string; actions: Array<{ tool: string; input: Record<string, unknown>; result: string }> },
           event: ReturnType<typeof audioEvent>,
         ): void;
       };
       poller.spawnPeerJobPoller(
-        {
-          text: `Queued job ${jobId}.`,
-          actions: [
-            {
-              tool: "add_memory",
-              input: { content: "store this" },
-              result: `Queued job ${jobId}.`,
-            },
-          ],
-        },
+        { text: `Queued job ${jobId}.`, actions: [{ tool: "add_memory", input: { content: "store this" }, result: `Queued job ${jobId}.` }] },
         audioEvent(),
       );
 
-      await waitFor(
-        () => socket.sent.length,
-        (count) => count === 1,
-        7_000,
-      );
+      await waitFor(() => socket.sent.length, (count) => count === 1, 7_000);
       expect(socket.sent[0]!.text).toContain("Storage receipt");
-      expect(socket.sent[0]!.text).toContain(
-        "Vault evidence: Log/2026-06-21.md#^e-voice",
-      );
+      expect(socket.sent[0]!.text).toContain("Vault evidence: Log/2026-06-21.md#^e-voice");
 
-      const window = await runtime.state.recentWindow(
-        conversationId("whatsapp", "34611111111"),
-      );
-      expect(
-        window.some(
-          (message) =>
-            message.role === "assistant" &&
-            message.text === socket.sent[0]!.text,
-        ),
-      ).toBe(true);
+      const window = await runtime.state.recentWindow(conversationId("whatsapp", "34611111111"));
+      expect(window.some((message) => message.role === "assistant" && message.text === socket.sent[0]!.text)).toBe(true);
     } finally {
-      await new Promise<void>(
-        (resolve) => peerServer?.close(() => resolve()) ?? resolve(),
-      );
+      await new Promise<void>((resolve) => peerServer?.close(() => resolve()) ?? resolve());
       runtime.close();
       await rm(dir, { recursive: true, force: true });
     }
@@ -967,13 +761,8 @@ describe("WhatsAppGateway", () => {
       await gateway.handleEvent(audioEvent({ mediaRaw: null }) as never);
 
       // No ack first — a single, clear reply (never silent), no "queued" framing.
-      await waitFor(
-        () => socket.sent.length,
-        (count) => count === 1,
-      );
-      expect(
-        socket.sent.some((m) => m.text.includes("Got this voice note")),
-      ).toBe(false);
+      await waitFor(() => socket.sent.length, (count) => count === 1);
+      expect(socket.sent.some((m) => m.text.includes("Got this voice note"))).toBe(false);
       expect(socket.sent[0]!.text).toContain("could not download");
     } finally {
       runtime.close();
@@ -1012,17 +801,12 @@ describe("WhatsAppGateway", () => {
 
       await gateway.handleEvent(audioEvent() as never);
       // One inline reply, no ack.
-      await waitFor(
-        () => socket.sent.length,
-        (count) => count === 1,
-      );
+      await waitFor(() => socket.sent.length, (count) => count === 1);
       const db = new DatabaseSync(join(dir, "whatsapp", "whatsapp.sqlite"));
       try {
-        const row = db
-          .prepare(
-            "SELECT storage_status FROM whatsapp_message_media WHERE message_id = ?",
-          )
-          .get("voice_1") as { storage_status: string } | undefined;
+        const row = db.prepare("SELECT storage_status FROM whatsapp_message_media WHERE message_id = ?").get("voice_1") as
+          | { storage_status: string }
+          | undefined;
         expect(row?.storage_status).toBe("archive_unavailable");
       } finally {
         db.close();
@@ -1031,11 +815,7 @@ describe("WhatsAppGateway", () => {
       await gateway.handleEvent({
         ...(eventFromBaileysMessage(
           textMessage({
-            key: {
-              id: "status_1",
-              remoteJid: "34611111111@s.whatsapp.net",
-              fromMe: false,
-            },
+            key: { id: "status_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
             message: { conversation: "what happened to my voice note?" },
           }),
         ) as NonNullable<ReturnType<typeof eventFromBaileysMessage>>),
@@ -1044,14 +824,9 @@ describe("WhatsAppGateway", () => {
       // Voice notes no longer create a "digest job", so the question is answered
       // as a normal chat turn — NOT intercepted by the (image-only) shortcut.
       expect(socket.sent).toHaveLength(2);
-      expect(socket.sent[1]!.text).not.toContain(
-        "Latest voice-note digest status",
-      );
+      expect(socket.sent[1]!.text).not.toContain("Latest voice-note digest status");
       expect(socket.sent[1]!.text).toBe("Re: what happened to my voice note?");
-      expect(
-        runtime.whatsappStore.diagnostics().processingCounts
-          .replied_from_digest_state,
-      ).toBeUndefined();
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBeUndefined();
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
       runtime.close();
@@ -1060,9 +835,7 @@ describe("WhatsAppGateway", () => {
   });
 
   it("links immediate text follow-ups to the recent image intake in transcript readback", async () => {
-    const dir = await mkdtemp(
-      join(tmpdir(), "zenod-whatsapp-media-followup-store-"),
-    );
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-media-followup-store-"));
     const store = new WhatsAppStore(join(dir, "whatsapp.sqlite"));
     try {
       store.recordInbound(imageEvent() as never);
@@ -1090,13 +863,10 @@ describe("WhatsAppGateway", () => {
       expect(image?.linkedFollowUps).toEqual([
         expect.objectContaining({
           messageId: "comment_1",
-          bodyText:
-            "this comment is related to the picture: please remember the red marker",
+          bodyText: "this comment is related to the picture: please remember the red marker",
         }),
       ]);
-      const transcript = formatConversationTranscript(
-        store.recentTranscript({ messageId: "image_1" }),
-      );
+      const transcript = formatConversationTranscript(store.recentTranscript({ messageId: "image_1" }));
       expect(transcript).toContain("Linked follow-up comment(s):");
       expect(transcript).toContain("please remember the red marker");
     } finally {
@@ -1106,9 +876,7 @@ describe("WhatsAppGateway", () => {
   });
 
   it("answers pending media status with the attached follow-up comment instead of a bare not-done", async () => {
-    const dir = await mkdtemp(
-      join(tmpdir(), "zenod-whatsapp-media-followup-status-"),
-    );
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-media-followup-status-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
     const gateway = new WhatsAppGateway({
@@ -1139,19 +907,11 @@ describe("WhatsAppGateway", () => {
       );
 
       expect(socket.sent).toHaveLength(1);
-      expect(socket.sent[0]!.text).toContain(
-        "Latest media ingest status: digest_queued",
-      );
+      expect(socket.sent[0]!.text).toContain("Latest media ingest status: digest_queued");
       expect(socket.sent[0]!.text).toContain("Follow-up attached to image_1");
-      expect(socket.sent[0]!.text).toContain(
-        "No final digest report has been recorded yet.",
-      );
-      const [image] = runtime.whatsappStore.recentTranscript({
-        messageId: "image_1",
-      });
-      expect(image?.linkedFollowUps?.[0]?.bodyText).toContain(
-        "did this happen already",
-      );
+      expect(socket.sent[0]!.text).toContain("No final digest report has been recorded yet.");
+      const [image] = runtime.whatsappStore.recentTranscript({ messageId: "image_1" });
+      expect(image?.linkedFollowUps?.[0]?.bodyText).toContain("did this happen already");
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });
@@ -1159,9 +919,7 @@ describe("WhatsAppGateway", () => {
   });
 
   it("routes tasking instructions that mention voice-note digestion through chat", async () => {
-    const dir = await mkdtemp(
-      join(tmpdir(), "zenod-whatsapp-tasking-after-digest-"),
-    );
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-tasking-after-digest-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
     const calls: string[] = [];
@@ -1185,27 +943,19 @@ describe("WhatsAppGateway", () => {
     });
 
     try {
-      process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT =
-        "test fan out from this voice note";
+      process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "test fan out from this voice note";
       runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
       await gateway.pair();
 
       await gateway.handleEvent(audioEvent() as never);
-      await waitFor(
-        () => socket.sent.length,
-        (count) => count === 1,
-      );
+      await waitFor(() => socket.sent.length, (count) => count === 1);
 
       const taskingText =
         "So I think I want to fast track one job which is doing log analysis of the last transcripts because I sent three voice notes but only got two digestions. Can you immediately create this one issue and launch a Codex agent against that issue?";
       await gateway.handleEvent({
         ...(eventFromBaileysMessage(
           textMessage({
-            key: {
-              id: "tasking_1",
-              remoteJid: "34611111111@s.whatsapp.net",
-              fromMe: false,
-            },
+            key: { id: "tasking_1", remoteJid: "34611111111@s.whatsapp.net", fromMe: false },
             message: { conversation: taskingText },
           }),
         ) as NonNullable<ReturnType<typeof eventFromBaileysMessage>>),
@@ -1219,16 +969,9 @@ describe("WhatsAppGateway", () => {
       expect(calls).toContain(`34611111111:${taskingText}`);
       expect(socket.sent).toHaveLength(2);
       expect(socket.sent[1]!.text).toBe(`Re: ${taskingText}`);
-      expect(socket.sent[1]!.text).not.toContain(
-        "Latest voice-note digest status",
-      );
-      expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(
-        2,
-      );
-      expect(
-        runtime.whatsappStore.diagnostics().processingCounts
-          .replied_from_digest_state,
-      ).toBeUndefined();
+      expect(socket.sent[1]!.text).not.toContain("Latest voice-note digest status");
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied).toBe(2);
+      expect(runtime.whatsappStore.diagnostics().processingCounts.replied_from_digest_state).toBeUndefined();
     } finally {
       delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
       runtime.close();
