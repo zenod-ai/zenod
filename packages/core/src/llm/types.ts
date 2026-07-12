@@ -191,6 +191,8 @@ export interface PeerTool {
   advisoryContent?: boolean;
   /** Host-owned read output that must not be paraphrased by the model. */
   authoritativeReadResult?: boolean;
+  /** Host-owned MCP catalog inspection, available only for explicit catalog intent. */
+  requiresMcpCatalogIntent?: boolean;
   /**
    * Repository this peer is allowed to mutate directly. For Archus this is the
    * central backlog repo, not arbitrary product/code repos.

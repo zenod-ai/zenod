@@ -47,6 +47,7 @@ describe("answer tool-step budget", () => {
         inspect_connected_mcp_catalog: {
           description: "Host catalog",
           authoritativeReadResult: true,
+          requiresMcpCatalogIntent: true,
           annotations: { readOnlyHint: true },
           run: async () => "EXACT HOST CATALOG",
         },
@@ -70,6 +71,66 @@ describe("answer tool-step budget", () => {
   it("does not misroute an operational MCP request into catalog inspection", () => {
     expect(isMcpCatalogInspectionQuestion("Use the connected MCP to draft a post")).toBe(false);
     expect(isMcpCatalogInspectionQuestion("Show the actual tools this connected MCP exposes")).toBe(true);
+  });
+
+  it.each([
+    "What are your capabilities?",
+    "What can this connected MCP do?",
+    "List my connected units",
+    "Which actual tools are available?",
+    "Show the schema for the post tool",
+    "Can I see whether the peer skill was loaded?",
+    "Check the MCP refresh status and namespace collisions",
+  ])("recognizes explicit natural-language catalog intent: %s", (question) => {
+    expect(isMcpCatalogInspectionQuestion(question)).toBe(true);
+  });
+
+  it.each([
+    "Please reply exactly: strawberry banana.",
+    "Checking if you're able to hear me; if you can, just say strawberry banana.",
+    "Use the connected MCP to draft a post.",
+    "Can you say hi to Zenod?",
+    "Remember that our design connects multiple MCP servers to multiple repositories.",
+    "Save a note about tool schemas and capabilities for later.",
+    "Use the peer tool to remember this message.",
+    "Show me the server logs.",
+  ])("rejects ordinary content or task intent: %s", (question) => {
+    expect(isMcpCatalogInspectionQuestion(question)).toBe(false);
+  });
+
+  it("does not expose the catalog inspector to the model on a non-catalog turn", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const inspect = vi.fn(async () => "CATALOG");
+    captured.config = undefined;
+
+    await llm.answer(
+      {
+        question: "Remember that our design connects multiple MCP servers to multiple repositories.",
+        vaultBriefing: "brief",
+        conversation: [],
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        inspect_connected_mcp_catalog: {
+          description: "Host catalog",
+          authoritativeReadResult: true,
+          requiresMcpCatalogIntent: true,
+          annotations: { readOnlyHint: true },
+          run: inspect,
+        },
+        connected_store_memory: {
+          description: "Store a memory",
+          annotations: { readOnlyHint: true },
+          run: async () => "stored",
+        },
+      },
+    );
+
+    expect(inspect).not.toHaveBeenCalled();
+    expect(captured.config.tools).not.toHaveProperty("inspect_connected_mcp_catalog");
+    expect(captured.config.tools).toHaveProperty("connected_store_memory");
   });
 
   it("tells the model its budget and forces a final answer on the last step", async () => {
