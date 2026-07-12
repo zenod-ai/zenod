@@ -98,6 +98,21 @@ describe("engine — vaultless (Console shell)", () => {
     expect(llm.lastInput?.conversation[0]?.text).not.toContain("Detected asks:");
   });
 
+  it("uses chat context notes for the model without storing them as the user message", async () => {
+    const { engine, llm } = vaultlessEngine();
+    await engine.chat("what is our current plan?", "web", {
+      conversationKey: "grounded-chat",
+      contextNote: "Approved briefing v2: own your context. Board: 2 proposed, 1 posted.",
+    });
+
+    expect(llm.lastInput?.question).toContain("Approved briefing v2");
+    expect(llm.lastInput?.question).toContain("Original user message:\nwhat is our current plan?");
+
+    await engine.chat("and what did I ask?", "web", { conversationKey: "grounded-chat" });
+    expect(llm.lastInput?.conversation[0]).toEqual({ role: "user", text: "what is our current plan?" });
+    expect(llm.lastInput?.conversation[0]?.text).not.toContain("Approved briefing v2");
+  });
+
   it("gates the vault-only methods with a clear error", async () => {
     const { engine } = vaultlessEngine();
     await expect(engine.ask("what do I know?")).rejects.toThrow(/no vault/i);

@@ -366,6 +366,8 @@ export interface ChatOptions {
   onDelta?: (delta: string) => void;
   onToolEvent?: (event: ChatToolEvent) => void;
   conversationKey?: string;
+  /** Host-owned, per-turn grounding shown to the model but never stored as the user's message. */
+  contextNote?: string;
 }
 
 /**

@@ -35,13 +35,32 @@ export function createHeraldUnit(options: CreateZenodUnitOptions = {}) {
         fileToMemory: createZenodWalletFiler(() => runtime.settings.peers()),
         listApproved: (id) => lanes.store.listBoardItems(id, ["approved"]),
         publishApproved: (id, itemIds) => lanes.publishApproved(id, itemIds, { appendChatReceipt: false }),
+        getTurnState: (id) => {
+          const briefing = lanes.store.getApprovedBriefing(id);
+          if (!briefing) throw new Error("Herald turn state requires an approved briefing.");
+          return {
+            briefing,
+            board: lanes.store.listBoardItems(id),
+            filings: lanes.store.listFilings(id).slice(-10),
+            wakes: lanes.store.recentWakeReceipts(id, 10),
+          };
+        },
       });
       return {
         ...inherited,
-        chatInterceptor: async (message) => {
-          const result = await handler({ tenantId, text: message });
-          if (result.handled || !inherited?.chatInterceptor) return result;
-          return inherited.chatInterceptor(message);
+        chatInterceptor: async (input) => {
+          const result = await handler({ tenantId, text: input.message });
+          // Once Herald has an approved briefing, contextNote marks the single
+          // model-backed Herald path. An inherited handled reply must never
+          // replace it and recreate a second operational authority.
+          if (result.handled || result.contextNote || !inherited?.chatInterceptor) return result;
+          const inheritedResult = await inherited.chatInterceptor(input);
+          return inheritedResult.handled
+            ? inheritedResult
+            : {
+                ...result,
+                contextNote: [result.contextNote, inheritedResult.contextNote].filter(Boolean).join("\n\n"),
+              };
         },
       };
     },

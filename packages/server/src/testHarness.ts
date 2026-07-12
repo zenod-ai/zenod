@@ -49,11 +49,30 @@ export interface SyntheticChatResult {
   error?: string;
 }
 
+export interface ChatTurnInterceptorInput {
+  message: string;
+  surface: Surface;
+  conversationKey: string;
+}
+
+export interface ChatTurnInterception {
+  /** True means the deterministic unit seam produced the complete reply. */
+  handled: boolean;
+  text?: string;
+  /** Mandatory host-owned grounding for the model path when handled is false. */
+  contextNote?: string;
+}
+
+export type ChatTurnInterceptor = (
+  input: ChatTurnInterceptorInput,
+) => Promise<ChatTurnInterception>;
+
 export async function runSyntheticChat(options: {
   request: SyntheticChatRequest;
   defaultSurface: Surface;
   getEngine: () => Promise<BrainEngine>;
   recordAudit: (input: ChatTestAuditInput) => ChatTestAuditRecord;
+  interceptChat?: ChatTurnInterceptor;
 }): Promise<SyntheticChatResult> {
   const message = options.request.message?.trim();
   if (!message) throw new Error("message is required");
@@ -68,14 +87,17 @@ export async function runSyntheticChat(options: {
   console.log(`[test-chat:${correlationId}] start surface=${surface} conversation=${cid}`);
   const at = new Date();
   try {
-    const engine = await options.getEngine();
-    const reply = await engine.chat(message, surface, {
-      conversationKey,
-      onToolEvent: (event) => {
-        toolEvents.push(event);
-        console.log(`[test-chat:${correlationId}] tool ${event.phase}: ${event.tool} - ${event.label}`);
-      },
-    });
+    const intercepted = await options.interceptChat?.({ message, surface, conversationKey });
+    const reply = intercepted?.handled
+      ? { text: intercepted.text ?? "", sources: [] }
+      : await (await options.getEngine()).chat(message, surface, {
+          conversationKey,
+          ...(intercepted?.contextNote ? { contextNote: intercepted.contextNote } : {}),
+          onToolEvent: (event) => {
+            toolEvents.push(event);
+            console.log(`[test-chat:${correlationId}] tool ${event.phase}: ${event.tool} - ${event.label}`);
+          },
+        });
     const audit = options.recordAudit({
       correlationId,
       ...(testRunId ? { testRunId } : {}),

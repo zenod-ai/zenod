@@ -52,7 +52,12 @@ import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } fr
 import { transcriptPath } from "./executionTranscript.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
-import { runSyntheticChat, type ChatTestAuditStore, type SyntheticChatRequest } from "./testHarness.js";
+import {
+  runSyntheticChat,
+  type ChatTestAuditStore,
+  type ChatTurnInterceptor,
+  type SyntheticChatRequest,
+} from "./testHarness.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
 import { type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, resolveProject } from "./projectRegistry.js";
@@ -108,7 +113,7 @@ export interface AppOptions {
   /** Exact hostnames allowed to resolve privately for the managed unit fleet. */
   walletFleetAllowlist?: readonly string[];
   /** Unit-owned conversation state handled before the ported chat/model path. */
-  chatInterceptor?: (message: string) => Promise<{ handled: boolean; text?: string }>;
+  chatInterceptor?: ChatTurnInterceptor;
 }
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
@@ -2573,7 +2578,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/chat", async (c) => {
     const { message } = await c.req.json<{ message?: string }>();
     if (!message) return c.json({ error: "message is required" }, 400);
-    const intercepted = await options.chatInterceptor?.(message);
+    const intercepted = await options.chatInterceptor?.({ message, surface: "web", conversationKey: "default" });
     if (intercepted?.handled) {
       const text = intercepted.text ?? "";
       await runtime.state.appendMessage(conversationId("web"), "user", message, "web");
@@ -2583,7 +2588,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const cleanSlate = await handleCleanSlateChat(message, runtime);
     if (cleanSlate) return c.json(cleanSlate);
     const engine = await runtime.getEngine();
-    const reply = await engine.handleTasking({ text: message, surface: "web", conversationKey: "default" });
+    const reply = await engine.handleTasking({
+      text: message,
+      surface: "web",
+      conversationKey: "default",
+      ...(intercepted?.contextNote ? { contextNote: intercepted.contextNote } : {}),
+    });
     return c.json({ text: reply.text, sources: [], actions: reply.actions });
   });
 
@@ -2661,6 +2671,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         defaultSurface: "mcp",
         getEngine: () => runtime.getEngine(),
         recordAudit: (input) => chatTestAudit.recordChatTestRun(input),
+        ...(options.chatInterceptor ? { interceptChat: options.chatInterceptor } : {}),
       });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "invalid test chat request" }, 400);
@@ -2685,7 +2696,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/chat/stream", async (c) => {
     const { message } = await c.req.json<{ message?: string }>();
     if (!message) return c.json({ error: "message is required" }, 400);
-    const intercepted = await options.chatInterceptor?.(message);
+    const intercepted = await options.chatInterceptor?.({ message, surface: "web", conversationKey: "default" });
     if (intercepted?.handled) {
       const text = intercepted.text ?? "";
       await runtime.state.appendMessage(conversationId("web"), "user", message, "web");
@@ -2738,6 +2749,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         const heartbeat = setInterval(() => send({ type: "ping" }), 15_000);
         try {
           const reply = await engine.chat(message, "web", {
+            conversationKey: "default",
+            ...(intercepted?.contextNote ? { contextNote: intercepted.contextNote } : {}),
             onDelta: (delta) => send({ type: "delta", text: delta }),
             onToolEvent: (event) => {
               hadToolActivity = true;
@@ -3007,6 +3020,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
             },
             get: (id) => runtime.ingestStore.get(id),
           },
+          undefined,
+          options.chatInterceptor,
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

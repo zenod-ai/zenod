@@ -1332,9 +1332,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
     onToolEvent?: (event: ChatToolEvent) => void,
     conversationKey?: string,
   ): Promise<Reply> {
-    const chatOptions =
+    const chatOptions: ChatOptions =
       typeof onDeltaOrOptions === "function"
-        ? { onDelta: onDeltaOrOptions, onToolEvent, conversationKey }
+        ? {
+            onDelta: onDeltaOrOptions,
+            ...(onToolEvent ? { onToolEvent } : {}),
+            ...(conversationKey ? { conversationKey } : {}),
+          }
         : (onDeltaOrOptions ?? {});
     await syncForRead();
     const cid = conversationId(surface, chatOptions.conversationKey);
@@ -1354,11 +1358,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const taskTools =
       repo || options.taskingTools ? buildTaskTools(surface, (action) => actions.push(action)) : undefined;
     const briefing = await vaultBriefing();
-    reportTokenCost("chat", [briefing.text, ...window.map((m) => m.text), message], briefing);
+    const question = chatOptions.contextNote
+      ? `${chatOptions.contextNote}\n\nOriginal user message:\n${message}`
+      : message;
+    reportTokenCost("chat", [briefing.text, ...window.map((m) => m.text), question], briefing);
 
     const result = await llm.answer(
       {
-        question: message,
+        question,
         conversationId: approvalCid,
         vaultBriefing: briefing.text,
         conversation: window.map((m) => ({ role: m.role, text: m.text })),

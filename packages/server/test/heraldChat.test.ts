@@ -34,6 +34,16 @@ async function storeFixture(
     listProposed: (tenantId) => store.listBoardItems(tenantId, ["proposed"]),
     decideItems: (tenantId, input) => store.decideItems(tenantId, input),
     recordFiling: (input) => store.recordFiling(input),
+    getTurnState: (tenantId) => {
+      const briefing = store.getApprovedBriefing(tenantId);
+      if (!briefing) throw new Error("approved briefing required");
+      return {
+        briefing,
+        board: store.listBoardItems(tenantId),
+        filings: store.listFilings(tenantId),
+        wakes: store.recentWakeReceipts(tenantId),
+      };
+    },
     fileToMemory,
     ...extra,
   };
@@ -214,6 +224,61 @@ describe("Herald briefing chat", () => {
       const result = await fixture.handle({ tenantId: "alpha", text: "publish approved" });
       expect(result).toMatchObject({ handled: true, text: expect.stringContaining("https://x.com/i/web/status/10") });
       expect(published).toHaveBeenCalledWith("alpha", created.items.map((item) => item.id));
+    } finally {
+      store.close();
+    }
+  });
+
+  it("grounds every ordinary post-briefing turn in tenant briefing, board, filings, wakes, and receipts", async () => {
+    const { store, handle } = await storeFixture(async () => "Stored.\ncommit: abc7890");
+    try {
+      await negotiate(handle);
+      await handle({ tenantId: "alpha", text: "✓ approve briefing" });
+      const wakeId = store.tryStartWake("alpha", "run_now", 100)!;
+      const created = store.createProposals("alpha", wakeId, [proposal(1)], 110);
+      store.finishWake(wakeId, {
+        status: "completed",
+        code: "wake_completed",
+        message: "Herald wake completed with one cited proposal.",
+        proposalIds: [created.items[0]!.id],
+      }, 120);
+      store.approveItems("alpha", [created.items[0]!.id], 130);
+      store.markPosted("alpha", created.items[0]!.id, "https://x.com/i/web/status/42", 140);
+      store.recordFiling({
+        tenantId: "alpha",
+        kind: "posted",
+        content: "Build on the posted context-ownership angle.",
+        memoryCitation: proposal(1).memoryCitation,
+        commitReceipt: "commit: fedcba9",
+      }, 150);
+      store.approveBriefing({
+        tenantId: "beta",
+        content: {
+          theme: "BETA PRIVATE THEME",
+          objectives: ["BETA PRIVATE OBJECTIVE"],
+          tone: "private",
+          replyPolicy: "none",
+        },
+        cadenceMinutes: 60,
+      }, 160);
+      store.recordFiling({
+        tenantId: "beta",
+        kind: "private",
+        content: "BETA PRIVATE FILING",
+        memoryCitation: null,
+        commitReceipt: "commit: 7654321",
+      }, 170);
+
+      const result = await handle({ tenantId: "alpha", text: "what should we do next?" });
+      expect(result.handled).toBe(false);
+      expect(result.contextNote).toContain("HERALD AUTHORITATIVE TURN STATE");
+      expect(result.contextNote).toContain("Build in public");
+      expect(result.contextNote).toContain("Proposal 1");
+      expect(result.contextNote).toContain("https://x.com/i/web/status/42");
+      expect(result.contextNote).toContain("commit: fedcba9");
+      expect(result.contextNote).toContain("wake_completed");
+      expect(result.contextNote).not.toContain("BETA PRIVATE");
+      expect(result.contextNote).not.toMatch(/\b(?:Ring|Council)\b/);
     } finally {
       store.close();
     }

@@ -7,6 +7,7 @@ import {
   type HeraldBriefingDraft,
   type HeraldFiling,
   type HeraldMutationReceipt,
+  type HeraldWakeReceipt,
 } from "./heraldLoop.js";
 import { callPeerWithArgs, type PeerConfig } from "./peerClient.js";
 
@@ -18,6 +19,14 @@ export interface HeraldChatInput {
 export interface HeraldChatResult {
   handled: boolean;
   text?: string;
+  contextNote?: string;
+}
+
+export interface HeraldTurnState {
+  briefing: HeraldBriefing;
+  board: HeraldBoardItem[];
+  filings: HeraldFiling[];
+  wakes: HeraldWakeReceipt[];
 }
 
 export interface HeraldMemoryFilingInput {
@@ -59,6 +68,8 @@ export interface HeraldChatDependencies {
     tenantId: string,
     itemIds: string[],
   ) => Promise<{ status: "ok" | "error"; message: string; published: Array<{ permalink: string }> }>;
+  /** Authoritative tenant snapshot loaded at the boundary of every model-backed turn. */
+  getTurnState(tenantId: string): HeraldTurnState;
 }
 
 export interface HeraldApprovalSelection {
@@ -174,6 +185,51 @@ function loudError(error: unknown): HeraldChatResult {
     handled: true,
     text: `Herald action failed loudly; no success is claimed. ERROR: ${error instanceof Error ? error.message : String(error)}`,
   };
+}
+
+function bounded(value: string, limit = 2_000): string {
+  return value.length <= limit ? value : `${value.slice(0, limit)}…`;
+}
+
+/**
+ * The mandatory state kernel for model-backed Herald turns. It contains only
+ * tenant-local authority already persisted by the loop organ; wallet secrets
+ * and bearer credentials never enter this context.
+ */
+export function buildHeraldTurnContext(state: HeraldTurnState): string {
+  const board = state.board.map((item, index) => ({
+    number: index + 1,
+    id: item.id,
+    state: item.state,
+    text: bounded(item.text),
+    why: bounded(item.rationale),
+    memoryCitation: item.memoryCitation,
+    ...(item.permalink ? { permalink: item.permalink } : {}),
+  }));
+  const filings = state.filings.slice(-10).map((filing) => ({
+    kind: filing.kind,
+    content: bounded(filing.content),
+    memoryCitation: filing.memoryCitation,
+    commitReceipt: bounded(filing.commitReceipt),
+    createdAt: filing.createdAt,
+  }));
+  const wakes = state.wakes.slice(0, 10).map((wake) => ({
+    status: wake.status,
+    code: wake.code,
+    message: bounded(wake.message),
+    proposalIds: wake.proposalIds,
+    completedAt: wake.completedAt,
+  }));
+  return [
+    "HERALD AUTHORITATIVE TURN STATE",
+    "Identity: You are Herald, the tenant's single project-voice agent and operational authority.",
+    "Use this state before answering. Do not invent proposals, approvals, publications, commands, claims, citations, or receipts outside it.",
+    "If the requested operation is not represented by a deterministic Herald control, explain the current state and supported next action without claiming a mutation.",
+    `Approved briefing: ${JSON.stringify(state.briefing)}`,
+    `Current board: ${JSON.stringify(board)}`,
+    `Recent filings and outcome receipts: ${JSON.stringify(filings)}`,
+    `Recent wake receipts: ${JSON.stringify(wakes)}`,
+  ].join("\n\n");
 }
 
 function isPrematureLoopAction(text: string): boolean {
@@ -306,7 +362,12 @@ export function createHeraldChatHandler(dependencies: HeraldChatDependencies) {
       };
     }
 
-    if (!message.startsWith("✓")) return { handled: false };
+    if (!message.startsWith("✓")) {
+      return {
+        handled: false,
+        contextNote: buildHeraldTurnContext(dependencies.getTurnState(tenantId)),
+      };
+    }
     const proposals = dependencies.listProposed(tenantId);
     if (proposals.length === 0) {
       return { handled: true, text: "Nothing changed: there are no current proposed items to approve." };

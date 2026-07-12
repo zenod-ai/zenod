@@ -24,7 +24,7 @@ import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
-import type { ChatTestAuditStore } from "./testHarness.js";
+import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
 import type { CustomerProductConfig } from "./customerBilling.js";
 import { readCustomerSession } from "./customerSession.js";
@@ -113,6 +113,7 @@ function registerZenodTools(
   server: McpServer,
   runtime: Runtime,
   agent: AgentDefinition = ZENOD_AGENT,
+  chatInterceptor?: ChatTurnInterceptor,
 ): void {
   const { settings } = runtime;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
@@ -157,6 +158,7 @@ function registerZenodTools(
       get: (id) => runtime.ingestStore.get(id),
     },
     server,
+    chatInterceptor,
   );
 }
 
@@ -270,7 +272,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
     tools(server, context) {
       const runtime = runtimes.forContext(context);
-      registerZenodTools(server, runtime, agent);
+      const chatInterceptor = options.appOptionsForTenant?.(context.tenant!.id, runtime).chatInterceptor;
+      registerZenodTools(server, runtime, agent, chatInterceptor);
       options.registerAdditionalTools?.(server, context, runtime);
     },
     routes(routes) {
