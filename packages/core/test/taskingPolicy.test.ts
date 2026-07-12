@@ -1053,6 +1053,23 @@ describe("peerMutationGuardFailure", () => {
       ).toBeNull();
     });
 
+    it("allows explicit natural-language invocation verbs for the exact namespaced mutation tool", () => {
+      for (const request of [
+        "Call Calli's createPosts tool exactly once to create a held draft; omit approval and do not publish.",
+        "Invoke createPosts exactly once without approval so the peer returns its held-draft receipt.",
+      ]) {
+        expect(peerMutationGuardFailure(createPosts, request, { forceMutation: true })).toBeNull();
+      }
+    });
+
+    it("keeps negated call/invoke instructions fail-closed", () => {
+      for (const request of ["Do not call createPosts.", "Never invoke createPosts."]) {
+        expect(peerMutationGuardFailure(createPosts, request, { forceMutation: true })).toContain(
+          "require an explicit write/run/send instruction",
+        );
+      }
+    });
+
     it("allows a natural draft request that also asks to show the held result", () => {
       expect(
         peerMutationGuardFailure(

@@ -109,7 +109,7 @@ function hasUnnegatedVerb(request: string, verbs: RegExp): boolean {
 const POST_VERB_RE = /\b(?:post|publish|send)\b/gi;
 const EMAIL_VERB_RE = /\b(?:send|email|mail)\b/gi;
 const INTENT_CLAUSE_BOUNDARY_RE = /[.;!?]|\b(?:but|however|instead|then)\b/gi;
-const DYNAMIC_RUN_VERB_RE = /\b(?:run|execute)\b/gi;
+const DYNAMIC_RUN_VERB_RE = /\b(?:run|execute|invoke|call)\b/gi;
 const DYNAMIC_NEGATION_RE = /\b(?:no|not|don'?t|won'?t|never|cancel|stop|abort|nvm|nevermind|without|exclude|except|skip|omit)\b/i;
 const POSTFIX_CANCELLATION_RE =
   /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this|the\s+call))?|stop|abort|nvm|nevermind|do\s+not\s+(?:do|run|execute|invoke|call|proceed)|don'?t\s+(?:do|run|execute|invoke|call|proceed))\b/i;
@@ -118,7 +118,7 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Strict positive `run|execute <exact-tool-leaf>` intent with no later cancellation. */
+/** Strict positive `run|execute|invoke|call <exact-tool-leaf>` intent with no later cancellation. */
 function hasExplicitDynamicMutationVerb(tool: string, request: string): boolean {
   const toolLeaf = tool.split("__")[1] ?? "";
   if (toolLeaf.length < 4) return false;
