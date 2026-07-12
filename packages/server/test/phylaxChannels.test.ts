@@ -254,10 +254,17 @@ describe("ported gateway integration", () => {
     dirs.push(dataDir);
     const calls: PhylaxDownstreamCall[] = [];
     const sent: Array<{ jid: string; text: string }> = [];
+    let transcriptionCalls = 0;
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.zenod.dev/mcp/alpha", downstreamToken: "ring-alpha" }) },
       artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/customer-unit-token/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe() {
+          transcriptionCalls += 1;
+          throw new Error("image bytes must not reach transcription");
+        },
+      },
       async callDownstream(call) {
         calls.push(call);
         return { content: [{ type: "text", text: `Council image reply ${calls.length}` }] };
@@ -295,6 +302,7 @@ describe("ported gateway integration", () => {
       await runtime.whatsapp.handleEvent(image("wa-image-plain", "", "image/jpeg"));
 
       expect(calls).toHaveLength(2);
+      expect(transcriptionCalls).toBe(0);
       expect(sent).toEqual([
         { jid: "34611111111@s.whatsapp.net", text: "Council image reply 1" },
         { jid: "34611111111@s.whatsapp.net", text: "Council image reply 2" },

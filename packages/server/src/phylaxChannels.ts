@@ -126,6 +126,11 @@ function safeArtifactName(value: string | null | undefined): string {
   return safe || "media.bin";
 }
 
+function isAudioMedia(media: NonNullable<PhylaxChannelInbound["media"]>): boolean {
+  if (media.mimeType?.toLowerCase().startsWith("audio/")) return true;
+  return /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav|webm)$/i.test(media.fileName?.trim() ?? "");
+}
+
 function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string): string {
   if (!handoff.artifact_ref && !handoff.transcription_failed) return text;
   return [
@@ -162,7 +167,7 @@ export class PhylaxChannelsOrgan {
 
     const artifactRef = input.media ? this.rememberArtifact(route.tenantId, input.media) : undefined;
     let transcription: PhylaxTranscriptionReceipt = input.transcription ?? {};
-    if (!input.transcription && input.media?.bytes && this.options.transcriber) {
+    if (!input.transcription && input.media?.bytes && isAudioMedia(input.media) && this.options.transcriber) {
       try {
         transcription = await this.options.transcriber.transcribe({
           tenantId: route.tenantId,
