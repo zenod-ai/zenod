@@ -1,6 +1,6 @@
 # EPIC 5 · Herald Sprint — duplicate the Ring, give it an agenda
 
-Status: active — H-S5 paused during final live walk (Jordi, 2026-07-11)
+Status: active — capped PR-5.1 repair Wave R1 dispatched
 Created: 2026-07-11
 Updated: 2026-07-12
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: Herald delivery manager
 Steward since: 2026-07-11T19:50:29+02:00
-Last reconciled commit: `17e3f30319371fbc4750c8790ff4ce1f45377dea`
+Last reconciled commit: `b86a28b33e4783c7441ddfa00f9dccb4c1b17c77`
 Planner: Jordi + Epic 3.0 planner
 Worker: Herald delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -89,13 +89,14 @@ HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Ca
 
 ## Current State
 
-Phase: PR-5.1 accepted with amendments — repair issue minting and capped dispatch ready
-Last verified: 2026-07-12T02:02:00+02:00
+Phase: capped PR-5.1 repair — Wave R1 H-S6 ∥ H-S8 dispatched
+Last verified: 2026-07-12T14:08:00+02:00
 Integration target: main
-Fresh base commit: `bf366b5939492af1417814bfae1daf30006b3cf4` — pinned from `origin/main` at dispatch (D19c); no rebases until the journey passes
+Fresh repair base commit: `b86a28b33e4783c7441ddfa00f9dccb4c1b17c77` — pinned from `origin/main` immediately before R1 dispatch; no rebases inside the wave
+Repair clock: started 2026-07-12T14:08:00+02:00; H-D17 stop time is 2026-07-12T18:08:00+02:00.
 Live deployment: `https://herald.zenod.dev/` is serving exact commit `17e3f30319371fbc4750c8790ff4ce1f45377dea`; CI and image publication passed.
 Paused point: tenant one is paid and authenticated; the duplicated wallet contains live Zenod + Calli tenants; Calli is connected to `@ZenodAgent`; the corrected active test model key is stored; Herald loop/chat state was reset for the final uninterrupted lap. The final lap had re-verified the logged-out landing and GitHub return and was entering the dashboard when Jordi paused it. Existing screenshots cover steps 1–7, but they are partial-lap evidence and do not yet constitute SHIP.
-Next action: the manager mints H-S6–H-S9 GitHub issues, pins fresh `origin/main`, and starts the half-day repair clock. Dispatch H-S6 ∥ H-S8, then H-S7, then trimmed H-S9 + preflight. At the cap, deploy whatever passing work is merged and restart H-S5 at step 1 so the live walk names any remainder.
+Next action: H-S6-worker and H-S8-worker execute R1 from the exact pinned base. The manager monitors 30-minute heartbeats, reviews and integrates green work, then pins the integrated R1 SHA for H-S7.
 Blockers: none. PR-5.1 is accepted with the deterministic-test and half-day-cap amendments below. No credential or infrastructure input is required.
 
 ## Role Goals
@@ -247,16 +248,16 @@ Pre-answered — the planner is asleep.
 | [#898](https://github.com/zenod-ai/zenod/issues/898) | Ticket worker | H-S3-worker | H-S3 briefing setup mode + ✓ parsing + filings via wallet | BUILD on PORTed ring chat | done | H-S1, H-S2 | 2 | [#902](https://github.com/zenod-ai/zenod/pull/902) / `codex/h-s3-briefing-chat` | `cfc13e2` | CI + 13 focused tests; merged `ea005cb` | 2026-07-11T20:42:28+02:00 | integrated |
 | [#899](https://github.com/zenod-ai/zenod/issues/899) | Ticket worker | H-S4-worker | H-S4 proposer/poster lanes + Board & Briefing dashboard panels + Run now | BUILD on DUPLICATEd wallet/dashboard | done | H-S1, H-S2 | 2 | [#903](https://github.com/zenod-ai/zenod/pull/903) / `codex/h-s4-loop-lanes-dashboard` | `cfc13e2` | CI + 699 server tests + web/build/typecheck; merged `7d9dad1`; chat seam fixed `0820167` | 2026-07-11T20:42:28+02:00 | integrated |
 | [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | held for capped repair | H-S6–H-S9 or H-D17 cap + preflight | last | `main` | `17e3f30` live | PR-5.1 accepted; first-setup transcript is the repair evidence | 2026-07-12T02:02:00+02:00 | resume from step 1 after repair completion or four-hour cap, green merge, deploy and preflight |
-| draft H-S6 | Ticket worker | unassigned | One-Herald state kernel | BUILD repair | ready to mint | H-D16 | R1 | branch/worktree after issue minting | fresh pinned `origin/main` | first-setup transcript | 2026-07-12T02:02:00+02:00 | manager mints issue, pins base and dispatches under four-hour total cap |
-| draft H-S7 | Ticket worker | unassigned | Authoritative natural-language loop control | BUILD repair | ready after R1 | H-S6 | R2 | branch/worktree after issue minting | integrated R1 commit | first-setup transcript | 2026-07-12T02:02:00+02:00 | dispatch only after H-S6 integrates |
-| draft H-S8 | Ticket worker | unassigned | Herald-only product language | PORT cleanup + BUILD | ready to mint | H-D16 | R1 | branch/worktree after issue minting | fresh pinned `origin/main` | live dashboard copy | 2026-07-12T02:02:00+02:00 | manager mints issue, pins base and dispatches under four-hour total cap |
-| draft H-S9 | Tester / ticket worker | unassigned | Deterministic seam contract and integration gate | TEST + bounded fixes | ready after R2 | H-S6, H-S7, H-S8 | R3 | branch/worktree after issue minting | integrated R2 commit | deterministic seam list from planner amendment | 2026-07-12T02:02:00+02:00 | maximum 90 minutes; fewer passing tests beat delaying H-S5 |
+| [#905](https://github.com/zenod-ai/zenod/issues/905) | Ticket worker | H-S6-worker | One-Herald state kernel | BUILD repair | dispatched | H-D16 | R1 | `codex/h-s6-state-kernel` / `../wt-h-s6` | `b86a28b` | first-setup transcript + PR-5.1 | 2026-07-12T14:08:00+02:00 | create worktree as first action; implement, validate, open PR and hand off in issue |
+| [#908](https://github.com/zenod-ai/zenod/issues/908) | Ticket worker | queued H-S7-worker | Authoritative natural-language loop control | BUILD repair | waiting for R1 | H-S6 | R2 | `codex/h-s7-natural-loop` / `../wt-h-s7` on dispatch | integrated R1 commit | first-setup transcript | 2026-07-12T14:08:00+02:00 | manager dispatches only after H-S6 integrates |
+| [#906](https://github.com/zenod-ai/zenod/issues/906) | Ticket worker | H-S8-worker | Herald-only product language | PORT cleanup + BUILD | dispatched | H-D16 | R1 | `codex/h-s8-herald-language` / `../wt-h-s8` | `b86a28b` | live dashboard copy + PR-5.1 | 2026-07-12T14:08:00+02:00 | create worktree as first action; port/adapt copy, validate, open PR and hand off in issue |
+| [#907](https://github.com/zenod-ai/zenod/issues/907) | Tester / ticket worker | queued H-S9-worker | Deterministic seam contract and integration gate | TEST + bounded fixes | waiting for R2 | H-S6, H-S7, H-S8 | R3 | `codex/h-s9-deterministic-seams` / `../wt-h-s9` on dispatch | integrated R2 commit | deterministic seam list from planner amendment | 2026-07-12T14:08:00+02:00 | maximum 90 minutes after R2; fewer passing tests beat delaying H-S5 |
 
 Budgets: 90 min per ticket; manager reassigns anything silent past budget. Heartbeat every 30 min: `lap/state | blocker | ETA`.
 
 ## Branch And Integration
 
-- Integration target: protected `main`; dispatch base `bf366b5939492af1417814bfae1daf30006b3cf4` is frozen until the journey passes.
+- Integration target: protected `main`; repair R1 dispatch base `b86a28b33e4783c7441ddfa00f9dccb4c1b17c77` is frozen for H-S6/H-S8.
 - Every ticket worker uses its dedicated branch and worktree; the shared checkout remains the steward's integration surface.
 - The manager reviews and integrates passing Wave 1 work, pins the resulting exact commit for Wave 2, then integrates H-S3/H-S4 and freezes one exact live journey commit.
 - No rebases during a pinned wave. Targeted tests precede integration; the full acceptance test runs only on the live Herald deployment per D19–D21.
@@ -289,6 +290,14 @@ None. PR-5.1 was accepted with amendments on 2026-07-12. Anything else that surf
 | 2026-07-11 | H-S5 partial browser laps | `17e3f30319371fbc4750c8790ff4ce1f45377dea` | live Chrome session | landing, pricing, GitHub, Stripe TEST, dashboard/wallet, no-briefing refusal, briefing + Zenod commit receipt | partial — not SHIP; final uninterrupted pass still required | local-only `docs/evidence/herald-ship-2026-07-11/`; redact credential-bearing wallet URLs before committing any image |
 
 ## Handoff Journal
+
+### 2026-07-12T14:08:00+02:00 — Herald delivery manager — capped repair R1 dispatched
+
+Context: fresh `origin/main` was pinned at `b86a28b33e4783c7441ddfa00f9dccb4c1b17c77`. The accepted backlog is materialized as H-S6 [#905](https://github.com/zenod-ai/zenod/issues/905), H-S8 [#906](https://github.com/zenod-ai/zenod/issues/906), H-S9 [#907](https://github.com/zenod-ai/zenod/issues/907), and H-S7 [#908](https://github.com/zenod-ai/zenod/issues/908). The four-hour H-D17 clock began with R1 dispatch and expires at 2026-07-12T18:08:00+02:00.
+
+Assignments: H-S6-worker / `codex/h-s6-state-kernel` / `../wt-h-s6`; H-S8-worker / `codex/h-s8-herald-language` / `../wt-h-s8`; both must create their dedicated worktree as first action from the exact pinned base. H-S7 and H-S9 remain dependency-gated.
+
+Next: integrate green R1 work, pin the integrated SHA for H-S7, then execute H-S7 → deterministic H-S9 + preflight within the total cap.
 
 ### 2026-07-12T02:02:00+02:00 — Epic 5 planner — PR-5.1 accepted with caps
 
