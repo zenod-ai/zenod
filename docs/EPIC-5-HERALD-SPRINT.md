@@ -89,14 +89,14 @@ HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Ca
 
 ## Current State
 
-Phase: planner review — PR-5.1 plus proposed repair backlog before H-S5 resumes
-Last verified: 2026-07-12T01:55:51+02:00
+Phase: PR-5.1 accepted with amendments — repair issue minting and capped dispatch ready
+Last verified: 2026-07-12T02:02:00+02:00
 Integration target: main
 Fresh base commit: `bf366b5939492af1417814bfae1daf30006b3cf4` — pinned from `origin/main` at dispatch (D19c); no rebases until the journey passes
 Live deployment: `https://herald.zenod.dev/` is serving exact commit `17e3f30319371fbc4750c8790ff4ce1f45377dea`; CI and image publication passed.
 Paused point: tenant one is paid and authenticated; the duplicated wallet contains live Zenod + Calli tenants; Calli is connected to `@ZenodAgent`; the corrected active test model key is stored; Herald loop/chat state was reset for the final uninterrupted lap. The final lap had re-verified the logged-out landing and GitHub return and was entering the dashboard when Jordi paused it. Existing screenshots cover steps 1–7, but they are partial-lap evidence and do not yet constitute SHIP.
-Next action: planner reviews PR-5.1 and the H-S6–H-S9 backlog below. If accepted, the manager mints the draft GitHub issues, pins fresh `origin/main`, dispatches the repair waves, integrates and deploys one exact SHA, passes the pre-test gate, then restarts H-S5 at step 1. Do not resume from the paused browser step because Definition Of Done requires a clean pass from step 1.
-Blockers: H-S5 is intentionally held at the PR-5.1 planner gate because the live test revealed a product-identity and authority divergence. No credential or infrastructure input is required.
+Next action: the manager mints H-S6–H-S9 GitHub issues, pins fresh `origin/main`, and starts the half-day repair clock. Dispatch H-S6 ∥ H-S8, then H-S7, then trimmed H-S9 + preflight. At the cap, deploy whatever passing work is merged and restart H-S5 at step 1 so the live walk names any remainder.
+Blockers: none. PR-5.1 is accepted with the deterministic-test and half-day-cap amendments below. No credential or infrastructure input is required.
 
 ## Role Goals
 
@@ -133,7 +133,7 @@ The one new organ — the loop — lives entirely inside Herald:
 
 ### PR-5.1 — One Herald, one personality, one authority
 
-Status: proposed by Jordi from first-setup live testing on 2026-07-12; planner acceptance required before implementation.
+Status: **accepted with amendments** by the Epic 5 planner on 2026-07-12. Implementation is green-lit under H-D16/H-D17 and the capped path below.
 
 Evidence: `/Users/jordi/.codex/attachments/0ebd2a14-d6fa-4aea-be10-613c7bee6f50/pasted-text.txt`. The briefing interview and exact ✓ filing worked, but the subsequent generic chat produced uncited, non-board drafts, invented an unsupported `✓ approve post` command, and then the authoritative board parser correctly reported that no proposals existed.
 
@@ -175,34 +175,35 @@ Proposed UI/copy consequences:
 - Present the wallet as Herald's connected tools/capabilities, not a Council roster.
 - Board and chat are two views of the same Herald state, never parallel realities.
 
-Planner decision requested: accept this invariant as a correction to H-D2/H-D13's product interpretation and add its turn contract to SHIP acceptance. Recommendation: **accept**; it narrows authority and removes an observed split-brain behavior without changing the existing Zenod, Calli, board, scheduler, or tenant architecture.
+Planner verdict: **accepted** as a correction to H-D2/H-D13's product interpretation and as SHIP acceptance. It narrows authority and removes an observed split-brain behavior without changing the existing Zenod, Calli, board, scheduler, or tenant architecture. Amendments: H-S9 is deterministic-seam-only and hard-capped at 90 minutes; the complete repair is capped at one half-day before H-S5 restarts with whatever passing work is merged.
 
 ### Proposed backlog and path to the next test phase
 
-These are draft tickets until the planner accepts PR-5.1. After acceptance the manager creates the GitHub issues, records exact branches/bases, and dispatches in the waves below.
+The planner accepted these tickets with the two amendments below. They remain marked draft only until the manager creates their GitHub issues, records exact branches/bases, and dispatches the capped waves.
 
 | Draft | Title | Scope | Depends On | Acceptance Gate | Wave |
 |---|---|---|---|---|---|
 | H-S6 | One-Herald state kernel | Server-side identity/authority repair. Remove the generic post-briefing fallback as an independent personality; assemble approved briefing, current board, recent filings and receipts as Herald's mandatory turn state for chat and MCP; keep deterministic mutation receipts behind Herald's single voice. | PR-5.1 | Every post-briefing turn is handled as Herald and can name the current briefing/board state; no generic Ring/Council persona can emit domain output outside Herald authority. | R1 |
 | H-S7 | Authoritative natural-language loop control | Route natural requests into existing lanes: show/propose → the real proposer/board; numbered approvals → current board parser; feedback → rejection/lesson filing that shapes the next wake; send/publish → actual approved board state and Calli. Prevent invented approval commands and chat-only drafts. | H-S6 | Jordi's transcript can be replayed through chat: proposed copy exists as cited board rows, feedback is durable, unsupported `✓ approve post` is never suggested, and publishing cannot occur without real board approval. | R2 |
 | H-S8 | Herald-only product language | Remove inherited "Council" / "Talk to your brain" language; present wallet peers as Herald's connected tools/capabilities; make chat, briefing and board read as one agent's state; disclose that reply policy is recorded while automated X replies remain HARDEN. | PR-5.1 | No Ring/Council/second-persona product copy remains on Herald surfaces; the dashboard makes one Herald and one state model obvious. | R1 |
-| H-S9 | Transcript-derived contract and integration gate | Add regression tests from Jordi's first-setup evidence across briefing, natural proposal request, style feedback, approval guidance and publish intent. Assert citations/WHY, board persistence, memory receipts, unsupported-feature disclosure and zero off-board mutations. Run full server/web/build validation. | H-S6, H-S7, H-S8 | Automated replay passes; 100% of domain proposals are authoritative board rows; every mutation has a receipt or clear Herald-voice error; full relevant CI is green. | R3 |
+| H-S9 | Deterministic seam contract and integration gate | Add deterministic tests only: ✓ parser cases, board transitions, no-off-board-mutation guard, natural "show posts" routing to the proposer path, feedback filing, approval/publish state guards, and receipt/error shapes. Do not assert nondeterministic LLM wording and do not mock an LLM transcript into a fake journey. Run relevant server/web/build validation. Hard 90-minute budget: reduce the test set rather than delay the next walk. | H-S6, H-S7, H-S8 | Deterministic seams pass; domain proposals cannot bypass board creation; mutations return receipts/clear errors; relevant CI is green. Conversational quality remains a live H-S5 judgment. | R3 |
 
 Dispatch sequence:
 
-1. **Planner gate:** accept/amend/reject PR-5.1 and this backlog. No code work begins before acceptance because this changes SHIP identity/acceptance.
+1. **Planner gate — complete:** PR-5.1 and the backlog were accepted on 2026-07-12 with the H-S9 and total-budget amendments.
 2. **Pin:** fetch `origin/main`, record one fresh base SHA, and create H-S6–H-S9 GitHub issues with dedicated worktrees/branches.
 3. **Wave R1:** H-S6 ∥ H-S8. Their file surfaces are expected to be server runtime/chat versus Herald web copy/components.
 4. **Wave R2:** H-S7 on the integrated R1 commit. This is sequenced after H-S6 so natural intent cannot recreate a second authority path.
-5. **Wave R3:** H-S9 tests the integrated behavior using Jordi's transcript as the contract fixture; fix/retest until green.
+5. **Wave R3:** H-S9 tests deterministic seams only, with a hard 90-minute ceiling. If time expires, keep the highest-value passing tests and move on; the live walk judges conversational quality.
 6. **Pre-test gate:** merge to `main`; CI + image publication pass; deploy one exact SHA; `/api/health` matches; live tenant wallet/model/Calli connectivity passes; reset only Herald test loop/chat state; recapture or redact any evidence containing token-bearing URLs.
-7. **Next test phase:** set H-S5 back to `testing` and restart the complete real-browser journey at step 1. A test phase may not begin earlier.
+7. **Half-day stop rule:** the total repair window is four wall-clock hours from first dispatch. At the cap, stop adding repair scope, integrate only green work, run the preflight, and restart H-S5 with whatever is merged. Any remainder stays visible and the walk names the next actual defect.
+8. **Next test phase:** set H-S5 back to `testing` and restart the complete real-browser journey at step 1. It begins after either the planned repair completes or the half-day cap fires, provided merged work is green and the preflight passes.
 
 Entry criteria for the next H-S5 test phase:
 
 - PR-5.1 accepted and reflected as a final decision/acceptance update.
-- H-S6–H-S9 issues are done and integrated.
-- Transcript-derived regression is green on the deployed SHA.
+- Either H-S6–H-S9 are complete, or the four-hour repair cap has fired and all passing work available at the cap is integrated.
+- H-S9's deterministic seam set is green on the deployed SHA; LLM conversational quality is deliberately not an automated gate.
 - Natural "show me posts" creates real cited board items; feedback persists; publish intent resolves against real approvals.
 - Herald UI and replies contain no visible Ring/Council second personality.
 - Live Zenod and Calli wallet catalogs, model key, X connection, and exact deployment SHA are verified.
@@ -234,6 +235,8 @@ Pre-answered — the planner is asleep.
 | H-D13 | Herald's own MCP face | Comes with the ring duplicate. v0 tools: `get_board`, `get_briefing`, `propose_now`, `approve_items`. Same tokened-URL auth as every unit. |
 | H-D14 | Old EPIC-2.6 / `units/herald/` scaffold | Ignore. Superseded in spirit by this spine; do not build from it, do not edit it. |
 | H-D15 | Catch-all | Anything unanswered: simplest option, note it in the journal, keep moving. |
+| H-D16 | Agent-unit persona inheritance | **One personality, one authority, grounded every turn.** Ring is implementation provenance only; Herald is the sole visible persona and MCP authority. Every turn loads briefing + current operational state, and natural language/buttons enter the same authoritative lanes. This decision is a reusable requirement for future agent-unit spines. |
+| H-D17 | Repair/test budget | H-S6 ∥ H-S8 → H-S7 → deterministic-only H-S9 + preflight. H-S9 has a hard 90-minute cap. The whole repair has a four-hour wall-clock cap from first dispatch; when it fires, deploy green merged work and restart H-S5 rather than extending the gap between journeys. |
 
 ## Issue Ledger
 
@@ -243,11 +246,11 @@ Pre-answered — the planner is asleep.
 | [#895](https://github.com/zenod-ai/zenod/issues/895) | Ticket worker | H-S2-worker | H-S2 loop organ (scheduler + boards + briefing store + no-briefing-no-fire gate) | BUILD (verified absent everywhere) | done | pinned base | 1 | [#901](https://github.com/zenod-ai/zenod/pull/901) / `codex/h-s2-loop-organ` | `bf366b5` | 685 server tests + manager integration tests; merged `cfc13e2` | 2026-07-11T20:07:57+02:00 | integrated |
 | [#898](https://github.com/zenod-ai/zenod/issues/898) | Ticket worker | H-S3-worker | H-S3 briefing setup mode + ✓ parsing + filings via wallet | BUILD on PORTed ring chat | done | H-S1, H-S2 | 2 | [#902](https://github.com/zenod-ai/zenod/pull/902) / `codex/h-s3-briefing-chat` | `cfc13e2` | CI + 13 focused tests; merged `ea005cb` | 2026-07-11T20:42:28+02:00 | integrated |
 | [#899](https://github.com/zenod-ai/zenod/issues/899) | Ticket worker | H-S4-worker | H-S4 proposer/poster lanes + Board & Briefing dashboard panels + Run now | BUILD on DUPLICATEd wallet/dashboard | done | H-S1, H-S2 | 2 | [#903](https://github.com/zenod-ai/zenod/pull/903) / `codex/h-s4-loop-lanes-dashboard` | `cfc13e2` | CI + 699 server tests + web/build/typecheck; merged `7d9dad1`; chat seam fixed `0820167` | 2026-07-11T20:42:28+02:00 | integrated |
-| [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | planner review | H-S1..4 + PR-5.1 | last | `main` | `17e3f30` live | first-setup transcript proves briefing receipt but exposes chat/board split personality and authority | 2026-07-12T01:54:37+02:00 | planner reviews PR-5.1; accepted refinement becomes a bounded fix ticket before H-S5 restarts |
-| draft H-S6 | Ticket worker | unassigned | One-Herald state kernel | BUILD repair | planner review | PR-5.1 | R1 | branch/worktree after approval | fresh pinned `origin/main` after approval | first-setup transcript | 2026-07-12T01:55:51+02:00 | planner accepts backlog, then manager mints issue and dispatches |
-| draft H-S7 | Ticket worker | unassigned | Authoritative natural-language loop control | BUILD repair | planner review | H-S6 | R2 | branch/worktree after approval | integrated R1 commit | first-setup transcript | 2026-07-12T01:55:51+02:00 | dispatch only after H-S6 integrates |
-| draft H-S8 | Ticket worker | unassigned | Herald-only product language | PORT cleanup + BUILD | planner review | PR-5.1 | R1 | branch/worktree after approval | fresh pinned `origin/main` after approval | live dashboard copy | 2026-07-12T01:55:51+02:00 | planner accepts backlog, then manager mints issue and dispatches |
-| draft H-S9 | Tester / ticket worker | unassigned | Transcript-derived contract and integration gate | TEST + bounded fixes | planner review | H-S6, H-S7, H-S8 | R3 | branch/worktree after approval | integrated R2 commit | Jordi transcript contract | 2026-07-12T01:55:51+02:00 | dispatch after repair integration; green is required before H-S5 |
+| [#896](https://github.com/zenod-ai/zenod/issues/896) | Epic worker / tester | Herald delivery manager | H-S5 journey loop (browser, live) + test package | — | held for capped repair | H-S6–H-S9 or H-D17 cap + preflight | last | `main` | `17e3f30` live | PR-5.1 accepted; first-setup transcript is the repair evidence | 2026-07-12T02:02:00+02:00 | resume from step 1 after repair completion or four-hour cap, green merge, deploy and preflight |
+| draft H-S6 | Ticket worker | unassigned | One-Herald state kernel | BUILD repair | ready to mint | H-D16 | R1 | branch/worktree after issue minting | fresh pinned `origin/main` | first-setup transcript | 2026-07-12T02:02:00+02:00 | manager mints issue, pins base and dispatches under four-hour total cap |
+| draft H-S7 | Ticket worker | unassigned | Authoritative natural-language loop control | BUILD repair | ready after R1 | H-S6 | R2 | branch/worktree after issue minting | integrated R1 commit | first-setup transcript | 2026-07-12T02:02:00+02:00 | dispatch only after H-S6 integrates |
+| draft H-S8 | Ticket worker | unassigned | Herald-only product language | PORT cleanup + BUILD | ready to mint | H-D16 | R1 | branch/worktree after issue minting | fresh pinned `origin/main` | live dashboard copy | 2026-07-12T02:02:00+02:00 | manager mints issue, pins base and dispatches under four-hour total cap |
+| draft H-S9 | Tester / ticket worker | unassigned | Deterministic seam contract and integration gate | TEST + bounded fixes | ready after R2 | H-S6, H-S7, H-S8 | R3 | branch/worktree after issue minting | integrated R2 commit | deterministic seam list from planner amendment | 2026-07-12T02:02:00+02:00 | maximum 90 minutes; fewer passing tests beat delaying H-S5 |
 
 Budgets: 90 min per ticket; manager reassigns anything silent past budget. Heartbeat every 30 min: `lap/state | blocker | ETA`.
 
@@ -262,7 +265,7 @@ Budgets: 90 min per ticket; manager reassigns anything silent past budget. Heart
 
 | Gate | Human Owner | Trigger | Exact Approval / Input Required | What May Continue |
 |---|---|---|---|---|
-| PR-5.1 Herald identity + repair backlog | Epic 5 planner | First-setup transcript shows generic chat and authoritative board diverge | Accept, amend, or reject the one-Herald invariant, turn contract, H-S6–H-S9 backlog, and next-test entry criteria | Issue minting and repair dispatch; H-S5 remains held until the pre-test gate passes |
+| PR-5.1 Herald identity + repair backlog | Epic 5 planner | First-setup transcript shows generic chat and authoritative board diverge | **Complete 2026-07-12:** accepted with deterministic-only H-S9, 90-minute H-S9 cap, and four-hour total repair cap | Issue minting and capped repair dispatch may proceed |
 | SHIP approval | Jordi | Test package delivered | Jordi walks the identical journey and approves | Nothing in HARDEN |
 | HARDEN reply lane | Jordi | After SHIP approval | Jordi routes the X-read ask to Calli's track | All other HARDEN items |
 | Customer #0 flip (D-H1 dogfood) | Jordi personally | HARDEN, his call | Jordi connects Zenod's own X account and approves the first real morning-N | Everything else |
@@ -275,7 +278,7 @@ Stale policy: the manager reassigns any ticket silent past its budget. Record ta
 
 ## Open Questions
 
-PR-5.1 only: does the planner accept the one-Herald identity invariant, its eight-part turn contract, the H-S6–H-S9 backlog, and the listed next-test entry criteria as SHIP acceptance? Recommendation: accept. Anything else that surfaces follows H-D15.
+None. PR-5.1 was accepted with amendments on 2026-07-12. Anything else that surfaces follows H-D15 and the four-hour stop rule in H-D17.
 
 ## Validation Evidence
 
@@ -286,6 +289,14 @@ PR-5.1 only: does the planner accept the one-Herald identity invariant, its eigh
 | 2026-07-11 | H-S5 partial browser laps | `17e3f30319371fbc4750c8790ff4ce1f45377dea` | live Chrome session | landing, pricing, GitHub, Stripe TEST, dashboard/wallet, no-briefing refusal, briefing + Zenod commit receipt | partial — not SHIP; final uninterrupted pass still required | local-only `docs/evidence/herald-ship-2026-07-11/`; redact credential-bearing wallet URLs before committing any image |
 
 ## Handoff Journal
+
+### 2026-07-12T02:02:00+02:00 — Epic 5 planner — PR-5.1 accepted with caps
+
+Verdict: the one-Herald diagnosis is accepted as journey-driven structural work, not cosmetic busywork. H-S6 is the correct enforcement layer; H-S8 may run in parallel; H-S7 follows H-S6. Amendment one trims H-S9 to deterministic seams only and caps it at 90 minutes—no brittle LLM-output replay and no mocks that simulate the journey. Amendment two caps the entire repair at four wall-clock hours from first dispatch; at the cap the manager integrates green work, deploys one SHA, runs preflight, and restarts H-S5 so the live walk names any remaining defect.
+
+Durable dialect lesson: when duplicating an agent unit, inherited persona is a liability, not a freebie. "One personality, one authority, grounded every turn" is now H-D16 and has been filed on [EpicSpine v2 #9](https://github.com/AlfaBlok/epicspine-skill/pull/9#issuecomment-4949270403) for reuse in future agent-unit spine Decisions tables.
+
+Next: mint H-S6–H-S9, pin the fresh base, start the repair clock, and dispatch H-S6 ∥ H-S8.
 
 ### 2026-07-12T01:54:37+02:00 — Herald delivery manager — first-setup evidence routed to planner
 
