@@ -16,6 +16,21 @@ import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
 describe("Ring wallet receipt", () => {
+  it("marks the host catalog as requiring explicit catalog intent", async () => {
+    const ringDir = await mkdtemp(join(tmpdir(), "ring-runtime-catalog-intent-"));
+    const ringRuntime = new Runtime(ringDir, RING_AGENT);
+    try {
+      const tools = (ringRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+      expect(tools.inspect_connected_mcp_catalog).toMatchObject({
+        authoritativeReadResult: true,
+        requiresMcpCatalogIntent: true,
+      });
+    } finally {
+      ringRuntime.close();
+      await rm(ringDir, { recursive: true, force: true });
+    }
+  });
+
   it("waits for a Zenod store_memory job and returns its commit receipt", async () => {
     const zenodDir = await mkdtemp(join(tmpdir(), "zenod-runtime-wallet-store-zenod-"));
     const ringDir = await mkdtemp(join(tmpdir(), "zenod-runtime-wallet-store-ring-"));
