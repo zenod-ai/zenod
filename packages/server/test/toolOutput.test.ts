@@ -32,6 +32,77 @@ describe("v4 tool output validation", () => {
     expect(validateToolResponse("archus.get_issue", output)).toBe(output);
   });
 
+  it("accepts typed, canonically linked terminal memory evidence", () => {
+    const result = {
+      evidenceRef: "Log/2026-07-12.md#^e-cobalt",
+      evidenceUrl: `https://github.com/owner/vault/blob/${"a".repeat(40)}/Log/2026-07-12.md#L42`,
+      pagesTouched: ["Projects/Council.md"],
+      pageUrls: [`https://github.com/owner/vault/blob/${"a".repeat(40)}/Projects/Council.md`],
+      commitSha: "a".repeat(40),
+      githubUrls: [
+        "https://github.com/owner/vault/blob/main/Log/2026-07-12.md",
+        "https://github.com/owner/vault/blob/main/Projects/Council.md",
+      ],
+    };
+    const output = {
+      found: true,
+      ticket_id: "job-1",
+      jobId: "job-1",
+      kind: "store",
+      status: "done",
+      state: "done",
+      result,
+      evidence: [
+        evidence("memory_stored", {
+          id: "job-1",
+          ticket_id: "job-1",
+          jobId: "job-1",
+          status: "done",
+          evidenceRef: "Log/2026-07-12.md#^e-cobalt",
+          url: `https://github.com/owner/vault/blob/${"a".repeat(40)}/Log/2026-07-12.md#L42`,
+          commitSha: "a".repeat(40),
+          pagesTouched: ["Projects/Council.md"],
+          githubUrls: [
+            "https://github.com/owner/vault/blob/main/Log/2026-07-12.md",
+            "https://github.com/owner/vault/blob/main/Projects/Council.md",
+          ],
+          pageUrls: [`https://github.com/owner/vault/blob/${"a".repeat(40)}/Projects/Council.md`],
+        }),
+      ],
+    };
+
+    expect(validateToolResponse("zenod.get_task_result", output)).toBe(output);
+  });
+
+  it("rejects terminal memory evidence without its typed reference and canonical URL", () => {
+    const output = {
+      found: true,
+      ticket_id: "job-1",
+      jobId: "job-1",
+      kind: "store",
+      status: "done",
+      state: "done",
+      result: {
+        evidenceRef: "Log/2026-07-12.md#^e-cobalt",
+        pagesTouched: [],
+        commitSha: "a".repeat(40),
+        githubUrls: [],
+      },
+      evidence: [
+        evidence("memory_stored", {
+          jobId: "job-1",
+          status: "done",
+          commitSha: "a".repeat(40),
+          pagesTouched: [],
+          githubUrls: [],
+          pageUrls: [],
+        }),
+      ],
+    };
+
+    expect(() => validateToolResponse("zenod.get_task_result", output)).toThrow(/evidenceRef|url/);
+  });
+
   it("rejects evidence shapes outside a tool's public contract", () => {
     const output = toolResponse({
       evidence: [evidence("memory_stored", { jobId: "j1", status: "done", commitSha: "abc", pagesTouched: [] })],

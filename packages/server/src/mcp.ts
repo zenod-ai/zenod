@@ -140,15 +140,60 @@ function enqueuedResponse(job: TaskJob) {
   };
 }
 
+function legacyEvidenceFileUrl(evidenceRef: string, githubUrls: string[]): string | undefined {
+  const [path] = evidenceRef.split("#", 1);
+  if (!path) return undefined;
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const base = githubUrls.find((value) => {
+    try {
+      return new URL(value).pathname.endsWith(`/${encodedPath}`);
+    } catch {
+      return false;
+    }
+  });
+  // Legacy results did not persist the evidence line. Return the canonical log
+  // file instead of inventing a GitHub fragment from the Obsidian block id.
+  return base?.split("#", 1)[0];
+}
+
 function taskJobEvidence(job: TaskJob): Array<Record<string, unknown>> {
   const result = job.result as Record<string, unknown> | null;
   const commitSha = typeof result?.commitSha === "string" ? result.commitSha : undefined;
+  const evidenceRef = typeof result?.evidenceRef === "string" ? result.evidenceRef : undefined;
   const githubUrls = Array.isArray(result?.githubUrls)
     ? result.githubUrls.filter((value): value is string => typeof value === "string")
     : [];
+  const evidenceUrl = typeof result?.evidenceUrl === "string"
+    ? result.evidenceUrl
+    : evidenceRef
+      ? legacyEvidenceFileUrl(evidenceRef, githubUrls)
+      : undefined;
+  const pagesTouched = Array.isArray(result?.pagesTouched)
+    ? result.pagesTouched.filter((value): value is string => typeof value === "string")
+    : [];
+  const pageUrls = Array.isArray(result?.pageUrls)
+    ? result.pageUrls.filter((value): value is string => typeof value === "string")
+    : githubUrls.filter((value) => value !== evidenceUrl && value.split("#", 1)[0] !== evidenceUrl?.split("#", 1)[0]);
+  if (job.kind === "store") {
+    return [
+      {
+        kind: "memory_stored",
+        id: job.id,
+        ticket_id: job.id,
+        jobId: job.id,
+        status: "done",
+        ...(evidenceRef ? { evidenceRef } : {}),
+        ...(evidenceUrl ? { url: evidenceUrl } : {}),
+        ...(commitSha ? { commitSha } : {}),
+        pagesTouched,
+        githubUrls,
+        pageUrls,
+      },
+    ];
+  }
   return [
     {
-      kind: job.kind === "store" ? "memory_stored" : "task_job",
+      kind: "task_job",
       id: job.id,
       ticket_id: job.id,
       ...(commitSha ? { commitSha } : {}),
@@ -347,6 +392,7 @@ function formatStoreResult(result: StoreResult): string {
   return [
     result.question ? `QUESTION FOR THE USER: ${result.question}` : "Stored.",
     `evidence: ${result.evidenceRef}`,
+    ...(result.evidenceUrl ? [`evidence URL: ${result.evidenceUrl}`] : []),
     `pages: ${result.pagesTouched.join(", ")}`,
     `commit: ${result.commitSha}`,
     ...result.githubUrls,

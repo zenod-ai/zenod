@@ -378,14 +378,20 @@
     },
     "Ev_memory_stored": {
       "type": "object",
-      "required": ["kind", "jobId", "status", "commitSha", "pagesTouched"],
+      "required": ["kind", "jobId", "status", "evidenceRef", "url", "commitSha", "pagesTouched", "githubUrls", "pageUrls"],
       "properties": {
         "kind": { "const": "memory_stored" },
         "operationId": { "type": "string" },
+        "id": { "type": "string" },
+        "ticket_id": { "type": "string" },
         "jobId": { "type": "string" },
         "status": { "const": "done" },
+        "evidenceRef": { "type": "string" },
+        "url": { "type": "string" },
         "commitSha": { "type": "string" },
-        "pagesTouched": { "type": "array" }
+        "pagesTouched": { "type": "array", "items": { "type": "string" } },
+        "githubUrls": { "type": "array", "items": { "type": "string" } },
+        "pageUrls": { "type": "array", "items": { "type": "string" } }
       },
       "additionalProperties": false
     },
@@ -530,10 +536,63 @@
       ]
     },
     "zenod.get_task_result": {
+      "type": "object",
+      "properties": {
+        "found": { "type": "boolean" },
+        "ticket_id": { "type": "string" },
+        "jobId": { "type": "string" },
+        "kind": { "enum": ["task", "work", "store", "media_ingest"] },
+        "status": { "enum": ["queued", "running", "done", "error", "interrupted"] },
+        "state": { "enum": ["queued", "running", "done", "error"] },
+        "result": { "type": ["object", "null"] },
+        "evidence": { "type": "array", "items": { "oneOf": [
+          { "$ref": "#/$defs/Ev_memory_job" },
+          { "$ref": "#/$defs/Ev_memory_stored" }
+        ] } },
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["found", "ticket_id", "jobId", "kind", "status", "state", "result"],
+          "properties": { "found": { "const": true } }
+        },
+        {
+          "required": ["found", "ticket_id", "jobId", "state", "error"],
+          "properties": { "found": { "const": false }, "state": { "const": "error" } }
+        },
+        { "required": ["error"] }
+      ],
       "allOf": [
-        { "$ref": "#/$defs/Envelope" },
-        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_memory_job" } } } }
-      ]
+        {
+          "if": {
+            "required": ["found", "kind", "status"],
+            "properties": {
+              "found": { "const": true },
+              "kind": { "const": "store" },
+              "status": { "const": "done" }
+            }
+          },
+          "then": {
+            "required": ["evidence"],
+            "properties": {
+              "evidence": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "#/$defs/Ev_memory_stored" }
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
     },
     "zenod.extract_action_requests": {
       "allOf": [

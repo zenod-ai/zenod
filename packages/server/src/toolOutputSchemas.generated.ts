@@ -318,8 +318,12 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "kind",
           "jobId",
           "status",
+          "evidenceRef",
+          "url",
           "commitSha",
-          "pagesTouched"
+          "pagesTouched",
+          "githubUrls",
+          "pageUrls"
         ],
         "properties": {
           "kind": {
@@ -328,17 +332,44 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "operationId": {
             "type": "string"
           },
+          "id": {
+            "type": "string"
+          },
+          "ticket_id": {
+            "type": "string"
+          },
           "jobId": {
             "type": "string"
           },
           "status": {
             "const": "done"
           },
+          "evidenceRef": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
           "commitSha": {
             "type": "string"
           },
           "pagesTouched": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "githubUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pageUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -1749,8 +1780,12 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "kind",
           "jobId",
           "status",
+          "evidenceRef",
+          "url",
           "commitSha",
-          "pagesTouched"
+          "pagesTouched",
+          "githubUrls",
+          "pageUrls"
         ],
         "properties": {
           "kind": {
@@ -1759,17 +1794,44 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "operationId": {
             "type": "string"
           },
+          "id": {
+            "type": "string"
+          },
+          "ticket_id": {
+            "type": "string"
+          },
           "jobId": {
             "type": "string"
           },
           "status": {
             "const": "done"
           },
+          "evidenceRef": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
           "commitSha": {
             "type": "string"
           },
           "pagesTouched": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "githubUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pageUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -1839,110 +1901,213 @@ export const TOOL_OUTPUT_SCHEMAS = (
     "$id": "https://zenod.dev/schemas/tool-output/zenod.get_task_result.json",
     "title": "zenod.get_task_result output",
     "type": "object",
-    "required": [
-      "evidence"
-    ],
-    "additionalProperties": false,
     "properties": {
-      "text": {
+      "found": {
+        "type": "boolean"
+      },
+      "ticket_id": {
         "type": "string"
       },
-      "operations": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Operation"
-        }
+      "jobId": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "task",
+          "work",
+          "store",
+          "media_ingest"
+        ]
+      },
+      "status": {
+        "enum": [
+          "queued",
+          "running",
+          "done",
+          "error",
+          "interrupted"
+        ]
+      },
+      "state": {
+        "enum": [
+          "queued",
+          "running",
+          "done",
+          "error"
+        ]
+      },
+      "result": {
+        "type": [
+          "object",
+          "null"
+        ]
       },
       "evidence": {
         "type": "array",
         "items": {
-          "$ref": "#/$defs/Ev_memory_job"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Ev_memory_job"
+            },
+            {
+              "$ref": "#/$defs/Ev_memory_stored"
+            }
+          ]
         }
       },
-      "questions": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Question"
-        }
-      },
-      "candidates": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Candidate"
-        }
-      },
-      "errors": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/ToolError"
-        }
-      },
-      "meta": {
-        "type": "object",
-        "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
-      }
-    },
-    "$defs": {
-      "ToolError": {
+      "error": {
         "type": "object",
         "required": [
           "code",
           "message"
         ],
         "properties": {
-          "operationId": {
-            "type": "string"
-          },
           "code": {
             "type": "string"
           },
           "message": {
             "type": "string"
-          },
-          "currentState": {
-            "type": "object"
           }
         },
         "additionalProperties": false
-      },
-      "Candidate": {
-        "type": "object",
+      }
+    },
+    "anyOf": [
+      {
         "required": [
-          "target"
+          "found",
+          "ticket_id",
+          "jobId",
+          "kind",
+          "status",
+          "state",
+          "result"
         ],
         "properties": {
+          "found": {
+            "const": true
+          }
+        }
+      },
+      {
+        "required": [
+          "found",
+          "ticket_id",
+          "jobId",
+          "state",
+          "error"
+        ],
+        "properties": {
+          "found": {
+            "const": false
+          },
+          "state": {
+            "const": "error"
+          }
+        }
+      },
+      {
+        "required": [
+          "error"
+        ]
+      }
+    ],
+    "allOf": [
+      {
+        "if": {
+          "required": [
+            "found",
+            "kind",
+            "status"
+          ],
+          "properties": {
+            "found": {
+              "const": true
+            },
+            "kind": {
+              "const": "store"
+            },
+            "status": {
+              "const": "done"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "evidence"
+          ],
+          "properties": {
+            "evidence": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/Ev_memory_stored"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "additionalProperties": false,
+    "$defs": {
+      "Ev_memory_stored": {
+        "type": "object",
+        "required": [
+          "kind",
+          "jobId",
+          "status",
+          "evidenceRef",
+          "url",
+          "commitSha",
+          "pagesTouched",
+          "githubUrls",
+          "pageUrls"
+        ],
+        "properties": {
+          "kind": {
+            "const": "memory_stored"
+          },
           "operationId": {
             "type": "string"
           },
-          "target": {
+          "id": {
             "type": "string"
           },
-          "title": {
+          "ticket_id": {
+            "type": "string"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "status": {
+            "const": "done"
+          },
+          "evidenceRef": {
             "type": "string"
           },
           "url": {
             "type": "string"
           },
-          "matchReason": {
+          "commitSha": {
             "type": "string"
           },
-          "confidence": {
-            "type": "number"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Question": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "operationId": {
-            "type": "string"
+          "pagesTouched": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
-          "text": {
-            "type": "string"
+          "githubUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pageUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -1978,29 +2143,6 @@ export const TOOL_OUTPUT_SCHEMAS = (
           },
           "error": {
             "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Operation": {
-        "type": "object",
-        "required": [
-          "operationId",
-          "status"
-        ],
-        "properties": {
-          "operationId": {
-            "type": "string"
-          },
-          "interpretedAs": {
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "completed",
-              "blocked",
-              "needs_input"
-            ]
           }
         },
         "additionalProperties": false
@@ -5477,8 +5619,12 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "kind",
           "jobId",
           "status",
+          "evidenceRef",
+          "url",
           "commitSha",
-          "pagesTouched"
+          "pagesTouched",
+          "githubUrls",
+          "pageUrls"
         ],
         "properties": {
           "kind": {
@@ -5487,17 +5633,44 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "operationId": {
             "type": "string"
           },
+          "id": {
+            "type": "string"
+          },
+          "ticket_id": {
+            "type": "string"
+          },
           "jobId": {
             "type": "string"
           },
           "status": {
             "const": "done"
           },
+          "evidenceRef": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
           "commitSha": {
             "type": "string"
           },
           "pagesTouched": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "githubUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pageUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false

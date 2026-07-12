@@ -8,6 +8,8 @@ export interface EvidenceEntry {
   logPath: string;
   /** "e-7f3a2c" */
   anchor: string;
+  /** One-based line containing the evidence heading in the committed log file. */
+  line: number;
   /** The exact markdown appended. */
   entry: string;
   date: string;
@@ -59,7 +61,9 @@ export async function appendEvidence(
   }
 
   const separator = existing.endsWith("\n") ? "\n" : "\n\n";
-  await writeFile(absolute, `${existing}${separator}${entry}`);
+  const prefix = `${existing}${separator}`;
+  const line = prefix.split("\n").length;
+  await writeFile(absolute, `${prefix}${entry}`);
 
-  return { logPath, anchor, entry, date };
+  return { logPath, anchor, line, entry, date };
 }

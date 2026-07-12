@@ -98,6 +98,19 @@ export function bundleTool(toolName, registry) {
   const entry = registry.tools[toolName];
   if (!entry) throw new Error(`unknown tool: ${toolName}`);
 
+  // Most tools use the shared Evidence Envelope below. Poll/status tools may
+  // publish a compatibility-preserving direct object contract instead.
+  if (entry.type === "object" && entry.properties) {
+    const body = structuredClone(entry);
+    return {
+      $schema: SCHEMA_DIALECT,
+      $id: `https://zenod.dev/schemas/tool-output/${toolName}.json`,
+      title: `${toolName} output`,
+      ...body,
+      $defs: closeOverDefs(body, registryDefs, {}),
+    };
+  }
+
   // Start from the Envelope's properties, then apply the tool's per-property
   // narrowing (evidence.items, etc.) taken from the allOf override branch.
   const props = structuredClone(registryDefs.Envelope.properties);

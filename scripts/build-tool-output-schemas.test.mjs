@@ -35,9 +35,17 @@ test("every emitted per-tool schema is self-contained (no dangling $defs refs)",
   for (const [tool, schema] of Object.entries(bundles)) {
     assert.doesNotThrow(() => assertSelfContained(schema, tool));
     assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
-    assert.deepEqual(schema.required, ["evidence"]);
+    if (tool !== "zenod.get_task_result") assert.deepEqual(schema.required, ["evidence"]);
     assert.equal(schema.additionalProperties, false);
   }
+});
+
+test("get_task_result preserves its direct poll envelope and terminal evidence contract", () => {
+  const schema = bundleTool("zenod.get_task_result", registry);
+  for (const field of ["found", "ticket_id", "jobId", "kind", "status", "state", "result", "evidence", "error"]) {
+    assert.ok(schema.properties[field], `poll schema exposes ${field}`);
+  }
+  assert.ok(schema.$defs.Ev_memory_stored, "terminal memory evidence bundled");
 });
 
 test("get_issue narrows evidence to exactly `issue`", () => {

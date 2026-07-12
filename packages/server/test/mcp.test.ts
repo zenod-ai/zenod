@@ -10,14 +10,21 @@ import type { BrainEngine } from "zenod";
 import { ARCHUS_AGENT, EPAMINON_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
+import { validateToolResponse } from "../src/toolOutput.js";
 
 const fakeEngine: BrainEngine = {
   async store(input) {
+    const logUrl = "https://github.com/o/r/blob/main/Log/2026-06-11.md";
+    const pageUrl = "https://github.com/o/r/blob/main/Areas/Insurance.md";
+    const commitSha = "0".repeat(40);
+    const legacyResult = input.content.includes("legacy receipt");
     return {
       evidenceRef: "Log/2026-06-11.md#^e-abc123",
+      ...(!legacyResult ? { evidenceUrl: `https://github.com/o/r/blob/${commitSha}/Log/2026-06-11.md#L3` } : {}),
       pagesTouched: ["Areas/Insurance.md"],
-      commitSha: "0".repeat(40),
-      githubUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
+      ...(!legacyResult ? { pageUrls: [`https://github.com/o/r/blob/${commitSha}/Areas/Insurance.md`] } : {}),
+      commitSha,
+      githubUrls: legacyResult ? [logUrl, pageUrl] : [pageUrl],
       ...(input.content.includes("cryptic") ? { question: "Where does this belong?" } : {}),
     };
   },
@@ -122,7 +129,7 @@ describe("MCP endpoint", () => {
   }
 
   /** Enqueue a job via an async tool, then poll get_task_result until terminal. */
-  async function runAsyncTool(
+  async function runAsyncToolTerminal(
     client: Client,
     name: string,
     args: Record<string, unknown>,
@@ -143,11 +150,20 @@ describe("MCP endpoint", () => {
     for (let attempt = 0; attempt < 50; attempt++) {
       const polled = await client.callTool({ name: "get_task_result", arguments: { ticket_id } });
       const job = polled.structuredContent as { status: string; result: Record<string, unknown> | null };
-      if (job.status === "done") return job.result!;
+      if (job.status === "done") return job;
       if (job.status === "error" || job.status === "interrupted") throw new Error(`job ${jobId} ${job.status}`);
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     throw new Error(`job ${jobId} did not finish`);
+  }
+
+  async function runAsyncTool(
+    client: Client,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const terminal = await runAsyncToolTerminal(client, name, args);
+    return terminal.result as Record<string, unknown>;
   }
 
   it("rejects connections without the bearer token", async () => {
@@ -461,6 +477,64 @@ describe("MCP endpoint", () => {
       content: "something cryptic",
     })) as { question?: string };
     expect(unsure.question).toBeTruthy();
+
+    await client.close();
+  });
+
+  it("store_memory terminal evidence is typed, deep-linked, and compatibility-preserving", async () => {
+    const client = await connect();
+    const terminal = await runAsyncToolTerminal(client, "store_memory", {
+      content: "portable terminal evidence contract",
+    });
+
+    expect(terminal.result).toMatchObject({
+      evidenceRef: "Log/2026-06-11.md#^e-abc123",
+      evidenceUrl: `https://github.com/o/r/blob/${"0".repeat(40)}/Log/2026-06-11.md#L3`,
+      pagesTouched: ["Areas/Insurance.md"],
+      pageUrls: [`https://github.com/o/r/blob/${"0".repeat(40)}/Areas/Insurance.md`],
+      commitSha: "0".repeat(40),
+      githubUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
+    });
+    expect(terminal.evidence).toEqual([
+      {
+        kind: "memory_stored",
+        id: expect.any(String),
+        ticket_id: expect.any(String),
+        jobId: expect.any(String),
+        status: "done",
+        evidenceRef: "Log/2026-06-11.md#^e-abc123",
+        url: `https://github.com/o/r/blob/${"0".repeat(40)}/Log/2026-06-11.md#L3`,
+        commitSha: "0".repeat(40),
+        pagesTouched: ["Areas/Insurance.md"],
+        githubUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
+        pageUrls: [`https://github.com/o/r/blob/${"0".repeat(40)}/Areas/Insurance.md`],
+      },
+    ]);
+    expect(validateToolResponse("zenod.get_task_result", terminal)).toBe(terminal);
+
+    await client.close();
+  });
+
+  it("projects canonical terminal evidence for persisted legacy store results", async () => {
+    const client = await connect();
+    const terminal = await runAsyncToolTerminal(client, "store_memory", {
+      content: "legacy receipt compatibility",
+    });
+
+    expect(terminal.result).not.toHaveProperty("evidenceUrl");
+    expect(terminal.result).not.toHaveProperty("pageUrls");
+    expect(terminal.evidence).toEqual([
+      expect.objectContaining({
+        kind: "memory_stored",
+        evidenceRef: "Log/2026-06-11.md#^e-abc123",
+        url: "https://github.com/o/r/blob/main/Log/2026-06-11.md",
+        githubUrls: [
+          "https://github.com/o/r/blob/main/Log/2026-06-11.md",
+          "https://github.com/o/r/blob/main/Areas/Insurance.md",
+        ],
+        pageUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
+      }),
+    ]);
 
     await client.close();
   });
