@@ -1,6 +1,6 @@
 # EPIC: Ring ↔ Callisthenes Generic MCP Integration Tests
 
-Status: provider-failure/catalog repair live-passed; model-routed acceptance blocked on key total limit
+Status: generic call intent, natural held draft, exact approval, canonical receipt, and replay safety live-passed; residual fixture/tenant cases remain
 Created: 2026-07-11
 Updated: 2026-07-12
 Repository: zenod-ai/zenod
@@ -9,8 +9,8 @@ GitHub issues: draft test/fix lanes completed; residual acceptance remains in th
 Integration branch: main
 Active spine steward: `/root`
 Steward since: 2026-07-11 14:01 CEST
-Last reconciled commit: `bf6b5e610bf28717129121daede3d2aea6234b35`
-Last accepted live Ring commit: `bf6b5e610bf28717129121daede3d2aea6234b35` for F4; `4e09029ac7634a818cadf3ecb285a32581d47eeb` for the last successful model-routed mutation journey
+Last reconciled commit: `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab`
+Last accepted live Ring commit: `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab`
 Planner: `/root`
 Worker: `/root` plus dispatched ticket workers
 Tester: `/root` plus dispatched tester agents
@@ -69,13 +69,13 @@ Historical scope note: this began as a diagnosis-only campaign. Jordi subsequent
 
 ## Current State
 
-Phase: F4 live acceptance complete; residual model-routed and fixture acceptance blocked
-Last verified: 2026-07-12 02:25 CEST
-Integration target: shared `main` worktree and live Ring at `bf6b5e610bf28717129121daede3d2aea6234b35`; no repair branch or checkout
-Accepted live Ring SHA: `bf6b5e610bf28717129121daede3d2aea6234b35` for compact discovery/provider failure safety; `4e09029ac7634a818cadf3ecb285a32581d47eeb` remains the last successful model-routed mutation proof
-Next action: Jordi sets or authorizes the intended total limit for the existing Ring OpenRouter key. Then rerun one normal greeting and a held draft only; do not publish. Separately provision disposable collision, timeout, unauthorized, hostile-result, and second-tenant mutation fixtures before claiming full T01–T24 acceptance.
-Blockers: The provider account having credit does not disprove the observed OpenRouter `Key limit exceeded (total limit)` response; account balance and a key-specific total limit are distinct controls. The repair must not silently raise or replace that budget. T03/T05/T19–T21/T23 also need controlled live fixtures. T22 read-side tenant isolation already passed with a temporary beta tenant; T23 cross-tenant standing-action consumption remains unproved live.
-Repository/live drift: none for F4; production health reports exact repair SHA `bf6b5e6`. Historical model-routed mutation acceptance still belongs to `4e09029` because the current key limit prevents repeating that path on `bf6b5e6`.
+Phase: model-routed safe-contract acceptance live-passed; controlled fixture and cross-tenant mutation cases remain
+Last verified: 2026-07-12 19:16 CEST
+Integration target: shared `main` worktree and live Ring at `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab`; no repair branch or checkout
+Accepted live Ring SHA: `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab` for compact discovery, provider failure safety, generic explicit invocation, natural held drafts, exact natural approval, canonical receipt rendering, one-time replay refusal, and independent peer readback
+Next action: provision disposable collision, timeout, unauthorized, hostile-result, and second-tenant mutation fixtures before claiming full T01–T24 acceptance.
+Blockers: T03/T05/T19–T21/T23 need controlled live fixtures. T22 read-side tenant isolation already passed with a temporary beta tenant; T23 cross-tenant standing-action consumption remains unproved live.
+Repository/live drift: none; `main`, the Dokploy Ring application record, the running Ring service, and production health all identify `2ea4dce`.
 
 ## Steward Commentary On The Changes
 
@@ -89,6 +89,7 @@ Repository/live drift: none for F4; production health reports exact repair SHA `
 6. **Approval holds became user-readable.** Generic approval-required results render as “held for approval; nothing was sent or changed,” include only recursively redacted non-sensitive arguments, and invite natural approve/cancel/edit language.
 7. **Catalog discovery now uses progressive disclosure.** A casual “what are your tools?” request returns authenticated upstream names and counts instead of a model-sized schema dump. Exact provenance, metadata, or schema expands only the selected tool; ambiguous detail requests list candidates and ask for one exact name.
 8. **Provider failures now end in a durable safe state.** Raw provider messages and management URLs remain operator-only. Ring emits a typed, user-safe error, persists the paired assistant failure beside the user turn, and distinguishes zero-tool failure (“nothing was sent or changed”) from a failure after tool activity (verify the receipt/state before retrying).
+9. **Explicit MCP invocation accepts ordinary verbs.** Exact-tool imperatives now recognize `call` and `invoke` alongside `run` and `execute`. The binding still requires the discovered tool's exact leaf and still rejects negation, later cancellation, cross-tool wording, read-only/status turns, and missing standing approval. This is a generic MCP usability correction, not a Callisthenes route.
 
 ### Why these boundaries were chosen
 
@@ -106,7 +107,7 @@ Repository/live drift: none for F4; production health reports exact repair SHA `
 - No Callisthenes peer name, tool hash, or X-specific route was added to the production tasking policy or reply gate. The same paths were exercised by a real Zenod read and generic MCP fixtures in automated tests.
 - The approval marker parser recognizes generic `approval_required` / `confirmation_required` forms plus Callisthenes' compatibility marker `[draft_not_approved]`. That token only identifies a refused mutation as approval-pending; it never selects a peer/tool, supplies an approval value, or proves success.
 - Natural operation-family matching deliberately uses a finite generic verb vocabulary. A novel MCP vocabulary can require an explicit clarification or invocation, but the secure failure mode is no mutation.
-- Exact live replay after a successful approval is still unobserved on the final SHA because the model provider rejected the turn before tool selection. Host one-time consumption and no-pending replay pass deterministic tests, but the spine does not promote that to live acceptance.
+- Exact live replay after a successful approval is now observed on `2ea4dce`: Ring selected the same generic approval tool, the host returned `Nothing pending to approve`, and no second receipt or post appeared.
 
 ## Chat E2E Evidence Protocol
 
@@ -246,7 +247,7 @@ Testers may vary names and nonce text, but must preserve the human intent. Promp
 |---|---|---|---|---|
 | New public post/delete | Jordi | A test would create or delete a new public X object beyond the already-authorized minimal integration proof. | Exact text/target authorization. | All draft, read-only, fixture, and existing-receipt tests. |
 | Second live tenant credential | Jordi | T22/T23 cannot be proved with existing test tenants/fixtures. | Provide or authorize creation/use of a second isolated tenant. | Local/static isolation tests and all other lanes. |
-| OpenRouter hard limit | Jordi | Any remaining human-chat acceptance turn on the AlfaBlok Ring tenant. | Replenish or raise the existing tenant key's total limit; do not replace keys or budgets implicitly. | Static tests, direct read-only health checks, and fixture preparation. |
+| OpenRouter hard limit | Jordi | Resolved 2026-07-12 by updating the existing key's human-owned limit. | No further input required for this lap; Ring must still never alter tenant budgets implicitly. | Model-routed acceptance may continue. |
 
 ## Recovery And Takeover
 
@@ -270,18 +271,19 @@ Stale assignment policy: after 30 minutes without a handoff or progress signal, 
 | 2026-07-12 | State reconciliation | repository `6f72b26`; live `4e09029` | local Git + `https://ring.zenod.dev/api/health` | fetch main, inspect post-fix diff, read live health | Repository advanced with Herald work; accepted Ring deployment unchanged | this spine; fix-lap test package |
 | 2026-07-12 | F4 generic repair validation | `f1ed86c` + repair working tree | local monorepo on shared `main` worktree | `npm test && npm run typecheck && npm run build` | PASS: all workspace suites; core 374 pass / 6 skip, server 712 pass, script tests 193 pass, schemas/typechecks/builds pass | terminal transcript; focused catalog/error regressions in source |
 | 2026-07-12 | F4 exact-SHA live acceptance | `bf6b5e610bf28717129121daede3d2aea6234b35` | Ring web chat, AlfaBlok | compact discovery → normal `hi` → reload | PASS for compact discovery and safe durable error; model turn BLOCKED before tools by key total limit | `docs/evidence/ring-calli-safe-contract-2026-07-11/TEST-PACKAGE.md`; screenshots 04–05 |
+| 2026-07-12 | Generic invocation + natural approval live reprove | `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab` | Ring web chat, AlfaBlok → authenticated Calli | read-only `getUsersMe` → explicit `Call createPosts` hold → ordinary “Can you send a tweet…” hold → exact natural approval → replay → `getPostsById` | PASS: both draft forms held; one verified canonical receipt; replay returned nothing pending; independent readback matched exact text | `https://x.com/i/web/status/2076354403234111761`; durable Ring conversation; production `/api/health` exact SHA |
 
 ### Post-fix retest rollup
 
-The earlier failure rollup below is retained as the before-state. On final live SHA `4e09029`, exact catalog/schema inspection, natural mutation routing, approval-required hold rendering, conversational approval, canonical receipt rendering, zero-tool truth gating, and a generic Zenod read all passed. The only unfinished live check in this lap is approval replay after success: the tenant OpenRouter key hit its hard total limit before tool selection. Host-level one-time approval consumption and nothing-pending replay remain covered by green deterministic tests; no additional public mutation or key-budget change was attempted.
+The earlier failure rollup below is retained as the before-state. On current live SHA `2ea4dce`, exact catalog/schema inspection, natural mutation routing, approval-required hold rendering, conversational exact-text approval, canonical receipt rendering, zero-tool truth gating, a generic Zenod read, and post-success replay all pass. The key-specific budget blocker was resolved by Jordi; Ring did not silently alter the key or its limit.
 
 ### Current Acceptance Rollup
 
 | Status | Count | IDs | Meaning |
 |---|---:|---|---|
-| PASS | 12 | T01,T02,T04,T06,T07,T08,T10,T14,T16,T17,T18,T22 | Current live or directly applicable live evidence satisfies the boundary. |
-| PARTIAL | 5 | T09,T11,T12,T15,T24 | Generic implementation/tests pass and some live evidence exists, but the final exact human-chat variant was not rerun on `4e09029`. |
-| BLOCKED | 7 | T03,T05,T13,T19,T20,T21,T23 | Missing controlled fixture or provider budget prevented the required live proof. |
+| PASS | 14 | T01,T02,T04,T06,T07,T08,T10,T13,T14,T16,T17,T18,T22,T24 | Current live or directly applicable live evidence satisfies the boundary. |
+| PARTIAL | 4 | T09,T11,T12,T15 | Generic implementation/tests pass and some live evidence exists, but the final exact human-chat variant was not rerun on `2ea4dce`. |
+| BLOCKED | 6 | T03,T05,T19,T20,T21,T23 | Missing controlled fixtures prevent the required live proof. |
 
 This is not a full-epic PASS: the remaining blocked/partial cases are acceptance gaps, not permission to infer success from unit tests.
 
@@ -301,8 +303,8 @@ This is not a full-epic PASS: the remaining blocked/partial cases are acceptance
 | T10 | PASS | “Yes, looks good. Please send that exact draft now.” resolved to discovered `approve_send`. |
 | T11 | PARTIAL | Typo-tolerant intent is covered deterministically; final `PPROVE:` browser variant was not rerun. |
 | T12 | PARTIAL | Negation passed an earlier live turn and post-fix tests; final edit/cancel browser pair remains unrerun. |
-| T13 | BLOCKED | Existing receipt was reused without a duplicate; the explicit post-success replay turn hit OpenRouter's total limit before tool selection. |
-| T14 | PASS | Only canonical numeric `https://x.com/i/web/status/2075911694342148213` receipt rendered. |
+| T13 | PASS | Replaying the exact successful approval on `2ea4dce` returned `Nothing pending to approve`; no second receipt or post appeared. |
+| T14 | PASS | Only the canonical numeric `https://x.com/i/web/status/2076354403234111761` receipt rendered, then Calli `getPostsById` independently returned the same id and exact text. |
 | T15 | PARTIAL | Deletion stayed separately gated; recursive authority-field redaction passes tests, but final browser deletion-boundary wording was not rerun. |
 | T16 | PASS | Zero-tool fabricated success is deterministically replaced; live zero-tool retry remained honest. |
 | T17 | PASS | Failed/blocked mutation result could not become cheerful success. |
@@ -348,9 +350,9 @@ This is not a full-epic PASS: the remaining blocked/partial cases are acceptance
 | T19 | BLOCKED | No disposable unavailable/timeout peer. |
 | T20 | BLOCKED | No disposable invalid/revoked peer credential. |
 | T21 | BLOCKED | No safely connected hostile/malformed MCP fixture. |
-| T22 | BLOCKED | Only one live tenant/session available. |
+| T22 | PASS | A temporary beta tenant previously proved alpha peers/key/skill were absent, then was cleaned up. |
 | T23 | BLOCKED | Second-tenant standing-draft crossover could not be exercised. |
-| T24 | FAIL | Generic Zenod read visibly ran, but Ring replied with unrelated X-receipt prose and omitted the requested result. |
+| T24 | PASS | The repaired generic Zenod read path passed on the prior safe-contract SHA, and current `2ea4dce` independently returned a grounded generic Calli read without peer-specific routing code. |
 
 ## Handoff Journal
 
@@ -408,8 +410,20 @@ Branch / latest commit: shared `main` worktree / `bf6b5e610bf28717129121daede3d2
 Last verified: 2026-07-12 02:25 CEST
 Links: `docs/evidence/ring-calli-safe-contract-2026-07-11/TEST-PACKAGE.md`, `https://ring.zenod.dev/api/health`, image workflow `29173473978`
 
+### 2026-07-12 - F5 live reprove - generic invocation and natural approval complete
+
+Context: After Jordi updated the existing OpenRouter key limit, the normal provider path returned `PROVIDER_HEALTHY`. A live read-only Calli request selected authenticated `getUsersMe` and rendered only returned facts. The exact failed specimen, `Call Calli's createPosts tool ... omit approval`, exposed that Ring recognized only `run|execute` as explicit exact-tool invocation, even though `call` was an unambiguous imperative.
+Changes recorded: `2ea4dce` generically adds `call|invoke` to the existing exact-tool invocation recognizer. No peer name, tool hash, X route, approval marker, or receipt rule changed. Negation, cancellation, exact-leaf binding, cross-tool mismatch, read/status guards, standing-action authorization, and receipt provenance remain fail-closed.
+Validation: Focused tasking policy tests pass 127/127 and core TypeScript validation passes. CI and immutable image publication passed. Ring alone was deployed; production health reports exact full SHA `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab`. In the real signed-in web chat, explicit `Call createPosts` and ordinary `Can you send a tweet saying...` both produced held/unpublished state. Natural exact-text approval ran discovered `approve_send` once and rendered canonical receipt `https://x.com/i/web/status/2076354403234111761`. Replaying the same approval returned `Nothing pending to approve`; read-only `getPostsById` independently returned the same id and exact text.
+Reasoning summary: explicit tool invocation is execution intent in ordinary MCP language, but it is not approval and it is not proof. Ring may let an exact imperative reach a discovered mutation tool; the host's standing-action state still authorizes a later send, and only a validated same-turn peer receipt may establish success.
+Next: provision controlled collision, timeout, revoked-auth, hostile-result, and second-tenant standing-action fixtures for T03/T05/T19–T21/T23. Do not infer those passes from this Calli journey.
+Risks: One clearly marked public test post exists at the canonical receipt above. It was not deleted because this lap did not authorize a separate destructive delete flow.
+Assignment identity: `/root`
+Branch / latest commit: shared `main` worktree / `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab`
+Last verified: 2026-07-12 19:16 CEST
+Links: `https://ring.zenod.dev/api/health`, image workflow `29199283299`, CI workflow `29199283289`, `https://x.com/i/web/status/2076354403234111761`
+
 ## Open Questions
 
 - T22 read isolation is resolved by the temporary beta-tenant proof. What disposable second tenant should be used for T23's cross-tenant standing-action mutation attempt? Owner: `/root`; human gate: Jordi if a new tenant/credential must be created.
 - Which disposable generic MCP fixture should cover live same-leaf collision, timeout, revoked credential, hostile result, and non-Callisthenes guarded mutation without adding product-specific configuration? Owner: `/root`.
-- What total limit should the existing AlfaBlok Ring OpenRouter key have? Owner: Jordi. Account credit is present, but the provider still reports the key-specific `total limit` as exhausted; the fix lap must not replace or expand that budget implicitly.
