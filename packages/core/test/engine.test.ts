@@ -395,10 +395,15 @@ describe("BrainEngine", () => {
     expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
     expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(result.evidenceRef).toMatch(/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]{6}$/);
+    expect(result.evidenceUrl).toBe(`https://github.com/zenod-ai/fixture/blob/${result.commitSha}/Log/${result.evidenceRef.slice(4, 14)}.md${new URL(result.evidenceUrl!).hash}`);
+    expect(result.evidenceUrl).toMatch(/\/blob\/[0-9a-f]{40}\/Log\/\d{4}-\d{2}-\d{2}\.md#L\d+$/);
+    expect(result.pageUrls).toEqual([`https://github.com/zenod-ai/fixture/blob/${result.commitSha}/Areas/Insurance.md`]);
     expect(result.githubUrls.some((u) => u.includes("Areas/Insurance.md"))).toBe(true);
 
     // evidence is verbatim and anchored
     const log = await readFile(join(repo.path, result.evidenceRef.split("#")[0]!), "utf8");
+    const linkedLine = Number(new URL(result.evidenceUrl!).hash.match(/^#L(\d+)$/)?.[1]);
+    expect(log.split("\n")[linkedLine - 1]).toContain(result.evidenceRef.split("#^")[1]);
     expect(log).toContain("verbatim: yes");
     expect(log).toContain("> I just got travel insurance with Axa");
 

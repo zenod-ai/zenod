@@ -1107,9 +1107,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
           classification.question ?? "Where should this memory be filed? I could not classify it confidently.";
         const stubPath = await writeInboxStub(input.content, question, evidenceRef);
         const sha = await repo.commitAndPush(`memory: (inbox) ${classification.summary}`);
+        const canonicalLocation = { ...location, branch: sha };
+        const pageUrls = [githubUrl(canonicalLocation, stubPath)].filter(Boolean);
         return {
           evidenceRef,
+          ...(githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`)
+            ? { evidenceUrl: githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`) }
+            : {}),
           pagesTouched: [stubPath],
+          pageUrls,
           commitSha: sha,
           githubUrls: [githubUrl(location, evidence.logPath), githubUrl(location, stubPath)].filter(Boolean),
           question,
@@ -1201,9 +1207,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
         const stubPath = await writeInboxStub(input.content, question, retriedRef);
         const sha = await repo.commitAndPush(`memory: (inbox) ${classification.summary}`);
+        const canonicalLocation = { ...location, branch: sha };
+        const pageUrls = [githubUrl(canonicalLocation, stubPath)].filter(Boolean);
         return {
           evidenceRef: retriedRef,
+          ...(githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`)
+            ? { evidenceUrl: githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`) }
+            : {}),
           pagesTouched: [stubPath],
+          pageUrls,
           commitSha: sha,
           githubUrls: [githubUrl(location, retried.logPath), githubUrl(location, stubPath)].filter(Boolean),
           question,
@@ -1212,13 +1224,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
       // 7-8. One commit per store.
       const sha = await repo.commitAndPush(`memory: ${classification.summary}`);
+      const canonicalLocation = { ...location, branch: sha };
+      const pageUrls = touched.map((path) => githubUrl(canonicalLocation, path)).filter(Boolean);
       const result: StoreResult = {
         evidenceRef,
+        ...(githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`)
+          ? { evidenceUrl: githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`) }
+          : {}),
         pagesTouched: touched,
+        pageUrls,
         commitSha: sha,
         githubUrls: [
           githubUrl(location, evidence.logPath),
-          ...touched.map((p) => githubUrl(location, p)),
+          ...touched.map((path) => githubUrl(location, path)),
         ].filter(Boolean),
       };
       if (shouldDigestForBacklog(input)) {

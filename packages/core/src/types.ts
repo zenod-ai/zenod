@@ -29,9 +29,14 @@ export interface AttachmentInput {
 export interface StoreResult {
   /** Citation anchor of the evidence entry, e.g. "Log/2026-06-11.md#^e-7f3a2c". */
   evidenceRef: string;
+  /** Canonical URL for the exact immutable evidence entry, including its anchor. */
+  evidenceUrl?: string;
   /** Vault-relative paths of meaning pages created or updated. */
   pagesTouched: string[];
+  /** Canonical URLs for meaning pages, kept separate from the evidence-entry URL. */
+  pageUrls?: string[];
   commitSha: string;
+  /** Compatibility collection retained for existing consumers. */
   githubUrls: string[];
   /**
    * Present when classification confidence was below threshold: the store
