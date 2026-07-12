@@ -384,7 +384,7 @@ export class HeraldLaneService {
       text: item.text,
     });
     const draftText = textResult(draft);
-    if (draft.isError || !draftText.includes("[draft_not_approved]")) {
+    if (!draft.isError || !draftText.includes("[draft_not_approved]")) {
       throw new Error(
         `Callisthenes did not hold the draft under C-22: ${draftText || "empty result"}`,
       );
