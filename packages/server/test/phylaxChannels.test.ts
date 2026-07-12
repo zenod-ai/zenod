@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { createMemoryTenantStore, createUnit } from "@zenod/mcp-chassis";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -200,6 +201,101 @@ describe("Phylax MCP channel tools", () => {
 });
 
 describe("ported gateway integration", () => {
+  it("migrates an existing W-P3 audit table additively", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-recovery-migration-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    await mkdir(join(dataDir, "whatsapp"), { recursive: true });
+    const legacy = new DatabaseSync(path);
+    legacy.exec(`
+      CREATE TABLE whatsapp_channel_audit (
+        provider_message_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        transcript_text TEXT,
+        transcript_provenance TEXT,
+        artifact_ref TEXT,
+        artifact_sha256 TEXT,
+        downstream_destination TEXT NOT NULL,
+        downstream_correlation_id TEXT,
+        downstream_receipt_json TEXT,
+        lifecycle_state TEXT NOT NULL,
+        outbound_provider_id TEXT,
+        outbound_status TEXT,
+        forwarded_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    legacy.close();
+
+    const migrated = new WhatsAppStore(path);
+    migrated.recordChannelForwarding({
+      providerMessageId: "migration-media-001",
+      tenantId: "alpha",
+      senderId: "34611111111",
+      downstreamDestination: "ring.zenod.dev#tenant:alpha",
+      replyText: "bounded reply persisted after migration",
+    });
+    expect(migrated.channelAudit("migration-media-001")).toMatchObject({
+      replyText: "bounded reply persisted after migration",
+      lifecycleState: "forwarded",
+    });
+    migrated.close();
+  });
+
+  it("does not enqueue or notify historical interrupted media during migration", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-recovery-historical-"));
+    dirs.push(dataDir);
+    const event: WhatsAppInboundEvent = {
+      messageId: "historical-interrupted-media",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: "old.ogg",
+    };
+    const before = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
+    before.recordInbound(event);
+    before.markMessageStatus(event.messageId, "interrupted");
+    before.close();
+
+    const sent: string[] = [];
+    let connectionUpdate: ((update: Record<string, unknown>) => void) | undefined;
+    const runtime = new PhylaxPortedRuntime(dataDir, new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => null },
+    }), {}, {
+      whatsappSocketFactory: async () => ({
+        ev: {
+          on(eventName, listener) {
+            if (eventName === "connection.update") connectionUpdate = listener;
+          },
+        },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: "must-not-send" } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    try {
+      expect(runtime.whatsappStore.mediaRecovery(event.messageId)).toBeNull();
+      await runtime.whatsapp.start();
+      connectionUpdate?.({ connection: "open" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(sent).toEqual([]);
+      expect(runtime.whatsappStore.mediaRecovery(event.messageId)).toBeNull();
+    } finally {
+      runtime.close();
+    }
+  });
+
   it("joins a media provider id to artifact hash, transcript provenance, typed Ring receipt and outbound delivery", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-media-trace-"));
     dirs.push(dataDir);
@@ -288,6 +384,269 @@ describe("ported gateway integration", () => {
     expect(trace?.artifactRef).toMatch(/^https:\/\/phylax\.zenod\.dev\/artifacts\/alpha\//);
     expect(JSON.stringify(trace)).not.toMatch(/token-bearing-path|ring-secret|do-not-store|\/mcp\/secret|authorization/i);
     store.close();
+  });
+
+  it("reconciles a restart after an audited provider send without sending or forwarding again", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-restart-sent-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    const event: WhatsAppInboundEvent = {
+      messageId: "wa-media-already-sent",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: "voice.ogg",
+    };
+    const before = new WhatsAppStore(path);
+    before.recordInbound(event);
+    before.markMessageStatus(event.messageId, "processing");
+    before.recordChannelForwarding({
+      providerMessageId: event.messageId,
+      tenantId: "alpha",
+      senderId: event.senderId,
+      downstreamDestination: "ring.zenod.dev#tenant:alpha",
+      downstreamCorrelationId: "ring-sent-001",
+      replyText: "strawberry banana",
+    });
+    before.recordOutboundAudit({
+      messageId: event.messageId,
+      chatId: event.chatId,
+      contactId: event.senderId,
+      bodyText: "strawberry banana",
+      status: "sent",
+      sentMessageId: "wa-sent-before-restart",
+    });
+    before.close();
+
+    const after = new WhatsAppStore(path);
+    expect(after.channelAudit(event.messageId)).toMatchObject({
+      lifecycleState: "replied",
+      outboundProviderId: "wa-sent-before-restart",
+      outboundStatus: "sent",
+    });
+    expect(after.mediaRecovery(event.messageId)).toBeNull();
+    expect(after.diagnostics().processingCounts.replied).toBe(1);
+    after.close();
+  });
+
+  it("recovers a forwarded media reply once after restart without calling Ring again", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-restart-forwarded-"));
+    dirs.push(dataDir);
+    const event: WhatsAppInboundEvent = {
+      messageId: "wa-media-forwarded",
+      chatId: "123456789012345@lid",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: "voice.ogg",
+    };
+    const before = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
+    before.recordInbound(event);
+    before.markMessageStatus(event.messageId, "processing");
+    before.recordChannelForwarding({
+      providerMessageId: event.messageId,
+      tenantId: "alpha",
+      senderId: event.senderId,
+      downstreamDestination: "ring.zenod.dev#tenant:alpha",
+      downstreamCorrelationId: "ring-forwarded-001",
+      downstreamReceipt: { kind: "ring_reply", id: "receipt-forwarded-001" },
+      replyText: "strawberry banana",
+    });
+    before.close();
+
+    let downstreamCalls = 0;
+    const sent: Array<{ jid: string; text: string }> = [];
+    let connectionUpdate: ((update: Record<string, unknown>) => void) | undefined;
+    const runtime = new PhylaxPortedRuntime(dataDir, new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.zenod.dev/mcp/alpha", downstreamToken: "ring-alpha" }) },
+      async callDownstream() {
+        downstreamCalls += 1;
+        return { content: [{ type: "text", text: "must not happen" }] };
+      },
+    }), {}, {
+      whatsappSocketFactory: async () => ({
+        ev: {
+          on(eventName, listener) {
+            if (eventName === "connection.update") connectionUpdate = listener;
+          },
+        },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(jid, content) {
+          sent.push({ jid, text: content.text });
+          return { key: { id: "wa-recovered-001" } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    try {
+      await runtime.whatsapp.start();
+      connectionUpdate?.({ connection: "open" });
+      await vi.waitFor(() => expect(runtime.whatsappStore.mediaRecovery(event.messageId)?.state).toBe("recovered_replied"));
+      expect(sent).toEqual([{ jid: event.senderId, text: "strawberry banana" }]);
+      expect(downstreamCalls).toBe(0);
+      expect(runtime.whatsappStore.channelAudit(event.messageId)).toMatchObject({
+        lifecycleState: "replied",
+        outboundProviderId: "wa-recovered-001",
+        outboundStatus: "recovery_sent",
+      });
+
+      connectionUpdate?.({ connection: "open" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(sent).toHaveLength(1);
+      expect(downstreamCalls).toBe(0);
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("makes a crash-after-claim terminal and does not retry an ambiguous provider send", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-restart-claimed-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    const event: WhatsAppInboundEvent = {
+      messageId: "wa-media-claimed",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "image",
+      mimeType: "image/jpeg",
+      fileName: "image.jpg",
+    };
+    const first = new WhatsAppStore(path);
+    first.recordInbound(event);
+    first.markMessageStatus(event.messageId, "processing");
+    first.close();
+    const restarted = new WhatsAppStore(path);
+    expect(restarted.claimInterruptedMediaRecovery()).toMatchObject({
+      providerMessageId: event.messageId,
+      kind: "interrupted_failure",
+      state: "claimed",
+    });
+    restarted.close();
+
+    const sent: string[] = [];
+    let connectionUpdate: ((update: Record<string, unknown>) => void) | undefined;
+    const runtime = new PhylaxPortedRuntime(dataDir, new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => null },
+    }), {}, {
+      whatsappSocketFactory: async () => ({
+        ev: {
+          on(eventName, listener) {
+            if (eventName === "connection.update") connectionUpdate = listener;
+          },
+        },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: "must-not-send" } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    try {
+      expect(runtime.whatsappStore.mediaRecovery(event.messageId)).toMatchObject({
+        state: "provider_notification_failed",
+        errorText: "recovery send outcome unknown after restart",
+      });
+      expect(runtime.whatsappStore.recentTranscript({ messageId: event.messageId, sinceMs: 0 })).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          direction: "inbound",
+          status: "failed",
+          mediaRecovery: expect.objectContaining({ state: "provider_notification_failed" }),
+        }),
+        expect.objectContaining({
+          direction: "outbound",
+          status: "recovery_unknown",
+        }),
+      ]));
+      await runtime.whatsapp.start();
+      connectionUpdate?.({ connection: "open" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(sent).toEqual([]);
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("notifies explicitly when restart interrupted media before the Ring boundary", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-restart-notice-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    const event: WhatsAppInboundEvent = {
+      messageId: "wa-media-before-ring",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: "voice.ogg",
+    };
+    const before = new WhatsAppStore(path);
+    before.recordInbound(event);
+    before.markMessageStatus(event.messageId, "processing");
+    before.close();
+
+    const sent: Array<{ jid: string; text: string }> = [];
+    let connectionUpdate: ((update: Record<string, unknown>) => void) | undefined;
+    const runtime = new PhylaxPortedRuntime(dataDir, new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => null },
+    }), {}, {
+      whatsappSocketFactory: async () => ({
+        ev: {
+          on(eventName, listener) {
+            if (eventName === "connection.update") connectionUpdate = listener;
+          },
+        },
+        async sendMessage(jid, content) {
+          sent.push({ jid, text: content.text });
+          return { key: { id: "wa-notice-001" } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    try {
+      await runtime.whatsapp.start();
+      connectionUpdate?.({ connection: "open" });
+      await vi.waitFor(() => expect(runtime.whatsappStore.mediaRecovery(event.messageId)?.state).toBe("failure_notified"));
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({ jid: event.senderId });
+      expect(sent[0]?.text).toContain("will not retry it automatically to avoid duplicate delivery");
+      expect(runtime.whatsappStore.recentTranscript({ messageId: event.messageId, sinceMs: 0 })).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          direction: "inbound",
+          status: "failed_notified",
+          mediaRecovery: expect.objectContaining({ state: "failure_notified", outboundProviderId: "wa-notice-001" }),
+        }),
+        expect.objectContaining({ direction: "outbound", status: "recovery_notice_sent", sentMessageId: "wa-notice-001" }),
+      ]));
+    } finally {
+      runtime.close();
+    }
   });
 
   it("feeds Baileys inbound through the tenant seam and sends the Ring reply through the same socket", async () => {
