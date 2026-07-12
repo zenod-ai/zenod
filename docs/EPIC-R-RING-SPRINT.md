@@ -1,15 +1,15 @@
 # EPIC R · Ring Sprint — duplicate Zenod, the middle is the Council
 
-Status: active
+Status: shipped
 Created: 2026-07-11
-Updated: 2026-07-11
+Updated: 2026-07-12
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-R-RING-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Ring delivery manager
 Steward since: 2026-07-11T02:20:29+02:00
-Last reconciled commit: `fcac83ff27e04b60b19a3cfae0ff62bf8f0f5a92`
+Last reconciled commit: `6f72b26775d51f3e51165379446ce13435ad1c1a`
 Planner: Jordi + Epic 3.0 planner
 Worker: Ring delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -62,16 +62,16 @@ Stand up the Ring — the front door: a web chat with your own Council, wired to
 
 SHIP — the journey, walked in a REAL BROWSER on the LIVE deployment, loop until ONE uninterrupted clean pass, screenshots per step:
 
-- [ ] 1. Open `ring.zenod.dev` logged out → normal landing: what the Ring is ("your council — one chat, wired to all your agents"), Get started, Pricing, Sign in. No public token field. (DUPLICATE)
-- [ ] 2. Pricing: Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
-- [ ] 3. Sign in with GitHub — same account system as Zenod/Callisthenes, one identity across units. (DUPLICATE)
-- [ ] 4. Subscribe (TEST card) → `client_reference_id` binding → tenant row in THIS container → land in the dashboard. (DUPLICATE)
-- [ ] 5. Dashboard: the COUNCIL CHAT front and center (ported ChatTab); **My Units wallet** panel (add a unit by pasting its MCP URL + token; status per unit); **Keys** (tenant's OpenRouter key via UI — never env); the Ring's own MCP URL + token with copy button (this is what Phylax and external agents will call); usage; back-link to landing. No channel tabs, no other units' panels. (PORT ChatTab + persona; EVOLVE peers→wallet; DUPLICATE the rest)
-- [ ] 6. Enter OpenRouter key → chat answers as the council. (PORT — existing chat path)
-- [ ] 7. Wallet: paste the tenant's own Zenod MCP URL + token → unit shows connected. Tell the council "remember this: the ring is alive" → council routes to that Zenod → the Zenod commit receipt appears in the chat reply. THE golden-path moment. (PORT peer-call machinery)
-- [ ] 8. The Ring's MCP FACE works: an external MCP client `initialize`s against the tenant's Ring URL and one chat tool call gets a council reply — this is the exact contract Phylax will consume. (PORT — existing /mcp plumbing)
-- [ ] 9. Logout/login persists chat wallet keys; second tenant sees none of the first tenant's wallet, chat history, or keys.
-- [ ] 10. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test."
+- [x] 1. Open `ring.zenod.dev` logged out → normal landing: what the Ring is ("your council — one chat, wired to all your agents"), Get started, Pricing, Sign in. No public token field. (DUPLICATE)
+- [x] 2. Pricing: Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
+- [x] 3. Sign in with GitHub — same account system as Zenod/Callisthenes, one identity across units. (DUPLICATE)
+- [x] 4. Subscribe (TEST card) → `client_reference_id` binding → tenant row in THIS container → land in the dashboard. (DUPLICATE)
+- [x] 5. Dashboard: the COUNCIL CHAT front and center (ported ChatTab); **My Units wallet** panel (add a unit by pasting its MCP URL + token; status per unit); **Keys** (tenant's OpenRouter key via UI — never env); the Ring's own MCP URL + token with copy button (this is what Phylax and external agents will call); usage; back-link to landing. No channel tabs, no other units' panels. (PORT ChatTab + persona; EVOLVE peers→wallet; DUPLICATE the rest)
+- [x] 6. Enter OpenRouter key → chat answers as the council. (PORT — existing chat path)
+- [x] 7. Wallet: paste the tenant's own Zenod MCP URL + token → unit shows connected. Tell the council "remember this: the ring is alive" → council routes to that Zenod → the Zenod commit receipt appears in the chat reply. THE golden-path moment. (PORT peer-call machinery)
+- [x] 8. The Ring's MCP FACE works: an external MCP client `initialize`s against the tenant's Ring URL and one chat tool call gets a council reply — this is the exact contract Phylax will consume. (PORT — existing /mcp plumbing)
+- [x] 9. Logout/login persists chat wallet keys; second tenant sees none of the first tenant's wallet, chat history, or keys.
+- [x] 10. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test."
 
 HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now approved and tracked as R-H1..R-H5 below. Multiple-unit routing rules, Google sign-in, and standing-directives remain future work.
 
@@ -84,12 +84,26 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: HARDEN complete — generic MCP + advertised and tenant-managed Agent Skills live
-Last verified: 2026-07-11T14:35:28+02:00
+Phase: shipped; HARDEN complete — generic MCP, advertised/tenant-managed Agent Skills, and receipt provenance live
+Last verified: 2026-07-12T01:58:31+02:00
 Integration target: main
-Fresh base commit: `e7dc215a566189c317a68533a7006c6d8a5b2d8f` — LIVE exact advertised-skill release (D19c)
-Next action: none; R-H1–R-H5 package delivered.
+Live Ring artifact: `ghcr.io/zenod-ai/zenod:sha-4e09029` (`4e09029ac7634a818cadf3ecb285a32581d47eeb`)
+Validated Zenod skill publisher: `ghcr.io/zenod-ai/zenod:sha-e7dc215` (`e7dc215a566189c317a68533a7006c6d8a5b2d8f`)
+Next action: none; SHIP, R-H1–R-H5, advertised Zenod skill import, and post-HARDEN truthfulness corrections are delivered.
 Blockers: none.
+
+## Steward Commentary And Reasoning
+
+Reconciled 2026-07-12 against `main` at `6f72b26` and live `ring.zenod.dev` health at exact SHA `4e09029ac7634a818cadf3ecb285a32581d47eeb`.
+
+- **Advertised skill import (`e7dc215`):** Ring imports a peer's canonical bundle only after successful MCP discovery and only from the peer's own origin. Manual attach/replace/detach remains authoritative. This makes first connection useful without turning the peer into an authority over the tenant.
+- **Host-evidenced catalogs (`a730417`):** the Council and My Units render the catalog Ring actually discovered, including exact names and schemas. Reason: models and skill prose must not invent aliases, capabilities, or replacement schemas.
+- **Receipt provenance (`1b72a7c`):** a mutation success claim must come from verified same-turn tool evidence at the reply boundary. Reason: neither model prose nor a loaded skill can establish that an external side effect occurred.
+- **Schema-warning honesty (`bf366b5`):** unsupported or reduced peer output schemas are surfaced as warnings instead of silently replaced with an invented contract. Reason: degraded interoperability must remain visible and debuggable.
+- **Natural mutation intent (`eb0f095`):** ordinary requests such as "draft this and show me" can invoke the matching discovered mutation, while capability questions and negated sends remain read-only. Reason: safety should bind intent to the exact operation family, not require magic command phrasing.
+- **Generic approval holds (`4e09029`):** approval-required peer results render as "held; nothing changed," include only non-sensitive proposed arguments, and preserve the peer response as quoted untrusted data. Reason: a draft hold is neither a failure nor a completed mutation, and secrets must never be echoed to make it actionable.
+
+Summarized authority model: **the MCP catalog defines what can be called; the Agent Skill advises how to use it; a verified same-turn receipt proves what happened.** Keeping these three layers separate is the main defense against invented tools, authority escalation, and fabricated success.
 
 ## Role Goals
 
@@ -205,8 +219,15 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Final SHIP journey | `5ac9f37` | ring.zenod.dev live | real browser exact SHIP 7; external MCP SDK client; bearer-isolated beta tenant | PASS: commit `45e22e2` + GitHub links visible without reload; `ring-face-ok`; alpha peers/key hidden from beta; beta cleaned up | `docs/evidence/ring-ship-2026-07-11/19-ship7-live-authoritative-receipt.png`; `TEST-PACKAGE.md` |
 | 2026-07-11 | Generic MCP + skills hardening | `e6b0a2b` | ring.zenod.dev live | saved Calli refresh; real browser skill/draft; external MCP SDK; bearer-isolated beta tenant | PASS: Calli tools ready 18; canonical skill loaded; `[draft_not_approved]` held; MCP status ok; beta sees no peers/key/skill; cleaned up | `docs/evidence/ring-ship-2026-07-11/20`–`25`; `TEST-PACKAGE.md` |
 | 2026-07-11 | Advertised Zenod skill import | `e7dc215` | ring.zenod.dev + cloud.zenod.dev live | existing peer boot refresh; signed-in Chrome; external Ring MCP chat; service correlation audit | PASS: Zenod v1.0.0 auto-attached, 3 inert files; `load_peer_skill` ran and reported scripts non-executable | `docs/evidence/ring-zenod-skill-2026-07-11/zenod-auto-attached.png`; correlation `test_abdfd93795ad4ff1a6fac8ebc8c16ca6` |
+| 2026-07-12 | Post-HARDEN catalog/receipt/approval truthfulness | `4e09029` | ring.zenod.dev live | exact health SHA; source and focused regression evidence in `a730417`, `1b72a7c`, `bf366b5`, `eb0f095`, `4e09029` | DEPLOYED: host-evidenced catalog, same-turn receipt provenance, schema warnings, natural intent, truthful approval holds | Live health returned `4e09029ac7634a818cadf3ecb285a32581d47eeb`; no new full browser journey was claimed in this reconciliation |
 
 ## Handoff Journal
+
+### 2026-07-12T01:58:31+02:00 - Spine steward - Latest live state and reasoning reconciled
+
+Context: Ring is shipped, not active; all ten SHIP checks were already proved by the existing live package and are now marked complete. Production has advanced from the advertised-skill build to exact SHA `4e09029`, adding host-evidenced catalogs, same-turn mutation receipt provenance, visible output-schema warnings, natural-language mutation intent bound to exact operation families, and generic approval-hold rendering with sensitive arguments removed. Zenod remains healthy on exact SHA `e7dc215`, which is still the validated skill publisher. The spines now distinguish those two live artifacts instead of implying one shared current SHA.
+Reasoning: catalog, skill, and receipt are deliberately separate authorities. Catalog truth prevents invented capability; skill guidance improves routing without granting power; receipt provenance prevents fabricated outcomes. The later Ring changes tighten those boundaries rather than expanding product scope.
+Next: none. A future behavioral change must name which authority layer it changes and provide new live evidence; this reconciliation does not claim a new full browser journey.
 
 ### 2026-07-11T14:35:28+02:00 - Ring delivery manager - Advertised Zenod skill live
 
