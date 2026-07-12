@@ -103,6 +103,18 @@ afterEach(() => {
 })
 
 describe("PeerAgents", () => {
+  it("presents wallet peers as Herald capabilities without a second persona", async () => {
+    mocks.api.mockResolvedValueOnce({ peers: [] })
+    render(<PeerAgents product="herald" />)
+
+    expect(await screen.findByText("Herald capabilities")).toBeTruthy()
+    expect(screen.getByText("No capabilities connected")).toBeTruthy()
+    expect(screen.getByLabelText("Capability name")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Add capability" })).toBeTruthy()
+    expect(document.body.textContent).not.toContain("Council")
+    expect(document.body.textContent).not.toContain("My Units")
+  })
+
   it("shows refresh provenance and exact upstream/callable contracts separately", async () => {
     mocks.api.mockResolvedValueOnce({ peers: [peer()] })
     render(<PeerAgents />)

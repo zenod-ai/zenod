@@ -266,7 +266,8 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`
 }
 
-export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
+export function ChatTab({ vaultless = false, product = "default" }: { vaultless?: boolean; product?: "default" | "herald" } = {}) {
+  const isHerald = product === "herald"
   const [messages, setMessages] = React.useState<Message[]>([])
   const [input, setInput] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -396,7 +397,9 @@ export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
       })
     } catch (err) {
       const text = isNotConfigured(err)
-        ? "Zenod is not fully configured yet — set the vault and API key in the other tabs first."
+        ? isHerald
+          ? "Herald needs a model key before he can reply. Add it in Keys."
+          : "Zenod is not fully configured yet — set the vault and API key in the other tabs first."
         : errorMessage(err)
       patchStreaming(() => ({ role: "assistant", text, error: true }))
     } finally {
@@ -519,10 +522,9 @@ export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
                 <EmptyMedia variant="icon">
                   <BrainIcon />
                 </EmptyMedia>
-                <EmptyTitle>Talk to your brain</EmptyTitle>
+                <EmptyTitle>{isHerald ? "Talk with Herald" : "Talk to your brain"}</EmptyTitle>
                 <EmptyDescription>
-                  Ask anything stored in your vault, or say &ldquo;remember
-                  this: …&rdquo; to file a new memory.
+                  {isHerald ? "Brief Herald, review the same numbered Board items, approve selections, and follow publishing receipts here." : <>Ask anything stored in your vault, or say &ldquo;remember this: …&rdquo; to file a new memory.</>}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -618,7 +620,7 @@ export function ChatTab({ vaultless = false }: { vaultless?: boolean } = {}) {
             <Textarea
               ref={textareaRef}
               value={input}
-              placeholder={vaultless ? "Message the agent…" : "Ask your vault, or say 'remember this: …'"}
+              placeholder={isHerald ? "Message Herald about the briefing or current Board…" : vaultless ? "Message the agent…" : "Ask your vault, or say 'remember this: …'"}
               rows={1}
               disabled={voiceTranscribing}
               className="min-h-9 resize-none rounded-xl border-transparent bg-muted/60 px-3.5 focus-visible:border-transparent focus-visible:bg-muted focus-visible:ring-0 dark:bg-input/30 dark:focus-visible:bg-input/50"

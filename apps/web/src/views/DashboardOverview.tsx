@@ -197,10 +197,9 @@ export function DashboardOverview({
               {overview?.tenant.name ?? overview?.tenant.id ?? "Zenod"}
             </span>
           </div>
-          <CardTitle className="text-lg">Connect your agent</CardTitle>
+          <CardTitle className="text-lg">{isHerald ? "Connect to Herald" : "Connect your agent"}</CardTitle>
           <CardDescription>
-            Use this {isHerald ? "Herald" : isRing ? "Ring Council" : "Zenod"} endpoint and bearer token from Claude Code, Codex, or any
-            HTTP MCP client.
+            {isHerald ? "Use Herald's" : <>Use this {isRing ? "Ring Council" : "Zenod"}</>} endpoint and bearer token from Claude Code, Codex, or any HTTP MCP client.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">

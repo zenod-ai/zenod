@@ -167,12 +167,12 @@ export function Settings({
           <section aria-labelledby="council-chat-heading" className="flex flex-col gap-2">
             <div>
               <h2 id="council-chat-heading" className="text-lg font-semibold">{isHerald ? "Herald chat" : "Council chat"}</h2>
-              <p className="text-sm text-muted-foreground">{isHerald ? "Brief, approve, and follow every publishing receipt in one conversation." : "One conversation with the council wired to your units."}</p>
+              <p className="text-sm text-muted-foreground">{isHerald ? "Herald keeps this conversation, the approved Briefing, and the Board in one shared state." : "One conversation with the council wired to your units."}</p>
             </div>
-            <ChatTab vaultless />
+            <ChatTab vaultless product={isHerald ? "herald" : "default"} />
           </section>
-          <section aria-label="My Units">
-            <PeerAgents />
+          <section aria-label={isHerald ? "Herald capabilities" : "My Units"}>
+            <PeerAgents product={isHerald ? "herald" : "ring"} />
           </section>
           {isHerald ? <HeraldLoopPanels /> : null}
           <div className="grid gap-6 lg:grid-cols-2">
@@ -180,7 +180,7 @@ export function Settings({
             <section aria-labelledby="ring-keys-heading" className="flex flex-col gap-2">
               <div>
                 <h2 id="ring-keys-heading" className="text-lg font-semibold">Keys</h2>
-                <p className="text-sm text-muted-foreground">Your tenant-scoped Council model key.</p>
+                <p className="text-sm text-muted-foreground">{isHerald ? "The tenant-scoped model key Herald uses for chat and loop work." : "Your tenant-scoped Council model key."}</p>
               </div>
               <KeysTab initial={settings} onSaved={setSettings} vaultless unitLabel={isHerald ? "Herald" : "Ring Council"} />
             </section>
