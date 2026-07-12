@@ -90,7 +90,10 @@ async function fixture() {
         });
       }
       if (toolName === "createPosts")
-        return text("[draft_not_approved] held as dr_123");
+        return {
+          ...text("[draft_not_approved] held as dr_123"),
+          isError: true,
+        };
       if (toolName === "approve_send")
         return text(
           "Posted to X. Live URL: https://x.com/i/web/status/123456789",
@@ -273,6 +276,33 @@ describe("Herald proposer and poster lanes", () => {
         return text("memory", { path: "Projects/Launch.md", body: "memory" });
       if (toolName === "createPosts")
         return text("unexpected success without C-22");
+      return text("must not run");
+    });
+    try {
+      await service.proposeNow("alpha");
+      const item = service.getBoard("alpha").items[0];
+      await expect(
+        service.approveAndPublish("alpha", [item.id]),
+      ).rejects.toThrow("did not hold the draft under C-22");
+      expect(
+        callTool.mock.calls.filter((call) => call[1] === "approve_send"),
+      ).toHaveLength(0);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("rejects a draft marker that Calli did not return as an isError refusal", async () => {
+    const { service, callTool } = await fixture();
+    callTool.mockImplementation(async (_target, toolName) => {
+      if (toolName === "search_memory")
+        return text("Projects/Launch.md", {
+          hits: [{ path: "Projects/Launch.md" }],
+        });
+      if (toolName === "get_memory")
+        return text("memory", { path: "Projects/Launch.md", body: "memory" });
+      if (toolName === "createPosts")
+        return text("[draft_not_approved] marker without an MCP refusal");
       return text("must not run");
     });
     try {
