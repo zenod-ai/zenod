@@ -6,15 +6,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   api: vi.fn(),
+  chatStream: vi.fn(),
+  notConfigured: false,
   toast: { error: vi.fn(), success: vi.fn() },
 }))
 
 vi.mock("@/lib/api", () => ({
   api: mocks.api,
-  chatStream: vi.fn(),
+  chatStream: mocks.chatStream,
   errorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "error",
-  isNotConfigured: () => false,
+  isNotConfigured: () => mocks.notConfigured,
   transcribeVoiceNote: vi.fn(),
 }))
 vi.mock("sonner", () => ({ toast: mocks.toast }))
@@ -25,6 +27,8 @@ import { ChatTab } from "@/views/ChatTab"
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn()
   mocks.api.mockReset()
+  mocks.chatStream.mockReset()
+  mocks.notConfigured = false
   mocks.toast.error.mockReset()
   mocks.toast.success.mockReset()
 })
@@ -76,6 +80,7 @@ describe("Herald loop dashboard", () => {
     })
 
     render(<HeraldLoopPanels />)
+    expect(await screen.findByText("Chat, Briefing, and Board are three views of the same Herald state.")).toBeTruthy()
     expect(await screen.findByText("The launch is alive.")).toBeTruthy()
     expect(screen.getByText(/WHY:/)).toBeTruthy()
     expect(screen.getByText("Memory citation").closest("a")?.href).toContain(
@@ -83,6 +88,7 @@ describe("Herald loop dashboard", () => {
     )
     expect(screen.getByText(/x.com\/i\/web\/status\/123/)).toBeTruthy()
     expect(screen.getByText("v2 · approved")).toBeTruthy()
+    expect(screen.getByText(/Automated X replies are not active yet/)).toBeTruthy()
 
     await userEvent.click(screen.getByRole("button", { name: "Run now" }))
     await waitFor(() =>
@@ -106,6 +112,20 @@ describe("Herald loop dashboard", () => {
 })
 
 describe("Herald chat receipt refresh", () => {
+  it("uses Herald-only conversation and configuration language", async () => {
+    mocks.api.mockResolvedValueOnce({ messages: [] })
+    mocks.notConfigured = true
+    mocks.chatStream.mockRejectedValueOnce(new Error("not configured"))
+    render(<ChatTab vaultless product="herald" />)
+
+    expect(await screen.findByText("Talk with Herald")).toBeTruthy()
+    expect(screen.getByText(/review the same numbered Board items/)).toBeTruthy()
+    await userEvent.type(screen.getByPlaceholderText("Message Herald about the briefing or current Board…"), "hello")
+    await userEvent.click(screen.getByRole("button", { name: "Send" }))
+    expect(await screen.findByText("Herald needs a model key before he can reply. Add it in Keys.")).toBeTruthy()
+    expect(document.body.textContent).not.toContain("Zenod is not fully configured")
+  })
+
   it("reloads persisted chat only for the Herald refresh event", async () => {
     mocks.api
       .mockResolvedValueOnce({

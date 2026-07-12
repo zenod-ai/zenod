@@ -104,13 +104,14 @@ export function HeraldLoopPanels() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+      <p className="text-sm text-muted-foreground lg:col-span-2">Chat, Briefing, and Board are three views of the same Herald state.</p>
       <Card aria-labelledby="herald-board-heading">
         <CardHeader className="flex-row items-start justify-between gap-4">
           <div>
             <ListChecksIcon className="mb-2 size-5 text-muted-foreground" />
             <CardTitle id="herald-board-heading">Board</CardTitle>
             <CardDescription>
-              Proposals, their WHY, cited memory, and authoritative posting
+              Herald's numbered proposals, their WHY, cited memory, and authoritative posting
               receipts.
             </CardDescription>
           </div>
@@ -225,6 +226,7 @@ export function HeraldLoopPanels() {
               <div>
                 <dt className="text-muted-foreground">Reply policy</dt>
                 <dd>{briefing.content.replyPolicy}</dd>
+                <dd className="mt-1 text-xs text-muted-foreground">Recorded in the Briefing. Automated X replies are not active yet; that reply lane remains HARDEN.</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Cadence</dt>

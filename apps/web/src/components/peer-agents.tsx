@@ -45,7 +45,8 @@ import {
  * connectivity and an authenticated MCP tool catalog are deliberately separate.
  * The token is write-only (never returned by the API); we only show whether one is set.
  */
-export function PeerAgents() {
+export function PeerAgents({ product = "ring" }: { product?: "ring" | "herald" } = {}) {
+  const isHerald = product === "herald"
   const [peers, setPeers] = React.useState<Peer[] | null>(null)
   const [name, setName] = React.useState("")
   const [url, setUrl] = React.useState("")
@@ -76,7 +77,7 @@ export function PeerAgents() {
       setPeers(r.peers)
       return r.peers
     } catch (err) {
-      toast.error("Could not save units", { description: errorMessage(err) })
+      toast.error(`Could not save ${isHerald ? "capabilities" : "units"}`, { description: errorMessage(err) })
       return null
     } finally {
       setSaving(false)
@@ -99,12 +100,12 @@ export function PeerAgents() {
       setUrl("")
       setToken("")
       if (added && isPeerToolsReady(added)) {
-        toast.success(`Unit "${added.name}" tools ready`, {
+        toast.success(`${isHerald ? "Capability" : "Unit"} "${added.name}" tools ready`, {
           description: `${added.toolCount} discovered ${added.toolCount === 1 ? "tool" : "tools"}.`,
         })
       } else {
         toast.warning(
-          `Unit "${added?.name ?? name.trim()}" saved, but tools are unavailable`,
+          `${isHerald ? "Capability" : "Unit"} "${added?.name ?? name.trim()}" saved, but tools are unavailable`,
           {
             description:
               added?.toolsError ??
@@ -121,7 +122,7 @@ export function PeerAgents() {
     const next = (peers ?? [])
       .filter((p) => p.name !== target)
       .map((p) => ({ name: p.name, url: p.url }))
-    if (await save(next)) toast.success(`Unit "${target}" removed`)
+    if (await save(next)) toast.success(`${isHerald ? "Capability" : "Unit"} "${target}" removed`)
   }
 
   function beginPeerOperation(peerName: string, label: string) {
@@ -287,9 +288,9 @@ export function PeerAgents() {
     <Card>
       <CardHeader>
         <NetworkIcon className="size-5 text-muted-foreground" />
-        <CardTitle>My Units</CardTitle>
+        <CardTitle>{isHerald ? "Herald capabilities" : "My Units"}</CardTitle>
         <CardDescription>
-          Wire the Council to your agents with their MCP URL and downstream token.
+          {isHerald ? "Connect the memory and publishing tools Herald can use with their MCP URL and downstream token." : "Wire the Council to your agents with their MCP URL and downstream token."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -301,8 +302,8 @@ export function PeerAgents() {
               <EmptyMedia variant="icon">
                 <NetworkIcon />
               </EmptyMedia>
-              <EmptyTitle>No units yet</EmptyTitle>
-              <EmptyDescription>Add Zenod below to give the Council durable memory.</EmptyDescription>
+              <EmptyTitle>{isHerald ? "No capabilities connected" : "No units yet"}</EmptyTitle>
+              <EmptyDescription>{isHerald ? "Add Zenod for memory and Calli for publishing. They become tools Herald can use." : "Add Zenod below to give the Council durable memory."}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -385,7 +386,7 @@ export function PeerAgents() {
                                   {tool.outputSchemaError && (
                                     <p className="mt-1 text-destructive">
                                       {tool.outputSchemaError}. The tool remains available;
-                                      Ring did not truncate or invent a schema.
+                                      {isHerald ? "Herald" : "Ring"} did not truncate or invent a schema.
                                     </p>
                                   )}
                                 </div>
@@ -479,7 +480,7 @@ export function PeerAgents() {
                   <p className="text-xs text-muted-foreground">
                     Attach a downloaded{" "}
                     <span className="font-mono">.skill.json</span> bundle.
-                    Replacing it does not reconnect the unit.
+                    Replacing it does not reconnect the {isHerald ? "capability" : "unit"}.
                   </p>
                 </div>
                 <Button
@@ -499,7 +500,7 @@ export function PeerAgents() {
 
         <form onSubmit={addPeer} className="flex flex-col gap-4 border-t pt-5">
           <Field>
-            <FieldLabel htmlFor="peer-name">Unit name</FieldLabel>
+            <FieldLabel htmlFor="peer-name">{isHerald ? "Capability name" : "Unit name"}</FieldLabel>
             <Input id="peer-name" placeholder="zenod" value={name} onChange={(e) => setName(e.target.value)} />
             <FieldDescription>A short label, such as Zenod.</FieldDescription>
           </Field>
@@ -518,7 +519,7 @@ export function PeerAgents() {
             <Input
               id="peer-token"
               type="password"
-              placeholder="the unit's MCP token"
+              placeholder={isHerald ? "the capability's MCP token" : "the unit's MCP token"}
               value={token}
               onChange={(e) => setToken(e.target.value)}
               className="font-mono text-xs"
@@ -528,7 +529,7 @@ export function PeerAgents() {
           <div>
             <Button type="submit" disabled={saving || hasPeerActivity || peers === null || !name.trim() || !url.trim() || !token.trim()}>
               {saving ? <Spinner /> : <NetworkIcon data-icon="inline-start" />}
-              Add unit
+              Add {isHerald ? "capability" : "unit"}
             </Button>
           </div>
         </form>
