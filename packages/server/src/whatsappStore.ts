@@ -72,6 +72,7 @@ export interface WhatsAppTranscriptEntry {
   media?: WhatsAppTranscriptMedia[];
   linkedReceipts?: WhatsAppTranscriptReceipt[];
   linkedFollowUps?: WhatsAppTranscriptFollowUp[];
+  channelAudit?: WhatsAppChannelAuditRecord;
 }
 
 export interface WhatsAppTranscriptMedia {
@@ -137,6 +138,39 @@ export interface WhatsAppNotificationQuery {
   chatId?: string;
   query?: string;
   limit?: number;
+}
+
+export type WhatsAppChannelLifecycle = "forwarded" | "replied" | "failed" | "interrupted";
+
+export interface WhatsAppChannelAuditInput {
+  providerMessageId: string;
+  tenantId: string;
+  senderId: string;
+  transcriptText?: string | null;
+  transcriptProvenance?: string | null;
+  artifactRef?: string | null;
+  artifactSha256?: string | null;
+  downstreamDestination: string;
+  downstreamCorrelationId?: string | null;
+  downstreamReceipt?: Record<string, unknown> | null;
+}
+
+export interface WhatsAppChannelAuditRecord {
+  providerMessageId: string;
+  tenantId: string;
+  senderId: string;
+  transcriptText: string | null;
+  transcriptProvenance: string | null;
+  artifactRef: string | null;
+  artifactSha256: string | null;
+  downstreamDestination: string;
+  downstreamCorrelationId: string | null;
+  downstreamReceipt: Record<string, unknown> | null;
+  lifecycleState: WhatsAppChannelLifecycle;
+  outboundProviderId: string | null;
+  outboundStatus: string | null;
+  forwardedAt: number;
+  updatedAt: number;
 }
 
 function safeJson(value: unknown): string {
@@ -268,6 +302,26 @@ export class WhatsAppStore {
         created_at INTEGER NOT NULL,
         raw_json TEXT NOT NULL DEFAULT '{}'
       );
+
+      CREATE TABLE IF NOT EXISTS whatsapp_channel_audit (
+        provider_message_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        transcript_text TEXT,
+        transcript_provenance TEXT,
+        artifact_ref TEXT,
+        artifact_sha256 TEXT,
+        downstream_destination TEXT NOT NULL,
+        downstream_correlation_id TEXT,
+        downstream_receipt_json TEXT,
+        lifecycle_state TEXT NOT NULL,
+        outbound_provider_id TEXT,
+        outbound_status TEXT,
+        forwarded_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_channel_audit_correlation
+        ON whatsapp_channel_audit(downstream_correlation_id);
     `);
 
     // A process exit cannot leave an active worker behind. Make that evidence
@@ -276,6 +330,9 @@ export class WhatsAppStore {
     this.db
       .prepare("UPDATE whatsapp_messages SET processing_status = 'interrupted' WHERE processing_status = 'processing'")
       .run();
+    this.db
+      .prepare("UPDATE whatsapp_channel_audit SET lifecycle_state = 'interrupted', updated_at = ? WHERE lifecycle_state = 'forwarded'")
+      .run(Date.now());
   }
 
   recordInbound(event: WhatsAppInboundEvent): RecordInboundResult {
@@ -372,6 +429,72 @@ export class WhatsAppStore {
 
   markMessageStatus(messageId: string, status: string): void {
     this.db.prepare("UPDATE whatsapp_messages SET processing_status = ? WHERE message_id = ?").run(status, messageId);
+    if (status === "replied" || status === "failed" || status === "interrupted") {
+      this.db
+        .prepare(
+          "UPDATE whatsapp_channel_audit SET lifecycle_state = ?, updated_at = ? WHERE provider_message_id = ?",
+        )
+        .run(status, Date.now(), messageId);
+    }
+  }
+
+  recordChannelForwarding(input: WhatsAppChannelAuditInput): void {
+    const now = Date.now();
+    this.db.prepare(
+      `INSERT INTO whatsapp_channel_audit (
+         provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance,
+         artifact_ref, artifact_sha256, downstream_destination, downstream_correlation_id,
+         downstream_receipt_json, lifecycle_state, forwarded_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'forwarded', ?, ?)
+       ON CONFLICT(provider_message_id) DO UPDATE SET
+         tenant_id=excluded.tenant_id,
+         sender_id=excluded.sender_id,
+         transcript_text=excluded.transcript_text,
+         transcript_provenance=excluded.transcript_provenance,
+         artifact_ref=excluded.artifact_ref,
+         artifact_sha256=excluded.artifact_sha256,
+         downstream_destination=excluded.downstream_destination,
+         downstream_correlation_id=excluded.downstream_correlation_id,
+         downstream_receipt_json=excluded.downstream_receipt_json,
+         lifecycle_state='forwarded',
+         updated_at=excluded.updated_at`,
+    ).run(
+      input.providerMessageId,
+      input.tenantId,
+      input.senderId,
+      input.transcriptText ?? null,
+      input.transcriptProvenance ?? null,
+      input.artifactRef ?? null,
+      input.artifactSha256 ?? null,
+      input.downstreamDestination,
+      input.downstreamCorrelationId ?? null,
+      input.downstreamReceipt ? safeJson(input.downstreamReceipt) : null,
+      now, now,
+    );
+  }
+
+  channelAudit(providerMessageId: string): WhatsAppChannelAuditRecord | null {
+    const row = this.db.prepare(
+      `SELECT provider_message_id AS providerMessageId, tenant_id AS tenantId,
+         sender_id AS senderId, transcript_text AS transcriptText,
+         transcript_provenance AS transcriptProvenance, artifact_ref AS artifactRef,
+         artifact_sha256 AS artifactSha256, downstream_destination AS downstreamDestination,
+         downstream_correlation_id AS downstreamCorrelationId,
+         downstream_receipt_json AS downstreamReceiptJson, lifecycle_state AS lifecycleState,
+         outbound_provider_id AS outboundProviderId, outbound_status AS outboundStatus,
+         forwarded_at AS forwardedAt, updated_at AS updatedAt
+       FROM whatsapp_channel_audit WHERE provider_message_id = ?`,
+    ).get(providerMessageId) as
+      | (Omit<WhatsAppChannelAuditRecord, "downstreamReceipt"> & { downstreamReceiptJson: string | null })
+      | undefined;
+    if (!row) return null;
+    const { downstreamReceiptJson, ...record } = row;
+    return {
+      ...record,
+      downstreamReceipt: downstreamReceiptJson
+        ? (JSON.parse(downstreamReceiptJson) as Record<string, unknown>)
+        : null,
+    };
   }
 
   recordInboundTranscript(messageId: string, transcript: string): void {
@@ -425,6 +548,13 @@ export class WhatsAppStore {
         Date.now(),
         safeJson(input.raw),
       );
+    if (input.messageId) {
+      this.db.prepare(
+        `UPDATE whatsapp_channel_audit
+         SET outbound_provider_id = COALESCE(?, outbound_provider_id), outbound_status = ?, updated_at = ?
+         WHERE provider_message_id = ?`,
+      ).run(input.sentMessageId ?? null, input.status, Date.now(), input.messageId);
+    }
   }
 
   lastActivity(): number | null {
@@ -675,6 +805,7 @@ export class WhatsAppStore {
     const mediaByMessage = new Map<string, WhatsAppTranscriptMedia[]>();
     const receiptsByMessage = new Map<string, WhatsAppTranscriptReceipt[]>();
     const followUpsByMessage = new Map<string, WhatsAppTranscriptFollowUp[]>();
+    const channelAuditByMessage = new Map<string, WhatsAppChannelAuditRecord>();
     if (inboundMessageIds.length > 0) {
       const placeholders = inboundMessageIds.map(() => "?").join(",");
       const mediaRows = this.db
@@ -760,6 +891,10 @@ export class WhatsAppStore {
         bucket.push({ at: row.at, messageId: row.messageId, bodyText: row.bodyText });
         followUpsByMessage.set(row.mediaMessageId, bucket);
       }
+      for (const messageId of inboundMessageIds) {
+        const audit = this.channelAudit(messageId);
+        if (audit) channelAuditByMessage.set(messageId, audit);
+      }
     }
 
     return rows.reverse().map((row) => ({
@@ -776,6 +911,9 @@ export class WhatsAppStore {
       ...(row.direction === "inbound" && row.messageId && receiptsByMessage.has(row.messageId) ? { linkedReceipts: receiptsByMessage.get(row.messageId) } : {}),
       ...(row.direction === "inbound" && row.messageId && followUpsByMessage.has(row.messageId)
         ? { linkedFollowUps: followUpsByMessage.get(row.messageId) }
+        : {}),
+      ...(row.direction === "inbound" && row.messageId && channelAuditByMessage.has(row.messageId)
+        ? { channelAudit: channelAuditByMessage.get(row.messageId) }
         : {}),
     }));
   }
