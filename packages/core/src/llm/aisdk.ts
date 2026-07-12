@@ -981,7 +981,12 @@ export class AiSdkBrainLlm implements BrainLlm {
     // prose or tool choice cannot manufacture catalog authority.
     const peerEntries = Object.entries(peerTools ?? {}).filter(([, peer]) => !peer.requiresMcpCatalogIntent);
     let authoritativePeerResult: string | null = null;
-    const sameTurnPeerMutations = new Map<string, Promise<string>>();
+    // One answer() call is the host-owned lifetime for a logical peer call. Keeping
+    // this cache local (rather than process- or conversation-global) means identical
+    // calls from another tenant, conversation, or later user turn are always fresh.
+    // The promise is cached before the upstream await so concurrent duplicate tool
+    // calls share both the result and the single onPeerAction record.
+    const sameAnswerPeerCalls = new Map<string, Promise<string>>();
     // M-1 — retry-stop: the FIRST Blocked result from an outbound send tool ends the
     // turn. Without this, the model retries the same blocked call (or tries another
     // send tool) for its remaining step budget, and replyGate.ts's renderActionTurnReply
@@ -1023,28 +1028,43 @@ export class AiSdkBrainLlm implements BrainLlm {
       return `Blocked ${name}: Archus can directly write only its central backlog repo ${peer.authorityRepo}. ` +
         `The requested repo ${requestedRepo} is a product/target repo. For target-repo issue creation, edits, labels, or code-repo work, use Epaminon/Codex execution instead; if durable tracking is needed, create or update a central backlog item in ${peer.authorityRepo} that names target:${requestedRepo}.`;
     };
-    const peerMutationDedupeKey = (name: string, args: Record<string, unknown>): string | null => {
+    const canonicalToolArgument = (value: unknown): string => {
+      if (Array.isArray(value)) return `[${value.map(canonicalToolArgument).join(",")}]`;
+      if (value && typeof value === "object") {
+        return `{${Object.entries(value as Record<string, unknown>)
+          .filter(([, item]) => item !== undefined)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, item]) => `${JSON.stringify(key)}:${canonicalToolArgument(item)}`)
+          .join(",")}}`;
+      }
+      return JSON.stringify(value ?? null);
+    };
+    const peerCallDedupeArgs = (name: string, args: Record<string, unknown>): unknown => {
+      // Preserve the pre-existing Console journey identity: labels and the echoed
+      // original request are execution metadata, while title/body identify the
+      // issues that would actually be created. Every other peer uses its complete,
+      // recursively canonicalized argument object.
       if (name === "console_create_issues") {
         const issues = Array.isArray(args.issues) ? args.issues : [];
-        return `${name}:${JSON.stringify(
-          issues.map((issue) => {
-            const item = issue && typeof issue === "object" ? (issue as Record<string, unknown>) : {};
-            return {
-              title: typeof item.title === "string" ? item.title.trim() : "",
-              body: typeof item.body === "string" ? item.body.trim() : "",
-            };
-          }),
-        )}`;
+        return issues.map((issue) => {
+          const item = issue && typeof issue === "object" ? (issue as Record<string, unknown>) : {};
+          return {
+            title: typeof item.title === "string" ? item.title.trim() : "",
+            body: typeof item.body === "string" ? item.body.trim() : "",
+          };
+        });
       }
       if (name === "console_create_issue_then_run") {
         const issue = args.issue && typeof args.issue === "object" ? (args.issue as Record<string, unknown>) : {};
-        return `${name}:${JSON.stringify({
+        return {
           title: typeof issue.title === "string" ? issue.title.trim() : "",
           body: typeof issue.body === "string" ? issue.body.trim() : "",
-        })}`;
+        };
       }
-      return null;
+      return args;
     };
+    const peerCallDedupeKey = (name: string, args: Record<string, unknown>): string =>
+      `${name}:${canonicalToolArgument(peerCallDedupeArgs(name, args))}`;
     const peerToolSet = Object.fromEntries(
       peerEntries.map(([name, peer]) => [
         name,
@@ -1073,82 +1093,84 @@ export class AiSdkBrainLlm implements BrainLlm {
             if (approvalFields.length) {
               args = Object.fromEntries(Object.entries(args).filter(([key]) => !approvalFields.some(([field]) => field === key)));
             }
-            const mutationAttempt = peer.verifiedMutationReceipt === true;
-            const receiptMetadata = (result: string) => {
-              if (!mutationAttempt && !peer.connectedMcp) return undefined;
-              const receipt = validateMutationReceipt(name, result);
-              return {
-                ...(peer.connectedMcp ? { peerAction: true as const } : {}),
-                ...(mutationAttempt ? { mutationAttempt: true as const } : {}),
-                ...(mutationAttempt && receipt.verified ? { verifiedMutationReceipt: true as const } : {}),
-                ...(mutationAttempt && receipt.text ? { verifiedReceiptText: receipt.text } : {}),
-              };
-            };
-            const normalized = normalizedToolName(name);
-            const isOutboundSend = OUTBOUND_SEND_TOOL_NAMES.has(normalized);
-
-            if (isOutboundSend && blockedOutboundTurn) {
-              // Retry-stop: already blocked once this turn — never re-attempt, never
-              // record a second (duplicate) action.
-              return blockedOutboundTurn.text;
-            }
-
-            const guardFailure = peer.annotations?.readOnlyHint === true
-              ? null
-              : peerMutationGuardFailure(name, input.question, {
-                  conversationId: input.conversationId,
-                  args,
-                  forceMutation: peer.annotations?.readOnlyHint === false || !isKnownTool(name),
-                  owner: peer.owner,
-                  description: peer.description,
-                  requiresStandingApproval: commitOnlyApproval,
-                });
-            if (guardFailure) {
-              if (isOutboundSend) {
-                // M-1 friendly block template: the raw "ERROR: Blocked …" string is an
-                // action-turn tool result, so replyGate.ts would otherwise deliver it to
-                // the user verbatim. Render the honest human affordance instead; the raw
-                // detail goes to the operator log only.
-                console.warn(`[peer-guard] blocked ${name}: ${guardFailure}`);
-                const text = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL ? NOTHING_PENDING_TEXT : friendlyDraftBlock();
-                blockedOutboundTurn = { tool: name, text };
-                input.onPeerAction?.(name, args, text, receiptMetadata(text));
-                return text;
-              }
-              const result = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL
-                ? NOTHING_PENDING_TEXT
-                : `ERROR: ${guardFailure}`;
-              input.onPeerAction?.(name, args, result, receiptMetadata(result));
-              return result;
-            }
-            if (isAffirmativeApproval(input.question)) {
-              for (const [field, property] of approvalFields) {
-                if (property.type === "boolean") args[field] = true;
-              }
-            }
-            const boundaryFailure = archusWriteBoundaryFailure(name, peer, args);
-            if (boundaryFailure) {
-              const result = `ERROR: ${boundaryFailure}`;
-              input.onPeerAction?.(name, args, result, receiptMetadata(result));
-              return result;
-            }
-            // P-1 — ask_outbound composes a draft through Callistheness but never sends,
-            // so it never reaches peerMutationGuardFailure's registration above. Register
-            // the same standing-approval state here so a later "Tweet approved" resolved
-            // via a direct post_tweet/post_reddit/send_email call finds it.
-            registerOutboundComposeApproval(input.conversationId, name, args);
-            const dedupeKey = peerMutationDedupeKey(name, args);
-            const existing = dedupeKey ? sameTurnPeerMutations.get(dedupeKey) : undefined;
+            const dedupeKey = peerCallDedupeKey(name, args);
+            const existing = sameAnswerPeerCalls.get(dedupeKey);
             if (existing) return existing;
-            const pending = caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? "")))).then((result) => {
+
+            const pending = (async () => {
+              const mutationAttempt = peer.verifiedMutationReceipt === true;
+              const receiptMetadata = (result: string) => {
+                if (!mutationAttempt && !peer.connectedMcp) return undefined;
+                const receipt = validateMutationReceipt(name, result);
+                return {
+                  ...(peer.connectedMcp ? { peerAction: true as const } : {}),
+                  ...(mutationAttempt ? { mutationAttempt: true as const } : {}),
+                  ...(mutationAttempt && receipt.verified ? { verifiedMutationReceipt: true as const } : {}),
+                  ...(mutationAttempt && receipt.text ? { verifiedReceiptText: receipt.text } : {}),
+                };
+              };
+              const normalized = normalizedToolName(name);
+              const isOutboundSend = OUTBOUND_SEND_TOOL_NAMES.has(normalized);
+
+              if (isOutboundSend && blockedOutboundTurn) {
+                // Retry-stop: already blocked once this turn — never re-attempt, never
+                // record a second (duplicate) action.
+                return blockedOutboundTurn.text;
+              }
+
+              const guardFailure = peer.annotations?.readOnlyHint === true
+                ? null
+                : peerMutationGuardFailure(name, input.question, {
+                    conversationId: input.conversationId,
+                    args,
+                    forceMutation: peer.annotations?.readOnlyHint === false || !isKnownTool(name),
+                    owner: peer.owner,
+                    description: peer.description,
+                    requiresStandingApproval: commitOnlyApproval,
+                  });
+              if (guardFailure) {
+                if (isOutboundSend) {
+                  // M-1 friendly block template: the raw "ERROR: Blocked …" string is an
+                  // action-turn tool result, so replyGate.ts would otherwise deliver it to
+                  // the user verbatim. Render the honest human affordance instead; the raw
+                  // detail goes to the operator log only.
+                  console.warn(`[peer-guard] blocked ${name}: ${guardFailure}`);
+                  const text = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL ? NOTHING_PENDING_TEXT : friendlyDraftBlock();
+                  blockedOutboundTurn = { tool: name, text };
+                  input.onPeerAction?.(name, args, text, receiptMetadata(text));
+                  return text;
+                }
+                const result = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL
+                  ? NOTHING_PENDING_TEXT
+                  : `ERROR: ${guardFailure}`;
+                input.onPeerAction?.(name, args, result, receiptMetadata(result));
+                return result;
+              }
+              if (isAffirmativeApproval(input.question)) {
+                for (const [field, property] of approvalFields) {
+                  if (property.type === "boolean") args[field] = true;
+                }
+              }
+              const boundaryFailure = archusWriteBoundaryFailure(name, peer, args);
+              if (boundaryFailure) {
+                const result = `ERROR: ${boundaryFailure}`;
+                input.onPeerAction?.(name, args, result, receiptMetadata(result));
+                return result;
+              }
+              // P-1 — ask_outbound composes a draft through Callistheness but never sends,
+              // so it never reaches peerMutationGuardFailure's registration above. Register
+              // the same standing-approval state here so a later "Tweet approved" resolved
+              // via a direct post_tweet/post_reddit/send_email call finds it.
+              registerOutboundComposeApproval(input.conversationId, name, args);
+              const result = await caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? ""))));
               if (input.conversationId && peer.owner) {
                 registerStandingApproval(input.conversationId, peer.owner, name, args, result, peer.description);
               }
               if (peer.authoritativeReadResult) authoritativePeerResult = result;
               input.onPeerAction?.(name, args, result, receiptMetadata(result));
               return result;
-            });
-            if (dedupeKey) sameTurnPeerMutations.set(dedupeKey, pending);
+            })();
+            sameAnswerPeerCalls.set(dedupeKey, pending);
             return pending;
           },
         }),

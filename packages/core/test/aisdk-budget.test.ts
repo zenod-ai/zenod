@@ -435,4 +435,166 @@ describe("answer tool-step budget", () => {
     expect(calls).toHaveLength(1);
     expect(actions).toHaveLength(1);
   });
+
+  it("deduplicates concurrent connected-MCP calls with recursively canonical arguments and records one outcome", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    const actions: unknown[] = [];
+    let release!: (value: string) => void;
+    const upstream = new Promise<string>((resolve) => { release = resolve; });
+    await llm.answer(
+      {
+        question: "read the connected peer record",
+        vaultBriefing: "brief",
+        conversation: [],
+        onPeerAction: (tool, input, result) => actions.push({ tool, input, result }),
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        peer__read_record__abc123: {
+          description: "Read one record from a connected MCP.",
+          connectedMcp: true,
+          annotations: { readOnlyHint: true },
+          inputSchema: z.object({
+            query: z.object({ filters: z.object({ limit: z.number(), state: z.string() }), terms: z.array(z.string()) }),
+          }),
+          run: async (input) => {
+            calls.push(input);
+            return upstream;
+          },
+        },
+      },
+    );
+
+    const peer = captured.config.tools.peer__read_record__abc123;
+    const first = peer.execute({ query: { terms: ["ring", "mcp"], filters: { state: "open", limit: 2 } } });
+    const second = peer.execute({ query: { filters: { limit: 2, state: "open" }, terms: ["ring", "mcp"] } });
+    release("one peer result");
+
+    await expect(Promise.all([first, second])).resolves.toEqual(["one peer result", "one peer result"]);
+    expect(calls).toHaveLength(1);
+    expect(actions).toHaveLength(1);
+  });
+
+  it("keeps materially different connected-MCP arguments distinct within one answer", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    await llm.answer(
+      { question: "read records one and two", vaultBriefing: "brief", conversation: [] },
+      readTools,
+      undefined,
+      undefined,
+      {
+        peer__read_record__abc123: {
+          description: "Read one record from a connected MCP.",
+          connectedMcp: true,
+          annotations: { readOnlyHint: true },
+          inputSchema: z.object({ id: z.number() }),
+          run: async (input) => { calls.push(input); return `record ${String((input as { id: number }).id)}`; },
+        },
+      },
+    );
+
+    const peer = captured.config.tools.peer__read_record__abc123;
+    await expect(Promise.all([peer.execute({ id: 1 }), peer.execute({ id: 2 })])).resolves.toEqual(["record 1", "record 2"]);
+    expect(calls).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+  it("does not retry or double-record a duplicate guarded mutation failure", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    const actions: unknown[] = [];
+    await llm.answer(
+      {
+        question: "show status only",
+        vaultBriefing: "brief",
+        conversation: [],
+        onPeerAction: (tool, input, result) => actions.push({ tool, input, result }),
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        peer__future_write__abc123: {
+          description: "Change remote state.",
+          connectedMcp: true,
+          verifiedMutationReceipt: true,
+          annotations: { readOnlyHint: false },
+          inputSchema: z.object({ value: z.string() }),
+          run: async (input) => { calls.push(input); return "unexpected mutation"; },
+        },
+      },
+    );
+
+    const peer = captured.config.tools.peer__future_write__abc123;
+    const [first, second] = await Promise.all([peer.execute({ value: "same" }), peer.execute({ value: "same" })]);
+    expect(first).toContain("ERROR: Blocked");
+    expect(second).toBe(first);
+    expect(calls).toHaveLength(0);
+    expect(actions).toHaveLength(1);
+  });
+
+  it("reuses an unknown mutation outcome instead of retrying the upstream MCP", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    const actions: unknown[] = [];
+    await llm.answer(
+      {
+        question: "Explicitly run create_record exactly once with value same.",
+        vaultBriefing: "brief",
+        conversation: [],
+        onPeerAction: (tool, input, result) => actions.push({ tool, input, result }),
+      },
+      readTools,
+      undefined,
+      undefined,
+      {
+        peer__create_record__abc123: {
+          description: "Create one remote record.",
+          connectedMcp: true,
+          verifiedMutationReceipt: true,
+          annotations: { readOnlyHint: false },
+          inputSchema: z.object({ value: z.string() }),
+          run: async (input) => { calls.push(input); return "ERROR: upstream outcome unknown"; },
+        },
+      },
+    );
+
+    const peer = captured.config.tools.peer__create_record__abc123;
+    const [first, second] = await Promise.all([peer.execute({ value: "same" }), peer.execute({ value: "same" })]);
+    expect(first).toBe("ERROR: upstream outcome unknown");
+    expect(second).toBe(first);
+    expect(calls).toEqual([{ value: "same" }]);
+    expect(actions).toHaveLength(1);
+  });
+
+  it("expires connected-MCP call identity at the answer boundary", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    const calls: unknown[] = [];
+    const peerTools = {
+      peer__read_record__abc123: {
+        description: "Read one record from a connected MCP.",
+        connectedMcp: true,
+        annotations: { readOnlyHint: true },
+        inputSchema: z.object({ id: z.number() }),
+        run: async (input: unknown) => { calls.push(input); return "record"; },
+      },
+    };
+
+    await llm.answer(
+      { question: "read it", conversationId: "tenant-a:web:one", vaultBriefing: "brief", conversation: [] },
+      readTools, undefined, undefined, peerTools,
+    );
+    await captured.config.tools.peer__read_record__abc123.execute({ id: 1 });
+
+    await llm.answer(
+      { question: "read it again", conversationId: "tenant-a:web:one", vaultBriefing: "brief", conversation: [] },
+      readTools, undefined, undefined, peerTools,
+    );
+    await captured.config.tools.peer__read_record__abc123.execute({ id: 1 });
+
+    expect(calls).toEqual([{ id: 1 }, { id: 1 }]);
+  });
 });
