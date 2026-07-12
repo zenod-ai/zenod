@@ -1,9 +1,11 @@
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import type { Env, Hono } from "hono";
 import { SqliteStateStore } from "zenod";
 import { Settings } from "./settings.js";
 import { WhatsAppGateway, type SocketFactory } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
+import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { TelegramGateway } from "./telegramGateway.js";
 import {
   PhylaxChannelsOrgan,
@@ -24,6 +26,8 @@ export class PhylaxPortedRuntime {
   readonly whatsappStore: WhatsAppStore;
   readonly whatsapp: WhatsAppGateway;
   readonly telegram: TelegramGateway;
+  private readonly mediaCoalescingWindowMs: number;
+  private readonly mediaInFlight = new Map<string, Promise<Awaited<ReturnType<PhylaxChannelsOrgan["receive"]>>>>();
 
   constructor(
     readonly dataDir: string,
@@ -35,6 +39,10 @@ export class PhylaxPortedRuntime {
       verifyInbound?: (input: { channel: "whatsapp"; sender: string; text: string }) => Promise<string | null> | string | null;
     } = {},
   ) {
+    const configuredWindow = Number(env.PHYLAX_MEDIA_COALESCE_WINDOW_MS ?? 300_000);
+    this.mediaCoalescingWindowMs = Number.isFinite(configuredWindow)
+      ? Math.max(1_000, Math.min(configuredWindow, 3_600_000))
+      : 300_000;
     this.state = new SqliteStateStore(join(dataDir, "phylax-channels.sqlite"));
     this.settings = new Settings(this.state);
     this.settings.seedFromEnv(env);
@@ -60,7 +68,7 @@ export class PhylaxPortedRuntime {
           text,
         });
         if (verificationReply) return { replyText: verificationReply };
-        const forwarded = await this.organ.receive({
+        const inbound = {
           channel: "whatsapp",
           sender: event.senderId,
           chatId: event.chatId,
@@ -76,21 +84,68 @@ export class PhylaxPortedRuntime {
                 },
               }
             : {}),
-        });
-        this.whatsappStore.recordChannelForwarding({
-          providerMessageId: event.messageId,
-          tenantId: forwarded.tenantId,
-          senderId: forwarded.sender,
-          transcriptText: forwarded.handoff.text_transcript ?? null,
-          transcriptProvenance:
-            forwarded.handoff.transcription_source ?? (media ? "whatsapp-media" : "whatsapp-text"),
-          artifactRef: forwarded.handoff.artifact_ref ?? null,
-          artifactSha256: forwarded.artifactSha256,
-          downstreamDestination: forwarded.downstreamDestination,
-          downstreamCorrelationId: forwarded.downstreamCorrelationId,
-          downstreamReceipt: forwarded.downstreamReceipt,
-          replyText: forwarded.replyText,
-        });
+        } as const;
+        let mediaClaim: ReturnType<WhatsAppStore["claimMediaCoalescing"]> | null = null;
+        let claimedTenantId: string | null = null;
+        if (media?.bytes) {
+          const tenantId = await this.organ.tenantIdFor("whatsapp", event.senderId, event.chatId);
+          claimedTenantId = tenantId;
+          const artifactSha256 = createHash("sha256").update(media.bytes).digest("hex");
+          mediaClaim = this.whatsappStore.claimMediaCoalescing({
+            providerMessageId: event.messageId,
+            tenantId,
+            channel: "whatsapp",
+            artifactSha256,
+            windowMs: this.mediaCoalescingWindowMs,
+          });
+          if (mediaClaim.role === "duplicate") {
+            const canonicalInFlight = this.mediaInFlight.get(mediaClaim.canonicalProviderMessageId);
+            if (canonicalInFlight) await canonicalInFlight.catch(() => undefined);
+            const canonical = this.whatsappStore.channelAudit(mediaClaim.canonicalProviderMessageId);
+            if (canonical) {
+              this.whatsappStore.recordCoalescedChannelForwarding({
+                providerMessageId: event.messageId,
+                canonicalProviderMessageId: mediaClaim.canonicalProviderMessageId,
+                artifactSha256,
+                senderId: normalizeWhatsAppIdentifier(event.senderId),
+              });
+            }
+            return { replyText: canonical?.replyText ?? "", suppressReply: true };
+          }
+        }
+        const forwarding = (async () => {
+          try {
+            const result = await this.organ.receive(inbound, claimedTenantId ?? undefined);
+            this.whatsappStore.recordChannelForwarding({
+              providerMessageId: event.messageId,
+              tenantId: result.tenantId,
+              senderId: result.sender,
+              transcriptText: result.handoff.text_transcript ?? null,
+              transcriptProvenance:
+                result.handoff.transcription_source ?? (media ? "whatsapp-media" : "whatsapp-text"),
+              artifactRef: result.handoff.artifact_ref ?? null,
+              artifactSha256: result.artifactSha256,
+              downstreamDestination: result.downstreamDestination,
+              downstreamCorrelationId: result.downstreamCorrelationId,
+              downstreamReceipt: result.downstreamReceipt,
+              replyText: result.replyText,
+              canonicalProviderMessageId: mediaClaim?.canonicalProviderMessageId ?? null,
+              coalescingState: mediaClaim ? "owner" : null,
+            });
+            if (mediaClaim) this.whatsappStore.completeMediaCoalescing(mediaClaim.canonicalProviderMessageId, "completed");
+            return result;
+          } catch (error) {
+            if (mediaClaim) this.whatsappStore.completeMediaCoalescing(mediaClaim.canonicalProviderMessageId, "failed");
+            throw error;
+          }
+        })();
+        if (mediaClaim) this.mediaInFlight.set(mediaClaim.canonicalProviderMessageId, forwarding);
+        let forwarded: Awaited<typeof forwarding>;
+        try {
+          forwarded = await forwarding;
+        } finally {
+          if (mediaClaim) this.mediaInFlight.delete(mediaClaim.canonicalProviderMessageId);
+        }
         return { replyText: forwarded.replyText };
       },
       ...(adapters.whatsappSocketFactory ? { socketFactory: adapters.whatsappSocketFactory } : {}),

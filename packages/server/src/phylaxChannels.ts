@@ -224,17 +224,15 @@ export class PhylaxChannelsOrgan {
     },
   ) {}
 
-  async receive(input: PhylaxChannelInbound): Promise<PhylaxInboundReceipt> {
-    const sender = normalizedSender(input.channel, input.sender);
-    if (!sender || !input.chatId.trim()) {
-      throw new PhylaxChannelError("invalid_input", "sender and chatId are required");
-    }
-    const route = await this.options.routes.resolve(input.channel, sender);
-    if (!route) {
-      throw new PhylaxChannelError("unmatched_sender", "sender is not registered to a Phylax tenant");
-    }
-    if (!route.downstreamUrl.trim() || !route.downstreamToken.trim()) {
-      throw new PhylaxChannelError("downstream_error", "tenant downstream is not configured");
+  async tenantIdFor(channel: PhylaxPortedChannel, senderValue: string, chatId: string): Promise<string> {
+    const { route } = await this.resolveInboundRoute(channel, senderValue, chatId);
+    return route.tenantId;
+  }
+
+  async receive(input: PhylaxChannelInbound, expectedTenantId?: string): Promise<PhylaxInboundReceipt> {
+    const { sender, route } = await this.resolveInboundRoute(input.channel, input.sender, input.chatId);
+    if (expectedTenantId && route.tenantId !== expectedTenantId) {
+      throw new PhylaxChannelError("downstream_error", "tenant route changed before media processing");
     }
 
     const artifact = input.media ? this.rememberArtifact(route.tenantId, input.media) : undefined;
@@ -307,6 +305,25 @@ export class PhylaxChannelsOrgan {
         downstream_identity: safeDownstreamDestination(route),
       }],
     };
+  }
+
+  private async resolveInboundRoute(
+    channel: PhylaxPortedChannel,
+    senderValue: string,
+    chatId: string,
+  ): Promise<{ sender: string; route: PhylaxTenantRoute }> {
+    const sender = normalizedSender(channel, senderValue);
+    if (!sender || !chatId.trim()) {
+      throw new PhylaxChannelError("invalid_input", "sender and chatId are required");
+    }
+    const route = await this.options.routes.resolve(channel, sender);
+    if (!route) {
+      throw new PhylaxChannelError("unmatched_sender", "sender is not registered to a Phylax tenant");
+    }
+    if (!route.downstreamUrl.trim() || !route.downstreamToken.trim()) {
+      throw new PhylaxChannelError("downstream_error", "tenant downstream is not configured");
+    }
+    return { sender, route };
   }
 
   private rememberArtifact(
