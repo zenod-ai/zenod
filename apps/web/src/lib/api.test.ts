@@ -41,4 +41,28 @@ describe("chatStream", () => {
     expect(streamed).toBe("Draft answer.")
     expect(completed).toBe("Verified receipt: abc123")
   })
+
+  it("preserves a safe structured stream error without exposing provider internals", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          `${JSON.stringify({
+            type: "error",
+            code: "model_budget_exhausted",
+            message: "The Council model key reached its provider spending limit. No connected tool ran.",
+          })}\n`,
+          { status: 200 }
+        )
+      )
+    )
+
+    await expect(
+      chatStream("hi", { onDelta: () => {}, onDone: () => {} })
+    ).rejects.toMatchObject({
+      status: 503,
+      code: "model_budget_exhausted",
+      message: expect.not.stringContaining("openrouter.ai/workspaces"),
+    })
+  })
 })

@@ -4,7 +4,9 @@ export const MCP_CATALOG_TOOL_NAME = "inspect_connected_mcp_catalog";
 
 const SCHEMA_WORDS =
   /\b(schema|schemas|field|fields|argument|arguments|input|output|required)\b/i;
-const MAX_RENDERED_SCHEMA_BYTES = 256 * 1024;
+const NAME_PROVENANCE_WORDS =
+  /\b(actual|exact|upstream|callable|namespaced|namespace|collision|shadow|distinguish)\b/i;
+const METADATA_WORDS = /\b(descriptions?|annotations?|details?|contracts?|metadata)\b/i;
 function mentionedPeers(
   question: string,
   peers: readonly PeerConfig[],
@@ -99,14 +101,11 @@ function renderTool(tool: PeerToolSpec, includeSchemas: boolean): string {
   return lines.join("\n");
 }
 
-function renderedSchemaBytes(tools: readonly PeerToolSpec[]): number {
-  return tools.reduce(
-    (total, tool) =>
-      total +
-      Buffer.byteLength(JSON.stringify(tool.inputSchema ?? null), "utf8") +
-      Buffer.byteLength(JSON.stringify(tool.outputSchema ?? null), "utf8"),
-    0,
-  );
+function renderToolNames(tools: readonly PeerToolSpec[], includeCallableNames: boolean): string[] {
+  if (includeCallableNames) {
+    return tools.map((tool) => `- \`${tool.mcp}\` → Ring \`${tool.as}\``);
+  }
+  return [`- Tools: ${tools.map((tool) => `\`${tool.mcp}\``).join(", ")}`];
 }
 
 /** Pure host renderer over authenticated, persisted tools/list state. */
@@ -118,9 +117,11 @@ export function renderMcpCatalog(
     return "No MCP units are connected in this tenant's wallet.";
   const selectedPeers = mentionedPeers(question, peers);
   const wantsSchemas = SCHEMA_WORDS.test(question);
+  const wantsNameProvenance = NAME_PROVENANCE_WORDS.test(question);
+  const wantsMetadata = METADATA_WORDS.test(question);
   const sections = selectedPeers.map((peer) => {
     const tools = peer.tools ?? [];
-    const selectedTool = wantsSchemas
+    const selectedTool = wantsSchemas || wantsMetadata
       ? exactOrUniqueDescriptiveTool(question, tools)
       : null;
     const discovery = peer.discovery;
@@ -135,28 +136,26 @@ export function renderMcpCatalog(
     if (discovery?.error) header.push(`- Discovery error: ${discovery.error}`);
     if (tools.length === 0)
       return [...header, "- No tools are currently advertised."].join("\n");
-    if (wantsSchemas && !selectedTool) {
-      if (renderedSchemaBytes(tools) <= MAX_RENDERED_SCHEMA_BYTES) {
-        return [
-          ...header,
-          "- No unique tool matched the user's wording. Ring did not guess; complete bounded contracts for every advertised tool follow:",
-          ...tools.map((tool) => renderTool(tool, true)),
-        ].join("\n");
-      }
+    if ((wantsSchemas || wantsMetadata) && !selectedTool) {
       return [
         ...header,
-        `- Schema request is ambiguous and the complete catalog exceeds Ring's ${MAX_RENDERED_SCHEMA_BYTES}-byte host-render bound. Ring will not guess which tool you meant. Ask again with one exact upstream MCP or Ring callable name:`,
-        ...tools.map((tool) => renderTool(tool, false)),
+        "- More than one tool could match. Ring did not guess or dump every contract; ask again with one exact upstream MCP or Ring callable name:",
+        ...renderToolNames(tools, true),
+      ].join("\n");
+    }
+    if (selectedTool) {
+      return [
+        ...header,
+        wantsSchemas ? "- Exact selected tool contract:" : "- Exact selected tool details:",
+        renderTool(selectedTool, wantsSchemas),
       ].join("\n");
     }
     return [
       ...header,
-      wantsSchemas
-        ? "- Exact selected tool contract:"
-        : "- Exact authenticated tools/list catalog (skills are not included):",
-      ...(selectedTool
-        ? [renderTool(selectedTool, true)]
-        : tools.map((tool) => renderTool(tool, false))),
+      wantsNameProvenance
+        ? "- Exact authenticated upstream → Ring callable names (skills are not included):"
+        : "- Authenticated upstream tool names (ask for one exact tool's details or schema to expand it):",
+      ...renderToolNames(tools, wantsNameProvenance),
     ].join("\n");
   });
   return [

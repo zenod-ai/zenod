@@ -2,8 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { BrainEngine } from "zenod";
-import { createApp } from "../src/app.js";
+import { conversationId, type BrainEngine } from "zenod";
+import { createApp, safeChatStreamFailure } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 import { CONSOLE_AGENT, type AgentDefinition } from "../src/agent.js";
 import { journeyStepIdempotencyKey } from "../src/journeyContracts.js";
@@ -430,6 +430,53 @@ describe("server API", () => {
       },
     ]);
     expect(calls).toEqual([{ message: "find zenod notes", surface: "web" }]);
+  });
+
+  it("sanitizes and durably pairs a provider key-limit failure", async () => {
+    runtime.getEngine = async () =>
+      ({
+        async chat() {
+          // Mirror the real engine boundary: the user turn is durable before the provider call.
+          await runtime.state.appendMessage(conversationId("web"), "user", "hi", "web");
+          const error = new Error(
+            "Key limit exceeded (total limit). Manage it using https://openrouter.ai/workspaces/default/keys/private-resource-id",
+          ) as Error & { statusCode: number };
+          error.statusCode = 403;
+          throw error;
+        },
+      }) as unknown as BrainEngine;
+    const headers = { Authorization: `Bearer ${runtime.settings.apiToken()}` };
+
+    const res = await app.request("/api/chat/stream", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ message: "hi" }),
+    });
+    const events = (await res.text()).trim().split("\n").map((line) => JSON.parse(line));
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "error",
+        code: "model_budget_exhausted",
+        message: expect.stringContaining("key-specific"),
+      }),
+    ]);
+    expect(events[0].message).toContain("No connected tool ran; nothing was sent or changed.");
+    expect(events[0].message).not.toContain("openrouter.ai/workspaces");
+    expect(events[0].message).not.toContain("private-resource-id");
+
+    const history = await app.request("/api/chat/history", { headers });
+    expect((await history.json()).messages).toEqual([
+      { role: "user", text: "hi" },
+      { role: "assistant", text: events[0].message },
+    ]);
+  });
+
+  it("does not claim nothing changed when a provider failure follows tool activity", () => {
+    const failure = safeChatStreamFailure(new Error("rate limit exceeded"), true);
+    expect(failure.code).toBe("model_rate_limited");
+    expect(failure.message).toContain("Tool activity occurred");
+    expect(failure.message).not.toContain("nothing was sent or changed");
   });
 
   it("test chat runs through engine.chat with explicit context and audit readback", async () => {

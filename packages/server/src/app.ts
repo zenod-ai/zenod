@@ -113,6 +113,50 @@ export interface AppOptions {
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
 
+export interface SafeChatStreamFailure {
+  code: "model_budget_exhausted" | "model_auth_failed" | "model_rate_limited" | "model_unavailable";
+  message: string;
+}
+
+function errorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const status = (error as { statusCode?: unknown; status?: unknown }).statusCode
+    ?? (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
+/** User-safe model failure text. Raw provider messages remain operator-only. */
+export function safeChatStreamFailure(error: unknown, hadToolActivity = false): SafeChatStreamFailure {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const status = errorStatusCode(error);
+  const outcome = hadToolActivity
+    ? "Tool activity occurred before the model stopped. Do not retry a mutation until you verify its receipt or state."
+    : "No connected tool ran; nothing was sent or changed.";
+
+  if (/\bkey limit exceeded\b|\btotal limit\b|\bspending limit\b|\binsufficient (?:credits?|balance)\b/i.test(raw)) {
+    return {
+      code: "model_budget_exhausted",
+      message: `The Council model key reached its provider spending limit. The provider account may still have credit because this limit is key-specific. ${outcome} Update the key limit in Keys.`,
+    };
+  }
+  if (status === 401 || (status === 403 && /\b(?:key|auth|credential|permission)\b/i.test(raw))) {
+    return {
+      code: "model_auth_failed",
+      message: `The Council model provider rejected the configured key. ${outcome} Check the key in Keys.`,
+    };
+  }
+  if (status === 429 || /\brate.?limit|too many requests\b/i.test(raw)) {
+    return {
+      code: "model_rate_limited",
+      message: `The Council model provider is temporarily rate-limiting requests. ${outcome} Try again later.`,
+    };
+  }
+  return {
+    code: "model_unavailable",
+    message: `The Council model could not complete this turn. ${outcome} Check Keys and try again.`,
+  };
+}
+
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
 }
@@ -2679,6 +2723,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const body = new ReadableStream<Uint8Array>({
       async start(controller) {
         let open = true;
+        let hadToolActivity = false;
         const send = (event: unknown) => {
           if (!open) return;
           try {
@@ -2695,6 +2740,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           const reply = await engine.chat(message, "web", {
             onDelta: (delta) => send({ type: "delta", text: delta }),
             onToolEvent: (event) => {
+              hadToolActivity = true;
               console.log(`[chat] tool ${event.phase}: ${event.tool} — ${event.label}`);
               send({ type: "tool", phase: event.phase, tool: event.tool, label: event.label });
             },
@@ -2707,7 +2753,19 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           });
         } catch (err) {
           console.error("[chat] stream failed:", err);
-          send({ type: "error", message: err instanceof Error ? err.message : "chat failed" });
+          const failure = safeChatStreamFailure(err, hadToolActivity);
+          try {
+            const cid = conversationId("web");
+            const recent = await runtime.state.recentWindow(cid);
+            const last = recent.at(-1);
+            if (last?.role !== "user" || last.text !== message) {
+              await runtime.state.appendMessage(cid, "user", message, "web");
+            }
+            await runtime.state.appendMessage(cid, "assistant", failure.message, "web");
+          } catch (persistError) {
+            console.error("[chat] failed to persist safe stream error:", persistError);
+          }
+          send({ type: "error", code: failure.code, message: failure.message });
         } finally {
           clearInterval(heartbeat);
           open = false;

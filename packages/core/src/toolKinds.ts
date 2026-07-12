@@ -29,6 +29,8 @@ const READ_TOOLS: readonly string[] = [
   "readnote",
   "listpages",
   "searchchats",
+  // Ring host-owned authenticated MCP catalog inspection
+  "inspectconnectedmcpcatalog",
   // Zenod memory peer reads
   "zenoddigestmessage",
   "askzenod",

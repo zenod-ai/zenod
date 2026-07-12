@@ -50,19 +50,29 @@ describe("host-owned MCP catalog", () => {
     const alpha = peer("Alpha", true);
     const beta = peer("Beta");
     const output = renderMcpCatalog(
-      "Show which actual tools both connected units expose",
+      "Show the exact upstream and Ring callable names for both connected units",
       [alpha, beta],
     );
 
-    expect(output).toContain("Upstream MCP name: `shared_leaf`");
-    expect(output).toContain(`Ring callable name: \`${alpha.tools![0]!.as}\``);
-    expect(output).toContain(`Ring callable name: \`${beta.tools![0]!.as}\``);
+    expect(output).toContain(`\`shared_leaf\` → Ring \`${alpha.tools![0]!.as}\``);
+    expect(output).toContain(`\`shared_leaf\` → Ring \`${beta.tools![0]!.as}\``);
     expect(alpha.tools![0]!.as).not.toBe(beta.tools![0]!.as);
     expect(output).toContain("Refreshed at: 2026-07-11T12:34:56.000Z");
     expect(output).toContain("advisory only");
     expect(output).not.toContain("never-render-this-secret");
     expect(output).not.toContain("ask_alpha");
     expect(output).not.toContain("ask_beta");
+  });
+
+  it("keeps a casual tool question compact and progressively discloses details", () => {
+    const output = renderMcpCatalog("hi what are your tools?", [peer("Alpha", true), peer("Beta")]);
+
+    expect(output).toContain("Advertised tool count: 1");
+    expect(output).toContain("Tools: `shared_leaf`");
+    expect(output).not.toContain("Ring callable name:");
+    expect(output).not.toContain("Description:");
+    expect(output).not.toContain("Annotations:");
+    expect(output.length).toBeLessThan(2_000);
   });
 
   it("renders complete selected schemas and handles ambiguity without guessing", () => {
@@ -100,29 +110,11 @@ describe("host-owned MCP catalog", () => {
         },
       ],
     };
-    const complete = renderMcpCatalog("For Alpha, show the schema fields", [
+    const refused = renderMcpCatalog("For Alpha, show the schema fields", [
       ambiguous,
     ]);
-    expect(complete).toContain(
-      "Ring did not guess; complete bounded contracts for every advertised tool follow",
-    );
-    expect(complete.match(/Input schema \(verbatim/g)).toHaveLength(2);
-
-    const tooLarge: PeerConfig = {
-      ...alpha,
-      tools: Array.from({ length: 5 }, (_, index) => ({
-        ...alpha.tools![0]!,
-        as: councilToolName("Alpha", `leaf_${index}`),
-        mcp: `leaf_${index}`,
-        inputSchema: { type: "object", description: "x".repeat(60_000) },
-        outputSchema: undefined,
-      })),
-    };
-    const refused = renderMcpCatalog("For Alpha, show the schema fields", [
-      tooLarge,
-    ]);
-    expect(refused).toContain("host-render bound");
-    expect(refused).toContain("Ring will not guess");
+    expect(refused).toContain("Ring did not guess or dump every contract");
+    expect(refused).toContain("Ring did not guess");
     expect(refused).not.toContain("Input schema (verbatim");
   });
 });

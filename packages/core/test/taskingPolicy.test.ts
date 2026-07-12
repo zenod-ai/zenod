@@ -868,6 +868,20 @@ describe("reconcileTaskingReply", () => {
     expect(reconcileTaskingReply(reply, actions)).toBe(reply);
   });
 
+  it("keeps host-owned MCP catalog prose out of execution-status reconciliation", () => {
+    const reply = [
+      "MCP catalog facts below are rendered from authenticated tools/list state.",
+      "get_task_result: Poll until an execution is done or failed.",
+    ].join("\n");
+    const actions: RecordedAction[] = [{
+      tool: "inspect_connected_mcp_catalog",
+      result: reply,
+    }];
+
+    expect(reconcileTaskingReply(reply, actions)).toBe(reply);
+    expect(reconcileTaskingReply(reply, actions)).not.toContain("⚠️ Correction");
+  });
+
   // FP4 · #548 — the W1-3 STEP-1 live-fire reds, as fixtures. The gate now classifies by
   // the toolKinds registry (not a name-allowlist), covers ALL ungrounded banner paths
   // (create-fabrication + unproven-mutation + execution-state hedges), and the read tools

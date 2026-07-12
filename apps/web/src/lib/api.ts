@@ -581,7 +581,7 @@ export async function chatStream(
           sources: ChatSource[]
           stored?: ChatStored
         }
-      | { type: "error"; message: string }
+      | { type: "error"; code?: string; message: string }
       | { type: "ping" }
     if (event.type === "ping") return // keep-alive; nothing to render
     if (event.type === "delta") handlers.onDelta(event.text)
@@ -593,7 +593,7 @@ export async function chatStream(
         sources: event.sources,
         ...(event.stored ? { stored: event.stored } : {}),
       })
-    else if (event.type === "error") throw new ApiError(500, event.message)
+    else if (event.type === "error") throw new ApiError(503, event.message, event.code)
   }
 
   for (;;) {

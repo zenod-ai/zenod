@@ -9,7 +9,7 @@ describe("toolKinds registry (FP4 · #548)", () => {
   // those without a kind declaration here, this coverage test fails in CI — the fail-safe
   // (unknown → mutate → spurious banner) can never silently ship.
   const READ_TOOLS = [
-    "search_vault", "read_note", "list_pages", "search_chats",
+    "search_vault", "read_note", "list_pages", "search_chats", "inspect_connected_mcp_catalog",
     "zenod_digest_message", "ask_zenod", "search_memory", "get_memory",
     "get_recent_conversation_transcript", "read_llm_timeline",
     "archus_read_exact_github_issue", "archus_search_github_issues", "archus_list_github_issues", "ask_archus",
