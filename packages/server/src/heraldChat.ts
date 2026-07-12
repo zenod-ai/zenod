@@ -125,9 +125,16 @@ export function classifyHeraldNaturalLoopIntent(text: string): HeraldNaturalLoop
     const rejectRest = /reject\s+the\s+rest/i.test(normalized) ? " + reject the rest" : "";
     return { kind: "approve", command: `✓ ${selection}${rejectRest}` };
   }
+  const proposalRequestIsReadOnly =
+    /\b(?:do not|don't|never|without)\b/i.test(normalized) ||
+    /\b(?:posted|published|sent)\b/i.test(normalized) ||
+    /\byou\s+(?:proposed|drafted|suggested)\b/i.test(normalized);
   if (
-    /^(?:please\s+)?(?:show|list|give|generate|draft|propose|suggest)\b[^.!?]{0,80}\b(?:posts?|proposals?|drafts?)\b[^.!?]{0,80}[.!]?$/i.test(normalized) ||
-    /^(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:show|list|give|generate|draft|propose|suggest)\b[^.!?]{0,80}\b(?:posts?|proposals?|drafts?)\b[^.!?]{0,80}\??$/i.test(normalized)
+    !proposalRequestIsReadOnly &&
+    (
+      /^(?:please\s+)?(?:show|list|give|generate|draft|propose|suggest)\b[^.!?]{0,80}\b(?:posts?|proposals?|drafts?)\b[^.!?]{0,80}[.!]?$/i.test(normalized) ||
+      /^(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:show|list|give|generate|draft|propose|suggest)\b[^.!?]{0,80}\b(?:posts?|proposals?|drafts?)\b[^.!?]{0,80}\??$/i.test(normalized)
+    )
   ) {
     return { kind: "propose" };
   }

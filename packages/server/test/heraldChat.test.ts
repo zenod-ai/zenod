@@ -98,6 +98,10 @@ describe("Herald natural loop intent classifier", () => {
     expect(classifyHeraldNaturalLoopIntent("don't draft posts")).toBeNull();
     expect(classifyHeraldNaturalLoopIntent("why did you propose these posts?")).toBeNull();
     expect(classifyHeraldNaturalLoopIntent("what proposals did you suggest?")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("show me why we posted these posts")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("show me the posts we published yesterday")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("show me the posts you proposed")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("show me posts without generating new ones")).toBeNull();
     expect(classifyHeraldNaturalLoopIntent("what do you think our sharpest perspective is?"))
       .toBeNull();
   });
@@ -285,6 +289,10 @@ describe("Herald briefing chat", () => {
         "don't draft posts",
         "why did you propose these posts?",
         "what proposals did you suggest?",
+        "show me why we posted these posts",
+        "show me the posts we published yesterday",
+        "show me the posts you proposed",
+        "show me posts without generating new ones",
       ]) {
         const grounded = await fixture.handle({ tenantId: "alpha", text });
         expect(grounded.handled).toBe(false);
@@ -345,6 +353,27 @@ describe("Herald briefing chat", () => {
       ]));
       expect(store.listBoardItems("alpha").map((item) => item.state)).toEqual(["rejected", "rejected"]);
       expect(store.countProposed("alpha")).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("fails feedback loudly without local or board mutation when Zenod returns no commit receipt", async () => {
+    const fileToMemory = vi.fn(async () => "Stored.\ncommit: eee1234");
+    const { store, handle } = await storeFixture(fileToMemory);
+    try {
+      await negotiate(handle);
+      await handle({ tenantId: "alpha", text: "✓ approve briefing" });
+      fileToMemory.mockResolvedValue("silent_ack");
+      const wakeId = store.tryStartWake("alpha", "run_now")!;
+      store.createProposals("alpha", wakeId, [proposal(1), proposal(2)]);
+      store.finishWake(wakeId, { status: "completed", code: "wake_completed", message: "ready" });
+
+      const result = await handle({ tenantId: "alpha", text: "dial down the slang" });
+      expect(result.text).toContain("failed loudly; no success is claimed");
+      expect(result.text).toContain("no verified commit receipt");
+      expect(store.listFilings("alpha").filter((filing) => filing.kind === "lesson")).toEqual([]);
+      expect(store.listBoardItems("alpha").map((item) => item.state)).toEqual(["proposed", "proposed"]);
     } finally {
       store.close();
     }
