@@ -142,6 +142,25 @@ describe("chunkText", () => {
 });
 
 describe("TelegramGateway", () => {
+  it("delivers to a tenant-bound handle using the sole numeric owner allowlist entry", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(null);
+    runtime.settings.setTelegramSettings({ botToken: "TEST:TOKEN", allowedUsers: ["@AlfaBlok", "555"], enabled: false });
+    const gateway = new TelegramGateway({ settings: runtime.settings, getEngine: async () => fakeEngine([]), fetchImpl });
+    try {
+      await expect(gateway.sendText("@AlfaBlok", "Phylax Telegram receipt pass.")).resolves.toEqual({ sentMessageId: "1" });
+      expect(calls.find((call) => call.method === "sendMessage")?.body).toMatchObject({
+        chat_id: 555,
+        text: "Phylax Telegram receipt pass.",
+      });
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("routes an allowed message through handleTasking and replies with a rich message", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
     const runtime = new Runtime(dir);
