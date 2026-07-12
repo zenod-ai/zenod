@@ -38,6 +38,8 @@ If the text changes after confirmation, the confirmation is stale. Start again a
 `approve_send` may return:
 
 - a canonical X permalink: verified success; relay it;
+- `[publication_in_progress]`: another caller owns the same action's dispatch; do not retry or use another send tool;
+- `[publication_unknown]`: the dispatch may have succeeded; do not retry. A specific candidate post may be checked with `reconcile_send`, which must prove the exact id, text, and action dispatch window through the provider read;
 - an affordance asking for concrete text: nothing was sent; collect or recover the exact standing draft;
 - `Nothing pending to approve.`: nothing was sent; create and show a draft first;
 - a loud failure: nothing is proven; follow the failure rules in `SKILL.md`.

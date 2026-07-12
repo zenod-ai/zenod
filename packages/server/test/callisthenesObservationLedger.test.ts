@@ -28,7 +28,9 @@ describe("Callisthenes held-action ledger", () => {
     expect(ledger.resolve("tenant-b", { actionId: first.id, text: "Exact bytes" })).toBeNull();
     expect(ledger.resolve("tenant-a", { actionId: first.id, text: "Exact bytes" })?.id).toBe(first.id);
 
-    ledger.recordReceipt("tenant-a", first.id, "Posted. Live URL: https://x.com/i/web/status/100", "https://x.com/i/web/status/100");
+    const claim = ledger.claim("tenant-a", { actionId: first.id, text: "Exact bytes" });
+    expect(claim.state).toBe("claimed");
+    ledger.recordReceipt("tenant-a", first.id, claim.state === "claimed" ? claim.owner : "", "Posted. Live URL: https://x.com/i/web/status/100", "https://x.com/i/web/status/100");
     expect(ledger.resolve("tenant-a", { actionId: first.id, text: "Exact bytes" })).toBeNull();
     expect(ledger.replayReceipt("tenant-a", { actionId: first.id, text: "Exact bytes" })?.draft_id).toBe(first.id);
     expect(ledger.replayReceipt("tenant-a", { actionId: first.id, text: "Changed bytes" })).toBeNull();
@@ -44,17 +46,17 @@ describe("Callisthenes held-action ledger", () => {
 
   it("expires legacy pending rows without granting them a permanent approval window", async () => {
     const dataDir = await tempDir();
-    const ledger = new CallisthenesObservationLedger(dataDir, {
-      pendingTtlMs: 1_000,
-      now: () => new Date("2026-07-12T20:00:02.000Z"),
-    });
-    await writeFile(ledger.path, JSON.stringify({
+    await writeFile(join(dataDir, "callisthenes-observations.json"), JSON.stringify({
       "tenant-a": {
         drafts: [{ id: "legacy-content-id", text: "Legacy", status: "pending", created_at: "2026-07-12T20:00:00.000Z" }],
         receipts: [],
         usage: { calls: 0, sends: 0, rejected_drafts: 1, throttled: 0 },
       },
     }));
+    const ledger = new CallisthenesObservationLedger(dataDir, {
+      pendingTtlMs: 1_000,
+      now: () => new Date("2026-07-12T20:00:02.000Z"),
+    });
 
     expect(ledger.resolve("tenant-a", { actionId: "legacy-content-id", text: "Legacy" })).toBeNull();
     expect(ledger.read("tenant-a").drafts[0]).toMatchObject({
@@ -66,9 +68,8 @@ describe("Callisthenes held-action ledger", () => {
 
   it("replays a unique legacy receipt-only row without shadowing a new pending same-text action", async () => {
     const dataDir = await tempDir();
-    const ledger = new CallisthenesObservationLedger(dataDir);
     const legacyId = observedContentId("tenant-a", "Legacy sent text");
-    await writeFile(ledger.path, JSON.stringify({
+    await writeFile(join(dataDir, "callisthenes-observations.json"), JSON.stringify({
       "tenant-a": {
         drafts: [],
         receipts: [{
@@ -81,6 +82,7 @@ describe("Callisthenes held-action ledger", () => {
         usage: { calls: 0, sends: 1, rejected_drafts: 0, throttled: 0 },
       },
     }));
+    const ledger = new CallisthenesObservationLedger(dataDir);
 
     expect(ledger.replayReceipt("tenant-a", { text: "Legacy sent text" })?.id).toBe("legacy-receipt");
     expect(ledger.replayReceipt("tenant-a", { actionId: legacyId, text: "Legacy sent text" })?.id).toBe("legacy-receipt");
@@ -88,5 +90,20 @@ describe("Callisthenes held-action ledger", () => {
 
     const pending = ledger.hold("tenant-a", "Legacy sent text");
     expect(ledger.resolve("tenant-a", { text: "Legacy sent text" })?.id).toBe(pending.id);
+  });
+
+  it("allows a deferred no-dispatch action to be claimed only after its retry time", async () => {
+    const dataDir = await tempDir();
+    let now = new Date("2026-07-12T20:00:00.000Z");
+    const ledger = new CallisthenesObservationLedger(dataDir, { now: () => now });
+    const held = ledger.hold("tenant-a", "Wait safely.");
+    const claim = ledger.claim("tenant-a", { actionId: held.id, text: held.text });
+    expect(claim.state).toBe("claimed");
+    if (claim.state !== "claimed") throw new Error("expected claim");
+    ledger.markDeferred("tenant-a", held.id, claim.owner, "[throttle_exceeded]", new Date("2026-07-12T21:00:00.000Z"));
+    expect(ledger.claim("tenant-a", { actionId: held.id, text: held.text }).state).toBe("deferred");
+    now = new Date("2026-07-12T21:00:01.000Z");
+    expect(ledger.claim("tenant-a", { actionId: held.id, text: held.text }).state).toBe("claimed");
+    ledger.close();
   });
 });

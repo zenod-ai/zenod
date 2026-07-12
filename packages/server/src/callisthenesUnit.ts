@@ -96,6 +96,24 @@ const APPROVE_SEND_TOOL = {
   },
 };
 
+const RECONCILE_SEND_TOOL = {
+  name: "reconcile_send",
+  title: "Reconcile an unknown X publication",
+  description: "Resolve an unknown approve_send outcome only by reading the connected X identity and a specific X post, then proving its author, exact text, unique post id, and creation window match the held action. This tool never publishes or retries.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["channel", "action_id", "text", "post_id"],
+    properties: {
+      channel: { type: "string", enum: ["x"] },
+      action_id: { type: "string", minLength: 1 },
+      text: { type: "string", minLength: 1 },
+      post_id: { type: "string", pattern: "^[0-9]+$", description: "Numeric X post id obtained independently after the ambiguous dispatch." },
+    },
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+};
+
 function objectSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
   return schema && schema.type === "object" ? schema : { type: "object", properties: {} };
 }
@@ -202,6 +220,60 @@ function rpcText(id: RpcRequest["id"], text: string, headers?: Headers): Respons
   return Response.json({ jsonrpc: "2.0", id: id ?? null, result: { content: [{ type: "text", text }] } }, { headers: outgoing });
 }
 
+function unknownPublication(actionId: string, reason?: string): string {
+  return `[publication_unknown] action_id=${actionId}. The prior dispatch may have published. Do not call approve_send again. Reconcile it with reconcile_send using a provider-read post_id.${reason ? ` Detail: ${reason}` : ""}`;
+}
+
+function publicationInProgress(actionId: string): string {
+  return `[publication_in_progress] action_id=${actionId}. One dispatch is already in flight. Do not retry or call another send tool; a later approve_send call may only replay its terminal receipt or unknown state.`;
+}
+
+function publicationDeferred(action: { id: string; retry_at?: string; unknown_reason?: string }): string {
+  return `[publication_deferred] action_id=${action.id}. The engine proved no post was dispatched. ${action.unknown_reason ?? "Retry later."} Retry only after ${action.retry_at}.`;
+}
+
+function extractPost(raw: string): { id: string; text: string; authorId: string; createdAt: string } | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const visit = (value: unknown): { id: string; text: string; authorId: string; createdAt: string } | null => {
+      if (!value || typeof value !== "object") return null;
+      const object = value as Record<string, unknown>;
+      const createdAt = object.created_at ?? object.createdAt;
+      const authorId = object.author_id ?? object.authorId;
+      if ((typeof object.id === "string" || typeof object.id === "number") && typeof object.text === "string" && typeof authorId === "string" && typeof createdAt === "string") {
+        return { id: String(object.id), text: object.text, authorId, createdAt };
+      }
+      for (const child of Object.values(object)) {
+        const found = visit(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    return visit(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function extractUserId(raw: string): string | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const visit = (value: unknown): string | null => {
+      if (!value || typeof value !== "object") return null;
+      const object = value as Record<string, unknown>;
+      if ((typeof object.id === "string" || typeof object.id === "number") && typeof (object.username ?? object.name) === "string") return String(object.id);
+      for (const child of Object.values(object)) {
+        const found = visit(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    return visit(parsed);
+  } catch {
+    return null;
+  }
+}
+
 export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = {}) {
   const env = options.env ?? process.env;
   const storage = new ChassisStorage({
@@ -212,8 +284,10 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
   const engineUrl = (options.customer?.engineUrl || env.CALLISTHENES_ENGINE_URL || "http://calli-engine:8000").replace(/\/$/, "");
   const fetcher = options.fetcher ?? fetch;
   const pendingTtl = Number(env.CALLISTHENES_PENDING_ACTION_TTL_MS);
+  const dispatchLease = Number(env.CALLISTHENES_DISPATCH_LEASE_MS);
   const observationLedger = new CallisthenesObservationLedger(storage.dataDir, {
     ...(Number.isFinite(pendingTtl) && pendingTtl > 0 ? { pendingTtlMs: pendingTtl } : {}),
+    ...(Number.isFinite(dispatchLease) && dispatchLease > 0 ? { dispatchLeaseMs: dispatchLease } : {}),
   });
   const customer = createCallisthenesCustomerLayer(
     { dataDir: storage.dataDir },
@@ -248,6 +322,10 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
       observationLedger.observeCall(record.tenant.id, "");
       return approveSend(rpc, record.tenant.id, target, headers);
     }
+    if (rpc?.method === "tools/call" && rpc.params?.name === "reconcile_send") {
+      observationLedger.observeCall(record.tenant.id, "");
+      return reconcileSend(rpc, record.tenant.id, target, headers);
+    }
 
     let forwardedBody = body;
     if (rpc?.method === "tools/call" && rpc.params?.name === "createPosts") {
@@ -272,6 +350,7 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
     if (!payload) return new Response(responseText, { status: response.status, headers: response.headers });
     if (rpc.method === "tools/list" && payload.result?.tools) {
       if (!payload.result.tools.some((tool) => tool.name === "approve_send")) payload.result.tools.push(APPROVE_SEND_TOOL);
+      if (!payload.result.tools.some((tool) => tool.name === "reconcile_send")) payload.result.tools.push(RECONCILE_SEND_TOOL);
       payload.result.tools = payload.result.tools.map((tool) =>
         describePublicTool(tool, env.CALLISTHENES_APPROVE_ARG?.trim() || "callisthenes_approve")
       );
@@ -313,11 +392,26 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
     if (!text.trim()) return rpcText(rpc.id, renderApproveAffordance("x"));
     const actionId = String(args.action_id ?? args.actionId ?? "").trim() || undefined;
     const approval = { ...(actionId ? { actionId } : {}), text };
-    const held = observationLedger.resolve(tenantId, approval);
-    if (!held) {
-      const replay = observationLedger.replayReceipt(tenantId, approval);
-      return rpcText(rpc.id, replay?.text ?? renderNothingPendingToApprove());
+    let claim = observationLedger.claim(tenantId, approval);
+    if (claim.state === "sent") return rpcText(rpc.id, claim.receipt.text);
+    if (claim.state === "unknown") return rpcText(rpc.id, unknownPublication(claim.action.id, claim.action.unknown_reason));
+    if (claim.state === "deferred") return rpcText(rpc.id, publicationDeferred(claim.action));
+    if (claim.state === "missing") return rpcText(rpc.id, renderNothingPendingToApprove());
+    if (claim.state === "dispatching") {
+      const waitMs = Math.max(100, Number(env.CALLISTHENES_CONCURRENT_WAIT_MS) || 10_000);
+      const deadline = Date.now() + waitMs;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        claim = observationLedger.publicationState(tenantId, approval);
+        if (claim.state === "sent") return rpcText(rpc.id, claim.receipt.text);
+        if (claim.state === "unknown") return rpcText(rpc.id, unknownPublication(claim.action.id, claim.action.unknown_reason));
+        if (claim.state === "deferred") return rpcText(rpc.id, publicationDeferred(claim.action));
+        if (claim.state !== "dispatching") return rpcText(rpc.id, renderNothingPendingToApprove());
+      }
+      return rpcText(rpc.id, publicationInProgress(claim.action.id));
     }
+    const held = claim.action;
+    const owner = claim.owner;
 
     const approveValue = env.CALLISTHENES_APPROVE_TOKEN?.trim() || true;
     const engineRpc: RpcRequest = {
@@ -338,14 +432,77 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
     // truncated request and closes the socket before dispatching the tool.
     const engineHeaders = new Headers(headers);
     engineHeaders.delete("content-length");
-    const response = await fetcher(target, { method: "POST", headers: engineHeaders, body: JSON.stringify(engineRpc) });
-    const payload = parseRpcResponse(await response.text());
-    if (!payload) return rpcText(rpc.id, "FAILED to send to X (Twitter): the engine returned no readable MCP result. Do NOT tell the user it was sent.", response.headers);
-    const raw = resultText(payload);
-    const receipt = parseOutboundReceipt("x", raw);
-    const rendered = renderOutboundReceipt(receipt);
-    if (receipt.verified && receipt.url) observationLedger.recordReceipt(tenantId, held.id, rendered, receipt.url);
-    return rpcText(rpc.id, rendered, response.headers);
+    try {
+      const response = await fetcher(target, { method: "POST", headers: engineHeaders, body: JSON.stringify(engineRpc) });
+      const payload = parseRpcResponse(await response.text());
+      if (!response.ok || !payload) {
+        observationLedger.markUnknown(tenantId, held.id, owner, !response.ok ? `upstream HTTP ${response.status}` : "unreadable MCP result");
+        return rpcText(rpc.id, unknownPublication(held.id), response.headers);
+      }
+      const raw = resultText(payload);
+      if (raw.includes("[throttle_exceeded]")) {
+        const retryMs = Math.max(1_000, Number(env.CALLISTHENES_THROTTLE_RETRY_MS) || 60 * 60 * 1_000);
+        observationLedger.markDeferred(tenantId, held.id, owner, raw, new Date(Date.now() + retryMs), true);
+        return rpcText(rpc.id, raw, response.headers);
+      }
+      if (raw.includes("[draft_not_approved]")) {
+        const retryMs = Math.max(1_000, Number(env.CALLISTHENES_GUARD_RETRY_MS) || 5 * 60 * 1_000);
+        observationLedger.markDeferred(tenantId, held.id, owner, raw, new Date(Date.now() + retryMs));
+        return rpcText(rpc.id, raw, response.headers);
+      }
+      const receipt = parseOutboundReceipt("x", raw);
+      const rendered = renderOutboundReceipt(receipt);
+      if (!receipt.verified || !receipt.url) {
+        observationLedger.markUnknown(tenantId, held.id, owner, "upstream result did not contain a verified canonical receipt");
+        return rpcText(rpc.id, unknownPublication(held.id), response.headers);
+      }
+      return rpcText(rpc.id, observationLedger.recordReceipt(tenantId, held.id, owner, rendered, receipt.url).text, response.headers);
+    } catch (error) {
+      observationLedger.markUnknown(tenantId, held.id, owner, error instanceof Error ? error.message : "upstream transport failure");
+      return rpcText(rpc.id, unknownPublication(held.id));
+    }
+  }
+
+  async function reconcileSend(
+    rpc: RpcRequest,
+    tenantId: string,
+    target: URL,
+    headers: Headers,
+  ): Promise<Response> {
+    const args = rpc.params?.arguments ?? {};
+    const actionId = String(args.action_id ?? args.actionId ?? "").trim();
+    const text = String(args.text ?? "");
+    const postId = String(args.post_id ?? args.postId ?? "").trim();
+    const approval = { actionId, text };
+    const state = observationLedger.publicationState(tenantId, approval);
+    if (state.state === "sent") return rpcText(rpc.id, state.receipt.text);
+    if (state.state !== "unknown" || !/^\d+$/.test(postId)) return rpcText(rpc.id, renderNothingPendingToApprove());
+    const engineHeaders = new Headers(headers);
+    engineHeaders.delete("content-length");
+    try {
+      const providerRead = async (name: string, arguments_: Record<string, unknown>) => {
+        const request: RpcRequest = { jsonrpc: "2.0", id: rpc.id, method: "tools/call", params: { name, arguments: arguments_ } };
+        const response = await fetcher(target, { method: "POST", headers: engineHeaders, body: JSON.stringify(request) });
+        const payload = parseRpcResponse(await response.text());
+        return { response, raw: payload ? resultText(payload) : "" };
+      };
+      const identityRead = await providerRead("getUsersMe", {});
+      const connectedUserId = identityRead.response.ok ? extractUserId(identityRead.raw) : null;
+      const { response, raw } = await providerRead("getPostsById", { id: postId });
+      const post = response.ok ? extractPost(raw) : null;
+      const createdAt = post ? new Date(post.createdAt).getTime() : Number.NaN;
+      const windowStart = new Date(state.action.dispatch_started_at ?? "").getTime() - 5_000;
+      const windowEnd = new Date(state.action.unknown_at ?? "").getTime() + 60_000;
+      if (!connectedUserId || !post || post.authorId !== connectedUserId || post.id !== postId || post.text !== text || !Number.isFinite(createdAt) || !Number.isFinite(windowStart) || !Number.isFinite(windowEnd) || createdAt < windowStart || createdAt > windowEnd) {
+        return rpcText(rpc.id, unknownPublication(actionId, "Provider reads did not prove an exact post by this connected account in this action's dispatch window"), response.headers);
+      }
+      const url = `https://x.com/i/web/status/${postId}`;
+      const rendered = renderOutboundReceipt(parseOutboundReceipt("x", JSON.stringify({ data: { id: postId } })));
+      const receipt = observationLedger.reconcileSent(tenantId, approval, rendered, url);
+      return rpcText(rpc.id, receipt?.text ?? unknownPublication(actionId), response.headers);
+    } catch {
+      return rpcText(rpc.id, unknownPublication(actionId, "Provider reconciliation failed"));
+    }
   }
 
   app.get("/healthz", (c) => c.json({ status: "ok", name: "callisthenes", sha: resolvedGitSha() }));
@@ -369,6 +526,7 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
     customerTokenVault: customer.tokenVault,
     observationLedger,
     close() {
+      observationLedger.close();
       if ("close" in tenantStore && typeof tenantStore.close === "function") tenantStore.close();
     },
   };

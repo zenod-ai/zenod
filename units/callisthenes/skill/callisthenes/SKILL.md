@@ -44,7 +44,10 @@ A bare “approve”, “yes”, “post now”, “send it”, or “go” is s
 
 - Never retry automatically after a timeout, disconnect, malformed response, or unknown outcome.
 - Never call a second send tool as a fallback.
-- On an uncertain outcome, state that publication is unverified and ask the user whether to check X before any retry.
+- `[publication_in_progress]` means another caller owns the one dispatch attempt. Do not retry or fall back; wait for its terminal receipt or unknown state.
+- `[publication_unknown]` is a durable terminal safety state. Do not retry. If a specific candidate X post is found independently, call `reconcile_send` once with its numeric `post_id`, the original `action_id`, and the exact text. Callisthenes reads the connected identity and that post, accepting it only when author, id, text, unique provider object, and creation window prove it belongs to this action.
+- Reconciliation can prove that an unknown action was sent; absence from a bounded search cannot prove it was not sent and never reopens the action.
+- An unresolved unknown also blocks minting a fresh same-text action. A later same-text publication gets a distinct action ID only after the earlier action is proven sent; it cannot be used as a disguised retry.
 - Never claim “posted”, “sent”, or “live” without the canonical permalink returned by Callisthenes.
 
 ## Delete

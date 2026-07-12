@@ -103,7 +103,7 @@ describe("Callisthenes front unit", () => {
         return Response.json({
           jsonrpc: "2.0",
           id: rpc.id,
-          result: { content: [{ type: "text", text: '{"data":{"id":"1900123456789"}}' }] },
+          result: { content: [{ type: "text", text: JSON.stringify({ data: { id: approvedCalls === 1 ? "1900123456789" : "1900123456790" } }) }] },
         });
       }
       return Response.json({
@@ -140,6 +140,10 @@ describe("Callisthenes front unit", () => {
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
       });
       expect(byName.approve_send.description).toContain("explicitly confirms the exact final text");
+      expect(byName.reconcile_send).toMatchObject({
+        inputSchema: { required: ["channel", "action_id", "text", "post_id"], properties: { channel: { enum: ["x"] }, post_id: { pattern: "^[0-9]+$" } } },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      });
       expect(byName.unknownFutureTool).toMatchObject({
         description: "preserve upstream metadata",
         annotations: { readOnlyHint: false },
@@ -212,7 +216,7 @@ describe("Callisthenes front unit", () => {
         jsonrpc: "2.0", id: 9, method: "tools/call",
         params: { name: "approve_send", arguments: { channel: "x", text: "Ship the observable seam." } },
       })).json() as any;
-      expect(compatible.result.content[0].text).toBe("Posted to X. Live URL: https://x.com/i/web/status/1900123456789");
+      expect(compatible.result.content[0].text).toBe("Posted to X. Live URL: https://x.com/i/web/status/1900123456790");
       expect(approvedCalls).toBe(2);
     } finally {
       unit.close();
