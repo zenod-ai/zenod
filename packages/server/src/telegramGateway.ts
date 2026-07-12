@@ -99,6 +99,7 @@ export class TelegramGateway {
   private lastActivity: number | null = null;
   private offset = 0;
   private running = false;
+  private starting: Promise<void> | null = null;
   private abort: AbortController | null = null;
   private loop: Promise<void> | null = null;
 
@@ -182,6 +183,17 @@ export class TelegramGateway {
 
   async start(): Promise<void> {
     if (this.running) return;
+    if (this.starting) return this.starting;
+    const attempt = this.startOnce();
+    this.starting = attempt;
+    try {
+      await attempt;
+    } finally {
+      if (this.starting === attempt) this.starting = null;
+    }
+  }
+
+  private async startOnce(): Promise<void> {
     const token = this.options.settings.telegramBotToken();
     if (!token) {
       this.state = "error";
@@ -212,6 +224,7 @@ export class TelegramGateway {
   }
 
   async close(): Promise<void> {
+    await this.starting?.catch(() => {});
     this.running = false;
     this.abort?.abort();
     this.abort = null;

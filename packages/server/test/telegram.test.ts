@@ -142,6 +142,23 @@ describe("chunkText", () => {
 });
 
 describe("TelegramGateway", () => {
+  it("serializes concurrent starts into one Telegram polling loop", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(null);
+    runtime.settings.setTelegramSettings({ botToken: "TEST:TOKEN", allowedUsers: ["555"], enabled: true });
+    const gateway = new TelegramGateway({ settings: runtime.settings, getEngine: async () => fakeEngine([]), fetchImpl });
+    try {
+      await Promise.all([gateway.start(), gateway.start()]);
+      expect(calls.filter((call) => call.method === "getMe")).toHaveLength(1);
+      expect(calls.filter((call) => call.method === "getUpdates" && call.body.offset === -1)).toHaveLength(1);
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("delivers to a tenant-bound handle using the sole numeric owner allowlist entry", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
     const runtime = new Runtime(dir);
