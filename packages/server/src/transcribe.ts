@@ -7,6 +7,8 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
+
 /**
  * Audio transcription. Three engines:
  *
@@ -762,30 +764,32 @@ async function runTranscription(
     return { success: false, provider: "whisper.cpp", error: `model unavailable: ${(err as Error).message}` };
   }
 
-  const dir = await mkdtemp(join(tmpdir(), "zenod-whisper-"));
-  const input = join(dir, `in${extname(filename) || ".m4a"}`);
-  const wav = join(dir, "audio.wav");
-  const outBase = join(dir, "out");
-  try {
-    await writeFile(input, data);
-    await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], { signal });
-    await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-pp", "-otxt", "-of", outBase], {
-      signal,
-      onStderrLine: onProgress
-        ? (line) => {
-            const pct = parseWhisperProgress(line);
-            if (pct !== null) onProgress(pct);
-          }
-        : undefined,
-    });
-    const transcript = (await readFile(`${outBase}.txt`, "utf8")).trim();
-    if (!transcript) {
-      return { success: false, provider: "whisper.cpp", error: "transcription returned empty text" };
+  return runLocalTranscriptionSerialized(async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whisper-"));
+    const input = join(dir, `in${extname(filename) || ".m4a"}`);
+    const wav = join(dir, "audio.wav");
+    const outBase = join(dir, "out");
+    try {
+      await writeFile(input, data);
+      await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], { signal });
+      await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-pp", "-otxt", "-of", outBase], {
+        signal,
+        onStderrLine: onProgress
+          ? (line) => {
+              const pct = parseWhisperProgress(line);
+              if (pct !== null) onProgress(pct);
+            }
+          : undefined,
+      });
+      const transcript = (await readFile(`${outBase}.txt`, "utf8")).trim();
+      if (!transcript) {
+        return { success: false, provider: "whisper.cpp", error: "transcription returned empty text" };
+      }
+      return { success: true, transcript, provider: `whisper.cpp ${modelName}` };
+    } catch (err) {
+      return { success: false, provider: "whisper.cpp", error: (err as Error).message };
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
-    return { success: true, transcript, provider: `whisper.cpp ${modelName}` };
-  } catch (err) {
-    return { success: false, provider: "whisper.cpp", error: (err as Error).message };
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  });
 }
