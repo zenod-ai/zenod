@@ -156,6 +156,24 @@ describe("Herald proposer and poster lanes", () => {
     }
   });
 
+  it("feeds a persisted feedback lesson into the next proposer wake", async () => {
+    const { service, prompts } = await fixture();
+    try {
+      service.store.recordFiling({
+        tenantId: "alpha",
+        kind: "lesson",
+        content: "Dial down slang; land sharper, more informative points.",
+        memoryCitation: "https://github.com/acme/brain/blob/main/Projects/Launch.md",
+        commitReceipt: "commit: lesson123",
+      });
+      await service.proposeNow("alpha");
+      expect(prompts[0]).toContain("Recent filings MUST visibly shape the new ideas");
+      expect(prompts[0]).toContain("Dial down slang; land sharper, more informative points.");
+    } finally {
+      service.close();
+    }
+  });
+
   it("uses Calli's C-22 draft then approve_send, stores the canonical permalink, and feeds the filing into the next wake", async () => {
     const { service, calls, prompts } = await fixture();
     try {

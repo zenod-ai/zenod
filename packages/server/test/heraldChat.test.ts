@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  classifyHeraldNaturalLoopIntent,
   createHeraldChatHandler,
   createZenodWalletFiler,
   parseHeraldApproval,
@@ -20,7 +21,7 @@ afterEach(async () => {
 
 async function storeFixture(
   fileToMemory: HeraldChatDependencies["fileToMemory"],
-  extra: Partial<Pick<HeraldChatDependencies, "listApproved" | "publishApproved">> = {},
+  extra: Partial<Pick<HeraldChatDependencies, "listApproved" | "publishApproved" | "proposeNow">> = {},
 ) {
   const dir = await mkdtemp(join(tmpdir(), "herald-chat-"));
   dirs.push(dir);
@@ -74,6 +75,31 @@ describe("Herald approval parser", () => {
     expect(parseHeraldApproval("✓ 2 + reject the rest", 3)).toEqual({ approveIndexes: [2], rejectIndexes: [1, 3] });
     expect(parseHeraldApproval("✓ maybe 2", 3)).toBeNull();
     expect(parseHeraldApproval("✓ 4", 3)).toBeNull();
+  });
+});
+
+describe("Herald natural loop intent classifier", () => {
+  it("routes only explicit loop intents and leaves ordinary conversation to grounded Herald", () => {
+    expect(classifyHeraldNaturalLoopIntent("can you show some of the posts you propose?"))
+      .toEqual({ kind: "propose" });
+    expect(classifyHeraldNaturalLoopIntent("approve 1 and 3"))
+      .toEqual({ kind: "approve", command: "✓ 1,3" });
+    expect(classifyHeraldNaturalLoopIntent("dial down the slang and be more serious"))
+      .toEqual({ kind: "feedback" });
+    expect(classifyHeraldNaturalLoopIntent("don't post these; they are too corny"))
+      .toEqual({ kind: "feedback" });
+    expect(classifyHeraldNaturalLoopIntent("publish approved"))
+      .toEqual({ kind: "publish", allApproved: true });
+    expect(classifyHeraldNaturalLoopIntent("please send it now"))
+      .toEqual({ kind: "publish", allApproved: false });
+    expect(classifyHeraldNaturalLoopIntent("what did we post?")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("can you send out one of them?")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("are more serious posts performing better?")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("don't draft posts")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("why did you propose these posts?")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("what proposals did you suggest?")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("what do you think our sharpest perspective is?"))
+      .toBeNull();
   });
 });
 
@@ -224,6 +250,139 @@ describe("Herald briefing chat", () => {
       const result = await fixture.handle({ tenantId: "alpha", text: "publish approved" });
       expect(result).toMatchObject({ handled: true, text: expect.stringContaining("https://x.com/i/web/status/10") });
       expect(published).toHaveBeenCalledWith("alpha", created.items.map((item) => item.id));
+    } finally {
+      store.close();
+    }
+  });
+
+  it("routes a natural show-posts request through the real proposer and renders cited board rows", async () => {
+    let store!: HeraldLoopStore;
+    const proposeNow = vi.fn(async (tenantId: string) => {
+      const wakeId = store.tryStartWake(tenantId, "run_now")!;
+      const created = store.createProposals(tenantId, wakeId, [proposal(1), proposal(2)]);
+      return store.finishWake(wakeId, {
+        status: "completed",
+        code: "wake_completed",
+        message: "Herald wake completed with 2 substantiated proposals.",
+        proposalIds: created.items.map((item) => item.id),
+      });
+    });
+    const fixture = await storeFixture(async () => "Stored.\ncommit: aaa1234", { proposeNow });
+    store = fixture.store;
+    try {
+      await negotiate(fixture.handle);
+      await fixture.handle({ tenantId: "alpha", text: "✓ approve briefing" });
+      const result = await fixture.handle({ tenantId: "alpha", text: "can you show some of the posts you propose?" });
+
+      expect(proposeNow).toHaveBeenCalledWith("alpha");
+      expect(result).toMatchObject({ handled: true, text: expect.stringContaining("wake completed") });
+      expect(result.text).toContain("1. Proposal 1");
+      expect(result.text).toContain("WHY: Filing 1 shows useful evidence");
+      expect(result.text).toContain("Memory: https://zenod.dev/memory/1");
+      expect(store.listBoardItems("alpha", ["proposed"])).toHaveLength(2);
+
+      for (const text of [
+        "don't draft posts",
+        "why did you propose these posts?",
+        "what proposals did you suggest?",
+      ]) {
+        const grounded = await fixture.handle({ tenantId: "alpha", text });
+        expect(grounded.handled).toBe(false);
+      }
+      expect(proposeNow).toHaveBeenCalledOnce();
+    } finally {
+      store.close();
+    }
+  });
+
+  it("routes natural numbered approval through the current-list parser and never accepts invented approval syntax", async () => {
+    const fileToMemory = vi.fn(async () => "Stored.\ncommit: bbb1234");
+    const { store, handle } = await storeFixture(fileToMemory);
+    try {
+      await negotiate(handle);
+      await handle({ tenantId: "alpha", text: "✓ approve briefing" });
+      fileToMemory.mockClear();
+      const wakeId = store.tryStartWake("alpha", "run_now")!;
+      store.createProposals("alpha", wakeId, [proposal(1), proposal(2), proposal(3)]);
+      store.finishWake(wakeId, { status: "completed", code: "wake_completed", message: "ready" });
+
+      const unsupported = await handle({ tenantId: "alpha", text: "✓ approve post" });
+      expect(unsupported.text).toContain("I could not parse that approval");
+      expect(unsupported.text).not.toContain("✓ approve post");
+      expect(store.listBoardItems("alpha").map((item) => item.state)).toEqual(["proposed", "proposed", "proposed"]);
+
+      const result = await handle({ tenantId: "alpha", text: "approve 1 and 3" });
+      expect(result.text).toContain("Approving 1 and 3, rejecting 2.");
+      expect(store.listBoardItems("alpha").map((item) => item.state)).toEqual(["approved", "rejected", "approved"]);
+      expect(fileToMemory).toHaveBeenCalledOnce();
+    } finally {
+      store.close();
+    }
+  });
+
+  it("files natural feedback to Zenod, persists the local lesson, and rejects current proposals before success", async () => {
+    const fileToMemory = vi.fn(async () => "Stored.\ncommit: ccc1234");
+    const { store, handle } = await storeFixture(fileToMemory);
+    try {
+      await negotiate(handle);
+      await handle({ tenantId: "alpha", text: "✓ approve briefing" });
+      fileToMemory.mockClear();
+      const wakeId = store.tryStartWake("alpha", "run_now")!;
+      store.createProposals("alpha", wakeId, [proposal(1), proposal(2)]);
+      store.finishWake(wakeId, { status: "completed", code: "wake_completed", message: "ready" });
+
+      const feedback = "don't post these; dial down the slang, don't sound corny, and be more serious and informative";
+      const result = await handle({ tenantId: "alpha", text: feedback });
+      expect(result.text).toContain("durable iteration lesson");
+      expect(result.text).toContain("commit: ccc1234");
+      expect(fileToMemory).toHaveBeenCalledWith(expect.objectContaining({
+        tenantId: "alpha",
+        kind: "lesson",
+        content: expect.stringContaining(feedback),
+      }));
+      expect(store.listFilings("alpha")).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: "lesson", content: expect.stringContaining(feedback), commitReceipt: expect.stringContaining("ccc1234") }),
+      ]));
+      expect(store.listBoardItems("alpha").map((item) => item.state)).toEqual(["rejected", "rejected"]);
+      expect(store.countProposed("alpha")).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("never publishes without approval and natural send targets only real approved board state", async () => {
+    const published = vi.fn(async (_tenantId: string, itemIds: string[]) => ({
+      status: "ok" as const,
+      message: `Published ${itemIds.length} approved item.`,
+      published: [{ permalink: "https://x.com/i/web/status/88" }],
+    }));
+    let store!: HeraldLoopStore;
+    const fixture = await storeFixture(async () => "Stored.\ncommit: ddd1234", {
+      listApproved: (tenantId) => store.listBoardItems(tenantId, ["approved"]),
+      publishApproved: published,
+    });
+    store = fixture.store;
+    try {
+      await negotiate(fixture.handle);
+      await fixture.handle({ tenantId: "alpha", text: "✓ approve briefing" });
+      const wakeId = store.tryStartWake("alpha", "run_now")!;
+      const created = store.createProposals("alpha", wakeId, [proposal(1)]);
+      store.finishWake(wakeId, { status: "completed", code: "wake_completed", message: "ready" });
+
+      const retrospective = await fixture.handle({ tenantId: "alpha", text: "what did we post?" });
+      expect(retrospective.handled).toBe(false);
+      expect(published).not.toHaveBeenCalled();
+
+      const blocked = await fixture.handle({ tenantId: "alpha", text: "send it" });
+      expect(blocked.text).toContain("there are no approved board items");
+      expect(blocked.text).toContain("✓ 1");
+      expect(blocked.text).not.toContain("✓ approve post");
+      expect(published).not.toHaveBeenCalled();
+
+      store.approveItems("alpha", [created.items[0]!.id]);
+      const sent = await fixture.handle({ tenantId: "alpha", text: "send it" });
+      expect(sent.text).toContain("https://x.com/i/web/status/88");
+      expect(published).toHaveBeenCalledWith("alpha", [created.items[0]!.id]);
     } finally {
       store.close();
     }

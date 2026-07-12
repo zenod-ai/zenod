@@ -11,7 +11,7 @@ vi.mock("../src/walletUrl.js", async (importOriginal) => {
   return { ...original, validateWalletUrl: vi.fn(async () => undefined) };
 });
 
-import { RING_AGENT } from "../src/agent.js";
+import { HERALD_AGENT, RING_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -61,6 +61,49 @@ describe("Ring wallet receipt", () => {
       ringRuntime.close();
       await rm(zenodDir, { recursive: true, force: true });
       await rm(ringDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps Herald model turns read-only while deterministic loop lanes retain wallet custody", async () => {
+    const heraldDir = await mkdtemp(join(tmpdir(), "zenod-runtime-wallet-herald-read-only-"));
+    const heraldRuntime = new Runtime(heraldDir, HERALD_AGENT);
+    try {
+      heraldRuntime.settings.setPeers([{
+        name: "Calli",
+        url: "https://calli.example/mcp",
+        token: "downstream-token",
+        wallet: true,
+        tools: [
+          {
+            as: "calli_publish",
+            mcp: "approve_send",
+            arg: "text",
+            description: "Publish a held post.",
+            annotations: { readOnlyHint: false, destructiveHint: true },
+          },
+          {
+            as: "calli_status",
+            mcp: "status",
+            arg: "query",
+            description: "Read connection status.",
+            annotations: { readOnlyHint: true, destructiveHint: false },
+          },
+          {
+            as: "calli_unannotated",
+            mcp: "future_tool",
+            arg: "input",
+            description: "Unknown authority must not reach Herald's model.",
+          },
+        ],
+      }]);
+
+      const tools = (heraldRuntime as unknown as { buildPeerTools(): PeerTools }).buildPeerTools();
+      expect(tools.calli_status).toBeDefined();
+      expect(tools.calli_publish).toBeUndefined();
+      expect(tools.calli_unannotated).toBeUndefined();
+    } finally {
+      heraldRuntime.close();
+      await rm(heraldDir, { recursive: true, force: true });
     }
   });
 

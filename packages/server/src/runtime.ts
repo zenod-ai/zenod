@@ -789,6 +789,11 @@ export class Runtime {
       for (const spec of specs) {
         const inputSchema = peerToolInputSchema(spec.inputSchema);
         const readOnlyHint = spec.annotations?.readOnlyHint;
+        // Herald's model is advisory/read-only over wallet peers. All loop
+        // mutations enter through the deterministic proposer/approval/poster
+        // controller, so ambiguous conversation can never call Calli or Zenod
+        // writes behind the board's back.
+        if (this.agent.name === "herald" && readOnlyHint !== true) continue;
         const verifiedMutationReceipt =
           peer.wallet === true &&
           (readOnlyHint === false ||
