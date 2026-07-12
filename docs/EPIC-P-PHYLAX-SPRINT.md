@@ -85,11 +85,11 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 ## Current State
 
 Phase: P-S5 journey loop — WhatsApp text, voice transcription, and MCP delivery receipt pass live; Telegram and two-tenant isolation remain
-Last verified: 2026-07-12T17:38:01+02:00 (live WhatsApp text + voice + external MCP delivery receipt)
+Last verified: 2026-07-12T17:56:00+02:00 (exact-SHA runtime receipt reconciled; SHIP 1–12 completion audit recorded)
 Integration target: main
 Fresh base commit: `31e69bbbc20e2e4a2b053a2d30adf44f18b34245` — PINNED at dispatch; no rebases until the journey passes (D19c)
 Next action: bind a real Telegram bot/identity and exercise one Telegram delivery; then verify isolation with a second tenant and a second sender number.
-Blockers: no Telegram bot token is configured on the Phylax service; the two available WhatsApp numbers are already the paired transport number and the sole verified tenant sender, so SHIP 11 still needs a second sender identity.
+Blockers: no Telegram bot token is configured on the Phylax service; the two available WhatsApp numbers are already the paired transport number and the sole verified tenant sender, so SHIP 11 still needs a second sender identity. See `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` for the requirement-by-requirement proof state.
 
 ## Role Goals
 
@@ -194,6 +194,8 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-12 | P-S5 WhatsApp text pipe | `f6cc22c` | `phylax.zenod.dev` + WhatsApp Web/real account | verified sender → Phylax → tenant Ring → WhatsApp | PASS: one inbound, one Ring run, one reply; legacy listener disabled | `docs/evidence/phylax-ship-2026-07-12/10-clean-text-pipe-whatsapp-web.png` |
 | 2026-07-12 | P-S5 voice transcription pipe | `f6cc22c` | `phylax.zenod.dev` + WhatsApp Web/real account | 35-second voice note → serialized local Whisper → authenticated artifact handoff → Ring → WhatsApp | PASS: message `3EB08DF39E67F9B2227E5F`; transcript and `whisper.cpp large-v3-turbo` source recorded; reply `voice pipe passed`; container remained stable | `docs/evidence/phylax-ship-2026-07-12/12-voice-transcription-pipe-live.png` |
 | 2026-07-12 | P-S5 MCP server WhatsApp face | `f6cc22c` | live tenant MCP endpoint | external MCP client `send_message` to verified phone | PASS: provider receipt `whatsapp:3EB0A5D62BF7283727DC42:sent` (not silent ack) | live structured MCP receipt |
+| 2026-07-12 | Exact-SHA deployment reconciliation | `f6cc22c` | Dokploy application `urbFsgl6eImbQ4MTIZl5N` + Swarm service | reconcile desired image and `GIT_SHA`; restart preserved fresh Baileys volume/session | PASS: `/api/health` reports full `f6cc22ccc3b7210a5e8afceb9f619ac76a73c734`; WhatsApp reconnected to linked number ending `0219` | `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` |
+| 2026-07-12 | P-S5 completion audit | `f6cc22c` | live deployment + durable stores + screenshots + focused/full tests | inspect every SHIP 1–12 requirement and reject indirect evidence where real-account proof is required | SHIP 1–6, 8–9 pass; SHIP 7/10 Telegram and SHIP 11 live second-tenant isolation remain incomplete | `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` |
 | pending | SHIP journey clean pass | `f6cc22c` | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending Telegram exercise and two-tenant isolation | test package |
 
 ## Handoff Journal
@@ -231,6 +233,14 @@ Context: Jordi supplied `+34 664 24 02 19` for a fresh QR pairing and `+34 618 2
 During the voice lap, two overlapping local Whisper processes exhausted the container and left two audit rows in `processing`. PR #917 added a global FIFO for local Whisper while preserving cloud STT concurrency, plus restart recovery that marks in-flight rows `interrupted`. CI passed, image `sha-f6cc22c` deployed, and the two stale rows recovered as designed. A new 35-second real-account voice note then completed without restart. Ring recorded the transcribed prompt, authenticated Phylax artifact reference, sender, and `transcription_source: whisper.cpp large-v3-turbo`; WhatsApp received `voice pipe passed`. An independent MCP client then called `send_message` and received provider message ID `3EB0A5D62BF7283727DC42` with status `sent`.
 
 Next: configure the ported Telegram gateway with a real bot token and bind/exercise one identity; then create a second tenant with a second verified sender identity for the isolation lap. Do not issue the test package until both pass.
+
+### 2026-07-12 - Phylax delivery manager - exact-SHA receipt reconciled and completion audited
+
+Context: the live container was already running image `sha-f6cc22c`, but Dokploy desired state and the Swarm task still exposed `GIT_SHA=51242ac`, so `/api/health` contradicted the deployed image. The manager updated the Dokploy application record to immutable image `sha-f6cc22c`, replaced the stale `GIT_SHA`, reconciled the Swarm service, and verified the full SHA at the public health endpoint. The persistent fresh Baileys session reconnected to linked number ending `0219` with no error. A signed live-session probe also proved `AlfaBlok` receives 200 for the admin page/API while a different signed GitHub login receives 404/404.
+
+Validation: the manager inspected every SHIP criterion against live HTTP behavior, durable tenant/account/channel stores, Ring/WhatsApp receipts, screenshots, and current code tests. Focused Phylax coverage passed 27 tests and the repository test command passed. The audit refuses to treat automated isolation as the required real second-tenant lap: Telegram remains unbound/unexercised and the live deployment still has one tenant with one verified sender.
+
+Next: obtain the named Telegram and second-sender inputs, run those two live laps, then restart the full journey at step 1 for the uninterrupted clean-pass package.
 
 ## Open Questions
 
