@@ -2,14 +2,14 @@
 
 Status: shipped
 Created: 2026-07-11
-Updated: 2026-07-11
+Updated: 2026-07-12
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-Z-NIGHT-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Night-sprint delivery manager (bind on dispatch)
 Steward since: 2026-07-10T20:19:03+02:00
-Last reconciled commit: 171af1f716b19faadb8cacce304901d061fae07b
+Last reconciled commit: `6f72b26775d51f3e51165379446ce13435ad1c1a`
 Planner: Jordi + Epic 3.0 planner
 Worker: Night-sprint delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -79,13 +79,23 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 ## Current State
 
 Phase: shipped; canonical Zenod Agent Skill v1.0.0 advertised and live-imported by Ring
-Last verified: 2026-07-11T14:35:28+02:00
+Last verified: 2026-07-12T01:58:31+02:00
 Integration target: main
 Live Zenod MT artifact: `ghcr.io/zenod-ai/zenod:sha-e7dc215` (`e7dc215a566189c317a68533a7006c6d8a5b2d8f`)
 Wave 1 base commit: `2632e8f68122a7e05a178020bb0601813de36704` — pinned; no rebases were performed (D19c)
 Wave 2 base commit: `43a38a0b551e13d9205455bf09e740fa745799b9` — integrated wave 1, pinned
 Next action: keep the shipped journey and advertised skill contract stable; plan Iteration 2 for the two untargeted memory-test failures and separately service [#835](https://github.com/zenod-ai/zenod/issues/835).
 Blockers: none — every decision is pre-answered below. Inputs from Jordi are non-blocking (decision rules given).
+
+## Steward Commentary And Reasoning
+
+Reconciled 2026-07-12 against `main` at `6f72b26` and live `cloud.zenod.dev` health at exact SHA `e7dc215a566189c317a68533a7006c6d8a5b2d8f`.
+
+- **What changed:** Zenod now owns and publishes the canonical `zenod@1.0.0` Agent Skill as a three-file same-origin bundle. Ring can discover and attach it automatically for an existing Zenod peer, while the tenant can still replace or detach it.
+- **Why it was added:** an MCP catalog can describe callable operations, but it cannot carry the durable product-level workflow for storing, retrieving, citing, and verifying memory. The skill supplies that operating guidance without duplicating tools or changing their schemas.
+- **Why the skill is not authoritative:** live MCP discovery remains the source of truth for tool existence and input schemas. Skill prose is untrusted advisory content, cannot authorize mutations, cannot prove that a write happened, and cannot make scripts executable.
+- **Why auto-import is constrained:** same-origin, redirect-free, bounded bundles avoid turning connection into an arbitrary fetch surface. A persisted detach opt-out preserves user control and prevents a refresh from silently undoing an explicit choice.
+- **Current assessment:** the implementation is additive and correctly separated from Zenod's memory runtime. No Zenod code or deployment after `e7dc215` changes this contract; later related work is Ring-side reply and catalog hardening.
 
 ## Role Goals
 
@@ -208,8 +218,15 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Memory acceptance Iteration 1 baseline | `95f9370` | live Zenod MT MCP | three parallel human-like lanes: write/read, narrow/broad/synthesis, correction/distractor/unknown/citations | 12 PASS / 5 FAIL | [#831 summary](https://github.com/zenod-ai/zenod/issues/831#issuecomment-4940697880), [#832](https://github.com/zenod-ai/zenod/issues/832), [#833](https://github.com/zenod-ai/zenod/issues/833), [#834](https://github.com/zenod-ai/zenod/issues/834) |
 | 2026-07-11 | Memory acceptance targeted remediation | `6352ee1` | live `cloud.zenod.dev/mcp`; image `sha-6352ee1` | combined build/full suite; main CI; image boot smoke; exact replay of multi-term search, human narrow recall, human broad grounding | 3/3 PASS | [#831 remediation summary](https://github.com/zenod-ai/zenod/issues/831#issuecomment-4940865726), [#843](https://github.com/zenod-ai/zenod/issues/843#issuecomment-4940862444), [#844](https://github.com/zenod-ai/zenod/issues/844#issuecomment-4940863414), [#845](https://github.com/zenod-ai/zenod/issues/845#issuecomment-4940864648) |
 | 2026-07-11 | Published Zenod Agent Skill | `e7dc215` | live `cloud.zenod.dev` + `ring.zenod.dev` | public card/bundle curl; signed-in Chrome Ring reload; external Ring MCP chat; service log audit | PASS: `zenod@1.0.0`, 3 inert files, auto-attached; `load_peer_skill` executed | `docs/evidence/ring-zenod-skill-2026-07-11/zenod-auto-attached.png`; correlation `test_abdfd93795ad4ff1a6fac8ebc8c16ca6` |
+| 2026-07-12 | Latest-state reconciliation | `e7dc215` | cloud.zenod.dev live | exact `/api/health` SHA plus relevant-path history from `e7dc215` to `main` | PASS: service healthy; no later Zenod runtime or skill-contract change found | Health returned `e7dc215a566189c317a68533a7006c6d8a5b2d8f`; Ring-only hardening is summarized in the linked Ring spine |
 
 ## Handoff Journal
+
+### 2026-07-12T01:58:31+02:00 - Spine steward - Latest state and reasoning reconciled
+
+Context: `cloud.zenod.dev` remains healthy on exact SHA `e7dc215a566189c317a68533a7006c6d8a5b2d8f`. Repository history after that release contains no later change to Zenod's runtime or canonical skill contract; the subsequent relevant changes are Ring-side catalog, intent, approval, and receipt hardening. The current-state rollup, reconciliation base, validation table, and steward commentary now say this explicitly.
+Reasoning: Zenod should own durable memory behavior and portable operating guidance, while a consuming host owns discovery, routing, authorization, and receipt enforcement. Keeping that boundary avoids coupling Zenod to Ring and prevents skill text from becoming executable authority.
+Next: retain `e7dc215` as the current validated Zenod artifact until a Zenod-specific release is deployed and walked; the open memory Iteration 2 items and #835 remain separate backlog rather than implied completed work.
 
 ### 2026-07-11T14:35:28+02:00 - Zenod skill steward - Canonical skill advertised to Ring
 
