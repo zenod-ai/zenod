@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { maskPhoneNumber, normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
+import {
+  maskPhoneNumber,
+  normalizeWhatsAppIdentifier,
+} from "./whatsappConfig.js";
 
 export interface WhatsAppInboundEvent {
   messageId: string;
@@ -142,7 +145,8 @@ export interface WhatsAppNotificationQuery {
 function safeJson(value: unknown): string {
   return JSON.stringify(value ?? {}, (_key, item: unknown) => {
     if (typeof item === "bigint") return item.toString();
-    if (item instanceof Uint8Array) return `[Uint8Array ${item.byteLength} bytes]`;
+    if (item instanceof Uint8Array)
+      return `[Uint8Array ${item.byteLength} bytes]`;
     return item;
   });
 }
@@ -158,7 +162,13 @@ function epochMsFromWhatsAppTimestamp(value: unknown): number | null {
 }
 
 function uniqueMatches(text: string, re: RegExp): string[] {
-  return [...new Set([...text.matchAll(re)].map((match) => match[1]).filter((value): value is string => Boolean(value)))];
+  return [
+    ...new Set(
+      [...text.matchAll(re)]
+        .map((match) => match[1])
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
 }
 
 function driveFileIdFromLink(link: string): string | null {
@@ -173,17 +183,31 @@ function receiptFromOutbound(row: {
   bodyText: string;
 }): WhatsAppTranscriptReceipt | null {
   if (!/^Storage receipt\b/i.test(row.bodyText.trim())) return null;
-  const driveLinks = uniqueMatches(row.bodyText, /(https:\/\/drive\.google\.com\/[^\s)]+)/g);
+  const driveLinks = uniqueMatches(
+    row.bodyText,
+    /(https:\/\/drive\.google\.com\/[^\s)]+)/g,
+  );
   return {
     at: row.at,
     status: row.status,
     sentMessageId: row.sentMessageId,
     bodyText: row.bodyText,
     driveLinks,
-    driveFileIds: driveLinks.map(driveFileIdFromLink).filter((id): id is string => Boolean(id)),
-    vaultEvidenceRefs: uniqueMatches(row.bodyText, /^Vault evidence:\s*(.+)$/gm),
-    vaultCommits: uniqueMatches(row.bodyText, /^Vault commit:\s*([0-9a-f]{7,40})$/gim),
-    vaultLinks: uniqueMatches(row.bodyText, /(https:\/\/github\.com\/[^\s)]+)/g),
+    driveFileIds: driveLinks
+      .map(driveFileIdFromLink)
+      .filter((id): id is string => Boolean(id)),
+    vaultEvidenceRefs: uniqueMatches(
+      row.bodyText,
+      /^Vault evidence:\s*(.+)$/gm,
+    ),
+    vaultCommits: uniqueMatches(
+      row.bodyText,
+      /^Vault commit:\s*([0-9a-f]{7,40})$/gim,
+    ),
+    vaultLinks: uniqueMatches(
+      row.bodyText,
+      /(https:\/\/github\.com\/[^\s)]+)/g,
+    ),
   };
 }
 
@@ -269,6 +293,15 @@ export class WhatsAppStore {
         raw_json TEXT NOT NULL DEFAULT '{}'
       );
     `);
+
+    // A process exit cannot leave an active worker behind. Make that evidence
+    // explicit on boot instead of showing "processing" forever after an OOM or
+    // deploy restart.
+    this.db
+      .prepare(
+        "UPDATE whatsapp_messages SET processing_status = 'interrupted' WHERE processing_status = 'processing'",
+      )
+      .run();
   }
 
   recordInbound(event: WhatsAppInboundEvent): RecordInboundResult {
@@ -286,7 +319,14 @@ export class WhatsAppStore {
              last_seen_at = excluded.last_seen_at,
              raw_json = excluded.raw_json`,
         )
-        .run(event.senderId, phoneNumber, event.senderName || phoneNumber || event.senderId, now, now, "{}");
+        .run(
+          event.senderId,
+          phoneNumber,
+          event.senderName || phoneNumber || event.senderId,
+          now,
+          now,
+          "{}",
+        );
 
       this.db
         .prepare(
@@ -301,7 +341,13 @@ export class WhatsAppStore {
              updated_at = excluded.updated_at,
              raw_json = excluded.raw_json`,
         )
-        .run(event.chatId, event.isGroup ? "group" : "direct", event.chatName || event.senderName || event.chatId, now, "{}");
+        .run(
+          event.chatId,
+          event.isGroup ? "group" : "direct",
+          event.chatName || event.senderName || event.chatId,
+          now,
+          "{}",
+        );
 
       const timestamp = epochMsFromWhatsAppTimestamp(event.timestamp);
       const inserted = this.db
@@ -364,7 +410,11 @@ export class WhatsAppStore {
   }
 
   markMessageStatus(messageId: string, status: string): void {
-    this.db.prepare("UPDATE whatsapp_messages SET processing_status = ? WHERE message_id = ?").run(status, messageId);
+    this.db
+      .prepare(
+        "UPDATE whatsapp_messages SET processing_status = ? WHERE message_id = ?",
+      )
+      .run(status, messageId);
   }
 
   recordInboundTranscript(messageId: string, transcript: string): void {
@@ -437,10 +487,14 @@ export class WhatsAppStore {
     const inboundMessages = this.countMessages();
     const outboundAudits = this.countOutboundAudits();
     const processingRows = this.db
-      .prepare("SELECT processing_status AS status, COUNT(*) AS count FROM whatsapp_messages GROUP BY processing_status")
+      .prepare(
+        "SELECT processing_status AS status, COUNT(*) AS count FROM whatsapp_messages GROUP BY processing_status",
+      )
       .all() as unknown as Array<{ status: string; count: number }>;
     const outboundRows = this.db
-      .prepare("SELECT status, COUNT(*) AS count FROM whatsapp_outbound_audit GROUP BY status")
+      .prepare(
+        "SELECT status, COUNT(*) AS count FROM whatsapp_outbound_audit GROUP BY status",
+      )
       .all() as unknown as Array<{ status: string; count: number }>;
     const lastInbound = this.db
       .prepare(
@@ -450,26 +504,41 @@ export class WhatsAppStore {
          ORDER BY m.received_at DESC LIMIT 1`,
       )
       .get() as
-      | { received_at: number; contact_id: string | null; processing_status: string; chat_type: string | null }
+      | {
+          received_at: number;
+          contact_id: string | null;
+          processing_status: string;
+          chat_type: string | null;
+        }
       | undefined;
     const lastOutbound = this.db
-      .prepare("SELECT created_at, status FROM whatsapp_outbound_audit ORDER BY created_at DESC LIMIT 1")
+      .prepare(
+        "SELECT created_at, status FROM whatsapp_outbound_audit ORDER BY created_at DESC LIMIT 1",
+      )
       .get() as { created_at: number; status: string } | undefined;
 
     return {
       inboundMessages,
       outboundAudits,
-      processingCounts: Object.fromEntries(processingRows.map((row) => [row.status, Number(row.count)])),
-      outboundCounts: Object.fromEntries(outboundRows.map((row) => [row.status, Number(row.count)])),
+      processingCounts: Object.fromEntries(
+        processingRows.map((row) => [row.status, Number(row.count)]),
+      ),
+      outboundCounts: Object.fromEntries(
+        outboundRows.map((row) => [row.status, Number(row.count)]),
+      ),
       lastInbound: lastInbound
         ? {
             at: lastInbound.received_at,
-            sender: lastInbound.contact_id ? maskPhoneNumber(lastInbound.contact_id) : null,
+            sender: lastInbound.contact_id
+              ? maskPhoneNumber(lastInbound.contact_id)
+              : null,
             status: lastInbound.processing_status,
             isGroup: lastInbound.chat_type === "group",
           }
         : null,
-      lastOutbound: lastOutbound ? { at: lastOutbound.created_at, status: lastOutbound.status } : null,
+      lastOutbound: lastOutbound
+        ? { at: lastOutbound.created_at, status: lastOutbound.status }
+        : null,
     };
   }
 
@@ -512,7 +581,12 @@ export class WhatsAppStore {
          LIMIT 1`,
       )
       .get(message.message_id) as
-      | { created_at: number; status: string; body_text: string; error_text: string | null }
+      | {
+          created_at: number;
+          status: string;
+          body_text: string;
+          error_text: string | null;
+        }
       | undefined;
 
     return {
@@ -534,12 +608,17 @@ export class WhatsAppStore {
     };
   }
 
-  linkRecentMediaFollowUp(event: WhatsAppInboundEvent, maxAgeMs = 10 * 60 * 1000): WhatsAppMediaFollowUpLink | null {
+  linkRecentMediaFollowUp(
+    event: WhatsAppInboundEvent,
+    maxAgeMs = 10 * 60 * 1000,
+  ): WhatsAppMediaFollowUpLink | null {
     if (event.hasMedia) return null;
     const text = event.body.trim();
     if (!this.isMediaFollowUpText(text)) return null;
     const current = this.db
-      .prepare("SELECT received_at AS receivedAt FROM whatsapp_messages WHERE message_id = ?")
+      .prepare(
+        "SELECT received_at AS receivedAt FROM whatsapp_messages WHERE message_id = ?",
+      )
       .get(event.messageId) as { receivedAt: number } | undefined;
     const eventAt = current?.receivedAt ?? Date.now();
     const since = eventAt - maxAgeMs;
@@ -562,7 +641,12 @@ export class WhatsAppStore {
          LIMIT 1`,
       )
       .get(eventAt, since, event.chatId, event.senderId) as
-      | { messageId: string; receivedAt: number; mediaType: string | null; mediaStatus: string }
+      | {
+          messageId: string;
+          receivedAt: number;
+          mediaType: string | null;
+          mediaStatus: string;
+        }
       | undefined;
     if (!media) return null;
 
@@ -574,7 +658,12 @@ export class WhatsAppStore {
          )
          VALUES (?, ?, ?, ?)`,
       )
-      .run(event.messageId, media.messageId, Date.now(), safeJson({ reason: "nearby_media_followup", ageMs }));
+      .run(
+        event.messageId,
+        media.messageId,
+        Date.now(),
+        safeJson({ reason: "nearby_media_followup", ageMs }),
+      );
     return {
       mediaMessageId: media.messageId,
       followupMessageId: event.messageId,
@@ -600,7 +689,11 @@ export class WhatsAppStore {
            ORDER BY at ASC`,
         )
         .all(messageId) as unknown as WhatsAppTranscriptFollowUp[]
-    ).map((row) => ({ at: row.at, messageId: row.messageId, bodyText: row.bodyText }));
+    ).map((row) => ({
+      at: row.at,
+      messageId: row.messageId,
+      bodyText: row.bodyText,
+    }));
   }
 
   private isMediaFollowUpText(text: string): boolean {
@@ -610,10 +703,14 @@ export class WhatsAppStore {
     );
   }
 
-  recentTranscript(input: WhatsAppTranscriptQuery = {}): WhatsAppTranscriptEntry[] {
+  recentTranscript(
+    input: WhatsAppTranscriptQuery = {},
+  ): WhatsAppTranscriptEntry[] {
     const sinceMs = input.sinceMs ?? Date.now() - 2 * 60 * 60 * 1000;
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
-    const contact = input.contactId ? normalizeWhatsAppIdentifier(input.contactId) : "";
+    const contact = input.contactId
+      ? normalizeWhatsAppIdentifier(input.contactId)
+      : "";
     const chat = input.chatId ?? "";
     const message = input.messageId?.trim() ?? "";
     const rows = this.db
@@ -651,7 +748,18 @@ export class WhatsAppStore {
          ORDER BY at DESC
          LIMIT ?`,
       )
-      .all(sinceMs, sinceMs, contact, contact, chat, chat, message, message, message, limit) as unknown as Array<{
+      .all(
+        sinceMs,
+        sinceMs,
+        contact,
+        contact,
+        chat,
+        chat,
+        message,
+        message,
+        message,
+        limit,
+      ) as unknown as Array<{
       direction: "inbound" | "outbound";
       at: number;
       messageId: string | null;
@@ -663,7 +771,11 @@ export class WhatsAppStore {
       sentMessageId: string | null;
     }>;
     const inboundMessageIds = [
-      ...new Set(rows.filter((row) => row.direction === "inbound" && row.messageId).map((row) => row.messageId as string)),
+      ...new Set(
+        rows
+          .filter((row) => row.direction === "inbound" && row.messageId)
+          .map((row) => row.messageId as string),
+      ),
     ];
     const mediaByMessage = new Map<string, WhatsAppTranscriptMedia[]>();
     const receiptsByMessage = new Map<string, WhatsAppTranscriptReceipt[]>();
@@ -750,7 +862,11 @@ export class WhatsAppStore {
       }>;
       for (const row of followUpRows) {
         const bucket = followUpsByMessage.get(row.mediaMessageId) ?? [];
-        bucket.push({ at: row.at, messageId: row.messageId, bodyText: row.bodyText });
+        bucket.push({
+          at: row.at,
+          messageId: row.messageId,
+          bodyText: row.bodyText,
+        });
         followUpsByMessage.set(row.mediaMessageId, bucket);
       }
     }
@@ -765,18 +881,32 @@ export class WhatsAppStore {
       status: row.status,
       mediaType: row.mediaType,
       ...(row.sentMessageId ? { sentMessageId: row.sentMessageId } : {}),
-      ...(row.direction === "inbound" && row.messageId && mediaByMessage.has(row.messageId) ? { media: mediaByMessage.get(row.messageId) } : {}),
-      ...(row.direction === "inbound" && row.messageId && receiptsByMessage.has(row.messageId) ? { linkedReceipts: receiptsByMessage.get(row.messageId) } : {}),
-      ...(row.direction === "inbound" && row.messageId && followUpsByMessage.has(row.messageId)
+      ...(row.direction === "inbound" &&
+      row.messageId &&
+      mediaByMessage.has(row.messageId)
+        ? { media: mediaByMessage.get(row.messageId) }
+        : {}),
+      ...(row.direction === "inbound" &&
+      row.messageId &&
+      receiptsByMessage.has(row.messageId)
+        ? { linkedReceipts: receiptsByMessage.get(row.messageId) }
+        : {}),
+      ...(row.direction === "inbound" &&
+      row.messageId &&
+      followUpsByMessage.has(row.messageId)
         ? { linkedFollowUps: followUpsByMessage.get(row.messageId) }
         : {}),
     }));
   }
 
-  recentNotifications(input: WhatsAppNotificationQuery = {}): WhatsAppNotificationEntry[] {
+  recentNotifications(
+    input: WhatsAppNotificationQuery = {},
+  ): WhatsAppNotificationEntry[] {
     const sinceMs = input.sinceMs ?? Date.now() - 24 * 60 * 60 * 1000;
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
-    const contact = input.contactId ? normalizeWhatsAppIdentifier(input.contactId) : "";
+    const contact = input.contactId
+      ? normalizeWhatsAppIdentifier(input.contactId)
+      : "";
     const chat = input.chatId ?? "";
     const query = input.query?.trim() ?? "";
     const rows = this.db
@@ -805,7 +935,18 @@ export class WhatsAppStore {
          ORDER BY created_at DESC
          LIMIT ?`,
       )
-      .all(sinceMs, contact, contact, chat, chat, query, query, query, query, limit) as unknown as Array<{
+      .all(
+        sinceMs,
+        contact,
+        contact,
+        chat,
+        chat,
+        query,
+        query,
+        query,
+        query,
+        limit,
+      ) as unknown as Array<{
       notificationId: string;
       at: number;
       messageId: string | null;
@@ -820,16 +961,24 @@ export class WhatsAppStore {
   }
 
   countMessages(): number {
-    const row = this.db.prepare("SELECT COUNT(*) AS count FROM whatsapp_messages").get() as { count: number };
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS count FROM whatsapp_messages")
+      .get() as { count: number };
     return row.count;
   }
 
   countOutboundAudits(status?: string): number {
     const row = status
-      ? (this.db.prepare("SELECT COUNT(*) AS count FROM whatsapp_outbound_audit WHERE status = ?").get(status) as {
+      ? (this.db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM whatsapp_outbound_audit WHERE status = ?",
+          )
+          .get(status) as {
           count: number;
         })
-      : (this.db.prepare("SELECT COUNT(*) AS count FROM whatsapp_outbound_audit").get() as { count: number });
+      : (this.db
+          .prepare("SELECT COUNT(*) AS count FROM whatsapp_outbound_audit")
+          .get() as { count: number });
     return row.count;
   }
 
