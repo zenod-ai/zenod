@@ -77,6 +77,19 @@ export class PhylaxPortedRuntime {
               }
             : {}),
         });
+        this.whatsappStore.recordChannelForwarding({
+          providerMessageId: event.messageId,
+          tenantId: forwarded.tenantId,
+          senderId: forwarded.sender,
+          transcriptText: forwarded.handoff.text_transcript ?? null,
+          transcriptProvenance:
+            forwarded.handoff.transcription_source ?? (media ? "whatsapp-media" : "whatsapp-text"),
+          artifactRef: forwarded.handoff.artifact_ref ?? null,
+          artifactSha256: forwarded.artifactSha256,
+          downstreamDestination: forwarded.downstreamDestination,
+          downstreamCorrelationId: forwarded.downstreamCorrelationId,
+          downstreamReceipt: forwarded.downstreamReceipt,
+        });
         return { replyText: forwarded.replyText };
       },
       ...(adapters.whatsappSocketFactory ? { socketFactory: adapters.whatsappSocketFactory } : {}),

@@ -15,7 +15,7 @@ import {
   type PhylaxDownstreamCall,
 } from "../src/phylaxChannels.js";
 import { PhylaxPortedRuntime } from "../src/phylaxPortedRuntime.js";
-import type { WhatsAppInboundEvent } from "../src/whatsappStore.js";
+import { WhatsAppStore, type WhatsAppInboundEvent } from "../src/whatsappStore.js";
 
 const dirs: string[] = [];
 
@@ -109,6 +109,11 @@ describe("PhylaxChannelsOrgan", () => {
     });
     expect(passed.handoff).toMatchObject({ sender: "34611111111", text_transcript: "voice text", transcription_usage: { seconds: 2 }, transcription_source: "phylax@test" });
     expect(passed.handoff.artifact_ref).toMatch(/^https:\/\/phylax\.zenod\.dev\/mcp\/alpha-token\/artifacts\/alpha\//);
+    expect(passed.artifactSha256).toBe("90308fe99871113bf5490ec73a8813b667adc60fe01530102a6c7bfb73c66481");
+    expect(passed.evidence[0]).toMatchObject({
+      downstream_url: "https://ring.test",
+      downstream_identity: "ring.test#tenant:alpha",
+    });
     expect(existsSync(join(phylaxWhatsAppPaths(dataDir).artifacts, "alpha"))).toBe(true);
 
     fail = true;
@@ -195,6 +200,96 @@ describe("Phylax MCP channel tools", () => {
 });
 
 describe("ported gateway integration", () => {
+  it("joins a media provider id to artifact hash, transcript provenance, typed Ring receipt and outbound delivery", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-media-trace-"));
+    dirs.push(dataDir);
+    const store = new WhatsAppStore(join(dataDir, "whatsapp.sqlite"));
+    const event: WhatsAppInboundEvent = {
+      messageId: "provider-media-001",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: "provider-media-001.ogg",
+    };
+    store.recordInbound(event);
+    store.markMessageStatus(event.messageId, "processing");
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.zenod.dev/mcp/token-bearing-path", downstreamToken: "ring-secret" }) },
+      transcriber: { async transcribe() { return { text_transcript: "strawberry banana", transcription_source: "whisper.cpp@large-v3-turbo", transcription_usage: { seconds: 1.25 } }; } },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/artifacts/${tenantId}/${artifactId}`,
+      async callDownstream() {
+        return {
+          content: [{ type: "text", text: "strawberry banana" }],
+          structuredContent: {
+            correlation_id: "ring-media-correlation-001",
+            receipt: {
+              kind: "ring_reply",
+              id: "ring-media-receipt-001",
+              status: "completed",
+              authorization: "Bearer do-not-store",
+              evidence: [{ kind: "mailbox", id: "mailbox-001", url: "https://ring.zenod.dev/mcp/secret" }],
+            },
+          },
+        };
+      },
+    });
+    const forwarded = await organ.receive({
+      channel: "whatsapp",
+      sender: event.senderId,
+      chatId: event.chatId,
+      messageId: event.messageId,
+      media: { bytes: Buffer.from("deterministic-voice-bytes"), mimeType: "audio/ogg", fileName: event.fileName },
+    });
+    store.recordChannelForwarding({
+      providerMessageId: event.messageId,
+      tenantId: forwarded.tenantId,
+      senderId: forwarded.sender,
+      transcriptText: forwarded.handoff.text_transcript,
+      transcriptProvenance: forwarded.handoff.transcription_source,
+      artifactRef: forwarded.handoff.artifact_ref,
+      artifactSha256: forwarded.artifactSha256,
+      downstreamDestination: forwarded.downstreamDestination,
+      downstreamCorrelationId: forwarded.downstreamCorrelationId,
+      downstreamReceipt: forwarded.downstreamReceipt,
+    });
+    store.recordOutboundAudit({
+      messageId: event.messageId,
+      chatId: event.chatId,
+      contactId: event.senderId,
+      bodyText: forwarded.replyText,
+      status: "sent",
+      sentMessageId: "wa-outbound-001",
+    });
+    store.markMessageStatus(event.messageId, "replied");
+
+    const trace = store.channelAudit(event.messageId);
+    expect(trace).toMatchObject({
+      providerMessageId: "provider-media-001",
+      tenantId: "alpha",
+      senderId: "34611111111",
+      transcriptText: "strawberry banana",
+      transcriptProvenance: "whisper.cpp@large-v3-turbo",
+      artifactSha256: "91775098c42b14bb4ffa638c03195ffcf02523fd7b12c64c17d9ea99e817b03a",
+      downstreamDestination: "ring.zenod.dev#tenant:alpha",
+      downstreamCorrelationId: "ring-media-correlation-001",
+      downstreamReceipt: { kind: "ring_reply", id: "ring-media-receipt-001", status: "completed", evidence: [{ kind: "mailbox", id: "mailbox-001" }] },
+      lifecycleState: "replied",
+      outboundProviderId: "wa-outbound-001",
+      outboundStatus: "sent",
+    });
+    expect(trace?.artifactRef).toMatch(/^https:\/\/phylax\.zenod\.dev\/artifacts\/alpha\//);
+    expect(JSON.stringify(trace)).not.toMatch(/token-bearing-path|ring-secret|do-not-store|\/mcp\/secret|authorization/i);
+    store.close();
+  });
+
   it("feeds Baileys inbound through the tenant seam and sends the Ring reply through the same socket", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-ported-runtime-"));
     dirs.push(dataDir);
@@ -205,7 +300,18 @@ describe("ported gateway integration", () => {
       routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.zenod.dev/mcp/alpha", downstreamToken: "ring-alpha" }) },
       async callDownstream(call) {
         calls.push(call);
-        return { content: [{ type: "text", text: "Council: ported reply" }] };
+        return {
+          content: [{ type: "text", text: "Council: ported reply corr-in-prose-must-not-win" }],
+          structuredContent: {
+            correlationId: "ring-correlation-001",
+            receipt: {
+              kind: "ring_reply",
+              id: "ring-receipt-001",
+              status: "completed",
+              downstream_url: "https://ring.zenod.dev/mcp/secret-token",
+            },
+          },
+        };
       },
     });
     const listeners = new Map<string, (...args: never[]) => void>();
@@ -239,10 +345,32 @@ describe("ported gateway integration", () => {
       await runtime.whatsapp.handleEvent(event);
       expect(calls).toHaveLength(1);
       expect(calls[0]).toMatchObject({ route: { tenantId: "alpha", downstreamToken: "ring-alpha" }, arguments: { message: "hello council" } });
-      expect(sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Council: ported reply" }]);
+      expect(sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Council: ported reply corr-in-prose-must-not-win" }]);
       expect(runtime.whatsappStore.recentTranscript({ messageId: "wa-1", sinceMs: 0 })).toEqual(expect.arrayContaining([
         expect.objectContaining({ direction: "inbound", status: "replied" }),
         expect.objectContaining({ direction: "outbound", sentMessageId: "sent-1", status: "sent" }),
+      ]));
+      const trace = runtime.whatsappStore.channelAudit("wa-1");
+      expect(trace).toMatchObject({
+        providerMessageId: "wa-1",
+        tenantId: "alpha",
+        senderId: "34611111111",
+        transcriptText: "hello council",
+        transcriptProvenance: "whatsapp-text",
+        downstreamDestination: "ring.zenod.dev#tenant:alpha",
+        downstreamCorrelationId: "ring-correlation-001",
+        downstreamReceipt: { kind: "ring_reply", id: "ring-receipt-001", status: "completed" },
+        lifecycleState: "replied",
+        outboundProviderId: "sent-1",
+        outboundStatus: "sent",
+      });
+      expect(JSON.stringify(trace)).not.toContain("secret-token");
+      expect(trace?.downstreamCorrelationId).not.toBe("corr-in-prose-must-not-win");
+      expect(runtime.whatsappStore.recentTranscript({ messageId: "wa-1", sinceMs: 0 })).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          direction: "inbound",
+          channelAudit: expect.objectContaining({ downstreamCorrelationId: "ring-correlation-001", outboundProviderId: "sent-1" }),
+        }),
       ]));
     } finally {
       runtime.close();

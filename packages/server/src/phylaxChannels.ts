@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { callPeerTool, type PeerToolResult } from "./peerClient.js";
@@ -78,13 +78,85 @@ export interface PhylaxInboundReceipt {
   replyText: string;
   downstream: PeerToolResult;
   handoff: PhylaxDownstreamCall["handoff"];
+  artifactSha256: string | null;
+  downstreamDestination: string;
+  downstreamCorrelationId: string | null;
+  downstreamReceipt: Record<string, unknown> | null;
   evidence: Array<{
     kind: "channel_message_forwarded";
     id: string;
     tenant_id: string;
     channel: PhylaxPortedChannel;
     downstream_url: string;
+    downstream_identity: string;
   }>;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Read correlation only from the peer's typed envelope; reply prose is never inspected. */
+function downstreamAudit(result: PeerToolResult): {
+  correlationId: string | null;
+  receipt: Record<string, unknown> | null;
+} {
+  const structured = objectValue(result.structuredContent);
+  if (!structured) return { correlationId: null, receipt: null };
+  const typedResult = objectValue(structured.result);
+  const receipt = objectValue(structured.receipt) ?? objectValue(typedResult?.receipt) ?? typedResult;
+  const correlation = structured.correlationId ?? structured.correlation_id
+    ?? typedResult?.correlationId ?? typedResult?.correlation_id
+    ?? receipt?.correlationId ?? receipt?.correlation_id;
+  const correlationId = typeof correlation === "string" && correlation.trim()
+    && !/:\/\//.test(correlation)
+    && !/\b(?:bearer|authorization|api[_-]?key|token)\b/i.test(correlation)
+    ? correlation.trim()
+    : null;
+  const safeReceipt = safeTypedReceipt(receipt ?? structured);
+  return {
+    correlationId,
+    receipt: Object.keys(safeReceipt).length > 0 ? safeReceipt : null,
+  };
+}
+
+function safeTypedReceipt(receipt: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const key of ["id", "kind", "status", "code", "mailbox_id", "receipt_id"] as const) {
+    const value = receipt[key];
+    if (typeof value === "number" || typeof value === "boolean") safe[key] = value;
+    if (
+      typeof value === "string"
+      && !/:\/\//.test(value)
+      && !/\b(?:bearer|authorization|api[_-]?key|token)\b/i.test(value)
+    ) safe[key] = value;
+  }
+  if (Array.isArray(receipt.evidence)) {
+    safe.evidence = receipt.evidence
+      .map(objectValue)
+      .filter((item): item is Record<string, unknown> => item !== null)
+      .map((item) => safeTypedReceipt(item));
+  }
+  return safe;
+}
+
+function safeDownstreamDestination(route: PhylaxTenantRoute): string {
+  try {
+    const parsed = new URL(route.downstreamUrl);
+    return `${parsed.host}#tenant:${route.tenantId}`;
+  } catch {
+    return `configured-downstream#tenant:${route.tenantId}`;
+  }
+}
+
+function safeDownstreamOrigin(route: PhylaxTenantRoute): string {
+  try {
+    return new URL(route.downstreamUrl).origin;
+  } catch {
+    return "configured-downstream";
+  }
 }
 
 export class PhylaxChannelError extends Error {
@@ -165,7 +237,8 @@ export class PhylaxChannelsOrgan {
       throw new PhylaxChannelError("downstream_error", "tenant downstream is not configured");
     }
 
-    const artifactRef = input.media ? this.rememberArtifact(route.tenantId, input.media) : undefined;
+    const artifact = input.media ? this.rememberArtifact(route.tenantId, input.media) : undefined;
+    const artifactRef = artifact?.ref;
     let transcription: PhylaxTranscriptionReceipt = input.transcription ?? {};
     if (!input.transcription && input.media?.bytes && isAudioMedia(input.media) && this.options.transcriber) {
       try {
@@ -214,24 +287,38 @@ export class PhylaxChannelsOrgan {
     }
     const replyText = textFromResult(downstream);
     if (!replyText) throw new PhylaxChannelError("downstream_error", "tenant downstream returned no reply");
+    const audit = downstreamAudit(downstream);
     return {
       tenantId: route.tenantId,
       sender,
       replyText,
       downstream,
       handoff,
+      artifactSha256: artifact?.sha256 ?? null,
+      downstreamDestination: safeDownstreamDestination(route),
+      downstreamCorrelationId: audit.correlationId,
+      downstreamReceipt: audit.receipt,
       evidence: [{
         kind: "channel_message_forwarded",
         id: input.messageId?.trim() || `phylax_${randomUUID().replaceAll("-", "")}`,
         tenant_id: route.tenantId,
         channel: input.channel,
-        downstream_url: route.downstreamUrl,
+        downstream_url: safeDownstreamOrigin(route),
+        downstream_identity: safeDownstreamDestination(route),
       }],
     };
   }
 
-  private rememberArtifact(tenantId: string, media: NonNullable<PhylaxChannelInbound["media"]>): string | undefined {
-    if (media.artifactRef?.trim()) return media.artifactRef.trim();
+  private rememberArtifact(
+    tenantId: string,
+    media: NonNullable<PhylaxChannelInbound["media"]>,
+  ): { ref: string; sha256: string | null } | undefined {
+    if (media.artifactRef?.trim()) {
+      return {
+        ref: media.artifactRef.trim(),
+        sha256: media.bytes ? createHash("sha256").update(media.bytes).digest("hex") : null,
+      };
+    }
     if (!media.bytes) return undefined;
     const paths = phylaxWhatsAppPaths(this.options.dataDir);
     const tenantDir = join(paths.artifacts, tenantId);
@@ -252,7 +339,7 @@ export class PhylaxChannelsOrgan {
     if (parsed.protocol !== "https:" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
       throw new PhylaxChannelError("invalid_input", "artifact_ref must use https");
     }
-    return parsed.toString();
+    return { ref: parsed.toString(), sha256: createHash("sha256").update(media.bytes).digest("hex") };
   }
 }
 
