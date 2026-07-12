@@ -761,6 +761,7 @@ export class Runtime {
         schemaFormat: "json-schema",
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         authoritativeReadResult: true,
+        requiresMcpCatalogIntent: true,
         run: async (input) => {
           const request = typeof input === "object" && input !== null && typeof input.request === "string"
             ? input.request

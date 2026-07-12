@@ -128,11 +128,26 @@ export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
  * authenticated tools/list snapshot through an authoritative read tool.
  */
 export function isMcpCatalogInspectionQuestion(question: string): boolean {
-  const normalized = question.replace(/[’']/g, "'");
-  if (/\bwhat can (?:this|the|my|a|an) (?:connected )?(?:mcp|peer|unit) do\b/i.test(normalized)) return true;
-  if (/\bskill\b/i.test(normalized) && /\b(tool|mcp|publish|authorit|receipt|detect|load)\w*\b/i.test(normalized)) return true;
-  return /\b(mcp|peer|unit|connected|connection|tool|tools|capabilit(?:y|ies)|advertis(?:e|ed|es)|expos(?:e|ed|es)|refresh(?:ed)?|schema|schemas|annotation|annotations|skill)\b/i.test(normalized)
-    && /\b(what|which|show|list|inspect|describe|actual|really|available|change|changed|require|requires|detected|loaded|does|can)\b/i.test(normalized);
+  const normalized = question.replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
+
+  // Questions whose subject is the connected peer itself are unambiguously
+  // about its advertised capability, rather than a request to perform work.
+  if (/\bwhat can (?:this|the|my|a|an|any) (?:connected )?(?:mcp|peer|unit) do\b/i.test(normalized)) return true;
+  if (/\b(?:show|list|inspect|describe) (?:me )?(?:the |my |our |all )?(?:connected )?(?:mcps?|peers?|units?)\b[?.!]*$/i.test(normalized)) return true;
+
+  const hasInquiry = /\b(?:what|which|show|list|inspect|describe|details?|how|whether|available|actual|real|really|status|state|see|check|verify)\b/i.test(normalized);
+  const hasToolCatalogSubject = /\b(?:catalog|tools?|capabilit(?:y|ies)|advertised|exposed)\b/i.test(normalized);
+  if (hasInquiry && hasToolCatalogSubject) return true;
+
+  // Contract and discovery metadata are catalog questions only when the user
+  // is asking to inspect them. Merely mentioning an MCP, skill, or schema in a
+  // memory/task must not divert the turn into catalog rendering.
+  const hasContractSubject = /\b(?:schemas?|annotations?|namespaces?|collisions?|refresh(?:ed)?|discovery)\b/i.test(normalized);
+  if (hasInquiry && hasContractSubject) return true;
+
+  const hasSkillSubject = /\bskills?\b/i.test(normalized);
+  const hasSkillState = /\b(?:authorit\w*|publish\w*|detect\w*|load\w*|attach\w*|receipt\w*)\b/i.test(normalized);
+  return hasInquiry && hasSkillSubject && hasSkillState;
 }
 export const MAX_WORK_OUTPUT_TOKENS = 4096;
 
@@ -661,7 +676,7 @@ export class AiSdkBrainLlm implements BrainLlm {
     // the top search hits the model consulted. Never empty when the vault had hits.
     const sourcePaths = (): string[] =>
       readPaths.size > 0 ? [...readPaths] : searchedPaths.slice(0, 3);
-    const authoritativeCatalog = Object.entries(peerTools ?? {}).find(([, peer]) => peer.authoritativeReadResult);
+    const authoritativeCatalog = Object.entries(peerTools ?? {}).find(([, peer]) => peer.requiresMcpCatalogIntent);
     if (authoritativeCatalog && isMcpCatalogInspectionQuestion(input.question)) {
       const [toolName, peer] = authoritativeCatalog;
       const args = { request: input.question };
@@ -961,7 +976,10 @@ export class AiSdkBrainLlm implements BrainLlm {
     // Peer-agent delegation tools (the mesh). Each configured peer becomes one
     // tool (e.g. `ask_zenod`) that forwards a free-form request to that peer and
     // returns its answer. The model sees them as ordinary tools.
-    const peerEntries = Object.entries(peerTools ?? {});
+    // Catalog inspection is host-selected above. If that boundary did not
+    // match, do not expose the privileged inspector to the model at all: model
+    // prose or tool choice cannot manufacture catalog authority.
+    const peerEntries = Object.entries(peerTools ?? {}).filter(([, peer]) => !peer.requiresMcpCatalogIntent);
     let authoritativePeerResult: string | null = null;
     const sameTurnPeerMutations = new Map<string, Promise<string>>();
     // M-1 — retry-stop: the FIRST Blocked result from an outbound send tool ends the
