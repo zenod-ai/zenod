@@ -116,6 +116,26 @@ export function Settings({
       .catch(() => {})
   }, [])
 
+  if (!overview) {
+    const product =
+      window.location.hostname === "herald.zenod.dev"
+        ? "Herald"
+        : window.location.hostname === "ring.zenod.dev"
+          ? "The Ring"
+          : window.location.hostname === "phylax.zenod.dev"
+            ? "Phylax"
+            : "dashboard"
+    return (
+      <div
+        aria-label={`Loading ${product}`}
+        className="flex min-h-svh flex-col items-center justify-center gap-3"
+      >
+        <Spinner className="size-6 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Loading {product}…</p>
+      </div>
+    )
+  }
+
   async function handleLogout() {
     setLoggingOut(true)
     try {
