@@ -77,13 +77,14 @@ const APPROVAL_PROPERTY = {
 const APPROVE_SEND_TOOL = {
   name: "approve_send",
   title: "Approve and send an exact X draft",
-  description: "After the user explicitly confirms the exact final text, commit that standing X draft exactly once. Safe retries with the same tenant and text return the stored canonical permalink receipt without posting again.",
+  description: "After the user explicitly confirms the exact final text, commit its tenant-held action exactly once. Pass the opaque action_id returned by the draft when available. Safe retries return the stored canonical permalink receipt without posting again.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
     required: ["channel", "text"],
     properties: {
       channel: { type: "string", enum: ["x"], description: "The approved outbound channel." },
+      action_id: { type: "string", minLength: 1, description: "Opaque held-action id returned by the unapproved createPosts call. Supply it when available." },
       text: { type: "string", minLength: 1, description: "The exact final text already shown to and explicitly confirmed by the user. Do not rewrite it." },
     },
   },
@@ -118,7 +119,23 @@ function withApprovalProperty(schema: Record<string, unknown> | undefined): Reco
   };
 }
 
-function describePublicTool(tool: McpToolDescriptor): McpToolDescriptor {
+function withoutApprovalProperty(
+  schema: Record<string, unknown> | undefined,
+  approvalArg = "callisthenes_approve",
+): Record<string, unknown> {
+  const normalized = objectSchema(schema);
+  const properties = normalized.properties && typeof normalized.properties === "object"
+    ? { ...normalized.properties as Record<string, unknown> }
+    : {};
+  delete properties.callisthenes_approve;
+  delete properties[approvalArg];
+  const required = Array.isArray(normalized.required)
+    ? normalized.required.filter((name) => name !== "callisthenes_approve" && name !== approvalArg)
+    : normalized.required;
+  return { ...normalized, ...(required ? { required } : {}), properties };
+}
+
+function describePublicTool(tool: McpToolDescriptor, approvalArg = "callisthenes_approve"): McpToolDescriptor {
   if (!tool.name) return tool;
   if (READ_TOOL_NAMES.has(tool.name)) {
     return { ...tool, annotations: READ_ANNOTATIONS };
@@ -127,8 +144,8 @@ function describePublicTool(tool: McpToolDescriptor): McpToolDescriptor {
     return {
       ...tool,
       title: "Draft or create an X post",
-      description: "Draft an X post when explicit approval is absent (returns [draft_not_approved] and does not publish). Only a valid callisthenes_approve value may create the post; success returns the created post id used for its canonical permalink.",
-      inputSchema: withApprovalProperty(tool.inputSchema),
+      description: "Create a tenant-held X draft (returns [draft_not_approved] plus an opaque held action_id and does not publish). Publish only through approve_send after exact confirmation; direct approval fields are ignored.",
+      inputSchema: withoutApprovalProperty(tool.inputSchema, approvalArg),
       annotations: WRITE_ANNOTATIONS,
     };
   }
@@ -194,7 +211,10 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
   const tenantStore = options.tenantStore ?? createSqliteTenantStore({ dataDir: storage.dataDir, busyTimeoutMs: 30_000 });
   const engineUrl = (options.customer?.engineUrl || env.CALLISTHENES_ENGINE_URL || "http://calli-engine:8000").replace(/\/$/, "");
   const fetcher = options.fetcher ?? fetch;
-  const observationLedger = new CallisthenesObservationLedger(storage.dataDir);
+  const pendingTtl = Number(env.CALLISTHENES_PENDING_ACTION_TTL_MS);
+  const observationLedger = new CallisthenesObservationLedger(storage.dataDir, {
+    ...(Number.isFinite(pendingTtl) && pendingTtl > 0 ? { pendingTtlMs: pendingTtl } : {}),
+  });
   const customer = createCallisthenesCustomerLayer(
     { dataDir: storage.dataDir },
     { ...options.customer, env, tenantStore, engineUrl, observationLedger },
@@ -229,10 +249,22 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
       return approveSend(rpc, record.tenant.id, target, headers);
     }
 
+    let forwardedBody = body;
+    if (rpc?.method === "tools/call" && rpc.params?.name === "createPosts") {
+      const approvalArg = env.CALLISTHENES_APPROVE_ARG?.trim() || "callisthenes_approve";
+      const originalArgs = rpc.params.arguments ?? {};
+      if (Object.hasOwn(originalArgs, approvalArg) || Object.hasOwn(originalArgs, "callisthenes_approve")) {
+        const safeArgs = { ...originalArgs };
+        delete safeArgs[approvalArg];
+        delete safeArgs.callisthenes_approve;
+        forwardedBody = JSON.stringify({ ...rpc, params: { ...rpc.params, arguments: safeArgs } });
+        headers.delete("content-length");
+      }
+    }
     const response = await fetcher(target, {
       method: c.req.method,
       headers,
-      ...(body ? { body } : {}),
+      ...(forwardedBody ? { body: forwardedBody } : {}),
     } as RequestInit);
     if (!rpc) return new Response(response.body, { status: response.status, headers: response.headers });
     const responseText = await response.text();
@@ -240,15 +272,22 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
     if (!payload) return new Response(responseText, { status: response.status, headers: response.headers });
     if (rpc.method === "tools/list" && payload.result?.tools) {
       if (!payload.result.tools.some((tool) => tool.name === "approve_send")) payload.result.tools.push(APPROVE_SEND_TOOL);
-      payload.result.tools = payload.result.tools.map(describePublicTool);
+      payload.result.tools = payload.result.tools.map((tool) =>
+        describePublicTool(tool, env.CALLISTHENES_APPROVE_ARG?.trim() || "callisthenes_approve")
+      );
     }
     if (rpc.method === "tools/call") {
       const text = resultText(payload);
       observationLedger.observeCall(record.tenant.id, text);
       const args = rpc.params?.arguments ?? {};
       if (rpc.params?.name === "createPosts" && text.includes("[draft_not_approved]")) {
-        const proposed = String(args.text ?? "").trim();
-        if (proposed) observationLedger.observeRejectedDraft(record.tenant.id, proposed);
+        const proposed = String(args.text ?? "");
+        if (proposed.trim()) {
+          const held = observationLedger.hold(record.tenant.id, proposed);
+          const heldMarker = `[held_action] action_id=${held.id} expires_at=${held.expires_at}`;
+          const firstText = payload.result?.content?.find((item) => item.type === "text" && typeof item.text === "string");
+          if (firstText) firstText.text = `${firstText.text}\n${heldMarker}`;
+        }
       }
     }
     const outgoing = new Headers();
@@ -270,10 +309,15 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
       return rpcText(rpc.id, renderNothingPendingToApprove());
     }
     if (channel !== "x") return rpcText(rpc.id, renderApproveAffordance(channel as "reddit" | "email"));
-    const text = String(args.text ?? args.content ?? args.body ?? "").trim();
-    if (!text) return rpcText(rpc.id, renderApproveAffordance("x"));
-    const prior = observationLedger.receiptForText(tenantId, text);
-    if (prior) return rpcText(rpc.id, prior.text);
+    const text = String(args.text ?? args.content ?? args.body ?? "");
+    if (!text.trim()) return rpcText(rpc.id, renderApproveAffordance("x"));
+    const actionId = String(args.action_id ?? args.actionId ?? "").trim() || undefined;
+    const approval = { ...(actionId ? { actionId } : {}), text };
+    const held = observationLedger.resolve(tenantId, approval);
+    if (!held) {
+      const replay = observationLedger.replayReceipt(tenantId, approval);
+      return rpcText(rpc.id, replay?.text ?? renderNothingPendingToApprove());
+    }
 
     const approveValue = env.CALLISTHENES_APPROVE_TOKEN?.trim() || true;
     const engineRpc: RpcRequest = {
@@ -300,7 +344,7 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
     const raw = resultText(payload);
     const receipt = parseOutboundReceipt("x", raw);
     const rendered = renderOutboundReceipt(receipt);
-    if (receipt.verified && receipt.url) observationLedger.observeReceipt(tenantId, text, rendered, receipt.url);
+    if (receipt.verified && receipt.url) observationLedger.recordReceipt(tenantId, held.id, rendered, receipt.url);
     return rpcText(rpc.id, rendered, response.headers);
   }
 
