@@ -84,12 +84,12 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: P-S5 Human Gate — live exact SHA ready; test-number pairing required
-Last verified: 2026-07-11T05:54:31+02:00 (live exact-SHA preflight passed)
+Phase: P-S5 journey loop — WhatsApp text, voice transcription, and MCP delivery receipt pass live; Telegram and two-tenant isolation remain
+Last verified: 2026-07-12T17:38:01+02:00 (live WhatsApp text + voice + external MCP delivery receipt)
 Integration target: main
 Fresh base commit: `31e69bbbc20e2e4a2b053a2d30adf44f18b34245` — PINNED at dispatch; no rebases until the journey passes (D19c)
-Next action: Jordi supplies the manager's test WhatsApp number; manager opens `/admin`, pairs it by fresh QR, and starts the P-S5 journey from step 1.
-Blockers: P-S5 Human Gate — a spare/test WhatsApp number the manager may pair and message.
+Next action: bind a real Telegram bot/identity and exercise one Telegram delivery; then verify isolation with a second tenant and a second sender number.
+Blockers: no Telegram bot token is configured on the Phylax service; the two available WhatsApp numbers are already the paired transport number and the sole verified tenant sender, so SHIP 11 still needs a second sender identity.
 
 ## Role Goals
 
@@ -149,7 +149,7 @@ Wave 1: P-S1 ∥ P-S2. Wave 2: P-S3, P-S4. Then P-S5. Heartbeats, budgets, workt
 | [#871](https://github.com/zenod-ai/zenod/issues/871) | Ticket worker | P-S2-worker | P-S2 channels organ port (Baileys+Telegram+faces) | done | EPIC R SHIP satisfied | [#877](https://github.com/zenod-ai/zenod/pull/877) / `codex/p-s2-channels-port` | `31e69bb` | SHIP 8, 10 mechanics | 45 focused tests + typecheck + CI; manager review; merged `c0a2f6b` | 2026-07-11T05:17:00+02:00 | integrated |
 | [#872](https://github.com/zenod-ai/zenod/issues/872) | Ticket worker | P-S3-worker | P-S3 tenant settings + keyword verification + transcription | done | P-S1, P-S2 done | [#881](https://github.com/zenod-ai/zenod/pull/881) / `codex/p-s3-tenant-settings` | `c0a2f6b` | SHIP 6–7, 9 | 645 full + 24 post-merge focused tests; CI; manager review; merged `78aaee6` | 2026-07-11T05:34:00+02:00 | integrated |
 | [#873](https://github.com/zenod-ai/zenod/issues/873) | Ticket worker | P-S4-worker | P-S4 admin gate (alfablok) + billing + domain | done | P-S1, P-S2 admin surface done | [#880](https://github.com/zenod-ai/zenod/pull/880), [#883](https://github.com/zenod-ai/zenod/pull/883) / `codex/p-s4-admin-billing-domain` | `c0a2f6b` | SHIP 2, 4, 5 | CI + focused checks; live `51242ac`; root/health 200, MCP 401, logged-out admin 404 | 2026-07-11T05:54:31+02:00 | integrated and deployed |
-| [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | blocked on named Human Gate | P-S1..4 done | manager loop | live `51242ac` | SHIP 1–12 | exact-SHA live preflight passed; no session paired | 2026-07-11T05:54:31+02:00 | request test number, then fresh QR |
+| [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | in progress; SHIP 10 Telegram + SHIP 11 need Human Gate inputs | P-S1..4 done | manager loop; [#917](https://github.com/zenod-ai/zenod/pull/917) | live `f6cc22c` | SHIP 1–12 | fresh QR paired; inbound keyword verified; clean text pipe; serialized Whisper voice pipe with artifact handoff; external WhatsApp MCP delivery receipt | 2026-07-12T17:38:01+02:00 | configure Telegram bot/identity; obtain second sender identity for isolation |
 
 ## Branch And Integration
 
@@ -191,7 +191,10 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
 | 2026-07-11 | Pre-P-S5 live deployment receipt | `51242ac` | `https://phylax.zenod.dev` | guarded Dokploy target + exact-SHA HTTP probes | PASS: root and health 200; MCP unauthenticated 401; logged-out `/admin` 404; OAuth redirect targets Phylax callback | `/var/tmp/p-s4-cutover-2026-07-11`; application `urbFsgl6eImbQ4MTIZl5N` |
-| pending | SHIP journey clean pass | `51242ac` | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending Human Gate | test package |
+| 2026-07-12 | P-S5 WhatsApp text pipe | `f6cc22c` | `phylax.zenod.dev` + WhatsApp Web/real account | verified sender → Phylax → tenant Ring → WhatsApp | PASS: one inbound, one Ring run, one reply; legacy listener disabled | `docs/evidence/phylax-ship-2026-07-12/10-clean-text-pipe-whatsapp-web.png` |
+| 2026-07-12 | P-S5 voice transcription pipe | `f6cc22c` | `phylax.zenod.dev` + WhatsApp Web/real account | 35-second voice note → serialized local Whisper → authenticated artifact handoff → Ring → WhatsApp | PASS: message `3EB08DF39E67F9B2227E5F`; transcript and `whisper.cpp large-v3-turbo` source recorded; reply `voice pipe passed`; container remained stable | `docs/evidence/phylax-ship-2026-07-12/12-voice-transcription-pipe-live.png` |
+| 2026-07-12 | P-S5 MCP server WhatsApp face | `f6cc22c` | live tenant MCP endpoint | external MCP client `send_message` to verified phone | PASS: provider receipt `whatsapp:3EB0A5D62BF7283727DC42:sent` (not silent ack) | live structured MCP receipt |
+| pending | SHIP journey clean pass | `f6cc22c` | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending Telegram exercise and two-tenant isolation | test package |
 
 ## Handoff Journal
 
@@ -220,6 +223,14 @@ Next: integrate wave 2, publish/deploy one exact SHA into a new full-customer-un
 Context: P-S4 PR #880 and P-S3 PR #881 passed CI and manager review. P-S3 merged P-S4 without rebasing and resolved the shared hooks onto exactly one Baileys/Telegram runtime. A dedicated Stripe TEST webhook endpoint was created for `https://phylax.zenod.dev/webhook`; #883 preserves its endpoint-specific signing secret. Final image `sha-51242ac` passed publish smoke. The new application owns a fresh `phylax-data` volume and no migrated session; the protected legacy compose was untouched. Dokploy's deployment queue was backed up behind an unrelated active job, so the manager created only the reviewed new Swarm service from the exact target config, then used Dokploy's start action to reconcile application status to done.
 Evidence: live `/api/health` reports `phylax` / `51242ac`; root 200; unauthenticated MCP 401; logged-out `/admin` 404; OAuth authorization redirect carries `https://phylax.zenod.dev/auth/github/callback`.
 Next: P-S5 Human Gate — obtain the manager's spare/test WhatsApp number, pair it by fresh QR, then walk from step 1 until one uninterrupted clean browser-and-phone pass.
+
+### 2026-07-12 - Phylax delivery manager - live WhatsApp text, voice, and MCP receipt passed
+
+Context: Jordi supplied `+34 664 24 02 19` for a fresh QR pairing and `+34 618 21 77 03` as the real sender. The manager paired the new Phylax session without migrating the legacy session, verified the sender with the inbound keyword, and disabled only the legacy `zenod-console` listener after Jordi explicitly approved unplugging it. The old container and session remain intact. A clean text lap produced one Ring run and one WhatsApp reply.
+
+During the voice lap, two overlapping local Whisper processes exhausted the container and left two audit rows in `processing`. PR #917 added a global FIFO for local Whisper while preserving cloud STT concurrency, plus restart recovery that marks in-flight rows `interrupted`. CI passed, image `sha-f6cc22c` deployed, and the two stale rows recovered as designed. A new 35-second real-account voice note then completed without restart. Ring recorded the transcribed prompt, authenticated Phylax artifact reference, sender, and `transcription_source: whisper.cpp large-v3-turbo`; WhatsApp received `voice pipe passed`. An independent MCP client then called `send_message` and received provider message ID `3EB0A5D62BF7283727DC42` with status `sent`.
+
+Next: configure the ported Telegram gateway with a real bot token and bind/exercise one identity; then create a second tenant with a second verified sender identity for the isolation lap. Do not issue the test package until both pass.
 
 ## Open Questions
 
