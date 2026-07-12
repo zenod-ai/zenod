@@ -85,6 +85,7 @@ export interface PhylaxInboundReceipt {
     id: string;
     tenant_id: string;
     channel: PhylaxPortedChannel;
+    downstream_url: string;
     downstream_identity: string;
   }>;
 }
@@ -145,6 +146,14 @@ function safeDownstreamDestination(route: PhylaxTenantRoute): string {
     return `${parsed.host}#tenant:${route.tenantId}`;
   } catch {
     return `configured-downstream#tenant:${route.tenantId}`;
+  }
+}
+
+function safeDownstreamOrigin(route: PhylaxTenantRoute): string {
+  try {
+    return new URL(route.downstreamUrl).origin;
+  } catch {
+    return "configured-downstream";
   }
 }
 
@@ -285,6 +294,7 @@ export class PhylaxChannelsOrgan {
         id: input.messageId?.trim() || `phylax_${randomUUID().replaceAll("-", "")}`,
         tenant_id: route.tenantId,
         channel: input.channel,
+        downstream_url: safeDownstreamOrigin(route),
         downstream_identity: safeDownstreamDestination(route),
       }],
     };

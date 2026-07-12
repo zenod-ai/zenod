@@ -100,6 +100,10 @@ describe("PhylaxChannelsOrgan", () => {
     expect(passed.handoff).toMatchObject({ sender: "34611111111", text_transcript: "voice text", transcription_usage: { seconds: 2 }, transcription_source: "phylax@test" });
     expect(passed.handoff.artifact_ref).toMatch(/^https:\/\/phylax\.zenod\.dev\/mcp\/alpha-token\/artifacts\/alpha\//);
     expect(passed.artifactSha256).toBe("90308fe99871113bf5490ec73a8813b667adc60fe01530102a6c7bfb73c66481");
+    expect(passed.evidence[0]).toMatchObject({
+      downstream_url: "https://ring.test",
+      downstream_identity: "ring.test#tenant:alpha",
+    });
     expect(existsSync(join(phylaxWhatsAppPaths(dataDir).artifacts, "alpha"))).toBe(true);
 
     fail = true;
