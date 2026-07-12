@@ -95,6 +95,9 @@ describe("Herald natural loop intent classifier", () => {
     expect(classifyHeraldNaturalLoopIntent("what did we post?")).toBeNull();
     expect(classifyHeraldNaturalLoopIntent("can you send out one of them?")).toBeNull();
     expect(classifyHeraldNaturalLoopIntent("are more serious posts performing better?")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("don't draft posts")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("why did you propose these posts?")).toBeNull();
+    expect(classifyHeraldNaturalLoopIntent("what proposals did you suggest?")).toBeNull();
     expect(classifyHeraldNaturalLoopIntent("what do you think our sharpest perspective is?"))
       .toBeNull();
   });
@@ -277,6 +280,16 @@ describe("Herald briefing chat", () => {
       expect(result.text).toContain("WHY: Filing 1 shows useful evidence");
       expect(result.text).toContain("Memory: https://zenod.dev/memory/1");
       expect(store.listBoardItems("alpha", ["proposed"])).toHaveLength(2);
+
+      for (const text of [
+        "don't draft posts",
+        "why did you propose these posts?",
+        "what proposals did you suggest?",
+      ]) {
+        const grounded = await fixture.handle({ tenantId: "alpha", text });
+        expect(grounded.handled).toBe(false);
+      }
+      expect(proposeNow).toHaveBeenCalledOnce();
     } finally {
       store.close();
     }

@@ -126,8 +126,8 @@ export function classifyHeraldNaturalLoopIntent(text: string): HeraldNaturalLoop
     return { kind: "approve", command: `✓ ${selection}${rejectRest}` };
   }
   if (
-    /\b(?:show|list|give|generate|draft|propose|suggest)\b[^.!?]{0,80}\b(?:posts?|proposals?|drafts?)\b/i.test(normalized) ||
-    /\b(?:posts?|proposals?|drafts?)\b[^.!?]{0,80}\b(?:propose|suggest)\b/i.test(normalized)
+    /^(?:please\s+)?(?:show|list|give|generate|draft|propose|suggest)\b[^.!?]{0,80}\b(?:posts?|proposals?|drafts?)\b[^.!?]{0,80}[.!]?$/i.test(normalized) ||
+    /^(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:show|list|give|generate|draft|propose|suggest)\b[^.!?]{0,80}\b(?:posts?|proposals?|drafts?)\b[^.!?]{0,80}\??$/i.test(normalized)
   ) {
     return { kind: "propose" };
   }
