@@ -1060,8 +1060,10 @@ export class WhatsAppGateway {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.options.store.markMessageStatus(event.messageId, "failed");
+      const outboundStartedAt = Date.now();
       await this.sendReply(event, `⚠️ ${message}`, "error").catch(() => {});
       this.options.store.recordChannelTiming(event.messageId, {
+        outboundSendMs: Date.now() - outboundStartedAt,
         totalLifecycleMs: Date.now() - lifecycleStartedAt,
       });
     } finally {
