@@ -239,6 +239,30 @@ describe("ported gateway integration", () => {
     expect(migrated.channelAudit("migration-media-001")).toMatchObject({
       replyText: "bounded reply persisted after migration",
       lifecycleState: "forwarded",
+      timing: {
+        mediaDownloadMs: null,
+        transcriptionQueueWaitMs: null,
+        transcriptionRuntimeMs: null,
+        downstreamMs: null,
+        outboundSendMs: null,
+        totalLifecycleMs: null,
+      },
+    });
+    migrated.recordChannelTiming("migration-media-001", {
+      mediaDownloadMs: 11,
+      transcriptionQueueWaitMs: 22,
+      transcriptionRuntimeMs: 33,
+      downstreamMs: 44,
+      outboundSendMs: 55,
+      totalLifecycleMs: 165,
+    });
+    expect(migrated.channelAudit("migration-media-001")?.timing).toEqual({
+      mediaDownloadMs: 11,
+      transcriptionQueueWaitMs: 22,
+      transcriptionRuntimeMs: 33,
+      downstreamMs: 44,
+      outboundSendMs: 55,
+      totalLifecycleMs: 165,
     });
     migrated.close();
   });
@@ -319,7 +343,12 @@ describe("ported gateway integration", () => {
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.zenod.dev/mcp/token-bearing-path", downstreamToken: "ring-secret" }) },
-      transcriber: { async transcribe() { return { text_transcript: "strawberry banana", transcription_source: "whisper.cpp@large-v3-turbo", transcription_usage: { seconds: 1.25 } }; } },
+      transcriber: { async transcribe() { return {
+        text_transcript: "strawberry banana",
+        transcription_source: "whisper.cpp@large-v3-turbo",
+        transcription_usage: { seconds: 1.25 },
+        transcription_timing: { queue_wait_ms: 23, runtime_ms: 45 },
+      }; } },
       artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/artifacts/${tenantId}/${artifactId}`,
       async callDownstream() {
         return {
@@ -355,6 +384,12 @@ describe("ported gateway integration", () => {
       downstreamDestination: forwarded.downstreamDestination,
       downstreamCorrelationId: forwarded.downstreamCorrelationId,
       downstreamReceipt: forwarded.downstreamReceipt,
+      timing: {
+        mediaDownloadMs: 12,
+        transcriptionQueueWaitMs: forwarded.timing.transcriptionQueueWaitMs,
+        transcriptionRuntimeMs: forwarded.timing.transcriptionRuntimeMs,
+        downstreamMs: 67,
+      },
     });
     store.recordOutboundAudit({
       messageId: event.messageId,
@@ -365,6 +400,7 @@ describe("ported gateway integration", () => {
       sentMessageId: "wa-outbound-001",
     });
     store.markMessageStatus(event.messageId, "replied");
+    store.recordChannelTiming(event.messageId, { outboundSendMs: 8, totalLifecycleMs: 155 });
 
     const trace = store.channelAudit(event.messageId);
     expect(trace).toMatchObject({
@@ -380,6 +416,14 @@ describe("ported gateway integration", () => {
       lifecycleState: "replied",
       outboundProviderId: "wa-outbound-001",
       outboundStatus: "sent",
+      timing: {
+        mediaDownloadMs: 12,
+        transcriptionQueueWaitMs: 23,
+        transcriptionRuntimeMs: 45,
+        downstreamMs: 67,
+        outboundSendMs: 8,
+        totalLifecycleMs: 155,
+      },
     });
     expect(trace?.artifactRef).toMatch(/^https:\/\/phylax\.zenod\.dev\/artifacts\/alpha\//);
     expect(JSON.stringify(trace)).not.toMatch(/token-bearing-path|ring-secret|do-not-store|\/mcp\/secret|authorization/i);
@@ -722,6 +766,14 @@ describe("ported gateway integration", () => {
         lifecycleState: "replied",
         outboundProviderId: "sent-1",
         outboundStatus: "sent",
+        timing: {
+          mediaDownloadMs: null,
+          transcriptionQueueWaitMs: null,
+          transcriptionRuntimeMs: null,
+          downstreamMs: expect.any(Number),
+          outboundSendMs: expect.any(Number),
+          totalLifecycleMs: expect.any(Number),
+        },
       });
       expect(JSON.stringify(trace)).not.toContain("secret-token");
       expect(trace?.downstreamCorrelationId).not.toBe("corr-in-prose-must-not-win");

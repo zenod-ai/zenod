@@ -19,6 +19,7 @@ import {
 import {
   WhatsAppGateway,
   eventFromBaileysMessage,
+  installBaileysSessionLogRedaction,
   type SocketLike,
 } from "../src/whatsappGateway.js";
 import { WhatsAppStore } from "../src/whatsappStore.js";
@@ -178,6 +179,39 @@ function imageEvent(overrides: Record<string, unknown> = {}) {
 }
 
 describe("WhatsApp helpers", () => {
+  it("redacts only libsignal session objects while preserving health and unrelated logs", () => {
+    const captured: Array<{ level: "info" | "warn"; args: unknown[] }> = [];
+    const target = {
+      info: (...args: unknown[]) => captured.push({ level: "info", args }),
+      warn: (...args: unknown[]) => captured.push({ level: "warn", args }),
+    };
+    installBaileysSessionLogRedaction(target);
+    const installedInfo = target.info;
+    const installedWarn = target.warn;
+    installBaileysSessionLogRedaction(target);
+    expect(target.info).toBe(installedInfo);
+    expect(target.warn).toBe(installedWarn);
+
+    const secretSession = {
+      _chains: { secretChain: { chainKey: Buffer.from("private-chain-key") } },
+      indexInfo: { baseKey: Buffer.from("private-base-key"), remoteIdentityKey: Buffer.from("private-identity-key") },
+    };
+    target.info("Closing session:", secretSession);
+    target.warn("Session already closed", secretSession);
+    target.info("[whatsapp][health]", JSON.stringify({ event: "reconnect_succeeded", state: "connected" }));
+    target.warn("[whatsapp] unrelated adapter warning", { code: 428 });
+
+    const serialized = JSON.stringify(captured);
+    expect(serialized).not.toContain("private-chain-key");
+    expect(serialized).not.toContain("private-base-key");
+    expect(serialized).not.toContain("private-identity-key");
+    expect(captured).toEqual([
+      { level: "info", args: ["Closing session:", "[redacted libsignal session]"] },
+      { level: "warn", args: ["Session already closed", "[redacted libsignal session]"] },
+      { level: "info", args: ["[whatsapp][health]", '{"event":"reconnect_succeeded","state":"connected"}'] },
+      { level: "warn", args: ["[whatsapp] unrelated adapter warning", { code: 428 }] },
+    ]);
+  });
   it("normalizes, masks, and matches phone allowlists", () => {
     expect(normalizeWhatsAppIdentifier("+34 652 029 134@s.whatsapp.net")).toBe("34652029134");
     expect(normalizeWhatsAppIdentifier("12345:10@s.whatsapp.net")).toBe("12345");
