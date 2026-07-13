@@ -13,14 +13,17 @@ export interface PhylaxTenantRoute {
   tenantId: string;
   downstreamUrl: string;
   downstreamToken: string;
+  /** Non-secret revision used only to reject stale in-flight health completions. */
+  credentialRevision?: string;
 }
 
 export interface PhylaxTenantRouteResolver {
   resolve(channel: PhylaxPortedChannel, sender: string): Promise<PhylaxTenantRoute | null> | PhylaxTenantRoute | null;
   reportDownstreamCredentialStatus?(
     tenantId: string,
+    credentialRevision: string,
     status: "healthy" | "rejected",
-  ): Promise<void> | void;
+  ): Promise<boolean | void> | boolean | void;
 }
 
 export interface PhylaxChannelInbound {
@@ -269,11 +272,16 @@ export class PhylaxChannelsOrgan {
   ) {}
 
   private async reportDownstreamCredentialStatus(
-    tenantId: string,
+    route: PhylaxTenantRoute,
     status: "healthy" | "rejected",
   ): Promise<void> {
+    if (!route.credentialRevision) return;
     try {
-      await this.options.routes.reportDownstreamCredentialStatus?.(tenantId, status);
+      await this.options.routes.reportDownstreamCredentialStatus?.(
+        route.tenantId,
+        route.credentialRevision,
+        status,
+      );
     } catch {
       // Health persistence must never turn a completed downstream call into a duplicate-prone retry.
     }
@@ -405,7 +413,7 @@ export class PhylaxChannelsOrgan {
     } catch (error) {
       const failureCode = downstreamFailureCode(error);
       if (failureCode === "downstream_unauthorized") {
-        await this.reportDownstreamCredentialStatus(route.tenantId, "rejected");
+        await this.reportDownstreamCredentialStatus(route, "rejected");
         throw downstreamCredentialRejectedError(
           failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
         );
@@ -424,7 +432,7 @@ export class PhylaxChannelsOrgan {
         ? "downstream_unauthorized"
         : "downstream_rejected";
       if (failureCode === "downstream_unauthorized") {
-        await this.reportDownstreamCredentialStatus(route.tenantId, "rejected");
+        await this.reportDownstreamCredentialStatus(route, "rejected");
         throw downstreamCredentialRejectedError(failureAudit(downstreamMs, failureCode, audit));
       }
       throw new PhylaxChannelError(
@@ -441,7 +449,7 @@ export class PhylaxChannelsOrgan {
         failureAudit(downstreamMs, "downstream_empty_reply", audit),
       );
     }
-    await this.reportDownstreamCredentialStatus(route.tenantId, "healthy");
+    await this.reportDownstreamCredentialStatus(route, "healthy");
     return {
       tenantId: route.tenantId,
       sender,

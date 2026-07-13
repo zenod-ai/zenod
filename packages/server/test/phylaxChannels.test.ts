@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { createMemoryTenantStore, createUnit } from "@zenod/mcp-chassis";
+import { ChassisStorage, createMemoryTenantStore, createUnit } from "@zenod/mcp-chassis";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { serve } from "@hono/node-server";
@@ -16,6 +16,7 @@ import {
   type PhylaxDownstreamCall,
 } from "../src/phylaxChannels.js";
 import { PhylaxPortedRuntime } from "../src/phylaxPortedRuntime.js";
+import { PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
 import {
   phylaxTranscriptionConfigurationError,
   phylaxTranscriptionOptions,
@@ -87,7 +88,7 @@ describe("PhylaxChannelsOrgan", () => {
   });
 
   it("marks thrown and typed authentication rejections without echoing credential-bearing errors", async () => {
-    const statuses: Array<[string, string]> = [];
+    const statuses: Array<[string, string, string]> = [];
     let failure: "thrown" | "typed" = "thrown";
     const organ = new PhylaxChannelsOrgan({
       dataDir: "/tmp/unused-phylax-auth-rejection",
@@ -96,9 +97,10 @@ describe("PhylaxChannelsOrgan", () => {
           tenantId: "alpha",
           downstreamUrl: "https://ring.test/mcp/path-secret",
           downstreamToken: "bearer-secret",
+          credentialRevision: "credential-revision-1",
         }),
-        reportDownstreamCredentialStatus(tenantId, status) {
-          statuses.push([tenantId, status]);
+        reportDownstreamCredentialStatus(tenantId, credentialRevision, status) {
+          statuses.push([tenantId, credentialRevision, status]);
         },
       },
       async callDownstream() {
@@ -128,17 +130,25 @@ describe("PhylaxChannelsOrgan", () => {
       expect(String(rejected)).not.toContain("bearer-secret");
       expect(String(rejected)).not.toContain("path-secret");
     }
-    expect(statuses).toEqual([["alpha", "rejected"], ["alpha", "rejected"]]);
+    expect(statuses).toEqual([
+      ["alpha", "credential-revision-1", "rejected"],
+      ["alpha", "credential-revision-1", "rejected"],
+    ]);
   });
 
   it("marks the configured downstream credential healthy after a successful reply", async () => {
-    const statuses: Array<[string, string]> = [];
+    const statuses: Array<[string, string, string]> = [];
     const organ = new PhylaxChannelsOrgan({
       dataDir: "/tmp/unused-phylax-auth-healthy",
       routes: {
-        resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "secret" }),
-        reportDownstreamCredentialStatus(tenantId, status) {
-          statuses.push([tenantId, status]);
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://ring.test/mcp/alpha",
+          downstreamToken: "secret",
+          credentialRevision: "credential-revision-2",
+        }),
+        reportDownstreamCredentialStatus(tenantId, credentialRevision, status) {
+          statuses.push([tenantId, credentialRevision, status]);
         },
       },
       async callDownstream() {
@@ -147,7 +157,102 @@ describe("PhylaxChannelsOrgan", () => {
     });
 
     await organ.receive({ channel: "whatsapp", sender: "34611111111", chatId: "chat", text: "hello" });
-    expect(statuses).toEqual([["alpha", "healthy"]]);
+    expect(statuses).toEqual([["alpha", "credential-revision-2", "healthy"]]);
+  });
+
+  it("ignores a stale in-flight success after the tenant replaces downstream credentials", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-stale-success-"));
+    dirs.push(dataDir);
+    const settings = new PhylaxTenantSettingsStore(
+      dataDir,
+      new ChassisStorage({ dataDir, vaultEncryptionKey: "41".repeat(32) }),
+    );
+    const registration = settings.registerPhone("alpha", "+34 611 111 111");
+    settings.update("alpha", {
+      downstreamUrl: "https://ring.test/mcp/old-path",
+      downstreamToken: "old-bearer",
+    });
+    settings.verifyInbound("34611111111", registration.keyword);
+    let callStarted!: () => void;
+    const started = new Promise<void>((resolve) => { callStarted = resolve; });
+    let complete!: (value: { content: Array<{ type: "text"; text: string }> }) => void;
+    const completion = new Promise<{ content: Array<{ type: "text"; text: string }> }>((resolve) => {
+      complete = resolve;
+    });
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: (channel, sender) => settings.resolve(channel, sender),
+        reportDownstreamCredentialStatus: (tenantId, revision, status) =>
+          settings.reportDownstreamCredentialStatus(tenantId, revision, status),
+      },
+      callDownstream() {
+        callStarted();
+        return completion;
+      },
+    });
+
+    const pending = organ.receive({ channel: "whatsapp", sender: "34611111111", chatId: "chat", text: "hello" });
+    await started;
+    settings.update("alpha", {
+      downstreamUrl: "https://ring.test/mcp/new-path",
+      downstreamToken: "new-bearer",
+    });
+    complete({ content: [{ type: "text", text: "old call completed" }] });
+    await pending;
+
+    expect(settings.view("alpha")).toMatchObject({
+      downstreamUrl: "https://ring.test/mcp/new-path",
+      downstreamCredentialStatus: "unknown",
+      downstreamCredentialCheckedAt: null,
+    });
+  });
+
+  it("ignores a stale in-flight rejection after the tenant replaces downstream credentials", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-stale-rejection-"));
+    dirs.push(dataDir);
+    const settings = new PhylaxTenantSettingsStore(
+      dataDir,
+      new ChassisStorage({ dataDir, vaultEncryptionKey: "42".repeat(32) }),
+    );
+    const registration = settings.registerPhone("alpha", "+34 611 111 111");
+    settings.update("alpha", {
+      downstreamUrl: "https://ring.test/mcp/old-path",
+      downstreamToken: "old-bearer",
+    });
+    settings.verifyInbound("34611111111", registration.keyword);
+    let callStarted!: () => void;
+    const started = new Promise<void>((resolve) => { callStarted = resolve; });
+    let rejectCall!: (error: Error) => void;
+    const completion = new Promise<never>((_resolve, reject) => { rejectCall = reject; });
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: (channel, sender) => settings.resolve(channel, sender),
+        reportDownstreamCredentialStatus: (tenantId, revision, status) =>
+          settings.reportDownstreamCredentialStatus(tenantId, revision, status),
+      },
+      callDownstream() {
+        callStarted();
+        return completion;
+      },
+    });
+
+    const pending = organ.receive({ channel: "whatsapp", sender: "34611111111", chatId: "chat", text: "hello" });
+    await started;
+    settings.update("alpha", {
+      downstreamUrl: "https://ring.test/mcp/new-path",
+      downstreamToken: "new-bearer",
+    });
+    rejectCall(new Error('{"error":"Unauthorized"} old-bearer'));
+    const rejected = await pending.catch((error: unknown) => error);
+
+    expect(rejected).toMatchObject({ audit: { failureCode: "downstream_unauthorized" } });
+    expect(settings.view("alpha")).toMatchObject({
+      downstreamUrl: "https://ring.test/mcp/new-path",
+      downstreamCredentialStatus: "unknown",
+      downstreamCredentialCheckedAt: null,
+    });
   });
 
   it("ports D18 transcript, artifact and usage; transcription failure forwards immediately", async () => {

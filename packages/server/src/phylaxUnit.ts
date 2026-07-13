@@ -179,8 +179,8 @@ function createTenantOrgan(
     transcriptionDeadlineMs: configuredDeadline,
     routes: {
       resolve: (channel, sender) => tenantSettings.resolve(channel, sender),
-      reportDownstreamCredentialStatus: (tenantId, status) =>
-        tenantSettings.reportDownstreamCredentialStatus(tenantId, status),
+      reportDownstreamCredentialStatus: (tenantId, credentialRevision, status) =>
+        tenantSettings.reportDownstreamCredentialStatus(tenantId, credentialRevision, status),
     },
     transcriber: {
       async transcribe(input) {

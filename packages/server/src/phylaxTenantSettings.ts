@@ -49,6 +49,7 @@ export interface PhylaxTenantSettings {
   downstreamUrl: string | null;
   downstreamCredentialStatus: "unknown" | "healthy" | "rejected";
   downstreamCredentialCheckedAt: string | null;
+  downstreamCredentialRevision: string | null;
   transcriptionEnabled: boolean;
   transcriptionProvider: "local" | "groq" | "openai" | "openrouter";
   transcriptionModel: string | null;
@@ -57,7 +58,10 @@ export interface PhylaxTenantSettings {
   updatedAt: string;
 }
 
-export interface PhylaxTenantSettingsView extends Omit<PhylaxTenantSettings, "verificationHash"> {
+export interface PhylaxTenantSettingsView extends Omit<
+  PhylaxTenantSettings,
+  "verificationHash" | "downstreamCredentialRevision"
+> {
   downstreamTokenConfigured: boolean;
   transcriptionKeyConfigured: boolean;
 }
@@ -75,6 +79,7 @@ function defaultSettings(tenantId: string): PhylaxTenantSettings {
     downstreamUrl: null,
     downstreamCredentialStatus: "unknown",
     downstreamCredentialCheckedAt: null,
+    downstreamCredentialRevision: null,
     transcriptionEnabled: true,
     transcriptionProvider: "local",
     transcriptionModel: null,
@@ -125,7 +130,11 @@ export class PhylaxTenantSettingsStore {
 
   view(tenantId: string): PhylaxTenantSettingsView {
     const current = this.get(tenantId);
-    const { verificationHash: _verificationHash, ...settings } = current;
+    const {
+      verificationHash: _verificationHash,
+      downstreamCredentialRevision: _downstreamCredentialRevision,
+      ...settings
+    } = current;
     return {
       ...settings,
       downstreamUrl: this.encryptedDownstreamUrl(current),
@@ -162,7 +171,11 @@ export class PhylaxTenantSettingsStore {
       ...current,
       downstreamUrl: null,
       ...(downstreamCredentialChanged
-        ? { downstreamCredentialStatus: "unknown" as const, downstreamCredentialCheckedAt: null }
+        ? {
+            downstreamCredentialStatus: "unknown" as const,
+            downstreamCredentialCheckedAt: null,
+            downstreamCredentialRevision: randomBytes(16).toString("hex"),
+          }
         : {}),
       ...(input.telegramBinding !== undefined
         ? { telegramBinding: input.telegramBinding?.trim() ? normalizeTelegramEntry(input.telegramBinding) : null }
@@ -190,16 +203,21 @@ export class PhylaxTenantSettingsStore {
   /** Persist only non-secret health observed while Phylax calls the configured downstream. */
   reportDownstreamCredentialStatus(
     tenantId: string,
+    credentialRevision: string,
     status: "healthy" | "rejected",
     now = Date.now(),
-  ): void {
+  ): boolean {
     const current = this.get(tenantId);
-    if (current.downstreamCredentialStatus === status && status === "healthy") return;
+    if (!current.downstreamCredentialRevision || current.downstreamCredentialRevision !== credentialRevision) {
+      return false;
+    }
+    if (current.downstreamCredentialStatus === status && status === "healthy") return true;
     this.put({
       ...current,
       downstreamCredentialStatus: status,
       downstreamCredentialCheckedAt: new Date(now).toISOString(),
     });
+    return true;
   }
 
   registerPhone(
@@ -269,7 +287,8 @@ export class PhylaxTenantSettingsStore {
     if (!downstreamUrl) return null;
     const downstreamToken = this.secret(entry.tenantId, DOWNSTREAM_TOKEN_KEY);
     if (!downstreamToken) return null;
-    return { tenantId: entry.tenantId, downstreamUrl, downstreamToken };
+    const credentialRevision = this.ensureDownstreamCredentialRevision(entry.tenantId);
+    return { tenantId: entry.tenantId, downstreamUrl, downstreamToken, credentialRevision };
   }
 
   ownsRecipient(tenantId: string, channel: PhylaxPortedChannel, recipient: string): boolean {
@@ -306,11 +325,22 @@ export class PhylaxTenantSettingsStore {
   /** Move legacy credential-bearing MCP URLs into encrypted tenant custody on first read. */
   private encryptedDownstreamUrl(settings: PhylaxTenantSettings): string | null {
     const encrypted = this.secret(settings.tenantId, DOWNSTREAM_URL_KEY);
-    if (encrypted) return encrypted;
+    if (encrypted) {
+      if (settings.downstreamUrl) this.put({ ...settings, downstreamUrl: null });
+      return encrypted;
+    }
     if (!settings.downstreamUrl) return null;
     this.setSecret(settings.tenantId, DOWNSTREAM_URL_KEY, settings.downstreamUrl);
     this.put({ ...settings, downstreamUrl: null });
     return settings.downstreamUrl;
+  }
+
+  private ensureDownstreamCredentialRevision(tenantId: string): string {
+    const current = this.get(tenantId);
+    if (current.downstreamCredentialRevision) return current.downstreamCredentialRevision;
+    const revision = randomBytes(16).toString("hex");
+    this.put({ ...current, downstreamUrl: null, downstreamCredentialRevision: revision });
+    return revision;
   }
 
   private setSecret(tenantId: string, key: string, value: string): void {
