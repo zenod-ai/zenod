@@ -27,6 +27,7 @@ export class PhylaxPortedRuntime {
   readonly whatsapp: WhatsAppGateway;
   readonly telegram: TelegramGateway;
   private readonly mediaCoalescingWindowMs: number;
+  private readonly voiceProgressDelayMs: number;
   private readonly mediaInFlight = new Map<string, Promise<Awaited<ReturnType<PhylaxChannelsOrgan["receive"]>>>>();
 
   constructor(
@@ -43,6 +44,10 @@ export class PhylaxPortedRuntime {
     this.mediaCoalescingWindowMs = Number.isFinite(configuredWindow)
       ? Math.max(1_000, Math.min(configuredWindow, 3_600_000))
       : 300_000;
+    const configuredProgressDelay = Number(env.PHYLAX_VOICE_PROGRESS_DELAY_MS ?? 5_000);
+    this.voiceProgressDelayMs = Number.isFinite(configuredProgressDelay)
+      ? Math.max(100, Math.min(configuredProgressDelay, 30_000))
+      : 5_000;
     this.state = new SqliteStateStore(join(dataDir, "phylax-channels.sqlite"));
     this.settings = new Settings(this.state);
     this.settings.seedFromEnv(env);
@@ -61,7 +66,7 @@ export class PhylaxPortedRuntime {
       settings: this.settings,
       store: this.whatsappStore,
       getEngine: unavailableEngine,
-      portedInboundHandler: async ({ event, text, media, transcription, timing }) => {
+      portedInboundHandler: async ({ event, text, media, transcription, timing, progress }) => {
         const verificationReply = await adapters.verifyInbound?.({
           channel: "whatsapp",
           sender: event.senderId,
@@ -151,10 +156,27 @@ export class PhylaxPortedRuntime {
           }
         })();
         if (mediaClaim) this.mediaInFlight.set(mediaClaim.canonicalProviderMessageId, forwarding);
+        let forwardingSettled = false;
+        let progressPromise: Promise<void> | null = null;
+        const isVoice = Boolean(media?.bytes && (
+          media.mimeType?.toLowerCase().startsWith("audio/")
+          || /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav|webm)$/i.test(media.fileName?.trim() ?? "")
+        ));
+        const progressTimer = mediaClaim?.role === "owner" && isVoice
+          ? setTimeout(() => {
+              if (forwardingSettled) return;
+              progressPromise = progress("I received your voice note and I’m still processing it.")
+                .catch((error) => console.warn("[phylax] voice progress receipt failed:", error));
+            }, this.voiceProgressDelayMs)
+          : null;
+        progressTimer?.unref?.();
         let forwarded: Awaited<typeof forwarding>;
         try {
           forwarded = await forwarding;
         } finally {
+          forwardingSettled = true;
+          if (progressTimer) clearTimeout(progressTimer);
+          if (progressPromise) await progressPromise;
           if (mediaClaim) this.mediaInFlight.delete(mediaClaim.canonicalProviderMessageId);
         }
         return {

@@ -47,6 +47,7 @@ export interface TranscriptionEnvelope {
   error?: string;
   /** True when the audio contained no intelligible speech (silence/hallucination). */
   noSpeech?: boolean;
+  timing?: { queue_wait_ms: number | null; runtime_ms: number | null };
 }
 
 // Whisper-family models hallucinate filler on silent or sub-second audio —
@@ -627,7 +628,7 @@ async function transcribeWithGroq(
  * WAV whisper.cpp expects (any size — it's local, no upload cap), then
  * whisper-cli writes a .txt we read back.
  */
-type TranscribeOptions =
+export type TranscribeOptions =
   | {
       model?: string;
       groqApiKey?: string | null;
@@ -639,6 +640,7 @@ type TranscribeOptions =
       durationSeconds?: number;
       onProgress?: (percent: number) => void;
       signal?: AbortSignal;
+      includeTiming?: boolean;
     }
   | ((percent: number) => void);
 
@@ -654,11 +656,22 @@ export async function transcribeAudio(
   filename: string,
   options: TranscribeOptions = {},
 ): Promise<TranscriptionEnvelope> {
+  const startedAt = Date.now();
   const result = await runTranscription(data, filename, options);
-  if (result.success && isDegenerateTranscript(result.transcript ?? "")) {
-    return { success: false, provider: result.provider, error: NO_SPEECH_MESSAGE, noSpeech: true };
+  const includeTiming = typeof options !== "function" && options.includeTiming === true;
+  const timedResult = includeTiming && !result.timing
+    ? { ...result, timing: { queue_wait_ms: 0, runtime_ms: Date.now() - startedAt } }
+    : result;
+  if (timedResult.success && isDegenerateTranscript(timedResult.transcript ?? "")) {
+    return {
+      success: false,
+      provider: timedResult.provider,
+      error: NO_SPEECH_MESSAGE,
+      noSpeech: true,
+      ...(timedResult.timing ? { timing: timedResult.timing } : {}),
+    };
   }
-  return result;
+  return timedResult;
 }
 
 async function runTranscription(
@@ -669,6 +682,7 @@ async function runTranscription(
   const modelName = resolveWhisperModel(typeof options === "function" ? DEFAULT_WHISPER_MODEL : options.model);
   const onProgress = typeof options === "function" ? options : options.onProgress;
   const signal = typeof options === "function" ? undefined : options.signal;
+  const includeTiming = typeof options !== "function" && options.includeTiming === true;
   // The durable setting (UI-pasted, env-seeded on first boot) wins; the raw
   // env var keeps standalone/test use working without a settings store.
   const groqApiKey = (typeof options === "function" ? undefined : options.groqApiKey) ?? process.env.GROQ_API_KEY;
@@ -764,7 +778,9 @@ async function runTranscription(
     return { success: false, provider: "whisper.cpp", error: `model unavailable: ${(err as Error).message}` };
   }
 
-  return runLocalTranscriptionSerialized(async () => {
+  let queueWaitMs: number | null = null;
+  let runtimeStartedAt: number | null = null;
+  const result = await runLocalTranscriptionSerialized(async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whisper-"));
     const input = join(dir, `in${extname(filename) || ".m4a"}`);
     const wav = join(dir, "audio.wav");
@@ -791,5 +807,17 @@ async function runTranscription(
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  }, signal, (waitMs) => {
+    queueWaitMs = waitMs;
+    runtimeStartedAt = Date.now();
   });
+  return includeTiming
+    ? {
+        ...result,
+        timing: {
+          queue_wait_ms: queueWaitMs,
+          runtime_ms: runtimeStartedAt === null ? null : Date.now() - runtimeStartedAt,
+        },
+      }
+    : result;
 }

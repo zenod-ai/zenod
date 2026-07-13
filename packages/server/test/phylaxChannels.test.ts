@@ -16,6 +16,10 @@ import {
   type PhylaxDownstreamCall,
 } from "../src/phylaxChannels.js";
 import { PhylaxPortedRuntime } from "../src/phylaxPortedRuntime.js";
+import {
+  phylaxTranscriptionConfigurationError,
+  phylaxTranscriptionOptions,
+} from "../src/phylaxUnit.js";
 import { WhatsAppStore, type WhatsAppInboundEvent } from "../src/whatsappStore.js";
 
 const dirs: string[] = [];
@@ -131,6 +135,77 @@ describe("PhylaxChannelsOrgan", () => {
     expect(calls).toHaveLength(2);
     expect(calls[1].arguments.message).toContain("transcription_failed");
     expect(calls[1].route.tenantId).toBe("alpha");
+  });
+
+  it("bounds transcription, preserves the artifact, and forwards a typed timeout to Ring", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-transcription-timeout-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    let aborted = false;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      transcriptionDeadlineMs: 100,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "token" }) },
+      transcriber: {
+        async transcribe({ signal }) {
+          await new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => {
+            aborted = true;
+            reject(new Error("cancelled"));
+          }, { once: true }));
+          return {};
+        },
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/token/artifacts/${tenantId}/${artifactId}`,
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: "I could not transcribe that voice note." }] };
+      },
+    });
+
+    const result = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat",
+      messageId: "voice-timeout",
+      media: { bytes: Buffer.from("timeout-audio"), fileName: "voice.ogg", mimeType: "audio/ogg" },
+    });
+
+    expect(aborted).toBe(true);
+    expect(result.handoff.transcription_failed).toMatchObject({ code: "timeout" });
+    expect(result.handoff.artifact_ref).toMatch(/^https:\/\/phylax\.zenod\.dev\/mcp\/token\/artifacts\/alpha\//);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].arguments.message).toContain('"code":"timeout"');
+    expect(existsSync(join(phylaxWhatsAppPaths(dataDir).artifacts, "alpha"))).toBe(true);
+  });
+
+  it("uses a safe local model policy and requires tenant keys for cloud audio", () => {
+    const signal = new AbortController().signal;
+    const localDefault = phylaxTranscriptionOptions(
+      { provider: "local", model: null, key: null },
+      { GROQ_API_KEY: "must-not-leak", OPENAI_API_KEY: "must-not-leak" },
+      signal,
+    );
+    expect(localDefault).toMatchObject({
+      model: "small",
+      groqApiKey: "",
+      openaiApiKey: "",
+      openrouterApiKey: "",
+      includeTiming: true,
+    });
+    expect(phylaxTranscriptionOptions(
+      { provider: "local", model: "base", key: null },
+      {},
+      signal,
+    ).model).toBe("base");
+    expect(phylaxTranscriptionConfigurationError({ provider: "local", model: "not-a-model", key: null }))
+      .toContain("unsupported local transcription model");
+    expect(phylaxTranscriptionOptions(
+      { provider: "local", model: "not-a-model", key: null },
+      { PHYLAX_LOCAL_WHISPER_MODEL: "also-invalid" },
+      signal,
+    ).model).toBe("small");
+    expect(phylaxTranscriptionConfigurationError({ provider: "groq", model: null, key: null }))
+      .toBe("groq transcription requires a tenant-configured provider key");
   });
 
   it("uses only the fresh Phylax-owned /data/whatsapp shape", () => {
@@ -783,6 +858,148 @@ describe("ported gateway integration", () => {
           channelAudit: expect.objectContaining({ downstreamCorrelationId: "ring-correlation-001", outboundProviderId: "sent-1" }),
         }),
       ]));
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("sends one truthful slow-voice progress receipt only for the coalescing owner, then one terminal reply", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-progress-"));
+    dirs.push(dataDir);
+    const sent: Array<{ jid: string; text: string }> = [];
+    let transcriptionCalls = 0;
+    let downstreamCalls = 0;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/token/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe() {
+          transcriptionCalls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 180));
+          return {
+            text_transcript: "strawberry banana",
+            transcription_source: "whisper.cpp small",
+            transcription_timing: { queue_wait_ms: 0, runtime_ms: 180 },
+          };
+        },
+      },
+      async callDownstream() {
+        downstreamCalls += 1;
+        return { content: [{ type: "text", text: "strawberry banana" }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {
+      PHYLAX_MEDIA_COALESCE_WINDOW_MS: "60000",
+      PHYLAX_VOICE_PROGRESS_DELAY_MS: "100",
+    }, {
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(jid, content) {
+          sent.push({ jid, text: content.text });
+          return { key: { id: `sent-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const event = (messageId: string): WhatsAppInboundEvent => ({
+      messageId,
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: { testBytes: "same-voice-bytes" },
+    });
+    try {
+      await Promise.all([
+        runtime.whatsapp.handleEvent(event("voice-owner")),
+        runtime.whatsapp.handleEvent(event("voice-duplicate")),
+      ]);
+      expect(transcriptionCalls).toBe(1);
+      expect(downstreamCalls).toBe(1);
+      expect(sent.map((entry) => entry.text)).toEqual([
+        "I received your voice note and I’m still processing it.",
+        "strawberry banana",
+      ]);
+      const outbound = runtime.whatsappStore.recentTranscript({ sinceMs: 0 })
+        .filter((entry) => entry.direction === "outbound");
+      expect(outbound).toHaveLength(2);
+      expect(outbound.map((entry) => entry.status)).toEqual(["processing", "sent"]);
+      const traces = ["voice-owner", "voice-duplicate"].map((messageId) => runtime.whatsappStore.channelAudit(messageId));
+      expect(traces.filter((trace) => trace?.lifecycleState === "replied")).toHaveLength(1);
+      expect(traces.filter((trace) => trace?.lifecycleState === "coalesced")).toHaveLength(1);
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("makes a timed-out voice terminal at the provider with its typed failure and artifact intact", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-timeout-terminal-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const sent: string[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      transcriptionDeadlineMs: 100,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/token/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe({ signal }) {
+          await new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true }));
+          return {};
+        },
+      },
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: "Please retry that voice note." }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, { PHYLAX_VOICE_PROGRESS_DELAY_MS: "30000" }, {
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: "terminal-timeout-reply" } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const event: WhatsAppInboundEvent = {
+      messageId: "voice-timeout-terminal",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: { testBytes: "terminal-timeout-audio" },
+    };
+    try {
+      await runtime.whatsapp.handleEvent(event);
+      expect(sent).toEqual(["Please retry that voice note."]);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].handoff.transcription_failed).toMatchObject({ code: "timeout" });
+      expect(calls[0].handoff.artifact_ref).toMatch(/^https:\/\/phylax\.zenod\.dev\/mcp\/token\/artifacts\/alpha\//);
+      expect(runtime.whatsappStore.channelAudit(event.messageId)).toMatchObject({
+        lifecycleState: "replied",
+        outboundProviderId: "terminal-timeout-reply",
+        outboundStatus: "sent",
+      });
     } finally {
       runtime.close();
     }

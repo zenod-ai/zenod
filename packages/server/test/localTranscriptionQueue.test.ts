@@ -1,29 +1,46 @@
-import { describe, expect, it } from "vitest";
-
+import { describe, expect, it, vi } from "vitest";
 import { runLocalTranscriptionSerialized } from "../src/localTranscriptionQueue.js";
 
-describe("local transcription queue", () => {
-  it("runs local Whisper work one process at a time", async () => {
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+describe("local transcription FIFO", () => {
+  it("keeps peak concurrency at one and lets the queue progress after an aborted waiter", async () => {
+    const firstRelease = deferred();
+    const firstStarted = deferred();
     let active = 0;
     let peak = 0;
-    const order: string[] = [];
-    const run = (name: string) =>
-      runLocalTranscriptionSerialized(async () => {
-        active += 1;
-        peak = Math.max(peak, active);
-        order.push(`${name}:start`);
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        order.push(`${name}:end`);
-        active -= 1;
-        return name;
-      });
+    const ran: string[] = [];
+    const task = async (name: string, hold?: Promise<void>) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      ran.push(name);
+      if (name === "first") firstStarted.resolve();
+      if (hold) await hold;
+      active -= 1;
+      return name;
+    };
 
-    await expect(Promise.all([run("one"), run("two")])).resolves.toEqual(["one", "two"]);
+    const first = runLocalTranscriptionSerialized(() => task("first", firstRelease.promise));
+    await firstStarted.promise;
+    const controller = new AbortController();
+    const second = runLocalTranscriptionSerialized(() => task("second"), controller.signal);
+    const third = runLocalTranscriptionSerialized(() => task("third"));
+    controller.abort();
+
+    await expect(second).rejects.toMatchObject({ name: "AbortError" });
+    expect(ran).toEqual(["first"]);
+    firstRelease.resolve();
+    await expect(first).resolves.toBe("first");
+    await expect(third).resolves.toBe("third");
+    expect(ran).toEqual(["first", "third"]);
     expect(peak).toBe(1);
-    expect(order).toEqual(["one:start", "one:end", "two:start", "two:end"]);
   });
 
-  it("releases the next task when a transcription fails", async () => {
+  it("releases the next task when an acquired transcription fails", async () => {
     const failed = runLocalTranscriptionSerialized(async () => {
       throw new Error("whisper failed");
     });
@@ -31,5 +48,16 @@ describe("local transcription queue", () => {
 
     await expect(failed).rejects.toThrow("whisper failed");
     await expect(recovered).resolves.toBe("recovered");
+  });
+
+  it("removes the abort listener when the predecessor wins", async () => {
+    const controller = new AbortController();
+    const add = vi.spyOn(controller.signal, "addEventListener");
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+
+    await expect(runLocalTranscriptionSerialized(async () => "done", controller.signal)).resolves.toBe("done");
+    expect(add).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledOnce();
+    expect(remove.mock.calls[0]?.[1]).toBe(add.mock.calls[0]?.[1]);
   });
 });
