@@ -19,6 +19,7 @@ import { PhylaxTenantSettingsStore } from "./phylaxTenantSettings.js";
 import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
+export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
 
@@ -39,7 +40,11 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     },
   });
   const bootLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
-  void prepareModel(bootLocalModel && isValidWhisperModel(bootLocalModel) ? bootLocalModel : "small");
+  void prepareModel(
+    bootLocalModel && isValidWhisperModel(bootLocalModel)
+      ? bootLocalModel
+      : PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL,
+  );
 
   base = createZenodUnit({
     ...options,
@@ -249,7 +254,7 @@ export function phylaxTranscriptionOptions(
     ? requestedLocalModel
     : configuredLocalModel && isValidWhisperModel(configuredLocalModel)
       ? configuredLocalModel
-      : "small";
+      : PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL;
   const key = transcription.key ?? "";
   return {
     model: localModel,

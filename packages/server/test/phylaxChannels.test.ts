@@ -186,24 +186,24 @@ describe("PhylaxChannelsOrgan", () => {
       signal,
     );
     expect(localDefault).toMatchObject({
-      model: "small",
+      model: "base",
       groqApiKey: "",
       openaiApiKey: "",
       openrouterApiKey: "",
       includeTiming: true,
     });
     expect(phylaxTranscriptionOptions(
-      { provider: "local", model: "base", key: null },
+      { provider: "local", model: "small", key: null },
       {},
       signal,
-    ).model).toBe("base");
+    ).model).toBe("small");
     expect(phylaxTranscriptionConfigurationError({ provider: "local", model: "not-a-model", key: null }))
       .toContain("unsupported local transcription model");
     expect(phylaxTranscriptionOptions(
       { provider: "local", model: "not-a-model", key: null },
       { PHYLAX_LOCAL_WHISPER_MODEL: "also-invalid" },
       signal,
-    ).model).toBe("small");
+    ).model).toBe("base");
     expect(phylaxTranscriptionConfigurationError({ provider: "groq", model: null, key: null }))
       .toBe("groq transcription requires a tenant-configured provider key");
   });
