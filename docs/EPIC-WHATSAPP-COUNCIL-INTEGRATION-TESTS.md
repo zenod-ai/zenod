@@ -113,7 +113,7 @@ Run sequentially in one verified WhatsApp conversation. Record provider message 
 | W-P5 | Tester | Phylax agent | Reprove serialized Telegram poller after merged fix | code merged; live unverified | - | `#923` / `9ba7663` | `9ba7663` | One poller per bot/tenant; no recurring 409 after deploy. | Prior live logs repeated `getUpdates 409 Conflict`; `9ba7663` now serializes gateway startup with regression coverage. | 2026-07-12 20:35 CEST | Verify exact deployed SHA and absence of 409 loop; do not reimplement unless it fails. |
 | W-Z1 | Ticket worker | Zenod agent | Make terminal memory receipts linkable and schema-valid | draft | - | - | `c5768d3` | Strict result includes typed evidence ref and deep-linked canonical URL(s). | Runtime has URLs; v4 terminal schema omits them. | 2026-07-12 20:24 CEST | Update schema/runtime/tests generically. |
 | W-C1 | Ticket worker | Calli agent | Enforce exact held draft inside `approve_send` | integrated | - | `main` / `7f5fdb0` | `c5768d3` | Missing/altered standing action fails; exact pending action succeeds once. | Tenant-scoped opaque action IDs, exact-byte matching, expiry, and legacy fallback are merged. | 2026-07-13 02:34 CEST | Retain backward compatibility while W-C1a adds the preferred safe draft surface. |
-| W-C1a | Ticket worker | Calli agent | Expose first-class safe `draft_post` held-state tool | ready for integration | W-C1 | [#949](https://github.com/zenod-ai/zenod/issues/949) / `codex/w-c1-draft-post` / `c0df55c` | `a99db25` | Zero upstream call; typed tenant-held action; old `createPosts` flow remains compatible. | 16 focused Calli tests, 759 server tests, skill contract, and server typecheck pass; 20 approvals still collapse to one receipt. | 2026-07-13 02:34 CEST | Push branch, open PR, integrate after review; no production deploy in this lane. |
+| W-C1a | Ticket worker | Calli agent | Expose first-class safe `draft_post` held-state tool | integrated | W-C1 | [#949](https://github.com/zenod-ai/zenod/issues/949) / [#950](https://github.com/zenod-ai/zenod/pull/950) / `32a7d58` | `a99db25` | Zero upstream call; typed tenant-held action; old `createPosts` flow remains compatible. | CI, Docker build, 16 focused Calli tests, 759 server tests, skill contract, and server typecheck pass; 20 approvals still collapse to one receipt. | 2026-07-13 02:39 CEST | Calli code is complete; production deploy and downstream catalog/selection proof remain human/steward gated. |
 | W-C2 | Ticket worker | Calli agent | Make publication exactly-once under concurrency/unknowns | integrated | W-C1 | `main` / `7f5fdb0` | `c5768d3` | 20 approvals create one post; unknown outcome reconciles; action ID scopes same-text drafts. | SQLite claim/lease/receipt state is atomic across instances; unknown cannot auto-retry; reconciliation is provider-read-only. | 2026-07-13 02:34 CEST | No Calli correctness work remains; retain regression coverage. |
 
 ## Owner Commentary
@@ -280,6 +280,14 @@ Assignment identity: `calli-agent`
 Branch / latest commit: `codex/w-c1-draft-post` / `c0df55c`
 Base / integration target: `a99db25` / `main`
 Last verified: 2026-07-13 02:34 CEST
+
+### 2026-07-13 - calli-agent - W-C1a integrated
+
+Outcome: [#950](https://github.com/zenod-ai/zenod/pull/950) passed repository CI and Docker build, then squash-merged to `main` as `32a7d581a4f2e9de5928d0d6c9f816ae518ce248`; [#949](https://github.com/zenod-ai/zenod/issues/949) is closed.
+Scope confirmation: Only the Callisthenes public facade, its tests, its attached skill bundle, and this Calli ledger/handoff were changed. Ring behavior was not edited.
+Next: `/root` may deploy the Calli service from `32a7d58` and ask Ring to refresh/discover `draft_post`; no public post is needed to prove the held step.
+Assignment identity: `calli-agent`
+Last verified: 2026-07-13 02:39 CEST
 
 ## Open Questions
 
