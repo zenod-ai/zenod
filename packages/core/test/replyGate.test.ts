@@ -50,13 +50,13 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
 
     expect(out.isActionTurn).toBe(true);
     expect(out.intercepted).toBe(true);
-    expect(out.text).toBe("Nothing was changed: approve_send returned no verified same-turn mutation receipt.");
+    expect(out.text).toBe("Nothing pending to approve.");
     expect(out.text).not.toMatch(/posting/i);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       tools: ["approve_send"],
       discardedText: "Approved. Posting now!",
-      deliveredText: "Nothing was changed: approve_send returned no verified same-turn mutation receipt.",
+      deliveredText: "Nothing pending to approve.",
     });
   });
 
@@ -185,6 +185,33 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("structuredContent");
   });
 
+  it("uses one concise model synthesis only when it cites an exact URL returned by a multi-step peer read", () => {
+    const terminalUrl = "https://example.com/memory/terminal";
+    const actions = [
+      {
+        ...action("generic_search", JSON.stringify({
+          content: [{ type: "text", text: "many noisy search hits https://example.com/search/one" }],
+          structuredContent: { sources: Array.from({ length: 8 }, (_, index) => ({ sourceUrl: `https://example.com/search/${index}` })) },
+        })),
+        peerAction: true,
+      },
+      {
+        ...action("generic_get", JSON.stringify({
+          content: [{ type: "text", text: `Full terminal record. Source: ${terminalUrl}` }],
+          structuredContent: { sourceUrl: terminalUrl },
+        })),
+        peerAction: true,
+      },
+    ];
+    const drafted = `One concise grounded answer. Source: ${terminalUrl}`;
+
+    const out = applyReplyGate(drafted, actions);
+
+    expect(out.text).toBe(drafted);
+    expect(out.text).not.toContain("many noisy search hits");
+    expect(out.text).not.toContain("Full terminal record");
+  });
+
   it("does not duplicate structured evidence already present in the peer answer", () => {
     const url = "https://example.com/evidence/41";
     const out = applyReplyGate("A model-generated summary.", [{
@@ -260,6 +287,18 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     const out = applyReplyGate('{"published":true,"url":"https://x.com/user/status/{POST_ID}"}', []);
     expect(out.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
     expect(out.intercepted).toBe(true);
+  });
+
+  it("blocks a zero-tool claim that an approval action was held", () => {
+    const out = applyReplyGate("Held for approval; nothing was sent or changed.", []);
+    expect(out.text).toBe("Nothing was held or changed: no same-turn tool result created a standing action.");
+    expect(out.intercepted).toBe(true);
+  });
+
+  it("does not mistake an honest nothing-pending statement for a standing-action claim", () => {
+    const out = applyReplyGate("Nothing pending to approve.", []);
+    expect(out.text).toBe("Nothing pending to approve.");
+    expect(out.intercepted).toBe(false);
   });
 
   it("does not mistake an annotation-marked mutation attempt for a receipt", () => {

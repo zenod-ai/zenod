@@ -34,7 +34,7 @@ import { getNote } from "../ops/get.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
-import type { BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
+import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
 import { sanitizeGroundedAnswer } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
@@ -46,7 +46,7 @@ import {
   reconcileTaskingReply,
   summarizeActionsForReply,
 } from "../taskingPolicy.js";
-import { applyReplyGate } from "../replyGate.js";
+import { applyReplyGate, hasStandingActionClaim, isActionTool } from "../replyGate.js";
 import {
   approvalTokenSnapshot,
   cancelStandingApprovals,
@@ -57,6 +57,17 @@ import {
 
 const LONG_MESSAGE_DIGEST_CHARS = 1_200;
 const ZENOD_DIGEST_TOOL = "zenod_digest_message";
+const GROUNDED_STANDING_ACTION_RETRY = [
+  "Host retry: the previous answer claimed an action was held for approval, but no action-producing tool result exists, so no standing action exists.",
+  "Retry the original request once. If a discovered tool can create or hold the requested action safely, call that exact tool once.",
+  "Otherwise state plainly that nothing was held. Never claim held, pending, drafted, sent, or changed without a same-turn tool result.",
+].join(" ");
+
+function hasStandingActionEvidence(actions: readonly TaskingAction[]): boolean {
+  return actions.some((action) =>
+    isActionTool(action.tool) || action.mutationAttempt === true || action.verifiedMutationReceipt === true,
+  );
+}
 
 /**
  * The conversation key for a surface. One continuous thread per surface today;
@@ -1381,30 +1392,41 @@ export function createEngine(options: EngineOptions): BrainEngine {
       : message;
     reportTokenCost("chat", [briefing.text, ...window.map((m) => m.text), question], briefing);
 
-    const result = await llm.answer(
-      {
-        question,
-        conversationId: approvalCid,
-        vaultBriefing: briefing.text,
-        conversation: window.map((m) => ({ role: m.role, text: m.text })),
-        ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
-        ...(chatOptions.onToolEvent ? { onToolEvent: chatOptions.onToolEvent } : {}),
-        onPeerAction: (tool, inp, res, metadata) => actions.push({
-          tool,
-          input: inp,
-          result: res,
-          ...(metadata?.peerAction ? { peerAction: true } : {}),
-          ...(metadata?.mutationAttempt ? { mutationAttempt: true } : {}),
-          ...(metadata?.verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
-          ...(metadata?.verifiedReceiptText ? { verifiedReceiptText: metadata.verifiedReceiptText } : {}),
-        }),
-        onReadAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
-      },
-      readTools(),
+    const answerInput: AnswerInput = {
+      question,
+      conversationId: approvalCid,
+      vaultBriefing: briefing.text,
+      conversation: window.map((m) => ({ role: m.role, text: m.text })),
+      ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
+      ...(chatOptions.onToolEvent ? { onToolEvent: chatOptions.onToolEvent } : {}),
+      onPeerAction: (tool, inp, res, metadata) => actions.push({
+        tool,
+        input: inp,
+        result: res,
+        ...(metadata?.peerAction ? { peerAction: true } : {}),
+        ...(metadata?.mutationAttempt ? { mutationAttempt: true } : {}),
+        ...(metadata?.verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
+        ...(metadata?.verifiedReceiptText ? { verifiedReceiptText: metadata.verifiedReceiptText } : {}),
+      }),
+      onReadAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
+    };
+    const readToolSet = readTools();
+    let result = await llm.answer(
+      answerInput,
+      readToolSet,
       taskTools,
       options.driveTools,
       options.peerTools,
     );
+    if (!hasStandingActionEvidence(actions) && options.peerTools && hasStandingActionClaim(result.text)) {
+      result = await llm.answer(
+        { ...answerInput, hostInstruction: GROUNDED_STANDING_ACTION_RETRY, onTextDelta: () => {} },
+        readToolSet,
+        taskTools,
+        options.driveTools,
+        options.peerTools,
+      );
+    }
     const text = finalizeReply(result.text, actions, message, approvalCid);
     await persistApprovalTurn(cid, approvalCid);
     await state.appendMessage(cid, "assistant", text, surface);
@@ -1445,28 +1467,42 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const briefing = await vaultBriefing();
     const question = contextNote ? `${contextNote}\n\nOriginal user message:\n${input.text}` : input.text;
     reportTokenCost("tasking", [briefing.text, ...window.map((m) => m.text), question], briefing);
-    const result = await llm.answer(
-      {
-        question,
-        conversationId: approvalCid,
-        vaultBriefing: briefing.text,
-        conversation: window.map((m) => ({ role: m.role, text: m.text })),
-        onPeerAction: (tool, inp, res, metadata) => actions.push({
-          tool,
-          input: inp,
-          result: res,
-          ...(metadata?.peerAction ? { peerAction: true } : {}),
-          ...(metadata?.mutationAttempt ? { mutationAttempt: true } : {}),
-          ...(metadata?.verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
-          ...(metadata?.verifiedReceiptText ? { verifiedReceiptText: metadata.verifiedReceiptText } : {}),
-        }),
-        onReadAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
-      },
-      readTools(),
-      repo || options.taskingTools ? buildTaskTools(input.surface, (action) => actions.push(action), input.rawEvidence) : undefined,
+    const answerInput: AnswerInput = {
+      question,
+      conversationId: approvalCid,
+      vaultBriefing: briefing.text,
+      conversation: window.map((m) => ({ role: m.role, text: m.text })),
+      onPeerAction: (tool, inp, res, metadata) => actions.push({
+        tool,
+        input: inp,
+        result: res,
+        ...(metadata?.peerAction ? { peerAction: true } : {}),
+        ...(metadata?.mutationAttempt ? { mutationAttempt: true } : {}),
+        ...(metadata?.verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
+        ...(metadata?.verifiedReceiptText ? { verifiedReceiptText: metadata.verifiedReceiptText } : {}),
+      }),
+      onReadAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
+    };
+    const readToolSet = readTools();
+    const answerTaskTools = repo || options.taskingTools
+      ? buildTaskTools(input.surface, (action) => actions.push(action), input.rawEvidence)
+      : undefined;
+    let result = await llm.answer(
+      answerInput,
+      readToolSet,
+      answerTaskTools,
       options.driveTools,
       options.peerTools,
     );
+    if (!hasStandingActionEvidence(actions) && options.peerTools && hasStandingActionClaim(result.text)) {
+      result = await llm.answer(
+        { ...answerInput, hostInstruction: GROUNDED_STANDING_ACTION_RETRY },
+        readToolSet,
+        answerTaskTools,
+        options.driveTools,
+        options.peerTools,
+      );
+    }
     const text = finalizeReply(result.text, actions, input.text, approvalCid);
     await persistApprovalTurn(cid, approvalCid);
     await state.appendMessage(cid, "assistant", text, input.surface);

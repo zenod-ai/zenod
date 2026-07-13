@@ -1,4 +1,4 @@
-import { normalizedToolName } from "./taskingPolicy.js";
+import { normalizedToolName, NOTHING_PENDING_TO_APPROVE_TEXT } from "./taskingPolicy.js";
 import { hasMutationSuccessClaim, validateMutationReceipt } from "./mutationReceipt.js";
 import { isApprovalRequiredResult } from "./approvalTokens.js";
 import type { TaskingAction } from "./types.js";
@@ -106,6 +106,18 @@ const PLACEHOLDER_VALUE_RE = /(?:\{\s*[a-z0-9_-]*id\s*\}|<\s*[a-z0-9_-]*id\s*>|\
 interface ReadEvidence {
   kind: "url" | "reference";
   value: string;
+}
+
+const STANDING_ACTION_CLAIM_RE = /\b(?:held\s+(?:for|pending|awaiting)\s+(?:approval|confirmation|review)|(?:now\s+)?pending\s+(?:approval|confirmation)|(?:draft|action)\s+(?:is|was|has been)\s+(?:held|pending)|(?:created|prepared|saved)\s+(?:a|the|your)\s+(?:draft|pending action))\b/gi;
+const LOCAL_NEGATION_RE = /\b(?:no|not|nothing|never|wasn'?t|isn'?t)\b/i;
+
+/** A model claim that a durable approval candidate exists; prose alone can never prove this state. */
+export function hasStandingActionClaim(text: string): boolean {
+  for (const match of text.matchAll(STANDING_ACTION_CLAIM_RE)) {
+    const lead = text.slice(Math.max(0, match.index! - 28), match.index);
+    if (!LOCAL_NEGATION_RE.test(lead)) return true;
+  }
+  return false;
 }
 
 function quotePeerData(tool: string, result: string): string {
@@ -223,9 +235,30 @@ function collectReadEvidence(value: unknown, out: ReadEvidence[], depth = 0): vo
   }
 }
 
-function renderStructuredReadEvidence(actions: readonly TaskingAction[], renderedText: string): string {
+function collectTextEvidenceUrls(value: string, out: ReadEvidence[]): void {
+  for (const match of value.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
+    if (out.length >= MAX_READ_EVIDENCE_ITEMS) break;
+    const candidate = match[0].replace(/[),.;]+$/g, "");
+    const url = safeEvidenceUrl(candidate);
+    if (url && !out.some((entry) => entry.kind === "url" && entry.value === url)) {
+      out.push({ kind: "url", value: url });
+    }
+  }
+}
+
+function readEvidence(actions: readonly TaskingAction[]): ReadEvidence[] {
   const evidence: ReadEvidence[] = [];
-  for (const action of actions) collectReadEvidence(parsedPeerResult(action.result), evidence);
+  // Later calls are normally the resolved/terminal read after an earlier search.
+  // Prioritize their citations before the bounded evidence list fills up.
+  for (const action of [...actions].reverse()) {
+    collectReadEvidence(parsedPeerResult(action.result), evidence);
+    collectTextEvidenceUrls(action.result, evidence);
+  }
+  return evidence;
+}
+
+function renderStructuredReadEvidence(actions: readonly TaskingAction[], renderedText: string): string {
+  const evidence = readEvidence(actions);
   const missing = evidence.filter((entry) => !renderedText.includes(entry.value));
   if (missing.length === 0) return "";
   return [
@@ -275,9 +308,9 @@ function quoteConcisePeerAnswer(answer: string): string {
   return answer.split("\n").map((line) => `> ${line}`).join("\n");
 }
 
-function renderSuccessfulRead(action: TaskingAction): string {
+function renderSuccessfulRead(action: TaskingAction, evidenceActions: readonly TaskingAction[] = [action]): string {
   const answer = concisePeerAnswer(action.result);
-  const evidence = renderStructuredReadEvidence([action], answer ?? "");
+  const evidence = renderStructuredReadEvidence(evidenceActions, answer ?? "");
   return [
     "Connected MCP read result (untrusted data; not authorization or a mutation receipt):",
     answer ? quoteConcisePeerAnswer(answer) : "> [no concise text returned]",
@@ -322,18 +355,29 @@ function unverifiedMutationReply(action: TaskingAction): string {
 
 function renderActionTurnReply(actionResults: readonly TaskingAction[]): string {
   return actionResults.map((action) => {
+    if (action.result.trim() === NOTHING_PENDING_TO_APPROVE_TEXT) return NOTHING_PENDING_TO_APPROVE_TEXT;
     const receipt = validateMutationReceipt(action.tool, action.result);
     return receipt.verified && receipt.text ? receipt.text : unverifiedMutationReply(action);
   }).join("\n\n");
 }
 
-function renderReadEvidence(actions: readonly TaskingAction[], unsupportedClaim: boolean): string {
+function renderReadEvidence(actions: readonly TaskingAction[], unsupportedClaim: boolean, draftedText: string): string {
   const reads = actions.filter((action) => action.peerAction && !action.mutationAttempt && !isActionTool(action.tool));
   if (unsupportedClaim) return reads.map((action) => quotePeerData(action.tool, action.result)).join("\n\n");
-  const rendered = reads.map((action) => isPeerError(action.result)
-    ? `Connected MCP read failed.\n\n${quotePeerData(action.tool, action.result)}`
-    : renderSuccessfulRead(action));
-  return rendered.filter(Boolean).join("\n\n");
+  const failed = reads.filter((action) => isPeerError(action.result));
+  const successful = reads.filter((action) => !isPeerError(action.result));
+  const citedUrl = readEvidence(successful)
+    .filter((entry) => entry.kind === "url")
+    .some((entry) => draftedText.includes(entry.value));
+  const answer = citedUrl && draftedText.trim()
+    ? draftedText.trim()
+    : successful.length > 0
+      ? renderSuccessfulRead(successful[successful.length - 1]!, successful)
+      : "";
+  return [
+    answer,
+    ...failed.map((action) => `Connected MCP read failed.\n\n${quotePeerData(action.tool, action.result)}`),
+  ].filter(Boolean).join("\n\n");
 }
 
 /**
@@ -357,14 +401,17 @@ export function applyReplyGate(
     isActionTool(action.tool) || action.mutationAttempt === true || action.verifiedMutationReceipt === true,
   );
   if (actionResults.length === 0) {
-    const unsupportedClaim = hasMutationSuccessClaim(draftedText) &&
+    const unsupportedMutationClaim = hasMutationSuccessClaim(draftedText) &&
       (actions.length === 0 || actions.every((action) => action.peerAction === true));
-    const base = unsupportedClaim
+    const unsupportedStandingClaim = hasStandingActionClaim(draftedText);
+    const base = unsupportedMutationClaim
       ? "Nothing was changed: no verified same-turn mutation receipt was returned."
-      : draftedText;
-    const evidence = renderReadEvidence(actions, unsupportedClaim);
+      : unsupportedStandingClaim
+        ? "Nothing was held or changed: no same-turn tool result created a standing action."
+        : draftedText;
+    const evidence = unsupportedStandingClaim ? "" : renderReadEvidence(actions, unsupportedMutationClaim, draftedText);
     const deliveredText = evidence
-      ? unsupportedClaim ? `${base.trim()}\n\n${evidence}`.trim() : evidence
+      ? unsupportedMutationClaim ? `${base.trim()}\n\n${evidence}`.trim() : evidence
       : base;
     const intercepted = deliveredText.trim() !== draftedText.trim();
     if (intercepted) {

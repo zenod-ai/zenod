@@ -130,6 +130,11 @@ export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
 export function isMcpCatalogInspectionQuestion(question: string): boolean {
   const normalized = question.replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
 
+  // Terse chat prompts are still explicit catalog questions. Requiring a second
+  // inquiry word made `tools?` fall through to the model, which could then choose
+  // an unrelated connected mutation tool.
+  if (/^(?:tools?|capabilit(?:y|ies)|catalog|schemas?|skills?)\s*[?!.]*$/i.test(normalized)) return true;
+
   // Questions whose subject is the connected peer itself are unambiguously
   // about its advertised capability, rather than a request to perform work.
   if (/\bwhat can (?:this|the|my|a|an|any) (?:connected )?(?:mcp|peer|unit) do\b/i.test(normalized)) return true;
@@ -1215,7 +1220,7 @@ export class AiSdkBrainLlm implements BrainLlm {
       "ABSENCE GUARD: never say requested information is absent after only one empty, weak, or off-topic search. The search tool automatically performs one deterministic retry for a weak first result; consider both results and read relevant evidence before concluding unknown.",
       "SYNTHETIC EVIDENCE: 'synthetic test data' or quarantine in Inbox means it is not a real user fact; it does NOT mean the evidence is absent or forbidden to recall. When the user explicitly asks about a synthetic fixture, answer from its evidence and clearly label the answer synthetic. Do not promote it to a real user fact. Attributes not present in that evidence remain unknown.",
     ].join(" ");
-    const systemText = [input.vaultBriefing, ...briefingExtras, budgetNote, citationNote]
+    const systemText = [input.vaultBriefing, input.hostInstruction, ...briefingExtras, budgetNote, citationNote]
       .filter(Boolean)
       .join("\n\n");
     const config = {

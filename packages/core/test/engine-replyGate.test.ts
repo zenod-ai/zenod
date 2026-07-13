@@ -28,6 +28,29 @@ class ScriptedLlm {
   }
 }
 
+class HoldRecoveryLlm {
+  calls = 0;
+  questions: string[] = [];
+  hostInstructions: Array<string | undefined> = [];
+
+  async answer(input: AnswerInput): Promise<AnswerResult> {
+    this.calls += 1;
+    this.questions.push(input.question);
+    this.hostInstructions.push(input.hostInstruction);
+    if (this.calls === 1) {
+      input.onPeerAction?.("portable_read", { query: "context" }, '{"answer":"context only"}', {
+        peerAction: true,
+      });
+      return { text: "Held for approval; nothing was sent or changed.", readPaths: [] };
+    }
+    input.onPeerAction?.("portable_create", { text: "exact" }, "[approval_required] held", {
+      peerAction: true,
+      mutationAttempt: true,
+    });
+    return { text: "The draft is held.", readPaths: [] };
+  }
+}
+
 function vaultlessEngine(llm: BrainLlm) {
   return createEngine({ llm, state: new SqliteStateStore(":memory:") });
 }
@@ -42,7 +65,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("approve", "web");
 
-    expect(reply.text).toContain("Nothing was changed: approve_send returned no verified same-turn mutation receipt.");
+    expect(reply.text).toBe("Nothing pending to approve.");
     expect(reply.text).not.toMatch(/posting/i);
     // Runtime assertion + telemetry: the interception is observable, not silent.
     expect(warn).toHaveBeenCalledTimes(1);
@@ -146,5 +169,35 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     const engine = vaultlessEngine(new ScriptedLlm(null, "Published. https://x.com/user/status/{POST_ID}") as unknown as BrainLlm);
     const reply = await engine.chat("was it sent?", "web");
     expect(reply.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
+  });
+
+  it("retries one unsupported zero-tool hold and accepts only the grounded peer hold", async () => {
+    const llm = new HoldRecoveryLlm();
+    const engine = createEngine({
+      llm: llm as unknown as BrainLlm,
+      state: new SqliteStateStore(":memory:"),
+      peerTools: {
+        portable_read: {
+          description: "Read remote context without changing state.",
+          connectedMcp: true,
+          async run() { return '{"answer":"context only"}'; },
+        },
+        portable_create: {
+          description: "Create a held remote action.",
+          connectedMcp: true,
+          verifiedMutationReceipt: true,
+          async run() { return "[approval_required] held"; },
+        },
+      },
+    });
+
+    const reply = await engine.chat("create this exact remote action", "web");
+
+    expect(llm.calls).toBe(2);
+    expect(llm.questions).toEqual(["create this exact remote action", "create this exact remote action"]);
+    expect(llm.hostInstructions[0]).toBeUndefined();
+    expect(llm.hostInstructions[1]).toContain("no standing action exists");
+    expect(reply.text).toContain("Held for approval; nothing was sent or changed.");
+    expect(reply.text).toContain('"text": "exact"');
   });
 });

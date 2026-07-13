@@ -74,6 +74,8 @@ describe("answer tool-step budget", () => {
   });
 
   it.each([
+    "tools?",
+    "capabilities!",
     "What are your capabilities?",
     "What can this connected MCP do?",
     "List my connected units",

@@ -96,6 +96,8 @@ export interface ChatToolEvent {
 
 export interface AnswerInput {
   question: string;
+  /** Host-owned transient instruction for a bounded recovery attempt; never part of user content or tool arguments. */
+  hostInstruction?: string;
   /**
    * Stable id for the conversation this question belongs to (engine.ts's
    * conversationId(surface, key)). Scopes the M-1 standing-draft approval token —
