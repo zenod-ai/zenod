@@ -103,6 +103,26 @@ export interface PhylaxInboundReceipt {
   }>;
 }
 
+export interface PhylaxFailureAudit {
+  tenantId: string;
+  sender: string;
+  transcriptText: string | null;
+  transcriptProvenance: string | null;
+  transcriptionFailureCode: string | null;
+  artifactRef: string | null;
+  artifactSha256: string | null;
+  downstreamDestination: string;
+  downstreamCorrelationId: string | null;
+  downstreamReceipt: Record<string, unknown> | null;
+  failureStage: "downstream";
+  failureCode: "downstream_unauthorized" | "downstream_rejected" | "downstream_unavailable" | "downstream_empty_reply";
+  timing: {
+    transcriptionQueueWaitMs: number | null;
+    transcriptionRuntimeMs: number | null;
+    downstreamMs: number;
+  };
+}
+
 function objectValue(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -174,10 +194,18 @@ export class PhylaxChannelError extends Error {
   constructor(
     readonly code: "unmatched_sender" | "invalid_input" | "downstream_error" | "delivery_error",
     message: string,
+    readonly audit?: PhylaxFailureAudit,
   ) {
     super(message);
     this.name = "PhylaxChannelError";
   }
+}
+
+function downstreamFailureCode(error: unknown): PhylaxFailureAudit["failureCode"] {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(?:unauthori[sz]ed|401)\b/i.test(message)
+    ? "downstream_unauthorized"
+    : "downstream_unavailable";
 }
 
 export function phylaxWhatsAppPaths(dataDir: string) {
@@ -333,15 +361,61 @@ export class PhylaxChannelsOrgan {
       },
       handoff,
     };
+    const failureAudit = (
+      downstreamMs: number,
+      failureCode: PhylaxFailureAudit["failureCode"],
+      audit: { correlationId: string | null; receipt: Record<string, unknown> | null } = {
+        correlationId: null,
+        receipt: null,
+      },
+    ): PhylaxFailureAudit => ({
+      tenantId: route.tenantId,
+      sender,
+      transcriptText: handoff.text_transcript ?? null,
+      transcriptProvenance: handoff.transcription_source ?? (input.media ? "whatsapp-media" : "whatsapp-text"),
+      transcriptionFailureCode: handoff.transcription_failed?.code ?? null,
+      artifactRef: handoff.artifact_ref ?? null,
+      artifactSha256: artifact?.sha256 ?? null,
+      downstreamDestination: safeDownstreamDestination(route),
+      downstreamCorrelationId: audit.correlationId,
+      downstreamReceipt: audit.receipt,
+      failureStage: "downstream",
+      failureCode,
+      timing: { transcriptionQueueWaitMs, transcriptionRuntimeMs, downstreamMs },
+    });
     const downstreamStartedAt = Date.now();
-    const downstream = await (this.options.callDownstream ?? callRing)(call);
+    let downstream: PeerToolResult;
+    try {
+      downstream = await (this.options.callDownstream ?? callRing)(call);
+    } catch (error) {
+      throw new PhylaxChannelError(
+        "downstream_error",
+        error instanceof Error ? error.message : "tenant downstream request failed",
+        failureAudit(Math.max(0, Date.now() - downstreamStartedAt), downstreamFailureCode(error)),
+      );
+    }
     const downstreamMs = Math.max(0, Date.now() - downstreamStartedAt);
+    const audit = downstreamAudit(downstream);
     if (downstream.isError) {
-      throw new PhylaxChannelError("downstream_error", textFromResult(downstream) || "tenant downstream rejected the message");
+      const message = textFromResult(downstream) || "tenant downstream rejected the message";
+      throw new PhylaxChannelError(
+        "downstream_error",
+        message,
+        failureAudit(
+          downstreamMs,
+          /\b(?:unauthori[sz]ed|401)\b/i.test(message) ? "downstream_unauthorized" : "downstream_rejected",
+          audit,
+        ),
+      );
     }
     const replyText = textFromResult(downstream);
-    if (!replyText) throw new PhylaxChannelError("downstream_error", "tenant downstream returned no reply");
-    const audit = downstreamAudit(downstream);
+    if (!replyText) {
+      throw new PhylaxChannelError(
+        "downstream_error",
+        "tenant downstream returned no reply",
+        failureAudit(downstreamMs, "downstream_empty_reply", audit),
+      );
+    }
     return {
       tenantId: route.tenantId,
       sender,

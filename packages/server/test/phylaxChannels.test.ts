@@ -339,6 +339,23 @@ describe("ported gateway integration", () => {
       outboundSendMs: 55,
       totalLifecycleMs: 165,
     });
+    migrated.recordChannelFailure({
+      providerMessageId: "migration-failure-001",
+      tenantId: "alpha",
+      senderId: "34611111111",
+      downstreamDestination: "ring.zenod.dev#tenant:alpha",
+      failureStage: "downstream",
+      failureCode: "downstream_unauthorized",
+      transcriptionFailureCode: "timeout",
+      timing: { downstreamMs: 9, totalLifecycleMs: 12 },
+    });
+    expect(migrated.channelAudit("migration-failure-001")).toMatchObject({
+      lifecycleState: "failed",
+      failureStage: "downstream",
+      failureCode: "downstream_unauthorized",
+      transcriptionFailureCode: "timeout",
+      timing: { downstreamMs: 9, totalLifecycleMs: 12 },
+    });
     migrated.close();
   });
 
@@ -1000,6 +1017,88 @@ describe("ported gateway integration", () => {
         outboundProviderId: "terminal-timeout-reply",
         outboundStatus: "sent",
       });
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("persists a secret-free provider trace when transcription times out and Ring rejects authorization", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-timeout-unauthorized-"));
+    dirs.push(dataDir);
+    const sent: string[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      transcriptionDeadlineMs: 100,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://ring.zenod.dev/mcp/token-bearing-path",
+          downstreamToken: "ring-secret-must-not-persist",
+        }),
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/unit-token/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe({ signal }) {
+          await new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true }));
+          return {};
+        },
+      },
+      async callDownstream() {
+        throw new Error('Streamable HTTP error: Error POSTing to endpoint: {"error":"Unauthorized"}');
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, { PHYLAX_VOICE_PROGRESS_DELAY_MS: "30000" }, {
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: "terminal-unauthorized-reply" } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const event: WhatsAppInboundEvent = {
+      messageId: "3BA091E37C168738F529",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: { testBytes: "deterministic-timeout-audio" },
+    };
+    try {
+      await runtime.whatsapp.handleEvent(event);
+      expect(sent).toHaveLength(1);
+      const trace = runtime.whatsappStore.channelAudit(event.messageId);
+      expect(trace).toMatchObject({
+        providerMessageId: event.messageId,
+        tenantId: "alpha",
+        senderId: "34611111111",
+        transcriptProvenance: "whatsapp-media",
+        transcriptionFailureCode: "timeout",
+        downstreamDestination: "ring.zenod.dev#tenant:alpha",
+        failureStage: "downstream",
+        failureCode: "downstream_unauthorized",
+        lifecycleState: "failed",
+        outboundProviderId: "terminal-unauthorized-reply",
+        outboundStatus: "error",
+        timing: {
+          transcriptionQueueWaitMs: null,
+          outboundSendMs: expect.any(Number),
+          totalLifecycleMs: expect.any(Number),
+        },
+      });
+      expect(trace?.timing.transcriptionRuntimeMs).toBeGreaterThanOrEqual(90);
+      expect(trace?.timing.downstreamMs).toBeGreaterThanOrEqual(0);
+      expect(trace?.artifactSha256).toBe("b127e1dcfb96beb78b6c6f8367a3a7ad3d95f02684afe7d21241c65a35e8d650");
+      expect(JSON.stringify(trace)).not.toMatch(/token-bearing-path|ring-secret-must-not-persist|authorization|bearer/i);
     } finally {
       runtime.close();
     }

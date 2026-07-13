@@ -150,6 +150,7 @@ export interface WhatsAppChannelAuditInput {
   senderId: string;
   transcriptText?: string | null;
   transcriptProvenance?: string | null;
+  transcriptionFailureCode?: string | null;
   artifactRef?: string | null;
   artifactSha256?: string | null;
   downstreamDestination: string;
@@ -159,6 +160,11 @@ export interface WhatsAppChannelAuditInput {
   canonicalProviderMessageId?: string | null;
   coalescingState?: "owner" | null;
   timing?: Partial<WhatsAppChannelTiming>;
+}
+
+export interface WhatsAppChannelFailureInput extends WhatsAppChannelAuditInput {
+  failureStage: "downstream";
+  failureCode: "downstream_unauthorized" | "downstream_rejected" | "downstream_unavailable" | "downstream_empty_reply";
 }
 
 export interface WhatsAppChannelTiming {
@@ -176,6 +182,7 @@ export interface WhatsAppChannelAuditRecord {
   senderId: string;
   transcriptText: string | null;
   transcriptProvenance: string | null;
+  transcriptionFailureCode: string | null;
   artifactRef: string | null;
   artifactSha256: string | null;
   downstreamDestination: string;
@@ -184,6 +191,8 @@ export interface WhatsAppChannelAuditRecord {
   replyText: string | null;
   canonicalProviderMessageId: string | null;
   coalescingState: "owner" | "coalesced" | null;
+  failureStage: "downstream" | null;
+  failureCode: WhatsAppChannelFailureInput["failureCode"] | null;
   mediaRecovery?: WhatsAppMediaRecoveryRecord;
   lifecycleState: WhatsAppChannelLifecycle;
   outboundProviderId: string | null;
@@ -256,6 +265,11 @@ function boundedRecoveryReply(value: string | null | undefined): string | null {
 
 function durationMs(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+}
+
+function auditCode(value: string | null | undefined): string | null {
+  const code = value?.trim();
+  return code && /^[a-z0-9_.-]{1,64}$/i.test(code) ? code : null;
 }
 
 function epochMsFromWhatsAppTimestamp(value: unknown): number | null {
@@ -386,6 +400,7 @@ export class WhatsAppStore {
         sender_id TEXT NOT NULL,
         transcript_text TEXT,
         transcript_provenance TEXT,
+        transcription_failure_code TEXT,
         artifact_ref TEXT,
         artifact_sha256 TEXT,
         downstream_destination TEXT NOT NULL,
@@ -394,6 +409,8 @@ export class WhatsAppStore {
         reply_text TEXT,
         canonical_provider_message_id TEXT,
         coalescing_state TEXT,
+        failure_stage TEXT,
+        failure_code TEXT,
         lifecycle_state TEXT NOT NULL,
         outbound_provider_id TEXT,
         outbound_status TEXT,
@@ -450,6 +467,15 @@ export class WhatsAppStore {
     }
     if (!auditColumns.some((column) => column.name === "coalescing_state")) {
       this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN coalescing_state TEXT");
+    }
+    if (!auditColumns.some((column) => column.name === "transcription_failure_code")) {
+      this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN transcription_failure_code TEXT");
+    }
+    if (!auditColumns.some((column) => column.name === "failure_stage")) {
+      this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN failure_stage TEXT");
+    }
+    if (!auditColumns.some((column) => column.name === "failure_code")) {
+      this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN failure_code TEXT");
     }
     for (const column of [
       "media_download_ms",
@@ -763,19 +789,20 @@ export class WhatsAppStore {
     const now = Date.now();
     this.db.prepare(
       `INSERT INTO whatsapp_channel_audit (
-         provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance,
+         provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance, transcription_failure_code,
          artifact_ref, artifact_sha256, downstream_destination, downstream_correlation_id,
          downstream_receipt_json, reply_text, canonical_provider_message_id, coalescing_state,
-         lifecycle_state, media_download_ms, transcription_queue_wait_ms,
+         failure_stage, failure_code, lifecycle_state, media_download_ms, transcription_queue_wait_ms,
          transcription_runtime_ms, downstream_ms, outbound_send_ms, total_lifecycle_ms,
          forwarded_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'coalesced', 'coalesced', ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'coalesced', NULL, NULL, 'coalesced', ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       input.providerMessageId,
       canonical.tenantId,
       input.senderId,
       canonical.transcriptText,
       canonical.transcriptProvenance,
+      canonical.transcriptionFailureCode,
       canonical.artifactRef,
       input.artifactSha256,
       canonical.downstreamDestination,
@@ -799,18 +826,19 @@ export class WhatsAppStore {
     const now = Date.now();
     this.db.prepare(
       `INSERT INTO whatsapp_channel_audit (
-         provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance,
+         provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance, transcription_failure_code,
          artifact_ref, artifact_sha256, downstream_destination, downstream_correlation_id,
          downstream_receipt_json, reply_text, canonical_provider_message_id, coalescing_state,
-         lifecycle_state, media_download_ms, transcription_queue_wait_ms,
+         failure_stage, failure_code, lifecycle_state, media_download_ms, transcription_queue_wait_ms,
          transcription_runtime_ms, downstream_ms, outbound_send_ms, total_lifecycle_ms,
          forwarded_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'forwarded', ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'forwarded', ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(provider_message_id) DO UPDATE SET
          tenant_id=excluded.tenant_id,
          sender_id=excluded.sender_id,
          transcript_text=excluded.transcript_text,
          transcript_provenance=excluded.transcript_provenance,
+         transcription_failure_code=excluded.transcription_failure_code,
          artifact_ref=excluded.artifact_ref,
          artifact_sha256=excluded.artifact_sha256,
          downstream_destination=excluded.downstream_destination,
@@ -819,6 +847,8 @@ export class WhatsAppStore {
          reply_text=excluded.reply_text,
          canonical_provider_message_id=excluded.canonical_provider_message_id,
          coalescing_state=excluded.coalescing_state,
+         failure_stage=NULL,
+         failure_code=NULL,
          media_download_ms=excluded.media_download_ms,
          transcription_queue_wait_ms=excluded.transcription_queue_wait_ms,
          transcription_runtime_ms=excluded.transcription_runtime_ms,
@@ -833,6 +863,7 @@ export class WhatsAppStore {
       input.senderId,
       input.transcriptText ?? null,
       input.transcriptProvenance ?? null,
+      auditCode(input.transcriptionFailureCode),
       input.artifactRef ?? null,
       input.artifactSha256 ?? null,
       input.downstreamDestination,
@@ -848,6 +879,67 @@ export class WhatsAppStore {
       durationMs(input.timing?.outboundSendMs),
       durationMs(input.timing?.totalLifecycleMs),
       now, now,
+    );
+  }
+
+  recordChannelFailure(input: WhatsAppChannelFailureInput): void {
+    const now = Date.now();
+    this.db.prepare(
+      `INSERT INTO whatsapp_channel_audit (
+         provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance, transcription_failure_code,
+         artifact_ref, artifact_sha256, downstream_destination, downstream_correlation_id,
+         downstream_receipt_json, reply_text, canonical_provider_message_id, coalescing_state,
+         failure_stage, failure_code, lifecycle_state, media_download_ms,
+         transcription_queue_wait_ms, transcription_runtime_ms, downstream_ms,
+         outbound_send_ms, total_lifecycle_ms, forwarded_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(provider_message_id) DO UPDATE SET
+         tenant_id=excluded.tenant_id,
+         sender_id=excluded.sender_id,
+         transcript_text=excluded.transcript_text,
+         transcript_provenance=excluded.transcript_provenance,
+         transcription_failure_code=excluded.transcription_failure_code,
+         artifact_ref=excluded.artifact_ref,
+         artifact_sha256=excluded.artifact_sha256,
+         downstream_destination=excluded.downstream_destination,
+         downstream_correlation_id=excluded.downstream_correlation_id,
+         downstream_receipt_json=excluded.downstream_receipt_json,
+         canonical_provider_message_id=excluded.canonical_provider_message_id,
+         coalescing_state=excluded.coalescing_state,
+         failure_stage=excluded.failure_stage,
+         failure_code=excluded.failure_code,
+         lifecycle_state='failed',
+         media_download_ms=excluded.media_download_ms,
+         transcription_queue_wait_ms=excluded.transcription_queue_wait_ms,
+         transcription_runtime_ms=excluded.transcription_runtime_ms,
+         downstream_ms=excluded.downstream_ms,
+         outbound_send_ms=excluded.outbound_send_ms,
+         total_lifecycle_ms=excluded.total_lifecycle_ms,
+         updated_at=excluded.updated_at`,
+    ).run(
+      input.providerMessageId,
+      input.tenantId,
+      input.senderId,
+      input.transcriptText ?? null,
+      input.transcriptProvenance ?? null,
+      auditCode(input.transcriptionFailureCode),
+      input.artifactRef ?? null,
+      input.artifactSha256 ?? null,
+      input.downstreamDestination,
+      input.downstreamCorrelationId ?? null,
+      input.downstreamReceipt ? safeJson(input.downstreamReceipt) : null,
+      input.canonicalProviderMessageId ?? null,
+      input.coalescingState ?? null,
+      input.failureStage,
+      input.failureCode,
+      durationMs(input.timing?.mediaDownloadMs),
+      durationMs(input.timing?.transcriptionQueueWaitMs),
+      durationMs(input.timing?.transcriptionRuntimeMs),
+      durationMs(input.timing?.downstreamMs),
+      durationMs(input.timing?.outboundSendMs),
+      durationMs(input.timing?.totalLifecycleMs),
+      now,
+      now,
     );
   }
 
@@ -873,12 +965,14 @@ export class WhatsAppStore {
     const row = this.db.prepare(
       `SELECT provider_message_id AS providerMessageId, tenant_id AS tenantId,
          sender_id AS senderId, transcript_text AS transcriptText,
-         transcript_provenance AS transcriptProvenance, artifact_ref AS artifactRef,
+         transcript_provenance AS transcriptProvenance,
+         transcription_failure_code AS transcriptionFailureCode, artifact_ref AS artifactRef,
          artifact_sha256 AS artifactSha256, downstream_destination AS downstreamDestination,
          downstream_correlation_id AS downstreamCorrelationId,
          downstream_receipt_json AS downstreamReceiptJson, reply_text AS replyText,
          canonical_provider_message_id AS canonicalProviderMessageId,
          coalescing_state AS coalescingState,
+         failure_stage AS failureStage, failure_code AS failureCode,
          lifecycle_state AS lifecycleState,
          outbound_provider_id AS outboundProviderId, outbound_status AS outboundStatus,
          media_download_ms AS mediaDownloadMs,

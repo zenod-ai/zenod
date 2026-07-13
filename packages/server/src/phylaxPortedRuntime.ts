@@ -8,6 +8,7 @@ import { WhatsAppStore } from "./whatsappStore.js";
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { TelegramGateway } from "./telegramGateway.js";
 import {
+  PhylaxChannelError,
   PhylaxChannelsOrgan,
   phylaxWhatsAppPaths,
   type PhylaxDeliveryReceipt,
@@ -133,6 +134,7 @@ export class PhylaxPortedRuntime {
               transcriptText: result.handoff.text_transcript ?? null,
               transcriptProvenance:
                 result.handoff.transcription_source ?? (media ? "whatsapp-media" : "whatsapp-text"),
+              transcriptionFailureCode: result.handoff.transcription_failed?.code ?? null,
               artifactRef: result.handoff.artifact_ref ?? null,
               artifactSha256: result.artifactSha256,
               downstreamDestination: result.downstreamDestination,
@@ -151,6 +153,31 @@ export class PhylaxPortedRuntime {
             if (mediaClaim) this.whatsappStore.completeMediaCoalescing(mediaClaim.canonicalProviderMessageId, "completed");
             return result;
           } catch (error) {
+            if (error instanceof PhylaxChannelError && error.audit) {
+              this.whatsappStore.recordChannelFailure({
+                providerMessageId: event.messageId,
+                tenantId: error.audit.tenantId,
+                senderId: error.audit.sender,
+                transcriptText: error.audit.transcriptText,
+                transcriptProvenance: error.audit.transcriptProvenance,
+                transcriptionFailureCode: error.audit.transcriptionFailureCode,
+                artifactRef: error.audit.artifactRef,
+                artifactSha256: error.audit.artifactSha256,
+                downstreamDestination: error.audit.downstreamDestination,
+                downstreamCorrelationId: error.audit.downstreamCorrelationId,
+                downstreamReceipt: error.audit.downstreamReceipt,
+                canonicalProviderMessageId: mediaClaim?.canonicalProviderMessageId ?? null,
+                coalescingState: mediaClaim ? "owner" : null,
+                failureStage: error.audit.failureStage,
+                failureCode: error.audit.failureCode,
+                timing: {
+                  mediaDownloadMs: timing.mediaDownloadMs,
+                  transcriptionQueueWaitMs: error.audit.timing.transcriptionQueueWaitMs,
+                  transcriptionRuntimeMs: error.audit.timing.transcriptionRuntimeMs,
+                  downstreamMs: error.audit.timing.downstreamMs,
+                },
+              });
+            }
             if (mediaClaim) this.whatsappStore.completeMediaCoalescing(mediaClaim.canonicalProviderMessageId, "failed");
             throw error;
           }
