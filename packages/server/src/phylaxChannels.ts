@@ -51,6 +51,7 @@ export interface PhylaxChannelTranscriber {
     bytes: Uint8Array;
     mimeType: string | null;
     fileName: string | null;
+    signal: AbortSignal;
   }): Promise<PhylaxTranscriptionReceipt>;
 }
 
@@ -71,6 +72,7 @@ export interface PhylaxDownstreamCall {
     transcription_usage?: Record<string, unknown>;
     transcription_failed?: { code: string; message: string };
     transcription_source?: string;
+    transcription_timing?: { queue_wait_ms?: number | null; runtime_ms?: number | null };
   };
 }
 
@@ -230,6 +232,7 @@ export class PhylaxChannelsOrgan {
       transcriber?: PhylaxChannelTranscriber;
       callDownstream?: PhylaxDownstreamCaller;
       artifactUrl?: (tenantId: string, artifactId: string) => string;
+      transcriptionDeadlineMs?: number;
     },
   ) {}
 
@@ -257,20 +260,43 @@ export class PhylaxChannelsOrgan {
       : null;
     if (!input.transcription && input.media?.bytes && isAudioMedia(input.media) && this.options.transcriber) {
       const transcriptionStartedAt = Date.now();
+      const configuredDeadline = this.options.transcriptionDeadlineMs ?? 60_000;
+      const deadlineMs = Number.isFinite(configuredDeadline)
+        ? Math.max(100, Math.min(configuredDeadline, 300_000))
+        : 60_000;
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        transcription = await this.options.transcriber.transcribe({
-          tenantId: route.tenantId,
-          bytes: Buffer.from(input.media.bytes),
-          mimeType: input.media.mimeType ?? null,
-          fileName: input.media.fileName ?? null,
-        });
+        transcription = await Promise.race([
+          this.options.transcriber.transcribe({
+            tenantId: route.tenantId,
+            bytes: Buffer.from(input.media.bytes),
+            mimeType: input.media.mimeType ?? null,
+            fileName: input.media.fileName ?? null,
+            signal: controller.signal,
+          }),
+          new Promise<PhylaxTranscriptionReceipt>((resolve) => {
+            timer = setTimeout(() => {
+              controller.abort();
+              resolve({
+                transcription_failed: {
+                  code: "timeout",
+                  message: `transcription exceeded the ${deadlineMs}ms deadline`,
+                },
+              });
+            }, deadlineMs);
+            timer.unref?.();
+          }),
+        ]);
       } catch (error) {
         transcription = {
           transcription_failed: {
-            code: "unavailable",
+            code: controller.signal.aborted ? "timeout" : "unavailable",
             message: error instanceof Error ? error.message : "transcription failed",
           },
         };
+      } finally {
+        if (timer) clearTimeout(timer);
       }
       const observedTranscriptionMs = Math.max(0, Date.now() - transcriptionStartedAt);
       const reportedQueueWait = transcription.transcription_timing?.queue_wait_ms;
@@ -295,6 +321,7 @@ export class PhylaxChannelsOrgan {
       ...(transcription.transcription_usage ? { transcription_usage: transcription.transcription_usage } : {}),
       ...(transcription.transcription_failed ? { transcription_failed: transcription.transcription_failed } : {}),
       ...(transcription.transcription_source ? { transcription_source: transcription.transcription_source } : {}),
+      ...(transcription.transcription_timing ? { transcription_timing: transcription.transcription_timing } : {}),
     };
     const call: PhylaxDownstreamCall = {
       route,

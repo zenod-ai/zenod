@@ -117,6 +117,7 @@ export interface WhatsAppPortedInbound {
     lifecycleStartedAt: number;
     mediaDownloadMs: number | null;
   };
+  progress(text: string): Promise<void>;
 }
 
 export type WhatsAppPortedInboundHandler = (input: WhatsAppPortedInbound) => Promise<{
@@ -1037,6 +1038,7 @@ export class WhatsAppGateway {
         ...(media ? { media } : {}),
         ...(transcription ? { transcription } : {}),
         timing: { lifecycleStartedAt, mediaDownloadMs },
+        progress: (progressText) => this.sendReply(event, progressText, "processing"),
       });
       if (forwarded.suppressReply) {
         this.options.store.markMessageStatus(event.messageId, "coalesced");

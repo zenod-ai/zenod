@@ -6,7 +6,7 @@ import { basename, join } from "node:path";
 import { Hono, type Context } from "hono";
 import { PHYLAX_AGENT } from "./agent.js";
 import { readCustomerSession } from "./customerSession.js";
-import { transcribeAudio } from "./transcribe.js";
+import { isValidWhisperModel, prepareModel, transcribeAudio, type TranscribeOptions } from "./transcribe.js";
 import {
   PhylaxChannelError,
   PhylaxChannelsOrgan,
@@ -38,6 +38,8 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
       return verified ? "Your WhatsApp number is verified. Return to Phylax to finish setup." : null;
     },
   });
+  const bootLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
+  void prepareModel(bootLocalModel && isValidWhisperModel(bootLocalModel) ? bootLocalModel : "small");
 
   base = createZenodUnit({
     ...options,
@@ -166,8 +168,10 @@ function createTenantOrgan(
   baseUnit: () => ReturnType<typeof createZenodUnit>,
   env: NodeJS.ProcessEnv,
 ): PhylaxChannelsOrgan {
+  const configuredDeadline = Number(env.PHYLAX_TRANSCRIPTION_DEADLINE_MS ?? 60_000);
   return new PhylaxChannelsOrgan({
     dataDir,
+    transcriptionDeadlineMs: configuredDeadline,
     routes: { resolve: (channel, sender) => tenantSettings.resolve(channel, sender) },
     transcriber: {
       async transcribe(input) {
@@ -175,21 +179,26 @@ function createTenantOrgan(
         if (!transcription.enabled) {
           return { transcription_failed: { code: "disabled", message: "tenant transcription is disabled" } };
         }
-        const key = transcription.key ?? undefined;
-        const result = await transcribeAudio(Buffer.from(input.bytes), input.fileName ?? "voice.ogg", {
-          groqApiKey: transcription.provider === "groq" ? key ?? "" : "",
-          openaiApiKey: transcription.provider === "openai" ? key ?? "" : "",
-          openrouterApiKey: transcription.provider === "openrouter" ? key ?? "" : "",
-          ...(transcription.provider === "openai" ? { longTranscriptionProvider: "openai" as const } : {}),
-          ...(transcription.provider === "openrouter"
-            ? { openrouterModel: transcription.model ?? undefined, longTranscriptionProvider: "openrouter" as const }
-            : {}),
-        });
+        const configurationError = phylaxTranscriptionConfigurationError(transcription);
+        if (configurationError) {
+          return {
+            transcription_failed: {
+              code: "not_configured",
+              message: configurationError,
+            },
+          };
+        }
+        const result = await transcribeAudio(
+          Buffer.from(input.bytes),
+          input.fileName ?? "voice.ogg",
+          phylaxTranscriptionOptions(transcription, env, input.signal),
+        );
         if (!result.success || !result.transcript?.trim()) {
           return {
             ...(result.provider ? { transcription_source: result.provider } : {}),
+            ...(result.timing ? { transcription_timing: result.timing } : {}),
             transcription_failed: {
-              code: result.noSpeech ? "no_speech" : "unavailable",
+              code: input.signal.aborted ? "timeout" : result.noSpeech ? "no_speech" : "unavailable",
               message: result.error ?? "transcription failed",
             },
           };
@@ -197,6 +206,7 @@ function createTenantOrgan(
         return {
           text_transcript: result.transcript.trim(),
           ...(result.provider ? { transcription_source: result.provider } : {}),
+          ...(result.timing ? { transcription_timing: result.timing } : {}),
         };
       },
     },
@@ -208,6 +218,51 @@ function createTenantOrgan(
       return `${(env.CUSTOMER_APP_URL || "https://phylax.zenod.dev").replace(/\/$/, "")}/mcp/${token}/artifacts/${tenantId}/${artifactId}`;
     },
   });
+}
+
+export function phylaxTranscriptionConfigurationError(transcription: {
+  provider: "local" | "groq" | "openai" | "openrouter";
+  model?: string | null;
+  key: string | null;
+}): string | null {
+  if (transcription.provider !== "local" && !transcription.key) {
+    return `${transcription.provider} transcription requires a tenant-configured provider key`;
+  }
+  if (transcription.provider === "local" && transcription.model?.trim() && !isValidWhisperModel(transcription.model.trim())) {
+    return `unsupported local transcription model: ${transcription.model.trim()}`;
+  }
+  return null;
+}
+
+export function phylaxTranscriptionOptions(
+  transcription: {
+    provider: "local" | "groq" | "openai" | "openrouter";
+    model: string | null;
+    key: string | null;
+  },
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+): Exclude<TranscribeOptions, (percent: number) => void> {
+  const requestedLocalModel = transcription.provider === "local" ? transcription.model?.trim() : null;
+  const configuredLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
+  const localModel = requestedLocalModel && isValidWhisperModel(requestedLocalModel)
+    ? requestedLocalModel
+    : configuredLocalModel && isValidWhisperModel(configuredLocalModel)
+      ? configuredLocalModel
+      : "small";
+  const key = transcription.key ?? "";
+  return {
+    model: localModel,
+    groqApiKey: transcription.provider === "groq" ? key : "",
+    openaiApiKey: transcription.provider === "openai" ? key : "",
+    openrouterApiKey: transcription.provider === "openrouter" ? key : "",
+    ...(transcription.provider === "openai" ? { longTranscriptionProvider: "openai" as const } : {}),
+    ...(transcription.provider === "openrouter"
+      ? { openrouterModel: transcription.model ?? undefined, longTranscriptionProvider: "openrouter" as const }
+      : {}),
+    signal,
+    includeTiming: true,
+  };
 }
 
 function activeTenantId(
