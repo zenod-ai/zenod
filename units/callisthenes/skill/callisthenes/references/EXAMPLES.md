@@ -9,10 +9,10 @@ User: `Post that Ring is live.`
 Agent prepares a restrained draft, then calls:
 
 ```json
-{ "tool": "createPosts", "arguments": { "text": "Ring is live." } }
+{ "tool": "draft_post", "arguments": { "text": "Ring is live." } }
 ```
 
-Expected guarded result begins with `[draft_not_approved]`. The agent then says:
+Expected held result begins with `[draft_not_approved]` and includes an opaque `action_id`. On an older catalog without `draft_post`, call `createPosts` without approval for the same held transition. The agent then says:
 
 > Draft for @account: “Ring is live.” Publish this exact text?
 
@@ -23,7 +23,7 @@ Agent calls exactly once:
 ```json
 {
   "tool": "approve_send",
-  "arguments": { "channel": "x", "text": "Ring is live." }
+  "arguments": { "channel": "x", "action_id": "<opaque id from draft_post>", "text": "Ring is live." }
 }
 ```
 
@@ -33,7 +33,7 @@ If Callisthenes returns `https://x.com/i/web/status/123456789`, relay that perma
 
 User approves `Ring is live.` and then says `Add “for everyone”.`
 
-Do not send. Draft `Ring is live for everyone.`, call `createPosts` without approval, show the new exact text, and ask again.
+Do not send. Draft `Ring is live for everyone.`, call the discovered draft step (`draft_post` when available, otherwise `createPosts` without approval), show the new exact text, and ask again.
 
 ## Ambiguous approval
 
@@ -52,4 +52,3 @@ Say publication is unverified. Do not retry. Offer to check the target account f
 User: `Delete https://x.com/i/web/status/123456789.`
 
 Confirm deletion of that exact permalink. Only after confirmation invoke `deletePosts` once through the host's protected approval path. Report only the concrete deletion receipt.
-

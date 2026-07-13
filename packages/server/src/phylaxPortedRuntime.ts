@@ -61,7 +61,7 @@ export class PhylaxPortedRuntime {
       settings: this.settings,
       store: this.whatsappStore,
       getEngine: unavailableEngine,
-      portedInboundHandler: async ({ event, text, media, transcription }) => {
+      portedInboundHandler: async ({ event, text, media, transcription, timing }) => {
         const verificationReply = await adapters.verifyInbound?.({
           channel: "whatsapp",
           sender: event.senderId,
@@ -108,9 +108,14 @@ export class PhylaxPortedRuntime {
                 canonicalProviderMessageId: mediaClaim.canonicalProviderMessageId,
                 artifactSha256,
                 senderId: normalizeWhatsAppIdentifier(event.senderId),
+                timing: { mediaDownloadMs: timing.mediaDownloadMs },
               });
             }
-            return { replyText: canonical?.replyText ?? "", suppressReply: true };
+            return {
+              replyText: canonical?.replyText ?? "",
+              suppressReply: true,
+              timing: { mediaDownloadMs: timing.mediaDownloadMs },
+            };
           }
         }
         const forwarding = (async () => {
@@ -131,6 +136,12 @@ export class PhylaxPortedRuntime {
               replyText: result.replyText,
               canonicalProviderMessageId: mediaClaim?.canonicalProviderMessageId ?? null,
               coalescingState: mediaClaim ? "owner" : null,
+              timing: {
+                mediaDownloadMs: timing.mediaDownloadMs,
+                transcriptionQueueWaitMs: result.timing.transcriptionQueueWaitMs,
+                transcriptionRuntimeMs: result.timing.transcriptionRuntimeMs,
+                downstreamMs: result.timing.downstreamMs,
+              },
             });
             if (mediaClaim) this.whatsappStore.completeMediaCoalescing(mediaClaim.canonicalProviderMessageId, "completed");
             return result;
@@ -146,7 +157,15 @@ export class PhylaxPortedRuntime {
         } finally {
           if (mediaClaim) this.mediaInFlight.delete(mediaClaim.canonicalProviderMessageId);
         }
-        return { replyText: forwarded.replyText };
+        return {
+          replyText: forwarded.replyText,
+          timing: {
+            mediaDownloadMs: timing.mediaDownloadMs,
+            transcriptionQueueWaitMs: forwarded.timing.transcriptionQueueWaitMs,
+            transcriptionRuntimeMs: forwarded.timing.transcriptionRuntimeMs,
+            downstreamMs: forwarded.timing.downstreamMs,
+          },
+        };
       },
       ...(adapters.whatsappSocketFactory ? { socketFactory: adapters.whatsappSocketFactory } : {}),
     });

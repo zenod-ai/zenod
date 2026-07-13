@@ -122,6 +122,11 @@ describe("Callisthenes front unit", () => {
       const listed = await (await call("alpha-secret", { jsonrpc: "2.0", id: 1, method: "tools/list" })).json() as any;
       expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toContain("approve_send");
       const byName = Object.fromEntries(listed.result.tools.map((tool: { name: string }) => [tool.name, tool]));
+      expect(byName.draft_post).toMatchObject({
+        inputSchema: { required: ["text"], properties: { channel: { enum: ["x"] }, text: { minLength: 1 } } },
+        outputSchema: { required: ["status", "channel", "action_id", "text", "expires_at"], properties: { action_id: { pattern: "^act_[a-f0-9]{32}$" } } },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      });
       expect(byName.createPosts).toMatchObject({
         inputSchema: { required: ["text"], properties: { text: { type: "string" } } },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
@@ -218,6 +223,54 @@ describe("Callisthenes front unit", () => {
       })).json() as any;
       expect(compatible.result.content[0].text).toBe("Posted to X. Live URL: https://x.com/i/web/status/1900123456790");
       expect(approvedCalls).toBe(2);
+    } finally {
+      unit.close();
+    }
+  });
+
+  it("holds a first-class draft without calling the upstream connector", async () => {
+    const dataDir = await tempDir();
+    const tenantStore = createMemoryTenantStore([
+      { token: "alpha-secret", tenant: { id: "tenant-alpha" } },
+      { token: "beta-secret", tenant: { id: "tenant-beta" } },
+    ]);
+    const fetcher = vi.fn(async () => {
+      throw new Error("draft_post must not call the upstream connector");
+    });
+    const unit = createCallisthenesUnit({ dataDir, tenantStore, fetcher: fetcher as typeof fetch });
+    const call = (token: string, body: unknown) => unit.app.request("/mcp", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const draft = (id: number, text: string, channel: string = "x") => ({
+      jsonrpc: "2.0", id, method: "tools/call",
+      params: { name: "draft_post", arguments: { channel, text } },
+    });
+    try {
+      const first = await (await call("alpha-secret", draft(1, "Exact held bytes."))).json() as any;
+      const replay = await (await call("alpha-secret", draft(2, "Exact held bytes."))).json() as any;
+      const beta = await (await call("beta-secret", draft(3, "Exact held bytes."))).json() as any;
+      const invalid = await (await call("alpha-secret", draft(4, "No Mastodon hold.", "mastodon"))).json() as any;
+
+      const actionId = String(first.result.content[0].text).match(/action_id=(act_[a-f0-9]{32})/)?.[1];
+      const replayId = String(replay.result.content[0].text).match(/action_id=(act_[a-f0-9]{32})/)?.[1];
+      const betaId = String(beta.result.content[0].text).match(/action_id=(act_[a-f0-9]{32})/)?.[1];
+      expect(first.result.content[0].text).toContain("[draft_not_approved]");
+      expect(first.result.content[0].text).toContain("nothing was published");
+      expect(first.result.structuredContent).toEqual({
+        status: "held", channel: "x", action_id: actionId, text: "Exact held bytes.", expires_at: expect.any(String),
+      });
+      expect(replayId).toBe(actionId);
+      expect(betaId).not.toBe(actionId);
+      expect(invalid.result.content[0].text).toContain("[invalid_input]");
+      expect(fetcher).not.toHaveBeenCalled();
+
+      expect(unit.observationLedger.resolve("tenant-alpha", { actionId, text: "Exact held bytes." })?.id).toBe(actionId);
+      expect(unit.observationLedger.resolve("tenant-alpha", { actionId, text: "Altered held bytes." })).toBeNull();
+      expect(unit.observationLedger.resolve("tenant-beta", { actionId, text: "Exact held bytes." })).toBeNull();
+      expect(unit.observationLedger.read("tenant-alpha").usage).toMatchObject({ calls: 3, rejected_drafts: 1, sends: 0 });
+      expect(unit.observationLedger.read("tenant-beta").usage).toMatchObject({ calls: 1, rejected_drafts: 1, sends: 0 });
     } finally {
       unit.close();
     }
