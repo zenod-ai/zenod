@@ -14,6 +14,8 @@ type Settings = {
   numberId: string
   downstreamUrl: string | null
   downstreamTokenConfigured: boolean
+  downstreamCredentialStatus: "unknown" | "healthy" | "rejected"
+  downstreamCredentialCheckedAt: string | null
   transcriptionEnabled: boolean
   transcriptionProvider: "local" | "groq" | "openai" | "openrouter"
   transcriptionModel: string | null
@@ -116,6 +118,7 @@ export function PhylaxTenantSettings() {
     <Card>
       <CardHeader><CardTitle>Your Ring downstream</CardTitle><CardDescription>Inbound messages go directly to this tenant-scoped Ring MCP face.</CardDescription></CardHeader>
       <CardContent className="space-y-4">
+        {data.settings.downstreamCredentialStatus === "rejected" ? <div role="alert" className="border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive"><strong>Ring connection rejected.</strong> Replace both the tenant-scoped Ring MCP URL and bearer token below, then save and retry your message.</div> : null}
         <Field><FieldLabel>MCP URL</FieldLabel><Input value={downstreamUrl} onChange={(e) => setDownstreamUrl(e.target.value)} placeholder="https://ring.zenod.dev/mcp/…" /></Field>
         <Field><FieldLabel>Bearer token</FieldLabel><Input type="password" value={downstreamToken} onChange={(e) => setDownstreamToken(e.target.value)} placeholder={data.settings.downstreamTokenConfigured ? "Saved — enter to replace" : "Ring token"} /></Field>
       </CardContent>

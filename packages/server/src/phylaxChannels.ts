@@ -13,10 +13,17 @@ export interface PhylaxTenantRoute {
   tenantId: string;
   downstreamUrl: string;
   downstreamToken: string;
+  /** Non-secret revision used only to reject stale in-flight health completions. */
+  credentialRevision?: string;
 }
 
 export interface PhylaxTenantRouteResolver {
   resolve(channel: PhylaxPortedChannel, sender: string): Promise<PhylaxTenantRoute | null> | PhylaxTenantRoute | null;
+  reportDownstreamCredentialStatus?(
+    tenantId: string,
+    credentialRevision: string,
+    status: "healthy" | "rejected",
+  ): Promise<boolean | void> | boolean | void;
 }
 
 export interface PhylaxChannelInbound {
@@ -203,7 +210,7 @@ export class PhylaxChannelError extends Error {
 
 function downstreamFailureCode(error: unknown): PhylaxFailureAudit["failureCode"] {
   const message = error instanceof Error ? error.message : String(error);
-  return /\b(?:unauthori[sz]ed|401)\b/i.test(message)
+  return /\b(?:unauthori[sz]ed|forbidden|401|403)\b/i.test(message)
     ? "downstream_unauthorized"
     : "downstream_unavailable";
 }
@@ -263,6 +270,22 @@ export class PhylaxChannelsOrgan {
       transcriptionDeadlineMs?: number;
     },
   ) {}
+
+  private async reportDownstreamCredentialStatus(
+    route: PhylaxTenantRoute,
+    status: "healthy" | "rejected",
+  ): Promise<void> {
+    if (!route.credentialRevision) return;
+    try {
+      await this.options.routes.reportDownstreamCredentialStatus?.(
+        route.tenantId,
+        route.credentialRevision,
+        status,
+      );
+    } catch {
+      // Health persistence must never turn a completed downstream call into a duplicate-prone retry.
+    }
+  }
 
   async tenantIdFor(channel: PhylaxPortedChannel, senderValue: string, chatId: string): Promise<string> {
     const { route } = await this.resolveInboundRoute(channel, senderValue, chatId);
@@ -388,24 +411,34 @@ export class PhylaxChannelsOrgan {
     try {
       downstream = await (this.options.callDownstream ?? callRing)(call);
     } catch (error) {
+      const failureCode = downstreamFailureCode(error);
+      if (failureCode === "downstream_unauthorized") {
+        await this.reportDownstreamCredentialStatus(route, "rejected");
+        throw downstreamCredentialRejectedError(
+          failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
+        );
+      }
       throw new PhylaxChannelError(
         "downstream_error",
         error instanceof Error ? error.message : "tenant downstream request failed",
-        failureAudit(Math.max(0, Date.now() - downstreamStartedAt), downstreamFailureCode(error)),
+        failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
       );
     }
     const downstreamMs = Math.max(0, Date.now() - downstreamStartedAt);
     const audit = downstreamAudit(downstream);
     if (downstream.isError) {
       const message = textFromResult(downstream) || "tenant downstream rejected the message";
+      const failureCode = downstreamFailureCode(message) === "downstream_unauthorized"
+        ? "downstream_unauthorized"
+        : "downstream_rejected";
+      if (failureCode === "downstream_unauthorized") {
+        await this.reportDownstreamCredentialStatus(route, "rejected");
+        throw downstreamCredentialRejectedError(failureAudit(downstreamMs, failureCode, audit));
+      }
       throw new PhylaxChannelError(
         "downstream_error",
         message,
-        failureAudit(
-          downstreamMs,
-          /\b(?:unauthori[sz]ed|401)\b/i.test(message) ? "downstream_unauthorized" : "downstream_rejected",
-          audit,
-        ),
+        failureAudit(downstreamMs, failureCode, audit),
       );
     }
     const replyText = textFromResult(downstream);
@@ -416,6 +449,7 @@ export class PhylaxChannelsOrgan {
         failureAudit(downstreamMs, "downstream_empty_reply", audit),
       );
     }
+    await this.reportDownstreamCredentialStatus(route, "healthy");
     return {
       tenantId: route.tenantId,
       sender,
@@ -495,6 +529,13 @@ export class PhylaxChannelsOrgan {
   }
 }
 
+function downstreamCredentialRejectedError(audit: PhylaxFailureAudit): PhylaxChannelError {
+  return new PhylaxChannelError(
+    "downstream_error",
+    "Your Ring connection needs attention. Open Phylax settings and replace the Ring MCP URL and bearer token, then retry.",
+    audit,
+  );
+}
 async function callRing(call: PhylaxDownstreamCall): Promise<PeerToolResult> {
   return callPeerTool(
     {
