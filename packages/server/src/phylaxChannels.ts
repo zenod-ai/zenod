@@ -39,6 +39,10 @@ export interface PhylaxTranscriptionReceipt {
   transcription_usage?: Record<string, unknown>;
   transcription_failed?: { code: string; message: string };
   transcription_source?: string;
+  transcription_timing?: {
+    queue_wait_ms?: number | null;
+    runtime_ms?: number | null;
+  };
 }
 
 export interface PhylaxChannelTranscriber {
@@ -82,6 +86,11 @@ export interface PhylaxInboundReceipt {
   downstreamDestination: string;
   downstreamCorrelationId: string | null;
   downstreamReceipt: Record<string, unknown> | null;
+  timing: {
+    transcriptionQueueWaitMs: number | null;
+    transcriptionRuntimeMs: number | null;
+    downstreamMs: number;
+  };
   evidence: Array<{
     kind: "channel_message_forwarded";
     id: string;
@@ -238,7 +247,16 @@ export class PhylaxChannelsOrgan {
     const artifact = input.media ? this.rememberArtifact(route.tenantId, input.media) : undefined;
     const artifactRef = artifact?.ref;
     let transcription: PhylaxTranscriptionReceipt = input.transcription ?? {};
+    let transcriptionQueueWaitMs = typeof input.transcription?.transcription_timing?.queue_wait_ms === "number"
+      && Number.isFinite(input.transcription.transcription_timing.queue_wait_ms)
+      ? Math.max(0, Math.round(input.transcription.transcription_timing.queue_wait_ms))
+      : null;
+    let transcriptionRuntimeMs = typeof input.transcription?.transcription_timing?.runtime_ms === "number"
+      && Number.isFinite(input.transcription.transcription_timing.runtime_ms)
+      ? Math.max(0, Math.round(input.transcription.transcription_timing.runtime_ms))
+      : null;
     if (!input.transcription && input.media?.bytes && isAudioMedia(input.media) && this.options.transcriber) {
+      const transcriptionStartedAt = Date.now();
       try {
         transcription = await this.options.transcriber.transcribe({
           tenantId: route.tenantId,
@@ -254,6 +272,15 @@ export class PhylaxChannelsOrgan {
           },
         };
       }
+      const observedTranscriptionMs = Math.max(0, Date.now() - transcriptionStartedAt);
+      const reportedQueueWait = transcription.transcription_timing?.queue_wait_ms;
+      const reportedRuntime = transcription.transcription_timing?.runtime_ms;
+      transcriptionQueueWaitMs = typeof reportedQueueWait === "number" && Number.isFinite(reportedQueueWait)
+        ? Math.max(0, Math.round(reportedQueueWait))
+        : null;
+      transcriptionRuntimeMs = typeof reportedRuntime === "number" && Number.isFinite(reportedRuntime)
+        ? Math.max(0, Math.round(reportedRuntime))
+        : Math.max(0, observedTranscriptionMs - (transcriptionQueueWaitMs ?? 0));
     }
     const text = transcription.text_transcript?.trim() || input.text?.trim() || "";
     if (!text && !artifactRef && !transcription.transcription_failed) {
@@ -279,7 +306,9 @@ export class PhylaxChannelsOrgan {
       },
       handoff,
     };
+    const downstreamStartedAt = Date.now();
     const downstream = await (this.options.callDownstream ?? callRing)(call);
+    const downstreamMs = Math.max(0, Date.now() - downstreamStartedAt);
     if (downstream.isError) {
       throw new PhylaxChannelError("downstream_error", textFromResult(downstream) || "tenant downstream rejected the message");
     }
@@ -296,6 +325,11 @@ export class PhylaxChannelsOrgan {
       downstreamDestination: safeDownstreamDestination(route),
       downstreamCorrelationId: audit.correlationId,
       downstreamReceipt: audit.receipt,
+      timing: {
+        transcriptionQueueWaitMs,
+        transcriptionRuntimeMs,
+        downstreamMs,
+      },
       evidence: [{
         kind: "channel_message_forwarded",
         id: input.messageId?.trim() || `phylax_${randomUUID().replaceAll("-", "")}`,

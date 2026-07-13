@@ -37,6 +37,7 @@ import {
 import {
   WhatsAppStore,
   type WhatsAppInboundEvent,
+  type WhatsAppChannelTiming,
   type WhatsAppMediaFollowUpLink,
   type WhatsAppStoreDiagnostics,
   type WhatsAppTranscriptFollowUp,
@@ -112,12 +113,58 @@ export interface WhatsAppPortedInbound {
   text: string;
   media?: { bytes: Buffer; mimeType: string | null; fileName: string | null };
   transcription?: { provider?: string; failed?: { code: string; message: string } };
+  timing: {
+    lifecycleStartedAt: number;
+    mediaDownloadMs: number | null;
+  };
 }
 
 export type WhatsAppPortedInboundHandler = (input: WhatsAppPortedInbound) => Promise<{
   replyText: string;
   suppressReply?: boolean;
+  timing?: Partial<WhatsAppChannelTiming>;
 }>;
+
+type ConsoleLogTarget = Pick<Console, "info" | "warn">;
+const LIBSIGNAL_SESSION_MESSAGES = new Set([
+  "Closing session:",
+  "Opening session:",
+  "Removing old closed session:",
+  "Session already closed",
+]);
+const SESSION_LOG_WRAPPER = Symbol("phylax.libsignal-session-redaction");
+
+function looksLikeLibsignalSession(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return "_chains" in record && "indexInfo" in record;
+}
+
+/**
+ * libsignal bypasses Baileys' configured Pino logger and writes SessionEntry
+ * objects directly to console. Redact only those exact object-bearing
+ * signatures; every unrelated info/warn call remains byte-for-byte intact.
+ */
+export function installBaileysSessionLogRedaction(target: ConsoleLogTarget = console): void {
+  for (const level of ["info", "warn"] as const) {
+    const current = target[level] as typeof target[typeof level] & { [SESSION_LOG_WRAPPER]?: boolean };
+    if (current[SESSION_LOG_WRAPPER]) continue;
+    const delegate = current.bind(target);
+    const wrapped = ((...args: unknown[]) => {
+      if (
+        typeof args[0] === "string"
+        && LIBSIGNAL_SESSION_MESSAGES.has(args[0])
+        && looksLikeLibsignalSession(args[1])
+      ) {
+        delegate(args[0], "[redacted libsignal session]");
+        return;
+      }
+      delegate(...args);
+    }) as typeof current;
+    wrapped[SESSION_LOG_WRAPPER] = true;
+    target[level] = wrapped;
+  }
+}
 
 function normalizedJid(value: unknown): string {
   if (!value) return "";
@@ -266,6 +313,7 @@ function skipReasonForBaileysMessage(message: WAMessage): string {
 }
 
 async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
+  installBaileysSessionLogRedaction();
   await mkdir(sessionDir, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
   const { version } = await fetchLatestBaileysVersion();
@@ -952,22 +1000,28 @@ export class WhatsAppGateway {
 
   private async handlePortedInbound(event: WhatsAppInboundEvent, settings: WhatsAppSettings): Promise<void> {
     const handler = this.options.portedInboundHandler!;
+    const lifecycleStartedAt = Date.now();
     await this.setTyping(event, true);
     try {
       let text = event.body.trim();
       let media: WhatsAppPortedInbound["media"];
       let transcription: WhatsAppPortedInbound["transcription"];
+      let mediaDownloadMs: number | null = null;
       if ((event.mediaType === "audio" || event.mediaType === "ptt") && event.mediaRaw) {
+        const downloadStartedAt = Date.now();
         const stream = await downloadContentFromMessage(event.mediaRaw as never, "audio");
         const data = await streamToBuffer(stream);
+        mediaDownloadMs = Math.max(0, Date.now() - downloadStartedAt);
         const filename = `${event.messageId}.${event.mimeType?.includes("mpeg") ? "mp3" : "ogg"}`;
         media = { bytes: data, mimeType: event.mimeType ?? "audio/ogg", fileName: filename };
         // Phylax resolves the sender before transcription so provider keys and
         // policy come from that tenant. The organ owns this edge step; the
         // legacy fused path below keeps its existing global settings behavior.
       } else if (event.mediaType === "image" && event.mediaRaw) {
+        const downloadStartedAt = Date.now();
         const stream = await downloadContentFromMessage(event.mediaRaw as never, "image");
         const data = await streamToBuffer(stream);
+        mediaDownloadMs = Math.max(0, Date.now() - downloadStartedAt);
         const mimeType = event.mimeType?.startsWith("image/") ? event.mimeType : "image/jpeg";
         const extension = mimeType.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
         media = {
@@ -977,18 +1031,37 @@ export class WhatsAppGateway {
         };
       }
       this.options.store.markMessageStatus(event.messageId, "processing");
-      const forwarded = await handler({ event, text, ...(media ? { media } : {}), ...(transcription ? { transcription } : {}) });
+      const forwarded = await handler({
+        event,
+        text,
+        ...(media ? { media } : {}),
+        ...(transcription ? { transcription } : {}),
+        timing: { lifecycleStartedAt, mediaDownloadMs },
+      });
       if (forwarded.suppressReply) {
         this.options.store.markMessageStatus(event.messageId, "coalesced");
+        this.options.store.recordChannelTiming(event.messageId, {
+          ...forwarded.timing,
+          totalLifecycleMs: Date.now() - lifecycleStartedAt,
+        });
         return;
       }
       if (!forwarded.replyText.trim()) throw new Error("tenant downstream returned no reply");
+      const outboundStartedAt = Date.now();
       await this.sendReply(event, forwarded.replyText, "sent");
+      this.options.store.recordChannelTiming(event.messageId, {
+        ...forwarded.timing,
+        outboundSendMs: Date.now() - outboundStartedAt,
+        totalLifecycleMs: Date.now() - lifecycleStartedAt,
+      });
       this.options.store.markMessageStatus(event.messageId, "replied");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.options.store.markMessageStatus(event.messageId, "failed");
       await this.sendReply(event, `⚠️ ${message}`, "error").catch(() => {});
+      this.options.store.recordChannelTiming(event.messageId, {
+        totalLifecycleMs: Date.now() - lifecycleStartedAt,
+      });
     } finally {
       await this.setTyping(event, false);
     }

@@ -158,6 +158,16 @@ export interface WhatsAppChannelAuditInput {
   replyText?: string | null;
   canonicalProviderMessageId?: string | null;
   coalescingState?: "owner" | null;
+  timing?: Partial<WhatsAppChannelTiming>;
+}
+
+export interface WhatsAppChannelTiming {
+  mediaDownloadMs: number | null;
+  transcriptionQueueWaitMs: number | null;
+  transcriptionRuntimeMs: number | null;
+  downstreamMs: number | null;
+  outboundSendMs: number | null;
+  totalLifecycleMs: number | null;
 }
 
 export interface WhatsAppChannelAuditRecord {
@@ -178,6 +188,7 @@ export interface WhatsAppChannelAuditRecord {
   lifecycleState: WhatsAppChannelLifecycle;
   outboundProviderId: string | null;
   outboundStatus: string | null;
+  timing: WhatsAppChannelTiming;
   forwardedAt: number;
   updatedAt: number;
 }
@@ -241,6 +252,10 @@ const MAX_RECOVERY_REPLY_CHARS = 65_536;
 function boundedRecoveryReply(value: string | null | undefined): string | null {
   const text = value?.trim();
   return text ? text.slice(0, MAX_RECOVERY_REPLY_CHARS) : null;
+}
+
+function durationMs(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }
 
 function epochMsFromWhatsAppTimestamp(value: unknown): number | null {
@@ -382,6 +397,12 @@ export class WhatsAppStore {
         lifecycle_state TEXT NOT NULL,
         outbound_provider_id TEXT,
         outbound_status TEXT,
+        media_download_ms INTEGER,
+        transcription_queue_wait_ms INTEGER,
+        transcription_runtime_ms INTEGER,
+        downstream_ms INTEGER,
+        outbound_send_ms INTEGER,
+        total_lifecycle_ms INTEGER,
         forwarded_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -429,6 +450,18 @@ export class WhatsAppStore {
     }
     if (!auditColumns.some((column) => column.name === "coalescing_state")) {
       this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN coalescing_state TEXT");
+    }
+    for (const column of [
+      "media_download_ms",
+      "transcription_queue_wait_ms",
+      "transcription_runtime_ms",
+      "downstream_ms",
+      "outbound_send_ms",
+      "total_lifecycle_ms",
+    ]) {
+      if (!auditColumns.some((candidate) => candidate.name === column)) {
+        this.db.exec(`ALTER TABLE whatsapp_channel_audit ADD COLUMN ${column} INTEGER`);
+      }
     }
 
     // Recover the durable boundary, never the Ring call. If the provider send
@@ -721,6 +754,7 @@ export class WhatsAppStore {
     canonicalProviderMessageId: string;
     artifactSha256: string;
     senderId: string;
+    timing?: Partial<WhatsAppChannelTiming>;
   }): WhatsAppChannelAuditRecord {
     const canonical = this.channelAudit(input.canonicalProviderMessageId);
     if (!canonical) {
@@ -732,8 +766,10 @@ export class WhatsAppStore {
          provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance,
          artifact_ref, artifact_sha256, downstream_destination, downstream_correlation_id,
          downstream_receipt_json, reply_text, canonical_provider_message_id, coalescing_state,
-         lifecycle_state, forwarded_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'coalesced', 'coalesced', ?, ?)`,
+         lifecycle_state, media_download_ms, transcription_queue_wait_ms,
+         transcription_runtime_ms, downstream_ms, outbound_send_ms, total_lifecycle_ms,
+         forwarded_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'coalesced', 'coalesced', ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       input.providerMessageId,
       canonical.tenantId,
@@ -747,6 +783,12 @@ export class WhatsAppStore {
       canonical.downstreamReceipt ? safeJson(canonical.downstreamReceipt) : null,
       canonical.replyText,
       input.canonicalProviderMessageId,
+      durationMs(input.timing?.mediaDownloadMs),
+      durationMs(input.timing?.transcriptionQueueWaitMs),
+      durationMs(input.timing?.transcriptionRuntimeMs),
+      durationMs(input.timing?.downstreamMs),
+      durationMs(input.timing?.outboundSendMs),
+      durationMs(input.timing?.totalLifecycleMs),
       now,
       now,
     );
@@ -760,8 +802,10 @@ export class WhatsAppStore {
          provider_message_id, tenant_id, sender_id, transcript_text, transcript_provenance,
          artifact_ref, artifact_sha256, downstream_destination, downstream_correlation_id,
          downstream_receipt_json, reply_text, canonical_provider_message_id, coalescing_state,
-         lifecycle_state, forwarded_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'forwarded', ?, ?)
+         lifecycle_state, media_download_ms, transcription_queue_wait_ms,
+         transcription_runtime_ms, downstream_ms, outbound_send_ms, total_lifecycle_ms,
+         forwarded_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'forwarded', ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(provider_message_id) DO UPDATE SET
          tenant_id=excluded.tenant_id,
          sender_id=excluded.sender_id,
@@ -775,6 +819,12 @@ export class WhatsAppStore {
          reply_text=excluded.reply_text,
          canonical_provider_message_id=excluded.canonical_provider_message_id,
          coalescing_state=excluded.coalescing_state,
+         media_download_ms=excluded.media_download_ms,
+         transcription_queue_wait_ms=excluded.transcription_queue_wait_ms,
+         transcription_runtime_ms=excluded.transcription_runtime_ms,
+         downstream_ms=excluded.downstream_ms,
+         outbound_send_ms=excluded.outbound_send_ms,
+         total_lifecycle_ms=excluded.total_lifecycle_ms,
          lifecycle_state='forwarded',
          updated_at=excluded.updated_at`,
     ).run(
@@ -791,8 +841,32 @@ export class WhatsAppStore {
       boundedRecoveryReply(input.replyText),
       input.canonicalProviderMessageId ?? null,
       input.coalescingState ?? null,
+      durationMs(input.timing?.mediaDownloadMs),
+      durationMs(input.timing?.transcriptionQueueWaitMs),
+      durationMs(input.timing?.transcriptionRuntimeMs),
+      durationMs(input.timing?.downstreamMs),
+      durationMs(input.timing?.outboundSendMs),
+      durationMs(input.timing?.totalLifecycleMs),
       now, now,
     );
+  }
+
+  recordChannelTiming(providerMessageId: string, timing: Partial<WhatsAppChannelTiming>): void {
+    const entries = [
+      ["media_download_ms", timing.mediaDownloadMs],
+      ["transcription_queue_wait_ms", timing.transcriptionQueueWaitMs],
+      ["transcription_runtime_ms", timing.transcriptionRuntimeMs],
+      ["downstream_ms", timing.downstreamMs],
+      ["outbound_send_ms", timing.outboundSendMs],
+      ["total_lifecycle_ms", timing.totalLifecycleMs],
+    ] as const;
+    const present = entries.filter((entry) => entry[1] !== undefined);
+    if (present.length === 0) return;
+    const assignments = present.map(([column]) => `${column} = ?`).join(", ");
+    const values = present.map(([, value]) => durationMs(value));
+    this.db.prepare(
+      `UPDATE whatsapp_channel_audit SET ${assignments}, updated_at = ? WHERE provider_message_id = ?`,
+    ).run(...values, Date.now(), providerMessageId);
   }
 
   channelAudit(providerMessageId: string): WhatsAppChannelAuditRecord | null {
@@ -807,19 +881,49 @@ export class WhatsAppStore {
          coalescing_state AS coalescingState,
          lifecycle_state AS lifecycleState,
          outbound_provider_id AS outboundProviderId, outbound_status AS outboundStatus,
+         media_download_ms AS mediaDownloadMs,
+         transcription_queue_wait_ms AS transcriptionQueueWaitMs,
+         transcription_runtime_ms AS transcriptionRuntimeMs,
+         downstream_ms AS downstreamMs, outbound_send_ms AS outboundSendMs,
+         total_lifecycle_ms AS totalLifecycleMs,
          forwarded_at AS forwardedAt, updated_at AS updatedAt
        FROM whatsapp_channel_audit WHERE provider_message_id = ?`,
     ).get(providerMessageId) as
-      | (Omit<WhatsAppChannelAuditRecord, "downstreamReceipt"> & { downstreamReceiptJson: string | null })
+      | (Omit<WhatsAppChannelAuditRecord, "downstreamReceipt" | "timing"> & {
+          downstreamReceiptJson: string | null;
+          mediaDownloadMs: number | null;
+          transcriptionQueueWaitMs: number | null;
+          transcriptionRuntimeMs: number | null;
+          downstreamMs: number | null;
+          outboundSendMs: number | null;
+          totalLifecycleMs: number | null;
+        })
       | undefined;
     if (!row) return null;
-    const { downstreamReceiptJson, ...record } = row;
+    const {
+      downstreamReceiptJson,
+      mediaDownloadMs,
+      transcriptionQueueWaitMs,
+      transcriptionRuntimeMs,
+      downstreamMs,
+      outboundSendMs,
+      totalLifecycleMs,
+      ...record
+    } = row;
     const mediaRecovery = this.mediaRecovery(providerMessageId);
     return {
       ...record,
       downstreamReceipt: downstreamReceiptJson
         ? (JSON.parse(downstreamReceiptJson) as Record<string, unknown>)
         : null,
+      timing: {
+        mediaDownloadMs,
+        transcriptionQueueWaitMs,
+        transcriptionRuntimeMs,
+        downstreamMs,
+        outboundSendMs,
+        totalLifecycleMs,
+      },
       ...(mediaRecovery ? { mediaRecovery } : {}),
     };
   }
