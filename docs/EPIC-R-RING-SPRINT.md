@@ -2,14 +2,14 @@
 
 Status: shipped
 Created: 2026-07-11
-Updated: 2026-07-12
+Updated: 2026-07-13
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-R-RING-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Ring delivery manager
 Steward since: 2026-07-11T02:20:29+02:00
-Last reconciled commit: `6f72b26775d51f3e51165379446ce13435ad1c1a`
+Last reconciled commit: `a99db25edc000ac97c674b9ce793b14e27c74c9d`
 Planner: Jordi + Epic 3.0 planner
 Worker: Ring delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -73,7 +73,7 @@ SHIP — the journey, walked in a REAL BROWSER on the LIVE deployment, loop unti
 - [x] 9. Logout/login persists chat wallet keys; second tenant sees none of the first tenant's wallet, chat history, or keys.
 - [x] 10. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test."
 
-HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now approved and tracked as R-H1..R-H5 below. Multiple-unit routing rules, Google sign-in, and standing-directives remain future work.
+HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now approved and tracked as R-H1..R-H5 below. The later Ring experience-convergence lap is tracked as W-R1..W-R4: explicit catalog intent, concise cited MCP reads, logical-call dedupe, and channel-independent standing-approval truth. Multiple-unit routing rules, Google sign-in, and standing-directives remain future work.
 
 ## Non-Goals
 
@@ -84,17 +84,23 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
-Phase: shipped; HARDEN complete — generic MCP, advertised/tenant-managed Agent Skills, and receipt provenance live
-Last verified: 2026-07-12T01:58:31+02:00
+Phase: shipped; Ring experience-convergence lap deployed — generic MCP, truthful receipts/holds, and concise cited reads live
+Last verified: 2026-07-13T02:20:00+02:00
 Integration target: main
-Live Ring artifact: `ghcr.io/zenod-ai/zenod:sha-4e09029` (`4e09029ac7634a818cadf3ecb285a32581d47eeb`)
+Live Ring artifact: `ghcr.io/zenod-ai/zenod:sha-a99db25` (`a99db25edc000ac97c674b9ce793b14e27c74c9d`)
 Validated Zenod skill publisher: `ghcr.io/zenod-ai/zenod:sha-e7dc215` (`e7dc215a566189c317a68533a7006c6d8a5b2d8f`)
-Next action: none; SHIP, R-H1–R-H5, advertised Zenod skill import, and post-HARDEN truthfulness corrections are delivered.
-Blockers: none.
+Next action: Ring-only UX hardening for invalid shortened peer-tool selections, then observe the channel-independent standing-approval contract when the channel owner supplies a real ingress turn. Do not operate or modify Phylax, Zenod, or Calli from this lane.
+Blockers: no Ring correctness blocker. Real WhatsApp proof depends on the Phylax/browser owner and is evidence for Ring's MCP ingress contract, not authority for Ring to change channel transport.
 
 ## Steward Commentary And Reasoning
 
-Reconciled 2026-07-12 against `main` at `6f72b26` and live `ring.zenod.dev` health at exact SHA `4e09029ac7634a818cadf3ecb285a32581d47eeb`.
+Reconciled 2026-07-13 against `main` and live `ring.zenod.dev` at exact SHA `a99db25edc000ac97c674b9ce793b14e27c74c9d`.
+
+- **Experience convergence (`a99db25`):** Ring now treats terse `tools?` as explicit catalog intent, collapses successful multi-step MCP reads to one concise terminal answer with an exact returned safe URL, renders canonical `Nothing pending to approve.` without a contradictory wrapper, and rejects unsupported held/pending claims when no same-turn action-producing tool result exists. One bounded retry may ask the model to invoke the already-discovered exact tool; the retry instruction is host-owned system context and never contaminates the user's prompt or downstream arguments.
+- **Zero-tool truth boundary (`a99db25`):** model prose cannot create standing approval state. Live browser evidence forced the model to say `Held for approval`; Ring emitted no tool call and replaced it with `Nothing was held or changed: no same-turn tool result created a standing action.` This closes the seam where a misspelled or natural approval turn could previously receive invented success/hold prose.
+- **Generic read presentation (`a99db25`):** Ring may retain a concise model synthesis only when it includes an exact safe URL returned by the successful peer read chain; otherwise it deterministically renders the terminal connected read plus bounded evidence. Mutation claims remain governed by verified receipt provenance, never by citation alone.
+- **Integration ownership:** evolving peers may add, remove, or change tools through authenticated `tools/list` and their own D16 skill bundles. Ring does not hard-code Zenod, Calli, Phylax, tweet text, or channel phrases. Ring's responsibility is to discover exact contracts, route natural intent, preserve tenant boundaries, and make the final reply no stronger than the same-turn evidence. Peer owners remain responsible for their schemas, idempotency, external mutations, and canonical receipts; channel owners remain responsible for transport and media custody.
+- **Recorded Ring residual:** the current model can first attempt an invalid shortened peer tool name before recovering to the exact collision-safe discovered name. The invalid attempt is rejected before the MCP boundary, the exact peer call runs once, and the final reply remains grounded. This is bounded Ring UX/tool-selection noise; hardening belongs in Ring's generic exact-identifier selection path, not in any peer profile.
 
 - **Advertised skill import (`e7dc215`):** Ring imports a peer's canonical bundle only after successful MCP discovery and only from the peer's own origin. Manual attach/replace/detach remains authoritative. This makes first connection useful without turning the peer into an authority over the tenant.
 - **Host-evidenced catalogs (`a730417`):** the Council and My Units render the catalog Ring actually discovered, including exact names and schemas. Reason: models and skill prose must not invent aliases, capabilities, or replacement schemas.
@@ -153,6 +159,9 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | 2026-07-11 | Skill runtime boundary | Current AI SDK 6 provider-independent pattern first. AI SDK 7 `uploadSkill` and provider containers are a separate future decision. Scripts stay inert; skill prose cannot override authority or mutation guards. |
 | 2026-07-11 | Generic peer receipt gate | Verified receipts from mutating wallet peer tools render verbatim from the tool result. Do not special-case `add_memory`, Zenod, or Calli; preserve the existing separate reconciliation path for backlog/execution tools. |
 | 2026-07-11 | Authoritative stream completion | Streaming deltas are transient UX. The `done` event must carry `engine.chat`'s final authoritative text, and the UI must replace the draft with it. This applies generically to every final reply, not only wallet receipts. |
+| 2026-07-13 | Standing-action truth | A held/pending/approved state exists only when a same-turn action-producing tool result or persisted host approval record proves it. Unsupported model prose is rejected; Ring may retry once through host-owned system context, then fails closed. |
+| 2026-07-13 | Concise generic reads | Prefer one concise synthesis only when it cites an exact safe URL returned by the successful peer read chain; otherwise render the terminal peer result with bounded evidence. Never reuse this read rule to validate a mutation claim. |
+| 2026-07-13 | Cross-unit experience ownership | Ring integrates evolving units through authenticated catalogs, optional advisory skills, exact tool schemas, and typed receipts. It does not own peer implementation, public mutation semantics, or channel transport; no product- or channel-specific routing hacks are permitted. |
 
 ## Issue Ledger
 
@@ -173,6 +182,10 @@ Wave 1: R-S1 ∥ R-S2. Wave 2: R-S3, R-S4. Then R-S5. Heartbeat 30 min: `lap/sta
 | [#865](https://github.com/zenod-ai/zenod/issues/865) | Ticket worker | R-H4-worker | Progressive `load_peer_skill` runtime + safety | done | #863, #860 done | [#887](https://github.com/zenod-ai/zenod/pull/887) / `codex/r-h4-peer-skill-runtime` | `ddab094` | metadata-only baseline; on-demand skill; no authority escalation/scripts | CI + independent security review pass; merged `e1c257b` | 2026-07-11T06:53:42+02:00 | integrated |
 | [#864](https://github.com/zenod-ai/zenod/issues/864) | Epic worker / tester | Ring delivery manager | Generic MCP + skills integration and live Calli validation | done | #862, #865, #866, #861 done | `main`; live fixes [#889](https://github.com/zenod-ai/zenod/pull/889), [#890](https://github.com/zenod-ai/zenod/pull/890) | `e6b0a2b` live | existing Calli auto-refresh, held draft only, two-tenant isolation | Calli 18 real tools; skill v1.0.0; held receipt; external MCP + isolation pass | 2026-07-11T13:19:05+02:00 | package delivered |
 | [#892](https://github.com/zenod-ai/zenod/issues/892) | Ticket worker | Zenod skill steward | Advertised peer skill import + canonical Zenod bundle | done | #860, #862, #865 | [#893](https://github.com/zenod-ai/zenod/pull/893) / `codex/zenod-advertised-skill` | `e5387eb` | same-origin bounded import; tenant override; live progressive load | deployed `e7dc215`; existing Zenod peer auto-attached v1.0.0; loader audit pass | 2026-07-11T14:35:28+02:00 | closed |
+| [#933](https://github.com/zenod-ai/zenod/issues/933) | Ticket worker | Ring agent / W-R1 | Bind catalog inspection to explicit MCP intent | done | - | [#939](https://github.com/zenod-ai/zenod/pull/939) / `codex/w-r1-catalog-intent` | `c5768d3` | ordinary chat/voice intent never routes to catalog; terse explicit catalog prompts do | merged `890f68c`; live `tools?` host-routed once on `a99db25` | 2026-07-13T02:20:00+02:00 | closed |
+| [#934](https://github.com/zenod-ai/zenod/issues/934) | Ticket worker | Ring agent / W-R2 | Concise clickable structured MCP evidence | done | - | [#942](https://github.com/zenod-ai/zenod/pull/942) / `codex/w-r2-structured-evidence` | `c5768d3` | one concise grounded read with returned URL; no successful raw dump | merged `dd43550`; live search→get produced one answer + exact GitHub source on `a99db25` | 2026-07-13T02:20:00+02:00 | closed |
+| [#935](https://github.com/zenod-ai/zenod/issues/935) | Ticket worker | Ring agent / W-R3 | One logical MCP call and rendered outcome | done; UX residual recorded | - | [#943](https://github.com/zenod-ai/zenod/pull/943) / `codex/w-r3-logical-call-dedupe` | `c5768d3` | one upstream logical call and one rendered result per operation | merged `d11810a`; live invalid short alias was rejected before MCP, exact tool ran once | 2026-07-13T02:20:00+02:00 | harden exact-identifier selection generically |
+| [#936](https://github.com/zenod-ai/zenod/issues/936) | Tester | Ring agent / W-R4 | Prove channel-independent standing approval | Ring code ready; external ingress evidence pending | Calli/Phylax owners supply their contracts | `main` / `a99db25` | held state, natural approval, receipt, and replay remain truthful across Ring MCP conversations | zero-tool fabricated hold blocked live; no public mutation in this lap; structured handoff comment `4953396828` | 2026-07-13T02:20:00+02:00 | observe a real ingress turn without changing channel or peer code |
 
 ## Branch And Integration
 
@@ -220,8 +233,16 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-11 | Generic MCP + skills hardening | `e6b0a2b` | ring.zenod.dev live | saved Calli refresh; real browser skill/draft; external MCP SDK; bearer-isolated beta tenant | PASS: Calli tools ready 18; canonical skill loaded; `[draft_not_approved]` held; MCP status ok; beta sees no peers/key/skill; cleaned up | `docs/evidence/ring-ship-2026-07-11/20`–`25`; `TEST-PACKAGE.md` |
 | 2026-07-11 | Advertised Zenod skill import | `e7dc215` | ring.zenod.dev + cloud.zenod.dev live | existing peer boot refresh; signed-in Chrome; external Ring MCP chat; service correlation audit | PASS: Zenod v1.0.0 auto-attached, 3 inert files; `load_peer_skill` ran and reported scripts non-executable | `docs/evidence/ring-zenod-skill-2026-07-11/zenod-auto-attached.png`; correlation `test_abdfd93795ad4ff1a6fac8ebc8c16ca6` |
 | 2026-07-12 | Post-HARDEN catalog/receipt/approval truthfulness | `4e09029` | ring.zenod.dev live | exact health SHA; source and focused regression evidence in `a730417`, `1b72a7c`, `bf366b5`, `eb0f095`, `4e09029` | DEPLOYED: host-evidenced catalog, same-turn receipt provenance, schema warnings, natural intent, truthful approval holds | Live health returned `4e09029ac7634a818cadf3ecb285a32581d47eeb`; no new full browser journey was claimed in this reconciliation |
+| 2026-07-13 | Ring experience convergence | `a99db25` | ring.zenod.dev signed-in web chat + live runtime logs | `tools?`; read-only Ring memory retrieval; forced zero-tool held-claim probe; exact-SHA route/auth checks | PASS: authenticated catalogs for three evolving peers; one concise answer + exact GitHub URL; unsupported hold deterministically blocked with zero tools; root/app/health 200, MCP unauth 401, OAuth callback exact | GitHub CI + Publish image passed; issue [#936 handoff](https://github.com/zenod-ai/zenod/issues/936#issuecomment-4953396828); live health `a99db25` |
 
 ## Handoff Journal
+
+### 2026-07-13T02:20:00+02:00 - Ring delivery manager - Experience convergence deployed; ownership narrowed
+
+Context: Ring production and `main` are aligned at `a99db25`. The Ring-only fix lap closed four user-visible host seams without changing any peer or channel contract: terse explicit catalog questions are host-routed; successful multi-step reads collapse to one cited answer; canonical nothing-pending is rendered exactly; and zero-tool held/published claims fail closed, with at most one bounded host-side recovery attempt. Full repository tests, workspace typechecks, CI, and immutable image publication passed. Live signed-in web chat proved catalog, concise citation, and zero-tool hold interception. No public post was made.
+Reasoning: the experience comes together at Ring's evidence boundary, not through product-specific orchestration. Each unit can evolve independently because Ring consumes the authenticated catalog and typed result it actually exposes. Optional Agent Skills remain advisory. Ring can make routing and prose pleasant, but it cannot invent a tool, approval state, receipt, or peer capability to smooth over a missing contract.
+Residual: one live read showed the model try a shortened non-existent tool identifier before correcting to the exact discovered hashed identifier. Ring rejected the invalid attempt before any peer call; the correct read ran once. Treat this as Ring-owned generic tool-selection UX hardening. Do not ask peer owners to add aliases and do not weaken collision-safe names.
+Next: remain on the Ring lane. Harden exact-identifier selection if the noise repeats; otherwise observe the next real MCP ingress acceptance supplied by the channel owner and record only Ring correlation, selected tool, evidence, and final rendered reply.
 
 ### 2026-07-12T01:58:31+02:00 - Spine steward - Latest live state and reasoning reconciled
 
