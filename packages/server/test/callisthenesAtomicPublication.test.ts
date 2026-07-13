@@ -52,7 +52,7 @@ describe("Callisthenes atomic publication", () => {
     const first = createCallisthenesUnit({ dataDir, tenantStore, fetcher: fetcher as typeof fetch });
     const second = createCallisthenesUnit({ dataDir, tenantStore, fetcher: fetcher as typeof fetch });
     try {
-      const heldText = await textOf(await rpcCall(first, "alpha", 1, "createPosts", { text: "Atomic exact text." }));
+      const heldText = await textOf(await rpcCall(first, "alpha", 1, "draft_post", { channel: "x", text: "Atomic exact text." }));
       const actionId = heldText.match(/action_id=(act_[a-f0-9]{32})/)?.[1];
       expect(actionId).toBeTruthy();
       const approvals = Array.from({ length: 20 }, (_, index) => rpcCall(index % 2 ? first : second, "alpha", index + 10, "approve_send", {

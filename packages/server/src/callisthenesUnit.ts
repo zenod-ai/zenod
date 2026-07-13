@@ -96,6 +96,39 @@ const APPROVE_SEND_TOOL = {
   },
 };
 
+const DRAFT_POST_TOOL = {
+  name: "draft_post",
+  title: "Hold an exact X draft",
+  description: "Create or reuse a tenant-scoped held X draft without calling X or publishing anything. Returns an opaque action_id for approve_send. The same exact active draft is idempotent; changed text creates a different action.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["text"],
+    properties: {
+      channel: { type: "string", enum: ["x"], description: "Optional explicit channel; Callisthenes currently holds X drafts." },
+      text: { type: "string", minLength: 1, description: "The exact proposed X text. It is held byte-for-byte and is never published by this tool." },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["status", "channel", "action_id", "text", "expires_at"],
+    properties: {
+      status: { type: "string", enum: ["held"] },
+      channel: { type: "string", enum: ["x"] },
+      action_id: { type: "string", pattern: "^act_[a-f0-9]{32}$" },
+      text: { type: "string", minLength: 1 },
+      expires_at: { type: "string", format: "date-time" },
+    },
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+};
+
 const RECONCILE_SEND_TOOL = {
   name: "reconcile_send",
   title: "Reconcile an unknown X publication",
@@ -322,6 +355,25 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
       observationLedger.observeCall(record.tenant.id, "");
       return approveSend(rpc, record.tenant.id, target, headers);
     }
+    if (rpc?.method === "tools/call" && rpc.params?.name === "draft_post") {
+      observationLedger.observeCall(record.tenant.id, "");
+      const args = rpc.params.arguments ?? {};
+      const channel = String(args.channel ?? "x").trim().toLowerCase();
+      const text = typeof args.text === "string" ? args.text : "";
+      if (channel !== "x" || !text.trim()) {
+        return rpcText(rpc.id, "[invalid_input] draft_post requires channel x and non-empty exact text. Nothing was published.");
+      }
+      const held = observationLedger.hold(record.tenant.id, text);
+      const message = `[draft_not_approved] X draft held; nothing was published.\n[held_action] action_id=${held.id} expires_at=${held.expires_at}`;
+      return Response.json({
+        jsonrpc: "2.0",
+        id: rpc.id ?? null,
+        result: {
+          content: [{ type: "text", text: message }],
+          structuredContent: { status: "held", channel: "x", action_id: held.id, text: held.text, expires_at: held.expires_at },
+        },
+      });
+    }
     if (rpc?.method === "tools/call" && rpc.params?.name === "reconcile_send") {
       observationLedger.observeCall(record.tenant.id, "");
       return reconcileSend(rpc, record.tenant.id, target, headers);
@@ -349,6 +401,7 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
     const payload = parseRpcResponse(responseText);
     if (!payload) return new Response(responseText, { status: response.status, headers: response.headers });
     if (rpc.method === "tools/list" && payload.result?.tools) {
+      if (!payload.result.tools.some((tool) => tool.name === "draft_post")) payload.result.tools.push(DRAFT_POST_TOOL);
       if (!payload.result.tools.some((tool) => tool.name === "approve_send")) payload.result.tools.push(APPROVE_SEND_TOOL);
       if (!payload.result.tools.some((tool) => tool.name === "reconcile_send")) payload.result.tools.push(RECONCILE_SEND_TOOL);
       payload.result.tools = payload.result.tools.map((tool) =>

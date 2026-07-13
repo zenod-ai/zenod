@@ -34,6 +34,7 @@ def test_agent_skill_has_format_valid_core_metadata():
 def test_agent_skill_encodes_guarded_exactly_once_workflow():
     _, body = _parts()
     required = (
+        "draft_post",
         "createPosts",
         "[draft_not_approved]",
         "exact final text",

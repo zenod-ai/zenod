@@ -9,17 +9,18 @@ Required for guarded X publishing:
 | Terminal tool name | Purpose | Mutation |
 |---|---|---|
 | `getUsersMe` | Resolve the connected X identity | No |
+| `draft_post` | Create or reuse Callisthenes-owned held state without calling X | Safe tenant-local state only |
 | `createPosts` | Present a proposed post to Callisthenes' draft guard | Yes, but intentionally refused without approval |
 | `approve_send` | Commit the exact standing draft once and return a canonical receipt | Yes |
 | `deletePosts` | Delete a named post after separate confirmation | Yes |
 
-The host may expose names such as `calli_createPosts`. Resolve the attached peer's discovered tool whose terminal name is `createPosts`; do not search unrelated peers.
+The host may namespace terminal names. Resolve `draft_post` on the attached peer when present, otherwise its `createPosts` compatibility path; do not search unrelated peers.
 
 ## Publish state machine
 
 ```text
 proposed text
-  -> createPosts({ text })
+  -> draft_post({ text })
   -> [draft_not_approved] + opaque action_id
   -> show exact text + target
   -> explicit confirmation of that exact content
@@ -27,11 +28,13 @@ proposed text
   -> https://x.com/i/web/status/<id>
 ```
 
+Prefer `draft_post` when the live catalog advertises it. Older Callisthenes deployments use `createPosts({ text })` without approval for the same held-state transition; clients must retain that fallback until the compatibility path is retired explicitly.
+
 Only the final canonical permalink proves publication. An MCP HTTP success, a tool-start event, model narration, or an X post id embedded in an error is not sufficient.
 
 For backward compatibility, a client may omit `action_id` only when exactly one unexpired pending action has the exact text. If the action is missing, expired, consumed, belongs to another tenant, or the text differs by even one character, nothing is sent.
 
-If the text changes after confirmation, the confirmation is stale. Start again at `createPosts` with the new exact text.
+If the text changes after confirmation, the confirmation is stale. Start again at the discovered draft step with the new exact text.
 
 ## Approval outcomes
 
