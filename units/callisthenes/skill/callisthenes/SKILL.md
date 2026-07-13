@@ -19,7 +19,7 @@ Use only tools discovered from the peer to which this skill is attached. Hosts m
 Before the first operation in a session:
 
 1. Confirm discovery completed and the peer reports tools ready.
-2. Confirm `createPosts` and `approve_send` are present for the safe publish workflow.
+2. Confirm `approve_send` plus either `draft_post` (preferred) or the backward-compatible `createPosts` draft path are present for the safe publish workflow.
 3. Use `getUsersMe` when the target X identity is unknown or material to the request.
 4. If a required tool is absent, say which capability is unavailable. Do not substitute another peer or invent arguments.
 
@@ -30,9 +30,9 @@ Do not request, display, store, or infer MCP bearer tokens, X credentials, appro
 Follow this sequence exactly:
 
 1. Prepare one final post for one X account. Preserve the user's voice; do not add hype, emojis, hashtags, links, or claims they did not request.
-2. Call `createPosts` with the final `text` and **without** an approval argument. Callisthenes should refuse it with `[draft_not_approved]` and return a `[held_action]` marker containing an opaque `action_id`; that refusal is the guarded draft step and must not be described as a failure to save the draft.
+2. Prefer `draft_post` with the final `text` when it is discovered. It creates Callisthenes-owned held state, returns `[draft_not_approved]` plus a `[held_action]` marker containing an opaque `action_id`, and never calls X. For backward compatibility, if `draft_post` is absent, call `createPosts` with the final `text` and **without** an approval argument; its guarded refusal establishes the same held action. Neither outcome is a failure to save the draft.
 3. Show the user the exact final text and target account. Ask for explicit confirmation to publish that exact content.
-4. If the user edits any character or changes the target, repeat the draft step and obtain confirmation again.
+4. If the user edits any character or changes the target, repeat the same discovered draft step and obtain confirmation again.
 5. After confirmation, call `approve_send` **once** with `channel: "x"`, the returned `action_id`, and the byte-for-byte final `text` shown to the user. Older clients may omit `action_id` only when exactly one matching held action exists. Do not call approved `createPosts` directly.
 6. Relay the returned result faithfully. Success requires a canonical `https://x.com/i/web/status/<id>` permalink. The permalink is the receipt.
 
