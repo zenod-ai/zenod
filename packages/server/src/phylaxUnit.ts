@@ -177,7 +177,11 @@ function createTenantOrgan(
   return new PhylaxChannelsOrgan({
     dataDir,
     transcriptionDeadlineMs: configuredDeadline,
-    routes: { resolve: (channel, sender) => tenantSettings.resolve(channel, sender) },
+    routes: {
+      resolve: (channel, sender) => tenantSettings.resolve(channel, sender),
+      reportDownstreamCredentialStatus: (tenantId, status) =>
+        tenantSettings.reportDownstreamCredentialStatus(tenantId, status),
+    },
     transcriber: {
       async transcribe(input) {
         const transcription = tenantSettings.transcriptionConfig(input.tenantId);
@@ -224,7 +228,6 @@ function createTenantOrgan(
     },
   });
 }
-
 export function phylaxTranscriptionConfigurationError(transcription: {
   provider: "local" | "groq" | "openai" | "openrouter";
   model?: string | null;

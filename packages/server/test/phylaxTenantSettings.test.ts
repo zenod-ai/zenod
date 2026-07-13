@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,6 +57,8 @@ describe("PhylaxTenantSettingsStore", () => {
     const rowFile = await readFile(join(dataDir, "phylax-tenant-settings.json"), "utf8");
     expect(rowFile).not.toContain("ring-alpha-secret");
     expect(rowFile).not.toContain("stt-alpha-secret");
+    expect(rowFile).not.toContain("/mcp/alpha");
+    expect(rowFile).not.toContain("/mcp/beta");
   });
 
   it("does not resolve an unverified or tokenless tenant", async () => {
@@ -64,5 +66,67 @@ describe("PhylaxTenantSettingsStore", () => {
     store.registerPhone("alpha", "+34 611 111 111");
     store.update("alpha", { downstreamUrl: "https://ring.zenod.dev/mcp/alpha" });
     expect(store.resolve("whatsapp", "34611111111")).toBeNull();
+  });
+
+  it("tracks credential rejection without persisting secrets and clears it only through the existing update seam", async () => {
+    const { dataDir, store } = await setup();
+    store.update("alpha", {
+      downstreamUrl: "https://ring.zenod.dev/mcp/old-path-token",
+      downstreamToken: "old-bearer-secret",
+    });
+
+    store.reportDownstreamCredentialStatus("alpha", "rejected", 1_000);
+    expect(store.view("alpha")).toMatchObject({
+      downstreamCredentialStatus: "rejected",
+      downstreamCredentialCheckedAt: new Date(1_000).toISOString(),
+      downstreamTokenConfigured: true,
+    });
+    expect(await readFile(join(dataDir, "phylax-tenant-settings.json"), "utf8"))
+      .not.toContain("old-bearer-secret");
+    expect(await readFile(join(dataDir, "phylax-tenant-settings.json"), "utf8"))
+      .not.toContain("old-path-token");
+
+    store.update("alpha", { transcriptionModel: "small" });
+    expect(store.view("alpha").downstreamCredentialStatus).toBe("rejected");
+    store.update("alpha", {
+      downstreamUrl: "https://ring.zenod.dev/mcp/new-path-token",
+      downstreamToken: "new-bearer-secret",
+    });
+    expect(store.view("alpha")).toMatchObject({
+      downstreamCredentialStatus: "unknown",
+      downstreamCredentialCheckedAt: null,
+    });
+    expect(await readFile(join(dataDir, "phylax-tenant-settings.json"), "utf8"))
+      .not.toContain("new-bearer-secret");
+    expect(await readFile(join(dataDir, "phylax-tenant-settings.json"), "utf8"))
+      .not.toContain("new-path-token");
+
+    store.reportDownstreamCredentialStatus("alpha", "healthy", 2_000);
+    expect(store.view("alpha")).toMatchObject({
+      downstreamCredentialStatus: "healthy",
+      downstreamCredentialCheckedAt: new Date(2_000).toISOString(),
+    });
+  });
+
+  it("migrates a legacy plaintext downstream URL into encrypted custody without changing the route", async () => {
+    const { dataDir, store } = await setup();
+    await writeFile(store.path, JSON.stringify({
+      alpha: {
+        tenantId: "alpha",
+        phoneNumber: "34611111111",
+        verified: true,
+        downstreamUrl: "https://ring.zenod.dev/mcp/legacy-path-secret",
+      },
+    }));
+
+    store.update("alpha", { downstreamToken: "legacy-bearer-secret" });
+    expect(store.resolve("whatsapp", "34611111111")).toMatchObject({
+      tenantId: "alpha",
+      downstreamUrl: "https://ring.zenod.dev/mcp/legacy-path-secret",
+      downstreamToken: "legacy-bearer-secret",
+    });
+    const migrated = await readFile(join(dataDir, "phylax-tenant-settings.json"), "utf8");
+    expect(migrated).not.toContain("legacy-path-secret");
+    expect(migrated).not.toContain("legacy-bearer-secret");
   });
 });

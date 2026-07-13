@@ -86,6 +86,70 @@ describe("PhylaxChannelsOrgan", () => {
     expect(called).toBe(false);
   });
 
+  it("marks thrown and typed authentication rejections without echoing credential-bearing errors", async () => {
+    const statuses: Array<[string, string]> = [];
+    let failure: "thrown" | "typed" = "thrown";
+    const organ = new PhylaxChannelsOrgan({
+      dataDir: "/tmp/unused-phylax-auth-rejection",
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://ring.test/mcp/path-secret",
+          downstreamToken: "bearer-secret",
+        }),
+        reportDownstreamCredentialStatus(tenantId, status) {
+          statuses.push([tenantId, status]);
+        },
+      },
+      async callDownstream() {
+        if (failure === "thrown") {
+          throw new Error('POSTing to endpoint with bearer-secret: {"error":"Unauthorized"}');
+        }
+        return {
+          isError: true,
+          content: [{ type: "text", text: "403 forbidden for token bearer-secret" }],
+        };
+      },
+    });
+
+    for (const kind of ["thrown", "typed"] as const) {
+      failure = kind;
+      const rejected = await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat",
+        text: "hello",
+      }).catch((error: unknown) => error);
+      expect(rejected).toMatchObject({
+        code: "downstream_error",
+        audit: { failureCode: "downstream_unauthorized" },
+      });
+      expect(String(rejected)).toContain("replace the Ring MCP URL and bearer token");
+      expect(String(rejected)).not.toContain("bearer-secret");
+      expect(String(rejected)).not.toContain("path-secret");
+    }
+    expect(statuses).toEqual([["alpha", "rejected"], ["alpha", "rejected"]]);
+  });
+
+  it("marks the configured downstream credential healthy after a successful reply", async () => {
+    const statuses: Array<[string, string]> = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir: "/tmp/unused-phylax-auth-healthy",
+      routes: {
+        resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "secret" }),
+        reportDownstreamCredentialStatus(tenantId, status) {
+          statuses.push([tenantId, status]);
+        },
+      },
+      async callDownstream() {
+        return { content: [{ type: "text", text: "ok" }] };
+      },
+    });
+
+    await organ.receive({ channel: "whatsapp", sender: "34611111111", chatId: "chat", text: "hello" });
+    expect(statuses).toEqual([["alpha", "healthy"]]);
+  });
+
   it("ports D18 transcript, artifact and usage; transcription failure forwards immediately", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-d18-"));
     dirs.push(dataDir);
@@ -217,7 +281,6 @@ describe("PhylaxChannelsOrgan", () => {
     });
   });
 });
-
 describe("Phylax MCP channel tools", () => {
   it("registers send_message, notify and channel_status through conduct and returns receipts", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-tools-"));
