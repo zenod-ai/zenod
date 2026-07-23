@@ -563,6 +563,48 @@ describe("Zenod chassis unit", () => {
     }
   });
 
+  it("serves OAuth DCR metadata and a working /oauth/register so MCP connectors can self-register", async () => {
+    const dataDir = await tempDir();
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore([{ token: "reg-token", tenant: { id: "tenant-reg" } }]),
+      env: { CHASSIS_VAULT_MASTER_KEY },
+    });
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const started = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(started));
+    });
+    try {
+      const address = server.address() as AddressInfo;
+      const base = `http://127.0.0.1:${address.port}`;
+
+      // Discovery must return JSON metadata that advertises the registration endpoint —
+      // not the SPA fallback (the regression that made the connector fall back to
+      // POST /register → 404).
+      const meta = await fetch(`${base}/.well-known/oauth-authorization-server`);
+      expect(meta.status).toBe(200);
+      expect(meta.headers.get("content-type")).toContain("application/json");
+      const metaBody = (await meta.json()) as { registration_endpoint?: string };
+      expect(metaBody.registration_endpoint).toBe(`${base}/oauth/register`);
+
+      // Dynamic client registration (RFC 7591) must succeed and mint a client_id.
+      const register = await fetch(`${base}/oauth/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Claude",
+          redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+        }),
+      });
+      expect(register.status).toBe(201);
+      expect((await register.json()) as { client_id: string }).toMatchObject({
+        client_id: expect.stringMatching(/^zc_/),
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      unit.close();
+    }
+  });
+
   it("uses the durable chassis tenant store for idempotent self-host restart", async () => {
     const dataDir = await tempDir();
     const env = {

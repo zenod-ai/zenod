@@ -1686,3 +1686,5 @@ export type {
   OAuthStore,
   OAuthTokenSet,
 } from "./oauth.js";
+export { SqliteOAuthStore, createSqliteOAuthStore } from "./oauthSqliteStore.js";
+export type { SqliteOAuthStoreOptions } from "./oauthSqliteStore.js";

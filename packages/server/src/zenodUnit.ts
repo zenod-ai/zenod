@@ -4,6 +4,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
   ChassisStorage,
+  createSqliteOAuthStore,
   createSqliteTenantStore,
   createUnit,
   hashToken,
@@ -239,6 +240,16 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       longTools: ZENOD_LONG_TOOLS,
     },
     tenantAuth: { store: tenantStore },
+    // Enable the RFC 7591 dynamic-client-registration authorization server so MCP
+    // connectors can self-register (POST /oauth/register) and complete the OAuth
+    // handshake. Without it, discovery falls through to the SPA and connectors fall
+    // back to POST /register → 404. Persist to SQLite so registrations and refresh
+    // tokens survive redeploys (the default in-memory store would strand every
+    // connected client on each deploy).
+    oauth: {
+      server: true,
+      store: createSqliteOAuthStore({ dataDir: storage.dataDir }),
+    },
     controlPlane: {
       ...options.controlPlane,
       store: tenantStore,
