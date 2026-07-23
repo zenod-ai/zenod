@@ -124,3 +124,25 @@ jobs:
           build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Roll the hosted GHCR fleet (zenod-mt, ring, herald, …) forward to the sha we
+  # just published, so a merge to main actually deploys instead of leaving the
+  # docker-source apps pinned to a stale immutable tag. No-op / clean skip until
+  # the DOKPLOY_API_KEY secret is configured, so this is safe to merge first.
+  deploy:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Roll fleet to the freshly published sha
+        env:
+          IMAGE: ghcr.io/zenod-ai/zenod:sha-${{ github.sha }}
+          DOKPLOY_API_BASE: ${{ secrets.DOKPLOY_API_BASE }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+        run: |
+          # metadata-action's `type=sha,format=short` pins the 7-char short sha;
+          # match that here rather than the full 40-char commit.
+          export IMAGE="ghcr.io/zenod-ai/zenod:sha-${GITHUB_SHA::7}"
+          bash scripts/deploy-fleet.sh
