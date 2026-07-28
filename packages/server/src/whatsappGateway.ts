@@ -123,6 +123,10 @@ export interface WhatsAppPortedInbound {
 export type WhatsAppPortedInboundHandler = (input: WhatsAppPortedInbound) => Promise<{
   replyText: string;
   suppressReply?: boolean;
+  /** The reply is a queue/confirmation receipt; a later durable recovery row owns the terminal reply. */
+  deferred?: boolean;
+  /** Runs only after the queue/confirmation receipt has a provider send receipt. */
+  afterReply?: () => void;
   timing?: Partial<WhatsAppChannelTiming>;
 }>;
 
@@ -858,6 +862,13 @@ export class WhatsAppGateway {
     }
   }
 
+  /** Drain already-persisted provider work. This never invokes Ring. */
+  async drainMediaRecovery(): Promise<void> {
+    const socket = this.socket;
+    if (!socket) return;
+    await this.recoverInterruptedMedia(socket);
+  }
+
   async handleMessages(messages: WAMessage[], type: string): Promise<void> {
     this.lastUpsertAt = Date.now();
     this.lastUpsertType = type;
@@ -1050,13 +1061,19 @@ export class WhatsAppGateway {
       }
       if (!forwarded.replyText.trim()) throw new Error("tenant downstream returned no reply");
       const outboundStartedAt = Date.now();
-      await this.sendReply(event, forwarded.replyText, "sent");
+      try {
+        await this.sendReply(event, forwarded.replyText, forwarded.deferred ? "processing" : "sent");
+      } finally {
+        // A durable queued job must not strand merely because its acknowledgement
+        // could not be delivered. The worker owns the later terminal attempt.
+        forwarded.afterReply?.();
+      }
       this.options.store.recordChannelTiming(event.messageId, {
         ...forwarded.timing,
         outboundSendMs: Date.now() - outboundStartedAt,
         totalLifecycleMs: Date.now() - lifecycleStartedAt,
       });
-      this.options.store.markMessageStatus(event.messageId, "replied");
+      if (!forwarded.deferred) this.options.store.markMessageStatus(event.messageId, "replied");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.options.store.markMessageStatus(event.messageId, "failed");

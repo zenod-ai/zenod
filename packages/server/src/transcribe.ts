@@ -437,7 +437,11 @@ async function groqTranscribeFileWithRetry(path: string, apiKey: string, signal?
   }
 }
 
-async function probeDurationSeconds(data: Buffer, filename: string, signal?: AbortSignal): Promise<number | null> {
+export async function probeAudioDurationSeconds(
+  data: Buffer,
+  filename: string,
+  signal?: AbortSignal,
+): Promise<number | null> {
   const dir = await mkdtemp(join(tmpdir(), "zenod-probe-"));
   const input = join(dir, `in${extname(filename) || ".m4a"}`);
   try {
@@ -702,7 +706,7 @@ async function runTranscription(
       ? typeof options === "function"
         ? undefined
         : options.durationSeconds
-      : options.durationSeconds ?? (await probeDurationSeconds(data, filename, signal));
+      : options.durationSeconds ?? (await probeAudioDurationSeconds(data, filename, signal));
   const isLongAudio = durationSeconds !== null && durationSeconds !== undefined && durationSeconds > LONG_AUDIO_SECONDS;
   if (fakeTranscript) {
     onProgress?.(100);

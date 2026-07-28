@@ -174,9 +174,14 @@ function createTenantOrgan(
   env: NodeJS.ProcessEnv,
 ): PhylaxChannelsOrgan {
   const configuredDeadline = Number(env.PHYLAX_TRANSCRIPTION_DEADLINE_MS ?? 60_000);
+  const configuredVoiceJobDeadline = Number(
+    env.PHYLAX_VOICE_JOB_DEADLINE_MS
+      ?? 2 * 60 * 60_000,
+  );
   return new PhylaxChannelsOrgan({
     dataDir,
     transcriptionDeadlineMs: configuredDeadline,
+    voiceJobDeadlineMs: configuredVoiceJobDeadline,
     routes: {
       resolve: (channel, sender) => tenantSettings.resolve(channel, sender),
       reportDownstreamCredentialStatus: (tenantId, credentialRevision, status) =>

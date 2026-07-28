@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PhylaxChannelError,
   PhylaxChannelsOrgan,
+  normalizePhylaxVoiceJobDeadlineMs,
   phylaxWhatsAppPaths,
   registerPhylaxChannelTools,
   type PhylaxDownstreamCall,
@@ -40,6 +41,13 @@ afterEach(async () => {
 });
 
 describe("PhylaxChannelsOrgan", () => {
+  it("normalizes the durable voice safety bound to a two-hour default and four-hour maximum", () => {
+    expect(normalizePhylaxVoiceJobDeadlineMs(undefined)).toBe(2 * 60 * 60_000);
+    expect(normalizePhylaxVoiceJobDeadlineMs(Number.NaN)).toBe(2 * 60 * 60_000);
+    expect(normalizePhylaxVoiceJobDeadlineMs(8 * 60 * 60_000)).toBe(4 * 60 * 60_000);
+    expect(normalizePhylaxVoiceJobDeadlineMs(30 * 60_000)).toBe(30 * 60_000);
+  });
+
   it("resolves sender to exactly one tenant downstream and never crosses tokens", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-channels-"));
     dirs.push(dataDir);
@@ -1048,7 +1056,7 @@ describe("ported gateway integration", () => {
     }
   });
 
-  it("sends one truthful slow-voice progress receipt only for the coalescing owner, then one terminal reply", async () => {
+  it("queues one coalescing owner immediately, then sends one persisted Ring reply", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-progress-"));
     dirs.push(dataDir);
     const sent: Array<{ jid: string; text: string }> = [];
@@ -1078,6 +1086,7 @@ describe("ported gateway integration", () => {
       PHYLAX_MEDIA_COALESCE_WINDOW_MS: "60000",
       PHYLAX_VOICE_PROGRESS_DELAY_MS: "100",
     }, {
+      probeVoiceDuration: async () => 60,
       whatsappSocketFactory: async () => ({
         ev: { on() {} },
         user: { id: "34999999999@s.whatsapp.net" },
@@ -1109,16 +1118,17 @@ describe("ported gateway integration", () => {
         runtime.whatsapp.handleEvent(event("voice-owner")),
         runtime.whatsapp.handleEvent(event("voice-duplicate")),
       ]);
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("voice-owner")?.state).toBe("completed"));
       expect(transcriptionCalls).toBe(1);
       expect(downstreamCalls).toBe(1);
       expect(sent.map((entry) => entry.text)).toEqual([
-        "I received your voice note and I’m still processing it.",
+        'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "strawberry banana",
       ]);
       const outbound = runtime.whatsappStore.recentTranscript({ sinceMs: 0 })
         .filter((entry) => entry.direction === "outbound");
       expect(outbound).toHaveLength(2);
-      expect(outbound.map((entry) => entry.status)).toEqual(["processing", "sent"]);
+      expect(outbound.map((entry) => entry.status)).toEqual(["processing", "recovery_sent"]);
       const traces = ["voice-owner", "voice-duplicate"].map((messageId) => runtime.whatsappStore.channelAudit(messageId));
       expect(traces.filter((trace) => trace?.lifecycleState === "replied")).toHaveLength(1);
       expect(traces.filter((trace) => trace?.lifecycleState === "coalesced")).toHaveLength(1);
@@ -1127,11 +1137,74 @@ describe("ported gateway integration", () => {
     }
   });
 
-  it("makes a timed-out voice terminal at the provider with its typed failure and artifact intact", async () => {
+  it("does not strand a durable voice job when its queued acknowledgement send fails", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-ack-failure-"));
+    dirs.push(dataDir);
+    let sends = 0;
+    let downstreamCalls = 0;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://ring.test/mcp/alpha",
+          downstreamToken: "alpha-token",
+        }),
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe() {
+          return { text_transcript: "ack failed but transcript persisted", transcription_source: "whisper.cpp base" };
+        },
+      },
+      async callDownstream() {
+        downstreamCalls += 1;
+        return { content: [{ type: "text", text: "Terminal reply after ack failure." }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      probeVoiceDuration: async () => 60,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage() {
+          sends += 1;
+          if (sends === 1) throw new Error("ack provider failure");
+          return { key: { id: `ack-recovery-${sends}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    try {
+      await runtime.whatsapp.handleEvent({
+        messageId: "voice-ack-failure",
+        chatId: "34611111111@s.whatsapp.net",
+        senderId: "34611111111@s.whatsapp.net",
+        senderName: "Alpha",
+        chatName: "Alpha",
+        isGroup: false,
+        timestamp: 1,
+        body: "",
+        hasMedia: true,
+        mediaType: "ptt",
+        mimeType: "audio/ogg",
+        fileName: null,
+        mediaRaw: { testBytes: "ack-failure-audio" },
+      });
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("voice-ack-failure")?.state).toBe("completed"));
+      expect(downstreamCalls).toBe(1);
+      expect(sends).toBeGreaterThanOrEqual(2);
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  it("lets a long local voice complete beyond the old synchronous deadline", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-timeout-terminal-"));
     dirs.push(dataDir);
     const calls: PhylaxDownstreamCall[] = [];
     const sent: string[] = [];
+    let aborted = false;
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       transcriptionDeadlineMs: 100,
@@ -1139,16 +1212,21 @@ describe("ported gateway integration", () => {
       artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/token/artifacts/${tenantId}/${artifactId}`,
       transcriber: {
         async transcribe({ signal }) {
-          await new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true }));
-          return {};
+          signal.addEventListener("abort", () => { aborted = true; }, { once: true });
+          await new Promise((resolve) => setTimeout(resolve, 180));
+          return {
+            text_transcript: "long voice completed",
+            transcription_source: "whisper.cpp base",
+          };
         },
       },
       async callDownstream(call) {
         calls.push(call);
-        return { content: [{ type: "text", text: "Please retry that voice note." }] };
+        return { content: [{ type: "text", text: "Long voice saved." }] };
       },
     });
     const runtime = new PhylaxPortedRuntime(dataDir, organ, { PHYLAX_VOICE_PROGRESS_DELAY_MS: "30000" }, {
+      probeVoiceDuration: async () => 20 * 60,
       whatsappSocketFactory: async () => ({
         ev: { on() {} },
         async sendMessage(_jid, content) {
@@ -1176,21 +1254,255 @@ describe("ported gateway integration", () => {
     };
     try {
       await runtime.whatsapp.handleEvent(event);
-      expect(sent).toEqual(["Please retry that voice note."]);
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
+      expect(aborted).toBe(false);
+      expect(sent).toEqual([
+        'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        "Long voice saved.",
+      ]);
       expect(calls).toHaveLength(1);
-      expect(calls[0].handoff.transcription_failed).toMatchObject({ code: "timeout" });
+      expect(calls[0].handoff.text_transcript).toBe("long voice completed");
       expect(calls[0].handoff.artifact_ref).toMatch(/^https:\/\/phylax\.zenod\.dev\/mcp\/token\/artifacts\/alpha\//);
       expect(runtime.whatsappStore.channelAudit(event.messageId)).toMatchObject({
         lifecycleState: "replied",
         outboundProviderId: "terminal-timeout-reply",
-        outboundStatus: "sent",
+        outboundStatus: "recovery_sent",
       });
     } finally {
       runtime.close();
     }
   });
 
-  it("persists a secret-free provider trace when transcription times out and Ring rejects authorization", async () => {
+  it("holds over-30-minute audio for scoped confirmation and supports exact scoped cancellation", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-controls-"));
+    dirs.push(dataDir);
+    const sent: string[] = [];
+    let transcriptionCalls = 0;
+    let downstreamCalls = 0;
+    let durationSeconds: number | null = null;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve(_channel, sender) {
+          if (sender === "34611111111") {
+            return { tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "alpha-token" };
+          }
+          return { tenantId: "beta", downstreamUrl: "https://ring.test/mcp/beta", downstreamToken: "beta-token" };
+        },
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe({ signal }) {
+          transcriptionCalls += 1;
+          if (durationSeconds < 30 * 60) {
+            await new Promise<void>((resolve) => {
+              signal.addEventListener("abort", () => resolve(), { once: true });
+            });
+            throw new Error("cancelled");
+          }
+          return { text_transcript: "confirmed transcript", transcription_source: "whisper.cpp base" };
+        },
+      },
+      async callDownstream() {
+        downstreamCalls += 1;
+        return { content: [{ type: "text", text: "Confirmed voice handled." }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      probeVoiceDuration: async () => durationSeconds,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: `voice-control-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const event = (
+      messageId: string,
+      sender: string,
+      body: string,
+      voice = false,
+    ): WhatsAppInboundEvent => ({
+      messageId,
+      chatId: `${sender}@s.whatsapp.net`,
+      senderId: `${sender}@s.whatsapp.net`,
+      senderName: sender,
+      chatName: sender,
+      isGroup: false,
+      timestamp: 1,
+      body,
+      hasMedia: voice,
+      mediaType: voice ? "ptt" : null,
+      mimeType: voice ? "audio/ogg" : null,
+      fileName: null,
+      ...(voice ? { mediaRaw: { testBytes: messageId } } : {}),
+    });
+    try {
+      await runtime.whatsapp.handleEvent(event("alpha-unknown-duration", "34611111111", "", true));
+      expect(runtime.whatsappStore.voiceJob("alpha-unknown-duration")?.state).toBe("awaiting_confirmation");
+      expect(transcriptionCalls).toBe(0);
+      expect(sent).toContain(
+        'I could not determine this voice note’s length safely. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.',
+      );
+      await runtime.whatsapp.handleEvent(event("alpha-cancel-unknown", "34611111111", "cancel transcription"));
+      expect(runtime.whatsappStore.voiceJob("alpha-unknown-duration")?.state).toBe("cancelled");
+
+      durationSeconds = 31 * 60;
+      await runtime.whatsapp.handleEvent(event("alpha-long", "34611111111", "", true));
+      expect(runtime.whatsappStore.voiceJob("alpha-long")?.state).toBe("awaiting_confirmation");
+      expect(transcriptionCalls).toBe(0);
+      await runtime.whatsapp.handleEvent(event("beta-confirm", "34622222222", "confirm transcription"));
+      expect(runtime.whatsappStore.voiceJob("alpha-long")?.state).toBe("awaiting_confirmation");
+      expect(transcriptionCalls).toBe(0);
+      await runtime.whatsapp.handleEvent(event("alpha-confirm", "34611111111", "confirm transcription"));
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-long")?.state).toBe("completed"));
+      expect(transcriptionCalls).toBe(1);
+      expect(downstreamCalls).toBe(1);
+
+      durationSeconds = 60;
+      await runtime.whatsapp.handleEvent(event("alpha-cancel", "34611111111", "", true));
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-cancel")?.state).toBe("transcribing"));
+      await runtime.whatsapp.handleEvent(event("alpha-cancel-command", "34611111111", "cancel transcription"));
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-cancel")?.state).toBe("cancelled"));
+      expect(downstreamCalls).toBe(1);
+      expect(sent).toEqual(expect.arrayContaining([
+        'This voice note is longer than 30 minutes. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.',
+        "No voice transcription is waiting for confirmation in this conversation.",
+        "Confirmed voice handled.",
+        "Cancelled transcription alpha-cancel. Nothing was sent to Ring.",
+      ]));
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("ends a stuck transcription at the dedicated finite safety bound without calling Ring", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-safety-bound-"));
+    dirs.push(dataDir);
+    const sent: string[] = [];
+    let downstreamCalls = 0;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      voiceJobDeadlineMs: 100,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://ring.test/mcp/alpha",
+          downstreamToken: "alpha-token",
+        }),
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe({ signal }) {
+          await new Promise<void>((_resolve, reject) => {
+            signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+          });
+          return {};
+        },
+      },
+      async callDownstream() {
+        downstreamCalls += 1;
+        return { content: [{ type: "text", text: "must not be called" }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      probeVoiceDuration: async () => 60,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: `safety-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    try {
+      await runtime.whatsapp.handleEvent({
+        messageId: "voice-safety-bound",
+        chatId: "34611111111@s.whatsapp.net",
+        senderId: "34611111111@s.whatsapp.net",
+        senderName: "Alpha",
+        chatName: "Alpha",
+        isGroup: false,
+        timestamp: 1,
+        body: "",
+        hasMedia: true,
+        mediaType: "ptt",
+        mimeType: "audio/ogg",
+        fileName: null,
+        mediaRaw: { testBytes: "stuck-audio" },
+      });
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("voice-safety-bound")?.state).toBe("failed"));
+      expect(downstreamCalls).toBe(0);
+      expect(sent[0]).toContain("queued it for transcription");
+      expect(sent[1]).toContain("100ms safety deadline");
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  it("waits for worker shutdown and leaves an interrupted transcription resumable", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-close-"));
+    dirs.push(dataDir);
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://ring.test/mcp/alpha",
+          downstreamToken: "alpha-token",
+        }),
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe({ signal }) {
+          await new Promise<void>((_resolve, reject) => {
+            signal.addEventListener("abort", () => reject(new Error("shutdown")), { once: true });
+          });
+          return {};
+        },
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      probeVoiceDuration: async () => 60,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage() {
+          return { key: { id: "close-ack" } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    await runtime.whatsapp.handleEvent({
+      messageId: "voice-close",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: { testBytes: "close-audio" },
+    });
+    await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("voice-close")?.state).toBe("transcribing"));
+    await runtime.close();
+
+    const restarted = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
+    expect(restarted.voiceJob("voice-close")?.state).toBe("queued");
+    expect(restarted.mediaRecovery("voice-close")).toBeNull();
+    restarted.close();
+  });
+
+  it("does not retry or fabricate success when the Ring handoff outcome is unsafe", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-timeout-unauthorized-"));
     dirs.push(dataDir);
     const sent: string[] = [];
@@ -1206,9 +1518,8 @@ describe("ported gateway integration", () => {
       },
       artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/unit-token/artifacts/${tenantId}/${artifactId}`,
       transcriber: {
-        async transcribe({ signal }) {
-          await new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true }));
-          return {};
+        async transcribe() {
+          return { text_transcript: "durable before Ring", transcription_source: "whisper.cpp base" };
         },
       },
       async callDownstream() {
@@ -1216,6 +1527,7 @@ describe("ported gateway integration", () => {
       },
     });
     const runtime = new PhylaxPortedRuntime(dataDir, organ, { PHYLAX_VOICE_PROGRESS_DELAY_MS: "30000" }, {
+      probeVoiceDuration: async () => 60,
       whatsappSocketFactory: async () => ({
         ev: { on() {} },
         async sendMessage(_jid, content) {
@@ -1243,30 +1555,14 @@ describe("ported gateway integration", () => {
     };
     try {
       await runtime.whatsapp.handleEvent(event);
-      expect(sent).toHaveLength(1);
-      const trace = runtime.whatsappStore.channelAudit(event.messageId);
-      expect(trace).toMatchObject({
-        providerMessageId: event.messageId,
-        tenantId: "alpha",
-        senderId: "34611111111",
-        transcriptProvenance: "whatsapp-media",
-        transcriptionFailureCode: "timeout",
-        downstreamDestination: "ring.zenod.dev#tenant:alpha",
-        failureStage: "downstream",
-        failureCode: "downstream_unauthorized",
-        lifecycleState: "failed",
-        outboundProviderId: "terminal-unauthorized-reply",
-        outboundStatus: "error",
-        timing: {
-          transcriptionQueueWaitMs: null,
-          outboundSendMs: expect.any(Number),
-          totalLifecycleMs: expect.any(Number),
-        },
-      });
-      expect(trace?.timing.transcriptionRuntimeMs).toBeGreaterThanOrEqual(90);
-      expect(trace?.timing.downstreamMs).toBeGreaterThanOrEqual(0);
-      expect(trace?.artifactSha256).toBe("b127e1dcfb96beb78b6c6f8367a3a7ad3d95f02684afe7d21241c65a35e8d650");
-      expect(JSON.stringify(trace)).not.toMatch(/token-bearing-path|ring-secret-must-not-persist|authorization|bearer/i);
+      await vi.waitFor(() =>
+        expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("ring_outcome_unknown"));
+      expect(sent).toEqual([
+        'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        "⚠️ Your voice note was transcribed, but Ring’s handoff outcome is unknown. I will not retry it automatically because that could perform the request twice.",
+      ]);
+      expect(runtime.whatsappStore.channelAudit(event.messageId)).toBeNull();
+      expect(JSON.stringify(runtime.whatsappStore.voiceJob(event.messageId))).not.toContain("ring-secret-must-not-persist");
     } finally {
       runtime.close();
     }
@@ -1489,6 +1785,207 @@ describe("ported gateway integration", () => {
     expect(claim("alpha-tg-owner", "alpha", "telegram", 10_500).role).toBe("owner");
     expect(claim("alpha-wa-later-owner", "alpha", "whatsapp", 11_001).role).toBe("owner");
     store.close();
+  });
+
+  it("persists voice custody, schedules tenants fairly, and scopes confirmation/cancellation", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-jobs-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    const store = new WhatsAppStore(path);
+    const create = (
+      providerMessageId: string,
+      tenantId: string,
+      conversationKey: string,
+      state: "queued" | "awaiting_confirmation",
+      createdAt: number,
+    ) => store.createVoiceJob({
+      providerMessageId,
+      tenantId,
+      conversationKey,
+      senderId: `${tenantId}-sender`,
+      chatId: `${tenantId}-chat`,
+      artifactRef: `https://phylax.test/artifacts/${tenantId}/${providerMessageId}.ogg`,
+      artifactPath: join(dataDir, `${providerMessageId}.ogg`),
+      artifactSha256: providerMessageId.padEnd(64, "a").slice(0, 64),
+      mimeType: "audio/ogg",
+      fileName: `${providerMessageId}.ogg`,
+      captionText: "",
+      durationSeconds: 10,
+      state,
+    }, createdAt);
+
+    create("alpha-first", "alpha", "whatsapp:alpha", "queued", 1);
+    create("alpha-second", "alpha", "whatsapp:alpha", "queued", 2);
+    create("beta-first", "beta", "whatsapp:beta", "queued", 3);
+    create("alpha-long", "alpha", "whatsapp:alpha", "awaiting_confirmation", 4);
+    create("beta-long", "beta", "whatsapp:beta", "awaiting_confirmation", 5);
+
+    expect(store.claimNextVoiceJob(null)?.providerMessageId).toBe("alpha-first");
+    expect(store.claimNextVoiceJob("alpha")?.providerMessageId).toBe("beta-first");
+    expect(store.confirmLatestVoiceJob("alpha", "whatsapp:beta")).toBeNull();
+    expect(store.confirmLatestVoiceJob("alpha", "whatsapp:alpha")?.providerMessageId).toBe("alpha-long");
+    expect(store.cancelLatestVoiceJob("beta", "whatsapp:beta")?.providerMessageId).toBe("beta-long");
+    expect(store.cancelLatestVoiceJob("alpha", "whatsapp:alpha")?.providerMessageId).toBe("alpha-long");
+    store.queueVoiceFailureReply("alpha-long", "must not follow cancellation");
+    expect(store.voiceJob("alpha-long")?.state).toBe("cancelled");
+    expect(store.voiceJob("beta-long")?.state).toBe("cancelled");
+    expect(store.mediaRecovery("alpha-long")).toBeNull();
+    store.close();
+
+    const restarted = new WhatsAppStore(path);
+    expect(restarted.voiceJob("alpha-first")).toMatchObject({ state: "queued", attempts: 1 });
+    expect(restarted.voiceJob("beta-first")).toMatchObject({ state: "queued", attempts: 1 });
+    expect(restarted.voiceJob("beta-long")?.state).toBe("cancelled");
+    restarted.close();
+  });
+
+  it("resumes a persisted transcript at the Ring boundary without retranscribing it", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-transcribed-resume-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    const store = new WhatsAppStore(path);
+    store.createVoiceJob({
+      providerMessageId: "voice-transcribed-resume",
+      tenantId: "alpha",
+      conversationKey: "whatsapp:alpha",
+      senderId: "alpha",
+      chatId: "alpha-chat",
+      artifactRef: "https://phylax.test/artifacts/alpha/resume.ogg",
+      artifactPath: join(dataDir, "resume.ogg"),
+      artifactSha256: "c".repeat(64),
+      mimeType: "audio/ogg",
+      fileName: "resume.ogg",
+      captionText: "",
+      durationSeconds: 60,
+      state: "queued",
+    });
+    store.claimNextVoiceJob(null);
+    store.persistVoiceTranscript("voice-transcribed-resume", {
+      text_transcript: "already durable",
+      transcription_source: "whisper.cpp base",
+    });
+    store.close();
+
+    const restarted = new WhatsAppStore(path);
+    const resumed = restarted.claimNextVoiceJob(null);
+    expect(resumed).toMatchObject({
+      providerMessageId: "voice-transcribed-resume",
+      state: "transcribed",
+      attempts: 1,
+      transcription: { text_transcript: "already durable" },
+    });
+    expect(restarted.claimVoiceRingHandoff("voice-transcribed-resume")).toBe(true);
+    restarted.close();
+  });
+
+  it("persists transcript before Ring claim and never retries an ambiguous Ring handoff after restart", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-ring-boundary-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    const store = new WhatsAppStore(path);
+    store.createVoiceJob({
+      providerMessageId: "voice-ring-boundary",
+      tenantId: "alpha",
+      conversationKey: "whatsapp:34611111111",
+      senderId: "34611111111",
+      chatId: "34611111111@s.whatsapp.net",
+      artifactRef: "https://phylax.test/artifacts/alpha/voice.ogg",
+      artifactPath: join(dataDir, "voice.ogg"),
+      artifactSha256: "a".repeat(64),
+      mimeType: "audio/ogg",
+      fileName: "voice.ogg",
+      captionText: "",
+      durationSeconds: 1_200,
+      state: "queued",
+    });
+    expect(store.claimNextVoiceJob(null)?.state).toBe("transcribing");
+    expect(store.persistVoiceTranscript("voice-ring-boundary", {
+      text_transcript: "durable transcript",
+      transcription_source: "whisper.cpp base",
+    })).toBe(true);
+    expect(store.claimVoiceRingHandoff("voice-ring-boundary")).toBe(true);
+    store.close();
+
+    const restarted = new WhatsAppStore(path);
+    expect(restarted.voiceJob("voice-ring-boundary")).toMatchObject({
+      state: "ring_outcome_unknown",
+      transcription: {
+        text_transcript: "durable transcript",
+        transcription_source: "whisper.cpp base",
+      },
+    });
+    expect(restarted.claimNextVoiceJob(null)).toBeNull();
+    restarted.close();
+  });
+
+  it("recovers a persisted post-Ring reply after restart instead of marking the handoff unknown", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-known-reply-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    const event: WhatsAppInboundEvent = {
+      messageId: "voice-known-reply",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: "voice.ogg",
+    };
+    const store = new WhatsAppStore(path);
+    store.recordInbound(event);
+    store.markMessageStatus(event.messageId, "processing");
+    store.createVoiceJob({
+      providerMessageId: event.messageId,
+      tenantId: "alpha",
+      conversationKey: "whatsapp:34611111111",
+      senderId: "34611111111",
+      chatId: event.chatId,
+      artifactRef: "https://phylax.test/artifacts/alpha/voice.ogg",
+      artifactPath: join(dataDir, "voice.ogg"),
+      artifactSha256: "b".repeat(64),
+      mimeType: "audio/ogg",
+      fileName: "voice.ogg",
+      captionText: "",
+      durationSeconds: 60,
+      state: "queued",
+    });
+    store.claimNextVoiceJob(null);
+    store.persistVoiceTranscript(event.messageId, { text_transcript: "known transcript" });
+    store.claimVoiceRingHandoff(event.messageId);
+    store.recordChannelForwarding({
+      providerMessageId: event.messageId,
+      tenantId: "alpha",
+      senderId: "34611111111",
+      transcriptText: "known transcript",
+      transcriptProvenance: "whisper.cpp base",
+      artifactRef: "https://phylax.test/artifacts/alpha/voice.ogg",
+      artifactSha256: "b".repeat(64),
+      downstreamDestination: "ring.test#tenant:alpha",
+      downstreamCorrelationId: "ring-known-reply",
+      replyText: "Persisted Ring reply.",
+    });
+    store.close();
+
+    const restarted = new WhatsAppStore(path);
+    expect(restarted.voiceJob(event.messageId)).toMatchObject({
+      state: "reply_ready",
+      replyText: "Persisted Ring reply.",
+    });
+    expect(restarted.claimNextVoiceJob(null)).toBeNull();
+    const recovery = restarted.claimInterruptedMediaRecovery();
+    expect(recovery).toMatchObject({
+      providerMessageId: event.messageId,
+      kind: "forwarded_reply",
+      replyText: "Persisted Ring reply.",
+    });
+    restarted.completeInterruptedMediaRecovery(recovery!, { sentMessageId: "wa-known-reply" });
+    expect(restarted.voiceJob(event.messageId)?.state).toBe("completed");
+    restarted.close();
   });
 
   it("marks restart-orphan followers failed without Ring and preserves their provider-ID trace", () => {
