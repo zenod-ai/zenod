@@ -381,6 +381,33 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("truncated by Ring");
   });
 
+  it("rejects prefixed or fenced MCP and validation JSON instead of exposing raw envelopes", () => {
+    const sourceUrl = "https://example.com/memories/safe-envelope-source";
+    const read = {
+      ...action("connected_read_hash", JSON.stringify({
+        structuredContent: { answer: "Raw source answer.", sourceUrl },
+      })),
+      peerAction: true,
+    };
+    const drafts = [
+      'Here is the result:\n{"content":[{"type":"text","text":"raw internal result"}]}',
+      'Validation details:\n```json\n{"issues":[{"code":"invalid_type","path":["query"]}]}\n```',
+    ];
+
+    for (const drafted of drafts) {
+      const out = applyReplyGate(drafted, [read]);
+      expect(out.text).toBe([
+        "I found source data, but couldn't produce a safely grounded answer. Please retry or narrow the question.",
+        "",
+        "Evidence:",
+        `- <${sourceUrl}>`,
+      ].join("\n"));
+      expect(out.text).not.toContain("raw internal result");
+      expect(out.text).not.toContain("invalid_type");
+      expect(out.text).not.toContain("connected_read_hash");
+    }
+  });
+
   it("keeps the safe synthesis and exact evidence on mixed success/failure with one brief warning", () => {
     const sourceUrl = "https://example.com/memories/partial";
     const out = applyReplyGate("The available record says the rollout is still in validation.", [

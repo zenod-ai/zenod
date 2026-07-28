@@ -307,11 +307,22 @@ function draftedUrlsAreGrounded(draftedText: string, actions: readonly TaskingAc
   return true;
 }
 
+function hasRawReadEnvelopeFragment(text: string): boolean {
+  // Reject only JSON-shaped transport/validation fragments, including prefixed or
+  // fenced variants. Plain prose that happens to mention "content" or "errors" is not
+  // an envelope and remains eligible as a synthesis.
+  const rawMcpEnvelope = /[\[{][\s\S]{0,4000}"(?:content|structuredContent|isError)"\s*:/i;
+  const rawValidationEnvelope =
+    /[\[{][\s\S]{0,4000}"(?:issues|errors)"\s*:\s*\[[\s\S]{0,2000}"(?:code|path|expected|received)"\s*:/i;
+  return rawMcpEnvelope.test(text) || rawValidationEnvelope.test(text);
+}
+
 function isSafeReadSynthesis(draftedText: string, actions: readonly TaskingAction[]): boolean {
   const text = draftedText.trim();
   if (text.length < 3 || !/[\p{L}\p{N}]/u.test(text)) return false;
   if (hasMutationSuccessClaim(text) || hasStandingActionClaim(text)) return false;
   if (parsedPeerResult(text) !== undefined) return false;
+  if (hasRawReadEnvelopeFragment(text)) return false;
   if (/(?:Connected MCP (?:read )?result|untrusted data|truncated by Ring)/i.test(text)) return false;
   if (/"?(?:structuredContent|isError)"?\s*:/i.test(text)) return false;
   if (actions.some((action) =>
