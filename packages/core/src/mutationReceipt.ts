@@ -116,8 +116,9 @@ function collectTextEvidence(raw: string, out: MutationReceiptEvidence[]): void 
   // A bare URL can augment concrete same-result evidence, but can never prove a
   // mutation by itself.
   if (out.some((entry) => entry.kind !== "url")) {
-    for (const match of raw.matchAll(/https:\/\/[^\s"'<>]+/gi)) {
-      pushEvidence(out, "url", match[0]?.replace(/[),.;]+$/, ""));
+    for (const line of raw.split(/\r?\n/)) {
+      const candidate = line.trim();
+      if (/^https:\/\/[^\s"'<>]+$/i.test(candidate)) pushEvidence(out, "url", candidate);
     }
   }
 }

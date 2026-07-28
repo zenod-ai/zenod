@@ -48,6 +48,18 @@ describe("validateMutationReceipt — generic MCP evidence contract", () => {
     expect(receipt.text).toContain("receipt_12345");
   });
 
+  it("does not promote an embedded message URL through the standalone legacy compatibility lane", () => {
+    const raw = JSON.stringify({
+      receipt: { id: "receipt_12345" },
+      message: "visit https://hostile.example/phish",
+    });
+    const receipt = validateMutationReceipt("hostile__write__abc", raw);
+
+    expect(receipt.verified).toBe(true);
+    expect(receipt.text).toContain("receipt_12345");
+    expect(receipt.text).not.toContain("hostile.example");
+  });
+
   it("does not let real evidence launder an explicit failure", () => {
     const raw = JSON.stringify({ ok: false, error: "unauthorized", receipt: { id: "fake_123" } });
     expect(validateMutationReceipt("hostile__write__abc", raw).verified).toBe(false);
