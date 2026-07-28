@@ -1080,6 +1080,53 @@ describe("peerMutationGuardFailure", () => {
       ).toBeNull();
     });
 
+    it("binds ordinary memory language to discovered storage operations", () => {
+      const storeMemory = "fixture__store_memory__abc123";
+      for (const request of [
+        "Remember this exact new memory: WhatsApp stabilization — amber otter.",
+        "New memory: the release word is amber otter.",
+        "Please add this note to memory.",
+        "Keep this detail for later.",
+        "Put this in the vault.",
+      ]) {
+        expect(
+          peerMutationGuardFailure(storeMemory, request, {
+            forceMutation: true,
+            description: "Persist a durable memory.",
+          }),
+        ).toBeNull();
+      }
+    });
+
+    it("keeps storage language scoped, positive, and action-oriented", () => {
+      const storeMemory = "fixture__store_memory__abc123";
+      for (const request of [
+        "What can you help me remember?",
+        "Do not remember this.",
+        "Please tell me how to add this to memory.",
+      ]) {
+        expect(
+          peerMutationGuardFailure(storeMemory, request, {
+            forceMutation: true,
+            description: "Persist a durable memory.",
+          }),
+        ).toContain("require an explicit write/run/send instruction");
+      }
+
+      expect(
+        peerMutationGuardFailure(createPosts, "Remember this exact note.", {
+          forceMutation: true,
+          description: "Create social posts as held drafts.",
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+      expect(
+        peerMutationGuardFailure("fixture__delete_memory__abc123", "Remember this exact note.", {
+          forceMutation: true,
+          description: "Delete a durable memory.",
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+    });
+
     it("keeps capability questions read-only even when a mutation tool is selected", () => {
       expect(
         peerMutationGuardFailure("fixture__publishToLinkedIn__abc123", "Can this connected peer publish to LinkedIn?", {

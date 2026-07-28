@@ -234,7 +234,14 @@ export interface PeerMutationGuardContext {
 
 const MUTATION_FAMILIES = [
   { tool: /\b(?:delete|remove|destroy|revoke)\w*\b/i, request: /\b(?:delete|remove|destroy|revoke)\w*\b/i },
-  { tool: /\b(?:create|draft|post|publish|send|compose|prepare|save|store|submit)\w*\b/i, request: /\b(?:create|draft|post|publish|send|compose|prepare|save|store|submit)\w*\b/i },
+  // Persistence language is its own operation family. In particular, "remember"
+  // may authorize a discovered storage operation but never a generic create/send.
+  {
+    tool: /\b(?:save|store|persist|archive|memory)\w*\b/i,
+    request:
+      /\b(?:(?:save|store|persist|archive)\w*|remember\s+(?:this|that|these|the following)\b|new\s+memory\b|add\b[\s\S]{0,80}\b(?:to|as)\s+(?:(?:my|the)\s+)?(?:memory|vault)\b|keep\b[\s\S]{0,80}\bfor\s+later\b|put\b[\s\S]{0,80}\b(?:in|into)\s+(?:(?:my|the)\s+)?(?:memory|vault)\b)/i,
+  },
+  { tool: /\b(?:create|draft|post|publish|send|compose|prepare|submit)\w*\b/i, request: /\b(?:create|draft|post|publish|send|compose|prepare|submit)\w*\b/i },
   { tool: /\b(?:create|draft|compose|prepare)\w*\b/i, request: /\b(?:edit|change|revise|rewrite|replace)\w*\b/i },
   { tool: /\b(?:edit|update|change|rename|patch)\w*\b/i, request: /\b(?:edit|update|change|rename|patch|revise|rewrite)\w*\b/i },
   { tool: /\b(?:approve|confirm|commit|execute|run)\w*\b/i, request: /\b(?:approve|confirm|commit|execute|run)\w*\b/i },
