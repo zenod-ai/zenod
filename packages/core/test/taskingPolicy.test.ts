@@ -1108,6 +1108,7 @@ describe("peerMutationGuardFailure", () => {
         "Remember this exact note, but cancel.",
         "Remember this exact note, but do not store it.",
         "Remember this exact note — no, don’t.",
+        "Remember this exact note — no thanks.",
       ]) {
         expect(
           peerMutationGuardFailure(storeMemory, request, {
@@ -1141,6 +1142,8 @@ describe("peerMutationGuardFailure", () => {
         ["fixture__archive_memory__abc123", "Archive a memory."],
         ["fixture__add_vault_member__abc123", "Add a member to a vault."],
         ["fixture__create_memory_share__abc123", "Create a memory share."],
+        ["fixture__store_memory_and_publish__abc123", "Store a memory and publish it."],
+        ["fixture__save_note_and_send__abc123", "Save a note and send it."],
       ]) {
         expect(
           peerMutationGuardFailure(tool, "Remember this exact note.", {

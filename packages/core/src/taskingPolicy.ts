@@ -240,7 +240,17 @@ interface MutationFamily {
 }
 
 const STORAGE_POSTFIX_CANCELLATION_RE =
-  /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this))?|stop|abort|nvm|nevermind)\b|\b(?:do not|don['’]?t|never)\s+(?:save|store|persist|archive|remember|add|keep|put)\b|(?:^|[\s,;:—-])no(?:\s*,?\s*(?:do not|don['’]?t))?[.!]?\s*$|\b(?:do not|don['’]?t)[.!]?\s*$/i;
+  /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this))?|stop|abort|nvm|nevermind)\b|\b(?:do not|don['’]?t|never)\s+(?:save|store|persist|archive|remember|add|keep|put)\b|(?:^|[\s,;:—-])no(?:\s*,?\s*(?:do not|don['’]?t|thanks?|thank\s+you))?[.!]?\s*$|\b(?:do not|don['’]?t)[.!]?\s*$/i;
+
+const TERMINAL_MUTATION_ACTION_FAMILIES = [
+  /\b(?:save|store|persist|remember)\w*\b/i,
+  /\b(?:post|publish|send|share|deliver)\w*\b/i,
+  /\b(?:delete|remove|destroy|revoke)\w*\b/i,
+  /\b(?:create|draft|compose|prepare|submit|add|write|put)\w*\b/i,
+  /\b(?:edit|update|change|rename|patch|revise|rewrite|replace)\w*\b/i,
+  /\b(?:approve|confirm|commit|execute|run)\w*\b/i,
+  /\barchive\w*\b/i,
+] as const;
 
 const MUTATION_FAMILIES: readonly MutationFamily[] = [
   { tool: /\b(?:delete|remove|destroy|revoke)\w*\b/i, request: /\b(?:delete|remove|destroy|revoke)\w*\b/i },
@@ -290,6 +300,7 @@ function hasNaturalDynamicMutationIntent(tool: string, request: string, descript
   const operation = operationWords(tool, description);
   const leaf = tool.split("__")[1] ?? "";
   const leafOperation = operationWords(tool);
+  if (TERMINAL_MUTATION_ACTION_FAMILIES.filter((family) => family.test(leafOperation)).length > 1) return false;
   const humanRequest = leaf
     ? request.replace(new RegExp(`\b(?:using|via|with)\s+(?:the\s+)?(?:\w+\s+)?${escapeRegex(leaf)}(?:\s+tool)?\b`, "gi"), " ")
     : request;
