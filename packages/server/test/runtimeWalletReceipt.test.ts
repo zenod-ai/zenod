@@ -43,7 +43,9 @@ describe("Ring wallet receipt", () => {
           async store() {
             return {
               evidenceRef: "Log/2026-07-11.md#^e-ring",
+              evidenceUrl: `https://github.com/AlfaBlok/obsidian-brain/blob/${"b".repeat(40)}/Log/2026-07-11.md#L9`,
               pagesTouched: ["Projects/Ring.md"],
+              pageUrls: [`https://github.com/AlfaBlok/obsidian-brain/blob/${"b".repeat(40)}/Projects/Ring.md`],
               commitSha: "b".repeat(40),
               githubUrls: ["https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Ring.md"],
             };
@@ -66,10 +68,16 @@ describe("Ring wallet receipt", () => {
       expect(tools.add_memory.verifiedMutationReceipt).toBe(true);
       const result = await tools.add_memory.run("remember this: the ring is alive");
 
-      expect(result).toContain("Stored.");
-      expect(result).toContain("evidence: Log/2026-07-11.md#^e-ring");
-      expect(result).toContain(`commit: ${"b".repeat(40)}`);
-      expect(result).toContain("https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Ring.md");
+      expect(JSON.parse(result)).toEqual({
+        status: "done",
+        message: "Stored.",
+        evidenceRef: "Log/2026-07-11.md#^e-ring",
+        evidenceUrl: `https://github.com/AlfaBlok/obsidian-brain/blob/${"b".repeat(40)}/Log/2026-07-11.md#L9`,
+        pagesTouched: ["Projects/Ring.md"],
+        pageUrls: [`https://github.com/AlfaBlok/obsidian-brain/blob/${"b".repeat(40)}/Projects/Ring.md`],
+        commitSha: "b".repeat(40),
+        githubUrls: ["https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Ring.md"],
+      });
     } finally {
       zenodServer?.close();
       zenodRuntime.close();

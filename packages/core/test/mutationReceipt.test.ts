@@ -21,8 +21,8 @@ describe("validateMutationReceipt — generic MCP evidence contract", () => {
       receipt: { id: "obj_7f53a9", url: "https://unit.example/artifacts/obj_7f53a9" },
     }));
     expect(receipt.verified).toBe(true);
-    expect(receipt.text).toContain("- id: obj_7f53a9");
-    expect(receipt.text).toContain("- url: https://unit.example/artifacts/obj_7f53a9");
+    expect(receipt.text).toContain("- Receipt: `obj_7f53a9`");
+    expect(receipt.text).toContain("- Evidence: <https://unit.example/artifacts/obj_7f53a9>");
   });
 
   it.each([

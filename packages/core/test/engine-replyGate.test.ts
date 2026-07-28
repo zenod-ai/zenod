@@ -100,7 +100,8 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("send it", "web");
 
-    expect(reply.text).toBe("Verified mutation receipt from post_tweet.\n- url: https://x.com/i/web/status/42");
+    expect(reply.text).toBe("Done — the change was verified.\n\nEvidence:\n- Evidence: <https://x.com/i/web/status/42>");
+    expect(reply.text).not.toContain("post_tweet");
     // Still logged: the model tried to narrate its own line instead of relaying verbatim.
     expect(warn).toHaveBeenCalledTimes(1);
   });
@@ -137,8 +138,9 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("remember this", "web");
 
-    expect(reply.text).toContain("Verified mutation receipt from generic_memory_write.");
-    expect(reply.text).toContain(`- commit: ${"c".repeat(40)}`);
+    expect(reply.text).toContain("Done — the change was verified.");
+    expect(reply.text).toContain(`- Commit: \`${"c".repeat(40)}\``);
+    expect(reply.text).not.toContain("generic_memory_write");
   });
 
   it("renders a concise peer-grounded read instead of model-drafted prose", async () => {
@@ -198,6 +200,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     expect(llm.hostInstructions[0]).toBeUndefined();
     expect(llm.hostInstructions[1]).toContain("no standing action exists");
     expect(reply.text).toContain("Held for approval; nothing was sent or changed.");
+    expect(reply.text).not.toContain("portable_create");
     expect(reply.text).toContain('"text": "exact"');
   });
 });

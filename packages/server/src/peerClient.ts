@@ -386,18 +386,23 @@ export async function callPeerWithArgs(
       if (completed.status === "done" && completed.result && typeof completed.result === "object") {
         const receipt = completed.result as {
           evidenceRef?: string;
+          evidenceUrl?: string;
           pagesTouched?: string[];
+          pageUrls?: string[];
           commitSha?: string;
           githubUrls?: string[];
           question?: string;
         };
-        return [
-          receipt.question ? `QUESTION FOR THE USER: ${receipt.question}` : "Stored.",
-          receipt.evidenceRef ? `evidence: ${receipt.evidenceRef}` : "",
-          receipt.pagesTouched?.length ? `pages: ${receipt.pagesTouched.join(", ")}` : "",
-          receipt.commitSha ? `commit: ${receipt.commitSha}` : "",
-          ...(receipt.githubUrls ?? []),
-        ].filter(Boolean).join("\n");
+        return JSON.stringify({
+          status: "done",
+          message: receipt.question ? `QUESTION FOR THE USER: ${receipt.question}` : "Stored.",
+          ...(receipt.evidenceRef ? { evidenceRef: receipt.evidenceRef } : {}),
+          ...(receipt.evidenceUrl ? { evidenceUrl: receipt.evidenceUrl } : {}),
+          ...(receipt.pagesTouched ? { pagesTouched: receipt.pagesTouched } : {}),
+          ...(receipt.pageUrls ? { pageUrls: receipt.pageUrls } : {}),
+          ...(receipt.commitSha ? { commitSha: receipt.commitSha } : {}),
+          ...(receipt.githubUrls ? { githubUrls: receipt.githubUrls } : {}),
+        });
       }
       if (completed.status === "error") return `Zenod filing failed: ${completed.error ?? "unknown error"}`;
       return `Zenod filing receipt timed out for job ${jobId}.`;

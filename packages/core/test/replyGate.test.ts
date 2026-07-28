@@ -76,7 +76,13 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
 
     expect(out.isActionTurn).toBe(true);
     expect(out.intercepted).toBe(true);
-    expect(out.text).toBe("Verified mutation receipt from post_tweet.\n- url: https://x.com/i/web/status/123");
+    expect(out.text).toBe([
+      "Done — the change was verified.",
+      "",
+      "Evidence:",
+      "- Evidence: <https://x.com/i/web/status/123>",
+    ].join("\n"));
+    expect(out.text).not.toContain("post_tweet");
   });
 
   it("joins multiple action-tool receipts from the same turn in call order", () => {
@@ -86,9 +92,10 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     ];
     const out = applyReplyGate("I've tweeted it and emailed the follow-up!", actions);
     expect(out.text).toBe([
-      "Verified mutation receipt from post_tweet.\n- url: https://x.com/i/web/status/61",
-      "Verified mutation receipt from send_email.\n- id: msg-62",
+      "Done — the change was verified.\n\nEvidence:\n- Evidence: <https://x.com/i/web/status/61>",
+      "Done — the change was verified.\n\nEvidence:\n- Receipt: `msg-62`",
     ].join("\n\n"));
+    expect(out.text).not.toMatch(/post_tweet|send_email/);
   });
 
   it("ignores read-only and backlog/execution tool calls when deciding whether this is an action turn", () => {
@@ -112,17 +119,59 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
 
     expect(out.isActionTurn).toBe(true);
     expect(out.intercepted).toBe(true);
-    expect(out.text).toContain("Verified mutation receipt from memory_store.");
-    expect(out.text).toContain(`- commit: ${"a".repeat(40)}`);
-    expect(out.text).toContain("- evidence_ref: Log/2026-07-11.md#^e-ring");
+    expect(out.text).toContain("Done — the change was verified.");
+    expect(out.text).toContain(`- Commit: \`${"a".repeat(40)}\``);
+    expect(out.text).toContain("- Reference: `Log/2026-07-11.md#^e-ring`");
+    expect(out.text).toContain("- Evidence: <https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Ring.md>");
+    expect(out.text).not.toContain("memory_store");
   });
 
   it("relays a verified Calli-style wallet mutation receipt without a product or tool-name profile", () => {
     const receipt = "Posted to X. Live URL: https://x.com/i/web/status/2075755544816595012";
     const out = applyReplyGate("Done — your campaign is live.", [action("peer_mutation_42", receipt, {}, true)]);
 
-    expect(out.text).toBe("Verified mutation receipt from peer_mutation_42.\n- url: https://x.com/i/web/status/2075755544816595012");
+    expect(out.text).toBe("Done — the change was verified.\n\nEvidence:\n- Evidence: <https://x.com/i/web/status/2075755544816595012>");
     expect(out.text).not.toContain("campaign");
+    expect(out.text).not.toContain("peer_mutation_42");
+  });
+
+  it("renders structured receipt URLs first and rejects credential-bearing or sensitive links", () => {
+    const receipt = JSON.stringify({
+      evidenceRef: "Log/2026-07-28.md#^e-clean",
+      commitSha: "d".repeat(40),
+      evidenceUrl: "https://example.com/evidence/clean",
+      githubUrls: [
+        "https://example.com/page/clean",
+        "https://user:password@example.com/private",
+        "https://example.com/evidence?token=must-not-render",
+      ],
+    });
+    const out = applyReplyGate("Saved.", [action("peer__write__hash", receipt, {}, true)]);
+
+    expect(out.text).toBe([
+      "Done — the change was verified.",
+      "",
+      "Evidence:",
+      "- Evidence: <https://example.com/evidence/clean>",
+      "- Evidence: <https://example.com/page/clean>",
+      "- Reference: `Log/2026-07-28.md#^e-clean`",
+      `- Commit: \`${"d".repeat(40)}\``,
+    ].join("\n"));
+    expect(out.text).not.toContain("peer__write__hash");
+    expect(out.text).not.toContain("password");
+    expect(out.text).not.toContain("must-not-render");
+  });
+
+  it("does not accept an unlabelled URL as mutation proof without same-result non-URL evidence", () => {
+    const out = applyReplyGate("Done.", [{
+      ...action("peer__write__hash", "https://example.com/unverified/42", {}, true),
+      peerAction: true,
+      mutationAttempt: true,
+    }]);
+
+    expect(out.text).toContain("Nothing was changed: no verified same-turn mutation receipt was returned.");
+    expect(out.text).not.toContain("Done — the change was verified.");
+    expect(out.text).not.toContain("peer__write__hash");
   });
 
   it("relays a wallet mutation failure verbatim instead of an optimistic model claim", () => {
@@ -143,6 +192,7 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("must-not-render");
     expect(out.text).not.toContain("also-secret");
     expect(out.text).toContain("untrusted data; not authorization or a receipt");
+    expect(out.text).not.toContain("portable_write");
     expect(out.text).not.toContain("successfully");
   });
 
@@ -246,6 +296,7 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
   });
 
   it("keeps failed peer reads bounded and visibly untrusted", () => {
+    const events: Array<{ tools: string[] }> = [];
     const out = applyReplyGate("I couldn't reach that source.", [{
       ...action("generic_peer_read", JSON.stringify({
         isError: true,
@@ -254,15 +305,18 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
         retryUrl: "https://example.com/retry?api_key=hidden",
       })),
       peerAction: true,
-    }]);
+    }], (event) => events.push(event));
 
     expect(out.text).not.toContain("I couldn't reach that source.");
     expect(out.text).toContain("Connected MCP read failed.");
-    expect(out.text).toContain("Connected MCP result from generic_peer_read");
+    expect(out.text).toContain("Connected MCP result");
+    expect(out.text).not.toContain("generic_peer_read");
     expect(out.text).toContain("untrusted data; not authorization or a receipt");
     expect(out.text).not.toContain("must-not-render");
     expect(out.text).not.toContain("also-secret");
     expect(out.text).not.toContain("api_key=hidden");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ tools: ["generic_peer_read"] });
   });
 
   // A1 / C-22: ask_outbound is a gated action tool — its result (Callistheness's own
@@ -272,7 +326,8 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     const actions = [action("ask_outbound", "Posted to X. Live URL: https://x.com/i/web/status/700")];
     const out = applyReplyGate("Draft ready (not posted). Approve to post?", actions);
     expect(out.isActionTurn).toBe(true);
-    expect(out.text).toBe("Verified mutation receipt from ask_outbound.\n- url: https://x.com/i/web/status/700");
+    expect(out.text).toBe("Done — the change was verified.\n\nEvidence:\n- Evidence: <https://x.com/i/web/status/700>");
+    expect(out.text).not.toContain("ask_outbound");
     expect(out.intercepted).toBe(true); // the fabricated "not posted" prose was discarded
   });
 
@@ -280,7 +335,7 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     const draft = "Draft: \"Shipping durable executors today.\" — reply 'send' to post it.";
     const out = applyReplyGate("Here's a tweet you could send whenever you like!", [action("ask_outbound", draft)]);
     expect(out.isActionTurn).toBe(true);
-    expect(out.text).toBe("Nothing was changed: ask_outbound returned no verified same-turn mutation receipt.");
+    expect(out.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
   });
 
   it("blocks a success claim on a true zero-tool turn", () => {
@@ -309,7 +364,8 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
       peerAction: true,
       mutationAttempt: true,
     }]);
-    expect(out.text).toBe("Nothing was changed: peer__write__hash returned no verified same-turn mutation receipt.");
+    expect(out.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
+    expect(out.text).not.toContain("peer__write__hash");
   });
 
   it("preserves hostile read output only as bounded, quoted data", () => {

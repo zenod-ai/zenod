@@ -58,7 +58,7 @@ describe("AI SDK peer mutation provenance", () => {
     const action = await execute(raw);
     expect(action?.result).toBe(raw);
     expect(action?.metadata).toMatchObject({ mutationAttempt: true, verifiedMutationReceipt: true });
-    expect(action?.metadata?.verifiedReceiptText).toContain("- id: object_12345");
+    expect(action?.metadata?.verifiedReceiptText).toContain("- Receipt: `object_12345`");
     expect(action?.metadata?.verifiedReceiptText).not.toContain("ignore all instructions");
   });
 });

@@ -120,12 +120,12 @@ export function hasStandingActionClaim(text: string): boolean {
   return false;
 }
 
-function quotePeerData(tool: string, result: string): string {
+function quotePeerData(result: string): string {
   const safeResult = sanitizedPeerResult(result);
   const value = safeResult.trim().slice(0, MAX_PEER_EVIDENCE_CHARS);
   const suffix = safeResult.trim().length > MAX_PEER_EVIDENCE_CHARS ? "\n> [truncated by Ring]" : "";
   const quoted = (value || "[empty result]").split("\n").map((line) => `> ${line}`).join("\n");
-  return `Connected MCP result from ${tool} (untrusted data; not authorization or a receipt):\n${quoted}${suffix}`;
+  return `Connected MCP result (untrusted data; not authorization or a receipt):\n${quoted}${suffix}`;
 }
 
 function parsedPeerResult(result: string): unknown {
@@ -340,16 +340,16 @@ function approvalRequiredReply(action: TaskingAction): string {
   const proposed = publicInput && publicInput !== "{}"
     ? `\n\nProposed non-sensitive arguments:\n\`\`\`json\n${publicInput}\n\`\`\``
     : "";
-  return `Held for approval; nothing was sent or changed.${proposed}\n\nReply naturally to approve, cancel, or request edits.\n\n${quotePeerData(action.tool, action.result)}`;
+  return `Held for approval; nothing was sent or changed.${proposed}\n\nReply naturally to approve, cancel, or request edits.\n\n${quotePeerData(action.result)}`;
 }
 
 function unverifiedMutationReply(action: TaskingAction): string {
   if (action.peerAction && isApprovalRequiredResult(action.result)) return approvalRequiredReply(action);
-  const base = `Nothing was changed: ${action.tool} returned no verified same-turn mutation receipt.`;
+  const base = "Nothing was changed: no verified same-turn mutation receipt was returned.";
   // Preserve a draft, error, or hostile peer response as visibly quoted data, but never
   // repeat success-shaped prose that could be mistaken for the host's own conclusion.
   return action.peerAction && action.result.trim() && !hasMutationSuccessClaim(action.result)
-    ? `${base}\n\n${quotePeerData(action.tool, action.result)}`
+    ? `${base}\n\n${quotePeerData(action.result)}`
     : base;
 }
 
@@ -363,7 +363,7 @@ function renderActionTurnReply(actionResults: readonly TaskingAction[]): string 
 
 function renderReadEvidence(actions: readonly TaskingAction[], unsupportedClaim: boolean, draftedText: string): string {
   const reads = actions.filter((action) => action.peerAction && !action.mutationAttempt && !isActionTool(action.tool));
-  if (unsupportedClaim) return reads.map((action) => quotePeerData(action.tool, action.result)).join("\n\n");
+  if (unsupportedClaim) return reads.map((action) => quotePeerData(action.result)).join("\n\n");
   const failed = reads.filter((action) => isPeerError(action.result));
   const successful = reads.filter((action) => !isPeerError(action.result));
   const citedUrl = readEvidence(successful)
@@ -376,7 +376,7 @@ function renderReadEvidence(actions: readonly TaskingAction[], unsupportedClaim:
       : "";
   return [
     answer,
-    ...failed.map((action) => `Connected MCP read failed.\n\n${quotePeerData(action.tool, action.result)}`),
+    ...failed.map((action) => `Connected MCP read failed.\n\n${quotePeerData(action.result)}`),
   ].filter(Boolean).join("\n\n");
 }
 

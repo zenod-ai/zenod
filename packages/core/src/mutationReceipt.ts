@@ -14,6 +14,7 @@ export interface MutationReceiptValidation {
 const PLACEHOLDER = /(?:\{\s*[a-z0-9_-]*id\s*\}|<\s*[a-z0-9_-]*id\s*>|\bTODO\b)/i;
 const FAILURE = /(?:^|\b)(?:error|failed|failure|blocked|unauthori[sz]ed|forbidden|timed?\s*out|not[_ -]approved|not[_ -]sent|not[_ -]published)(?:\b|:)/i;
 const COMMIT_SHA = /^[a-f0-9]{40}$/i;
+const SENSITIVE_URL_QUERY_KEY = /(?:auth|authorization|credential|key|password|secret|signature|sig|token)/i;
 
 function cleanString(value: unknown): string | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -26,7 +27,8 @@ function validUrl(value: string): boolean {
   if (PLACEHOLDER.test(value)) return false;
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || !url.hostname.includes(".")) return false;
+    if (url.protocol !== "https:" || !url.hostname.includes(".") || url.username || url.password) return false;
+    if ([...url.searchParams.keys()].some((key) => SENSITIVE_URL_QUERY_KEY.test(key))) return false;
     return url.pathname !== "/" || Boolean(url.search);
   } catch {
     return false;
@@ -79,8 +81,9 @@ function collectStructuredEvidence(value: unknown, out: MutationReceiptEvidence[
   }
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (["url", "permalink", "receipturl", "evidenceurl", "artifacturl"].includes(normalized)) {
-      pushEvidence(out, "url", nested);
+    if (["url", "urls", "permalink", "permalinks", "receipturl", "receipturls", "evidenceurl", "evidenceurls", "artifacturl", "artifacturls", "githuburl", "githuburls", "pageurl", "pageurls"].includes(normalized)) {
+      const values = Array.isArray(nested) ? nested : [nested];
+      for (const item of values) pushEvidence(out, "url", item);
     } else if (["commit", "commitsha", "sha"].includes(normalized)) {
       pushEvidence(out, "commit", nested);
     } else if (["evidence", "evidenceref", "artifactref"].includes(normalized) && typeof nested !== "object") {
@@ -108,11 +111,43 @@ function collectTextEvidence(raw: string, out: MutationReceiptEvidence[]): void 
   for (const match of raw.matchAll(/\b(?:confirmed|receipt|message|ticket|job)\s+(?:id|handle)\s*:\s*([^\s,;]+)/gi)) {
     pushEvidence(out, /ticket|job/i.test(match[0]) ? "ticket_id" : "id", match[1]);
   }
+
+  // Legacy peers sometimes return immutable links as otherwise-unlabelled text.
+  // A bare URL can augment concrete same-result evidence, but can never prove a
+  // mutation by itself.
+  if (out.some((entry) => entry.kind !== "url")) {
+    for (const match of raw.matchAll(/https:\/\/[^\s"'<>]+/gi)) {
+      pushEvidence(out, "url", match[0]?.replace(/[),.;]+$/, ""));
+    }
+  }
 }
 
-export function renderVerifiedMutationReceipt(tool: string, evidence: readonly MutationReceiptEvidence[]): string {
-  const rows = evidence.map(({ kind, value }) => `- ${kind}: ${value}`).join("\n");
-  return `Verified mutation receipt from ${tool}.\n${rows}`;
+function renderEvidence({ kind, value }: MutationReceiptEvidence): string {
+  if (kind === "url") return `- Evidence: <${value}>`;
+  const label = kind === "commit"
+    ? "Commit"
+    : kind === "evidence_ref"
+      ? "Reference"
+      : kind === "ticket_id"
+        ? "Ticket"
+        : "Receipt";
+  return `- ${label}: \`${value.replace(/`/g, "\\`")}\``;
+}
+
+export function renderVerifiedMutationReceipt(_tool: string, evidence: readonly MutationReceiptEvidence[]): string {
+  const ordered = [...evidence].sort((left, right) =>
+    left.kind === "url" && right.kind !== "url"
+      ? -1
+      : left.kind !== "url" && right.kind === "url"
+        ? 1
+        : 0,
+  );
+  return [
+    "Done — the change was verified.",
+    "",
+    "Evidence:",
+    ...ordered.map(renderEvidence),
+  ].join("\n");
 }
 
 /**
