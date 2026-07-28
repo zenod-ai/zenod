@@ -146,33 +146,15 @@ export function uniqueSuffixedPeerToolName(
  * not authorize or invoke an upstream peer tool; it only reads Ring's saved,
  * authenticated tools/list snapshot through an authoritative read tool.
  */
-function conceptsOccurLocally(text: string, patterns: readonly RegExp[], maxSpan = 120): boolean {
-  const events = patterns.flatMap((pattern, patternIndex) => {
-    const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
-    return [...text.matchAll(new RegExp(pattern.source, flags))]
-      .map((match) => ({ patternIndex, position: match.index ?? 0 }));
-  });
-  events.sort((left, right) => left.position - right.position);
+function unwrapCatalogRequest(segment: string): string {
+  return segment.replace(
+    /^(?:please\s+)?(?:(?:can|could|would) you (?:please )?(?:tell|show) me|can i (?:please )?see|i (?:want|need|would like) to (?:know|see)|tell me)\s+/i,
+    "",
+  );
+}
 
-  const counts = Array.from({ length: patterns.length }, () => 0);
-  let represented = 0;
-  let left = 0;
-  for (let right = 0; right < events.length; right += 1) {
-    const added = events[right]!;
-    const addedCount = counts[added.patternIndex] ?? 0;
-    if (addedCount === 0) represented += 1;
-    counts[added.patternIndex] = addedCount + 1;
-
-    while (events[right]!.position - events[left]!.position > maxSpan) {
-      const removed = events[left]!;
-      const removedCount = counts[removed.patternIndex] ?? 0;
-      counts[removed.patternIndex] = removedCount - 1;
-      if (removedCount === 1) represented -= 1;
-      left += 1;
-    }
-    if (represented === patterns.length) return true;
-  }
-  return false;
+function isBenignCatalogContext(segment: string): boolean {
+  return /^(?:background|context)(?:\s+(?:for|on|about)\b[^.!?;]*)?\s*[.!?;]*$/i.test(segment);
 }
 
 export function isMcpCatalogInspectionQuestion(question: string): boolean {
@@ -190,32 +172,60 @@ export function isMcpCatalogInspectionQuestion(question: string): boolean {
 
   // Never form intent from a document-wide cross-product. A long transcript can
   // contain an unrelated inquiry near the start and mention tools much later.
-  // Catalog concepts must instead co-occur within one sentence/paragraph-local
-  // segment and a bounded span.
+  // Even inside one sentence, proximity is insufficient: "what are we trying to
+  // find ... make sure we have semantic tools to do the work" is operational
+  // content, not a request to dump the authenticated catalog.
   const segments = withBoundaries
-    .split(/(?:\n+|(?<=[.!?;])\s+)/)
+    // Speech-to-text providers do not always insert whitespace after punctuation.
+    // `?!;` are safe clause boundaries before any Unicode letter; periods stay
+    // conservative so decimals, hostnames, and abbreviations are not shredded.
+    .split(/(?:\n+|(?<=[?!;])(?=\s|\p{L})|(?<=\.)(?=\s|[A-Z]))/u)
     .map((segment) => segment.replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  const inquiry = /\b(?:what|which|show|list|inspect|describe|details?|how|whether|available|actual|real|really|status|state|see|check|verify)\b/i;
-  const toolCatalogSubject = /\b(?:catalog|tools?|capabilit(?:y|ies)|advertised|exposed)\b/i;
-  const contractSubject = /\b(?:schemas?|annotations?|namespaces?|collisions?|refresh(?:ed)?|discovery)\b/i;
-  const skillSubject = /\bskills?\b/i;
-  const skillState = /\b(?:authorit\w*|publish\w*|detect\w*|load\w*|attach\w*|receipt\w*)\b/i;
 
-  return segments.some((segment) => {
-    // Questions whose subject is the connected peer itself are unambiguously
-    // about its advertised capability, rather than a request to perform work.
-    if (/\bwhat can (?:this|the|my|a|an|any) (?:connected )?(?:mcp|peer|unit) do\b/i.test(segment)) return true;
-    if (/\b(?:show|list|inspect|describe) (?:me )?(?:the |my |our |all )?(?:connected )?(?:mcps?|peers?|units?)\b[?.!]*$/i.test(segment)) return true;
+  let foundCatalogInspection = false;
+  for (const rawSegment of segments) {
+    const segment = unwrapCatalogRequest(rawSegment);
+    const punctuation = String.raw`\s*[?!.]*`;
+    const catalogState = String.raw`(?:available|connected|advertised|exposed|loaded|authoritative|published|refreshed|attached|detected|read[ -]?only)`;
+    const catalogSubject = String.raw`(?:catalog|tools?|capabilit(?:y|ies)|schemas?|annotations?|namespaces?\s+collisions?|namespaces?|collisions?|refresh(?:ed)?(?:\s+status)?|discovery|skills?|mcps?|peers?|units?)`;
+    const peer = String.raw`(?:(?:this|the|my|a|an|any) (?:connected )?(?:[\w-]+ )?(?:mcp|peer|unit))`;
+    const directModifier = String.raw`(?:me|the|my|our|your|its|their|all|any|actual|real|connected|available|advertised|exposed|exact|input|output|loaded|authoritative|published|mcp|peer|unit)`;
+    const directVerb = String.raw`(?:show|list|inspect|describe|check|verify)`;
+    const patterns = [
+      new RegExp(`^what can ${peer} (?:actually )?do${punctuation}$`, "i"),
+      new RegExp(`^what (?:does|do) ${peer} (?:advertise|expose|offer)${punctuation}$`, "i"),
+      new RegExp(`^(?:(?:can|could|would|will) you )?(?:check|inspect|show me) (?:the |my |our )?(?:connected )?(?:mcp |peer |unit )?(?:surface|connection)${punctuation}$`, "i"),
 
-    if (conceptsOccurLocally(segment, [inquiry, toolCatalogSubject])) return true;
+      // Complete direct-object clauses only. Catalog continuations are explicit;
+      // arbitrary trailing actions cannot be absorbed by a prefix match.
+      new RegExp(`^(?:please\\s+)?(?:(?:can|could|would|will) you\\s+)?${directVerb}\\b(?:\\s+${directModifier}){0,6}\\s+${catalogSubject}(?:\\s+(?:and|,)\\s+(?:the |their |its )?${catalogSubject})*${punctuation}$`, "i"),
+      new RegExp(`^(?:please\\s+)?${directVerb} (?:me )?(?:the |my |our |your )?(?:schemas?|annotations?) (?:for|of) (?:the )?[\\w-]+(?:\\s+${catalogSubject})?${punctuation}$`, "i"),
+      new RegExp(`^(?:please\\s+)?${directVerb} (?:me )?(?:the |my |our |your |actual |real )*(?:tools?|capabilities) (?:that |which |this |the )(?:connected )?(?:[\\w-]+ )?(?:mcp|peer|unit) (?:advertises?|exposes?|offers?)${punctuation}$`, "i"),
+      new RegExp(`^(?:please\\s+)?${directVerb} (?:me )?(?:the |my |our |your |actual |real )*(?:tools?|capabilities) (?:advertised|exposed|offered|available) (?:by|from) (?:the |my |our |your )?(?:connected )?(?:[\\w-]+ )?(?:mcp|peer|unit)${punctuation}$`, "i"),
 
-    // Contract and discovery metadata are catalog questions only when the user
-    // is asking to inspect them. Merely mentioning an MCP, skill, or schema in a
-    // memory/task must not divert the turn into catalog rendering.
-    if (conceptsOccurLocally(segment, [inquiry, contractSubject])) return true;
-    return conceptsOccurLocally(segment, [inquiry, skillSubject, skillState]);
-  });
+      // Interrogatives require either no predicate ("Which tools?") or a
+      // catalog-state predicate owned directly by the catalog subject.
+      new RegExp(`^(?:what|which) (?:(?:actual|real|connected|available|advertised|exposed|exact|mcp|peer) )*${catalogSubject}${punctuation}$`, "i"),
+      new RegExp(`^(?:what|which) (?:(?:actual|real|connected|available|advertised|exposed|exact|mcp|peer) )*${catalogSubject} (?:are|is) ${catalogState}(?: and (?:(?:which|what) (?:ones? )?(?:are|is) )?${catalogState})*${punctuation}$`, "i"),
+      new RegExp(`^(?:what|which) (?:(?:actual|real|connected|available|advertised|exposed|exact|mcp|peer) )*${catalogSubject} (?:do|does) (?:i|we|you|${peer}) (?:have|advertise|expose|offer)${punctuation}$`, "i"),
+      new RegExp(`^what (?:are|is) (?:the |my |our |your |its |their )?(?:actual |real |connected |available |advertised |exposed )*${catalogSubject}${punctuation}$`, "i"),
+
+      new RegExp(`^(?:are|is|was|were) (?:the |my |our |your |its |their |any )?(?:connected )?${catalogSubject} (?:currently )?${catalogState}(?: and ${catalogState})*${punctuation}$`, "i"),
+      new RegExp(`^(?:has|have) (?:the |my |our |your |its |their )?(?:connected )?${catalogSubject} (?:been )?(?:refreshed|loaded|attached|detected|published)${punctuation}$`, "i"),
+      new RegExp(`^(?:do|does) (?:i|we|you|${peer}) (?:have|advertise|expose|offer) (?:tool |mcp )?${catalogSubject}${punctuation}$`, "i"),
+      new RegExp(`^how (?:are|is) (?:the |my |our |your )?(?:connected |advertised |exposed )*${catalogSubject} (?:discovered|advertised|exposed|loaded|attached|refreshed)${punctuation}$`, "i"),
+      new RegExp(`^(?:whether )?(?:the |my |our |your )?(?:peer |mcp )?skills? (?:is|are|was|were|has been|have been|was successfully|were successfully|has been successfully|have been successfully) (?:authoritative|published|detected|loaded|attached)${punctuation}$`, "i"),
+    ];
+    const inspectsCatalog = patterns.some((pattern) => pattern.test(segment));
+
+    // The authoritative fast path owns only catalog-only turns. If any clause is
+    // an ordinary task, quoted content, or unsupported prose, leave the entire
+    // turn on the normal model/tool path rather than hijacking part of it.
+    if (!inspectsCatalog && !isBenignCatalogContext(segment)) return false;
+    foundCatalogInspection ||= inspectsCatalog;
+  }
+  return foundCatalogInspection;
 }
 export const MAX_WORK_OUTPUT_TOKENS = 4096;
 

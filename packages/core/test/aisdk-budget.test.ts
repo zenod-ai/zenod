@@ -113,10 +113,36 @@ describe("answer tool-step budget", () => {
     expect(isMcpCatalogInspectionQuestion(transcript)).toBe(false);
   });
 
+  it("does not hijack a long memory request when one transcribed sentence mentions semantic tools", () => {
+    const transcript = [
+      "I want to add a note into memory about a decision I am working through.",
+      "Please preserve the reasoning and turn it into a disciplined brief.",
+      "The discussion explores tradeoffs, evidence, and possible next steps. ".repeat(80),
+      "And I want to visualize what we are trying to find And then I want to make sure that we have all the semantic tools to do visual semantic search, not just KPI, you know?And the filters should help with the work.",
+      "Save the useful decisions and give me a concise response.",
+    ].join(" ");
+
+    expect(transcript.length).toBeGreaterThan(5_000);
+    expect(isMcpCatalogInspectionQuestion(transcript)).toBe(false);
+  });
+
   it.each([
     "What tools are connected and available?",
     "Could you check the connected surface? What tools are available?",
     "Background for this request.\n\nPlease list the actual tools exposed by the connected MCP.",
+    "Background?List the actual tools exposed by the connected MCP.",
+    "Background?list the actual tools exposed by the connected MCP.",
+    "Do you expose tool annotations?",
+    "How are connected tools discovered?",
+    "Show me your tools and their schemas.",
+    "What tools are available and which ones are read-only?",
+    "I want to know what tools are available.",
+    "Could you tell me what tools are available?",
+    "Can I see what tools are connected?",
+    "Please tell me which tools are available?",
+    "Show loaded skills.",
+    "List authoritative skills.",
+    "Has the catalog refreshed?",
   ])("keeps locally expressed catalog questions: %s", (question) => {
     expect(isMcpCatalogInspectionQuestion(question)).toBe(true);
   });
@@ -125,6 +151,37 @@ describe("answer tool-step budget", () => {
     "What should we preserve from this discussion? The semantic tools section explains retrieval quality.",
     "What are we trying to find in the research?\n\nThe architecture later mentions semantic tools.",
     `What are we trying to find ${"in the customer research ".repeat(12)} before documenting our semantic tools approach?`,
+    "How can you use tools to remember this note?",
+    "Check whether you can save this memory using your tools.",
+    "What should I remember about semantic tools?",
+    "I want to make sure you have semantic tools to do visual search.",
+    "The peer skill was loaded successfully; remember that for later.",
+    "Use any tools available to remember this note.",
+    "Please use the tools connected to my account for this task.",
+    "Show me the memory about tool schemas.",
+    "Describe the decision about schema discovery.",
+    "Check whether semantic search tools found the note.",
+    "List memories mentioning MCP tool schemas.",
+    "What memories mention tool schemas?",
+    "Save this note: what tools are available?",
+    "Remember this sentence: What tools are available?",
+    "Remember this. What tools are available?",
+    "Show me your tools and remember this note.",
+    "List the tools, then save this memory.",
+    "Show me your tools: publish the draft.",
+    "How do I use tools to remember this note?",
+    "How does Zenod use semantic tools to remember things?",
+    "Which tool created the post?",
+    "What tool saved my memory?",
+    "Is your tool saving my memory?",
+    "Are tools handling this request?",
+    "What are your tools doing?",
+    "Show me the tools saving my memory.",
+    "Show tools and have the tool save this note.",
+    "Show tools, save this note.",
+    "Are tools handling this request with available memory?",
+    "Does this memory have tool schemas?",
+    "What are the tools doing to save this memory?",
   ])("does not cross sentence, paragraph, or distant-clause boundaries: %s", (question) => {
     expect(isMcpCatalogInspectionQuestion(question)).toBe(false);
   });
