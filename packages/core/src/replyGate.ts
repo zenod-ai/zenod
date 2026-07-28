@@ -97,6 +97,7 @@ export interface ReplyGateOutcome {
  */
 const MAX_PEER_EVIDENCE_CHARS = 4_000;
 const MAX_READ_EVIDENCE_ITEMS = 8;
+const MAX_RENDERED_READ_EVIDENCE_ITEMS = 3;
 const SENSITIVE_INPUT_KEY_RE = /(?:approval|approve|authorization|authorisation|confirm|credential|password|secret|token)/i;
 const SENSITIVE_URL_QUERY_KEY_RE = /(?:auth|authorization|credential|key|password|secret|signature|sig|token)/i;
 const PLACEHOLDER_VALUE_RE = /(?:\{\s*[a-z0-9_-]*id\s*\}|<\s*[a-z0-9_-]*id\s*>|\bTODO\b)/i;
@@ -107,6 +108,8 @@ const PARTIAL_READ_WARNING = "Some source reads failed, so this answer may be in
 interface ReadEvidence {
   kind: "url" | "reference";
   value: string;
+  /** Lower values are preferred when choosing one customer-facing item per read. */
+  preference: 0 | 1 | 2 | 3;
 }
 
 const STANDING_ACTION_CLAIM_RE = /\b(?:held\s+(?:for|pending|awaiting)\s+(?:approval|confirmation|review)|(?:now\s+)?pending\s+(?:approval|confirmation)|(?:draft|action)\s+(?:is|was|has been)\s+(?:held|pending)|(?:created|prepared|saved)\s+(?:a|the|your)\s+(?:draft|pending action))\b/gi;
@@ -227,7 +230,7 @@ function containsUrlTemplateToken(value: string): boolean {
 
 function safeEvidenceUrl(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length > 2_048 || PLACEHOLDER_VALUE_RE.test(value) ||
-      containsUrlTemplateToken(value)) {
+      containsUrlTemplateToken(value) || /(?:[\u0000-\u001f\u007f]|\\+[nrt])/i.test(value)) {
     return undefined;
   }
   try {
@@ -265,13 +268,16 @@ function collectReadEvidence(value: unknown, out: ReadEvidence[], depth = 0): vo
     if (isUrlField) {
       for (const item of values) {
         const url = safeEvidenceUrl(item);
-        if (url && !out.some((entry) => entry.kind === "url" && entry.value === url)) out.push({ kind: "url", value: url });
+        if (url && !out.some((entry) => entry.kind === "url" && entry.value === url)) {
+          const canonical = /^(?:canonicalurl|sourceurl|evidenceurl|permalink)$/.test(normalized);
+          out.push({ kind: "url", value: url, preference: canonical ? 0 : 1 });
+        }
       }
     } else if (isReferenceField) {
       for (const item of values) {
         const reference = safeEvidenceReference(item);
         if (reference && !out.some((entry) => entry.kind === "reference" && entry.value === reference)) {
-          out.push({ kind: "reference", value: reference });
+          out.push({ kind: "reference", value: reference, preference: 2 });
         }
       }
     }
@@ -289,9 +295,43 @@ function collectTextEvidenceUrls(value: string, out: ReadEvidence[]): void {
     const candidate = match[0].replace(/[),.;]+$/g, "");
     const url = safeEvidenceUrl(candidate);
     if (url && !out.some((entry) => entry.kind === "url" && entry.value === url)) {
-      out.push({ kind: "url", value: url });
+      out.push({ kind: "url", value: url, preference: 3 });
     }
   }
+}
+
+function collectNestedTextEvidenceUrls(value: unknown, out: ReadEvidence[], depth = 0): void {
+  if (out.length >= MAX_READ_EVIDENCE_ITEMS || value == null || depth > 8) return;
+  if (typeof value === "string") {
+    collectTextEvidenceUrls(value, out);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 100)) collectNestedTextEvidenceUrls(item, out, depth + 1);
+    return;
+  }
+  if (typeof value !== "object") return;
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>).slice(0, 100)) {
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const structuredEvidenceField =
+      /^(?:url|uri|link|permalink|canonicalurl|evidenceurl|artifacturl|sourceurl|githuburl)s?$/.test(normalized) ||
+      /^(?:evidence|evidenceref|artifactref|sourceref)$/.test(normalized);
+    if (!SENSITIVE_INPUT_KEY_RE.test(key) && !structuredEvidenceField) {
+      collectNestedTextEvidenceUrls(nested, out, depth + 1);
+    }
+  }
+}
+
+function evidenceForRead(action: TaskingAction): ReadEvidence[] {
+  const evidence: ReadEvidence[] = [];
+  const parsed = parsedPeerResult(action.result);
+  collectReadEvidence(parsed, evidence);
+  if (parsed === undefined) {
+    collectTextEvidenceUrls(action.result, evidence);
+  } else {
+    collectNestedTextEvidenceUrls(parsed, evidence);
+  }
+  return evidence;
 }
 
 function readEvidence(actions: readonly TaskingAction[]): ReadEvidence[] {
@@ -299,15 +339,32 @@ function readEvidence(actions: readonly TaskingAction[]): ReadEvidence[] {
   // Later calls are normally the resolved/terminal read after an earlier search.
   // Prioritize their citations before the bounded evidence list fills up.
   for (const action of [...actions].reverse()) {
-    collectReadEvidence(parsedPeerResult(action.result), evidence);
-    collectTextEvidenceUrls(action.result, evidence);
+    if (evidence.length >= MAX_READ_EVIDENCE_ITEMS) break;
+    for (const entry of evidenceForRead(action)) {
+      if (!evidence.some((existing) => existing.kind === entry.kind && existing.value === entry.value)) {
+        evidence.push(entry);
+      }
+      if (evidence.length >= MAX_READ_EVIDENCE_ITEMS) break;
+    }
   }
   return evidence;
 }
 
 function renderStructuredReadEvidence(actions: readonly TaskingAction[], renderedText: string): string {
-  const evidence = readEvidence(actions);
-  const missing = evidence.filter((entry) => !renderedText.includes(entry.value));
+  const allEvidence = readEvidence(actions);
+  if (allEvidence.some((entry) => entry.kind === "url" && renderedText.includes(entry.value))) return "";
+
+  const missing: ReadEvidence[] = [];
+  for (const action of actions) {
+    const candidates = evidenceForRead(action);
+    const preferred = candidates
+      .filter((entry) => !renderedText.includes(entry.value))
+      .sort((left, right) => left.preference - right.preference)[0];
+    if (preferred && !missing.some((entry) => entry.kind === preferred.kind && entry.value === preferred.value)) {
+      missing.push(preferred);
+    }
+    if (missing.length >= MAX_RENDERED_READ_EVIDENCE_ITEMS) break;
+  }
   if (missing.length === 0) return "";
   return [
     "Evidence:",
