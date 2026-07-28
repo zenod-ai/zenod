@@ -96,10 +96,11 @@ export interface ReplyGateOutcome {
  * model's own prose.
  */
 const MAX_PEER_EVIDENCE_CHARS = 4_000;
-const MAX_READ_EVIDENCE_ITEMS = 8;
+const MAX_RENDERED_READ_EVIDENCE_ITEMS = 3;
 const SENSITIVE_INPUT_KEY_RE = /(?:approval|approve|authorization|authorisation|confirm|credential|password|secret|token)/i;
 const SENSITIVE_URL_QUERY_KEY_RE = /(?:auth|authorization|credential|key|password|secret|signature|sig|token)/i;
 const PLACEHOLDER_VALUE_RE = /(?:\{\s*[a-z0-9_-]*id\s*\}|<\s*[a-z0-9_-]*id\s*>|\bTODO\b)/i;
+const UNSAFE_EVIDENCE_CONTROL_RE = /(?:[\u0000-\u001f\u007f]|\\+[nrt])/i;
 const READ_SYNTHESIS_FAILURE = "I found source data, but couldn't produce a safely grounded answer. Please retry or narrow the question.";
 const READ_FAILURE = "I couldn't read the connected source. Nothing was changed. Please retry.";
 const PARTIAL_READ_WARNING = "Some source reads failed, so this answer may be incomplete.";
@@ -107,6 +108,8 @@ const PARTIAL_READ_WARNING = "Some source reads failed, so this answer may be in
 interface ReadEvidence {
   kind: "url" | "reference";
   value: string;
+  /** Lower values are preferred when choosing one customer-facing item per read. */
+  preference: 0 | 1 | 2 | 3 | 4 | 5;
 }
 
 const STANDING_ACTION_CLAIM_RE = /\b(?:held\s+(?:for|pending|awaiting)\s+(?:approval|confirmation|review)|(?:now\s+)?pending\s+(?:approval|confirmation)|(?:draft|action)\s+(?:is|was|has been)\s+(?:held|pending)|(?:created|prepared|saved)\s+(?:a|the|your)\s+(?:draft|pending action))\b/gi;
@@ -227,7 +230,7 @@ function containsUrlTemplateToken(value: string): boolean {
 
 function safeEvidenceUrl(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length > 2_048 || PLACEHOLDER_VALUE_RE.test(value) ||
-      containsUrlTemplateToken(value)) {
+      containsUrlTemplateToken(value) || UNSAFE_EVIDENCE_CONTROL_RE.test(value)) {
     return undefined;
   }
   try {
@@ -243,71 +246,186 @@ function safeEvidenceUrl(value: unknown): string | undefined {
 function safeEvidenceReference(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 500 || PLACEHOLDER_VALUE_RE.test(trimmed) || /[\r\n`]/.test(trimmed)) return undefined;
+  if (!trimmed || trimmed.length > 500 || PLACEHOLDER_VALUE_RE.test(trimmed) ||
+      UNSAFE_EVIDENCE_CONTROL_RE.test(trimmed) || /`/.test(trimmed)) {
+    return undefined;
+  }
   return trimmed;
 }
 
-function collectReadEvidence(value: unknown, out: ReadEvidence[], depth = 0): void {
-  if (out.length >= MAX_READ_EVIDENCE_ITEMS || value == null || depth > 8) return;
-  if (Array.isArray(value)) {
-    for (const item of value.slice(0, 100)) collectReadEvidence(item, out, depth + 1);
-    return;
-  }
-  if (typeof value !== "object") return;
-
-  for (const [key, nested] of Object.entries(value as Record<string, unknown>).slice(0, 100)) {
-    if (out.length >= MAX_READ_EVIDENCE_ITEMS) break;
-    if (SENSITIVE_INPUT_KEY_RE.test(key)) continue;
-    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const isUrlField = /^(?:url|uri|link|permalink|canonicalurl|evidenceurl|artifacturl|sourceurl|githuburl)s?$/.test(normalized);
-    const isReferenceField = /^(?:evidence|evidenceref|artifactref|sourceref)$/.test(normalized);
-    const values = Array.isArray(nested) ? nested.slice(0, MAX_READ_EVIDENCE_ITEMS) : [nested];
-    if (isUrlField) {
-      for (const item of values) {
-        const url = safeEvidenceUrl(item);
-        if (url && !out.some((entry) => entry.kind === "url" && entry.value === url)) out.push({ kind: "url", value: url });
-      }
-    } else if (isReferenceField) {
-      for (const item of values) {
-        const reference = safeEvidenceReference(item);
-        if (reference && !out.some((entry) => entry.kind === "reference" && entry.value === reference)) {
-          out.push({ kind: "reference", value: reference });
-        }
-      }
-    }
-    collectReadEvidence(nested, out, depth + 1);
-  }
+function normalizedEvidenceKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function collectTextEvidenceUrls(value: string, out: ReadEvidence[]): void {
+function isStructuredUrlKey(normalized: string): boolean {
+  return /^(?:url|uri|link|permalink|canonicalurl|evidenceurl|artifacturl|sourceurl|githuburl)s?$/.test(normalized);
+}
+
+function isStructuredReferenceKey(normalized: string): boolean {
+  return /^(?:evidence|evidenceref|artifactref|sourceref)$/.test(normalized);
+}
+
+function structuredUrlPreference(normalized: string): ReadEvidence["preference"] {
+  const singular = normalized.endsWith("s") ? normalized.slice(0, -1) : normalized;
+  if (singular === "canonicalurl") return 0;
+  if (/^(?:evidenceurl|permalink)$/.test(singular)) return 1;
+  if (singular === "sourceurl") return 2;
+  return 3;
+}
+
+function betterReadEvidence(current: ReadEvidence | undefined, candidate: ReadEvidence): ReadEvidence {
+  return !current || candidate.preference < current.preference ? candidate : current;
+}
+
+function preferredStructuredReadEvidence(
+  value: unknown,
+  current?: ReadEvidence,
+  depth = 0,
+): ReadEvidence | undefined {
+  if (value == null || depth > 8) return current;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 100)) {
+      current = preferredStructuredReadEvidence(item, current, depth + 1);
+    }
+    return current;
+  }
+  if (typeof value !== "object") return current;
+
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>).slice(0, 100)) {
+    if (SENSITIVE_INPUT_KEY_RE.test(key)) continue;
+    const normalized = normalizedEvidenceKey(key);
+    const values = Array.isArray(nested) ? nested.slice(0, 100) : [nested];
+    if (isStructuredUrlKey(normalized)) {
+      for (const item of values) {
+        const url = safeEvidenceUrl(item);
+        if (url) {
+          current = betterReadEvidence(current, {
+            kind: "url",
+            value: url,
+            preference: structuredUrlPreference(normalized),
+          });
+        }
+      }
+    } else if (isStructuredReferenceKey(normalized)) {
+      for (const item of values) {
+        const reference = safeEvidenceReference(item);
+        if (reference) {
+          current = betterReadEvidence(current, { kind: "reference", value: reference, preference: 4 });
+        }
+      }
+    } else {
+      current = preferredStructuredReadEvidence(nested, current, depth + 1);
+    }
+  }
+  return current;
+}
+
+function firstTextEvidenceUrl(value: string): ReadEvidence | undefined {
   for (const match of value.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
-    if (out.length >= MAX_READ_EVIDENCE_ITEMS) break;
     const nextCharacter = value[(match.index ?? 0) + match[0].length];
     // Do not turn the safe-looking prefix of `https://host/<TEMPLATE>` into a
     // clickable root URL merely because the URL tokenizer stops at "<".
     if (nextCharacter === "<" || nextCharacter === "{") continue;
     const candidate = match[0].replace(/[),.;]+$/g, "");
     const url = safeEvidenceUrl(candidate);
-    if (url && !out.some((entry) => entry.kind === "url" && entry.value === url)) {
-      out.push({ kind: "url", value: url });
-    }
+    if (url) return { kind: "url", value: url, preference: 5 };
   }
+  return undefined;
 }
 
-function readEvidence(actions: readonly TaskingAction[]): ReadEvidence[] {
-  const evidence: ReadEvidence[] = [];
-  // Later calls are normally the resolved/terminal read after an earlier search.
-  // Prioritize their citations before the bounded evidence list fills up.
-  for (const action of [...actions].reverse()) {
-    collectReadEvidence(parsedPeerResult(action.result), evidence);
-    collectTextEvidenceUrls(action.result, evidence);
+function firstNestedTextEvidenceUrl(value: unknown, depth = 0): ReadEvidence | undefined {
+  if (value == null || depth > 8) return undefined;
+  if (typeof value === "string") return firstTextEvidenceUrl(value);
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 100)) {
+      const found = firstNestedTextEvidenceUrl(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
   }
-  return evidence;
+  if (typeof value !== "object") return undefined;
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>).slice(0, 100)) {
+    const normalized = normalizedEvidenceKey(key);
+    const structuredEvidenceField = isStructuredUrlKey(normalized) || isStructuredReferenceKey(normalized);
+    if (!SENSITIVE_INPUT_KEY_RE.test(key) && !structuredEvidenceField) {
+      const found = firstNestedTextEvidenceUrl(nested, depth + 1);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function preferredEvidenceForRead(action: TaskingAction): ReadEvidence | undefined {
+  const parsed = parsedPeerResult(action.result);
+  const structured = preferredStructuredReadEvidence(parsed);
+  if (structured) return structured;
+  return parsed === undefined
+    ? firstTextEvidenceUrl(action.result)
+    : firstNestedTextEvidenceUrl(parsed);
+}
+
+function textContainsEvidenceUrl(value: string, expected: string): boolean {
+  for (const match of value.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
+    const nextCharacter = value[(match.index ?? 0) + match[0].length];
+    if (nextCharacter === "<" || nextCharacter === "{") continue;
+    const candidate = match[0].replace(/[),.;]+$/g, "");
+    if (safeEvidenceUrl(candidate) === expected) return true;
+  }
+  return false;
+}
+
+function valueContainsEvidenceUrl(value: unknown, expected: string, depth = 0): boolean {
+  if (value == null || depth > 8) return false;
+  if (typeof value === "string") return textContainsEvidenceUrl(value, expected);
+  if (Array.isArray(value)) {
+    return value.slice(0, 100).some((item) => valueContainsEvidenceUrl(item, expected, depth + 1));
+  }
+  if (typeof value !== "object") return false;
+  return Object.entries(value as Record<string, unknown>).slice(0, 100).some(([key, nested]) => {
+    if (SENSITIVE_INPUT_KEY_RE.test(key)) return false;
+    const normalized = normalizedEvidenceKey(key);
+    if (isStructuredUrlKey(normalized)) {
+      const values = Array.isArray(nested) ? nested.slice(0, 100) : [nested];
+      return values.some((item) => safeEvidenceUrl(item) === expected);
+    }
+    if (isStructuredReferenceKey(normalized)) return false;
+    return valueContainsEvidenceUrl(nested, expected, depth + 1);
+  });
+}
+
+function actionReturnsEvidenceUrl(action: TaskingAction, expected: string): boolean {
+  const parsed = parsedPeerResult(action.result);
+  return parsed === undefined
+    ? textContainsEvidenceUrl(action.result, expected)
+    : valueContainsEvidenceUrl(parsed, expected);
+}
+
+function draftedEvidenceUrls(text: string): string[] | undefined {
+  const urls: string[] = [];
+  for (const match of text.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
+    const nextCharacter = text[(match.index ?? 0) + match[0].length];
+    if (nextCharacter === "<" || nextCharacter === "{") return undefined;
+    const candidate = match[0].replace(/[),.;]+$/g, "");
+    const sanitized = safeEvidenceUrl(candidate);
+    if (!sanitized) return undefined;
+    if (!urls.includes(sanitized)) urls.push(sanitized);
+  }
+  return urls;
 }
 
 function renderStructuredReadEvidence(actions: readonly TaskingAction[], renderedText: string): string {
-  const evidence = readEvidence(actions);
-  const missing = evidence.filter((entry) => !renderedText.includes(entry.value));
+  const draftedUrls = draftedEvidenceUrls(renderedText);
+  if (draftedUrls?.some((url) => actions.some((action) => actionReturnsEvidenceUrl(action, url)))) return "";
+
+  const missing: ReadEvidence[] = [];
+  for (const action of actions) {
+    const preferred = preferredEvidenceForRead(action);
+    if (preferred && !renderedText.includes(preferred.value) &&
+        !missing.some((entry) => entry.kind === preferred.kind && entry.value === preferred.value)) {
+      missing.push(preferred);
+    }
+    if (missing.length >= MAX_RENDERED_READ_EVIDENCE_ITEMS) break;
+  }
   if (missing.length === 0) return "";
   return [
     "Evidence:",
@@ -316,19 +434,9 @@ function renderStructuredReadEvidence(actions: readonly TaskingAction[], rendere
 }
 
 function draftedUrlsAreGrounded(draftedText: string, actions: readonly TaskingAction[]): boolean {
-  const exactEvidenceUrls = new Set(
-    readEvidence(actions)
-      .filter((entry): entry is ReadEvidence & { kind: "url" } => entry.kind === "url")
-      .map((entry) => entry.value),
-  );
-  for (const match of draftedText.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
-    const nextCharacter = draftedText[(match.index ?? 0) + match[0].length];
-    if (nextCharacter === "<" || nextCharacter === "{") return false;
-    const candidate = match[0].replace(/[),.;]+$/g, "");
-    const sanitized = safeEvidenceUrl(candidate);
-    if (!sanitized || !exactEvidenceUrls.has(sanitized)) return false;
-  }
-  return true;
+  const draftedUrls = draftedEvidenceUrls(draftedText);
+  return draftedUrls !== undefined &&
+    draftedUrls.every((url) => actions.some((action) => actionReturnsEvidenceUrl(action, url)));
 }
 
 function hasRawReadEnvelopeFragment(text: string): boolean {
