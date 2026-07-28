@@ -234,8 +234,8 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     app,
     phylaxRuntime: runtime,
     phylaxTenantSettings: tenantSettings,
-    close() {
-      base.close();
+    async close() {
+      await base.close();
     },
   };
 }

@@ -470,11 +470,41 @@ export class PhylaxPortedRuntime {
   async close(): Promise<void> {
     this.voiceWorkerClosed = true;
     for (const controller of this.voiceAbortControllers.values()) controller.abort();
-    this.whatsapp.close();
-    await this.voiceWorkerPromise?.catch(() => undefined);
-    await this.telegram.close();
-    this.whatsappStore.close();
-    this.state.close();
+    const failures: unknown[] = [];
+    const voiceDrain = (async (): Promise<void> => {
+      if (!this.voiceWorkerPromise) return;
+      let timer: NodeJS.Timeout | null = null;
+      try {
+        await Promise.race([
+          this.voiceWorkerPromise,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("Phylax voice worker did not stop within 5000ms")), 5_000);
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    })();
+    for (
+      const result of await Promise.allSettled([
+        this.whatsapp.close(),
+        this.telegram.close(),
+        voiceDrain,
+      ])
+    ) {
+      if (result.status === "rejected") failures.push(result.reason);
+    }
+    try {
+      this.whatsappStore.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      this.state.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length > 0) throw new AggregateError(failures, "Phylax channel shutdown failed");
   }
 }
 

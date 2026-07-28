@@ -2110,20 +2110,30 @@ export class Runtime {
     };
   }
 
-  close(): void {
-    this.whatsapp.close();
-    void this.telegram.close();
-    this.state.close();
-    this.oauth.close();
-    this.whatsappStore.close();
-    this.ingestStore.close();
-    this.taskJobStore.close();
-    this.executionStore.close();
-    this.journeyMonitor.stop();
-    this.journeyStore.close();
-    this.usageStore.close();
-    this.notificationStore.close();
-    this.credentialVault.close();
+  async close(): Promise<void> {
+    const failures: unknown[] = [];
+    for (const result of await Promise.allSettled([this.whatsapp.close(), this.telegram.close()])) {
+      if (result.status === "rejected") failures.push(result.reason);
+    }
+    const close = (operation: () => void): void => {
+      try {
+        operation();
+      } catch (error) {
+        failures.push(error);
+      }
+    };
+    close(() => this.state.close());
+    close(() => this.oauth.close());
+    close(() => this.whatsappStore.close());
+    close(() => this.ingestStore.close());
+    close(() => this.taskJobStore.close());
+    close(() => this.executionStore.close());
+    close(() => this.journeyMonitor.stop());
+    close(() => this.journeyStore.close());
+    close(() => this.usageStore.close());
+    close(() => this.notificationStore.close());
+    close(() => this.credentialVault.close());
+    if (failures.length > 0) throw new AggregateError(failures, "Runtime shutdown failed");
   }
 }
 

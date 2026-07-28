@@ -1,7 +1,8 @@
-import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  BufferJSON,
   DisconnectReason,
   downloadContentFromMessage,
   fetchLatestBaileysVersion,
@@ -317,13 +318,209 @@ function skipReasonForBaileysMessage(message: WAMessage): string {
   return "unknown";
 }
 
+const WHATSAPP_CREDS_FILE = "creds.json";
+const WHATSAPP_CREDS_BACKUP_FILE = "creds.last-known-good.json";
+const WHATSAPP_CREDENTIAL_FLUSH_MS = 2_000;
+const WHATSAPP_SHUTDOWN_DRAIN_MS = 4_000;
+
+function validWhatsAppCredentials(raw: Buffer): boolean {
+  if (raw.byteLength === 0) return false;
+  try {
+    const parsed = JSON.parse(raw.toString("utf8"), BufferJSON.reviver) as Record<string, unknown>;
+    const isBytes = (value: unknown, length: number): value is Uint8Array =>
+      value instanceof Uint8Array && value.byteLength === length;
+    const isKeyPair = (value: unknown): boolean => {
+      if (!value || typeof value !== "object") return false;
+      const pair = value as Record<string, unknown>;
+      return isBytes(pair.public, 32) && isBytes(pair.private, 32);
+    };
+    const signedPreKey = parsed.signedPreKey as Record<string, unknown> | undefined;
+    const accountSettings = parsed.accountSettings as Record<string, unknown> | undefined;
+    const advSecretKey = typeof parsed.advSecretKey === "string" ? parsed.advSecretKey : "";
+    const decodedAdvSecret = Buffer.from(advSecretKey, "base64");
+    const canonicalAdvSecret = decodedAdvSecret.toString("base64").replace(/=+$/, "");
+    return Number.isInteger(parsed.registrationId)
+      && Number(parsed.registrationId) >= 0
+      && Number(parsed.registrationId) <= 16_383
+      && isKeyPair(parsed.noiseKey)
+      && isKeyPair(parsed.pairingEphemeralKeyPair)
+      && isKeyPair(parsed.signedIdentityKey)
+      && Boolean(signedPreKey)
+      && isKeyPair(signedPreKey?.keyPair)
+      && isBytes(signedPreKey?.signature, 64)
+      && Number.isInteger(signedPreKey?.keyId)
+      && Number(signedPreKey?.keyId) >= 1
+      && Number(signedPreKey?.keyId) <= 0xffff_ffff
+      && decodedAdvSecret.byteLength === 32
+      && canonicalAdvSecret === advSecretKey.replace(/=+$/, "")
+      && Number.isInteger(parsed.firstUnuploadedPreKeyId)
+      && Number(parsed.firstUnuploadedPreKeyId) >= 1
+      && Number.isInteger(parsed.nextPreKeyId)
+      && Number(parsed.nextPreKeyId) >= 1
+      && Array.isArray(parsed.processedHistoryMessages)
+      && Number.isInteger(parsed.accountSyncCounter)
+      && Number(parsed.accountSyncCounter) >= 0
+      && Boolean(accountSettings)
+      && typeof accountSettings?.unarchiveChats === "boolean"
+      && typeof parsed.registered === "boolean";
+  } catch {
+    return false;
+  }
+}
+
+async function readValidCredentials(path: string): Promise<Buffer | null> {
+  let raw: Buffer;
+  try {
+    raw = await readFile(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  return raw && validWhatsAppCredentials(raw) ? raw : null;
+}
+
+async function atomicCredentialWrite(path: string, raw: Buffer): Promise<void> {
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    const handle = await open(temporary, "w", 0o600);
+    try {
+      await handle.writeFile(raw);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, path);
+    await chmod(path, 0o600);
+    const directory = await open(dirname(path), "r");
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+/** Restore only a missing/corrupt primary; a valid live credential always wins. */
+export async function restoreWhatsAppCredentials(sessionDir: string): Promise<boolean> {
+  const primary = join(sessionDir, WHATSAPP_CREDS_FILE);
+  if (await readValidCredentials(primary)) return false;
+  const backup = await readValidCredentials(join(sessionDir, WHATSAPP_CREDS_BACKUP_FILE));
+  if (!backup) return false;
+  await atomicCredentialWrite(primary, backup);
+  return true;
+}
+
+async function hasWhatsAppCredentialMaterial(sessionDir: string): Promise<boolean> {
+  let entries: string[];
+  try {
+    entries = await readdir(sessionDir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+  return entries.some((entry) =>
+    /^(?:app-state-sync-key|app-state-sync-version|lid-mapping|pre-key|sender-key|session)-/i.test(entry),
+  );
+}
+
+/**
+ * An empty directory is a legitimate first pairing. A populated Baileys key
+ * directory without valid root credentials is not: silently generating a new
+ * identity there strands the companion keys and disguises corruption as a QR.
+ */
+export async function prepareWhatsAppCredentials(sessionDir: string): Promise<"ready" | "new" | "restored"> {
+  await mkdir(sessionDir, { recursive: true, mode: 0o700 });
+  await chmod(sessionDir, 0o700);
+  const primary = join(sessionDir, WHATSAPP_CREDS_FILE);
+  const validPrimary = await readValidCredentials(primary);
+  if (validPrimary) {
+    const backup = join(sessionDir, WHATSAPP_CREDS_BACKUP_FILE);
+    await chmod(primary, 0o600);
+    if (await readValidCredentials(backup)) {
+      await chmod(backup, 0o600);
+    } else {
+      await atomicCredentialWrite(backup, validPrimary);
+    }
+    return "ready";
+  }
+  if (await restoreWhatsAppCredentials(sessionDir)) return "restored";
+  if (await hasWhatsAppCredentialMaterial(sessionDir)) {
+    throw new Error(
+      "WhatsApp session credentials are corrupt and no valid backup is available. Reset the session and pair again.",
+    );
+  }
+  return "new";
+}
+
+/**
+ * Baileys emits bursts of creds.update events. Calling saveCreds immediately
+ * for every event makes it difficult to flush the complete accepted sequence.
+ * Keep one chain and retain a same-directory, permission-restricted
+ * last-known-good copy for interrupted direct writes.
+ */
+export function createWhatsAppCredentialSaveQueue(
+  sessionDir: string,
+  saveCreds: () => Promise<void>,
+  onError: (error: unknown) => void = () => undefined,
+): { enqueue(): void; flush(): Promise<void> } {
+  const primary = join(sessionDir, WHATSAPP_CREDS_FILE);
+  const backup = join(sessionDir, WHATSAPP_CREDS_BACKUP_FILE);
+  let pending = Promise.resolve();
+  let lastError: unknown = null;
+
+  const saveOnce = async (): Promise<void> => {
+    const previous = await readValidCredentials(primary);
+    if (previous) await atomicCredentialWrite(backup, previous);
+    try {
+      await saveCreds();
+    } catch (error) {
+      const recoverable = previous ?? (await readValidCredentials(backup));
+      if (recoverable) await atomicCredentialWrite(primary, recoverable);
+      throw error;
+    }
+    const saved = await readValidCredentials(primary);
+    if (!saved) {
+      const recoverable = previous ?? (await readValidCredentials(backup));
+      if (recoverable) await atomicCredentialWrite(primary, recoverable);
+      throw new Error("WhatsApp credentials save produced an invalid primary file");
+    }
+    await chmod(primary, 0o600);
+    await atomicCredentialWrite(backup, saved);
+  };
+
+  return {
+    enqueue() {
+      pending = pending
+        .then(saveOnce)
+        .then(() => {
+          lastError = null;
+        })
+        .catch((error: unknown) => {
+          lastError = error;
+          onError(error);
+        });
+    },
+    async flush() {
+      let accepted: Promise<void>;
+      do {
+        accepted = pending;
+        await accepted;
+      } while (accepted !== pending);
+      if (lastError) throw lastError;
+    },
+  };
+}
+
 async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
   installBaileysSessionLogRedaction();
-  await mkdir(sessionDir, { recursive: true });
+  if ((await prepareWhatsAppCredentials(sessionDir)) === "restored") {
+    console.warn("[whatsapp] restored interrupted credential write from protected backup");
+  }
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
   const { version } = await fetchLatestBaileysVersion();
-  let pendingCredsSave = Promise.resolve();
-  let credsSaveError: unknown = null;
   const socket = makeWASocket({
     version,
     auth: state,
@@ -334,16 +531,17 @@ async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
     markOnlineOnConnect: false,
     getMessage: async () => ({ conversation: "" }),
   }) as WASocket;
+  const credentialSaves = createWhatsAppCredentialSaveQueue(
+    sessionDir,
+    saveCreds,
+    (err) => console.error("[whatsapp] failed to save credentials:", err),
+  );
   socket.ev.on("creds.update", () => {
-    pendingCredsSave = Promise.resolve(saveCreds()).catch((err: unknown) => {
-      credsSaveError = err;
-      console.error("[whatsapp] failed to save credentials:", err);
-    });
+    credentialSaves.enqueue();
   });
   return Object.assign(socket, {
     async flushCredentials() {
-      await pendingCredsSave;
-      if (credsSaveError) throw credsSaveError;
+      await credentialSaves.flush();
     },
   });
 }
@@ -361,6 +559,13 @@ export class WhatsAppGateway {
   private lastError: string | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectInFlight = false;
+  private lifecycleGeneration = 0;
+  private startInFlight: Promise<void> | null = null;
+  private connectionCloseInFlight: Promise<void> | null = null;
+  private closeInFlight: Promise<void> | null = null;
+  private terminalClosing = false;
+  private readonly lifecycleFailures: unknown[] = [];
+  private readonly activeSocketWork = new Set<Promise<unknown>>();
   private readonly waiters = new Set<() => void>();
   private lastUpsertAt: number | null = null;
   private lastUpsertType: string | null = null;
@@ -435,12 +640,43 @@ export class WhatsAppGateway {
   }
 
   async start(): Promise<void> {
-    if (this.socket) return;
-    this.lastError = null;
-    this.state = "disconnected";
-    const factory = this.options.socketFactory ?? defaultSocketFactory;
-    this.socket = await factory(this.sessionDir);
-    this.bindSocket(this.socket);
+    if (this.terminalClosing || this.socket) return;
+    if (this.startInFlight) return this.startInFlight;
+    const generation = ++this.lifecycleGeneration;
+    const start = async (): Promise<void> => {
+      this.lastError = null;
+      this.state = "disconnected";
+      const factory = this.options.socketFactory ?? defaultSocketFactory;
+      let socket: SocketLike;
+      try {
+        socket = await factory(this.sessionDir);
+      } catch (error) {
+        if (!this.terminalClosing && generation === this.lifecycleGeneration) {
+          this.state = "error";
+          this.lastError = error instanceof Error ? error.message : String(error);
+          this.lifecycleFailures.push(error);
+          this.notifyStatusChange();
+        }
+        throw error;
+      }
+      if (this.terminalClosing || generation !== this.lifecycleGeneration) {
+        try {
+          await this.flushSocketCredentials(socket);
+        } finally {
+          socket.end?.();
+        }
+        return;
+      }
+      this.socket = socket;
+      this.lifecycleFailures.length = 0;
+      this.bindSocket(socket, generation);
+    };
+    this.startInFlight = start();
+    try {
+      await this.startInFlight;
+    } finally {
+      this.startInFlight = null;
+    }
   }
 
   async pair(): Promise<void> {
@@ -463,13 +699,19 @@ export class WhatsAppGateway {
 
   async disconnect(options: { keepEnabled?: boolean } = {}): Promise<void> {
     this.clearReconnectTimer();
+    this.lifecycleGeneration += 1;
     if (!options.keepEnabled) this.options.settings.setWhatsAppSettings({ enabled: false });
     const socket = this.socket;
     this.socket = null;
     this.qr = null;
     this.state = "disconnected";
     this.notifyStatusChange();
-    socket?.end?.();
+    await this.startInFlight?.catch(() => undefined);
+    try {
+      await this.flushSocketCredentials(socket);
+    } finally {
+      socket?.end?.();
+    }
   }
 
   async resetSession(): Promise<void> {
@@ -478,13 +720,63 @@ export class WhatsAppGateway {
     this.options.settings.setRaw("whatsapp_linked_jid", "");
   }
 
-  close(): void {
+  async close(): Promise<void> {
+    if (this.closeInFlight) return this.closeInFlight;
+    this.terminalClosing = true;
+    this.lifecycleGeneration += 1;
     this.clearReconnectTimer();
     const socket = this.socket;
     this.socket = null;
     this.qr = null;
+    this.state = "disconnected";
     this.notifyStatusChange();
-    socket?.end?.();
+    this.closeInFlight = (async () => {
+      const failures: unknown[] = this.lifecycleFailures.splice(0);
+      try {
+        await this.flushSocketCredentials(socket);
+      } catch (error) {
+        failures.push(error);
+      } finally {
+        socket?.end?.();
+      }
+      const drain = (async () => {
+        for (
+          const result of await Promise.allSettled([
+            this.startInFlight ?? Promise.resolve(),
+            this.connectionCloseInFlight ?? Promise.resolve(),
+          ])
+        ) {
+          if (result.status === "rejected") failures.push(result.reason);
+        }
+        while (this.activeSocketWork.size > 0) {
+          await Promise.allSettled([...this.activeSocketWork]);
+        }
+      })();
+      let timer: NodeJS.Timeout | null = null;
+      try {
+        await Promise.race([
+          drain,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`WhatsApp shutdown work did not drain within ${WHATSAPP_SHUTDOWN_DRAIN_MS}ms`)),
+              WHATSAPP_SHUTDOWN_DRAIN_MS,
+            );
+          }),
+        ]);
+      } catch (error) {
+        failures.push(error);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+      try {
+        await this.flushSocketCredentials(socket);
+      } catch (error) {
+        failures.push(error);
+      }
+      failures.push(...this.lifecycleFailures.splice(0));
+      if (failures.length > 0) throw new AggregateError(failures, "WhatsApp shutdown failed");
+    })();
+    return this.closeInFlight;
   }
 
   private clearReconnectTimer(): void {
@@ -506,6 +798,12 @@ export class WhatsAppGateway {
     for (const waiter of this.waiters) waiter();
   }
 
+  private trackSocketWork<T>(work: Promise<T>): Promise<T> {
+    this.activeSocketWork.add(work);
+    void work.finally(() => this.activeSocketWork.delete(work)).catch(() => undefined);
+    return work;
+  }
+
   private waitForStatus(predicate: () => boolean, timeoutMs: number): Promise<void> {
     if (predicate()) return Promise.resolve();
     return new Promise((resolve) => {
@@ -524,14 +822,28 @@ export class WhatsAppGateway {
 
   private async flushSocketCredentials(socket: SocketLike | null): Promise<void> {
     if (!socket?.flushCredentials) return;
-    await socket.flushCredentials().catch((err: unknown) => {
+    let timer: NodeJS.Timeout | null = null;
+    try {
+      await Promise.race([
+        socket.flushCredentials(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`WhatsApp credential flush exceeded ${WHATSAPP_CREDENTIAL_FLUSH_MS}ms`)),
+            WHATSAPP_CREDENTIAL_FLUSH_MS,
+          );
+        }),
+      ]);
+    } catch (err) {
       this.lastError = `WhatsApp credentials could not be saved: ${err instanceof Error ? err.message : String(err)}`;
       console.error("[whatsapp] credential flush failed:", err);
-    });
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private scheduleReconnect(reason: string, delayMs: number): void {
-    if (!this.options.settings.whatsappSettings().enabled || this.reconnectTimer) return;
+    if (this.terminalClosing || !this.options.settings.whatsappSettings().enabled || this.reconnectTimer) return;
     this.lastError = reason;
     this.state = "disconnected";
     this.notifyStatusChange();
@@ -576,6 +888,7 @@ export class WhatsAppGateway {
     if (!this.options.settings.whatsappSettings().enabled) return;
     const dead = this.socket;
     this.socket = null;
+    this.lifecycleGeneration += 1;
     try {
       dead?.end?.();
     } catch {
@@ -791,9 +1104,9 @@ export class WhatsAppGateway {
     });
   }
 
-  private bindSocket(socket: SocketLike): void {
+  private bindSocket(socket: SocketLike, generation: number): void {
     socket.ev.on("connection.update", (update) => {
-      if (this.socket !== socket) return;
+      if (this.terminalClosing || this.socket !== socket || generation !== this.lifecycleGeneration) return;
       const qr = typeof update.qr === "string" ? update.qr : null;
       if (qr) {
         this.qr = qr;
@@ -812,8 +1125,8 @@ export class WhatsAppGateway {
         if (linked) this.options.settings.setRaw("whatsapp_linked_jid", linked);
         this.notifyStatusChange();
         if (wasReconnecting) this.logHealthEvent("reconnect_succeeded");
-        void this.refreshAllowedSenderAliases();
-        void this.recoverInterruptedMedia(socket).catch((error: unknown) => {
+        void this.trackSocketWork(this.refreshAllowedSenderAliases());
+        void this.trackSocketWork(this.recoverInterruptedMedia(socket)).catch((error: unknown) => {
           this.lastError = `WhatsApp media recovery failed: ${error instanceof Error ? error.message : String(error)}`;
           console.error("[whatsapp] media recovery failed:", error);
         });
@@ -826,18 +1139,25 @@ export class WhatsAppGateway {
             ?.statusCode,
         );
         this.socket = null;
+        this.lifecycleGeneration += 1;
         this.qr = null;
-        void this.handleConnectionClose(closingSocket ?? socket, statusCode).catch((err: unknown) => {
+        const closeWork = this.handleConnectionClose(closingSocket ?? socket, statusCode);
+        this.connectionCloseInFlight = closeWork;
+        void closeWork.catch((err: unknown) => {
           this.state = "error";
           this.lastError = err instanceof Error ? err.message : String(err);
+          this.lifecycleFailures.push(err);
           this.notifyStatusChange();
           console.error("[whatsapp] close handler failed:", err);
+        }).finally(() => {
+          if (this.connectionCloseInFlight === closeWork) this.connectionCloseInFlight = null;
         });
       }
     });
 
     socket.ev.on("messages.upsert", (update) => {
-      void this.handleMessages(update.messages, update.type).catch((err: unknown) => {
+      if (this.terminalClosing || this.socket !== socket || generation !== this.lifecycleGeneration) return;
+      void this.trackSocketWork(this.handleMessages(update.messages, update.type)).catch((err: unknown) => {
         this.lastError = err instanceof Error ? err.message : String(err);
         console.error("[whatsapp] message handler failed:", err);
       });
@@ -927,7 +1247,7 @@ export class WhatsAppGateway {
         // Images and other media keep the ingest-ack + background worker.
         this.options.store.markMessageStatus(event.messageId, "digest_queued");
         await this.sendReply(event, this.formatIngestAck(event), "ack_sent");
-        void this.processMediaIngest(event).catch((err: unknown) => {
+        void this.trackSocketWork(this.processMediaIngest(event)).catch((err: unknown) => {
           console.error("[whatsapp] media worker failed:", err);
         });
         return;
