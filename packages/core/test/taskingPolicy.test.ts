@@ -1080,6 +1080,113 @@ describe("peerMutationGuardFailure", () => {
       ).toBeNull();
     });
 
+    it("binds ordinary memory language to discovered storage operations", () => {
+      const storeMemory = "fixture__store_memory__abc123";
+      for (const request of [
+        "Remember this exact new memory: WhatsApp stabilization — amber otter.",
+        "New memory: the release word is amber otter.",
+        "Please add this note to memory.",
+        "Keep this detail for later.",
+        "Put this in the vault.",
+      ]) {
+        expect(
+          peerMutationGuardFailure(storeMemory, request, {
+            forceMutation: true,
+            description: "Persist a durable memory.",
+          }),
+        ).toBeNull();
+      }
+    });
+
+    it("keeps storage language scoped, positive, and action-oriented", () => {
+      const storeMemory = "fixture__store_memory__abc123";
+      for (const request of [
+        "What can you help me remember?",
+        "Do not remember this.",
+        "Please tell me how to add this to memory.",
+        "Remember this exact note, but actually no.",
+        "Remember this exact note, but cancel.",
+        "Remember this exact note, but do not store it.",
+        "Remember this exact note — no, don’t.",
+        "Remember this exact note — no thanks.",
+      ]) {
+        expect(
+          peerMutationGuardFailure(storeMemory, request, {
+            forceMutation: true,
+            description: "Persist a durable memory.",
+          }),
+        ).toContain("require an explicit write/run/send instruction");
+      }
+
+      expect(
+        peerMutationGuardFailure(createPosts, "Remember this exact note.", {
+          forceMutation: true,
+          description: "Create social posts as held drafts.",
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+      expect(
+        peerMutationGuardFailure("fixture__delete_memory__abc123", "Remember this exact note.", {
+          forceMutation: true,
+          description: "Delete a durable memory.",
+        }),
+      ).toContain("require an explicit write/run/send instruction");
+
+      for (const [tool, description] of [
+        ["fixture__publish_memory__abc123", "Publish a memory to an external audience."],
+        ["fixture__send_memory__abc123", "Send a memory to another user."],
+        ["fixture__share_memory__abc123", "Share a memory with another user."],
+        ["fixture__archive_invoice__abc123", "Archive an invoice; memories may be attached."],
+        ["fixture__rotate_key__abc123", "Rotate a key used by the memory archive."],
+        ["fixture__save_payment_method__abc123", "Save a payment method."],
+        ["fixture__create_financial_record__abc123", "Create a financial record."],
+        ["fixture__archive_memory__abc123", "Archive a memory."],
+        ["fixture__add_vault_member__abc123", "Add a member to a vault."],
+        ["fixture__create_memory_share__abc123", "Create a memory share."],
+        ["fixture__store_memory_and_publish__abc123", "Store a memory and publish it."],
+        ["fixture__save_note_and_send__abc123", "Save a note and send it."],
+      ]) {
+        expect(
+          peerMutationGuardFailure(tool, "Remember this exact note.", {
+            forceMutation: true,
+            description,
+          }),
+        ).toContain("require an explicit write/run/send instruction");
+      }
+
+      expect(
+        peerMutationGuardFailure("fixture__persist_financial_record__abc123", "Persist this financial record.", {
+          forceMutation: true,
+          description: "Persist a financial record.",
+        }),
+      ).toBeNull();
+    });
+
+    it("keeps generic storage capability questions read-only", () => {
+      for (const [tool, request] of [
+        ["fixture__archive_invoice__abc123", "Can you archive invoices?"],
+        [
+          "fixture__archive_invoice__abc123",
+          "Can you archive invoices in this connected MCP? I am asking what it supports.",
+        ],
+        ["fixture__archive_invoice__abc123", "Can you archive invoices in this connected MCP?"],
+        ["fixture__persist_records__abc123", "Can you persist records?"],
+      ]) {
+        expect(
+          peerMutationGuardFailure(tool, request, {
+            forceMutation: true,
+            description: "Persist or archive records.",
+          }),
+        ).toContain("require an explicit write/run/send instruction");
+      }
+
+      expect(
+        peerMutationGuardFailure("fixture__archive_invoice__abc123", "Can you archive this invoice?", {
+          forceMutation: true,
+          description: "Archive an invoice.",
+        }),
+      ).toBeNull();
+    });
+
     it("keeps capability questions read-only even when a mutation tool is selected", () => {
       expect(
         peerMutationGuardFailure("fixture__publishToLinkedIn__abc123", "Can this connected peer publish to LinkedIn?", {

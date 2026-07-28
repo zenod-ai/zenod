@@ -232,9 +232,48 @@ export interface PeerMutationGuardContext {
   requiresStandingApproval?: boolean | undefined;
 }
 
-const MUTATION_FAMILIES = [
+interface MutationFamily {
+  tool: RegExp;
+  request: RegExp;
+  leafOnly?: boolean;
+  postfixCancellation?: RegExp;
+}
+
+const STORAGE_POSTFIX_CANCELLATION_RE =
+  /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this))?|stop|abort|nvm|nevermind)\b|\b(?:do not|don['’]?t|never)\s+(?:save|store|persist|archive|remember|add|keep|put)\b|(?:^|[\s,;:—-])no(?:\s*,?\s*(?:do not|don['’]?t|thanks?|thank\s+you))?[.!]?\s*$|\b(?:do not|don['’]?t)[.!]?\s*$/i;
+
+const TERMINAL_MUTATION_ACTION_FAMILIES = [
+  /\b(?:save|store|persist|remember)\w*\b/i,
+  /\b(?:post|publish|send|share|deliver)\w*\b/i,
+  /\b(?:delete|remove|destroy|revoke)\w*\b/i,
+  /\b(?:create|draft|compose|prepare|submit|add|write|put)\w*\b/i,
+  /\b(?:edit|update|change|rename|patch|revise|rewrite|replace)\w*\b/i,
+  /\b(?:approve|confirm|commit|execute|run)\w*\b/i,
+  /\barchive\w*\b/i,
+] as const;
+
+const MUTATION_FAMILIES: readonly MutationFamily[] = [
   { tool: /\b(?:delete|remove|destroy|revoke)\w*\b/i, request: /\b(?:delete|remove|destroy|revoke)\w*\b/i },
-  { tool: /\b(?:create|draft|post|publish|send|compose|prepare|save|store|submit)\w*\b/i, request: /\b(?:create|draft|post|publish|send|compose|prepare|save|store|submit)\w*\b/i },
+  // Memory language requires both a storage action and a memory/note/vault target in
+  // the terminal leaf. It cannot authorize generic financial/account persistence.
+  {
+    tool:
+      /(?:\b(?:save|store|persist|remember)\w*\b[\s\S]{0,40}\b(?:memory|note|vault)\w*\b|\b(?:memory|note|vault)\w*\b[\s\S]{0,40}\b(?:save|store|persist|remember)\w*\b)/i,
+    request:
+      /\b(?:(?:save|store|persist|archive)\w*|remember\s+(?:this|that|these|the following)\b|new\s+memory\b|add\b[\s\S]{0,80}\b(?:to|as)\s+(?:(?:my|the)\s+)?(?:memory|vault)\b|keep\b[\s\S]{0,80}\bfor\s+later\b|put\b[\s\S]{0,80}\b(?:in|into)\s+(?:(?:my|the)\s+)?(?:memory|vault)\b)/i,
+    leafOnly: true,
+    postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE,
+  },
+  // Generic persistence operations require the matching user verb. These remain
+  // leaf-only so description prose cannot broaden an unrelated operation.
+  { tool: /\bsave\w*\b/i, request: /\bsave\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\bstore\w*\b/i, request: /\bstore\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\bpersist\w*\b/i, request: /\bpersist\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\barchive\w*\b/i, request: /\barchive\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\badd\w*\b/i, request: /\badd\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\bwrite\w*\b/i, request: /\bwrite\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\bput\w*\b/i, request: /\bput\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\b(?:create|draft|post|publish|send|compose|prepare|submit)\w*\b/i, request: /\b(?:create|draft|post|publish|send|compose|prepare|submit)\w*\b/i },
   { tool: /\b(?:create|draft|compose|prepare)\w*\b/i, request: /\b(?:edit|change|revise|rewrite|replace)\w*\b/i },
   { tool: /\b(?:edit|update|change|rename|patch)\w*\b/i, request: /\b(?:edit|update|change|rename|patch|revise|rewrite)\w*\b/i },
   { tool: /\b(?:approve|confirm|commit|execute|run)\w*\b/i, request: /\b(?:approve|confirm|commit|execute|run)\w*\b/i },
@@ -248,9 +287,20 @@ function operationWords(tool: string, description = ""): string {
 /** Bind ordinary human mutation language to the discovered operation family. */
 function hasNaturalDynamicMutationIntent(tool: string, request: string, description?: string): boolean {
   if (EXECUTION_STATUS_REQUEST_RE.test(request) || /\b(?:run|execute|invoke|call)\b/i.test(request)) return false;
+  if (
+    /\b(?:what|whether)\b[\s\S]{0,80}\b(?:support(?:s|ed|ing)?|capabilit(?:y|ies)|(?:can|could)\s+do|able\s+to)\b/i.test(
+      request,
+    )
+  ) return false;
+  if (
+    /^\s*(?:can|could)\s+you\s+\w+\s+(?!(?:this|that|these|those|my|our|the|a|an|saying|named|called)\b)[^:#"'`?]+\?\s*$/i.test(
+      request,
+    )
+  ) return false;
   const operation = operationWords(tool, description);
   const leaf = tool.split("__")[1] ?? "";
   const leafOperation = operationWords(tool);
+  if (TERMINAL_MUTATION_ACTION_FAMILIES.filter((family) => family.test(leafOperation)).length > 1) return false;
   const humanRequest = leaf
     ? request.replace(new RegExp(`\b(?:using|via|with)\s+(?:the\s+)?(?:\w+\s+)?${escapeRegex(leaf)}(?:\s+tool)?\b`, "gi"), " ")
     : request;
@@ -258,7 +308,7 @@ function hasNaturalDynamicMutationIntent(tool: string, request: string, descript
   // Descriptions are fallback context only; this prevents e.g. a delete tool whose
   // prose mentions "saved records" from being authorized by a request to save.
   const family = MUTATION_FAMILIES.find((candidate) => candidate.tool.test(leafOperation))
-    ?? MUTATION_FAMILIES.find((candidate) => candidate.tool.test(operation));
+    ?? MUTATION_FAMILIES.find((candidate) => !candidate.leafOnly && candidate.tool.test(operation));
   if (!family) return false;
   return [family].some((family) => {
     const verbs = new RegExp(family.request.source, "gi");
@@ -268,7 +318,8 @@ function hasNaturalDynamicMutationIntent(tool: string, request: string, descript
       const requested = lead.trim().length === 0 || /(?:please|can you|could you|would you|will you|i (?:want|need|would like) you to|let'?s)\s*$/i.test(localLead);
       if (!requested) continue;
       const negationLead = humanRequest.slice(Math.max(0, match.index! - 20), match.index);
-      if (!NEGATION_RE.test(negationLead)) return true;
+      const after = humanRequest.slice(match.index! + match[0].length);
+      if (!NEGATION_RE.test(negationLead) && !family.postfixCancellation?.test(after)) return true;
     }
     return false;
   });
