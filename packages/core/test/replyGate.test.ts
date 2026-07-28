@@ -417,6 +417,9 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
       JSON.stringify({ isError: true, content: [{ type: "text", text: "private detail" }] }),
       JSON.stringify({ structuredContent: { success: false, error: "validation failed" } }),
       JSON.stringify({ content: [{ type: "text", text: "ERROR: schema validation failed" }] }),
+      JSON.stringify({ status: "failure", message: "schema validation failed" }),
+      JSON.stringify({ structuredContent: { status: "timed_out", message: "upstream timeout" } }),
+      JSON.stringify({ status: "unauthorized", message: "credentials rejected" }),
     ].map((result, index) => ({
       ...action(`failed_read_${index}`, result),
       peerAction: true,

@@ -178,7 +178,12 @@ function sanitizedPeerResult(result: string): string {
 
 function hasRootFailureSignal(value: Record<string, unknown>): boolean {
   if (value.isError === true || value.ok === false || value.success === false) return true;
-  if (typeof value.status === "string" && /^(?:error|failed|blocked)$/i.test(value.status.trim())) return true;
+  if (typeof value.status === "string") {
+    const status = value.status.trim().toLowerCase().replace(/[\s_-]+/g, "");
+    if (/^(?:error|failed|failure|blocked|timeout|timedout|unauthorized|unauthorised|forbidden|denied)$/.test(status)) {
+      return true;
+    }
+  }
   return Object.hasOwn(value, "error") && value.error !== undefined && value.error !== null && value.error !== false;
 }
 
