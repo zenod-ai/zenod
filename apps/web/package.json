@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run src/views/dashboard-navigation.test.ts src/views/Settings.product-loading.test.tsx src/lib/api.test.ts src/components/peer-agents-model.test.ts src/components/peer-agents.test.tsx src/components/ring-control-surface-model.test.ts src/components/herald-loop-panels.test.tsx",
+    "test": "vitest run src/views/dashboard-navigation.test.ts src/views/Settings.product-loading.test.tsx src/lib/api.test.ts src/components/peer-agents-model.test.ts src/components/peer-agents.test.tsx src/components/ring-control-surface-model.test.ts src/components/herald-loop-panels.test.tsx src/components/phylax-tenant-settings.test.tsx",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"

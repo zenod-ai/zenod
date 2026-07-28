@@ -10,6 +10,8 @@ const DOWNSTREAM_TOKEN_KEY = "phylax_downstream_token";
 const DOWNSTREAM_URL_KEY = "phylax_downstream_url";
 const TRANSCRIPTION_TOKEN_KEY = "phylax_transcription_token";
 const VERIFY_TTL_MS = 30 * 60_000;
+export type PhylaxTranscriptionProvider = "local" | "groq" | "openai" | "openrouter";
+const CLOUD_TRANSCRIPTION_PROVIDERS = ["groq", "openai", "openrouter"] as const;
 const VERIFICATION_ANIMALS = [
   "badger",
   "bear",
@@ -51,7 +53,7 @@ export interface PhylaxTenantSettings {
   downstreamCredentialCheckedAt: string | null;
   downstreamCredentialRevision: string | null;
   transcriptionEnabled: boolean;
-  transcriptionProvider: "local" | "groq" | "openai" | "openrouter";
+  transcriptionProvider: PhylaxTranscriptionProvider;
   transcriptionModel: string | null;
   telegramBinding: string | null;
   notificationPrefs: { whatsapp: boolean; telegram: boolean };
@@ -64,6 +66,7 @@ export interface PhylaxTenantSettingsView extends Omit<
 > {
   downstreamTokenConfigured: boolean;
   transcriptionKeyConfigured: boolean;
+  transcriptionKeysConfigured: Record<Exclude<PhylaxTranscriptionProvider, "local">, boolean>;
 }
 
 type Store = Record<string, PhylaxTenantSettings>;
@@ -135,11 +138,20 @@ export class PhylaxTenantSettingsStore {
       downstreamCredentialRevision: _downstreamCredentialRevision,
       ...settings
     } = current;
+    const transcriptionKeysConfigured = Object.fromEntries(
+      CLOUD_TRANSCRIPTION_PROVIDERS.map((provider) => [
+        provider,
+        this.transcriptionKey(tenantId, provider) !== null,
+      ]),
+    ) as PhylaxTenantSettingsView["transcriptionKeysConfigured"];
     return {
       ...settings,
       downstreamUrl: this.encryptedDownstreamUrl(current),
       downstreamTokenConfigured: this.secret(tenantId, DOWNSTREAM_TOKEN_KEY) !== null,
-      transcriptionKeyConfigured: this.secret(tenantId, TRANSCRIPTION_TOKEN_KEY) !== null,
+      transcriptionKeyConfigured: current.transcriptionProvider === "local"
+        ? false
+        : transcriptionKeysConfigured[current.transcriptionProvider],
+      transcriptionKeysConfigured,
     };
   }
 
@@ -187,15 +199,17 @@ export class PhylaxTenantSettingsStore {
       updatedAt: new Date().toISOString(),
     };
     if (input.telegramBinding?.trim() && !next.telegramBinding) throw new Error("invalid Telegram binding");
+    if (input.transcriptionKey !== undefined && input.transcriptionKey !== null) {
+      const provider = input.transcriptionProvider ?? current.transcriptionProvider;
+      if (provider === "local") throw new Error("local transcription does not use a provider key");
+      this.setSecret(tenantId, this.transcriptionTokenKey(provider), input.transcriptionKey);
+    }
     this.put(next);
     if (input.downstreamUrl !== undefined) {
       this.setSecret(tenantId, DOWNSTREAM_URL_KEY, nextDownstreamUrl ?? "");
     }
     if (input.downstreamToken !== undefined && input.downstreamToken !== null) {
       this.setSecret(tenantId, DOWNSTREAM_TOKEN_KEY, input.downstreamToken);
-    }
-    if (input.transcriptionKey !== undefined && input.transcriptionKey !== null) {
-      this.setSecret(tenantId, TRANSCRIPTION_TOKEN_KEY, input.transcriptionKey);
     }
     return this.view(tenantId);
   }
@@ -298,19 +312,69 @@ export class PhylaxTenantSettingsStore {
       : Boolean(entry.telegramBinding && entry.telegramBinding === normalizeTelegramEntry(recipient));
   }
 
-  transcriptionConfig(tenantId: string): {
+  transcriptionConfig(
+    tenantId: string,
+    providerOverride?: PhylaxTranscriptionProvider,
+  ): {
     enabled: boolean;
-    provider: PhylaxTenantSettings["transcriptionProvider"];
+    provider: PhylaxTranscriptionProvider;
     model: string | null;
     key: string | null;
   } {
     const entry = this.get(tenantId);
+    const provider = providerOverride ?? entry.transcriptionProvider;
     return {
       enabled: entry.transcriptionEnabled,
-      provider: entry.transcriptionProvider,
-      model: entry.transcriptionModel,
-      key: this.secret(tenantId, TRANSCRIPTION_TOKEN_KEY),
+      provider,
+      model: provider === entry.transcriptionProvider ? entry.transcriptionModel : null,
+      key: provider === "local" ? null : this.transcriptionKey(tenantId, provider),
     };
+  }
+
+  clearTranscriptionKey(
+    tenantId: string,
+    provider: Exclude<PhylaxTranscriptionProvider, "local">,
+  ): PhylaxTenantSettingsView {
+    const current = this.get(tenantId);
+    if (current.transcriptionProvider === provider && current.transcriptionEnabled) {
+      this.put({
+        ...current,
+        transcriptionEnabled: false,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    this.setSecret(tenantId, this.transcriptionTokenKey(provider), "");
+    if (current.transcriptionProvider === provider) {
+      this.setSecret(tenantId, TRANSCRIPTION_TOKEN_KEY, "");
+    }
+    return this.view(tenantId);
+  }
+
+  /**
+   * Read one provider's tenant-scoped key. A legacy single-key tenant is
+   * migrated only to the provider it was configured for, never reused across
+   * providers.
+   */
+  private transcriptionKey(
+    tenantId: string,
+    provider: Exclude<PhylaxTranscriptionProvider, "local">,
+  ): string | null {
+    const scopedKey = this.transcriptionTokenKey(provider);
+    const scoped = this.secret(tenantId, scopedKey);
+    if (scoped) return scoped;
+    const current = this.get(tenantId);
+    if (current.transcriptionProvider !== provider) return null;
+    const legacy = this.secret(tenantId, TRANSCRIPTION_TOKEN_KEY);
+    if (!legacy) return null;
+    this.setSecret(tenantId, scopedKey, legacy);
+    this.setSecret(tenantId, TRANSCRIPTION_TOKEN_KEY, "");
+    return legacy;
+  }
+
+  private transcriptionTokenKey(
+    provider: Exclude<PhylaxTranscriptionProvider, "local">,
+  ): string {
+    return `${TRANSCRIPTION_TOKEN_KEY}:${provider}`;
   }
 
   private secret(tenantId: string, key: string): string | null {
