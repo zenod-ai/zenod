@@ -100,6 +100,35 @@ describe("answer tool-step budget", () => {
     expect(isMcpCatalogInspectionQuestion(question)).toBe(false);
   });
 
+  it("does not form catalog intent from unrelated phrases across a long memory transcript", () => {
+    const transcript = [
+      "Please remember and summarize this working-session transcript.",
+      "What are we trying to find in the customer research, and which decision should the memory preserve?",
+      "The discussion then stays on product positioning, user journeys, ownership, and rollout sequencing. ".repeat(120),
+      "A later architecture note says semantic tools help retrieve related concepts from stored material.",
+      "Save the useful decisions and give me a concise answer.",
+    ].join("\n\n");
+
+    expect(transcript.length).toBeGreaterThan(10_000);
+    expect(isMcpCatalogInspectionQuestion(transcript)).toBe(false);
+  });
+
+  it.each([
+    "What tools are connected and available?",
+    "Could you check the connected surface? What tools are available?",
+    "Background for this request.\n\nPlease list the actual tools exposed by the connected MCP.",
+  ])("keeps locally expressed catalog questions: %s", (question) => {
+    expect(isMcpCatalogInspectionQuestion(question)).toBe(true);
+  });
+
+  it.each([
+    "What should we preserve from this discussion? The semantic tools section explains retrieval quality.",
+    "What are we trying to find in the research?\n\nThe architecture later mentions semantic tools.",
+    `What are we trying to find ${"in the customer research ".repeat(12)} before documenting our semantic tools approach?`,
+  ])("does not cross sentence, paragraph, or distant-clause boundaries: %s", (question) => {
+    expect(isMcpCatalogInspectionQuestion(question)).toBe(false);
+  });
+
   it("does not expose the catalog inspector to the model on a non-catalog turn", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     const inspect = vi.fn(async () => "CATALOG");

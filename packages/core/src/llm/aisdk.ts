@@ -146,32 +146,66 @@ export function uniqueSuffixedPeerToolName(
  * not authorize or invoke an upstream peer tool; it only reads Ring's saved,
  * authenticated tools/list snapshot through an authoritative read tool.
  */
+function conceptsOccurLocally(text: string, patterns: readonly RegExp[], maxSpan = 120): boolean {
+  const positions = patterns.map((pattern) => {
+    const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+    return [...text.matchAll(new RegExp(pattern.source, flags))].map((match) => match.index ?? 0);
+  });
+  if (positions.some((matches) => matches.length === 0)) return false;
+
+  const search = (patternIndex: number, selected: number[]): boolean => {
+    if (patternIndex === positions.length) {
+      return Math.max(...selected) - Math.min(...selected) <= maxSpan;
+    }
+    return positions[patternIndex]!.some((position) => {
+      const next = [...selected, position];
+      return Math.max(...next) - Math.min(...next) <= maxSpan && search(patternIndex + 1, next);
+    });
+  };
+  return search(0, []);
+}
+
 export function isMcpCatalogInspectionQuestion(question: string): boolean {
-  const normalized = question.replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
+  const withBoundaries = question
+    .replace(/[’']/g, "'")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .trim();
+  const normalized = withBoundaries.replace(/\s+/g, " ");
 
   // Terse chat prompts are still explicit catalog questions. Requiring a second
   // inquiry word made `tools?` fall through to the model, which could then choose
   // an unrelated connected mutation tool.
   if (/^(?:tools?|capabilit(?:y|ies)|catalog|schemas?|skills?)\s*[?!.]*$/i.test(normalized)) return true;
 
-  // Questions whose subject is the connected peer itself are unambiguously
-  // about its advertised capability, rather than a request to perform work.
-  if (/\bwhat can (?:this|the|my|a|an|any) (?:connected )?(?:mcp|peer|unit) do\b/i.test(normalized)) return true;
-  if (/\b(?:show|list|inspect|describe) (?:me )?(?:the |my |our |all )?(?:connected )?(?:mcps?|peers?|units?)\b[?.!]*$/i.test(normalized)) return true;
+  // Never form intent from a document-wide cross-product. A long transcript can
+  // contain an unrelated inquiry near the start and mention tools much later.
+  // Catalog concepts must instead co-occur within one sentence/paragraph-local
+  // segment and a bounded span.
+  const segments = withBoundaries
+    .split(/(?:\n+|(?<=[.!?;])\s+)/)
+    .map((segment) => segment.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const inquiry = /\b(?:what|which|show|list|inspect|describe|details?|how|whether|available|actual|real|really|status|state|see|check|verify)\b/i;
+  const toolCatalogSubject = /\b(?:catalog|tools?|capabilit(?:y|ies)|advertised|exposed)\b/i;
+  const contractSubject = /\b(?:schemas?|annotations?|namespaces?|collisions?|refresh(?:ed)?|discovery)\b/i;
+  const skillSubject = /\bskills?\b/i;
+  const skillState = /\b(?:authorit\w*|publish\w*|detect\w*|load\w*|attach\w*|receipt\w*)\b/i;
 
-  const hasInquiry = /\b(?:what|which|show|list|inspect|describe|details?|how|whether|available|actual|real|really|status|state|see|check|verify)\b/i.test(normalized);
-  const hasToolCatalogSubject = /\b(?:catalog|tools?|capabilit(?:y|ies)|advertised|exposed)\b/i.test(normalized);
-  if (hasInquiry && hasToolCatalogSubject) return true;
+  return segments.some((segment) => {
+    // Questions whose subject is the connected peer itself are unambiguously
+    // about its advertised capability, rather than a request to perform work.
+    if (/\bwhat can (?:this|the|my|a|an|any) (?:connected )?(?:mcp|peer|unit) do\b/i.test(segment)) return true;
+    if (/\b(?:show|list|inspect|describe) (?:me )?(?:the |my |our |all )?(?:connected )?(?:mcps?|peers?|units?)\b[?.!]*$/i.test(segment)) return true;
 
-  // Contract and discovery metadata are catalog questions only when the user
-  // is asking to inspect them. Merely mentioning an MCP, skill, or schema in a
-  // memory/task must not divert the turn into catalog rendering.
-  const hasContractSubject = /\b(?:schemas?|annotations?|namespaces?|collisions?|refresh(?:ed)?|discovery)\b/i.test(normalized);
-  if (hasInquiry && hasContractSubject) return true;
+    if (conceptsOccurLocally(segment, [inquiry, toolCatalogSubject])) return true;
 
-  const hasSkillSubject = /\bskills?\b/i.test(normalized);
-  const hasSkillState = /\b(?:authorit\w*|publish\w*|detect\w*|load\w*|attach\w*|receipt\w*)\b/i.test(normalized);
-  return hasInquiry && hasSkillSubject && hasSkillState;
+    // Contract and discovery metadata are catalog questions only when the user
+    // is asking to inspect them. Merely mentioning an MCP, skill, or schema in a
+    // memory/task must not divert the turn into catalog rendering.
+    if (conceptsOccurLocally(segment, [inquiry, contractSubject])) return true;
+    return conceptsOccurLocally(segment, [inquiry, skillSubject, skillState]);
+  });
 }
 export const MAX_WORK_OUTPUT_TOKENS = 4096;
 
