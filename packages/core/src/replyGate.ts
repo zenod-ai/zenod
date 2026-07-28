@@ -322,6 +322,8 @@ function draftedUrlsAreGrounded(draftedText: string, actions: readonly TaskingAc
       .map((entry) => entry.value),
   );
   for (const match of draftedText.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
+    const nextCharacter = draftedText[(match.index ?? 0) + match[0].length];
+    if (nextCharacter === "<" || nextCharacter === "{") return false;
     const candidate = match[0].replace(/[),.;]+$/g, "");
     const sanitized = safeEvidenceUrl(candidate);
     if (!sanitized || !exactEvidenceUrls.has(sanitized)) return false;

@@ -391,24 +391,32 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("truncated by Ring");
   });
 
-  it("rejects a percent-encoded template URL in the draft while retaining exact safe evidence", () => {
-    const returnedUrl = "https://example.com/memories/returned";
-    const drafted = "I found it here: https://example.com/%7BSOURCE_URL%7D";
-    const out = applyReplyGate(drafted, [{
+  it("rejects raw or encoded template URLs in the draft even when their host prefix is grounded", () => {
+    const returnedUrl = "https://example.com/";
+    const read = {
       ...action("connected_read_hash", JSON.stringify({
         structuredContent: { sourceUrl: returnedUrl },
       })),
       peerAction: true,
-    }]);
+    };
+    const drafts = [
+      "I found it here: https://example.com/%7BSOURCE_URL%7D",
+      "I found it here: https://example.com/{SOURCE_URL}",
+      "I found it here: https://example.com/<URL>",
+    ];
 
-    expect(out.text).toBe([
-      "I found source data, but couldn't produce a safely grounded answer. Please retry or narrow the question.",
-      "",
-      "Evidence:",
-      `- <${returnedUrl}>`,
-    ].join("\n"));
-    expect(out.text).not.toContain("SOURCE_URL");
-    expect(out.text).not.toContain("%7B");
+    for (const drafted of drafts) {
+      const out = applyReplyGate(drafted, [read]);
+      expect(out.text).toBe([
+        "I found source data, but couldn't produce a safely grounded answer. Please retry or narrow the question.",
+        "",
+        "Evidence:",
+        `- <${returnedUrl}>`,
+      ].join("\n"));
+      expect(out.text).not.toContain("SOURCE_URL");
+      expect(out.text).not.toContain("%7B");
+      expect(out.text).not.toContain("<URL>");
+    }
   });
 
   it("rejects prefixed or fenced MCP and validation JSON instead of exposing raw envelopes", () => {
