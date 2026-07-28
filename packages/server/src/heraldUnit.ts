@@ -107,9 +107,16 @@ export function createHeraldUnit(options: CreateZenodUnitOptions = {}) {
   return {
     ...unit,
     lanes,
-    close() {
-      lanes.close();
-      unit.close();
+    async close() {
+      const failures = (
+        await Promise.allSettled([
+          Promise.resolve().then(() => lanes.close()),
+          unit.close(),
+        ])
+      )
+        .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+        .map((result) => result.reason);
+      if (failures.length > 0) throw new AggregateError(failures, "Herald shutdown failed");
     },
   };
 }

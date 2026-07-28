@@ -98,9 +98,32 @@ let closing = false;
 function shutdown(): void {
   if (closing) return;
   closing = true;
-  server.close(() => {
-    unit?.close();
-    runtime?.close();
+  const serverClosed = new Promise<void>((resolve, reject) => {
+    server.close((error?: Error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+  if ("closeIdleConnections" in server && typeof server.closeIdleConnections === "function") {
+    server.closeIdleConnections();
+  }
+  const resourcesClosed = Promise.resolve(unit?.close() ?? runtime?.close());
+  const forceTimer = setTimeout(() => {
+    console.error("shutdown exceeded 10 seconds; closing remaining HTTP connections");
+    process.exitCode = 1;
+    if ("closeAllConnections" in server && typeof server.closeAllConnections === "function") {
+      server.closeAllConnections();
+    }
+  }, 10_000);
+  void Promise.allSettled([serverClosed, resourcesClosed]).then((results) => {
+    clearTimeout(forceTimer);
+    const failures = results
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => result.reason);
+    if (failures.length > 0) {
+      console.error("shutdown failed:", new AggregateError(failures, "Server shutdown failed"));
+      process.exitCode = 1;
+    }
   });
 }
 

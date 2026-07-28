@@ -349,6 +349,107 @@ describe("WhatsApp API", () => {
   });
 });
 
+describe("WhatsApp lifecycle", () => {
+  it("discards a socket factory result that arrives after terminal close", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-late-start-"));
+    const runtime = new Runtime(dir);
+    const created = deferred<SocketLike>();
+    const socket = new FakeSocket();
+    const flushCredentials = vi.fn(async () => undefined);
+    const end = vi.fn(() => socket.emitter.removeAllListeners());
+    socket.flushCredentials = flushCredentials;
+    socket.end = end;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => created.promise,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      const starting = gateway.start();
+      const closing = gateway.close();
+      created.resolve(socket);
+      await Promise.all([starting, closing]);
+      socket.emitter.emit("connection.update", { connection: "open" });
+
+      expect(flushCredentials).toHaveBeenCalledTimes(1);
+      expect(end).toHaveBeenCalledTimes(1);
+      expect(gateway.status().state).toBe("disconnected");
+      expect(runtime.settings.getRaw("whatsapp_linked_jid")).toBeNull();
+    } finally {
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("awaits credential flush before ending the socket", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-flush-close-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const flushed = deferred<void>();
+    const order: string[] = [];
+    socket.flushCredentials = vi.fn(async () => {
+      order.push("flush-start");
+      await flushed.promise;
+      order.push("flush-end");
+    });
+    socket.end = vi.fn(() => {
+      order.push("end");
+      socket.emitter.removeAllListeners();
+    });
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      await gateway.start();
+      const closing = gateway.close();
+      await vi.waitFor(() => expect(order).toEqual(["flush-start"]));
+      expect(socket.end).not.toHaveBeenCalled();
+      flushed.resolve();
+      await closing;
+      expect(order).toEqual(["flush-start", "flush-end", "end", "flush-start", "flush-end"]);
+    } finally {
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("ends the socket and rejects shutdown when credential flush fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-flush-failure-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    socket.flushCredentials = vi.fn(async () => {
+      throw new Error("credential storage unavailable");
+    });
+    socket.end = vi.fn(() => socket.emitter.removeAllListeners());
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      await gateway.start();
+      await expect(gateway.close()).rejects.toThrow("WhatsApp shutdown failed");
+      expect(socket.end).toHaveBeenCalledTimes(1);
+      expect(gateway.status().lastError).toContain("credential storage unavailable");
+    } finally {
+      await runtime.close().catch(() => undefined);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("WhatsAppGateway", () => {
   it("sends an automated error reply when the engine fails (never silent)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-gateway-err-"));

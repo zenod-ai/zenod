@@ -103,10 +103,14 @@ export class ZenodRuntimePool {
     return app;
   }
 
-  close(): void {
-    for (const runtime of this.runtimes.values()) runtime.close();
+  async close(): Promise<void> {
+    const results = await Promise.allSettled([...this.runtimes.values()].map((runtime) => runtime.close()));
     this.apps.clear();
     this.runtimes.clear();
+    const failures = results
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => result.reason);
+    if (failures.length > 0) throw new AggregateError(failures, "Tenant runtime shutdown failed");
   }
 }
 
@@ -193,7 +197,7 @@ export interface CreateZenodUnitOptions {
   customerAdmin?: {
     githubLogin: string;
     mountRoutes?: (app: Hono<{ Bindings: HttpBindings }>) => void;
-    close?: () => void;
+    close?: () => void | Promise<void>;
   };
 }
 
@@ -412,12 +416,24 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     tenantStore,
     customerAccounts: customer.accounts,
     customerTokenVault: customer.tokenVault,
-    close() {
-      options.customerAdmin?.close?.();
-      runtimes.close();
-      if ("close" in tenantStore && typeof tenantStore.close === "function") {
-        tenantStore.close();
+    async close() {
+      const failures: unknown[] = [];
+      for (
+        const result of await Promise.allSettled([
+          Promise.resolve().then(() => options.customerAdmin?.close?.()),
+          runtimes.close(),
+        ])
+      ) {
+        if (result.status === "rejected") failures.push(result.reason);
       }
+      if ("close" in tenantStore && typeof tenantStore.close === "function") {
+        try {
+          tenantStore.close();
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+      if (failures.length > 0) throw new AggregateError(failures, "Unit shutdown failed");
     },
   };
 }
