@@ -131,15 +131,15 @@ describe("answer tool-step budget", () => {
 
   it("handles repeated inquiry, skill, and state tokens in a long single line without combinatorial matching", () => {
     const question = [
-      "what ".repeat(1_000),
+      "what skills ".repeat(4_000),
       "unrelated context ".repeat(20),
-      "skill ".repeat(1_000),
-      "unrelated context ".repeat(20),
-      "loaded ".repeat(1_000),
+      "loaded ".repeat(4_000),
     ].join("");
 
-    expect(question.length).toBeGreaterThan(15_000);
+    expect(question.length).toBeGreaterThan(70_000);
+    const startedAt = performance.now();
     expect(isMcpCatalogInspectionQuestion(question)).toBe(false);
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
   });
 
   it("does not expose the catalog inspector to the model on a non-catalog turn", async () => {
