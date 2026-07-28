@@ -1104,6 +1104,9 @@ describe("peerMutationGuardFailure", () => {
         "What can you help me remember?",
         "Do not remember this.",
         "Please tell me how to add this to memory.",
+        "Remember this exact note, but actually no.",
+        "Remember this exact note, but cancel.",
+        "Remember this exact note, but do not store it.",
       ]) {
         expect(
           peerMutationGuardFailure(storeMemory, request, {
@@ -1125,6 +1128,44 @@ describe("peerMutationGuardFailure", () => {
           description: "Delete a durable memory.",
         }),
       ).toContain("require an explicit write/run/send instruction");
+
+      for (const [tool, description] of [
+        ["fixture__publish_memory__abc123", "Publish a memory to an external audience."],
+        ["fixture__send_memory__abc123", "Send a memory to another user."],
+        ["fixture__share_memory__abc123", "Share a memory with another user."],
+        ["fixture__archive_invoice__abc123", "Archive an invoice; memories may be attached."],
+        ["fixture__rotate_key__abc123", "Rotate a key used by the memory archive."],
+        ["fixture__save_payment_method__abc123", "Save a payment method."],
+        ["fixture__create_financial_record__abc123", "Create a financial record."],
+      ]) {
+        expect(
+          peerMutationGuardFailure(tool, "Remember this exact note.", {
+            forceMutation: true,
+            description,
+          }),
+        ).toContain("require an explicit write/run/send instruction");
+      }
+
+      expect(
+        peerMutationGuardFailure("fixture__persist_financial_record__abc123", "Persist this financial record.", {
+          forceMutation: true,
+          description: "Persist a financial record.",
+        }),
+      ).toBeNull();
+    });
+
+    it("keeps generic storage capability questions read-only", () => {
+      for (const [tool, request] of [
+        ["fixture__archive_invoice__abc123", "Can you archive invoices?"],
+        ["fixture__persist_records__abc123", "Can you persist records?"],
+      ]) {
+        expect(
+          peerMutationGuardFailure(tool, request, {
+            forceMutation: true,
+            description: "Persist or archive records.",
+          }),
+        ).toContain("require an explicit write/run/send instruction");
+      }
     });
 
     it("keeps capability questions read-only even when a mutation tool is selected", () => {
