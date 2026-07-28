@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import type { Env, Hono } from "hono";
 import { SqliteStateStore } from "zenod";
 import { Settings } from "./settings.js";
@@ -13,7 +14,10 @@ import {
   phylaxWhatsAppPaths,
   type PhylaxDeliveryReceipt,
   type PhylaxTenantDelivery,
+  type PhylaxStagedVoice,
+  type PhylaxTranscriptionReceipt,
 } from "./phylaxChannels.js";
+import { probeAudioDurationSeconds } from "./transcribe.js";
 
 /**
  * The shipped channels organ, mounted without the old fused BrainEngine path.
@@ -30,6 +34,13 @@ export class PhylaxPortedRuntime {
   private readonly mediaCoalescingWindowMs: number;
   private readonly voiceProgressDelayMs: number;
   private readonly mediaInFlight = new Map<string, Promise<Awaited<ReturnType<PhylaxChannelsOrgan["receive"]>>>>();
+  private readonly voiceAbortControllers = new Map<string, AbortController>();
+  private voiceWorkerRunning = false;
+  private voiceWorkerClosed = false;
+  private voiceWorkerWakeRequested = false;
+  private voiceWorkerPromise: Promise<void> | null = null;
+  private lastVoiceTenantId: string | null = null;
+  private readonly probeVoiceDuration: (bytes: Buffer, fileName: string) => Promise<number | null>;
 
   constructor(
     readonly dataDir: string,
@@ -39,6 +50,7 @@ export class PhylaxPortedRuntime {
       whatsappSocketFactory?: SocketFactory;
       telegramFetch?: typeof fetch;
       verifyInbound?: (input: { channel: "whatsapp"; sender: string; text: string }) => Promise<string | null> | string | null;
+      probeVoiceDuration?: (bytes: Buffer, fileName: string) => Promise<number | null>;
     } = {},
   ) {
     const configuredWindow = Number(env.PHYLAX_MEDIA_COALESCE_WINDOW_MS ?? 300_000);
@@ -49,6 +61,8 @@ export class PhylaxPortedRuntime {
     this.voiceProgressDelayMs = Number.isFinite(configuredProgressDelay)
       ? Math.max(100, Math.min(configuredProgressDelay, 30_000))
       : 5_000;
+    this.probeVoiceDuration = adapters.probeVoiceDuration ?? ((bytes, fileName) =>
+      probeAudioDurationSeconds(bytes, fileName));
     this.state = new SqliteStateStore(join(dataDir, "phylax-channels.sqlite"));
     this.settings = new Settings(this.state);
     this.settings.seedFromEnv(env);
@@ -74,6 +88,32 @@ export class PhylaxPortedRuntime {
           text,
         });
         if (verificationReply) return { replyText: verificationReply };
+        const normalizedText = text.trim().toLowerCase();
+        if (!media && (normalizedText === "cancel transcription" || normalizedText === "confirm transcription")) {
+          const tenantId = await this.organ.tenantIdFor("whatsapp", event.senderId, event.chatId);
+          const sender = normalizeWhatsAppIdentifier(event.senderId);
+          const conversationKey = `whatsapp:${sender}`;
+          if (normalizedText === "cancel transcription") {
+            const cancelled = this.whatsappStore.cancelLatestVoiceJob(tenantId, conversationKey);
+            if (!cancelled) {
+              return { replyText: "No pending voice transcription to cancel in this conversation." };
+            }
+            this.voiceAbortControllers.get(cancelled.providerMessageId)?.abort();
+            return {
+              replyText: `Cancelled transcription ${cancelled.providerMessageId}. Nothing was sent to Ring.`,
+            };
+          }
+          const confirmed = this.whatsappStore.confirmLatestVoiceJob(tenantId, conversationKey);
+          if (!confirmed) {
+            return { replyText: "No voice transcription is waiting for confirmation in this conversation." };
+          }
+          return {
+            replyText:
+              `Confirmed transcription ${confirmed.providerMessageId}. It is queued and may take a while. `
+              + 'Send “cancel transcription” to cancel it before Ring handoff starts.',
+            afterReply: () => this.kickVoiceWorker(),
+          };
+        }
         const inbound = {
           channel: "whatsapp",
           sender: event.senderId,
@@ -123,6 +163,43 @@ export class PhylaxPortedRuntime {
               timing: { mediaDownloadMs: timing.mediaDownloadMs },
             };
           }
+        }
+        const isVoice = Boolean(media?.bytes && (
+          media.mimeType?.toLowerCase().startsWith("audio/")
+          || /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav|webm)$/i.test(media.fileName?.trim() ?? "")
+        ));
+        if (mediaClaim?.role === "owner" && isVoice && media?.bytes) {
+          const staged = await this.organ.stageVoice(inbound, claimedTenantId ?? undefined);
+          const durationSeconds = await this.probeVoiceDuration(
+            media.bytes,
+            media.fileName?.trim() || `${event.messageId}.ogg`,
+          );
+          const needsConfirmation = durationSeconds === null || durationSeconds > 30 * 60;
+          this.whatsappStore.createVoiceJob({
+            providerMessageId: event.messageId,
+            tenantId: staged.tenantId,
+            conversationKey: staged.conversationKey,
+            senderId: staged.sender,
+            chatId: staged.chatId,
+            artifactRef: staged.artifactRef,
+            artifactPath: staged.artifactPath,
+            artifactSha256: staged.artifactSha256,
+            mimeType: staged.mimeType,
+            fileName: staged.fileName,
+            captionText: staged.text,
+            durationSeconds,
+            state: needsConfirmation ? "awaiting_confirmation" : "queued",
+          });
+          return {
+            deferred: true,
+            replyText: durationSeconds === null
+              ? 'I could not determine this voice note’s length safely. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.'
+              : needsConfirmation
+              ? 'This voice note is longer than 30 minutes. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.'
+              : 'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+            ...(!needsConfirmation ? { afterReply: () => this.kickVoiceWorker() } : {}),
+            timing: { mediaDownloadMs: timing.mediaDownloadMs },
+          };
         }
         const forwarding = (async () => {
           try {
@@ -185,10 +262,6 @@ export class PhylaxPortedRuntime {
         if (mediaClaim) this.mediaInFlight.set(mediaClaim.canonicalProviderMessageId, forwarding);
         let forwardingSettled = false;
         let progressPromise: Promise<void> | null = null;
-        const isVoice = Boolean(media?.bytes && (
-          media.mimeType?.toLowerCase().startsWith("audio/")
-          || /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav|webm)$/i.test(media.fileName?.trim() ?? "")
-        ));
         const progressTimer = mediaClaim?.role === "owner" && isVoice
           ? setTimeout(() => {
               if (forwardingSettled) return;
@@ -244,6 +317,131 @@ export class PhylaxPortedRuntime {
       },
       ...(adapters.telegramFetch ? { fetchImpl: adapters.telegramFetch } : {}),
     });
+    queueMicrotask(() => this.kickVoiceWorker());
+  }
+
+  private kickVoiceWorker(): void {
+    if (this.voiceWorkerClosed) return;
+    this.voiceWorkerWakeRequested = true;
+    if (this.voiceWorkerRunning) return;
+    this.voiceWorkerRunning = true;
+    this.voiceWorkerPromise = (async () => {
+      try {
+        do {
+          this.voiceWorkerWakeRequested = false;
+          await this.runVoiceWorker();
+        } while (this.voiceWorkerWakeRequested && !this.voiceWorkerClosed);
+      } finally {
+        this.voiceWorkerRunning = false;
+        this.voiceWorkerPromise = null;
+        if (this.voiceWorkerWakeRequested && !this.voiceWorkerClosed) this.kickVoiceWorker();
+      }
+    })();
+  }
+
+  private async runVoiceWorker(): Promise<void> {
+    for (;;) {
+      if (this.voiceWorkerClosed) return;
+      const job = this.whatsappStore.claimNextVoiceJob(this.lastVoiceTenantId);
+      if (!job) return;
+      this.lastVoiceTenantId = job.tenantId;
+      const controller = new AbortController();
+      this.voiceAbortControllers.set(job.providerMessageId, controller);
+      try {
+        let transcription: PhylaxTranscriptionReceipt;
+        if (job.state === "transcribed") {
+          transcription = (job.transcription ?? {}) as PhylaxTranscriptionReceipt;
+        } else {
+          const bytes = await readFile(job.artifactPath);
+          transcription = await this.organ.transcribeStagedVoice({
+            tenantId: job.tenantId,
+            bytes,
+            mimeType: job.mimeType,
+            fileName: job.fileName,
+          }, controller.signal);
+          if (this.whatsappStore.voiceJob(job.providerMessageId)?.state === "cancelled") continue;
+          if (transcription.transcription_failed || !transcription.text_transcript?.trim()) {
+            const message = transcription.transcription_failed?.message ?? "transcription returned no text";
+            this.whatsappStore.queueVoiceFailureReply(
+              job.providerMessageId,
+              `⚠️ I could not transcribe that voice note: ${message}`,
+            );
+            await this.whatsapp.drainMediaRecovery();
+            continue;
+          }
+          if (!this.whatsappStore.persistVoiceTranscript(
+            job.providerMessageId,
+            transcription as unknown as Record<string, unknown>,
+          )) continue;
+        }
+        if (!transcription.text_transcript?.trim()) {
+          this.whatsappStore.queueVoiceFailureReply(
+            job.providerMessageId,
+            "⚠️ I could not process the persisted voice transcript because it was empty.",
+          );
+          await this.whatsapp.drainMediaRecovery();
+          continue;
+        }
+        if (!this.whatsappStore.claimVoiceRingHandoff(job.providerMessageId)) continue;
+        const staged: PhylaxStagedVoice = {
+          tenantId: job.tenantId,
+          sender: job.senderId,
+          chatId: job.chatId,
+          messageId: job.providerMessageId,
+          conversationKey: job.conversationKey,
+          artifactRef: job.artifactRef,
+          artifactPath: job.artifactPath,
+          artifactSha256: job.artifactSha256,
+          mimeType: job.mimeType,
+          fileName: job.fileName,
+          text: job.captionText,
+        };
+        const result = await this.organ.forwardStagedVoice(staged, transcription);
+        this.whatsappStore.recordChannelForwarding({
+          providerMessageId: job.providerMessageId,
+          tenantId: result.tenantId,
+          senderId: result.sender,
+          transcriptText: result.handoff.text_transcript ?? null,
+          transcriptProvenance: result.handoff.transcription_source ?? "whatsapp-media",
+          transcriptionFailureCode: null,
+          artifactRef: result.handoff.artifact_ref ?? null,
+          artifactSha256: job.artifactSha256,
+          downstreamDestination: result.downstreamDestination,
+          downstreamCorrelationId: result.downstreamCorrelationId,
+          downstreamReceipt: result.downstreamReceipt,
+          replyText: result.replyText,
+          canonicalProviderMessageId: job.providerMessageId,
+          coalescingState: "owner",
+          timing: {
+            transcriptionQueueWaitMs: result.timing.transcriptionQueueWaitMs,
+            transcriptionRuntimeMs: result.timing.transcriptionRuntimeMs,
+            downstreamMs: result.timing.downstreamMs,
+          },
+        });
+        this.whatsappStore.reconcileVoiceCoalescedFollowers(job.providerMessageId);
+        this.whatsappStore.completeVoiceRingHandoff(job.providerMessageId, result.replyText);
+        await this.whatsapp.drainMediaRecovery();
+      } catch (error) {
+        const current = this.whatsappStore.voiceJob(job.providerMessageId);
+        if (current?.state === "cancelled") continue;
+        if (this.voiceWorkerClosed && current?.state === "transcribing") {
+          this.whatsappStore.requeueInterruptedVoiceJob(job.providerMessageId);
+          continue;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        if (current?.state === "forwarding") {
+          this.whatsappStore.markVoiceRingOutcomeUnknown(job.providerMessageId);
+        } else {
+          this.whatsappStore.queueVoiceFailureReply(
+            job.providerMessageId,
+            `⚠️ I could not process that voice note: ${message}`,
+          );
+        }
+        await this.whatsapp.drainMediaRecovery();
+      } finally {
+        this.voiceAbortControllers.delete(job.providerMessageId);
+      }
+    }
   }
 
   async start(): Promise<void> {
@@ -269,9 +467,12 @@ export class PhylaxPortedRuntime {
     };
   }
 
-  close(): void {
+  async close(): Promise<void> {
+    this.voiceWorkerClosed = true;
+    for (const controller of this.voiceAbortControllers.values()) controller.abort();
     this.whatsapp.close();
-    void this.telegram.close();
+    await this.voiceWorkerPromise?.catch(() => undefined);
+    await this.telegram.close();
     this.whatsappStore.close();
     this.state.close();
   }

@@ -62,6 +62,29 @@ export interface PhylaxChannelTranscriber {
   }): Promise<PhylaxTranscriptionReceipt>;
 }
 
+export const DEFAULT_PHYLAX_VOICE_JOB_DEADLINE_MS = 2 * 60 * 60_000;
+export const MAX_PHYLAX_VOICE_JOB_DEADLINE_MS = 4 * 60 * 60_000;
+
+export function normalizePhylaxVoiceJobDeadlineMs(value: number | undefined): number {
+  return value === undefined || !Number.isFinite(value)
+    ? DEFAULT_PHYLAX_VOICE_JOB_DEADLINE_MS
+    : Math.max(100, Math.min(value, MAX_PHYLAX_VOICE_JOB_DEADLINE_MS));
+}
+
+export interface PhylaxStagedVoice {
+  tenantId: string;
+  sender: string;
+  chatId: string;
+  messageId: string;
+  conversationKey: string;
+  artifactRef: string;
+  artifactPath: string;
+  artifactSha256: string;
+  mimeType: string | null;
+  fileName: string | null;
+  text: string;
+}
+
 export interface PhylaxDownstreamCall {
   route: PhylaxTenantRoute;
   tool: "chat_with_ring";
@@ -268,6 +291,7 @@ export class PhylaxChannelsOrgan {
       callDownstream?: PhylaxDownstreamCaller;
       artifactUrl?: (tenantId: string, artifactId: string) => string;
       transcriptionDeadlineMs?: number;
+      voiceJobDeadlineMs?: number;
     },
   ) {}
 
@@ -290,6 +314,95 @@ export class PhylaxChannelsOrgan {
   async tenantIdFor(channel: PhylaxPortedChannel, senderValue: string, chatId: string): Promise<string> {
     const { route } = await this.resolveInboundRoute(channel, senderValue, chatId);
     return route.tenantId;
+  }
+
+  /**
+   * Establish custody before any duration probe or transcription work starts.
+   * The returned path is local-only queue state; only artifactRef crosses the
+   * downstream seam.
+   */
+  async stageVoice(input: PhylaxChannelInbound, expectedTenantId?: string): Promise<PhylaxStagedVoice> {
+    if (input.channel !== "whatsapp" || !input.messageId?.trim() || !input.media?.bytes || !isAudioMedia(input.media)) {
+      throw new PhylaxChannelError("invalid_input", "a WhatsApp audio message with bytes and messageId is required");
+    }
+    const { sender, route } = await this.resolveInboundRoute(input.channel, input.sender, input.chatId);
+    if (expectedTenantId && route.tenantId !== expectedTenantId) {
+      throw new PhylaxChannelError("downstream_error", "tenant route changed before media processing");
+    }
+    const artifact = this.rememberArtifact(route.tenantId, input.media);
+    if (!artifact?.path || !artifact.sha256) {
+      throw new PhylaxChannelError("invalid_input", "voice artifact could not be persisted");
+    }
+    return {
+      tenantId: route.tenantId,
+      sender,
+      chatId: input.chatId,
+      messageId: input.messageId.trim(),
+      conversationKey: `whatsapp:${sender}`,
+      artifactRef: artifact.ref,
+      artifactPath: artifact.path,
+      artifactSha256: artifact.sha256,
+      mimeType: input.media.mimeType ?? null,
+      fileName: input.media.fileName ?? null,
+      text: input.text?.trim() ?? "",
+    };
+  }
+
+  async transcribeStagedVoice(
+    voice: Pick<PhylaxStagedVoice, "tenantId" | "mimeType" | "fileName"> & { bytes: Uint8Array },
+    signal: AbortSignal,
+  ): Promise<PhylaxTranscriptionReceipt> {
+    if (!this.options.transcriber) {
+      return { transcription_failed: { code: "disabled", message: "tenant transcription is disabled" } };
+    }
+    if (signal.aborted) throw signal.reason ?? new Error("voice transcription cancelled");
+    const deadlineMs = normalizePhylaxVoiceJobDeadlineMs(this.options.voiceJobDeadlineMs);
+    const controller = new AbortController();
+    const externalAbort = () => controller.abort(signal.reason);
+    signal.addEventListener("abort", externalAbort, { once: true });
+    const timer = setTimeout(() => controller.abort(new Error("voice transcription safety deadline exceeded")), deadlineMs);
+    timer.unref?.();
+    try {
+      return await this.options.transcriber.transcribe({
+        tenantId: voice.tenantId,
+        bytes: voice.bytes,
+        mimeType: voice.mimeType,
+        fileName: voice.fileName,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return {
+        transcription_failed: {
+          code: controller.signal.aborted ? "timeout" : "unavailable",
+          message: controller.signal.aborted
+            ? `transcription exceeded the ${deadlineMs}ms safety deadline`
+            : error instanceof Error ? error.message : "transcription failed",
+        },
+      };
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", externalAbort);
+    }
+  }
+
+  async forwardStagedVoice(
+    voice: PhylaxStagedVoice,
+    transcription: PhylaxTranscriptionReceipt,
+  ): Promise<PhylaxInboundReceipt> {
+    return this.receive({
+      channel: "whatsapp",
+      sender: voice.sender,
+      chatId: voice.chatId,
+      messageId: voice.messageId,
+      text: voice.text,
+      media: {
+        artifactRef: voice.artifactRef,
+        mimeType: voice.mimeType,
+        fileName: voice.fileName,
+      },
+      transcription,
+    }, voice.tenantId);
   }
 
   async receive(input: PhylaxChannelInbound, expectedTenantId?: string): Promise<PhylaxInboundReceipt> {
@@ -498,10 +611,11 @@ export class PhylaxChannelsOrgan {
   private rememberArtifact(
     tenantId: string,
     media: NonNullable<PhylaxChannelInbound["media"]>,
-  ): { ref: string; sha256: string | null } | undefined {
+  ): { ref: string; path: string | null; sha256: string | null } | undefined {
     if (media.artifactRef?.trim()) {
       return {
         ref: media.artifactRef.trim(),
+        path: null,
         sha256: media.bytes ? createHash("sha256").update(media.bytes).digest("hex") : null,
       };
     }
@@ -525,7 +639,7 @@ export class PhylaxChannelsOrgan {
     if (parsed.protocol !== "https:" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
       throw new PhylaxChannelError("invalid_input", "artifact_ref must use https");
     }
-    return { ref: parsed.toString(), sha256: createHash("sha256").update(media.bytes).digest("hex") };
+    return { ref: parsed.toString(), path, sha256: createHash("sha256").update(media.bytes).digest("hex") };
   }
 }
 

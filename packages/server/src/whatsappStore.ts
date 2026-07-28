@@ -248,6 +248,56 @@ export interface WhatsAppMediaRecoveryRecord {
   updatedAt: number;
 }
 
+export type WhatsAppVoiceJobState =
+  | "awaiting_confirmation"
+  | "queued"
+  | "transcribing"
+  | "transcribed"
+  | "forwarding"
+  | "reply_ready"
+  | "completed"
+  | "cancelled"
+  | "failed"
+  | "ring_outcome_unknown";
+
+export interface WhatsAppVoiceJob {
+  providerMessageId: string;
+  tenantId: string;
+  conversationKey: string;
+  senderId: string;
+  chatId: string;
+  artifactRef: string;
+  artifactPath: string;
+  artifactSha256: string;
+  mimeType: string | null;
+  fileName: string | null;
+  captionText: string;
+  durationSeconds: number | null;
+  state: WhatsAppVoiceJobState;
+  transcription: Record<string, unknown> | null;
+  replyText: string | null;
+  errorText: string | null;
+  attempts: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CreateWhatsAppVoiceJob {
+  providerMessageId: string;
+  tenantId: string;
+  conversationKey: string;
+  senderId: string;
+  chatId: string;
+  artifactRef: string;
+  artifactPath: string;
+  artifactSha256: string;
+  mimeType: string | null;
+  fileName: string | null;
+  captionText: string;
+  durationSeconds: number | null;
+  state: "awaiting_confirmation" | "queued";
+}
+
 function safeJson(value: unknown): string {
   return JSON.stringify(value ?? {}, (_key, item: unknown) => {
     if (typeof item === "bigint") return item.toString();
@@ -454,6 +504,32 @@ export class WhatsAppStore {
       );
       CREATE INDEX IF NOT EXISTS idx_whatsapp_media_recovery_state
         ON whatsapp_media_recovery(recovery_state, created_at);
+
+      CREATE TABLE IF NOT EXISTS whatsapp_voice_jobs (
+        provider_message_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        conversation_key TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        artifact_ref TEXT NOT NULL,
+        artifact_path TEXT NOT NULL,
+        artifact_sha256 TEXT NOT NULL,
+        mime_type TEXT,
+        file_name TEXT,
+        caption_text TEXT NOT NULL DEFAULT '',
+        duration_seconds REAL,
+        job_state TEXT NOT NULL,
+        transcription_json TEXT,
+        reply_text TEXT,
+        error_text TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_voice_jobs_queue
+        ON whatsapp_voice_jobs(job_state, created_at);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_voice_jobs_scope
+        ON whatsapp_voice_jobs(tenant_id, conversation_key, job_state, created_at);
     `);
 
     // W-P2 is an additive migration over the W-P3 audit table already present
@@ -497,6 +573,37 @@ export class WhatsAppStore {
     const now = Date.now();
     this.db.exec("BEGIN IMMEDIATE");
     try {
+      // Local transcription is safe to resume from the durable artifact.
+      this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'queued', error_text = NULL, updated_at = ?
+         WHERE job_state = 'transcribing'`,
+      ).run(now);
+      // A process death after claiming the Ring seam is ambiguous. Never call
+      // Ring again: exactly-once cannot be inferred without its receipt.
+      this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'reply_ready',
+             reply_text = (
+               SELECT a.reply_text FROM whatsapp_channel_audit a
+               WHERE a.provider_message_id = whatsapp_voice_jobs.provider_message_id
+             ),
+             error_text = NULL,
+             updated_at = ?
+         WHERE job_state = 'forwarding'
+           AND EXISTS (
+             SELECT 1 FROM whatsapp_channel_audit a
+             WHERE a.provider_message_id = whatsapp_voice_jobs.provider_message_id
+               AND NULLIF(TRIM(a.reply_text), '') IS NOT NULL
+           )`,
+      ).run(now);
+      this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'ring_outcome_unknown',
+             error_text = 'Ring handoff outcome unknown after restart; not retried',
+             updated_at = ?
+         WHERE job_state = 'forwarding'`,
+      ).run(now);
       this.db.prepare(
         `UPDATE whatsapp_media_coalescing
          SET outcome_state = 'completed', updated_at = ?
@@ -510,7 +617,11 @@ export class WhatsAppStore {
       this.db.prepare(
         `UPDATE whatsapp_media_coalescing
          SET outcome_state = 'failed', updated_at = ?
-         WHERE outcome_state = 'processing'`,
+         WHERE outcome_state = 'processing'
+           AND canonical_provider_message_id NOT IN (
+             SELECT provider_message_id FROM whatsapp_voice_jobs
+             WHERE job_state IN ('awaiting_confirmation', 'queued', 'transcribing', 'transcribed')
+           )`,
       ).run(now);
       this.db.prepare(
         `INSERT INTO whatsapp_outbound_audit (
@@ -578,10 +689,19 @@ export class WhatsAppStore {
          FROM whatsapp_messages m
          LEFT JOIN whatsapp_channel_audit a ON a.provider_message_id = m.message_id
          WHERE m.processing_status = 'processing'
-           AND m.has_media = 1`,
+           AND m.has_media = 1
+           AND m.message_id NOT IN (
+             SELECT provider_message_id FROM whatsapp_voice_jobs
+             WHERE job_state IN ('awaiting_confirmation', 'queued', 'transcribing', 'transcribed')
+           )`,
       ).run(now, now);
       this.db.prepare(
-        "UPDATE whatsapp_messages SET processing_status = 'interrupted' WHERE processing_status = 'processing'",
+        `UPDATE whatsapp_messages SET processing_status = 'interrupted'
+         WHERE processing_status = 'processing'
+           AND message_id NOT IN (
+             SELECT provider_message_id FROM whatsapp_voice_jobs
+             WHERE job_state IN ('awaiting_confirmation', 'queued', 'transcribing', 'transcribed')
+           )`,
       ).run();
       this.db.prepare(
         `UPDATE whatsapp_channel_audit
@@ -597,6 +717,320 @@ export class WhatsAppStore {
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
+    }
+  }
+
+  createVoiceJob(input: CreateWhatsAppVoiceJob, now = Date.now()): WhatsAppVoiceJob {
+    this.db.prepare(
+      `INSERT INTO whatsapp_voice_jobs (
+         provider_message_id, tenant_id, conversation_key, sender_id, chat_id,
+         artifact_ref, artifact_path, artifact_sha256, mime_type, file_name,
+         caption_text, duration_seconds, job_state, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.providerMessageId,
+      input.tenantId,
+      input.conversationKey,
+      input.senderId,
+      input.chatId,
+      input.artifactRef,
+      input.artifactPath,
+      input.artifactSha256,
+      input.mimeType,
+      input.fileName,
+      input.captionText,
+      input.durationSeconds,
+      input.state,
+      now,
+      now,
+    );
+    return this.voiceJob(input.providerMessageId)!;
+  }
+
+  voiceJob(providerMessageId: string): WhatsAppVoiceJob | null {
+    const row = this.db.prepare(
+      `SELECT provider_message_id AS providerMessageId, tenant_id AS tenantId,
+         conversation_key AS conversationKey, sender_id AS senderId, chat_id AS chatId,
+         artifact_ref AS artifactRef, artifact_path AS artifactPath,
+         artifact_sha256 AS artifactSha256, mime_type AS mimeType, file_name AS fileName,
+         caption_text AS captionText, duration_seconds AS durationSeconds,
+         job_state AS state, transcription_json AS transcriptionJson,
+         reply_text AS replyText, error_text AS errorText, attempts,
+         created_at AS createdAt, updated_at AS updatedAt
+       FROM whatsapp_voice_jobs WHERE provider_message_id = ?`,
+    ).get(providerMessageId) as (Omit<WhatsAppVoiceJob, "transcription"> & { transcriptionJson: string | null }) | undefined;
+    if (!row) return null;
+    const { transcriptionJson, ...job } = row;
+    return {
+      ...job,
+      transcription: transcriptionJson
+        ? JSON.parse(transcriptionJson) as Record<string, unknown>
+        : null,
+    };
+  }
+
+  claimNextVoiceJob(lastTenantId: string | null, now = Date.now()): WhatsAppVoiceJob | null {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.db.prepare(
+        `SELECT provider_message_id AS providerMessageId
+         FROM whatsapp_voice_jobs
+         WHERE job_state IN ('queued', 'transcribed')
+         ORDER BY CASE WHEN ? IS NOT NULL AND tenant_id = ? THEN 1 ELSE 0 END,
+           created_at ASC, provider_message_id ASC
+         LIMIT 1`,
+      ).get(lastTenantId, lastTenantId) as { providerMessageId: string } | undefined;
+      if (!row) {
+        this.db.exec("COMMIT");
+        return null;
+      }
+      const current = this.voiceJob(row.providerMessageId);
+      const changed = current?.state === "transcribed" ? 1 : this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'transcribing', attempts = attempts + 1, updated_at = ?
+         WHERE provider_message_id = ? AND job_state = 'queued'`,
+      ).run(now, row.providerMessageId).changes;
+      this.db.exec("COMMIT");
+      return changed ? this.voiceJob(row.providerMessageId) : null;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  confirmLatestVoiceJob(tenantId: string, conversationKey: string, now = Date.now()): WhatsAppVoiceJob | null {
+    return this.transitionLatestScopedVoiceJob(
+      tenantId,
+      conversationKey,
+      ["awaiting_confirmation"],
+      "queued",
+      now,
+    );
+  }
+
+  cancelLatestVoiceJob(tenantId: string, conversationKey: string, now = Date.now()): WhatsAppVoiceJob | null {
+    const states: WhatsAppVoiceJobState[] = ["awaiting_confirmation", "queued", "transcribing", "transcribed"];
+    const placeholders = states.map(() => "?").join(", ");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.db.prepare(
+        `SELECT provider_message_id AS providerMessageId
+         FROM whatsapp_voice_jobs
+         WHERE tenant_id = ? AND conversation_key = ?
+           AND job_state IN (${placeholders})
+         ORDER BY created_at DESC, provider_message_id DESC
+         LIMIT 1`,
+      ).get(tenantId, conversationKey, ...states) as { providerMessageId: string } | undefined;
+      if (!row) {
+        this.db.exec("COMMIT");
+        return null;
+      }
+      const changed = this.db.prepare(
+        `UPDATE whatsapp_voice_jobs SET job_state = 'cancelled', updated_at = ?
+         WHERE provider_message_id = ? AND job_state IN (${placeholders})`,
+      ).run(now, row.providerMessageId, ...states).changes;
+      if (!changed) {
+        this.db.exec("COMMIT");
+        return null;
+      }
+      this.db.prepare(
+        "UPDATE whatsapp_messages SET processing_status = 'cancelled' WHERE message_id = ?",
+      ).run(row.providerMessageId);
+      this.db.prepare(
+        `UPDATE whatsapp_media_coalescing
+         SET outcome_state = 'failed', updated_at = ?
+         WHERE canonical_provider_message_id = ?`,
+      ).run(now, row.providerMessageId);
+      this.db.exec("COMMIT");
+      return this.voiceJob(row.providerMessageId);
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  private transitionLatestScopedVoiceJob(
+    tenantId: string,
+    conversationKey: string,
+    fromStates: WhatsAppVoiceJobState[],
+    toState: WhatsAppVoiceJobState,
+    now: number,
+  ): WhatsAppVoiceJob | null {
+    const placeholders = fromStates.map(() => "?").join(", ");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.db.prepare(
+        `SELECT provider_message_id AS providerMessageId
+         FROM whatsapp_voice_jobs
+         WHERE tenant_id = ? AND conversation_key = ?
+           AND job_state IN (${placeholders})
+         ORDER BY created_at DESC, provider_message_id DESC
+         LIMIT 1`,
+      ).get(tenantId, conversationKey, ...fromStates) as { providerMessageId: string } | undefined;
+      if (!row) {
+        this.db.exec("COMMIT");
+        return null;
+      }
+      const changed = this.db.prepare(
+        `UPDATE whatsapp_voice_jobs SET job_state = ?, updated_at = ?
+         WHERE provider_message_id = ? AND job_state IN (${placeholders})`,
+      ).run(toState, now, row.providerMessageId, ...fromStates).changes;
+      this.db.exec("COMMIT");
+      return changed ? this.voiceJob(row.providerMessageId) : null;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  persistVoiceTranscript(
+    providerMessageId: string,
+    transcription: Record<string, unknown>,
+    now = Date.now(),
+  ): boolean {
+    return Boolean(this.db.prepare(
+      `UPDATE whatsapp_voice_jobs
+       SET job_state = 'transcribed', transcription_json = ?, error_text = NULL, updated_at = ?
+       WHERE provider_message_id = ? AND job_state = 'transcribing'`,
+    ).run(safeJson(transcription), now, providerMessageId).changes);
+  }
+
+  requeueInterruptedVoiceJob(providerMessageId: string, now = Date.now()): boolean {
+    return Boolean(this.db.prepare(
+      `UPDATE whatsapp_voice_jobs
+       SET job_state = 'queued', error_text = NULL, updated_at = ?
+       WHERE provider_message_id = ? AND job_state = 'transcribing'`,
+    ).run(now, providerMessageId).changes);
+  }
+
+  claimVoiceRingHandoff(providerMessageId: string, now = Date.now()): boolean {
+    return Boolean(this.db.prepare(
+      `UPDATE whatsapp_voice_jobs SET job_state = 'forwarding', updated_at = ?
+       WHERE provider_message_id = ? AND job_state = 'transcribed'`,
+    ).run(now, providerMessageId).changes);
+  }
+
+  completeVoiceRingHandoff(providerMessageId: string, replyText: string, now = Date.now()): void {
+    const bounded = boundedRecoveryReply(replyText);
+    if (!bounded) throw new Error("Ring reply is empty");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'reply_ready', reply_text = ?, error_text = NULL, updated_at = ?
+         WHERE provider_message_id = ? AND job_state = 'forwarding'`,
+      ).run(bounded, now, providerMessageId).changes;
+      if (!changed) throw new Error("voice job is not at the Ring handoff boundary");
+      this.db.prepare(
+        `INSERT INTO whatsapp_media_recovery (
+           provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
+         ) VALUES (?, 'forwarded_reply', 'pending', ?, ?, ?)
+         ON CONFLICT(provider_message_id) DO NOTHING`,
+      ).run(providerMessageId, bounded, now, now);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  failVoiceJob(providerMessageId: string, errorText: string, now = Date.now()): void {
+    this.db.prepare(
+      `UPDATE whatsapp_voice_jobs
+       SET job_state = 'failed', error_text = ?, updated_at = ?
+       WHERE provider_message_id = ?
+         AND job_state NOT IN ('cancelled', 'completed', 'reply_ready', 'ring_outcome_unknown')`,
+    ).run(errorText.slice(0, 2_000), now, providerMessageId);
+  }
+
+  queueVoiceFailureReply(providerMessageId: string, replyText: string, now = Date.now()): void {
+    const bounded = boundedRecoveryReply(replyText);
+    if (!bounded) throw new Error("voice failure reply is empty");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'failed', error_text = ?, updated_at = ?
+         WHERE provider_message_id = ?
+           AND job_state NOT IN ('cancelled', 'completed', 'reply_ready', 'ring_outcome_unknown')`,
+      ).run(bounded, now, providerMessageId).changes;
+      if (!changed) {
+        this.db.exec("COMMIT");
+        return;
+      }
+      this.db.prepare(
+        `INSERT INTO whatsapp_media_recovery (
+           provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
+         ) VALUES (?, 'interrupted_failure', 'pending', ?, ?, ?)
+         ON CONFLICT(provider_message_id) DO NOTHING`,
+      ).run(providerMessageId, bounded, now, now);
+      this.db.prepare(
+        `UPDATE whatsapp_media_coalescing SET outcome_state = 'failed', updated_at = ?
+         WHERE canonical_provider_message_id = ?`,
+      ).run(now, providerMessageId);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  markVoiceRingOutcomeUnknown(providerMessageId: string, now = Date.now()): void {
+    const notice =
+      "⚠️ Your voice note was transcribed, but Ring’s handoff outcome is unknown. I will not retry it automatically because that could perform the request twice.";
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'ring_outcome_unknown',
+             error_text = 'Ring handoff outcome unknown; not retried',
+             updated_at = ?
+         WHERE provider_message_id = ? AND job_state = 'forwarding'`,
+      ).run(now, providerMessageId).changes;
+      if (!changed) {
+        this.db.exec("COMMIT");
+        return;
+      }
+      this.db.prepare(
+        `INSERT INTO whatsapp_media_recovery (
+           provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
+         ) VALUES (?, 'interrupted_failure', 'pending', ?, ?, ?)
+         ON CONFLICT(provider_message_id) DO NOTHING`,
+      ).run(providerMessageId, notice, now, now);
+      this.db.prepare(
+        `UPDATE whatsapp_media_coalescing SET outcome_state = 'failed', updated_at = ?
+         WHERE canonical_provider_message_id = ?`,
+      ).run(now, providerMessageId);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  reconcileVoiceCoalescedFollowers(canonicalProviderMessageId: string): void {
+    const followers = this.db.prepare(
+      `SELECT c.provider_message_id AS providerMessageId,
+         c.artifact_sha256 AS artifactSha256,
+         COALESCE(m.contact_id, '') AS senderId
+       FROM whatsapp_media_coalescing c
+       LEFT JOIN whatsapp_messages m ON m.message_id = c.provider_message_id
+       WHERE c.canonical_provider_message_id = ? AND c.role = 'duplicate'
+       ORDER BY c.created_at ASC, c.provider_message_id ASC`,
+    ).all(canonicalProviderMessageId) as unknown as Array<{
+      providerMessageId: string;
+      artifactSha256: string;
+      senderId: string;
+    }>;
+    for (const follower of followers) {
+      if (this.channelAudit(follower.providerMessageId)) continue;
+      this.recordCoalescedChannelForwarding({
+        providerMessageId: follower.providerMessageId,
+        canonicalProviderMessageId,
+        artifactSha256: follower.artifactSha256,
+        senderId: normalizeWhatsAppIdentifier(follower.senderId),
+      });
+      this.markMessageStatus(follower.providerMessageId, "coalesced");
     }
   }
 
@@ -1118,6 +1552,11 @@ export class WhatsAppStore {
           `UPDATE whatsapp_media_coalescing
            SET outcome_state = 'completed', updated_at = ?
            WHERE canonical_provider_message_id = ?`,
+        ).run(now, claim.providerMessageId);
+        this.db.prepare(
+          `UPDATE whatsapp_voice_jobs
+           SET job_state = 'completed', updated_at = ?
+           WHERE provider_message_id = ? AND job_state = 'reply_ready'`,
         ).run(now, claim.providerMessageId);
       }
       this.db.exec("COMMIT");
