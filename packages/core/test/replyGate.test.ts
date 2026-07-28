@@ -390,7 +390,7 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
       }],
       structuredContent: {
         sourceUrl: "https://example.com/search/preferred",
-        sources: Array.from({ length: 6 }, (_, index) => ({
+        sources: Array.from({ length: 8 }, (_, index) => ({
           sourceUrl: `https://example.com/search/structured-${index}`,
         })),
       },
@@ -407,6 +407,48 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("structured-");
   });
 
+  it("grounds an exact URL from an early action even when later actions return many URLs", () => {
+    const citedUrl = "https://example.com/early/exact";
+    const actions = [
+      {
+        ...action("connected_search_early", JSON.stringify({
+          structuredContent: { sourceUrl: citedUrl },
+        })),
+        peerAction: true,
+      },
+      ...Array.from({ length: 2 }, (_, actionIndex) => ({
+        ...action(`connected_search_noise_${actionIndex}`, JSON.stringify({
+          structuredContent: {
+            sources: Array.from({ length: 8 }, (_, sourceIndex) => ({
+              sourceUrl: `https://example.com/noise/${actionIndex}/${sourceIndex}`,
+            })),
+          },
+        })),
+        peerAction: true,
+      })),
+    ];
+    const drafted = `The early result contains the requested decision. Source: ${citedUrl}`;
+
+    const out = applyReplyGate(drafted, actions);
+
+    expect(out.text).toBe(drafted);
+    expect(out.text).not.toContain("Evidence:");
+    expect(out.text).not.toContain("noise/");
+  });
+
+  it("canonicalizes cited URLs before deciding whether evidence is already present", () => {
+    const returnedUrl = "https://example.com";
+    const drafted = `The source is ${returnedUrl}`;
+    const out = applyReplyGate(drafted, [{
+      ...action("connected_get", JSON.stringify({ structuredContent: { sourceUrl: returnedUrl } })),
+      peerAction: true,
+    }]);
+
+    expect(out.text).toBe(drafted);
+    expect(out.text).not.toContain("Evidence:");
+    expect(out.text.match(/https:\/\/example\.com/g)).toHaveLength(1);
+  });
+
   it("prefers one structured canonical URL over malformed and duplicate Drive evidence", () => {
     const canonicalUrl = "https://example.com/memories/canonical";
     const malformedDrive = String.raw`https://drive.google.com/file/d/bad\n\n#fragment`;
@@ -417,7 +459,7 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
         text: `${malformedDrive}\n${duplicateDrive}\n${duplicateDrive}`,
       }],
       structuredContent: {
-        githubUrl: duplicateDrive,
+        sourceUrl: duplicateDrive,
         evidenceRef: "Log/2026-07-28.md#^e-preferred",
         canonicalUrl,
       },
@@ -457,6 +499,27 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("/n");
     expect(out.text).not.toContain("/r");
     expect(out.text).not.toContain("/t");
+    expect(out.text).not.toContain("Evidence:");
+  });
+
+  it("rejects actual and literal escaped controls in structured evidence references", () => {
+    const references = [
+      "Log/file\tactual#bad",
+      String.raw`Log/file\n\n#bad`,
+      String.raw`Log/file\\rreturn#bad`,
+    ];
+    const actions = references.map((evidenceRef, index) => ({
+      ...action(`connected_get_ref_${index}`, JSON.stringify({
+        structuredContent: { evidenceRef },
+      })),
+      peerAction: true,
+    }));
+
+    const out = applyReplyGate("No clean reference was returned.", actions);
+
+    expect(out.text).toBe("No clean reference was returned.");
+    expect(out.text).not.toContain("/n");
+    expect(out.text).not.toContain("/r");
     expect(out.text).not.toContain("Evidence:");
   });
 
