@@ -605,6 +605,9 @@ describe("MCP endpoint", () => {
     expect(chat.conversationId).toBe("mcp:issue-37-mcp");
     expect(chat.toolEvents.map((event) => event.tool)).toEqual(["digestBacklog", "digestBacklog"]);
     expect(runtime.state.getChatTestRun(chat.correlationId)?.prompt).toBe("do you have a digest backlog tool?");
+    const humanText = result.content.find((item) => item.type === "text")?.text ?? "";
+    expect(humanText).toBe("Re: do you have a digest backlog tool?");
+    expect(humanText).not.toMatch(/correlationId:|conversationId:|toolEvents:/);
     await client.close();
   });
 

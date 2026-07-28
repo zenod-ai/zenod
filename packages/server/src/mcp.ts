@@ -533,13 +533,7 @@ export function buildMcpServer(
         recordAudit: recordChatTestRun,
         ...(chatInterceptor ? { interceptChat: chatInterceptor } : {}),
       });
-      const lines = [
-        result.status === "ok" ? result.text : `ERROR: ${result.error}`,
-        "",
-        `correlationId: ${result.correlationId}`,
-        `conversationId: ${result.conversationId}`,
-        `toolEvents: ${result.toolEvents.length}`,
-      ];
+      const text = result.status === "ok" ? result.text : `ERROR: ${result.error}`;
       const structuredContent =
         result.status === "ok"
           ? {
@@ -565,7 +559,7 @@ export function buildMcpServer(
               },
             };
       return {
-        content: [{ type: "text", text: lines.join("\n") }],
+        content: [{ type: "text", text }],
         structuredContent,
         isError: result.status === "error",
       };
