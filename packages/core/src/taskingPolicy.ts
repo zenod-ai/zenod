@@ -275,6 +275,11 @@ function operationWords(tool: string, description = ""): string {
 function hasNaturalDynamicMutationIntent(tool: string, request: string, description?: string): boolean {
   if (EXECUTION_STATUS_REQUEST_RE.test(request) || /\b(?:run|execute|invoke|call)\b/i.test(request)) return false;
   if (
+    /\b(?:what|whether)\b[\s\S]{0,80}\b(?:support(?:s|ed|ing)?|capabilit(?:y|ies)|(?:can|could)\s+do|able\s+to)\b/i.test(
+      request,
+    )
+  ) return false;
+  if (
     /^\s*(?:can|could)\s+you\b(?![\s\S]*\b(?:this|that|these|those|my|our|the|a|an|saying|named|called)\b)[^:#"'`]+\?\s*$/i.test(
       request,
     )

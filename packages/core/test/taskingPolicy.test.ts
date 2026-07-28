@@ -1157,6 +1157,10 @@ describe("peerMutationGuardFailure", () => {
     it("keeps generic storage capability questions read-only", () => {
       for (const [tool, request] of [
         ["fixture__archive_invoice__abc123", "Can you archive invoices?"],
+        [
+          "fixture__archive_invoice__abc123",
+          "Can you archive invoices in this connected MCP? I am asking what it supports.",
+        ],
         ["fixture__persist_records__abc123", "Can you persist records?"],
       ]) {
         expect(
@@ -1166,6 +1170,13 @@ describe("peerMutationGuardFailure", () => {
           }),
         ).toContain("require an explicit write/run/send instruction");
       }
+
+      expect(
+        peerMutationGuardFailure("fixture__archive_invoice__abc123", "Can you archive this invoice?", {
+          forceMutation: true,
+          description: "Archive an invoice.",
+        }),
+      ).toBeNull();
     });
 
     it("keeps capability questions read-only even when a mutation tool is selected", () => {
