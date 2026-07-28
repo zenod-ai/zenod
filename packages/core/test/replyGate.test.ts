@@ -285,6 +285,12 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
         sourceUrl: "https://user:password@example.com/evidence",
         artifactUrl: "https://example.com/file?token=must-not-render",
         permalink: "https://example.com/item/{POST_ID}",
+        canonicalUrl: "https://example.com/{SOURCE_URL}",
+        evidenceUrl: "https://example.com/<URL>",
+        githubUrls: [
+          "https://example.com/%7BSOURCE_URL%7D",
+          "https://example.com/%3CURL%3E",
+        ],
         apiToken: "must-not-render",
       },
     });
@@ -296,6 +302,10 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).toBe("No public evidence link was returned.");
     expect(out.text).not.toContain("must-not-render");
     expect(out.text).not.toContain("POST_ID");
+    expect(out.text).not.toContain("SOURCE_URL");
+    expect(out.text).not.toContain("%7B");
+    expect(out.text).not.toContain("%3C");
+    expect(out.text).not.toContain("<URL>");
   });
 
   it("renders an all-failed peer read as one concise human failure without the envelope", () => {
@@ -379,6 +389,26 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("invented");
     expect(out.text).not.toContain("connected_read_hash");
     expect(out.text).not.toContain("truncated by Ring");
+  });
+
+  it("rejects a percent-encoded template URL in the draft while retaining exact safe evidence", () => {
+    const returnedUrl = "https://example.com/memories/returned";
+    const drafted = "I found it here: https://example.com/%7BSOURCE_URL%7D";
+    const out = applyReplyGate(drafted, [{
+      ...action("connected_read_hash", JSON.stringify({
+        structuredContent: { sourceUrl: returnedUrl },
+      })),
+      peerAction: true,
+    }]);
+
+    expect(out.text).toBe([
+      "I found source data, but couldn't produce a safely grounded answer. Please retry or narrow the question.",
+      "",
+      "Evidence:",
+      `- <${returnedUrl}>`,
+    ].join("\n"));
+    expect(out.text).not.toContain("SOURCE_URL");
+    expect(out.text).not.toContain("%7B");
   });
 
   it("rejects prefixed or fenced MCP and validation JSON instead of exposing raw envelopes", () => {

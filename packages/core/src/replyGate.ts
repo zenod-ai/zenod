@@ -210,8 +210,26 @@ function isPeerError(result: string): boolean {
   });
 }
 
+function containsUrlTemplateToken(value: string): boolean {
+  let candidate = value;
+  for (let pass = 0; pass < 2; pass += 1) {
+    if (/(?:\{[^{}\r\n]+\}|<[^<>\r\n]+>)/.test(candidate)) return true;
+    try {
+      const decoded = decodeURIComponent(candidate);
+      if (decoded === candidate) break;
+      candidate = decoded;
+    } catch {
+      break;
+    }
+  }
+  return false;
+}
+
 function safeEvidenceUrl(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length > 2_048 || PLACEHOLDER_VALUE_RE.test(value)) return undefined;
+  if (typeof value !== "string" || value.length > 2_048 || PLACEHOLDER_VALUE_RE.test(value) ||
+      containsUrlTemplateToken(value)) {
+    return undefined;
+  }
   try {
     const url = new URL(value.trim());
     if (!["http:", "https:"].includes(url.protocol) || !url.hostname.includes(".") || url.username || url.password) return undefined;
@@ -264,6 +282,10 @@ function collectReadEvidence(value: unknown, out: ReadEvidence[], depth = 0): vo
 function collectTextEvidenceUrls(value: string, out: ReadEvidence[]): void {
   for (const match of value.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
     if (out.length >= MAX_READ_EVIDENCE_ITEMS) break;
+    const nextCharacter = value[(match.index ?? 0) + match[0].length];
+    // Do not turn the safe-looking prefix of `https://host/<TEMPLATE>` into a
+    // clickable root URL merely because the URL tokenizer stops at "<".
+    if (nextCharacter === "<" || nextCharacter === "{") continue;
     const candidate = match[0].replace(/[),.;]+$/g, "");
     const url = safeEvidenceUrl(candidate);
     if (url && !out.some((entry) => entry.kind === "url" && entry.value === url)) {
