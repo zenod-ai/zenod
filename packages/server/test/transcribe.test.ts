@@ -64,4 +64,15 @@ describe("transcribeAudio provider routing (cloud covers short audio without whi
     });
     expect(result.provider).toMatch(/^groq/);
   });
+
+  it("long audio explicitly assigned to Groq stays on Groq instead of silently selecting local", async () => {
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "this is a long voice note";
+    const result = await transcribeAudio(Buffer.from("x"), "note.m4a", {
+      groqApiKey: "gsk-test",
+      longTranscriptionProvider: "groq",
+      durationSeconds: 1_200,
+    });
+    expect(result.provider).toMatch(/^groq/);
+    expect(result.provider).not.toMatch(/whisper\.cpp/);
+  });
 });

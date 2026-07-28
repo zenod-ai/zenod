@@ -6,7 +6,18 @@ import { basename, join } from "node:path";
 import { Hono, type Context } from "hono";
 import { PHYLAX_AGENT } from "./agent.js";
 import { readCustomerSession } from "./customerSession.js";
-import { isValidWhisperModel, prepareModel, transcribeAudio, type TranscribeOptions } from "./transcribe.js";
+import { openRouterTranscriptionModels } from "./openrouterModels.js";
+import { probePhylaxTranscriptionProvider } from "./phylaxTranscriptionProbe.js";
+import {
+  DEFAULT_OPENROUTER_STT_MODEL,
+  GROQ_STT_MODEL,
+  isValidWhisperModel,
+  OPENAI_STT_MODEL,
+  prepareModel,
+  transcribeAudio,
+  WHISPER_MODELS,
+  type TranscribeOptions,
+} from "./transcribe.js";
 import {
   PhylaxChannelError,
   PhylaxChannelsOrgan,
@@ -77,6 +88,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
   app.get("/api/phylax/settings", (c) => {
     const tenantId = activeTenantId(c, base, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
+    c.header("cache-control", "private, no-store");
     const account = base.customerAccounts.list().find((candidate) => candidate.tenant_id === tenantId);
     const token = account ? base.customerTokenVault.get(account.account_id) : null;
     return c.json({
@@ -90,23 +102,84 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
         : null,
     });
   });
+  app.get("/api/phylax/transcription/options", async (c) => {
+    const tenantId = activeTenantId(c, base, env);
+    if (!tenantId) return c.json({ error: "unauthorized" }, 401);
+    c.header("cache-control", "private, no-store");
+    const catalog = await openRouterTranscriptionModels(
+      Number.POSITIVE_INFINITY,
+      { forceRefresh: c.req.query("refresh") === "1" },
+    );
+    return c.json({
+      defaults: {
+        local: PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL,
+        groq: GROQ_STT_MODEL,
+        openai: OPENAI_STT_MODEL,
+        openrouter: DEFAULT_OPENROUTER_STT_MODEL,
+      },
+      localModels: WHISPER_MODELS,
+      openrouterModels: catalog.models,
+      openrouterCatalog: {
+        cached: catalog.cached,
+        fallback: catalog.fallback,
+      },
+    });
+  });
   app.put("/api/phylax/settings", async (c) => {
     const tenantId = activeTenantId(c, base, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
-    const body = await c.req.json<{
-      downstreamUrl?: string | null;
-      downstreamToken?: string | null;
-      transcriptionEnabled?: boolean;
-      transcriptionProvider?: "local" | "groq" | "openai" | "openrouter";
-      transcriptionModel?: string | null;
-      transcriptionKey?: string | null;
-      telegramBinding?: string | null;
-      notificationPrefs?: { whatsapp?: boolean; telegram?: boolean };
-    }>().catch(() => ({}));
     try {
-      return c.json({ settings: tenantSettings.update(tenantId, body) });
+      const body = parsePhylaxSettingsUpdate(await c.req.json<unknown>());
+      const normalized = normalizePhylaxTranscriptionUpdate(tenantSettings, tenantId, body);
+      return c.json({ settings: tenantSettings.update(tenantId, normalized) });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : "invalid settings" }, 400);
+    }
+  });
+  app.post("/api/phylax/transcription/check", async (c) => {
+    const tenantId = activeTenantId(c, base, env);
+    if (!tenantId) return c.json({ error: "unauthorized" }, 401);
+    try {
+      const body = parsePhylaxTranscriptionCheck(await c.req.json<unknown>());
+      const current = tenantSettings.transcriptionConfig(tenantId);
+      const provider = body.provider ?? current.provider;
+      const configured = tenantSettings.transcriptionConfig(tenantId, provider);
+      const model = body.model?.trim()
+        || (provider === current.provider ? current.model : null)
+        || defaultPhylaxTranscriptionModel(provider);
+      const key = body.key === undefined || body.key === null ? configured.key : body.key.trim() || null;
+      const configurationError = phylaxTranscriptionConfigurationError({ provider, model, key });
+      if (configurationError) return c.json({ ok: false, provider, model, message: configurationError });
+      const openRouterCatalog = provider === "openrouter"
+        ? await openRouterTranscriptionModels()
+        : undefined;
+      return c.json(await probePhylaxTranscriptionProvider({
+        provider,
+        model,
+        key,
+        env,
+        openRouterCatalog,
+      }));
+    } catch (error) {
+      return c.json(
+        { ok: false, message: error instanceof Error ? error.message : "could not check transcription provider" },
+        400,
+      );
+    }
+  });
+  app.delete("/api/phylax/transcription/key", async (c) => {
+    const tenantId = activeTenantId(c, base, env);
+    if (!tenantId) return c.json({ error: "unauthorized" }, 401);
+    try {
+      const body = parsePhylaxTranscriptionKeyRemoval(await c.req.json<unknown>());
+      return c.json({
+        settings: tenantSettings.clearTranscriptionKey(tenantId, body.provider),
+      });
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : "could not remove provider key" },
+        400,
+      );
     }
   });
   app.post("/api/phylax/phone-registration", async (c) => {
@@ -164,6 +237,165 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     close() {
       base.close();
     },
+  };
+}
+
+type PhylaxSettingsUpdate = Parameters<PhylaxTenantSettingsStore["update"]>[1];
+
+function optionalString(
+  record: Record<string, unknown>,
+  key: string,
+  maxLength: number,
+): string | null | undefined {
+  const value = record[key];
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string" || value.length > maxLength) throw new Error(`${key} must be a string`);
+  return value;
+}
+
+function optionalBoolean(record: Record<string, unknown>, key: string): boolean | undefined {
+  const value = record[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
+  return value;
+}
+
+export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("settings body must be an object");
+  const record = value as Record<string, unknown>;
+  const allowed = new Set([
+    "downstreamUrl",
+    "downstreamToken",
+    "transcriptionEnabled",
+    "transcriptionProvider",
+    "transcriptionModel",
+    "transcriptionKey",
+    "telegramBinding",
+    "notificationPrefs",
+  ]);
+  const unknown = Object.keys(record).find((key) => !allowed.has(key));
+  if (unknown) throw new Error(`unsupported setting: ${unknown}`);
+  const provider = record.transcriptionProvider;
+  if (
+    provider !== undefined &&
+    (typeof provider !== "string" || !["local", "groq", "openai", "openrouter"].includes(provider))
+  ) throw new Error("invalid transcription provider");
+  let notificationPrefs: { whatsapp?: boolean; telegram?: boolean } | undefined;
+  if (record.notificationPrefs !== undefined) {
+    if (!record.notificationPrefs || typeof record.notificationPrefs !== "object" || Array.isArray(record.notificationPrefs)) {
+      throw new Error("notificationPrefs must be an object");
+    }
+    const prefs = record.notificationPrefs as Record<string, unknown>;
+    const unknownPref = Object.keys(prefs).find((key) => key !== "whatsapp" && key !== "telegram");
+    if (unknownPref) throw new Error(`unsupported notification preference: ${unknownPref}`);
+    notificationPrefs = {
+      ...(prefs.whatsapp !== undefined ? { whatsapp: optionalBoolean(prefs, "whatsapp") } : {}),
+      ...(prefs.telegram !== undefined ? { telegram: optionalBoolean(prefs, "telegram") } : {}),
+    };
+  }
+  return {
+    ...(record.downstreamUrl !== undefined ? { downstreamUrl: optionalString(record, "downstreamUrl", 4_096) } : {}),
+    ...(record.downstreamToken !== undefined ? { downstreamToken: optionalString(record, "downstreamToken", 8_192) } : {}),
+    ...(record.transcriptionEnabled !== undefined
+      ? { transcriptionEnabled: optionalBoolean(record, "transcriptionEnabled") }
+      : {}),
+    ...(provider !== undefined ? { transcriptionProvider: provider as PhylaxSettingsUpdate["transcriptionProvider"] } : {}),
+    ...(record.transcriptionModel !== undefined
+      ? { transcriptionModel: optionalString(record, "transcriptionModel", 256) }
+      : {}),
+    ...(record.transcriptionKey !== undefined
+      ? { transcriptionKey: optionalString(record, "transcriptionKey", 8_192) }
+      : {}),
+    ...(record.telegramBinding !== undefined ? { telegramBinding: optionalString(record, "telegramBinding", 256) } : {}),
+    ...(notificationPrefs ? { notificationPrefs } : {}),
+  };
+}
+
+export function parsePhylaxTranscriptionCheck(value: unknown): {
+  provider?: "local" | "groq" | "openai" | "openrouter";
+  model?: string | null;
+  key?: string | null;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("check body must be an object");
+  const record = value as Record<string, unknown>;
+  const unknown = Object.keys(record).find((key) => !["provider", "model", "key"].includes(key));
+  if (unknown) throw new Error(`unsupported check field: ${unknown}`);
+  const provider = record.provider;
+  if (
+    provider !== undefined &&
+    (typeof provider !== "string" || !["local", "groq", "openai", "openrouter"].includes(provider))
+  ) throw new Error("invalid transcription provider");
+  return {
+    ...(provider !== undefined ? { provider: provider as "local" | "groq" | "openai" | "openrouter" } : {}),
+    ...(record.model !== undefined ? { model: optionalString(record, "model", 256) } : {}),
+    ...(record.key !== undefined ? { key: optionalString(record, "key", 8_192) } : {}),
+  };
+}
+
+export function parsePhylaxTranscriptionKeyRemoval(value: unknown): {
+  provider: "groq" | "openai" | "openrouter";
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("key removal body must be an object");
+  }
+  const record = value as Record<string, unknown>;
+  const unknown = Object.keys(record).find((key) => key !== "provider");
+  if (unknown) throw new Error(`unsupported key removal field: ${unknown}`);
+  if (!["groq", "openai", "openrouter"].includes(String(record.provider))) {
+    throw new Error("invalid transcription provider");
+  }
+  return {
+    provider: record.provider as "groq" | "openai" | "openrouter",
+  };
+}
+
+export function defaultPhylaxTranscriptionModel(
+  provider: "local" | "groq" | "openai" | "openrouter",
+): string | null {
+  if (provider === "local") return PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL;
+  if (provider === "groq") return GROQ_STT_MODEL;
+  if (provider === "openai") return OPENAI_STT_MODEL;
+  return DEFAULT_OPENROUTER_STT_MODEL;
+}
+
+export function normalizePhylaxTranscriptionUpdate(
+  settings: PhylaxTenantSettingsStore,
+  tenantId: string,
+  input: PhylaxSettingsUpdate,
+): PhylaxSettingsUpdate {
+  const current = settings.transcriptionConfig(tenantId);
+  const provider = input.transcriptionProvider ?? current.provider;
+  const providerConfig = settings.transcriptionConfig(tenantId, provider);
+  const providerChanged = provider !== current.provider;
+  const model = input.transcriptionModel !== undefined
+    ? input.transcriptionModel?.trim() || defaultPhylaxTranscriptionModel(provider)
+    : providerChanged
+      ? defaultPhylaxTranscriptionModel(provider)
+      : current.model ?? defaultPhylaxTranscriptionModel(provider);
+  const canonicalModel =
+    provider === "groq" || provider === "openai"
+      ? defaultPhylaxTranscriptionModel(provider)
+      : model;
+  const key = input.transcriptionKey !== undefined && input.transcriptionKey !== null
+    ? input.transcriptionKey.trim() || null
+    : providerConfig.key;
+  const enabled = input.transcriptionEnabled ?? current.enabled;
+  if (enabled) {
+    const configurationError = phylaxTranscriptionConfigurationError({
+      provider,
+      model: canonicalModel,
+      key,
+    });
+    if (configurationError) throw new Error(configurationError);
+  }
+  return {
+    ...input,
+    ...(providerChanged ||
+    input.transcriptionModel !== undefined ||
+    provider === "groq" ||
+    provider === "openai"
+      ? { transcriptionModel: canonicalModel }
+      : {}),
   };
 }
 
@@ -269,6 +501,7 @@ export function phylaxTranscriptionOptions(
     groqApiKey: transcription.provider === "groq" ? key : "",
     openaiApiKey: transcription.provider === "openai" ? key : "",
     openrouterApiKey: transcription.provider === "openrouter" ? key : "",
+    ...(transcription.provider === "groq" ? { longTranscriptionProvider: "groq" as const } : {}),
     ...(transcription.provider === "openai" ? { longTranscriptionProvider: "openai" as const } : {}),
     ...(transcription.provider === "openrouter"
       ? { openrouterModel: transcription.model ?? undefined, longTranscriptionProvider: "openrouter" as const }

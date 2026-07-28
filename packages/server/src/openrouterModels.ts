@@ -25,8 +25,11 @@ type OpenRouterModel = {
 };
 
 const OPENROUTER_MODELS_URL =
-  process.env.ZENOD_OPENROUTER_MODELS_URL ?? "https://openrouter.ai/api/v1/models?output_modalities=all&sort=most-popular";
+  process.env.ZENOD_OPENROUTER_MODELS_URL
+  ?? "https://openrouter.ai/api/v1/models?output_modalities=transcription&sort=most-popular";
 const CACHE_TTL_MS = 30 * 60 * 1000;
+const FALLBACK_CACHE_TTL_MS = 60 * 1000;
+const FETCH_TIMEOUT_MS = 10_000;
 // OpenRouter reports transcription prices in mixed units with no unit flag in the
 // response: token-billed models (e.g. gpt-4o-transcribe, "priced per token") quote a
 // per-token rate that is always tiny (< $1e-4), while most STT models (whisper, voxtral,
@@ -47,16 +50,28 @@ const FALLBACK_TRANSCRIPTION_MODELS: OpenRouterTranscriptionModel[] = [
   fallbackModel("openai/whisper-1", "OpenAI: Whisper 1", 10, 0.006, 0),
 ];
 
-let cached: { fetchedAt: number; models: OpenRouterTranscriptionModel[] } | null = null;
+let cached: {
+  fetchedAt: number;
+  models: OpenRouterTranscriptionModel[];
+  fallback: boolean;
+} | null = null;
 
-export async function openRouterTranscriptionModels(limit = 20): Promise<{
+export async function openRouterTranscriptionModels(
+  limit = Number.POSITIVE_INFINITY,
+  options: { forceRefresh?: boolean } = {},
+): Promise<{
   models: OpenRouterTranscriptionModel[];
   cached: boolean;
   fallback: boolean;
 }> {
   const now = Date.now();
-  if (cached && now - cached.fetchedAt < CACHE_TTL_MS) {
-    return { models: cached.models.slice(0, limit), cached: true, fallback: false };
+  const cacheTtl = cached?.fallback ? FALLBACK_CACHE_TTL_MS : CACHE_TTL_MS;
+  if (!options.forceRefresh && cached && now - cached.fetchedAt < cacheTtl) {
+    return {
+      models: cached.models.slice(0, limit),
+      cached: true,
+      fallback: cached.fallback,
+    };
   }
 
   try {
@@ -64,16 +79,26 @@ export async function openRouterTranscriptionModels(limit = 20): Promise<{
       headers: {
         Accept: "application/json",
       },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`OpenRouter models failed (${response.status})`);
     const body = (await response.json()) as OpenRouterModelResponse;
-    const models = normalizeOpenRouterModels(body.data ?? []).slice(0, limit);
+    const models = normalizeOpenRouterModels(body.data ?? []);
     if (models.length === 0) throw new Error("OpenRouter returned no transcription models");
-    cached = { fetchedAt: now, models };
-    return { models, cached: false, fallback: false };
+    cached = { fetchedAt: now, models, fallback: false };
+    return { models: models.slice(0, limit), cached: false, fallback: false };
   } catch (err) {
     console.warn("[openrouter] using fallback transcription model catalog:", (err as Error).message);
-    return { models: FALLBACK_TRANSCRIPTION_MODELS.slice(0, limit), cached: false, fallback: true };
+    cached = {
+      fetchedAt: now,
+      models: FALLBACK_TRANSCRIPTION_MODELS,
+      fallback: true,
+    };
+    return {
+      models: FALLBACK_TRANSCRIPTION_MODELS.slice(0, limit),
+      cached: false,
+      fallback: true,
+    };
   }
 }
 

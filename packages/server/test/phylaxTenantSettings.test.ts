@@ -17,7 +17,7 @@ async function setup() {
   const dataDir = await mkdtemp(join(tmpdir(), "phylax-settings-"));
   dirs.push(dataDir);
   const storage = new ChassisStorage({ dataDir, vaultEncryptionKey: MASTER_KEY });
-  return { dataDir, store: new PhylaxTenantSettingsStore(dataDir, storage) };
+  return { dataDir, storage, store: new PhylaxTenantSettingsStore(dataDir, storage) };
 }
 
 describe("PhylaxTenantSettingsStore", () => {
@@ -60,6 +60,92 @@ describe("PhylaxTenantSettingsStore", () => {
     expect(rowFile).not.toContain("stt-alpha-secret");
     expect(rowFile).not.toContain("/mcp/alpha");
     expect(rowFile).not.toContain("/mcp/beta");
+  });
+
+  it("keeps cloud-provider keys separate and never reuses one provider's key for another", async () => {
+    const { store } = await setup();
+    store.update("alpha", {
+      transcriptionProvider: "openrouter",
+      transcriptionKey: "openrouter-alpha-secret",
+      transcriptionModel: "openai/whisper-large-v3-turbo",
+    });
+    expect(store.transcriptionConfig("alpha")).toMatchObject({
+      provider: "openrouter",
+      key: "openrouter-alpha-secret",
+    });
+    expect(store.transcriptionConfig("alpha", "groq").key).toBeNull();
+
+    store.update("alpha", {
+      transcriptionProvider: "groq",
+      transcriptionKey: "groq-alpha-secret",
+      transcriptionModel: null,
+    });
+    expect(store.transcriptionConfig("alpha")).toMatchObject({
+      provider: "groq",
+      key: "groq-alpha-secret",
+    });
+    expect(store.transcriptionConfig("alpha", "openrouter").key).toBe("openrouter-alpha-secret");
+    expect(store.view("alpha").transcriptionKeysConfigured).toEqual({
+      groq: true,
+      openai: false,
+      openrouter: true,
+    });
+  });
+
+  it("removes only the selected provider key and safely disables an active provider", async () => {
+    const { store } = await setup();
+    store.update("alpha", {
+      transcriptionProvider: "openrouter",
+      transcriptionKey: "openrouter-alpha-secret",
+      transcriptionModel: "openai/whisper-large-v3-turbo",
+    });
+    store.update("alpha", {
+      transcriptionProvider: "groq",
+      transcriptionKey: "groq-alpha-secret",
+    });
+
+    const inactive = store.clearTranscriptionKey("alpha", "openrouter");
+    expect(inactive.transcriptionEnabled).toBe(true);
+    expect(inactive.transcriptionKeysConfigured).toEqual({
+      groq: true,
+      openai: false,
+      openrouter: false,
+    });
+
+    const active = store.clearTranscriptionKey("alpha", "groq");
+    expect(active.transcriptionEnabled).toBe(false);
+    expect(active.transcriptionKeysConfigured).toEqual({
+      groq: false,
+      openai: false,
+      openrouter: false,
+    });
+  });
+
+  it("migrates a legacy transcription key only to its persisted active provider", async () => {
+    const { storage, store } = await setup();
+    await writeFile(store.path, JSON.stringify({
+      alpha: {
+        tenantId: "alpha",
+        transcriptionEnabled: true,
+        transcriptionProvider: "openrouter",
+        transcriptionModel: "openai/whisper-large-v3-turbo",
+      },
+    }));
+    const vault = storage.forTenant({ id: "alpha" }).vault("phylax-secrets.sqlite");
+    try {
+      vault.set("phylax_transcription_token", "legacy-openrouter-secret");
+    } finally {
+      vault.close();
+    }
+
+    expect(store.transcriptionConfig("alpha", "groq").key).toBeNull();
+    expect(store.transcriptionConfig("alpha").key).toBe("legacy-openrouter-secret");
+    expect(store.view("alpha").transcriptionKeysConfigured).toEqual({
+      groq: false,
+      openai: false,
+      openrouter: true,
+    });
+    expect(await readFile(store.path, "utf8")).not.toContain("legacy-openrouter-secret");
   });
 
   it("does not resolve an unverified or tokenless tenant", async () => {

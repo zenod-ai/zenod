@@ -132,11 +132,11 @@ const WHISPER_BINARY = process.env.ZENOD_WHISPER_BINARY ?? "whisper-cli";
 const MODEL_DIR = process.env.ZENOD_WHISPER_MODEL_DIR ?? "/data/models";
 const LANGUAGE = process.env.ZENOD_WHISPER_LANGUAGE ?? "auto";
 const THREADS = process.env.ZENOD_WHISPER_THREADS ?? "4";
-const GROQ_STT_MODEL = process.env.ZENOD_GROQ_STT_MODEL ?? "whisper-large-v3-turbo";
+export const GROQ_STT_MODEL = process.env.ZENOD_GROQ_STT_MODEL ?? "whisper-large-v3-turbo";
 const GROQ_STT_URL = process.env.ZENOD_GROQ_BASE_URL
   ? `${process.env.ZENOD_GROQ_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
   : "https://api.groq.com/openai/v1/audio/transcriptions";
-const OPENAI_STT_MODEL = process.env.ZENOD_OPENAI_STT_MODEL ?? "whisper-1";
+export const OPENAI_STT_MODEL = process.env.ZENOD_OPENAI_STT_MODEL ?? "whisper-1";
 const OPENAI_STT_URL = process.env.ZENOD_OPENAI_BASE_URL
   ? `${process.env.ZENOD_OPENAI_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
   : "https://api.openai.com/v1/audio/transcriptions";
@@ -346,7 +346,7 @@ function parseWhisperProgress(line: string): number | null {
 
 function shouldTryOpenRouterFallback(
   isLongAudio: boolean,
-  longProvider: "openrouter" | "openai" | "local",
+  longProvider: "groq" | "openrouter" | "openai" | "local",
   openrouterApiKey: string | null | undefined,
 ): boolean {
   // Long-note provider selection is still respected. For short notes, Groq is
@@ -639,7 +639,7 @@ export type TranscribeOptions =
       openaiApiKey?: string | null;
       openrouterApiKey?: string | null;
       openrouterModel?: string | null;
-      longTranscriptionProvider?: "openrouter" | "openai" | "local";
+      longTranscriptionProvider?: "groq" | "openrouter" | "openai" | "local";
       useOpenAiForLongAudio?: boolean;
       durationSeconds?: number;
       onProgress?: (percent: number) => void;
@@ -713,7 +713,9 @@ async function runTranscription(
     const failed = fakeFailedProviders();
     const canTryOpenRouter = shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey);
     const provider =
-      isLongAudio && longProvider === "openrouter" && openrouterApiKey && !failed.has("openrouter")
+      isLongAudio && longProvider === "groq" && groqApiKey && !failed.has("groq")
+        ? `groq ${GROQ_STT_MODEL}`
+        : isLongAudio && longProvider === "openrouter" && openrouterApiKey && !failed.has("openrouter")
         ? `openrouter ${openrouterModel}`
         : isLongAudio && longProvider === "openai" && openaiApiKey && !failed.has("openai")
         ? `openai ${OPENAI_STT_MODEL}`
@@ -732,7 +734,14 @@ async function runTranscription(
   }
 
   if (isLongAudio) {
-    if (longProvider === "openrouter" && openrouterApiKey) {
+    if (longProvider === "groq" && groqApiKey) {
+      try {
+        return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
+      } catch (err) {
+        if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
+        console.warn(`[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`);
+      }
+    } else if (longProvider === "openrouter" && openrouterApiKey) {
       const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
       if (result.success || signal?.aborted) return result;
       console.warn(`[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`);
