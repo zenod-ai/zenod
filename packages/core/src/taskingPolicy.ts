@@ -240,7 +240,7 @@ interface MutationFamily {
 }
 
 const STORAGE_POSTFIX_CANCELLATION_RE =
-  /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this))?|stop|abort|nvm|nevermind)\b|\b(?:do not|don'?t|never)\s+(?:save|store|persist|archive|remember|add|keep|put)\b/i;
+  /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this))?|stop|abort|nvm|nevermind)\b|\b(?:do not|don['’]?t|never)\s+(?:save|store|persist|archive|remember|add|keep|put)\b|(?:^|[\s,;:—-])no(?:\s*,?\s*(?:do not|don['’]?t))?[.!]?\s*$|\b(?:do not|don['’]?t)[.!]?\s*$/i;
 
 const MUTATION_FAMILIES: readonly MutationFamily[] = [
   { tool: /\b(?:delete|remove|destroy|revoke)\w*\b/i, request: /\b(?:delete|remove|destroy|revoke)\w*\b/i },
@@ -248,7 +248,7 @@ const MUTATION_FAMILIES: readonly MutationFamily[] = [
   // the terminal leaf. It cannot authorize generic financial/account persistence.
   {
     tool:
-      /(?:\b(?:save|store|persist|archive|add|create|write|put)\w*\b[\s\S]{0,40}\b(?:memory|note|vault)\w*\b|\b(?:memory|note|vault)\w*\b[\s\S]{0,40}\b(?:save|store|persist|archive|add|create|write|put)\w*\b)/i,
+      /(?:\b(?:save|store|persist|remember)\w*\b[\s\S]{0,40}\b(?:memory|note|vault)\w*\b|\b(?:memory|note|vault)\w*\b[\s\S]{0,40}\b(?:save|store|persist|remember)\w*\b)/i,
     request:
       /\b(?:(?:save|store|persist|archive)\w*|remember\s+(?:this|that|these|the following)\b|new\s+memory\b|add\b[\s\S]{0,80}\b(?:to|as)\s+(?:(?:my|the)\s+)?(?:memory|vault)\b|keep\b[\s\S]{0,80}\bfor\s+later\b|put\b[\s\S]{0,80}\b(?:in|into)\s+(?:(?:my|the)\s+)?(?:memory|vault)\b)/i,
     leafOnly: true,
@@ -260,6 +260,9 @@ const MUTATION_FAMILIES: readonly MutationFamily[] = [
   { tool: /\bstore\w*\b/i, request: /\bstore\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
   { tool: /\bpersist\w*\b/i, request: /\bpersist\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
   { tool: /\barchive\w*\b/i, request: /\barchive\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\badd\w*\b/i, request: /\badd\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\bwrite\w*\b/i, request: /\bwrite\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
+  { tool: /\bput\w*\b/i, request: /\bput\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
   { tool: /\b(?:create|draft|post|publish|send|compose|prepare|submit)\w*\b/i, request: /\b(?:create|draft|post|publish|send|compose|prepare|submit)\w*\b/i },
   { tool: /\b(?:create|draft|compose|prepare)\w*\b/i, request: /\b(?:edit|change|revise|rewrite|replace)\w*\b/i },
   { tool: /\b(?:edit|update|change|rename|patch)\w*\b/i, request: /\b(?:edit|update|change|rename|patch|revise|rewrite)\w*\b/i },
@@ -280,7 +283,7 @@ function hasNaturalDynamicMutationIntent(tool: string, request: string, descript
     )
   ) return false;
   if (
-    /^\s*(?:can|could)\s+you\b(?![\s\S]*\b(?:this|that|these|those|my|our|the|a|an|saying|named|called)\b)[^:#"'`]+\?\s*$/i.test(
+    /^\s*(?:can|could)\s+you\s+\w+\s+(?!(?:this|that|these|those|my|our|the|a|an|saying|named|called)\b)[^:#"'`?]+\?\s*$/i.test(
       request,
     )
   ) return false;

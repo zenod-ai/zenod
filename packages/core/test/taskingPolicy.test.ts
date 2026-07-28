@@ -1107,6 +1107,7 @@ describe("peerMutationGuardFailure", () => {
         "Remember this exact note, but actually no.",
         "Remember this exact note, but cancel.",
         "Remember this exact note, but do not store it.",
+        "Remember this exact note — no, don’t.",
       ]) {
         expect(
           peerMutationGuardFailure(storeMemory, request, {
@@ -1137,6 +1138,9 @@ describe("peerMutationGuardFailure", () => {
         ["fixture__rotate_key__abc123", "Rotate a key used by the memory archive."],
         ["fixture__save_payment_method__abc123", "Save a payment method."],
         ["fixture__create_financial_record__abc123", "Create a financial record."],
+        ["fixture__archive_memory__abc123", "Archive a memory."],
+        ["fixture__add_vault_member__abc123", "Add a member to a vault."],
+        ["fixture__create_memory_share__abc123", "Create a memory share."],
       ]) {
         expect(
           peerMutationGuardFailure(tool, "Remember this exact note.", {
@@ -1161,6 +1165,7 @@ describe("peerMutationGuardFailure", () => {
           "fixture__archive_invoice__abc123",
           "Can you archive invoices in this connected MCP? I am asking what it supports.",
         ],
+        ["fixture__archive_invoice__abc123", "Can you archive invoices in this connected MCP?"],
         ["fixture__persist_records__abc123", "Can you persist records?"],
       ]) {
         expect(
