@@ -147,22 +147,32 @@ export function uniqueSuffixedPeerToolName(
  * authenticated tools/list snapshot through an authoritative read tool.
  */
 function conceptsOccurLocally(text: string, patterns: readonly RegExp[], maxSpan = 120): boolean {
-  const positions = patterns.map((pattern) => {
+  const events = patterns.flatMap((pattern, patternIndex) => {
     const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
-    return [...text.matchAll(new RegExp(pattern.source, flags))].map((match) => match.index ?? 0);
+    return [...text.matchAll(new RegExp(pattern.source, flags))]
+      .map((match) => ({ patternIndex, position: match.index ?? 0 }));
   });
-  if (positions.some((matches) => matches.length === 0)) return false;
+  events.sort((left, right) => left.position - right.position);
 
-  const search = (patternIndex: number, selected: number[]): boolean => {
-    if (patternIndex === positions.length) {
-      return Math.max(...selected) - Math.min(...selected) <= maxSpan;
+  const counts = Array.from({ length: patterns.length }, () => 0);
+  let represented = 0;
+  let left = 0;
+  for (let right = 0; right < events.length; right += 1) {
+    const added = events[right]!;
+    const addedCount = counts[added.patternIndex] ?? 0;
+    if (addedCount === 0) represented += 1;
+    counts[added.patternIndex] = addedCount + 1;
+
+    while (events[right]!.position - events[left]!.position > maxSpan) {
+      const removed = events[left]!;
+      const removedCount = counts[removed.patternIndex] ?? 0;
+      counts[removed.patternIndex] = removedCount - 1;
+      if (removedCount === 1) represented -= 1;
+      left += 1;
     }
-    return positions[patternIndex]!.some((position) => {
-      const next = [...selected, position];
-      return Math.max(...next) - Math.min(...next) <= maxSpan && search(patternIndex + 1, next);
-    });
-  };
-  return search(0, []);
+    if (represented === patterns.length) return true;
+  }
+  return false;
 }
 
 export function isMcpCatalogInspectionQuestion(question: string): boolean {
