@@ -143,10 +143,10 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     expect(reply.text).not.toContain("generic_memory_write");
   });
 
-  it("renders a concise peer-grounded read instead of model-drafted prose", async () => {
+  it("preserves a substantive synthesized peer read instead of exposing the raw result", async () => {
     const llm = new ScriptedLlm(
       { tool: "generic_peer_read", input: { query: "ring" }, result: '{"answer":"One grounded memory about the Ring."}' },
-      "I invented a polished summary.",
+      "The available memory says the Ring is the main topic.",
     );
     const engine = createEngine({
       llm: llm as unknown as BrainLlm,
@@ -162,9 +162,9 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
 
     const reply = await engine.chat("what do you remember?", "web");
 
-    expect(reply.text).toContain("> One grounded memory about the Ring.");
-    expect(reply.text).not.toContain("I invented a polished summary.");
-    expect(reply.text).not.toContain("structuredContent");
+    expect(reply.text).toBe("The available memory says the Ring is the main topic.");
+    expect(reply.text).not.toContain("One grounded memory about the Ring.");
+    expect(reply.text).not.toContain('"answer"');
   });
 
   it("replaces zero-tool fabricated success at the persisted chat boundary", async () => {

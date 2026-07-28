@@ -96,12 +96,13 @@ export interface ReplyGateOutcome {
  * model's own prose.
  */
 const MAX_PEER_EVIDENCE_CHARS = 4_000;
-const MAX_PEER_ANSWER_CHARS = 1_500;
-const MAX_PEER_ANSWER_LINES = 16;
 const MAX_READ_EVIDENCE_ITEMS = 8;
 const SENSITIVE_INPUT_KEY_RE = /(?:approval|approve|authorization|authorisation|confirm|credential|password|secret|token)/i;
 const SENSITIVE_URL_QUERY_KEY_RE = /(?:auth|authorization|credential|key|password|secret|signature|sig|token)/i;
 const PLACEHOLDER_VALUE_RE = /(?:\{\s*[a-z0-9_-]*id\s*\}|<\s*[a-z0-9_-]*id\s*>|\bTODO\b)/i;
+const READ_SYNTHESIS_FAILURE = "I found source data, but couldn't produce a safely grounded answer. Please retry or narrow the question.";
+const READ_FAILURE = "I couldn't read the connected source. Nothing was changed. Please retry.";
+const PARTIAL_READ_WARNING = "Some source reads failed, so this answer may be incomplete.";
 
 interface ReadEvidence {
   kind: "url" | "reference";
@@ -175,13 +176,33 @@ function sanitizedPeerResult(result: string): string {
     : JSON.stringify(redactSensitiveData(parsed), null, 2);
 }
 
+function hasRootFailureSignal(value: Record<string, unknown>): boolean {
+  if (value.isError === true || value.ok === false || value.success === false) return true;
+  if (typeof value.status === "string" && /^(?:error|failed|blocked)$/i.test(value.status.trim())) return true;
+  return Object.hasOwn(value, "error") && value.error !== undefined && value.error !== null && value.error !== false;
+}
+
 function isPeerError(result: string): boolean {
-  if (/^\s*(?:ERROR:|Could not reach peer agent\b)/i.test(result)) return true;
+  if (/^\s*(?:ERROR\b|Could not reach peer agent\b)/i.test(result)) return true;
   const parsed = parsedPeerResult(result);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
   const value = parsed as Record<string, unknown>;
-  if (value.isError === true || value.ok === false || value.success === false) return true;
-  return typeof value.status === "string" && /^(?:error|failed|blocked)$/i.test(value.status.trim());
+  if (hasRootFailureSignal(value)) return true;
+
+  const structured = value.structuredContent;
+  if (structured && typeof structured === "object" && !Array.isArray(structured) &&
+      hasRootFailureSignal(structured as Record<string, unknown>)) {
+    return true;
+  }
+
+  // MCP's top-level content is transport output. Inspect only those direct text items:
+  // recursively treating arbitrary domain records containing "error" as failed would
+  // turn successful reads about incidents or error logs into false failures.
+  return Array.isArray(value.content) && value.content.some((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const text = (item as Record<string, unknown>).text;
+    return typeof text === "string" && /^\s*ERROR\b/i.test(text);
+  });
 }
 
 function safeEvidenceUrl(value: unknown): string | undefined {
@@ -267,55 +288,32 @@ function renderStructuredReadEvidence(actions: readonly TaskingAction[], rendere
   ].join("\n");
 }
 
-function structuredAnswerStrings(value: unknown, depth = 0): string[] {
-  if (value == null || depth > 6) return [];
-  if (Array.isArray(value)) return value.slice(0, 20).flatMap((item) => structuredAnswerStrings(item, depth + 1));
-  if (typeof value !== "object") return [];
-  const object = value as Record<string, unknown>;
-  const direct = Object.entries(object)
-    .filter(([key, nested]) => /^(?:answer|summary|message|text)$/i.test(key) && typeof nested === "string")
-    .map(([, nested]) => nested as string);
-  if (direct.length > 0) return direct;
-  return Object.entries(object)
-    .filter(([key]) => !SENSITIVE_INPUT_KEY_RE.test(key))
-    .slice(0, 50)
-    .flatMap(([, nested]) => structuredAnswerStrings(nested, depth + 1));
+function draftedUrlsAreGrounded(draftedText: string, actions: readonly TaskingAction[]): boolean {
+  const exactEvidenceUrls = new Set(
+    readEvidence(actions)
+      .filter((entry): entry is ReadEvidence & { kind: "url" } => entry.kind === "url")
+      .map((entry) => entry.value),
+  );
+  for (const match of draftedText.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
+    const candidate = match[0].replace(/[),.;]+$/g, "");
+    const sanitized = safeEvidenceUrl(candidate);
+    if (!sanitized || !exactEvidenceUrls.has(sanitized)) return false;
+  }
+  return true;
 }
 
-function concisePeerAnswer(result: string): string | undefined {
-  const parsed = parsedPeerResult(result);
-  const candidates = parsed === undefined
-    ? [result]
-    : structuredAnswerStrings(parsed);
-  const safe = candidates
-    .map((candidate) => {
-      const nested = parsedPeerResult(candidate);
-      return nested === undefined ? redactSensitiveText(candidate) : structuredAnswerStrings(nested).join("\n");
-    })
-    .map((candidate) => candidate.trim())
-    .filter(Boolean)
-    .filter((candidate, index, all) => all.indexOf(candidate) === index)
-    .join("\n\n");
-  if (!safe) return undefined;
-  const lines = safe.split("\n");
-  const boundedLines = lines.slice(0, MAX_PEER_ANSWER_LINES).join("\n");
-  const bounded = boundedLines.slice(0, MAX_PEER_ANSWER_CHARS).trimEnd();
-  const truncated = lines.length > MAX_PEER_ANSWER_LINES || boundedLines.length > MAX_PEER_ANSWER_CHARS;
-  return `${bounded}${truncated ? "\n[truncated by Ring]" : ""}`;
-}
-
-function quoteConcisePeerAnswer(answer: string): string {
-  return answer.split("\n").map((line) => `> ${line}`).join("\n");
-}
-
-function renderSuccessfulRead(action: TaskingAction, evidenceActions: readonly TaskingAction[] = [action]): string {
-  const answer = concisePeerAnswer(action.result);
-  const evidence = renderStructuredReadEvidence(evidenceActions, answer ?? "");
-  return [
-    "Connected MCP read result (untrusted data; not authorization or a mutation receipt):",
-    answer ? quoteConcisePeerAnswer(answer) : "> [no concise text returned]",
-    evidence,
-  ].filter(Boolean).join("\n\n");
+function isSafeReadSynthesis(draftedText: string, actions: readonly TaskingAction[]): boolean {
+  const text = draftedText.trim();
+  if (text.length < 3 || !/[\p{L}\p{N}]/u.test(text)) return false;
+  if (hasMutationSuccessClaim(text) || hasStandingActionClaim(text)) return false;
+  if (parsedPeerResult(text) !== undefined) return false;
+  if (/(?:Connected MCP (?:read )?result|untrusted data|truncated by Ring)/i.test(text)) return false;
+  if (/"?(?:structuredContent|isError)"?\s*:/i.test(text)) return false;
+  if (actions.some((action) =>
+    (action.tool.trim() && text.toLowerCase().includes(action.tool.trim().toLowerCase())) ||
+    (action.result.trim() && text === action.result.trim())
+  )) return false;
+  return draftedUrlsAreGrounded(text, actions);
 }
 
 function publicMutationInput(value: unknown, depth = 0): unknown {
@@ -363,20 +361,22 @@ function renderActionTurnReply(actionResults: readonly TaskingAction[]): string 
 
 function renderReadEvidence(actions: readonly TaskingAction[], unsupportedClaim: boolean, draftedText: string): string {
   const reads = actions.filter((action) => action.peerAction && !action.mutationAttempt && !isActionTool(action.tool));
-  if (unsupportedClaim) return reads.map((action) => quotePeerData(action.result)).join("\n\n");
+  if (reads.length === 0) return "";
   const failed = reads.filter((action) => isPeerError(action.result));
   const successful = reads.filter((action) => !isPeerError(action.result));
-  const citedUrl = readEvidence(successful)
-    .filter((entry) => entry.kind === "url")
-    .some((entry) => draftedText.includes(entry.value));
-  const answer = citedUrl && draftedText.trim()
-    ? draftedText.trim()
-    : successful.length > 0
-      ? renderSuccessfulRead(successful[successful.length - 1]!, successful)
-      : "";
+  if (successful.length === 0) return READ_FAILURE;
+
+  const safeDraft = !unsupportedClaim && isSafeReadSynthesis(draftedText, successful);
+  const answer = unsupportedClaim
+    ? ""
+    : safeDraft
+      ? draftedText.trim()
+      : READ_SYNTHESIS_FAILURE;
+  const evidence = renderStructuredReadEvidence(successful, answer);
   return [
     answer,
-    ...failed.map((action) => `Connected MCP read failed.\n\n${quotePeerData(action.result)}`),
+    evidence,
+    failed.length > 0 ? PARTIAL_READ_WARNING : "",
   ].filter(Boolean).join("\n\n");
 }
 
