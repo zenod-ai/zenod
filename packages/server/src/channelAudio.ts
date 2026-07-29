@@ -14,5 +14,6 @@ export async function transcribeChannelAudio(
     openrouterModel: settings.openrouterTranscriptionModel(),
     longTranscriptionProvider: settings.longTranscriptionProvider(),
     useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
+    allowLocalFallback: false,
   });
 }

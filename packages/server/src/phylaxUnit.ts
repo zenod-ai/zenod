@@ -506,6 +506,7 @@ export function phylaxTranscriptionOptions(
     ...(transcription.provider === "openrouter"
       ? { openrouterModel: transcription.model ?? undefined, longTranscriptionProvider: "openrouter" as const }
       : {}),
+    allowLocalFallback: transcription.provider === "local",
     signal,
     includeTiming: true,
   };

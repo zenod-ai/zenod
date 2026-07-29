@@ -924,6 +924,43 @@ describe("WhatsAppGateway", () => {
     }
   });
 
+  it("replies immediately when cloud STT fails instead of degrading to local Whisper", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-stt-fail-loud-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "unused";
+      process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS = "openrouter";
+      runtime.settings.set("openrouter_api_key", "sk-or-test");
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+
+      await Promise.race([
+        gateway.handleEvent(audioEvent() as never),
+        new Promise<never>((_resolve, reject) =>
+          setTimeout(() => reject(new Error("STT failure reply exceeded one second")), 1_000),
+        ),
+      ]);
+
+      expect(socket.sent).toHaveLength(1);
+      expect(socket.sent[0]!.text).toContain("could not transcribe");
+      expect(socket.sent[0]!.text).toContain("openrouter transcription failed");
+    } finally {
+      delete process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS;
+      delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("voice notes are answered inline — a follow-up question routes through chat, not a digest-status shortcut", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-digest-status-"));
     const runtime = new Runtime(dir);
