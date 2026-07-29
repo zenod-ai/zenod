@@ -48,6 +48,381 @@ describe("PhylaxChannelsOrgan", () => {
     expect(normalizePhylaxVoiceJobDeadlineMs(30 * 60_000)).toBe(30 * 60_000);
   });
 
+  it("dispatches a tenant voice binding mechanically, validates its live schema, and polls to a terminal receipt", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-dispatch-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-scope-only",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: {
+            content: { source: "transcript" as const },
+            source: { source: "constant" as const, value: "whatsapp" },
+          },
+        },
+        text: {
+          tool: "chat_with_ring",
+          argumentMappings: { message: { source: "message" as const } },
+        },
+        media: {
+          tool: "chat_with_ring",
+          argumentMappings: { message: { source: "message" as const } },
+        },
+      },
+    };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "source", "idempotencyKey"],
+            properties: {
+              content: { type: "string", minLength: 1 },
+              source: { const: "whatsapp" },
+              idempotencyKey: { type: "string", minLength: 1 },
+            },
+          },
+          description: "Store memory",
+        }],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        if (call.tool === "store_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: { ticket_id: "job-alpha-1", state: "accepted", status: "queued" },
+          };
+        }
+        const db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"), { readOnly: true });
+        const persisted = db.prepare(
+          "SELECT job_id FROM phylax_capture_jobs WHERE tenant_id = ? AND provider_message_id = ?",
+        ).get("alpha", "provider-voice-1") as { job_id?: string } | undefined;
+        db.close();
+        expect(persisted?.job_id).toBe("job-alpha-1");
+        expect(call).toMatchObject({
+          tool: "get_task_result",
+          arguments: { ticket_id: "job-alpha-1" },
+        });
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "job-alpha-1",
+            state: "done",
+            status: "done",
+            result: {
+              recap: "Remember the launch checklist.",
+              evidenceRef: "Log/2026-07-29.md#^voice-1",
+              evidenceUrl: "https://github.test/log#voice-1",
+              pagesTouched: ["Projects/Launch.md"],
+              pageUrls: ["https://github.test/projects/launch"],
+              commitSha: "abc1234",
+              githubUrls: ["https://github.test/commit/abc1234"],
+              question: "Which owner should be listed?",
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+    });
+
+    const receipt = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-voice-1",
+      transcription: { text_transcript: "Remember the launch checklist." },
+    });
+
+    expect(calls[0]).toMatchObject({
+      tool: "store_memory",
+      arguments: {
+        content: "Remember the launch checklist.",
+        source: "whatsapp",
+        idempotencyKey: "alpha:whatsapp:provider-voice-1",
+      },
+    });
+    expect(receipt.replyText).toContain("Saved ✓");
+    expect(receipt.replyText).toContain("Projects/Launch.md");
+    expect(receipt.replyText).toContain("abc1234");
+    expect(receipt.replyText).toContain("Which owner should be listed?");
+    expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+      .toBe("Log/2026-07-29.md#^voice-1");
+    await organ.close();
+  });
+
+  it("fails loudly before dispatch when a tenant binding drifts from the discovered schema", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-schema-drift-"));
+    dirs.push(dataDir);
+    let called = false;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: { wrongField: { source: "transcript" } },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "chat_with_ring", argumentMappings: {} },
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+          description: "Store memory",
+        }],
+      }),
+      async callDownstream() {
+        called = true;
+        return { content: [{ type: "text", text: "must not run" }] };
+      },
+    });
+
+    await expect(organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-drift-1",
+      transcription: { text_transcript: "capture me" },
+    })).rejects.toMatchObject({
+      code: "downstream_error",
+      audit: { failureCode: "downstream_schema_drift" },
+    });
+    expect(called).toBe(false);
+    await organ.close();
+  });
+
+  it("returns an honest foreground deadline, then resumes the persisted poll after restart", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-restart-"));
+    dirs.push(dataDir);
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-scope-only",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "transcript" as const } },
+        },
+        text: { tool: "chat_with_ring", argumentMappings: {} },
+        media: { tool: "chat_with_ring", argumentMappings: {} },
+      },
+    };
+    const discovery = async () => ({
+      transport: "connected" as const,
+      tools: "ready" as const,
+      specs: [{
+        as: "memory",
+        mcp: "store_memory",
+        arg: "input",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["content", "idempotencyKey"],
+          properties: {
+            content: { type: "string" },
+            idempotencyKey: { type: "string" },
+          },
+        },
+        description: "Store memory",
+      }],
+    });
+    const first = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      discoverDownstream: discovery,
+      captureForegroundDeadlineMs: 2,
+      capturePollIntervalMs: 1,
+      async callDownstream(call) {
+        return call.tool === "store_memory"
+          ? {
+              content: [{ type: "text", text: "queued" }],
+              structuredContent: { ticket_id: "job-restart-1", state: "accepted" },
+            }
+          : {
+              content: [{ type: "text", text: "running" }],
+              structuredContent: { ticket_id: "job-restart-1", state: "running" },
+            };
+      },
+    });
+    const pending = await first.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-restart-1",
+      transcription: { text_transcript: "capture across restart" },
+    });
+    expect(pending.replyText).toContain("still filing");
+    expect(pending.replyText).not.toContain("Saved");
+    await first.close();
+
+    const delivered: string[] = [];
+    const restarted = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      discoverDownstream: discovery,
+      capturePollIntervalMs: 1,
+      async callDownstream(call) {
+        expect(call.tool).toBe("get_task_result");
+        expect(call.arguments).toEqual({ ticket_id: "job-restart-1" });
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "job-restart-1",
+            state: "done",
+            result: {
+              recap: "Restart-safe capture.",
+              evidenceRef: "Log/2026-07-29.md#^restart-1",
+              pagesTouched: ["Inbox/Restart.md"],
+              commitSha: "def5678",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+    });
+    restarted.setTerminalReceiptDelivery(async (_channel, _recipient, text) => {
+      delivered.push(text);
+    });
+    await restarted.resumePendingCaptures();
+    await vi.waitFor(() => expect(delivered).toHaveLength(1));
+    expect(delivered[0]).toContain("Saved ✓");
+    expect(restarted.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+      .toBe("Log/2026-07-29.md#^restart-1");
+    await restarted.resumePendingCaptures();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(delivered).toHaveLength(1);
+    await restarted.close();
+  });
+
+  it("coalesces a repeated provider message per tenant without crossing same-id tenant jobs", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-multitenant-"));
+    dirs.push(dataDir);
+    const binding = {
+      voice_note: {
+        tool: "store_memory",
+        argumentMappings: { content: { source: "transcript" as const } },
+      },
+      text: { tool: "chat_with_ring", argumentMappings: {} },
+      media: { tool: "chat_with_ring", argumentMappings: {} },
+    };
+    const storeCalls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve(_channel, sender) {
+          const tenantId = sender.endsWith("111") ? "alpha" : "beta";
+          return {
+            tenantId,
+            downstreamUrl: `https://zenod.test/mcp/${tenantId}`,
+            downstreamToken: `${tenantId}-memory-scope`,
+            turnBindings: binding,
+          };
+        },
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+          description: "Store memory",
+        }],
+      }),
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          storeCalls.push(call);
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: {
+              ticket_id: `job-${call.route.tenantId}`,
+              state: "accepted",
+            },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: `job-${call.route.tenantId}`,
+            state: "done",
+            result: {
+              evidenceRef: `Log/2026-07-29.md#^${call.route.tenantId}`,
+              pagesTouched: [`Inbox/${call.route.tenantId}.md`],
+              commitSha: call.route.tenantId === "alpha" ? "aaaaaaa" : "bbbbbbb",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+    });
+    const inbound = (sender: string) => ({
+      channel: "whatsapp" as const,
+      sender,
+      chatId: `chat-${sender}`,
+      messageId: "same-provider-id",
+      transcription: { text_transcript: `memory from ${sender}` },
+    });
+
+    const [alpha, beta] = await Promise.all([
+      organ.receive(inbound("34611111111")),
+      organ.receive(inbound("34622222222")),
+    ]);
+    const alphaDuplicate = await organ.receive(inbound("34611111111"));
+
+    expect(alpha.replyText).toContain("Saved ✓");
+    expect(beta.replyText).toContain("Saved ✓");
+    expect(alphaDuplicate.replyText).toBe(alpha.replyText);
+    expect(storeCalls.map((call) => call.arguments.idempotencyKey)).toEqual([
+      "alpha:whatsapp:same-provider-id",
+      "beta:whatsapp:same-provider-id",
+    ]);
+    expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+      .toBe("Log/2026-07-29.md#^alpha");
+    expect(organ.lastCaptureEvidenceRef("beta", "whatsapp:34622222222"))
+      .toBe("Log/2026-07-29.md#^beta");
+    await organ.close();
+  });
+
   it("resolves sender to exactly one tenant downstream and never crosses tokens", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-channels-"));
     dirs.push(dataDir);

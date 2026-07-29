@@ -464,7 +464,12 @@ function createTenantOrgan(
     transcriptionDeadlineMs: configuredDeadline,
     voiceJobDeadlineMs: configuredVoiceJobDeadline,
     routes: {
-      resolve: (channel, sender) => tenantSettings.resolve(channel, sender),
+      resolve: (channel, sender) => {
+        const route = tenantSettings.resolve(channel, sender);
+        return route
+          ? { ...route, turnBindings: tenantSettings.get(route.tenantId).turnBindings }
+          : null;
+      },
       reportDownstreamCredentialStatus: (tenantId, credentialRevision, status) =>
         tenantSettings.reportDownstreamCredentialStatus(tenantId, credentialRevision, status),
     },

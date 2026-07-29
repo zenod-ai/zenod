@@ -164,7 +164,13 @@ export interface WhatsAppChannelAuditInput {
 
 export interface WhatsAppChannelFailureInput extends WhatsAppChannelAuditInput {
   failureStage: "downstream";
-  failureCode: "downstream_unauthorized" | "downstream_rejected" | "downstream_unavailable" | "downstream_empty_reply";
+  failureCode:
+    | "downstream_unauthorized"
+    | "downstream_rejected"
+    | "downstream_unavailable"
+    | "downstream_empty_reply"
+    | "downstream_schema_drift"
+    | "downstream_job_failed";
 }
 
 export interface WhatsAppChannelTiming {

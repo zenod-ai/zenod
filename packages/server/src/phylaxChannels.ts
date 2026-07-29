@@ -1,11 +1,23 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import { z } from "zod";
-import { callPeerTool, type PeerToolResult } from "./peerClient.js";
+import {
+  callPeerTool,
+  discoverPeerTools,
+  type PeerDiscoveryResult,
+  type PeerToolResult,
+} from "./peerClient.js";
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { normalizeTelegramEntry } from "./telegramConfig.js";
+import type {
+  PhylaxBindingArgumentSource,
+  PhylaxTurnBindings,
+  PhylaxTurnType,
+} from "./phylaxTenantSettings.js";
 
 export type PhylaxPortedChannel = "whatsapp" | "telegram";
 
@@ -13,6 +25,8 @@ export interface PhylaxTenantRoute {
   tenantId: string;
   downstreamUrl: string;
   downstreamToken: string;
+  /** Tenant-owned mechanical dispatch table. The resolver must never substitute another tenant's defaults. */
+  turnBindings?: PhylaxTurnBindings;
   /** Non-secret revision used only to reject stale in-flight health completions. */
   credentialRevision?: string;
 }
@@ -87,12 +101,8 @@ export interface PhylaxStagedVoice {
 
 export interface PhylaxDownstreamCall {
   route: PhylaxTenantRoute;
-  tool: "chat_with_ring";
-  arguments: {
-    message: string;
-    surface: "whatsapp" | "mcp";
-    conversationKey: string;
-  };
+  tool: string;
+  arguments: Record<string, unknown>;
   handoff: {
     sender: string;
     text_transcript?: string;
@@ -107,6 +117,12 @@ export interface PhylaxDownstreamCall {
 }
 
 export type PhylaxDownstreamCaller = (call: PhylaxDownstreamCall) => Promise<PeerToolResult>;
+export type PhylaxDownstreamDiscoverer = (route: PhylaxTenantRoute) => Promise<PeerDiscoveryResult>;
+export type PhylaxTerminalReceiptDelivery = (
+  channel: PhylaxPortedChannel,
+  recipient: string,
+  text: string,
+) => Promise<void>;
 
 export interface PhylaxInboundReceipt {
   tenantId: string;
@@ -131,6 +147,8 @@ export interface PhylaxInboundReceipt {
     downstream_url: string;
     downstream_identity: string;
   }>;
+  /** Runtime invokes this only after the foreground provider reply is accepted. */
+  afterReply?: () => void;
 }
 
 export interface PhylaxFailureAudit {
@@ -145,7 +163,13 @@ export interface PhylaxFailureAudit {
   downstreamCorrelationId: string | null;
   downstreamReceipt: Record<string, unknown> | null;
   failureStage: "downstream";
-  failureCode: "downstream_unauthorized" | "downstream_rejected" | "downstream_unavailable" | "downstream_empty_reply";
+  failureCode:
+    | "downstream_unauthorized"
+    | "downstream_rejected"
+    | "downstream_unavailable"
+    | "downstream_empty_reply"
+    | "downstream_schema_drift"
+    | "downstream_job_failed";
   timing: {
     transcriptionQueueWaitMs: number | null;
     transcriptionRuntimeMs: number | null;
@@ -282,18 +306,450 @@ function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string)
   ].filter(Boolean).join("\n");
 }
 
+const DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS = 4 * 60_000;
+const DEFAULT_CAPTURE_POLL_INTERVAL_MS = 1_000;
+const CAPTURE_PENDING_REPLY = "I’m still filing this memory — I’ll confirm here when it is saved.";
+
+interface PhylaxCaptureJob {
+  tenantId: string;
+  channel: PhylaxPortedChannel;
+  providerMessageId: string;
+  sender: string;
+  chatId: string;
+  conversationKey: string;
+  tool: string;
+  jobId: string;
+  state: "polling" | "done" | "error";
+  receiptText: string | null;
+  evidenceRef: string | null;
+  deliveredAt: number | null;
+}
+
+/**
+ * D14's local custody seam. This deliberately mirrors W-P4's durable
+ * BEGIN-IMMEDIATE claim/update pattern; Zenod's idempotencyKey remains the
+ * authority for the network ambiguity between dispatch and this commit.
+ */
+class PhylaxCaptureJournal {
+  private readonly db: DatabaseSync;
+
+  constructor(dataDir: string) {
+    mkdirSync(dataDir, { recursive: true });
+    this.db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
+    this.db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 30000;
+
+      CREATE TABLE IF NOT EXISTS phylax_capture_jobs (
+        tenant_id TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        provider_message_id TEXT NOT NULL,
+        sender TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        conversation_key TEXT NOT NULL,
+        tool TEXT NOT NULL,
+        job_id TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('polling', 'done', 'error')),
+        receipt_text TEXT,
+        evidence_ref TEXT,
+        delivered_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (tenant_id, channel, provider_message_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_phylax_capture_jobs_pending
+        ON phylax_capture_jobs(state, updated_at);
+
+      CREATE TABLE IF NOT EXISTS phylax_capture_conversations (
+        tenant_id TEXT NOT NULL,
+        conversation_key TEXT NOT NULL,
+        evidence_ref TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (tenant_id, conversation_key)
+      );
+    `);
+  }
+
+  accepted(input: Omit<PhylaxCaptureJob, "state" | "receiptText" | "evidenceRef" | "deliveredAt">): PhylaxCaptureJob {
+    const now = Date.now();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(
+        `INSERT INTO phylax_capture_jobs (
+           tenant_id, channel, provider_message_id, sender, chat_id,
+           conversation_key, tool, job_id, state, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'polling', ?, ?)
+         ON CONFLICT (tenant_id, channel, provider_message_id) DO UPDATE SET
+           sender = excluded.sender,
+           chat_id = excluded.chat_id,
+           conversation_key = excluded.conversation_key,
+           tool = excluded.tool,
+           job_id = excluded.job_id,
+           state = CASE
+             WHEN phylax_capture_jobs.state = 'done' THEN 'done'
+             ELSE 'polling'
+           END,
+           updated_at = excluded.updated_at`,
+      ).run(
+        input.tenantId,
+        input.channel,
+        input.providerMessageId,
+        input.sender,
+        input.chatId,
+        input.conversationKey,
+        input.tool,
+        input.jobId,
+        now,
+        now,
+      );
+      const stored = this.get(input.tenantId, input.channel, input.providerMessageId);
+      this.db.exec("COMMIT");
+      if (!stored) throw new Error("capture job was not persisted");
+      return stored;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  get(tenantId: string, channel: PhylaxPortedChannel, providerMessageId: string): PhylaxCaptureJob | null {
+    const row = this.db.prepare(
+      `SELECT tenant_id, channel, provider_message_id, sender, chat_id,
+              conversation_key, tool, job_id, state, receipt_text,
+              evidence_ref, delivered_at
+       FROM phylax_capture_jobs
+       WHERE tenant_id = ? AND channel = ? AND provider_message_id = ?`,
+    ).get(tenantId, channel, providerMessageId) as Record<string, unknown> | undefined;
+    return row ? captureJobFromRow(row) : null;
+  }
+
+  pending(): PhylaxCaptureJob[] {
+    return (this.db.prepare(
+      `SELECT tenant_id, channel, provider_message_id, sender, chat_id,
+              conversation_key, tool, job_id, state, receipt_text,
+              evidence_ref, delivered_at
+       FROM phylax_capture_jobs
+       WHERE state = 'polling'
+       ORDER BY created_at`,
+    ).all() as unknown as Record<string, unknown>[]).map(captureJobFromRow);
+  }
+
+  terminal(
+    job: PhylaxCaptureJob,
+    state: "done" | "error",
+    receiptText: string,
+    evidenceRef: string | null,
+  ): void {
+    const now = Date.now();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(
+        `UPDATE phylax_capture_jobs
+         SET state = ?, receipt_text = ?, evidence_ref = ?, updated_at = ?
+         WHERE tenant_id = ? AND channel = ? AND provider_message_id = ?`,
+      ).run(
+        state,
+        receiptText,
+        evidenceRef,
+        now,
+        job.tenantId,
+        job.channel,
+        job.providerMessageId,
+      );
+      if (state === "done" && evidenceRef) {
+        this.db.prepare(
+          `INSERT INTO phylax_capture_conversations (
+             tenant_id, conversation_key, evidence_ref, updated_at
+           ) VALUES (?, ?, ?, ?)
+           ON CONFLICT (tenant_id, conversation_key) DO UPDATE SET
+             evidence_ref = excluded.evidence_ref,
+             updated_at = excluded.updated_at`,
+        ).run(job.tenantId, job.conversationKey, evidenceRef, now);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  claimDelivery(job: PhylaxCaptureJob): boolean {
+    const result = this.db.prepare(
+      `UPDATE phylax_capture_jobs
+       SET delivered_at = ?, updated_at = ?
+       WHERE tenant_id = ? AND channel = ? AND provider_message_id = ?
+         AND delivered_at IS NULL`,
+    ).run(Date.now(), Date.now(), job.tenantId, job.channel, job.providerMessageId);
+    return Number(result.changes) === 1;
+  }
+
+  lastEvidenceRef(tenantId: string, conversationKey: string): string | null {
+    const row = this.db.prepare(
+      `SELECT evidence_ref FROM phylax_capture_conversations
+       WHERE tenant_id = ? AND conversation_key = ?`,
+    ).get(tenantId, conversationKey) as { evidence_ref?: unknown } | undefined;
+    return typeof row?.evidence_ref === "string" ? row.evidence_ref : null;
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}
+
+function captureJobFromRow(row: Record<string, unknown>): PhylaxCaptureJob {
+  return {
+    tenantId: String(row.tenant_id),
+    channel: row.channel === "telegram" ? "telegram" : "whatsapp",
+    providerMessageId: String(row.provider_message_id),
+    sender: String(row.sender),
+    chatId: String(row.chat_id),
+    conversationKey: String(row.conversation_key),
+    tool: String(row.tool),
+    jobId: String(row.job_id),
+    state: row.state === "done" ? "done" : row.state === "error" ? "error" : "polling",
+    receiptText: typeof row.receipt_text === "string" ? row.receipt_text : null,
+    evidenceRef: typeof row.evidence_ref === "string" ? row.evidence_ref : null,
+    deliveredAt: typeof row.delivered_at === "number" ? row.delivered_at : null,
+  };
+}
+
+function captureTurnType(input: PhylaxChannelInbound): PhylaxTurnType {
+  if (input.transcription || (input.media && isAudioMedia(input.media))) return "voice_note";
+  return input.media ? "media" : "text";
+}
+
+function valueFromBindingSource(
+  source: PhylaxBindingArgumentSource,
+  input: {
+    transcript: string;
+    sender: string;
+    chatId: string;
+    message: string;
+    surface: "whatsapp" | "mcp";
+    conversationKey: string;
+  },
+): unknown {
+  switch (source.source) {
+    case "transcript": return input.transcript;
+    case "sender": return input.sender;
+    case "chatId": return input.chatId;
+    case "constant": return source.value;
+    case "message": return input.message;
+    case "surface": return input.surface;
+    case "conversationKey": return input.conversationKey;
+  }
+}
+
+function acceptedJobId(result: PeerToolResult): string | null {
+  const structured = objectValue(result.structuredContent);
+  const candidate = structured?.ticket_id ?? structured?.jobId;
+  return typeof candidate === "string" && candidate.trim() ? candidate.trim() : null;
+}
+
+function jobState(result: PeerToolResult): string | null {
+  const structured = objectValue(result.structuredContent);
+  const candidate = structured?.state ?? structured?.status;
+  return typeof candidate === "string" ? candidate.toLowerCase() : null;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+    : [];
+}
+
+function terminalCaptureReceipt(result: PeerToolResult): {
+  state: "done" | "error";
+  text: string;
+  evidenceRef: string | null;
+} | null {
+  const state = jobState(result);
+  if (!state || !["done", "error", "interrupted"].includes(state)) return null;
+  const structured = objectValue(result.structuredContent);
+  const payload = objectValue(structured?.result);
+  if (state !== "done" || result.isError || !payload) {
+    const error = objectValue(structured?.error);
+    const message = typeof error?.message === "string"
+      ? error.message
+      : textFromResult(result) || "The memory filing job failed.";
+    return {
+      state: "error",
+      text: `⚠️ I could not save that memory: ${message}`,
+      evidenceRef: null,
+    };
+  }
+  const evidenceRef = typeof payload.evidenceRef === "string" && payload.evidenceRef.trim()
+    ? payload.evidenceRef.trim()
+    : null;
+  const evidenceUrl = typeof payload.evidenceUrl === "string" ? payload.evidenceUrl : null;
+  const pages = stringArray(payload.pagesTouched);
+  const pageUrls = stringArray(payload.pageUrls);
+  const commitSha = typeof payload.commitSha === "string" ? payload.commitSha : null;
+  const githubUrls = stringArray(payload.githubUrls);
+  const question = typeof payload.question === "string" && payload.question.trim()
+    ? payload.question.trim()
+    : null;
+  const recap = typeof payload.recap === "string" && payload.recap.trim()
+    ? payload.recap.trim()
+    : "Your memory has been filed.";
+  const filed = pages.map((page, index) => pageUrls[index] ? `${page} (${pageUrls[index]})` : page);
+  const commitUrl = githubUrls.find((url) => commitSha ? url.includes(commitSha) : false)
+    ?? githubUrls[0]
+    ?? null;
+  return {
+    state: "done",
+    evidenceRef,
+    text: [
+      "Saved ✓",
+      `Recap: ${recap}`,
+      ...(filed.length > 0 ? [`Filed: ${filed.join(", ")}`] : []),
+      ...(evidenceRef ? [`Evidence: ${evidenceUrl ? `${evidenceRef} (${evidenceUrl})` : evidenceRef}`] : []),
+      ...(commitSha ? [`Commit: ${commitUrl ? `${commitSha} (${commitUrl})` : commitSha}`] : []),
+      ...(question ? [`Question: ${question}`] : []),
+      "Reply to this message to discuss or act on it.",
+    ].join("\n"),
+  };
+}
+
 export class PhylaxChannelsOrgan {
+  private readonly captureJournal: PhylaxCaptureJournal;
+  private terminalReceiptDelivery: PhylaxTerminalReceiptDelivery | null = null;
+  private readonly backgroundPolls = new Map<string, Promise<void>>();
+  private closing = false;
+
   constructor(
     private readonly options: {
       dataDir: string;
       routes: PhylaxTenantRouteResolver;
       transcriber?: PhylaxChannelTranscriber;
       callDownstream?: PhylaxDownstreamCaller;
+      discoverDownstream?: PhylaxDownstreamDiscoverer;
       artifactUrl?: (tenantId: string, artifactId: string) => string;
       transcriptionDeadlineMs?: number;
       voiceJobDeadlineMs?: number;
+      captureForegroundDeadlineMs?: number;
+      capturePollIntervalMs?: number;
+      sleep?: (milliseconds: number) => Promise<void>;
     },
-  ) {}
+  ) {
+    this.captureJournal = new PhylaxCaptureJournal(options.dataDir);
+  }
+
+  setTerminalReceiptDelivery(delivery: PhylaxTerminalReceiptDelivery): void {
+    this.terminalReceiptDelivery = delivery;
+  }
+
+  lastCaptureEvidenceRef(tenantId: string, conversationKey: string): string | null {
+    return this.captureJournal.lastEvidenceRef(tenantId, conversationKey);
+  }
+
+  async resumePendingCaptures(): Promise<void> {
+    for (const job of this.captureJournal.pending()) {
+      this.startBackgroundPoll(job);
+    }
+  }
+
+  async close(): Promise<void> {
+    this.closing = true;
+    await Promise.allSettled(this.backgroundPolls.values());
+    this.captureJournal.close();
+  }
+
+  private callDownstream(call: PhylaxDownstreamCall): Promise<PeerToolResult> {
+    return (this.options.callDownstream ?? callConfiguredPeer)(call);
+  }
+
+  private discoverDownstream(route: PhylaxTenantRoute): Promise<PeerDiscoveryResult> {
+    return (this.options.discoverDownstream ?? discoverConfiguredPeer)(route);
+  }
+
+  private async validateBoundCall(call: PhylaxDownstreamCall): Promise<void> {
+    const discovery = await this.discoverDownstream(call.route);
+    if (discovery.tools !== "ready") {
+      throw new Error(`downstream schema discovery failed: ${discovery.error ?? "tools/list unavailable"}`);
+    }
+    const spec = discovery.specs.find((candidate) => candidate.mcp === call.tool);
+    if (!spec) throw new Error(`configured tool "${call.tool}" is not advertised by the tenant downstream`);
+    const schema = typeof spec.inputSchema === "object" ? spec.inputSchema : { type: "object" };
+    const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
+    if (!validate(call.arguments)) {
+      const detail = validate.errors
+        ?.map((error: { instancePath: string; message?: string }) =>
+          `${error.instancePath || "/"} ${error.message ?? "is invalid"}`)
+        .join("; ");
+      throw new Error(`configured mapping no longer matches "${call.tool}" input schema${detail ? `: ${detail}` : ""}`);
+    }
+  }
+
+  private async pollCapture(
+    job: PhylaxCaptureJob,
+    route: PhylaxTenantRoute,
+    handoff: PhylaxDownstreamCall["handoff"],
+    deadlineAt: number | null,
+  ): Promise<{ result: PeerToolResult; receipt: ReturnType<typeof terminalCaptureReceipt> } | null> {
+    const interval = Math.max(1, this.options.capturePollIntervalMs ?? DEFAULT_CAPTURE_POLL_INTERVAL_MS);
+    const sleep = this.options.sleep ?? ((milliseconds: number) =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, milliseconds);
+        timer.unref?.();
+      }));
+    for (;;) {
+      if (this.closing) return null;
+      if (deadlineAt !== null && Date.now() >= deadlineAt) return null;
+      const result = await this.callDownstream({
+        route,
+        tool: "get_task_result",
+        arguments: { ticket_id: job.jobId },
+        handoff,
+      });
+      const terminal = terminalCaptureReceipt(result);
+      if (terminal) {
+        this.captureJournal.terminal(job, terminal.state, terminal.text, terminal.evidenceRef);
+        return { result, receipt: terminal };
+      }
+      if (result.isError) {
+        const failed = terminalCaptureReceipt({
+          ...result,
+          structuredContent: {
+            ...(objectValue(result.structuredContent) ?? {}),
+            state: "error",
+          },
+        });
+        if (!failed) throw new Error("capture poll failed");
+        this.captureJournal.terminal(job, "error", failed.text, null);
+        return { result, receipt: failed };
+      }
+      await sleep(interval);
+    }
+  }
+
+  private startBackgroundPoll(job: PhylaxCaptureJob): void {
+    const key = `${job.tenantId}\0${job.channel}\0${job.providerMessageId}`;
+    if (this.backgroundPolls.has(key)) return;
+    const polling = (async () => {
+      try {
+        const route = await this.options.routes.resolve(job.channel, job.sender);
+        if (!route || route.tenantId !== job.tenantId) {
+          throw new Error("tenant route is unavailable while resuming capture");
+        }
+        const completed = await this.pollCapture(job, route, { sender: job.sender }, null);
+        if (!completed || !completed.receipt) return;
+        const current = this.captureJournal.get(job.tenantId, job.channel, job.providerMessageId);
+        if (!current || current.deliveredAt !== null || !this.terminalReceiptDelivery) return;
+        // W-P4 convention: claim the provider boundary durably before the send;
+        // a crash after this point is ambiguous and must not duplicate a reply.
+        if (!this.captureJournal.claimDelivery(job)) return;
+        await this.terminalReceiptDelivery(
+          job.channel,
+          job.channel === "telegram" ? job.chatId : job.sender,
+          completed.receipt.text,
+        );
+      } catch (error) {
+        console.error(`[phylax] capture poll ${job.jobId} failed:`, error);
+      }
+    })().finally(() => this.backgroundPolls.delete(key));
+    this.backgroundPolls.set(key, polling);
+  }
 
   private async reportDownstreamCredentialStatus(
     route: PhylaxTenantRoute,
@@ -487,16 +943,46 @@ export class PhylaxChannelsOrgan {
       ...(transcription.transcription_source ? { transcription_source: transcription.transcription_source } : {}),
       ...(transcription.transcription_timing ? { transcription_timing: transcription.transcription_timing } : {}),
     };
-    const call: PhylaxDownstreamCall = {
-      route,
-      tool: "chat_with_ring",
-      arguments: {
-        message: handoffEnvelope(handoff, text || "A channel artifact was received."),
-        surface: input.channel === "whatsapp" ? "whatsapp" : "mcp",
-        conversationKey: `${input.channel}:${sender}`,
-      },
-      handoff,
-    };
+    const message = handoffEnvelope(handoff, text || "A channel artifact was received.");
+    const surface = input.channel === "whatsapp" ? "whatsapp" : "mcp";
+    const conversationKey = `${input.channel}:${sender}`;
+    const turnType = captureTurnType(input);
+    const binding = route.turnBindings?.[turnType];
+    const call: PhylaxDownstreamCall = binding
+      ? {
+          route,
+          tool: binding.tool,
+          arguments: Object.fromEntries(
+            Object.entries(binding.argumentMappings).map(([field, source]) => [
+              field,
+              valueFromBindingSource(source, {
+                transcript: text,
+                sender,
+                chatId: input.chatId,
+                message,
+                surface,
+                conversationKey,
+              }),
+            ]),
+          ),
+          handoff,
+        }
+      : {
+          route,
+          tool: "chat_with_ring",
+          arguments: { message, surface, conversationKey },
+          handoff,
+        };
+    if (call.tool === "store_memory") {
+      const providerMessageId = input.messageId?.trim();
+      if (!providerMessageId) {
+        throw new PhylaxChannelError(
+          "invalid_input",
+          "provider messageId is required for an idempotent memory capture",
+        );
+      }
+      call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
+    }
     const failureAudit = (
       downstreamMs: number,
       failureCode: PhylaxFailureAudit["failureCode"],
@@ -521,9 +1007,114 @@ export class PhylaxChannelsOrgan {
     });
     const downstreamStartedAt = Date.now();
     let downstream: PeerToolResult;
+    let backgroundCaptureJob: PhylaxCaptureJob | null = null;
     try {
-      downstream = await (this.options.callDownstream ?? callRing)(call);
+      if (binding) {
+        try {
+          await this.validateBoundCall(call);
+        } catch (error) {
+          throw new PhylaxChannelError(
+            "downstream_error",
+            error instanceof Error ? error.message : "tenant binding schema validation failed",
+            failureAudit(
+              Math.max(0, Date.now() - downstreamStartedAt),
+              "downstream_schema_drift",
+            ),
+          );
+        }
+      }
+      const providerMessageId = input.messageId?.trim();
+      const existing = call.tool === "store_memory" && providerMessageId
+        ? this.captureJournal.get(route.tenantId, input.channel, providerMessageId)
+        : null;
+      if (existing?.state === "done" && existing.receiptText) {
+        downstream = {
+          content: [{ type: "text", text: existing.receiptText }],
+          structuredContent: {
+            ticket_id: existing.jobId,
+            jobId: existing.jobId,
+            state: "done",
+            result: {
+              ...(existing.evidenceRef ? { evidenceRef: existing.evidenceRef } : {}),
+            },
+          },
+        };
+      } else if (existing?.state === "error" && existing.receiptText) {
+        downstream = {
+          isError: true,
+          content: [{ type: "text", text: existing.receiptText }],
+          structuredContent: {
+            ticket_id: existing.jobId,
+            jobId: existing.jobId,
+            state: "error",
+            error: { code: "job_failed", message: existing.receiptText },
+          },
+        };
+      } else if (existing) {
+        const deadline = Date.now() + Math.max(
+          1,
+          this.options.captureForegroundDeadlineMs ?? DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS,
+        );
+        const completed = await this.pollCapture(existing, route, handoff, deadline);
+        if (completed?.receipt) {
+          downstream = {
+            ...completed.result,
+            content: [{ type: "text", text: completed.receipt.text }],
+            ...(completed.receipt.state === "error" ? { isError: true } : {}),
+          };
+        } else {
+          downstream = {
+            content: [{ type: "text", text: CAPTURE_PENDING_REPLY }],
+            structuredContent: {
+              ticket_id: existing.jobId,
+              jobId: existing.jobId,
+              state: "polling",
+            },
+          };
+          backgroundCaptureJob = existing;
+        }
+      } else {
+        downstream = await this.callDownstream(call);
+        const jobId = call.tool === "store_memory" && !downstream.isError
+          ? acceptedJobId(downstream)
+          : null;
+        if (call.tool === "store_memory" && !downstream.isError && !jobId) {
+          throw new Error("store_memory returned no canonical ticket_id; capture cannot be polled safely");
+        }
+        if (jobId && providerMessageId) {
+          // Synchronous SQLite commit happens before the first await/poll.
+          const job = this.captureJournal.accepted({
+            tenantId: route.tenantId,
+            channel: input.channel,
+            providerMessageId,
+            sender,
+            chatId: input.chatId,
+            conversationKey,
+            tool: call.tool,
+            jobId,
+          });
+          const deadline = Date.now() + Math.max(
+            1,
+            this.options.captureForegroundDeadlineMs ?? DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS,
+          );
+          const completed = await this.pollCapture(job, route, handoff, deadline);
+          if (completed?.receipt) {
+            downstream = {
+              ...completed.result,
+              content: [{ type: "text", text: completed.receipt.text }],
+              ...(completed.receipt.state === "error" ? { isError: true } : {}),
+            };
+          } else {
+            downstream = {
+              ...downstream,
+              content: [{ type: "text", text: CAPTURE_PENDING_REPLY }],
+            };
+            backgroundCaptureJob = job;
+          }
+        }
+      }
     } catch (error) {
+      if (error instanceof PhylaxChannelError) throw error;
       const failureCode = downstreamFailureCode(error);
       if (failureCode === "downstream_unauthorized") {
         await this.reportDownstreamCredentialStatus(route, "rejected");
@@ -586,6 +1177,9 @@ export class PhylaxChannelsOrgan {
         downstream_url: safeDownstreamOrigin(route),
         downstream_identity: safeDownstreamDestination(route),
       }],
+      ...(backgroundCaptureJob
+        ? { afterReply: () => this.startBackgroundPoll(backgroundCaptureJob) }
+        : {}),
     };
   }
 
@@ -650,14 +1244,22 @@ function downstreamCredentialRejectedError(audit: PhylaxFailureAudit): PhylaxCha
     audit,
   );
 }
-async function callRing(call: PhylaxDownstreamCall): Promise<PeerToolResult> {
+function configuredPeer(route: PhylaxTenantRoute) {
+  return {
+    name: `phylax-memory-${route.tenantId}`,
+    url: route.downstreamUrl,
+    token: route.downstreamToken,
+    wallet: false,
+  } as const;
+}
+
+async function discoverConfiguredPeer(route: PhylaxTenantRoute): Promise<PeerDiscoveryResult> {
+  return discoverPeerTools(configuredPeer(route));
+}
+
+async function callConfiguredPeer(call: PhylaxDownstreamCall): Promise<PeerToolResult> {
   return callPeerTool(
-    {
-      name: `ring-${call.route.tenantId}`,
-      url: call.route.downstreamUrl,
-      token: call.route.downstreamToken,
-      wallet: false,
-    },
+    configuredPeer(call.route),
     call.tool,
     call.arguments,
   );

@@ -293,6 +293,7 @@ export class PhylaxPortedRuntime {
         }
         return {
           replyText: forwarded.replyText,
+          ...(forwarded.afterReply ? { afterReply: forwarded.afterReply } : {}),
           timing: {
             mediaDownloadMs: timing.mediaDownloadMs,
             transcriptionQueueWaitMs: forwarded.timing.transcriptionQueueWaitMs,
@@ -325,9 +326,19 @@ export class PhylaxPortedRuntime {
               }
             : {}),
         });
-        return { replyText: forwarded.replyText };
+        return {
+          replyText: forwarded.replyText,
+          ...(forwarded.afterReply ? { afterReply: forwarded.afterReply } : {}),
+        };
       },
       ...(adapters.telegramFetch ? { fetchImpl: adapters.telegramFetch } : {}),
+    });
+    this.organ.setTerminalReceiptDelivery(async (channel, recipient, text) => {
+      if (channel === "whatsapp") {
+        await this.whatsapp.sendText(recipient, text);
+      } else {
+        await this.telegram.sendText(recipient, text);
+      }
     });
     queueMicrotask(() => this.kickVoiceWorker());
   }
@@ -433,6 +444,7 @@ export class PhylaxPortedRuntime {
         this.whatsappStore.reconcileVoiceCoalescedFollowers(job.providerMessageId);
         this.whatsappStore.completeVoiceRingHandoff(job.providerMessageId, result.replyText);
         await this.whatsapp.drainMediaRecovery();
+        result.afterReply?.();
       } catch (error) {
         const current = this.whatsappStore.voiceJob(job.providerMessageId);
         if (current?.state === "cancelled") continue;
@@ -460,6 +472,7 @@ export class PhylaxPortedRuntime {
     this.startEventLoopHeartbeat();
     await this.whatsapp.startIfEnabled();
     await this.telegram.startIfEnabled();
+    await this.organ.resumePendingCaptures();
   }
 
   workerHealth(now = Date.now()): {
@@ -537,6 +550,11 @@ export class PhylaxPortedRuntime {
     }
     try {
       this.state.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await this.organ.close();
     } catch (error) {
       failures.push(error);
     }
