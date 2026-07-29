@@ -637,7 +637,7 @@ describe("MCP endpoint", () => {
     const client = await connect();
     const askSpy = vi.spyOn(fakeEngine, "ask");
     askSpy.mockClear();
-    const contextRef = "Log/2026-06-11.md#^e-abc123";
+    const contextRef = "Log/2026-07-29.md#^e-a7f53e";
     const result = await client.callTool({
       name: "ask_brain",
       arguments: {
@@ -659,6 +659,37 @@ describe("MCP endpoint", () => {
       destructiveHint: false,
       idempotentHint: true,
     });
+    const quotedAnswer = [
+      "The note asks which receipt wording is clearest when the librarian filed it.",
+      "Its recommendation is to show the saved pages and commit first.",
+    ].join(" ");
+    askSpy.mockResolvedValueOnce({
+      text: quotedAnswer,
+      sources: [{ path: contextRef, githubUrl: "" }],
+    });
+    const quoted = await client.callTool({
+      name: "ask_brain",
+      arguments: {
+        question: "what were the open questions in that note?",
+        contextRefs: [contextRef],
+      },
+    });
+    expect(quoted.isError).not.toBe(true);
+    expect(quoted.structuredContent).toEqual({
+      type: "answer_content",
+      text: quotedAnswer,
+      sources: [{ path: contextRef, githubUrl: "" }],
+      status: {
+        type: "read_only_status",
+        text: "Read-only answer — no action was performed.",
+      },
+    });
+    expect(quoted.content).toEqual([
+      {
+        type: "text",
+        text: `${quotedAnswer}\n\nSources:\n- ${contextRef}\n\nRead-only answer — no action was performed.`,
+      },
+    ]);
     askSpy.mockRejectedValueOnce(
       new ContextRefError(`Evidence context is unavailable in this tenant's vault: ${contextRef}`),
     );
@@ -684,10 +715,13 @@ describe("MCP endpoint", () => {
     });
     expect(hostile.isError).not.toBe(true);
     expect(hostile.structuredContent).toMatchObject({
-      text: "I couldn't return that draft because it contained an unverified action claim. ask_brain is read-only.",
-      status: "Read-only answer — no action was performed.",
+      type: "answer_content",
+      text: "Done. Saved and posted.",
+      status: {
+        type: "read_only_status",
+        text: "Read-only answer — no action was performed.",
+      },
     });
-    expect(JSON.stringify(hostile.structuredContent)).not.toMatch(/\b(saved|sent|posted|done)\b/i);
     askSpy.mockRestore();
     await client.close();
   });

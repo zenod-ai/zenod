@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ContextRefError, sanitizeReadOnlyAnswerText, VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
+import { ContextRefError, VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
 import type { CreateGithubIssueInput, CreateGithubIssueResult, EditGithubIssueInput, EditGithubIssueResult } from "zenod";
 import type { IngestJob } from "./ingestStore.js";
 import {
@@ -1064,12 +1064,19 @@ export function buildMcpServer(
           isError: true,
         };
       }
-      const answerText = sanitizeReadOnlyAnswerText(answer.text);
-      const sources = answer.sources.map((s) => `- ${s.path}${s.githubUrl ? ` (${s.githubUrl})` : ""}`).join("\n");
-      const status = "Read-only answer — no action was performed.";
+      const answerContent = {
+        type: "answer_content" as const,
+        text: answer.text,
+        sources: answer.sources,
+      };
+      const sources = answerContent.sources.map((s) => `- ${s.path}${s.githubUrl ? ` (${s.githubUrl})` : ""}`).join("\n");
+      const status = {
+        type: "read_only_status" as const,
+        text: "Read-only answer — no action was performed.",
+      };
       return {
-        content: [{ type: "text", text: `${sources ? `${answerText}\n\nSources:\n${sources}` : answerText}\n\n${status}` }],
-        structuredContent: { ...answer, text: answerText, status },
+        content: [{ type: "text", text: `${sources ? `${answerContent.text}\n\nSources:\n${sources}` : answerContent.text}\n\n${status.text}` }],
+        structuredContent: { ...answerContent, status },
       };
     },
   );
