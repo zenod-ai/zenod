@@ -9,7 +9,7 @@ GitHub issues: `https://github.com/zenod-ai/zenod/issues`
 Integration branch: main
 Active spine steward: `/root` planner
 Steward since: 2026-07-29 15:00 CEST
-Last reconciled commit: `9e64f392e1329e3651374511b7351925dec5f4e0`
+Last reconciled commit: `cb7b966b1092f566c4af62f25ec4260d5075ec49`
 Planner: `/root`
 Worker: unassigned until Jordi launches agents
 Tester: `/root` plus real human web-chat and WhatsApp journey walker
@@ -95,11 +95,11 @@ Make Ring simple and truthful for ordinary human chat, especially WhatsApp voice
 
 ## Current State
 
-Phase: planning
-Last verified: 2026-07-29 15:00 CEST
+Phase: planning review
+Last verified: 2026-07-29 15:20 CEST
 Integration target: main
 Fresh base commit: `9e64f392e1329e3651374511b7351925dec5f4e0`
-Next action: land this planning-only spine, transfer stewardship to the launched epic worker, then dispatch Wave 1 from a fresh `origin/main`.
+Next action: review and land planning PR [#989](https://github.com/zenod-ai/zenod/pull/989), transfer stewardship to the launched epic worker, then dispatch Wave 1 from a fresh `origin/main`.
 Blockers: no planning blocker; implementation agents are intentionally not launched in this turn.
 
 The current production failure is cross-layer but has two distinct causes:
@@ -294,7 +294,7 @@ If there is no matching terminal receipt, that success reply is impossible. The 
 ## Branch And Integration
 
 - Default integration branch: `main`.
-- Planning branch: `codex/ring-intent-voice-spine`, created in `/Users/jordi/Documents/GitHub/zenod-ring-intent-voice-spine` from exact `origin/main` SHA `9e64f392e1329e3651374511b7351925dec5f4e0`.
+- Planning branch: `codex/ring-intent-voice-spine`, created in `/Users/jordi/Documents/GitHub/zenod-ring-intent-voice-spine` from exact `origin/main` SHA `9e64f392e1329e3651374511b7351925dec5f4e0`; draft PR [#989](https://github.com/zenod-ai/zenod/pull/989).
 - The shared checkout is not an implementation surface. Do not checkout branches there, discard its edits, or mix its untracked evidence into ticket commits.
 - Worker isolation: one ticket worker per dedicated `codex/*` branch and separate worktree.
 - Every worker fetches fresh `origin/main`, records the exact base in its issue, then creates the worktree. Later waves base on the latest reviewed integrated SHA recorded by the steward.
@@ -361,7 +361,7 @@ Takeover rules:
 | 2026-07-29 | Planning base | `9e64f392e1329e3651374511b7351925dec5f4e0` | local isolated worktree | `git fetch origin main && git rev-parse origin/main` | pass | Exact base recorded before branch/worktree creation |
 | 2026-07-29 | Existing issue overlap audit | n/a | GitHub `zenod-ai/zenod` | Search mutation, voice-note, reconnect, prior #965/#972 and related issues | pass | New tickets are scoped follow-ups; earlier grammar/timeout fixes are not misrepresented as absent |
 | 2026-07-29 | GitHub ticket creation | n/a | GitHub | Connected app attempted first; 403; authenticated `gh issue create` fallback | pass | [#982](https://github.com/zenod-ai/zenod/issues/982), [#983](https://github.com/zenod-ai/zenod/issues/983), [#984](https://github.com/zenod-ai/zenod/issues/984), [#985](https://github.com/zenod-ai/zenod/issues/985), [#986](https://github.com/zenod-ai/zenod/issues/986), [#987](https://github.com/zenod-ai/zenod/issues/987), [#988](https://github.com/zenod-ai/zenod/issues/988) |
-| pending | Spine structure | planning branch | local isolated worktree | `python3 skills/epic-spine/scripts/validate_spine.py docs/EPIC-RING-INTENT-AND-VOICE-MEMORY.md --strict` | pending | Run before handoff |
+| 2026-07-29 | Spine structure | `cb7b966b1092f566c4af62f25ec4260d5075ec49` | local isolated worktree | `python3 skills/epic-spine/scripts/validate_spine.py docs/EPIC-RING-INTENT-AND-VOICE-MEMORY.md --strict` plus `git diff --check` | pass | Draft PR [#989](https://github.com/zenod-ai/zenod/pull/989) |
 | pending | RIV-7 clean journey | exact candidate SHA | Ring web chat + WhatsApp + connected MCPs | Nine journeys in #988 | pending | Screenshot/log test package |
 
 ## Handoff Journal
@@ -386,17 +386,17 @@ Links: `docs/EPIC-R-RING-SPRINT.md`, issues #982-#988.
 
 Context: The GitHub connector could read but returned 403 for issue creation, so the repository's authenticated GitHub CLI created the same seven tickets. Existing open/closed issues were searched first. #965 and #972 are treated as prior partial fixes and evidence; the new tickets address the broader typed-policy and lifecycle contracts rather than duplicating their narrow acceptance.
 
-Next: validate and publish this spine, then wait for Jordi to launch the epic worker and Wave 1 agents.
+Next: review and land draft PR #989, then wait for Jordi to launch the epic worker and Wave 1 agents.
 
 Risks: issue numbers are not sequential by dependency because parallel creation returned #983-#986 in completion order; the ledger and titles are authoritative.
 
 Assignment identity: `/root` planner.
 
-Branch / latest commit: `codex/ring-intent-voice-spine` at base `9e64f392e1329e3651374511b7351925dec5f4e0`.
+Branch / latest commit: `codex/ring-intent-voice-spine` / `cb7b966b1092f566c4af62f25ec4260d5075ec49`.
 
 Last verified: 2026-07-29 15:00 CEST.
 
-Links: [#982](https://github.com/zenod-ai/zenod/issues/982), [#985](https://github.com/zenod-ai/zenod/issues/985), [#984](https://github.com/zenod-ai/zenod/issues/984), [#983](https://github.com/zenod-ai/zenod/issues/983), [#986](https://github.com/zenod-ai/zenod/issues/986), [#987](https://github.com/zenod-ai/zenod/issues/987), [#988](https://github.com/zenod-ai/zenod/issues/988).
+Links: [#982](https://github.com/zenod-ai/zenod/issues/982), [#985](https://github.com/zenod-ai/zenod/issues/985), [#984](https://github.com/zenod-ai/zenod/issues/984), [#983](https://github.com/zenod-ai/zenod/issues/983), [#986](https://github.com/zenod-ai/zenod/issues/986), [#987](https://github.com/zenod-ai/zenod/issues/987), [#988](https://github.com/zenod-ai/zenod/issues/988), draft PR [#989](https://github.com/zenod-ai/zenod/pull/989).
 
 ## Open Questions
 
