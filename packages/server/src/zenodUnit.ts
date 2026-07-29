@@ -24,7 +24,6 @@ import { ChassisCredentialVault } from "./credentialVault.js";
 import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
-import { MEMORY_CHANNEL_MCP_TOOLS } from "./auth.js";
 import { Runtime } from "./runtime.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
@@ -38,6 +37,15 @@ import {
   ZENOD_SKILL_BUNDLE_PATH,
   zenodSkillBundle,
 } from "./zenodSkill.js";
+
+export const MEMORY_CHANNEL_MCP_TOOLS = Object.freeze([
+  "ask_brain",
+  "chat_with_zenod",
+  "get_task_result",
+  "ingest_memory",
+  "search_memory",
+  "store_memory",
+] as const);
 
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();

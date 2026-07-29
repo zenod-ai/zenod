@@ -640,6 +640,22 @@ export function requireTenantAuth(
   };
 }
 
+function requireUnprofiledTenantAuth(
+  options: TenantAuthOptions,
+): UnitAuthMiddleware {
+  const realm = options.realm?.trim() || "mcp-chassis";
+  return async (c, next) => {
+    const credential = await resolveAuthenticatedTenant(c, options);
+    if (credential?.profile === null) {
+      c.set("tenant", credential.tenant);
+      c.set("credentialProfile", null);
+      await next();
+      return;
+    }
+    return unauthorized(c, realm, options.oauthChallenge === true);
+  };
+}
+
 async function resolveAuthenticatedTenant(
   c: Context<UnitHonoEnv>,
   options: TenantAuthOptions,
@@ -765,7 +781,7 @@ async function resolveTenantToken(
 ): Promise<TenantTokenRecord | null> {
   if (!token) return null;
   const record = await store.resolveTokenHash(hashToken(token));
-  return record && isActive(record) ? record : null;
+  return record && isActive(record) && !record.profile?.trim() ? record : null;
 }
 
 type RequiredUiOptions = Required<
@@ -1210,8 +1226,16 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     throw new Error(
       "OAuth routes require tenantAuth so grants can bind to tenants",
     );
-  const auth = options.tenantAuth
+  const mcpAuth = options.tenantAuth
     ? requireTenantAuth({
+        ...options.tenantAuth,
+        ...(oauth?.serverEnabled
+          ? { oauth: oauth.store, oauthChallenge: true }
+          : {}),
+      })
+    : noopAuth();
+  const unprofiledTenantAuth = options.tenantAuth
+    ? requireUnprofiledTenantAuth({
         ...options.tenantAuth,
         ...(oauth?.serverEnabled
           ? { oauth: oauth.store, oauthChallenge: true }
@@ -1516,7 +1540,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       kit: oauth,
       tenantStore: options.tenantAuth.store,
       storage,
-      tenantAuth: auth,
+      tenantAuth: unprofiledTenantAuth,
     });
   }
 
@@ -1656,8 +1680,8 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     return RESPONSE_ALREADY_SENT;
   };
 
-  app.all("/mcp", auth, handleMcp);
-  app.all("/mcp/:token", auth, handleMcp);
+  app.all("/mcp", mcpAuth, handleMcp);
+  app.all("/mcp/:token", mcpAuth, handleMcp);
 
   if (options.routes) {
     const tenantAuth = options.tenantAuth;
@@ -1683,7 +1707,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
               return tenant ? { tenant, profile: null } : null;
             })()
           : null);
-      if (!credential) {
+      if (!credential || credential.profile !== null) {
         return unauthorized(
           c,
           tenantAuth.realm?.trim() || "mcp-chassis",

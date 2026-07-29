@@ -14,10 +14,10 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createZenodUnit,
+  MEMORY_CHANNEL_MCP_TOOLS,
   ZENOD_READ_TOOLS,
   ZenodRuntimePool,
 } from "../src/zenodUnit.js";
-import { MEMORY_CHANNEL_MCP_TOOLS } from "../src/auth.js";
 import { PeerSkillStore } from "../src/peerSkillStore.js";
 
 const tempDirs: string[] = [];
@@ -593,6 +593,22 @@ describe("Zenod chassis unit", () => {
     };
     const alphaScoped = await issue("tenant-alpha");
     const betaScoped = await issue("tenant-beta");
+    const scopedSettings = await unit.app.request("/api/settings", {
+      headers: { authorization: `Bearer ${alphaScoped}` },
+    });
+    const scopedTokenRotation = await unit.app.request(
+      "/api/token/regenerate",
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${alphaScoped}` },
+      },
+    );
+    const primarySettings = await unit.app.request("/api/settings", {
+      headers: { authorization: "Bearer alpha-primary-token" },
+    });
+    expect(scopedSettings.status).toBe(401);
+    expect(scopedTokenRotation.status).toBe(401);
+    expect(primarySettings.status).toBe(200);
     const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
       const started = serve(
         { fetch: unit.app.fetch, port: 0 },

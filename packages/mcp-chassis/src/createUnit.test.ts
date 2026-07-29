@@ -896,6 +896,7 @@ describe("createUnit", () => {
       tenantAuth: { store: tenants },
       storage: { dataDir, vaultEncryptionKey: TEST_VAULT_KEY },
       controlPlane: { store: tenants, token: "control-secret" },
+      ui: { sessionSecret: "profile-route-session-secret" },
       toolProfiles: { "memory-channel": ["read_memory"] },
       conduct: { toolKinds: { read: ["read_memory"] } },
       tools(server) {
@@ -905,6 +906,11 @@ describe("createUnit", () => {
         server.registerTool("full_surface", {}, async () => ({
           content: [{ type: "text", text: "full surface" }],
         }));
+      },
+      routes(routes) {
+        routes.post("/api/danger", (c) =>
+          c.json({ ok: true, tenant: c.get("unitContext").tenant }),
+        );
       },
     });
     const base = await listen(unit.app);
@@ -937,6 +943,42 @@ describe("createUnit", () => {
       mcpPath: `/mcp/${first.token}`,
     });
     expect(first.token).toMatch(/^zenod_[a-f0-9]{48}$/);
+
+    const profiledApi = await fetch(`${base}/api/danger`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${first.token}` },
+    });
+    expect(profiledApi.status).toBe(401);
+    const profiledUiBearer = await fetch(`${base}/api/settings`, {
+      headers: { authorization: `Bearer ${first.token}` },
+    });
+    expect(profiledUiBearer.status).toBe(401);
+    const profiledLogin = await fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: first.token }),
+    });
+    expect(profiledLogin.status).toBe(401);
+    expect(profiledLogin.headers.get("set-cookie")).toBeNull();
+
+    const primaryApi = await fetch(`${base}/api/danger`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${tenant.token}` },
+    });
+    expect(primaryApi.status).toBe(200);
+    const primaryLogin = await fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: tenant.token }),
+    });
+    expect(primaryLogin.status).toBe(200);
+    const sessionCookie = primaryLogin.headers.get("set-cookie")?.split(";")[0];
+    expect(sessionCookie).toBeTruthy();
+    const sessionApi = await fetch(`${base}/api/danger`, {
+      method: "POST",
+      headers: { cookie: sessionCookie ?? "" },
+    });
+    expect(sessionApi.status).toBe(200);
 
     const primaryList = await listTools(
       base,
@@ -1970,6 +2012,23 @@ describe("createUnit", () => {
       resource: `${base}/mcp`,
       scope: "mcp",
     };
+    const scopedToken = tenants.provisionTenantToken(
+      "tenant-one",
+      "memory-channel",
+    )!.token;
+    const scopedDecision = await fetch(
+      `${base}/oauth/authorize/decision`,
+      {
+        method: "POST",
+        redirect: "manual",
+        body: formBody({
+          ...authorizeParams,
+          token: scopedToken,
+          decision: "approve",
+        }),
+      },
+    );
+    expect(scopedDecision.status).toBe(401);
 
     const decision = await fetch(`${base}/oauth/authorize/decision`, {
       method: "POST",
@@ -2031,6 +2090,18 @@ describe("createUnit", () => {
       },
     });
     const base = await listen(unit.app);
+    const profiledToken = tenants.provisionTenantToken(
+      "tenant-one",
+      "memory-channel",
+    )!.token;
+    const profiledStart = await fetch(
+      `${base}/api/oauth/providers/demo/start`,
+      {
+        redirect: "manual",
+        headers: { authorization: `Bearer ${profiledToken}` },
+      },
+    );
+    expect(profiledStart.status).toBe(401);
 
     const start = await fetch(`${base}/api/oauth/providers/demo/start`, {
       redirect: "manual",
