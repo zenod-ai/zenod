@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Ajv as AjvDraft7 } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { z } from "zod";
 import {
@@ -860,7 +861,17 @@ export class PhylaxChannelsOrgan {
     const spec = discovery.specs.find((candidate) => candidate.mcp === call.tool);
     if (!spec) throw new Error(`configured tool "${call.tool}" is not advertised by the tenant downstream`);
     const schema = typeof spec.inputSchema === "object" ? spec.inputSchema : { type: "object" };
-    const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
+    const dialect = "$schema" in schema && typeof schema.$schema === "string"
+      ? schema.$schema
+      : "";
+    const isDraft7 = /^https?:\/\/json-schema\.org\/draft-07\/schema#?$/.test(dialect);
+    const validator = isDraft7
+      ? new AjvDraft7({ allErrors: true, strict: false })
+      : new Ajv2020({ allErrors: true, strict: false });
+    const validationSchema = isDraft7
+      ? { ...schema, $schema: "http://json-schema.org/draft-07/schema#" }
+      : schema;
+    const validate = validator.compile(validationSchema);
     if (!validate(call.arguments)) {
       const detail = validate.errors
         ?.map((error: { instancePath: string; message?: string }) =>
