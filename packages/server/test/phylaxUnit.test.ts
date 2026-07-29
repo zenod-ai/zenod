@@ -390,6 +390,8 @@ describe("Phylax customer unit mount", () => {
     unit.phylaxTenantSettings.update("tenant-alpha", {
       downstreamUrl: "https://memory.test/mcp",
       downstreamToken: "tenant-alpha-memory-scope",
+      assistantUrl: "https://ring.test/mcp",
+      assistantToken: "tenant-alpha-assistant-scope",
       voiceDefault: "assistant",
     });
 
@@ -518,6 +520,10 @@ describe("Phylax customer unit mount", () => {
         transcription: { text_transcript: "What did I save?" },
       });
       expect(assistant.replyText).toBe("Assistant answer.");
+      expect(peerMocks.callPeerTool.mock.calls[0]?.[0]).toMatchObject({
+        url: "https://ring.test/mcp",
+        token: "tenant-alpha-assistant-scope",
+      });
       expect(peerMocks.callPeerTool.mock.calls[0]?.[1]).toBe("chat_with_ring");
       expect(peerMocks.callPeerTool.mock.calls[0]?.[2]).toEqual({
         message: "What did I save?",
@@ -532,6 +538,10 @@ describe("Phylax customer unit mount", () => {
         chatId: "chat-alpha",
         messageId: "capture-voice-1",
         transcription: { text_transcript: "Remember the launch sequence." },
+      });
+      expect(peerMocks.callPeerTool.mock.calls[1]?.[0]).toMatchObject({
+        url: "https://memory.test/mcp",
+        token: "tenant-alpha-memory-scope",
       });
       expect(peerMocks.callPeerTool.mock.calls[1]?.[1]).toBe("store_memory");
       expect(peerMocks.callPeerTool.mock.calls[1]?.[2]).toEqual({

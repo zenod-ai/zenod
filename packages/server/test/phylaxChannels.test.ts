@@ -57,6 +57,8 @@ describe("PhylaxChannelsOrgan", () => {
       tenantId: "alpha",
       downstreamUrl: "https://zenod.test/mcp/memory",
       downstreamToken: "memory-scope-only",
+      assistantUrl: "https://ring.test/mcp/assistant",
+      assistantToken: "assistant-scope-only",
       turnBindings: {
         voice_note: {
           tool: "store_memory",
@@ -896,6 +898,8 @@ describe("PhylaxChannelsOrgan", () => {
       tenantId: "alpha",
       downstreamUrl: "https://zenod.test/mcp/memory",
       downstreamToken: "memory-scope-only",
+      assistantUrl: "https://ring.test/mcp/assistant",
+      assistantToken: "assistant-scope-only",
       turnBindings: {
         voice_note: {
           tool: "store_memory",
@@ -2331,6 +2335,94 @@ describe("ported gateway integration", () => {
     } finally {
       runtime.close();
     }
+  });
+
+  it("routes text and receipt replies through the tenant assistant authority without widening memory capture", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-assistant-route-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const discoveries: Array<{ url: string; token: string }> = [];
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-scope-only",
+      assistantUrl: "https://ring.test/mcp/assistant",
+      assistantToken: "assistant-scope-only",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "transcript" as const } },
+        },
+        text: {
+          tool: "chat_with_ring",
+          argumentMappings: {
+            message: { source: "message" as const },
+            surface: { source: "surface" as const },
+            conversationKey: { source: "conversationKey" as const },
+          },
+        },
+        media: {
+          tool: "ingest_memory",
+          argumentMappings: { artifactUrl: { source: "artifactUrl" as const } },
+        },
+      },
+    };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      async discoverDownstream(candidate) {
+        discoveries.push({ url: candidate.downstreamUrl, token: candidate.downstreamToken });
+        return {
+          transport: "connected",
+          tools: "ready",
+          specs: [{
+            as: "ring",
+            mcp: "chat_with_ring",
+            arg: "input",
+            inputSchema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["message", "surface", "conversationKey"],
+              properties: {
+                message: { type: "string" },
+                surface: { type: "string" },
+                conversationKey: { type: "string" },
+              },
+            },
+            description: "Chat with Ring",
+          }],
+        };
+      },
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: "Council answer" }] };
+      },
+    });
+
+    const result = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-text-1",
+      text: "what were the open questions?",
+    });
+
+    expect(result.replyText).toBe("Council answer");
+    expect(discoveries).toEqual([{
+      url: "https://ring.test/mcp/assistant",
+      token: "assistant-scope-only",
+    }]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      route: {
+        tenantId: "alpha",
+        downstreamUrl: "https://ring.test/mcp/assistant",
+        downstreamToken: "assistant-scope-only",
+      },
+      tool: "chat_with_ring",
+    });
+    expect(JSON.stringify(calls)).not.toContain("memory-scope-only");
+    await organ.close();
   });
 
   it("queues one coalescing owner immediately, then sends one persisted Ring reply", async () => {
