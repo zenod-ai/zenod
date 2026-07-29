@@ -302,7 +302,7 @@ export class Runtime {
     // polls — the same durable-queue + boot-recovery shape as ingest. The store
     // constructor marks any job left mid-flight by a restart as "interrupted";
     // resume() then drains anything still queued.
-    this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"));
+    this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"), options.tenantId ?? "standalone");
     this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine(), this.settings);
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
@@ -2114,6 +2114,11 @@ export class Runtime {
     const failures: unknown[] = [];
     for (const result of await Promise.allSettled([this.whatsapp.close(), this.telegram.close()])) {
       if (result.status === "rejected") failures.push(result.reason);
+    }
+    try {
+      await this.taskJobQueue.close();
+    } catch (error) {
+      failures.push(error);
     }
     const close = (operation: () => void): void => {
       try {

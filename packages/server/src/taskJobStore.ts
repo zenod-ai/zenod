@@ -28,6 +28,7 @@ const IN_FLIGHT_STATE = "running" as const;
 // it to completion with the normal receipt — bounded so a job that keeps crashing the
 // server eventually fails honestly instead of looping forever.
 const MAX_STORE_RESUME_ATTEMPTS = 3;
+export const TASK_JOB_LEASE_MS = 4 * 60_000;
 
 export interface TaskJobInput {
   /** task: the instruction sent through the shared tasking loop. */
@@ -146,12 +147,19 @@ export interface TaskJobPatch {
 
 export class TaskJobStore {
   private readonly db: DatabaseSync;
+  private readonly tenantId: string;
+  private readonly ownerId = randomUUID();
 
-  constructor(path: string, now: () => number = Date.now) {
+  constructor(path: string, tenantId = "standalone", now: () => number = Date.now) {
+    const normalizedTenantId = tenantId.trim();
+    if (!normalizedTenantId) throw new Error("TaskJobStore tenantId must not be empty");
+    this.tenantId = normalizedTenantId;
     this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS task_jobs (
         id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL DEFAULT 'standalone',
+        idempotency_key TEXT,
         kind TEXT NOT NULL,
         input_json TEXT NOT NULL DEFAULT '{}',
         status TEXT NOT NULL,
@@ -160,23 +168,55 @@ export class TaskJobStore {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
-      CREATE INDEX IF NOT EXISTS task_jobs_status ON task_jobs(status, created_at);
     `);
-    // C-27 migration: the resume-attempt counter (older DBs won't have it).
-    try {
-      this.db.exec(`ALTER TABLE task_jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`);
-    } catch {
-      // column already exists
+    const migrations = [
+      `ALTER TABLE task_jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE task_jobs ADD COLUMN tenant_id TEXT`,
+      `ALTER TABLE task_jobs ADD COLUMN idempotency_key TEXT`,
+      `ALTER TABLE task_jobs ADD COLUMN owner_id TEXT`,
+      `ALTER TABLE task_jobs ADD COLUMN lease_expires_at INTEGER`,
+    ];
+    for (const migration of migrations) {
+      try {
+        this.db.exec(migration);
+      } catch {
+        // column already exists
+      }
     }
-    // C-27 / #580 — a restart killed any in-flight loop. WRITE jobs (kind 'store' — vault
-    // filing + add_memory) must never be lost: RE-QUEUE them so the worker resumes/retries
-    // to completion with the normal receipt, bounded by MAX_STORE_RESUME_ATTEMPTS.
+    // A legacy database belongs to the runtime opening it. New writes always set
+    // tenant_id explicitly; this backfill is only for rows predating D14.
+    this.db.prepare(`UPDATE task_jobs SET tenant_id=? WHERE tenant_id IS NULL OR tenant_id=''`).run(this.tenantId);
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS task_jobs_tenant_status
+        ON task_jobs(tenant_id, status, created_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS task_jobs_tenant_idempotency
+        ON task_jobs(tenant_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL;
+    `);
+    this.recoverExpiredRunning(now());
+  }
+
+  /**
+   * Recover only claims whose owner lease has expired. A rolling replacement
+   * may open this database while the previous process is still serving, so
+   * startup alone is not evidence that a running job was interrupted.
+   */
+  recoverExpiredRunning(now: number = Date.now()): void {
+    // C-27 / #580 — an expired WRITE claim (kind 'store' — vault filing +
+    // add_memory) is re-queued so a surviving worker resumes it, bounded by
+    // MAX_STORE_RESUME_ATTEMPTS.
     this.db
       .prepare(
-        `UPDATE task_jobs SET status='queued', attempts=attempts+1, updated_at=?
-         WHERE status=? AND kind='store' AND attempts < ?`,
+        `UPDATE task_jobs
+         SET status='queued',
+             attempts=attempts+1,
+             owner_id=NULL,
+             lease_expires_at=NULL,
+             updated_at=?
+         WHERE tenant_id=? AND status=? AND kind='store' AND attempts < ?
+           AND (lease_expires_at IS NULL OR lease_expires_at<=?)`,
       )
-      .run(now(), IN_FLIGHT_STATE, MAX_STORE_RESUME_ATTEMPTS);
+      .run(now, this.tenantId, IN_FLIGHT_STATE, MAX_STORE_RESUME_ATTEMPTS, now);
     // Everything else still in-flight (non-write jobs — their durability lives in the
     // executor; and 'store' jobs that already exhausted their retries) is surfaced as
     // interrupted so the caller's poll resolves instead of hanging.
@@ -187,44 +227,138 @@ export class TaskJobStore {
                error=CASE WHEN kind='store'
                           THEN 'interrupted by a server restart (gave up after ' || attempts || ' retries)'
                           ELSE 'interrupted by a server restart' END,
+               owner_id=NULL,
+               lease_expires_at=NULL,
                updated_at=?
-         WHERE status=?`,
+         WHERE tenant_id=? AND status=?
+           AND (lease_expires_at IS NULL OR lease_expires_at<=?)`,
       )
-      .run(now(), IN_FLIGHT_STATE);
+      .run(now, this.tenantId, IN_FLIGHT_STATE, now);
   }
 
-  enqueue(kind: TaskJobKind, input: TaskJobInput, now: number = Date.now()): TaskJob {
+  enqueue(
+    kind: TaskJobKind,
+    input: TaskJobInput,
+    idempotencyKey?: string,
+    now: number = Date.now(),
+  ): TaskJob {
+    const normalizedKey = idempotencyKey?.trim();
+    if (idempotencyKey !== undefined && !normalizedKey) {
+      throw new Error("idempotencyKey must not be empty");
+    }
+    if (normalizedKey && normalizedKey.length > 512) {
+      throw new Error("idempotencyKey must be at most 512 characters");
+    }
+    if (normalizedKey && kind !== "store") {
+      throw new Error("idempotencyKey is only supported for store jobs");
+    }
+
     const id = randomUUID();
+    if (normalizedKey) {
+      this.db
+        .prepare(
+          `INSERT INTO task_jobs
+             (id, tenant_id, idempotency_key, kind, input_json, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)
+           ON CONFLICT DO NOTHING`,
+        )
+        .run(id, this.tenantId, normalizedKey, kind, JSON.stringify(input), now, now);
+      const existing = this.db
+        .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? AND idempotency_key=?`)
+        .get(this.tenantId, normalizedKey) as Row | undefined;
+      if (!existing) throw new Error("Failed to resolve idempotent store job");
+      return rowToJob(existing);
+    }
+
     this.db
       .prepare(
-        `INSERT INTO task_jobs (id, kind, input_json, status, created_at, updated_at)
-         VALUES (?, ?, ?, 'queued', ?, ?)`,
+        `INSERT INTO task_jobs
+           (id, tenant_id, idempotency_key, kind, input_json, status, created_at, updated_at)
+         VALUES (?, ?, NULL, ?, ?, 'queued', ?, ?)`,
       )
-      .run(id, kind, JSON.stringify(input), now, now);
+      .run(id, this.tenantId, kind, JSON.stringify(input), now, now);
     return this.get(id)!;
   }
 
   /** Oldest queued job, or null. The worker drains these one at a time. */
   nextQueued(): TaskJob | null {
     const row = this.db
-      .prepare(`SELECT * FROM task_jobs WHERE status='queued' ORDER BY created_at ASC LIMIT 1`)
-      .get() as Row | undefined;
+      .prepare(
+        `SELECT * FROM task_jobs
+         WHERE tenant_id=? AND status='queued'
+         ORDER BY created_at ASC LIMIT 1`,
+      )
+      .get(this.tenantId) as Row | undefined;
     return row ? rowToJob(row) : null;
   }
 
+  /**
+   * Atomically take ownership of the oldest queued job. The status predicate is
+   * repeated on the UPDATE so separate processes cannot both execute one row.
+   */
+  claimNextQueued(now: number = Date.now()): TaskJob | null {
+    const row = this.db
+      .prepare(
+        `UPDATE task_jobs
+         SET status='running', owner_id=?, lease_expires_at=?, updated_at=?
+         WHERE tenant_id=? AND status='queued' AND id=(
+           SELECT id FROM task_jobs
+           WHERE tenant_id=? AND status='queued'
+           ORDER BY created_at ASC
+           LIMIT 1
+         )
+         RETURNING *`,
+      )
+      .get(this.ownerId, now + TASK_JOB_LEASE_MS, now, this.tenantId, this.tenantId) as Row | undefined;
+    return row ? rowToJob(row) : null;
+  }
+
+  renewClaim(id: string, now: number = Date.now()): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE task_jobs
+         SET lease_expires_at=?, updated_at=?
+         WHERE tenant_id=? AND id=? AND status='running' AND owner_id=?`,
+      )
+      .run(now + TASK_JOB_LEASE_MS, now, this.tenantId, id, this.ownerId);
+    return result.changes === 1;
+  }
+
+  nextRunningLeaseExpiry(): number | null {
+    const row = this.db
+      .prepare(
+        `SELECT MIN(lease_expires_at) AS lease_expires_at
+         FROM task_jobs
+         WHERE tenant_id=? AND status='running' AND lease_expires_at IS NOT NULL`,
+      )
+      .get(this.tenantId) as { lease_expires_at: number | null };
+    return row.lease_expires_at;
+  }
+
   get(id: string): TaskJob | null {
-    const row = this.db.prepare(`SELECT * FROM task_jobs WHERE id=?`).get(id) as Row | undefined;
+    const row = this.db
+      .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? AND id=?`)
+      .get(this.tenantId, id) as Row | undefined;
     return row ? rowToJob(row) : null;
   }
 
   recent(limit = 25): TaskJob[] {
     const rows = this.db
-      .prepare(`SELECT * FROM task_jobs ORDER BY created_at DESC LIMIT ?`)
-      .all(limit) as unknown as Row[];
+      .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?`)
+      .all(this.tenantId, limit) as unknown as Row[];
     return rows.map(rowToJob);
   }
 
   update(id: string, patch: TaskJobPatch, now: number = Date.now()): void {
+    this.applyPatch(id, patch, now, false);
+  }
+
+  /** Finish a job only while this store instance still owns its live claim. */
+  updateClaimed(id: string, patch: TaskJobPatch, now: number = Date.now()): boolean {
+    return this.applyPatch(id, patch, now, true);
+  }
+
+  private applyPatch(id: string, patch: TaskJobPatch, now: number, claimedOnly: boolean): boolean {
     const sets: string[] = [];
     const vals: unknown[] = [];
     const push = (col: string, val: unknown) => {
@@ -234,10 +368,21 @@ export class TaskJobStore {
     if (patch.status !== undefined) push("status", patch.status);
     if (patch.result !== undefined) push("result_json", patch.result ? JSON.stringify(patch.result) : null);
     if (patch.error !== undefined) push("error", patch.error);
-    if (sets.length === 0) return;
+    if (sets.length === 0) return false;
+    if (claimedOnly && patch.status !== undefined && patch.status !== "running") {
+      push("owner_id", null);
+      push("lease_expires_at", null);
+    }
     push("updated_at", now);
-    vals.push(id);
-    this.db.prepare(`UPDATE task_jobs SET ${sets.join(", ")} WHERE id=?`).run(...(vals as never[]));
+    vals.push(this.tenantId, id);
+    if (claimedOnly) vals.push(this.ownerId);
+    const result = this.db
+      .prepare(
+        `UPDATE task_jobs SET ${sets.join(", ")}
+         WHERE tenant_id=? AND id=?${claimedOnly ? " AND status='running' AND owner_id=?" : ""}`,
+      )
+      .run(...(vals as never[]));
+    return result.changes === 1;
   }
 
   close(): void {

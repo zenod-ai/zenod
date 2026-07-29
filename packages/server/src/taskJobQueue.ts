@@ -3,7 +3,14 @@ import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchiv
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
 import type { Settings } from "./settings.js";
-import type { MediaIngestReceipt, TaskJob, TaskJobInput, TaskJobKind, TaskJobStore } from "./taskJobStore.js";
+import {
+  TASK_JOB_LEASE_MS,
+  type MediaIngestReceipt,
+  type TaskJob,
+  type TaskJobInput,
+  type TaskJobKind,
+  type TaskJobStore,
+} from "./taskJobStore.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 
 /**
@@ -16,7 +23,9 @@ import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
  * restart marks in-flight jobs interrupted (see TaskJobStore).
  */
 export class TaskJobQueue {
-  private draining = false;
+  private activeDrain: Promise<void> | null = null;
+  private leaseTimer: ReturnType<typeof setTimeout> | null = null;
+  private closed = false;
 
   constructor(
     private readonly store: TaskJobStore,
@@ -25,9 +34,10 @@ export class TaskJobQueue {
   ) {}
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
-  enqueue(kind: TaskJobKind, input: TaskJobInput): TaskJob {
-    const job = this.store.enqueue(kind, input);
-    void this.drain();
+  enqueue(kind: TaskJobKind, input: TaskJobInput, idempotencyKey?: string): TaskJob {
+    if (this.closed) throw new Error("TaskJobQueue is closed");
+    const job = this.store.enqueue(kind, input, idempotencyKey);
+    this.requestDrain();
     return job;
   }
 
@@ -41,25 +51,45 @@ export class TaskJobQueue {
 
   /** Resume after boot: pick up anything still queued. */
   resume(): void {
-    void this.drain();
+    if (this.closed) return;
+    this.requestDrain();
+  }
+
+  private requestDrain(): void {
+    if (this.closed || this.activeDrain) return;
+    const active = this.drain();
+    this.activeDrain = active;
+    void active
+      .catch((error) => console.error("[task-job] queue drain failed:", error))
+      .finally(() => {
+        if (this.activeDrain === active) this.activeDrain = null;
+      });
   }
 
   private async drain(): Promise<void> {
-    if (this.draining) return;
-    this.draining = true;
+    if (this.leaseTimer) {
+      clearTimeout(this.leaseTimer);
+      this.leaseTimer = null;
+    }
     try {
+      this.store.recoverExpiredRunning();
       let job: TaskJob | null;
-      while ((job = this.store.nextQueued())) {
+      while ((job = this.store.claimNextQueued())) {
         await this.process(job);
       }
     } finally {
-      this.draining = false;
+      this.scheduleLeaseRecovery();
     }
   }
 
   private async process(job: TaskJob): Promise<void> {
-    this.store.update(job.id, { status: "running" });
+    const leaseHeartbeat = setInterval(
+      () => this.store.renewClaim(job.id),
+      Math.max(1_000, Math.floor(TASK_JOB_LEASE_MS / 3)),
+    );
+    leaseHeartbeat.unref?.();
     try {
+      let completed = false;
       if (job.kind === "task") {
         const engine = await this.getEngine();
         const result = await engine.handleTasking({
@@ -67,7 +97,7 @@ export class TaskJobQueue {
           surface: "mcp",
           conversationKey: job.input.conversationKey ?? "mcp",
         });
-        this.store.update(job.id, { status: "done", result });
+        completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else if (job.kind === "store") {
         const engine = await this.getEngine();
         const result = await engine.store({
@@ -76,14 +106,17 @@ export class TaskJobQueue {
           ...(job.input.hints ? { hints: job.input.hints } : {}),
           ...(job.input.verbatim !== undefined ? { verbatim: job.input.verbatim } : {}),
         });
-        this.store.update(job.id, { status: "done", result });
+        completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else if (job.kind === "media_ingest") {
         if (!this.settings) {
-          this.store.update(job.id, { status: "done", result: mediaIngestUnavailableReceipt(job.input, null) });
+          completed = this.store.updateClaimed(job.id, {
+            status: "done",
+            result: mediaIngestUnavailableReceipt(job.input, null),
+          });
         } else {
           const archived = await archiveMediaInput(this.settings, job.input);
           const result = await processMediaIngest(this.settings, job.input, archived, () => this.getEngine());
-          this.store.update(job.id, { status: "done", result });
+          completed = this.store.updateClaimed(job.id, { status: "done", result });
         }
       } else {
         const engine = await this.getEngine();
@@ -91,13 +124,39 @@ export class TaskJobQueue {
           objective: job.input.objective ?? "",
           ...(job.input.plan ? { plan: job.input.plan } : {}),
         });
-        this.store.update(job.id, { status: "done", result });
+        completed = this.store.updateClaimed(job.id, { status: "done", result });
       }
-      console.log(`[task-job] ${job.id} done: ${job.kind}`);
+      if (completed) console.log(`[task-job] ${job.id} done: ${job.kind}`);
+      else console.warn(`[task-job] ${job.id} result ignored after claim ownership changed`);
     } catch (err) {
       console.error(`[task-job] ${job.id} failed:`, err);
-      this.store.update(job.id, { status: "error", error: (err as Error).message });
+      if (!this.store.updateClaimed(job.id, { status: "error", error: (err as Error).message })) {
+        console.warn(`[task-job] ${job.id} error ignored after claim ownership changed`);
+      }
+    } finally {
+      clearInterval(leaseHeartbeat);
     }
+  }
+
+  private scheduleLeaseRecovery(): void {
+    if (this.closed) return;
+    const expiresAt = this.store.nextRunningLeaseExpiry();
+    if (expiresAt === null) return;
+    const delay = Math.max(1, expiresAt - Date.now() + 1);
+    this.leaseTimer = setTimeout(() => {
+      this.leaseTimer = null;
+      this.requestDrain();
+    }, delay);
+    this.leaseTimer.unref?.();
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    if (this.leaseTimer) {
+      clearTimeout(this.leaseTimer);
+      this.leaseTimer = null;
+    }
+    await this.activeDrain;
   }
 }
 

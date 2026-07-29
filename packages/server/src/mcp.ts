@@ -45,6 +45,7 @@ import {
   EPAMINON_RUN_TASK_SHAPE,
   RUN_ISSUE_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
+  STORE_MEMORY_SHAPE,
 } from "./mcpToolSchemas.js";
 import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./toolOutput.js";
 
@@ -55,7 +56,7 @@ import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./to
  * to.
  */
 export interface TaskJobs {
-  enqueue(kind: TaskJobKind, input: TaskJobInput): TaskJob;
+  enqueue(kind: TaskJobKind, input: TaskJobInput, idempotencyKey?: string): TaskJob;
   get(id: string): TaskJob | null;
 }
 
@@ -914,22 +915,28 @@ export function buildMcpServer(
       title: "Store memory",
       description:
         "Store a memory in the user's vault through the librarian pipeline: records immutable evidence in the Log, files the meaning onto the right page(s) with citations, validates, and commits to GitHub. If the librarian is unsure where the memory belongs, it returns a question instead of guessing — relay that question to the user. Use for anything the user wants remembered: facts, decisions, events, preferences. ASYNC: the librarian pipeline runs classify + compose LLM calls and a git commit (slower for longer memories), so it returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the evidence ref, pages touched, commit SHA, and any question.",
-      inputSchema: {
-        content: z.string().min(1).describe("The memory to store, as the user expressed it"),
-        hints: z.array(z.string()).optional().describe("Optional filing hints, e.g. 'belongs to the housing project'"),
-        verbatim: z.boolean().optional().describe("Force verbatim evidence recording (exact words preserved)"),
-      },
+      inputSchema: STORE_MEMORY_SHAPE,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ content, hints, verbatim }) => {
+    async ({ content, hints, verbatim, idempotencyKey }) => {
       const input: TaskJobInput = {
         content,
         ...(hints ? { hints } : {}),
         ...(verbatim !== undefined ? { verbatim } : {}),
       };
       if (taskJobs) {
-        const job = taskJobs.enqueue("store", input);
+        const job = taskJobs.enqueue("store", input, idempotencyKey);
         return enqueuedResponse(job);
+      }
+      if (idempotencyKey) {
+        return {
+          content: [{ type: "text", text: "Idempotent store_memory requires the durable task-job queue." }],
+          structuredContent: {
+            code: "idempotency_unavailable",
+            message: "This Zenod runtime cannot guarantee idempotency without its durable task-job queue.",
+          },
+          isError: true,
+        };
       }
       // No queue wired (e.g. a minimal embedding) — run synchronously.
       const engine = await getEngine();
