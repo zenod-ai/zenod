@@ -115,7 +115,7 @@ describe("PeerAgents", () => {
     expect(document.body.textContent).not.toContain("My Units")
   })
 
-  it("shows refresh provenance and exact upstream/callable contracts separately", async () => {
+  it("MC-16.2 shows the actually discovered tools and exact upstream/callable contracts", async () => {
     mocks.api.mockResolvedValueOnce({ peers: [peer()] })
     render(<PeerAgents />)
 
@@ -125,6 +125,7 @@ describe("PeerAgents", () => {
     fireEvent.click(screen.getByText(/search_chats → calli__search_chats/))
     expect(screen.getByText("Search exact upstream chats.")).toBeTruthy()
     expect(screen.getByText(/"required": \[/)).toBeTruthy()
+    expect(screen.getByText(/"matches": \{/)).toBeTruthy()
     expect(screen.getByText(/"readOnlyHint": true/)).toBeTruthy()
   })
 
