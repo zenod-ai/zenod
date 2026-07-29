@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Context, Next } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
@@ -9,9 +10,94 @@ const SESSION_COOKIE = "zenod_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const HOSTED_ENTRY_TTL_MS = 2 * 60 * 1000;
 const HOSTED_SURFACES = new Set(["ring-router-products", "phylax-channels"]);
+const MCP_TOOL_TOKEN_PREFIX = "zenod_mcp_scope_v1";
+const MEMORY_CHANNEL_PROFILE = "memory-channel";
+
+export const MEMORY_CHANNEL_MCP_TOOLS = Object.freeze([
+  "ask_brain",
+  "chat_with_zenod",
+  "get_task_result",
+  "ingest_memory",
+  "search_memory",
+  "store_memory",
+] as const);
+
+interface McpToolTokenClaims {
+  v: 1;
+  nonce: string;
+  profile: typeof MEMORY_CHANNEL_PROFILE;
+}
+
+interface McpRequestAccess {
+  toolAllowlist?: ReadonlySet<string>;
+}
+
+const mcpRequestAccess = new AsyncLocalStorage<McpRequestAccess>();
 
 function sign(secret: string, payload: string): string {
   return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+/** Mint the exact D3 bearer for a Phylax channel binding. */
+export function createMemoryChannelMcpToken(
+  apiToken: string,
+  nonce = randomUUID(),
+): string {
+  if (!apiToken) throw new Error("cannot mint an MCP tool token without an API token");
+  if (!nonce) throw new Error("MCP tool token nonce is required");
+  const claims: McpToolTokenClaims = {
+    v: 1,
+    nonce,
+    profile: MEMORY_CHANNEL_PROFILE,
+  };
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signed = `${MCP_TOOL_TOKEN_PREFIX}.${payload}`;
+  return `${signed}.${sign(apiToken, signed)}`;
+}
+
+export function mcpToolAllowlistForToken(
+  apiToken: string,
+  token: string,
+): ReadonlySet<string> | null {
+  if (!apiToken) return null;
+  const [prefix, payload, mac, ...extra] = token.split(".");
+  if (
+    prefix !== MCP_TOOL_TOKEN_PREFIX ||
+    !payload ||
+    !mac ||
+    extra.length > 0 ||
+    !/^[a-f0-9]{64}$/.test(mac)
+  ) {
+    return null;
+  }
+  const signed = `${prefix}.${payload}`;
+  const expected = sign(apiToken, signed);
+  const a = Buffer.from(mac);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<McpToolTokenClaims>;
+    if (
+      claims.v !== 1 ||
+      typeof claims.nonce !== "string" ||
+      !claims.nonce ||
+      claims.profile !== MEMORY_CHANNEL_PROFILE
+    ) {
+      return null;
+    }
+    return new Set(MEMORY_CHANNEL_MCP_TOOLS);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Available only while an authenticated /mcp request is being handled.
+ * Undefined means the accepted credential has the full MCP surface.
+ */
+export function currentMcpToolAllowlist(): ReadonlySet<string> | undefined {
+  return mcpRequestAccess.getStore()?.toolAllowlist;
 }
 
 export function hostedRingMode(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -109,13 +195,20 @@ export function requireAuth(settings: Settings) {
 export function requireMcpAuth(settings: Settings, oauth: OAuthStore) {
   return async (c: Context, next: Next) => {
     const presented = bearerToken(c);
-    const ok =
-      (presented !== null && matchesStaticToken(presented, settings)) ||
-      (presented !== null && validateAccessToken(oauth, presented) !== null) ||
-      hasValidSession(c, settings);
-    if (ok) {
-      await next();
-      return;
+    if (presented !== null && matchesStaticToken(presented, settings)) {
+      return mcpRequestAccess.run({}, next);
+    }
+    if (presented !== null && validateAccessToken(oauth, presented) !== null) {
+      return mcpRequestAccess.run({}, next);
+    }
+    if (hasValidSession(c, settings)) {
+      return mcpRequestAccess.run({}, next);
+    }
+    if (presented !== null) {
+      const toolAllowlist = mcpToolAllowlistForToken(settings.apiToken(), presented);
+      if (toolAllowlist) {
+        return mcpRequestAccess.run({ toolAllowlist }, next);
+      }
     }
     c.header("WWW-Authenticate", wwwAuthenticate(publicBaseUrl(c)));
     return c.json({ error: "unauthorized" }, 401);

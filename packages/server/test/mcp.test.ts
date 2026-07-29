@@ -9,6 +9,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { BrainEngine } from "zenod";
 import { ARCHUS_AGENT, EPAMINON_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
+import {
+  createMemoryChannelMcpToken,
+  MEMORY_CHANNEL_MCP_TOOLS,
+} from "../src/auth.js";
 import { Runtime } from "../src/runtime.js";
 import { validateToolResponse } from "../src/toolOutput.js";
 
@@ -120,9 +124,9 @@ describe("MCP endpoint", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  function connect() {
+  function connect(bearer = token) {
     const transport = new StreamableHTTPClientTransport(url, {
-      requestInit: { headers: { Authorization: `Bearer ${token}` } },
+      requestInit: { headers: { Authorization: `Bearer ${bearer}` } },
     });
     const client = new Client({ name: "test-client", version: "0.0.0" });
     return client.connect(transport).then(() => client);
@@ -194,6 +198,38 @@ describe("MCP endpoint", () => {
       "task_brain",
     ]);
     await client.close();
+  });
+
+  it("enforces the exact memory-channel profile at tools/list and tools/call", async () => {
+    const scopedToken = createMemoryChannelMcpToken(token, "memory-channel-test");
+    const client = await connect(scopedToken);
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name).sort()).toEqual([
+      ...MEMORY_CHANNEL_MCP_TOOLS,
+    ]);
+
+    const allowed = await client.callTool({
+      name: "ask_brain",
+      arguments: { question: "when does my insurance renew?" },
+    });
+    expect(JSON.stringify(allowed.content)).toContain(
+      "Answer to: when does my insurance renew?",
+    );
+
+    const denied = await client.callTool({
+      name: "task_brain",
+      arguments: { text: "run an action" },
+    });
+    expect(denied.isError).toBe(true);
+    expect(JSON.stringify(denied.content)).toMatch(/not found|unknown/i);
+    await client.close();
+  });
+
+  it("rejects a tampered memory-channel token", async () => {
+    const scopedToken = createMemoryChannelMcpToken(token, "tamper-test");
+    const last = scopedToken.at(-1);
+    const tampered = `${scopedToken.slice(0, -1)}${last === "0" ? "1" : "0"}`;
+    await expect(connect(tampered)).rejects.toThrow(/401|unauthorized/i);
   });
 
   it("ingest_memory exposes the async media seam with loud input and processor errors", async () => {

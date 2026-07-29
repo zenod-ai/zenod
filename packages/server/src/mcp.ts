@@ -11,6 +11,7 @@ import {
 } from "./testHarness.js";
 import type { MediaIngestReceipt, TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
 import type { ExecutionTicket } from "./executionQueue.js";
+import { currentMcpToolAllowlist } from "./auth.js";
 import {
   formatConversationTranscript,
   transcriptQueryFromToolArgs,
@@ -500,12 +501,24 @@ export function buildMcpServer(
   existingServer?: McpServer,
   chatInterceptor?: ChatTurnInterceptor,
 ): McpServer {
-  const server =
+  const rawServer =
     existingServer ??
     new McpServer({
       name: serverName.trim() || "zenod-mcp-server",
       version: VERSION,
     });
+  const toolAllowlist = currentMcpToolAllowlist();
+  const server = toolAllowlist
+    ? new Proxy(rawServer, {
+        get(target, property, receiver) {
+          if (property !== "registerTool") return Reflect.get(target, property, receiver);
+          return (name: string, ...args: unknown[]) => {
+            if (!toolAllowlist.has(name)) return undefined;
+            return Reflect.apply(target.registerTool, target, [name, ...args]);
+          };
+        },
+      })
+    : rawServer;
 
   // This agent's chat-brain tool: a full engine.chat turn (the agent reasons with
   // its own tools and replies). Named per-agent — chat_with_zenod, chat_with_archus
@@ -1344,5 +1357,5 @@ export function buildMcpServer(
     );
   }
 
-  return server;
+  return rawServer;
 }
