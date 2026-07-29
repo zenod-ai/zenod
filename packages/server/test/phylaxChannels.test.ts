@@ -402,6 +402,108 @@ describe("PhylaxChannelsOrgan", () => {
     await restarted.close();
   });
 
+  it.each([
+    ["canonical HTTP", "http://json-schema.org/draft-07/schema#", "http"],
+    ["HTTPS alias", "https://json-schema.org/draft-07/schema#", "https"],
+  ])("validates and dispatches the %s Draft-07 store_memory catalog schema", async (
+    _dialect,
+    schemaUri,
+    suffix,
+  ) => {
+    const dataDir = await mkdtemp(join(tmpdir(), `phylax-binding-draft7-${suffix}-`));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: {
+                content: { source: "transcript" },
+                hints: { source: "constant", value: ["whatsapp", "voice-note"] },
+                verbatim: { source: "constant", value: true },
+              },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "chat_with_ring", argumentMappings: {} },
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          description: "Store memory",
+          inputSchema: {
+            $schema: schemaUri,
+            type: "object",
+            additionalProperties: false,
+            required: ["content"],
+            properties: {
+              content: { type: "string" },
+              hints: { type: "array", items: { type: "string" } },
+              verbatim: { type: "boolean" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        if (call.tool === "store_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: { ticket_id: `job-draft7-${suffix}`, state: "accepted" },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: `job-draft7-${suffix}`,
+            state: "done",
+            result: {
+              recap: "Draft-07 catalog capture.",
+              evidenceRef: "Log/2026-07-29.md#^draft7",
+              pagesTouched: ["Inbox/Draft7.md"],
+              commitSha: "d7abc12",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+    });
+
+    const receipt = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: `provider-draft7-${suffix}`,
+      transcription: { text_transcript: "Capture this through the live catalog schema." },
+    });
+
+    expect(calls[0]).toMatchObject({
+      tool: "store_memory",
+      arguments: {
+        content: "Capture this through the live catalog schema.",
+        hints: ["whatsapp", "voice-note"],
+        verbatim: true,
+      },
+    });
+    expect(calls[0]?.arguments.idempotencyKey).toEqual(expect.any(String));
+    expect(receipt.replyText).toContain("Saved ✓");
+    expect(receipt.replyText).toContain("Draft-07 catalog capture.");
+    await organ.close();
+  });
+
   it("keeps an accepted capture polling through a transient result outage and records only the later terminal success", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-transient-poll-"));
     dirs.push(dataDir);
