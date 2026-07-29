@@ -367,6 +367,7 @@ describe("PhylaxChannelsOrgan", () => {
       groqApiKey: "",
       openaiApiKey: "",
       openrouterApiKey: "",
+      allowLocalFallback: true,
       includeTiming: true,
     });
     expect(phylaxTranscriptionOptions(
@@ -383,6 +384,16 @@ describe("PhylaxChannelsOrgan", () => {
     ).model).toBe("base");
     expect(phylaxTranscriptionConfigurationError({ provider: "groq", model: null, key: null }))
       .toBe("groq transcription requires a tenant-configured provider key");
+    expect(phylaxTranscriptionOptions(
+      { provider: "openrouter", model: "openai/whisper-large-v3-turbo", key: "tenant-key" },
+      { OPENROUTER_API_KEY: "must-not-leak" },
+      signal,
+    )).toMatchObject({
+      groqApiKey: "",
+      openaiApiKey: "",
+      openrouterApiKey: "tenant-key",
+      allowLocalFallback: false,
+    });
   });
 
   it("uses only the fresh Phylax-owned /data/whatsapp shape", () => {

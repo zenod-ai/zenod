@@ -645,6 +645,8 @@ export type TranscribeOptions =
       onProgress?: (percent: number) => void;
       signal?: AbortSignal;
       includeTiming?: boolean;
+      /** Channel capture disables the slow local fallback and fails honestly instead. */
+      allowLocalFallback?: boolean;
     }
   | ((percent: number) => void);
 
@@ -687,6 +689,7 @@ async function runTranscription(
   const onProgress = typeof options === "function" ? options : options.onProgress;
   const signal = typeof options === "function" ? undefined : options.signal;
   const includeTiming = typeof options !== "function" && options.includeTiming === true;
+  const allowLocalFallback = typeof options === "function" || options.allowLocalFallback !== false;
   // The durable setting (UI-pasted, env-seeded on first boot) wins; the raw
   // env var keeps standalone/test use working without a settings store.
   const groqApiKey = (typeof options === "function" ? undefined : options.groqApiKey) ?? process.env.GROQ_API_KEY;
@@ -697,8 +700,18 @@ async function runTranscription(
     (typeof options === "function" ? undefined : options.openrouterModel) ?? DEFAULT_OPENROUTER_STT_MODEL;
   const explicitLongProvider = typeof options === "function" ? undefined : options.longTranscriptionProvider;
   const useOpenAiForLongAudio = typeof options === "function" ? false : options.useOpenAiForLongAudio === true;
-  const longProvider =
+  const configuredLongProvider =
     explicitLongProvider ?? (openrouterApiKey ? "openrouter" : useOpenAiForLongAudio && openaiApiKey ? "openai" : "local");
+  const longProvider =
+    configuredLongProvider === "local" && !allowLocalFallback
+      ? openrouterApiKey
+        ? "openrouter"
+        : groqApiKey
+          ? "groq"
+          : openaiApiKey
+            ? "openai"
+            : "local"
+      : configuredLongProvider;
   const fakeTranscript = (process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
   const needsDuration = Boolean(groqApiKey || (longProvider === "openrouter" && openrouterApiKey) || (longProvider === "openai" && openaiApiKey));
   const durationSeconds =
@@ -725,7 +738,24 @@ async function runTranscription(
             ? `groq ${GROQ_STT_MODEL}`
             : canTryOpenRouter && !failed.has("openrouter")
               ? `openrouter ${openrouterModel}`
+              : openaiApiKey && !failed.has("openai")
+                ? `openai ${OPENAI_STT_MODEL}`
             : `whisper.cpp ${modelName}`;
+    const configuredCloudProviders = [
+      ...(groqApiKey ? ["groq"] : []),
+      ...(openrouterApiKey ? ["openrouter"] : []),
+      ...(openaiApiKey ? ["openai"] : []),
+    ];
+    if (!allowLocalFallback && provider.startsWith("whisper.cpp") && configuredCloudProviders.length > 0) {
+      const failedProvider =
+        [...configuredCloudProviders].reverse().find((candidate) => failed.has(candidate))
+        ?? configuredCloudProviders[0]!;
+      return {
+        success: false,
+        provider: failedProvider,
+        error: `${failedProvider} transcription failed`,
+      };
+    }
     return {
       success: true,
       transcript: process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT,
@@ -733,26 +763,34 @@ async function runTranscription(
     };
   }
 
+  let cloudFailure: TranscriptionEnvelope | null = null;
   if (isLongAudio) {
     if (longProvider === "groq" && groqApiKey) {
       try {
         return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
       } catch (err) {
         if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
-        console.warn(`[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`);
+        cloudFailure = { success: false, provider: "groq", error: (err as Error).message };
+        console.warn(
+          `[transcribe] groq failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${(err as Error).message}`,
+        );
       }
     } else if (longProvider === "openrouter" && openrouterApiKey) {
       const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
       if (result.success || signal?.aborted) return result;
-      console.warn(`[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`);
+      cloudFailure = result;
+      console.warn(`[transcribe] openrouter failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
     } else if (longProvider === "openai" && openaiApiKey) {
       const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
       if (result.success || signal?.aborted) return result;
-      console.warn(`[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`);
+      cloudFailure = result;
+      console.warn(`[transcribe] openai failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
     }
-    console.log(
-      `[transcribe] ${Math.round(durationSeconds)}s audio exceeds ${LONG_AUDIO_SECONDS}s; using local whisper.cpp fallback`,
-    );
+    if (allowLocalFallback) {
+      console.log(
+        `[transcribe] ${Math.round(durationSeconds)}s audio exceeds ${LONG_AUDIO_SECONDS}s; using local whisper.cpp fallback`,
+      );
+    }
   } else if (groqApiKey) {
     // Groq first when configured — seconds instead of minutes, and it doesn't
     // pin the server's CPUs. Any failure (rate limit, network, oversized chunk)
@@ -764,9 +802,16 @@ async function runTranscription(
       if (openrouterApiKey && shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey)) {
         const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
         if (result.success || signal?.aborted) return result;
-        console.warn(`[transcribe] openrouter fallback failed, falling back to whisper.cpp: ${result.error}`);
+        cloudFailure = result;
+        console.warn(
+          `[transcribe] openrouter fallback failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`,
+        );
+      } else {
+        cloudFailure = { success: false, provider: "groq", error: (err as Error).message };
       }
-      console.warn(`[transcribe] groq failed, falling back to whisper.cpp: ${(err as Error).message}`);
+      console.warn(
+        `[transcribe] groq failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${(err as Error).message}`,
+      );
     }
   } else if (openrouterApiKey) {
     // Short audio, no Groq key, but an OpenRouter key is configured: use OpenRouter STT
@@ -776,12 +821,21 @@ async function runTranscription(
     // "openrouter" here; the real path now matches it.)
     const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
     if (result.success || signal?.aborted) return result;
-    console.warn(`[transcribe] openrouter failed, falling back to whisper.cpp: ${result.error}`);
+    cloudFailure = result;
+    console.warn(`[transcribe] openrouter failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
   } else if (openaiApiKey) {
     // Same, for a short-audio-only OpenAI key.
     const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
     if (result.success || signal?.aborted) return result;
-    console.warn(`[transcribe] openai failed, falling back to whisper.cpp: ${result.error}`);
+    cloudFailure = result;
+    console.warn(`[transcribe] openai failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
+  }
+
+  if (!allowLocalFallback) {
+    return cloudFailure ?? {
+      success: false,
+      error: "no cloud transcription provider is configured for this channel",
+    };
   }
 
   let model: string;
