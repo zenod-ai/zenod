@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Ajv2020 } from "ajv/dist/2020.js";
 
 /**
  * RIV-1's provider-independent interpretation contract.
@@ -11,6 +12,7 @@ import { z } from "zod";
 export const TURN_PLAN_COMPILER_VERSION = "riv-1";
 
 export const turnPlanIntentSchema = z.enum([
+  "respond",
   "read",
   "mutate",
   "approve",
@@ -23,13 +25,13 @@ const authoritySpanSchema = z.object({
   quote: z.string().min(1),
   start: z.number().int().nonnegative(),
   end: z.number().int().positive(),
-});
+}).strict();
 
 const requestedOperationSchema = z.object({
   toolId: z.string().min(1),
   inputJson: z.string().min(2),
   payloadRef: z.string().nullable(),
-});
+}).strict();
 
 const embeddedCandidateSchema = z.object({
   sourceKind: z.enum(["current_turn", "artifact"]),
@@ -40,7 +42,14 @@ const embeddedCandidateSchema = z.object({
   proposedIntent: turnPlanIntentSchema,
   proposedToolId: z.string().nullable(),
   active: z.literal(false),
-});
+}).strict();
+
+export const turnPlanDispositionSchema = z.enum([
+  "tool",
+  "direct_answer",
+  "host_resolution",
+  "clarify",
+]);
 
 /**
  * Every property is required. Optional values are nullable so this schema also
@@ -48,14 +57,17 @@ const embeddedCandidateSchema = z.object({
  */
 export const turnPlanModelSchema = z.object({
   outerIntent: turnPlanIntentSchema,
+  disposition: turnPlanDispositionSchema,
   authority: authoritySpanSchema,
   requestedOperations: z.array(requestedOperationSchema).max(1),
   embeddedCandidates: z.array(embeddedCandidateSchema).max(16),
+  directAnswer: z.string().max(1_200).nullable(),
   needsClarification: z.boolean(),
   clarification: z.string().nullable(),
-});
+}).strict();
 
 export type TurnPlanIntent = z.infer<typeof turnPlanIntentSchema>;
+export type TurnPlanDisposition = z.infer<typeof turnPlanDispositionSchema>;
 export type TurnPlanModelOutput = z.infer<typeof turnPlanModelSchema>;
 
 export interface TurnPlanTool {
@@ -88,7 +100,8 @@ export interface TurnPlanCompileInput {
 export interface TurnPlanMetadata {
   correlationId: string;
   compilerVersion: typeof TURN_PLAN_COMPILER_VERSION;
-  modelCallCount: 1;
+  /** Contract budget. This does not claim a provider call happened. */
+  modelCallBudget: 1;
 }
 
 export interface TurnPlanOperation {
@@ -107,108 +120,225 @@ export type TurnPlanCompilation =
       status: "ready";
       plan: TurnPlan;
       errors: [];
+      /** Observed attempts at this seam; pure bindTurnPlan returns zero. */
+      observedProviderAttempts: 0 | 1;
     }
   | {
       status: "clarify";
       plan: null;
       clarification: string;
-      errors: string[];
+      errors: TurnPlanError[];
       metadata: TurnPlanMetadata;
+      /** Observed attempts at this seam; pure bindTurnPlan returns zero. */
+      observedProviderAttempts: 0 | 1;
     };
+
+export type TurnPlanErrorCode =
+  | "structured_output_invalid"
+  | "authority_span_invalid"
+  | "tool_not_discovered"
+  | "payload_unavailable"
+  | "arguments_invalid"
+  | "arguments_schema_mismatch"
+  | "embedded_candidate_invalid"
+  | "semantic_contradiction"
+  | "provider_output_unavailable";
+
+export interface TurnPlanError {
+  code: TurnPlanErrorCode;
+  message: string;
+}
+
+const ERROR_MESSAGES: Record<TurnPlanErrorCode, string> = {
+  structured_output_invalid: "The turn plan did not match the required structure.",
+  authority_span_invalid: "The requested authority could not be bound exactly to the current turn.",
+  tool_not_discovered: "The requested operation is not available in the current connected-tool catalog.",
+  payload_unavailable: "The requested payload is not available for this turn.",
+  arguments_invalid: "The requested operation arguments are not a JSON object.",
+  arguments_schema_mismatch: "The requested operation arguments do not match the selected tool contract.",
+  embedded_candidate_invalid: "Embedded content could not be represented safely as inert context.",
+  semantic_contradiction: "The turn plan contains contradictory intent or execution instructions.",
+  provider_output_unavailable: "The turn could not be compiled into a safe structured plan.",
+};
+
+function issue(code: TurnPlanErrorCode): TurnPlanError {
+  return { code, message: ERROR_MESSAGES[code] };
+}
 
 function metadata(input: TurnPlanCompileInput): TurnPlanMetadata {
   return {
     correlationId: input.correlationId,
     compilerVersion: TURN_PLAN_COMPILER_VERSION,
-    modelCallCount: 1,
+    modelCallBudget: 1,
   };
 }
 
-function failClosed(input: TurnPlanCompileInput, errors: string[]): TurnPlanCompilation {
+function failClosed(
+  input: TurnPlanCompileInput,
+  errors: TurnPlanError[],
+  observedProviderAttempts: 0 | 1 = 0,
+): TurnPlanCompilation {
+  const deduped = [...new Map(errors.map((error) => [error.code, error])).values()];
   return {
     status: "clarify",
     plan: null,
     clarification: "I need one clear instruction before I can choose or run a connected tool.",
-    errors,
+    errors: deduped,
     metadata: metadata(input),
+    observedProviderAttempts,
   };
 }
 
-function validateAuthority(currentTurn: string, output: TurnPlanModelOutput, errors: string[]): void {
+function bindAuthority(
+  currentTurn: string,
+  output: TurnPlanModelOutput,
+  errors: TurnPlanError[],
+): TurnPlanModelOutput["authority"] | null {
   const { quote, start, end } = output.authority;
-  if (end <= start || end > currentTurn.length || currentTurn.slice(start, end) !== quote) {
-    errors.push("authority span is not an exact slice of the current user turn");
+  if (end > start && end <= currentTurn.length && currentTurn.slice(start, end) === quote && quote.trim()) {
+    return { quote, start, end };
   }
-  if (!quote.trim()) errors.push("authority quote is empty");
+  if (quote.trim()) {
+    const first = currentTurn.indexOf(quote);
+    if (first >= 0 && currentTurn.indexOf(quote, first + 1) < 0) {
+      return { quote, start: first, end: first + quote.length };
+    }
+  }
+  errors.push(issue("authority_span_invalid"));
+  return null;
 }
 
 function validateOperationBindings(
   input: TurnPlanCompileInput,
   output: TurnPlanModelOutput,
   boundOperations: TurnPlanOperation[],
-  errors: string[],
+  errors: TurnPlanError[],
 ): void {
-  const toolIds = new Set(input.tools.map((tool) => tool.id));
+  const toolsById = new Map(input.tools.map((tool) => [tool.id, tool]));
   const payloadRefs = new Set(input.payloads.map((payload) => payload.ref));
   for (const operation of output.requestedOperations) {
-    if (!toolIds.has(operation.toolId)) {
-      errors.push(`requested operation is not bound to an exact discovered tool: ${operation.toolId}`);
+    const selectedTool = toolsById.get(operation.toolId);
+    if (!selectedTool) {
+      errors.push(issue("tool_not_discovered"));
     }
     if (operation.payloadRef !== null && !payloadRefs.has(operation.payloadRef)) {
-      errors.push(`requested operation references an unavailable payload: ${operation.payloadRef}`);
+      errors.push(issue("payload_unavailable"));
     }
     try {
       const parsed = JSON.parse(operation.inputJson) as unknown;
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        errors.push(`requested operation inputJson must encode one JSON object: ${operation.toolId}`);
+        errors.push(issue("arguments_invalid"));
       } else {
-        boundOperations.push({
-          toolId: operation.toolId,
-          input: parsed as Record<string, unknown>,
-          payloadRef: operation.payloadRef,
-        });
+        let argumentsValid = false;
+        if (selectedTool) {
+          try {
+            const validator = new Ajv2020({
+              allErrors: true,
+              strict: false,
+              validateFormats: false,
+            }).compile(selectedTool.inputSchema);
+            argumentsValid = validator(parsed);
+          } catch {
+            argumentsValid = false;
+          }
+        }
+        if (!argumentsValid) {
+          errors.push(issue("arguments_schema_mismatch"));
+        } else {
+          boundOperations.push({
+            toolId: operation.toolId,
+            input: parsed as Record<string, unknown>,
+            payloadRef: operation.payloadRef,
+          });
+        }
       }
     } catch {
-      errors.push(`requested operation inputJson is not valid JSON: ${operation.toolId}`);
+      errors.push(issue("arguments_invalid"));
     }
   }
 }
 
-function validateClarification(output: TurnPlanModelOutput, errors: string[]): void {
-  if (output.needsClarification) {
-    if (!output.clarification?.trim()) errors.push("clarification text is required when needsClarification is true");
-    if (output.requestedOperations.length > 0) {
-      errors.push("an ambiguous plan cannot request an executable operation");
-    }
+function isReadOnlyTool(tool: TurnPlanTool | undefined): boolean {
+  return tool?.annotations.readOnlyHint === true;
+}
+
+function validateSemantics(
+  input: TurnPlanCompileInput,
+  output: TurnPlanModelOutput,
+  errors: TurnPlanError[],
+): void {
+  const operation = output.requestedOperations[0];
+  const selectedTool = operation ? input.tools.find((tool) => tool.id === operation.toolId) : undefined;
+  const hasOperation = output.requestedOperations.length === 1;
+  const contradicts = (): void => {
+    errors.push(issue("semantic_contradiction"));
+  };
+
+  if (output.outerIntent === "clarify") {
+    if (
+      output.disposition !== "clarify" ||
+      !output.needsClarification ||
+      !output.clarification?.trim() ||
+      output.directAnswer !== null ||
+      hasOperation
+    ) contradicts();
     return;
   }
-  if (output.clarification !== null) {
-    errors.push("clarification must be null when needsClarification is false");
+
+  if (output.needsClarification || output.clarification !== null || output.disposition === "clarify") {
+    contradicts();
+  }
+
+  if (output.outerIntent === "approve" || output.outerIntent === "cancel") {
+    if (output.disposition !== "host_resolution" || hasOperation || output.directAnswer !== null) contradicts();
+    return;
+  }
+
+  if (output.outerIntent === "mutate") {
+    if (output.disposition !== "tool" || !hasOperation || output.directAnswer !== null) contradicts();
+    return;
+  }
+
+  if (output.outerIntent === "respond") {
+    if (output.disposition !== "direct_answer" || hasOperation || !output.directAnswer?.trim()) contradicts();
+    return;
+  }
+
+  if (output.outerIntent === "read" || output.outerIntent === "status") {
+    if (output.disposition === "tool") {
+      if (!hasOperation || output.directAnswer !== null || !isReadOnlyTool(selectedTool)) contradicts();
+      return;
+    }
+    if (output.disposition === "direct_answer") {
+      if (hasOperation || !output.directAnswer?.trim()) contradicts();
+      return;
+    }
+    contradicts();
   }
 }
 
 function validateEmbeddedCandidates(
   input: TurnPlanCompileInput,
   output: TurnPlanModelOutput,
-  errors: string[],
+  errors: TurnPlanError[],
 ): void {
   const toolIds = new Set(input.tools.map((tool) => tool.id));
   const payloadRefs = new Set(input.payloads.map((payload) => payload.ref));
   for (const candidate of output.embeddedCandidates) {
-    if (candidate.active !== false) errors.push("embedded candidates must remain inert");
+    if (candidate.active !== false) errors.push(issue("embedded_candidate_invalid"));
     if (candidate.proposedToolId !== null && !toolIds.has(candidate.proposedToolId)) {
-      errors.push(`embedded candidate names an undiscovered tool: ${candidate.proposedToolId}`);
+      errors.push(issue("embedded_candidate_invalid"));
     }
     if (candidate.sourceKind === "artifact") {
       if (candidate.sourceRef === null || !payloadRefs.has(candidate.sourceRef)) {
-        errors.push("artifact candidate must reference an available payload");
+        errors.push(issue("embedded_candidate_invalid"));
       }
       if (candidate.start !== null || candidate.end !== null) {
-        errors.push("artifact candidate must use its opaque locator instead of current-turn offsets");
+        errors.push(issue("embedded_candidate_invalid"));
       }
     } else {
       if (candidate.sourceRef !== null) {
-        errors.push("current-turn candidate cannot name an artifact source");
+        errors.push(issue("embedded_candidate_invalid"));
       }
       if (
         candidate.start === null ||
@@ -216,7 +346,7 @@ function validateEmbeddedCandidates(
         candidate.end <= candidate.start ||
         candidate.end > input.currentTurn.length
       ) {
-        errors.push("current-turn candidate must have valid current-turn offsets");
+        errors.push(issue("embedded_candidate_invalid"));
       }
     }
   }
@@ -234,15 +364,15 @@ export function bindTurnPlan(
   if (!parsed.success) {
     return failClosed(
       input,
-      parsed.error.issues.map((issue) => `${issue.path.join(".") || "plan"}: ${issue.message}`),
+      [issue("structured_output_invalid")],
     );
   }
 
-  const errors: string[] = [];
+  const errors: TurnPlanError[] = [];
   const boundOperations: TurnPlanOperation[] = [];
-  validateAuthority(input.currentTurn, parsed.data, errors);
+  const authority = bindAuthority(input.currentTurn, parsed.data, errors);
   validateOperationBindings(input, parsed.data, boundOperations, errors);
-  validateClarification(parsed.data, errors);
+  validateSemantics(input, parsed.data, errors);
   validateEmbeddedCandidates(input, parsed.data, errors);
   if (errors.length > 0) return failClosed(input, errors);
 
@@ -250,11 +380,18 @@ export function bindTurnPlan(
     status: "ready",
     plan: {
       ...parsed.data,
+      authority: authority!,
       requestedOperations: boundOperations,
       metadata: metadata(input),
     },
     errors: [],
+    observedProviderAttempts: 0,
   };
+}
+
+/** Attach the one observed provider attempt made by the runtime compiler seam. */
+export function withObservedProviderAttempt(compilation: TurnPlanCompilation): TurnPlanCompilation {
+  return { ...compilation, observedProviderAttempts: 1 };
 }
 
 export function turnPlanPrompt(input: TurnPlanCompileInput): string {

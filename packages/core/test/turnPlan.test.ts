@@ -36,6 +36,7 @@ function input(overrides: Partial<TurnPlanCompileInput> = {}): TurnPlanCompileIn
 function validPlan(overrides: Partial<TurnPlanModelOutput> = {}): TurnPlanModelOutput {
   return {
     outerIntent: "mutate",
+    disposition: "tool",
     authority: { quote: "Save this entire note", start: 0, end: 21 },
     requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"artifact://voice-1"}', payloadRef: "artifact://voice-1" }],
     embeddedCandidates: [
@@ -50,6 +51,7 @@ function validPlan(overrides: Partial<TurnPlanModelOutput> = {}): TurnPlanModelO
         active: false,
       },
     ],
+    directAnswer: null,
     needsClarification: false,
     clarification: null,
     ...overrides,
@@ -73,9 +75,10 @@ describe("TurnPlan strict contract", () => {
         outerIntent: "mutate",
         authority: { quote: "Save this entire note", start: 0, end: 21 },
         requestedOperations: [expect.objectContaining({ toolId: exactWriteTool })],
-        metadata: { correlationId: "turn-123", compilerVersion: "riv-1", modelCallCount: 1 },
+        metadata: { correlationId: "turn-123", compilerVersion: "riv-1", modelCallBudget: 1 },
       }),
       errors: [],
+      observedProviderAttempts: 0,
     });
   });
 
@@ -88,7 +91,7 @@ describe("TurnPlan strict contract", () => {
     );
     expect(result.status).toBe("clarify");
     expect(result.plan).toBeNull();
-    expect(result.errors.join(" ")).toContain("not bound to an exact discovered tool");
+    expect(result.errors.map((error) => error.code)).toContain("tool_not_discovered");
   });
 
   it("fails closed when the authority quote is not an exact current-turn slice", () => {
@@ -98,7 +101,7 @@ describe("TurnPlan strict contract", () => {
     );
     expect(result.status).toBe("clarify");
     expect(result.plan).toBeNull();
-    expect(result.errors).toContain("authority span is not an exact slice of the current user turn");
+    expect(result.errors.map((error) => error.code)).toContain("authority_span_invalid");
   });
 
   it("references a long artifact once without putting its content in the plan prompt or output", () => {
@@ -107,7 +110,7 @@ describe("TurnPlan strict contract", () => {
       payloads: [{ ref: "artifact://long-voice", kind: "voice_transcript", mediaType: "text/plain", sizeBytes: transcript.length }],
     });
     const plan = validPlan({
-      requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"source":"artifact"}', payloadRef: "artifact://long-voice" }],
+      requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"artifact://long-voice"}', payloadRef: "artifact://long-voice" }],
       embeddedCandidates: [{
         sourceKind: "artifact",
         sourceRef: "artifact://long-voice",
@@ -145,7 +148,7 @@ describe("TurnPlan strict contract", () => {
     );
     expect(result.status).toBe("clarify");
     expect(result.plan).toBeNull();
-    expect(result.errors.join(" ")).toContain("inputJson is not valid JSON");
+    expect(result.errors.map((error) => error.code)).toContain("arguments_invalid");
   });
 
   it("allows ambiguity only as a no-operation clarification", () => {
@@ -153,8 +156,10 @@ describe("TurnPlan strict contract", () => {
       input(),
       validPlan({
         outerIntent: "clarify",
+        disposition: "clarify",
         requestedOperations: [],
         embeddedCandidates: [],
+        directAnswer: null,
         needsClarification: true,
         clarification: "Which connected destination should receive it?",
       }),
@@ -167,18 +172,22 @@ describe("TurnPlan strict contract", () => {
   });
 
   it.each([
-    ["What records match this name?", "read"],
-    ["Do not store this.", "cancel"],
-    ["Has the requested operation finished?", "status"],
-    ["Yes, approve the pending action.", "approve"],
-  ] as const)("represents %s as the distinct %s outer intent", (currentTurn, outerIntent) => {
+    ["What records match this name?", "read", "direct_answer"],
+    ["Do not store this.", "cancel", "host_resolution"],
+    ["Has the requested operation finished?", "status", "direct_answer"],
+    ["Yes, approve the pending action.", "approve", "host_resolution"],
+    ["Thanks, that is all.", "respond", "direct_answer"],
+  ] as const)("represents %s as the distinct %s outer intent", (currentTurn, outerIntent, disposition) => {
+    const directAnswer = disposition === "direct_answer" ? "A bounded answer." : null;
     const result = bindTurnPlan(
       input({ currentTurn }),
       validPlan({
         outerIntent,
+        disposition,
         authority: { quote: currentTurn.slice(0, -1), start: 0, end: currentTurn.length - 1 },
         requestedOperations: [],
         embeddedCandidates: [],
+        directAnswer,
       }),
     );
     expect(result.status).toBe("ready");
@@ -193,5 +202,135 @@ describe("TurnPlan strict contract", () => {
     });
     expect(result.status).toBe("clarify");
     expect(result.plan).toBeNull();
+  });
+
+  it("rejects unknown keys at the top level and in nested objects", () => {
+    expect(turnPlanModelSchema.safeParse({ ...validPlan(), surprise: true }).success).toBe(false);
+    expect(turnPlanModelSchema.safeParse({
+      ...validPlan(),
+      authority: { ...validPlan().authority, surprise: true },
+    }).success).toBe(false);
+    expect(turnPlanModelSchema.safeParse({
+      ...validPlan(),
+      requestedOperations: [{ ...validPlan().requestedOperations[0], surprise: true }],
+    }).success).toBe(false);
+  });
+
+  it("validates arguments against the exact selected tool JSON Schema", () => {
+    const result = bindTurnPlan(
+      input(),
+      validPlan({
+        requestedOperations: [{
+          toolId: exactWriteTool,
+          inputJson: '{"unexpected":"missing required text"}',
+          payloadRef: null,
+        }],
+      }),
+    );
+    expect(result.status).toBe("clarify");
+    expect(result.plan).toBeNull();
+    expect(result.errors.map((error) => error.code)).toContain("arguments_schema_mismatch");
+  });
+
+  it("allows a read operation only when the exact tool advertises readOnlyHint=true", () => {
+    const currentTurn = "Find this record.";
+    const result = bindTurnPlan(
+      input({ currentTurn }),
+      validPlan({
+        outerIntent: "read",
+        disposition: "tool",
+        authority: { quote: "Find this record", start: 0, end: 16 },
+        requestedOperations: [{ toolId: exactReadTool, inputJson: '{"query":"record"}', payloadRef: null }],
+        embeddedCandidates: [],
+      }),
+    );
+    expect(result.status).toBe("ready");
+  });
+
+  it.each([
+    {
+      name: "mutate with no operation",
+      plan: { requestedOperations: [] },
+    },
+    {
+      name: "approve introducing a mutation",
+      plan: { outerIntent: "approve", disposition: "tool", requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"x"}', payloadRef: null }] },
+    },
+    {
+      name: "cancel introducing a mutation",
+      plan: { outerIntent: "cancel", disposition: "tool", requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"x"}', payloadRef: null }] },
+    },
+    {
+      name: "read binding a mutating tool",
+      plan: { outerIntent: "read", disposition: "tool", requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"x"}', payloadRef: null }] },
+    },
+    {
+      name: "clarify carrying an operation",
+      plan: {
+        outerIntent: "clarify",
+        disposition: "clarify",
+        requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"x"}', payloadRef: null }],
+        directAnswer: null,
+        needsClarification: true,
+        clarification: "Which target?",
+      },
+    },
+  ])("fails closed for semantic contradiction: $name", ({ plan }) => {
+    const result = bindTurnPlan(input(), validPlan(plan as Partial<TurnPlanModelOutput>));
+    expect(result.status).toBe("clarify");
+    expect(result.plan).toBeNull();
+    expect(result.errors.map((error) => error.code)).toContain("semantic_contradiction");
+  });
+
+  it("normalizes a unique non-BMP authority quote to exact JavaScript offsets", () => {
+    const currentTurn = "🚀 Save this.";
+    const result = bindTurnPlan(
+      input({ currentTurn }),
+      validPlan({
+        authority: { quote: "Save this", start: 2, end: 11 },
+        requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"x"}', payloadRef: null }],
+        embeddedCandidates: [],
+      }),
+    );
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.plan.authority).toEqual({ quote: "Save this", start: 3, end: 12 });
+      expect(currentTurn.slice(result.plan.authority.start, result.plan.authority.end)).toBe("Save this");
+    }
+  });
+
+  it("requires exact supplied offsets when the authority quote repeats", () => {
+    const currentTurn = "Save this, then Save this.";
+    const exactSecond = bindTurnPlan(
+      input({ currentTurn }),
+      validPlan({
+        authority: { quote: "Save this", start: 16, end: 25 },
+        requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"x"}', payloadRef: null }],
+        embeddedCandidates: [],
+      }),
+    );
+    expect(exactSecond.status).toBe("ready");
+
+    const ambiguous = bindTurnPlan(
+      input({ currentTurn }),
+      validPlan({
+        authority: { quote: "Save this", start: 1, end: 10 },
+        requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"x"}', payloadRef: null }],
+        embeddedCandidates: [],
+      }),
+    );
+    expect(ambiguous.status).toBe("clarify");
+    expect(ambiguous.errors.map((error) => error.code)).toContain("authority_span_invalid");
+  });
+
+  it("returns only stable safe reason codes and messages for invalid model output", () => {
+    const secret = "sk-secret-model-output";
+    const result = bindTurnPlan(input(), { secret });
+    expect(result.status).toBe("clarify");
+    expect(JSON.stringify(result.errors)).not.toContain(secret);
+    expect(result.errors).toEqual([{
+      code: "structured_output_invalid",
+      message: "The turn plan did not match the required structure.",
+    }]);
   });
 });
