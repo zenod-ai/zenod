@@ -19,6 +19,7 @@ export function createRingUnit(options: CreateZenodUnitOptions = {}) {
     additionalMemoryChannelTools: options.additionalMemoryChannelTools,
     additionalToolProfiles: {
       ...(options.additionalToolProfiles ?? {}),
+      "assistant-channel": ["chat_with_ring"],
       "capture-ticket": ["record_capture_ticket"],
     },
     registerAdditionalTools(server, context, runtime) {

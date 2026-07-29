@@ -43,6 +43,7 @@ import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
 export const PHYLAX_DEFAULT_RING_TICKET_URL = "https://ring.zenod.dev/mcp";
+export const PHYLAX_DEFAULT_ASSISTANT_URL = "https://ring.zenod.dev/mcp";
 const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
@@ -61,6 +62,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
   });
   const tenantSettings = new PhylaxTenantSettingsStore(storage.dataDir, storage, {
+    assistantUrl: env.PHYLAX_ASSISTANT_URL?.trim() || PHYLAX_DEFAULT_ASSISTANT_URL,
     ringTicketUrl: env.PHYLAX_RING_TICKET_URL?.trim() || PHYLAX_DEFAULT_RING_TICKET_URL,
   });
   const captureJournalPath = join(storage.dataDir, "phylax-capture-jobs.sqlite");
@@ -407,6 +409,8 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
   const allowed = new Set([
     "downstreamUrl",
     "downstreamToken",
+    "assistantUrl",
+    "assistantToken",
     "ringTicketUrl",
     "ringTicketToken",
     "transcriptionEnabled",
@@ -450,6 +454,8 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
   return {
     ...(record.downstreamUrl !== undefined ? { downstreamUrl: optionalString(record, "downstreamUrl", 4_096) } : {}),
     ...(record.downstreamToken !== undefined ? { downstreamToken: optionalString(record, "downstreamToken", 8_192) } : {}),
+    ...(record.assistantUrl !== undefined ? { assistantUrl: optionalString(record, "assistantUrl", 4_096) } : {}),
+    ...(record.assistantToken !== undefined ? { assistantToken: optionalString(record, "assistantToken", 8_192) } : {}),
     ...(record.ringTicketUrl !== undefined ? { ringTicketUrl: optionalString(record, "ringTicketUrl", 4_096) } : {}),
     ...(record.ringTicketToken !== undefined ? { ringTicketToken: optionalString(record, "ringTicketToken", 8_192) } : {}),
     ...(record.transcriptionEnabled !== undefined

@@ -421,6 +421,48 @@ describe("PhylaxTenantSettingsStore", () => {
     expect(settingsFile).not.toContain("ring.example/mcp/beta");
   });
 
+  it("keeps assistant Ring credentials distinct from memory and capture-ticket authorities", async () => {
+    const { dataDir, storage, store } = await setup();
+    store.update("alpha", {
+      downstreamUrl: "https://memory.example/mcp/alpha",
+      downstreamToken: "alpha-memory-only",
+      assistantUrl: "https://ring.example/mcp/alpha-assistant",
+      assistantToken: "alpha-assistant-only",
+      ringTicketUrl: "https://ring.example/mcp/alpha-ticket",
+      ringTicketToken: "alpha-ticket-only",
+    });
+    store.update("beta", {
+      assistantUrl: "https://ring.example/mcp/beta-assistant",
+      assistantToken: "beta-assistant-only",
+    });
+
+    expect(store.assistantCredentials("alpha")).toEqual({
+      url: "https://ring.example/mcp/alpha-assistant",
+      token: "alpha-assistant-only",
+    });
+    expect(store.assistantCredentials("beta")).toEqual({
+      url: "https://ring.example/mcp/beta-assistant",
+      token: "beta-assistant-only",
+    });
+    expect(store.view("alpha")).toMatchObject({
+      assistantUrl: "https://ring.example/mcp/alpha-assistant",
+      assistantTokenConfigured: true,
+    });
+
+    const restarted = new PhylaxTenantSettingsStore(dataDir, storage);
+    expect(restarted.assistantCredentials("alpha")).toEqual({
+      url: "https://ring.example/mcp/alpha-assistant",
+      token: "alpha-assistant-only",
+    });
+    expect(restarted.assistantCredentials("gamma")).toBeNull();
+
+    const settingsFile = await readFile(store.path, "utf8");
+    expect(settingsFile).not.toContain("alpha-assistant-only");
+    expect(settingsFile).not.toContain("beta-assistant-only");
+    expect(settingsFile).not.toContain("alpha-assistant");
+    expect(settingsFile).not.toContain("beta-assistant");
+  });
+
   it("tracks credential rejection without persisting secrets and clears it only through the existing update seam", async () => {
     const { dataDir, store } = await setup();
     store.update("alpha", {

@@ -27,6 +27,9 @@ export interface PhylaxTenantRoute {
   tenantId: string;
   downstreamUrl: string;
   downstreamToken: string;
+  /** Ring authority scoped to assistant chat only; never used by capture tools. */
+  assistantUrl?: string;
+  assistantToken?: string;
   /** Tenant-owned mechanical dispatch table. The resolver must never substitute another tenant's defaults. */
   turnBindings?: PhylaxTurnBindings;
   /** Non-secret revision used only to reject stale in-flight health completions. */
@@ -1220,9 +1223,12 @@ export class PhylaxChannelsOrgan {
       ...(handoff.artifact_file_name ? { filename: handoff.artifact_file_name } : {}),
       ...(ingestMediaType ? { mediaType: ingestMediaType } : {}),
     };
+    const selectedRoute = binding?.tool === "chat_with_ring"
+      ? assistantRoute(route)
+      : route;
     const call: PhylaxDownstreamCall = binding
       ? {
-          route,
+          route: selectedRoute,
           tool: binding.tool,
           arguments: Object.fromEntries(
             Object.entries(binding.argumentMappings).flatMap(([field, source]) => {
@@ -1239,7 +1245,7 @@ export class PhylaxChannelsOrgan {
           handoff,
         }
       : {
-          route,
+          route: selectedRoute,
           tool: "chat_with_ring",
           arguments: { message, surface, conversationKey },
           handoff,
@@ -1269,7 +1275,7 @@ export class PhylaxChannelsOrgan {
       transcriptionFailureCode: handoff.transcription_failed?.code ?? null,
       artifactRef: handoff.artifact_ref ?? null,
       artifactSha256: artifact?.sha256 ?? null,
-      downstreamDestination: safeDownstreamDestination(route),
+      downstreamDestination: safeDownstreamDestination(call.route),
       downstreamCorrelationId: audit.correlationId,
       downstreamReceipt: audit.receipt,
       failureStage: "downstream",
@@ -1387,7 +1393,7 @@ export class PhylaxChannelsOrgan {
       if (error instanceof PhylaxChannelError) throw error;
       const failureCode = downstreamFailureCode(error);
       if (failureCode === "downstream_unauthorized") {
-        await this.reportDownstreamCredentialStatus(route, "rejected");
+        await this.reportDownstreamCredentialStatus(call.route, "rejected");
         throw downstreamCredentialRejectedError(
           failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
         );
@@ -1406,7 +1412,7 @@ export class PhylaxChannelsOrgan {
         ? "downstream_unauthorized"
         : "downstream_rejected";
       if (failureCode === "downstream_unauthorized") {
-        await this.reportDownstreamCredentialStatus(route, "rejected");
+        await this.reportDownstreamCredentialStatus(call.route, "rejected");
         throw downstreamCredentialRejectedError(failureAudit(downstreamMs, failureCode, audit));
       }
       throw new PhylaxChannelError(
@@ -1423,7 +1429,7 @@ export class PhylaxChannelsOrgan {
         failureAudit(downstreamMs, "downstream_empty_reply", audit),
       );
     }
-    await this.reportDownstreamCredentialStatus(route, "healthy");
+    await this.reportDownstreamCredentialStatus(call.route, "healthy");
     return {
       tenantId: route.tenantId,
       sender,
@@ -1431,7 +1437,7 @@ export class PhylaxChannelsOrgan {
       downstream,
       handoff,
       artifactSha256: artifact?.sha256 ?? null,
-      downstreamDestination: safeDownstreamDestination(route),
+      downstreamDestination: safeDownstreamDestination(call.route),
       downstreamCorrelationId: audit.correlationId,
       downstreamReceipt: audit.receipt,
       timing: {
@@ -1444,8 +1450,8 @@ export class PhylaxChannelsOrgan {
         id: input.messageId?.trim() || `phylax_${randomUUID().replaceAll("-", "")}`,
         tenant_id: route.tenantId,
         channel: input.channel,
-        downstream_url: safeDownstreamOrigin(route),
-        downstream_identity: safeDownstreamDestination(route),
+        downstream_url: safeDownstreamOrigin(call.route),
+        downstream_identity: safeDownstreamDestination(call.route),
       }],
       ...(backgroundCaptureJob
         ? { afterReply: () => this.startBackgroundPoll(backgroundCaptureJob) }
@@ -1514,6 +1520,22 @@ function downstreamCredentialRejectedError(audit: PhylaxFailureAudit): PhylaxCha
     audit,
   );
 }
+
+function assistantRoute(route: PhylaxTenantRoute): PhylaxTenantRoute {
+  if (!route.assistantUrl?.trim() || !route.assistantToken?.trim()) {
+    throw new PhylaxChannelError(
+      "downstream_error",
+      "tenant assistant downstream is not configured",
+    );
+  }
+  return {
+    tenantId: route.tenantId,
+    downstreamUrl: route.assistantUrl,
+    downstreamToken: route.assistantToken,
+    turnBindings: route.turnBindings,
+  };
+}
+
 function configuredPeer(route: PhylaxTenantRoute) {
   return {
     name: `phylax-memory-${route.tenantId}`,

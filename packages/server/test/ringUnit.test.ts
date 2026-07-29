@@ -28,6 +28,44 @@ describe("Ring council unit", () => {
     expect(resolveServerMode({ ZENOD_UNIT: "ring" }, RING_AGENT.name)).toBe("ring");
   });
 
+  it("issues an assistant-channel token that advertises only chat_with_ring", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "ring-assistant-profile-"));
+    dirs.push(dataDir);
+    const unit = createRingUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore([
+        { token: "primary-token", tenant: { id: "tenant-alpha" } },
+      ]),
+      controlPlane: { token: "control-secret" },
+      env: { CHASSIS_VAULT_MASTER_KEY: MASTER_KEY },
+    });
+    const issued = await unit.app.request("/api/tenants/tenant-alpha/tokens", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer control-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ profile: "assistant-channel" }),
+    });
+    expect(issued.status).toBe(200);
+    const token = ((await issued.json()) as { token: string }).token;
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const started = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(started));
+    });
+    try {
+      const address = server.address() as AddressInfo;
+      const client = new Client({ name: "assistant-profile-test", version: "1" });
+      await client.connect(new StreamableHTTPClientTransport(
+        new URL(`http://127.0.0.1:${address.port}/mcp/${token}`),
+      ));
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["chat_with_ring"]);
+      await client.close();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      unit.close();
+    }
+  });
+
   it("serves the Ring landing on its canonical host and the customer app at /app", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "ring-static-"));
     dirs.push(dataDir);
