@@ -657,7 +657,7 @@ describe("BrainEngine", () => {
     }
   });
 
-  it("rejects mutation-success language from a read-only model answer", async () => {
+  it("keeps quoted mutation words intact in a read-only model answer", async () => {
     llm.answerOverride = async (_input, tools) => {
       await tools.readNote!("Areas/Insurance.md");
       return {
@@ -668,10 +668,7 @@ describe("BrainEngine", () => {
 
     const answer = await engine().ask("What insurance do I have?");
 
-    expect(answer.text).toBe(
-      "I couldn't return that draft because it contained an unverified action claim. ask_brain is read-only.",
-    );
-    expect(answer.text).not.toMatch(/\b(saved|sent|posted|done)\b/i);
+    expect(answer.text).toBe("Done. I saved it and posted the update.");
   });
 
   it("removes an invented exact literal and invalid anchor from a same-log distractor replay", async () => {

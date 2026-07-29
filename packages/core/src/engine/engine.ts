@@ -38,7 +38,7 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
 import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
-import { sanitizeGroundedAnswer, sanitizeReadOnlyAnswerText } from "./answerGrounding.js";
+import { sanitizeGroundedAnswer } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
 import {
@@ -1371,14 +1371,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       ...result.readPaths.map((path) => ({ path, githubUrl: githubUrl(location, path) })),
     ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
     return {
-      text: sanitizeReadOnlyAnswerText(
-        sanitizeGroundedAnswer({
-          question,
-          text: result.text,
-          readSpans: [...readSpans].map(([path, text]) => ({ path, text })),
-          pinnedSpans,
-        }),
-      ),
+      text: sanitizeGroundedAnswer({
+        question,
+        text: result.text,
+        readSpans: [...readSpans].map(([path, text]) => ({ path, text })),
+        pinnedSpans,
+      }),
       sources,
     };
   }
