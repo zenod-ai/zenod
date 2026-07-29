@@ -381,12 +381,11 @@ export class PhylaxPortedRuntime {
       ...(adapters.telegramFetch ? { fetchImpl: adapters.telegramFetch } : {}),
     });
     this.organ.setTerminalReceiptDelivery(async (channel, recipient, text, captureProviderMessageId) => {
-      if (channel === "whatsapp") {
-        return this.whatsapp.sendText(recipient, text, captureProviderMessageId);
-      } else {
-        return this.telegram.sendText(recipient, text);
-      }
+      const delivery = channel === "whatsapp"
+        ? await this.whatsapp.sendText(recipient, text, captureProviderMessageId)
+        : await this.telegram.sendText(recipient, text);
       this.wakeCaptureTickets?.();
+      return delivery;
     });
     this.organ.setTerminalReceiptRecovery(async (
       channel,

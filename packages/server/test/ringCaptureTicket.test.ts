@@ -7,7 +7,7 @@ import { serve } from "@hono/node-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createMemoryTenantStore } from "@zenod/mcp-chassis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { conversationId, type StoreResult } from "zenod";
 
 import { captureMemoryAuthorityId } from "../src/captureMemoryAuthority.js";
@@ -384,7 +384,7 @@ describe("Ring capture context ticket", () => {
     }
   });
 
-  it("uses createPhylaxUnit production wiring to deliver only after terminal through a distinct Ring route", async () => {
+  it("wakes production Ring delivery after background terminal receipts on both provider branches", async () => {
     const phylaxDir = await mkdtemp(join(tmpdir(), "ring-capture-production-phylax-"));
     const ringDir = await mkdtemp(join(tmpdir(), "ring-capture-production-ring-"));
     const memoryDir = await mkdtemp(join(tmpdir(), "ring-capture-production-memory-"));
@@ -462,58 +462,139 @@ describe("Ring capture context ticket", () => {
         { as: "poll", mcp: "get_task_result", arg: "input", description: "Poll memory job" },
       ],
     }]);
+    const registration = phylax.phylaxTenantSettings.registerPhone(
+      "tenant-alpha",
+      "+34 611 111 111",
+      "number-alpha",
+    );
+    expect(phylax.phylaxTenantSettings.verifyInbound(
+      "34611111111@s.whatsapp.net",
+      registration.keyword,
+    )).toMatchObject({ tenantId: "tenant-alpha", verified: true });
     phylax.phylaxTenantSettings.update("tenant-alpha", {
       downstreamUrl: memoryEndpoint.url,
       downstreamToken: memoryToken,
       ringTicketUrl: ringEndpoint.url,
       ringTicketToken: ringToken,
+      telegramBinding: "@alpha",
     });
-    const conversationKey = "whatsapp:34611111111";
-    const cid = conversationId("whatsapp", conversationKey);
-    const job = memoryRuntime.taskJobStore.enqueue("store", {
-      content: "Stored only in the tenant Zenod authority.",
+    // Keep the real Zenod queue authority and MCP surface, but prevent its
+    // worker from consuming these controlled jobs before Phylax crosses from
+    // foreground polling to the background terminal path under test.
+    vi.spyOn(memoryRuntime.taskJobQueue, "enqueue").mockImplementation(
+      (kind, input, idempotencyKey) =>
+        memoryRuntime.taskJobStore.enqueue(kind, input, idempotencyKey),
+    );
+    const organOptions = (
+      phylax.phylaxRuntime.organ as unknown as {
+        options: {
+          captureForegroundDeadlineMs?: number;
+          capturePollIntervalMs?: number;
+          discoverDownstream?: () => Promise<unknown>;
+        };
+      }
+    ).options;
+    organOptions.captureForegroundDeadlineMs = 5;
+    organOptions.capturePollIntervalMs = 1;
+    organOptions.discoverDownstream = async () => ({
+      transport: "connected",
+      tools: "ready",
+      specs: [{
+        as: "memory",
+        mcp: "store_memory",
+        arg: "input",
+        description: "Store memory",
+        inputSchema: {
+          type: "object",
+          required: ["content"],
+          properties: { content: { type: "string", minLength: 1 } },
+        },
+      }],
     });
-    const ticket: CaptureTicketDelivery = {
-      tenantId: "tenant-alpha",
-      surface: "whatsapp",
-      conversationKey,
-      providerMessageId: "production-capture-42",
-      jobId: job.id,
-      memoryAuthorityId: captureMemoryAuthorityId({
-        url: memoryEndpoint.url,
-        token: memoryToken,
-      }),
-      captureTool: "store_memory",
-    };
+    const whatsappSend = vi.spyOn(phylax.phylaxRuntime.whatsapp, "sendText")
+      .mockResolvedValue({ sentMessageId: "wa-terminal-receipt" });
+    const telegramSend = vi.spyOn(phylax.phylaxRuntime.telegram, "sendText")
+      .mockResolvedValue({ sentMessageId: "tg-terminal-receipt" });
+    const cases = [
+      {
+        channel: "whatsapp" as const,
+        sender: "34611111111",
+        chatId: "wa-chat-alpha",
+        providerMessageId: "wa-production-capture",
+        evidenceRef: "Log/2026-07-29.md#^production-wa",
+        page: "Areas/Production WhatsApp.md",
+      },
+      {
+        channel: "telegram" as const,
+        sender: "@alpha",
+        chatId: "7711",
+        providerMessageId: "tg-production-capture",
+        evidenceRef: "Log/2026-07-29.md#^production-tg",
+        page: "Areas/Production Telegram.md",
+      },
+    ];
     try {
-      // This is createPhylaxUnit's real producer and delivery closure. Correlation
-      // is durable, but it cannot call Ring while the Zenod job is nonterminal.
-      phylax.ringCaptureTickets.observe(ticket);
-      phylax.ringCaptureTickets.resume();
-      await phylax.ringCaptureTickets.flush();
-      expect(await ringRuntime.state.recentWindow(cid)).toEqual([]);
+      for (const capture of cases) {
+        const conversationKey = capture.channel === "telegram"
+          ? "telegram:alpha"
+          : `whatsapp:${capture.sender}`;
+        const cid = conversationId(capture.channel, conversationKey);
+        const receipt = await phylax.phylaxRuntime.organ.receive({
+          channel: capture.channel,
+          sender: capture.sender,
+          chatId: capture.chatId,
+          messageId: capture.providerMessageId,
+          transcription: {
+            text_transcript: `Store this through ${capture.channel}.`,
+          },
+        });
+        const structured = receipt.downstream.structuredContent as {
+          ticket_id?: unknown;
+          state?: unknown;
+        } | undefined;
+        expect(structured?.state).toBe("accepted");
+        expect(typeof structured?.ticket_id).toBe("string");
+        expect(receipt.replyText).toContain("still filing");
+        expect(receipt.afterReply).toBeTypeOf("function");
+        expect(await ringRuntime.state.recentWindow(cid)).toEqual([]);
 
-      memoryRuntime.taskJobStore.update(job.id, {
-        status: "done",
-        result: stored("Log/2026-07-29.md#^production", "Areas/Production.md"),
-      });
-      phylax.ringCaptureTickets.observeJob({
-        tenantId: ticket.tenantId,
-        surface: ticket.surface,
-        conversationKey: ticket.conversationKey,
-        providerMessageId: ticket.providerMessageId,
-        jobId: ticket.jobId,
-      }, true);
-      await phylax.ringCaptureTickets.flush();
-      expect(await ringRuntime.state.recentWindow(cid)).toMatchObject([{
-        role: "assistant",
-        surface: "whatsapp",
-        text: [
-          "Capture context:",
-          "Summary: Filed memory in Areas/Production.md.",
-          "Evidence: Log/2026-07-29.md#^production",
-        ].join("\n"),
-      }]);
+        const jobId = structured!.ticket_id as string;
+        expect(memoryRuntime.taskJobStore.get(jobId)?.status).toBe("queued");
+        memoryRuntime.taskJobStore.update(jobId, {
+          status: "done",
+          result: stored(capture.evidenceRef, capture.page),
+        });
+
+        // This starts the actual organ background poll. Its successful provider
+        // delivery must pass through PhylaxPortedRuntime's production callback,
+        // wake journal recovery, and reach Ring without restart or direct
+        // producer observation/drain calls.
+        receipt.afterReply?.();
+        await vi.waitFor(async () => {
+          expect(await ringRuntime.state.recentWindow(cid)).toMatchObject([{
+            role: "assistant",
+            surface: capture.channel,
+            text: [
+              "Capture context:",
+              `Summary: Filed memory in ${capture.page}.`,
+              `Evidence: ${capture.evidenceRef}`,
+            ].join("\n"),
+          }]);
+        }, { timeout: 5_000 });
+        expect(await ringRuntime.state.recentWindow(cid)).toHaveLength(1);
+      }
+
+      expect(whatsappSend).toHaveBeenCalledTimes(1);
+      expect(whatsappSend).toHaveBeenCalledWith(
+        "34611111111",
+        expect.stringContaining("Log/2026-07-29.md#^production-wa"),
+        "wa-production-capture",
+      );
+      expect(telegramSend).toHaveBeenCalledTimes(1);
+      expect(telegramSend).toHaveBeenCalledWith(
+        "7711",
+        expect.stringContaining("Log/2026-07-29.md#^production-tg"),
+      );
       expect(phylax.phylaxTenantSettings.downstreamCredentials("tenant-alpha")).toEqual({
         url: memoryEndpoint.url,
         token: memoryToken,
@@ -523,21 +604,29 @@ describe("Ring capture context ticket", () => {
         token: ringToken,
       });
 
-      phylax.ringCaptureTickets.observeJob({
-        tenantId: ticket.tenantId,
-        surface: ticket.surface,
-        conversationKey: ticket.conversationKey,
-        providerMessageId: ticket.providerMessageId,
-        jobId: ticket.jobId,
-      }, true);
-      phylax.ringCaptureTickets.resume();
-      await phylax.ringCaptureTickets.flush();
-      expect(await ringRuntime.state.recentWindow(cid)).toHaveLength(1);
+      const journal = new DatabaseSync(
+        join(phylaxDir, "phylax-capture-jobs.sqlite"),
+        { readOnly: true },
+      );
+      const providerReceipts = journal.prepare(
+        `SELECT channel, provider_receipt_message_id
+         FROM phylax_capture_receipts
+         ORDER BY channel`,
+      ).all();
+      journal.close();
+      expect(providerReceipts).toEqual([
+        { channel: "telegram", provider_receipt_message_id: "tg-terminal-receipt" },
+        { channel: "whatsapp", provider_receipt_message_id: "wa-terminal-receipt" },
+      ]);
+
+      await phylax.phylaxRuntime.organ.resumePendingCaptures();
+      expect(whatsappSend).toHaveBeenCalledTimes(1);
+      expect(telegramSend).toHaveBeenCalledTimes(1);
     } finally {
       await phylax.close();
       await new Promise<void>((resolve) => ringEndpoint.server.close(() => resolve()));
       await new Promise<void>((resolve) => memoryEndpoint.server.close(() => resolve()));
       await Promise.all([ring.close(), memory.close()]);
     }
-  });
+  }, 15_000);
 });
