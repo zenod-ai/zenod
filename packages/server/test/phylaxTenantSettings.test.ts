@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChassisStorage } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it } from "vitest";
-import { PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
+import {
+  defaultPhylaxTurnBindings,
+  PhylaxTenantSettingsStore,
+} from "../src/phylaxTenantSettings.js";
 
 const dirs: string[] = [];
 const MASTER_KEY = "35".repeat(32);
@@ -21,6 +24,170 @@ async function setup() {
 }
 
 describe("PhylaxTenantSettingsStore", () => {
+  it("defaults every turn type and standalone voice routing without changing the legacy call shape", async () => {
+    const { store } = await setup();
+
+    expect(store.get("alpha")).toMatchObject({
+      voiceDefault: "capture",
+      turnBindings: {
+        voice_note: {
+          tool: "chat_with_ring",
+          argumentMappings: {
+            message: { source: "message" },
+            surface: { source: "surface" },
+            conversationKey: { source: "conversationKey" },
+          },
+        },
+        text: {
+          tool: "chat_with_ring",
+          argumentMappings: {
+            message: { source: "message" },
+            surface: { source: "surface" },
+            conversationKey: { source: "conversationKey" },
+          },
+        },
+        media: {
+          tool: "chat_with_ring",
+          argumentMappings: {
+            message: { source: "message" },
+            surface: { source: "surface" },
+            conversationKey: { source: "conversationKey" },
+          },
+        },
+      },
+    });
+    expect(store.view("alpha").turnBindings).toEqual(defaultPhylaxTurnBindings());
+    expect(store.view("alpha").voiceDefault).toBe("capture");
+  });
+
+  it("persists structured binding patches and voice defaults per tenant", async () => {
+    const { dataDir, storage, store } = await setup();
+    store.update("alpha", {
+      voiceDefault: "assistant",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: {
+            content: { source: "transcript" },
+            sender: { source: "sender" },
+            chatId: { source: "chatId" },
+            verbatim: { source: "constant", value: true },
+            hints: {
+              source: "constant",
+              value: ["WhatsApp voice note", { origin: "phylax" }],
+            },
+          },
+        },
+      },
+    });
+
+    const restarted = new PhylaxTenantSettingsStore(dataDir, storage);
+    expect(restarted.get("alpha").voiceDefault).toBe("assistant");
+    expect(restarted.get("alpha").turnBindings.voice_note).toEqual({
+      tool: "store_memory",
+      argumentMappings: {
+        content: { source: "transcript" },
+        sender: { source: "sender" },
+        chatId: { source: "chatId" },
+        verbatim: { source: "constant", value: true },
+        hints: {
+          source: "constant",
+          value: ["WhatsApp voice note", { origin: "phylax" }],
+        },
+      },
+    });
+    expect(restarted.get("alpha").turnBindings.text).toEqual(defaultPhylaxTurnBindings().text);
+    expect(restarted.get("beta")).toMatchObject({
+      voiceDefault: "capture",
+      turnBindings: defaultPhylaxTurnBindings(),
+    });
+    expect(JSON.parse(await readFile(store.path, "utf8"))).toMatchObject({
+      alpha: {
+        tenantId: "alpha",
+        voiceDefault: "assistant",
+        turnBindings: {
+          voice_note: { tool: "store_memory" },
+          text: { tool: "chat_with_ring" },
+          media: { tool: "chat_with_ring" },
+        },
+      },
+    });
+  });
+
+  it("rejects unknown turn types, free-form templates, and invalid mapping sources", async () => {
+    const { store } = await setup();
+    expect(() => store.update("alpha", {
+      turnBindings: {
+        unexpected: {
+          tool: "store_memory",
+          argumentMappings: {},
+        },
+      } as never,
+    })).toThrow("invalid Phylax turn type: unexpected");
+    expect(() => store.update("alpha", {
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: "{{transcript}}" },
+        },
+      } as never,
+    })).toThrow("binding argument source must be an object");
+    expect(() => store.update("alpha", {
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "invented" } },
+        },
+      } as never,
+    })).toThrow("invalid binding argument source");
+    expect(() => store.update("alpha", {
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: {
+            content: { source: "constant", value: undefined },
+          },
+        },
+      } as never,
+    })).toThrow("binding constant must contain only JSON values");
+    expect(() => store.update("alpha", { voiceDefault: "sometimes" as never }))
+      .toThrow("invalid voiceDefault");
+  });
+
+  it("backfills legacy voice routing and missing or corrupt binding rows", async () => {
+    const { store } = await setup();
+    await writeFile(store.path, JSON.stringify({
+      alpha: {
+        tenantId: "alpha",
+        voiceDefault: "invalid-legacy-value",
+        turnBindings: {
+          voice_note: {
+            tool: "store_memory",
+            argumentMappings: {
+              content: { source: "transcript" },
+              verbatim: { source: "constant", value: true },
+            },
+          },
+          text: { tool: "", argumentMappings: {} },
+        },
+      },
+    }));
+
+    expect(store.get("alpha")).toMatchObject({
+      voiceDefault: "capture",
+      turnBindings: {
+        ...defaultPhylaxTurnBindings(),
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: {
+            content: { source: "transcript" },
+            verbatim: { source: "constant", value: true },
+          },
+        },
+      },
+    });
+  });
+
   it("verifies only the claimed normalized sender using its one-time inbound keyword", async () => {
     const { store } = await setup();
     const registration = store.registerPhone("alpha", "+34 611 111 111", "number-1", 1_000);
