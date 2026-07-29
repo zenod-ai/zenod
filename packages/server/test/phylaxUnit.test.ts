@@ -3,6 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChassisStorage, createMemoryTenantStore } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const peerMocks = vi.hoisted(() => ({
+  discoverPeerTools: vi.fn(),
+}));
+
+vi.mock("../src/peerClient.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/peerClient.js")>()),
+  discoverPeerTools: peerMocks.discoverPeerTools,
+}));
+
 import { PHYLAX_AGENT } from "../src/agent.js";
 import {
   createPhylaxUnit,
@@ -21,6 +31,7 @@ const MASTER_KEY = "22".repeat(32);
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  peerMocks.discoverPeerTools.mockReset();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -174,6 +185,27 @@ describe("Phylax customer unit mount", () => {
       .toThrow("transcriptionKey must be a string");
     expect(() => parsePhylaxSettingsUpdate({ extra: true }))
       .toThrow("unsupported setting: extra");
+    expect(() => parsePhylaxSettingsUpdate({ voiceDefault: "maybe" }))
+      .toThrow("invalid voiceDefault");
+    expect(() => parsePhylaxSettingsUpdate({ turnBindings: [] }))
+      .toThrow("turnBindings must be an object");
+    expect(parsePhylaxSettingsUpdate({
+      voiceDefault: "capture",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "transcript" } },
+        },
+      },
+    })).toMatchObject({
+      voiceDefault: "capture",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "transcript" } },
+        },
+      },
+    });
     expect(() => parsePhylaxTranscriptionCheck({ tenantId: "alpha" }))
       .toThrow("unsupported check field: tenantId");
     expect(() => parsePhylaxTranscriptionCheck({ key: 123 })).toThrow("key must be a string");
@@ -316,6 +348,155 @@ describe("Phylax customer unit mount", () => {
       });
     } finally {
       unit.close();
+    }
+  });
+
+  it("discovers exact downstream tools with the saved tenant credential and never exposes credentials", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-tool-discovery-"));
+    dirs.push(dataDir);
+    const env = {
+      ACCOUNT_STATE_SECRET: "phylax-discovery-session-secret",
+      CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+    };
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env,
+    });
+    unit.customerAccounts.upsert("alpha", {
+      account_id: "github-51",
+      github_id: 51,
+      github_login: "alpha",
+      subscription_status: "active",
+      tenant_id: "tenant-alpha",
+    });
+    unit.customerAccounts.upsert("beta", {
+      account_id: "github-52",
+      github_id: 52,
+      github_login: "beta",
+      subscription_status: "active",
+      tenant_id: "tenant-beta",
+    });
+    unit.phylaxTenantSettings.update("tenant-alpha", {
+      downstreamUrl: "https://alpha-memory.example/mcp",
+      downstreamToken: "alpha-memory-token",
+    });
+    unit.phylaxTenantSettings.update("tenant-beta", {
+      downstreamUrl: "https://beta-memory.example/mcp",
+      downstreamToken: "beta-memory-token",
+    });
+    const sessions = new Hono();
+    sessions.get("/:id", (c) => {
+      const alpha = c.req.param("id") === "alpha";
+      issueCustomerSession(c, {
+        id: alpha ? 51 : 52,
+        login: alpha ? "alpha" : "beta",
+      }, env);
+      return c.text("ok");
+    });
+    const alphaCookie = (await sessions.request("/alpha")).headers.get("set-cookie")!.split(";", 1)[0]!;
+    const betaCookie = (await sessions.request("/beta")).headers.get("set-cookie")!.split(";", 1)[0]!;
+    peerMocks.discoverPeerTools.mockImplementation(async (peer: { token: string }) => ({
+      transport: "connected",
+      tools: "ready",
+      specs: [{
+        as: "unused",
+        mcp: peer.token === "alpha-memory-token" ? "remember_alpha" : "remember_beta",
+        arg: "input",
+        description: "Store one durable memory",
+        inputSchema: {
+          type: "object",
+          properties: { content: { type: "string" } },
+          required: ["content"],
+        },
+        annotations: { readOnlyHint: false },
+      }],
+    }));
+    try {
+      expect((await unit.app.request("/api/phylax/downstream/tools", { method: "POST" })).status)
+        .toBe(401);
+      const alpha = await unit.app.request("/api/phylax/downstream/tools", {
+        method: "POST",
+        headers: { cookie: alphaCookie },
+      });
+      const beta = await unit.app.request("/api/phylax/downstream/tools", {
+        method: "POST",
+        headers: { cookie: betaCookie },
+      });
+      expect(alpha.status).toBe(200);
+      expect(beta.status).toBe(200);
+      expect(alpha.headers.get("cache-control")).toBe("private, no-store");
+      const alphaBody = await alpha.json();
+      const betaBody = await beta.json();
+      expect(alphaBody).toEqual({
+        tools: [{
+          name: "remember_alpha",
+          description: "Store one durable memory",
+          inputSchema: {
+            type: "object",
+            properties: { content: { type: "string" } },
+            required: ["content"],
+          },
+          annotations: { readOnlyHint: false },
+        }],
+      });
+      expect(betaBody).toMatchObject({ tools: [{ name: "remember_beta" }] });
+      expect(JSON.stringify([alphaBody, betaBody])).not.toMatch(
+        /alpha-memory-token|beta-memory-token|alpha-memory\.example|beta-memory\.example/,
+      );
+      expect(peerMocks.discoverPeerTools.mock.calls.map(([peer]) => peer.token))
+        .toEqual(["alpha-memory-token", "beta-memory-token"]);
+    } finally {
+      await unit.close();
+    }
+  });
+
+  it("fails downstream discovery loudly without leaking the credential or transport error", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-tool-discovery-error-"));
+    dirs.push(dataDir);
+    const env = {
+      ACCOUNT_STATE_SECRET: "phylax-discovery-error-secret",
+      CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+    };
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env,
+    });
+    unit.customerAccounts.upsert("alpha", {
+      account_id: "github-61",
+      github_id: 61,
+      github_login: "alpha",
+      subscription_status: "active",
+      tenant_id: "tenant-alpha",
+    });
+    unit.phylaxTenantSettings.update("tenant-alpha", {
+      downstreamUrl: "https://secret-host.example/mcp",
+      downstreamToken: "do-not-leak-this-token",
+    });
+    const sessions = new Hono();
+    sessions.get("/", (c) => {
+      issueCustomerSession(c, { id: 61, login: "alpha" }, env);
+      return c.text("ok");
+    });
+    const cookie = (await sessions.request("/")).headers.get("set-cookie")!.split(";", 1)[0]!;
+    peerMocks.discoverPeerTools.mockResolvedValue({
+      transport: "error",
+      tools: "error",
+      specs: [],
+      error: "connect ECONNREFUSED https://secret-host.example?token=do-not-leak-this-token",
+    });
+    try {
+      const response = await unit.app.request("/api/phylax/downstream/tools", {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(response.status).toBe(502);
+      const body = JSON.stringify(await response.json());
+      expect(body).toContain("Could not connect");
+      expect(body).not.toMatch(/secret-host|do-not-leak-this-token|ECONNREFUSED/);
+    } finally {
+      await unit.close();
     }
   });
 

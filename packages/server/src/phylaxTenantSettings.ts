@@ -98,6 +98,11 @@ export interface PhylaxTenantSettingsView extends Omit<
   transcriptionKeysConfigured: Record<Exclude<PhylaxTranscriptionProvider, "local">, boolean>;
 }
 
+export interface PhylaxDownstreamCredentials {
+  url: string;
+  token: string;
+}
+
 type Store = Record<string, PhylaxTenantSettings>;
 
 function legacyChatBinding(): PhylaxTurnBinding {
@@ -348,6 +353,17 @@ export class PhylaxTenantSettingsStore {
         : transcriptionKeysConfigured[current.transcriptionProvider],
       transcriptionKeysConfigured,
     };
+  }
+
+  /**
+   * Server-only credential access for authenticated downstream operations.
+   * Callers must never serialize this value into an HTTP response or log it.
+   */
+  downstreamCredentials(tenantId: string): PhylaxDownstreamCredentials | null {
+    const current = this.get(tenantId);
+    const url = this.encryptedDownstreamUrl(current);
+    const token = this.secret(tenantId, DOWNSTREAM_TOKEN_KEY);
+    return url && token ? { url, token } : null;
   }
 
   update(
