@@ -1,10 +1,12 @@
 import type { HttpBindings } from "@hono/node-server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ChassisStorage, hashToken, type UnitContext } from "@zenod/mcp-chassis";
+import { VERSION } from "zenod";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Hono, type Context } from "hono";
 import { PHYLAX_AGENT } from "./agent.js";
+import { resolvedGitSha } from "./app.js";
 import { readCustomerSession } from "./customerSession.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
 import { probePhylaxTranscriptionProvider } from "./phylaxTranscriptionProbe.js";
@@ -85,6 +87,25 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
   void runtime.start().catch((error) => console.error("phylax channels failed to start:", error));
 
   const app = new Hono<{ Bindings: HttpBindings }>();
+  app.get("/api/health", (c) => {
+    const whatsapp = runtime.whatsapp.status();
+    const receivePathDegraded =
+      whatsapp.receivePath.status === "degraded" || whatsapp.receivePath.status === "terminal";
+    return c.json({
+      status: receivePathDegraded ? "degraded" : "ok",
+      name: PHYLAX_AGENT.name,
+      version: VERSION,
+      sha: resolvedGitSha(),
+      process: { status: "ok" },
+      channels: {
+        whatsapp: {
+          providerMode: whatsapp.providerMode,
+          state: whatsapp.state,
+          receivePath: whatsapp.receivePath,
+        },
+      },
+    });
+  });
   app.get("/api/phylax/settings", (c) => {
     const tenantId = activeTenantId(c, base, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
