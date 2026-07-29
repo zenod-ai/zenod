@@ -24,7 +24,7 @@ import {
   registerOutboundComposeApproval,
 } from "../taskingPolicy.js";
 import { registerStandingApproval } from "../approvalTokens.js";
-import { isKnownTool } from "../toolKinds.js";
+import { isKnownTool, toolKind } from "../toolKinds.js";
 import { validateMutationReceipt } from "../mutationReceipt.js";
 import type {
   AnswerInput,
@@ -1255,7 +1255,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
             if (existing) return existing;
 
             const pending = (async () => {
-              const mutationAttempt = peer.verifiedMutationReceipt === true;
+              const mutationAttempt =
+                peer.verifiedMutationReceipt === true ||
+                peer.annotations?.readOnlyHint === false ||
+                (isKnownTool(name) && toolKind(name) === "mutate");
               const receiptMetadata = (result: string) => {
                 if (!mutationAttempt && !peer.connectedMcp) return undefined;
                 const receipt = validateMutationReceipt(name, result);
