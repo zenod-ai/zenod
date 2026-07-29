@@ -9,6 +9,7 @@ import { PHYLAX_AGENT } from "./agent.js";
 import { resolvedGitSha } from "./app.js";
 import { readCustomerSession } from "./customerSession.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
+import { discoverPeerTools } from "./peerClient.js";
 import { probePhylaxTranscriptionProvider } from "./phylaxTranscriptionProbe.js";
 import {
   DEFAULT_OPENROUTER_STT_MODEL,
@@ -174,6 +175,37 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
       },
     });
   });
+  app.post("/api/phylax/downstream/tools", async (c) => {
+    const tenantId = activeTenantId(c, base, env);
+    if (!tenantId) return c.json({ error: "unauthorized" }, 401);
+    c.header("cache-control", "private, no-store");
+    const credentials = tenantSettings.downstreamCredentials(tenantId);
+    if (!credentials) {
+      return c.json({
+        error: "Save this tenant's memory-scoped MCP URL and token before discovering tools.",
+      }, 409);
+    }
+    const discovery = await discoverPeerTools({
+      name: "phylax-memory-downstream",
+      url: credentials.url,
+      token: credentials.token,
+    });
+    if (discovery.tools !== "ready") {
+      return c.json({
+        error: discovery.transport === "connected"
+          ? "Authenticated downstream tools/list failed. Check the memory-scoped token and tool schemas."
+          : "Could not connect to the tenant's downstream MCP. Check its URL, memory-scoped token, and availability.",
+      }, 502);
+    }
+    return c.json({
+      tools: discovery.specs.map((tool) => ({
+        name: tool.mcp,
+        description: tool.description,
+        inputSchema: tool.inputSchema ?? { type: "object" },
+        ...(tool.annotations ? { annotations: tool.annotations } : {}),
+      })),
+    });
+  });
   app.put("/api/phylax/settings", async (c) => {
     const tenantId = activeTenantId(c, base, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
@@ -319,6 +351,8 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
     "transcriptionProvider",
     "transcriptionModel",
     "transcriptionKey",
+    "voiceDefault",
+    "turnBindings",
     "telegramBinding",
     "notificationPrefs",
   ]);
@@ -329,6 +363,15 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
     provider !== undefined &&
     (typeof provider !== "string" || !["local", "groq", "openai", "openrouter"].includes(provider))
   ) throw new Error("invalid transcription provider");
+  const voiceDefault = record.voiceDefault;
+  if (
+    voiceDefault !== undefined
+    && (typeof voiceDefault !== "string" || !["capture", "assistant"].includes(voiceDefault))
+  ) throw new Error("invalid voiceDefault");
+  if (
+    record.turnBindings !== undefined
+    && (!record.turnBindings || typeof record.turnBindings !== "object" || Array.isArray(record.turnBindings))
+  ) throw new Error("turnBindings must be an object");
   let notificationPrefs: { whatsapp?: boolean; telegram?: boolean } | undefined;
   if (record.notificationPrefs !== undefined) {
     if (!record.notificationPrefs || typeof record.notificationPrefs !== "object" || Array.isArray(record.notificationPrefs)) {
@@ -354,6 +397,12 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
       : {}),
     ...(record.transcriptionKey !== undefined
       ? { transcriptionKey: optionalString(record, "transcriptionKey", 8_192) }
+      : {}),
+    ...(voiceDefault !== undefined
+      ? { voiceDefault: voiceDefault as PhylaxSettingsUpdate["voiceDefault"] }
+      : {}),
+    ...(record.turnBindings !== undefined
+      ? { turnBindings: record.turnBindings as PhylaxSettingsUpdate["turnBindings"] }
       : {}),
     ...(record.telegramBinding !== undefined ? { telegramBinding: optionalString(record, "telegramBinding", 256) } : {}),
     ...(notificationPrefs ? { notificationPrefs } : {}),

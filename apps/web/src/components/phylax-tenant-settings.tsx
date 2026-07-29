@@ -22,6 +22,46 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
+const TURN_TYPES = ["voice_note", "text", "media"] as const
+type TurnType = (typeof TURN_TYPES)[number]
+type VoiceDefault = "capture" | "assistant"
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue }
+type SourceName =
+  | "transcript"
+  | "sender"
+  | "chatId"
+  | "constant"
+  | "message"
+  | "surface"
+  | "conversationKey"
+type ArgumentSource = {
+  source: SourceName
+  value?: JsonValue
+  constantText?: string
+}
+type TurnBinding = {
+  tool: string
+  argumentMappings: Record<string, ArgumentSource>
+}
+type TurnBindings = Record<TurnType, TurnBinding>
+
+type DiscoveredTool = {
+  name: string
+  description?: string
+  inputSchema: Record<string, unknown>
+  annotations?: Record<string, unknown>
+}
+
+type ToolDiscoveryResponse = {
+  tools: DiscoveredTool[]
+}
+
 type Settings = {
   phoneNumber: string | null
   verified: boolean
@@ -38,6 +78,8 @@ type Settings = {
     "groq" | "openai" | "openrouter",
     boolean
   >
+  voiceDefault: VoiceDefault
+  turnBindings: TurnBindings
   telegramBinding: string | null
   notificationPrefs: { whatsapp: boolean; telegram: boolean }
 }
@@ -70,6 +112,270 @@ type TranscriptionCheck = {
   provider: Settings["transcriptionProvider"]
   model: string
   message: string
+}
+
+const SOURCE_OPTIONS: Array<{ value: SourceName; label: string }> = [
+  { value: "transcript", label: "Transcript" },
+  { value: "sender", label: "Sender" },
+  { value: "chatId", label: "Chat ID" },
+  { value: "constant", label: "Constant JSON value" },
+  { value: "message", label: "Legacy message" },
+  { value: "surface", label: "Legacy surface" },
+  { value: "conversationKey", label: "Legacy conversation key" },
+]
+
+function editableBindings(value: TurnBindings): TurnBindings {
+  return Object.fromEntries(
+    TURN_TYPES.map((turnType) => [
+      turnType,
+      {
+        tool: value[turnType].tool,
+        argumentMappings: Object.fromEntries(
+          Object.entries(value[turnType].argumentMappings).map(
+            ([field, source]) => [
+              field,
+              source.source === "constant"
+                ? {
+                    ...source,
+                    constantText: JSON.stringify(source.value),
+                  }
+                : { ...source },
+            ]
+          )
+        ),
+      },
+    ])
+  ) as TurnBindings
+}
+
+function schemaFields(tool: DiscoveredTool): {
+  properties: Record<string, unknown>
+  required: Set<string>
+} {
+  const schema = tool.inputSchema
+  if (
+    !schema ||
+    typeof schema !== "object" ||
+    Array.isArray(schema) ||
+    (schema.type !== undefined && schema.type !== "object")
+  ) {
+    throw new Error(`${tool.name} does not advertise an object input schema`)
+  }
+  const properties = schema.properties ?? {}
+  if (
+    !properties ||
+    typeof properties !== "object" ||
+    Array.isArray(properties)
+  ) {
+    throw new Error(`${tool.name} advertises malformed schema properties`)
+  }
+  const requiredValue = schema.required ?? []
+  if (
+    !Array.isArray(requiredValue) ||
+    requiredValue.some(
+      (field) =>
+        typeof field !== "string" ||
+        !Object.prototype.hasOwnProperty.call(properties, field)
+    )
+  ) {
+    throw new Error(`${tool.name} advertises malformed required fields`)
+  }
+  return {
+    properties: properties as Record<string, unknown>,
+    required: new Set(requiredValue as string[]),
+  }
+}
+
+function validateDiscovery(value: ToolDiscoveryResponse): DiscoveredTool[] {
+  if (!value || !Array.isArray(value.tools)) {
+    throw new Error("Downstream tools/list returned a malformed catalog")
+  }
+  const names = new Set<string>()
+  for (const tool of value.tools) {
+    if (
+      !tool ||
+      typeof tool.name !== "string" ||
+      !tool.name.trim() ||
+      names.has(tool.name)
+    ) {
+      throw new Error("Downstream tools/list returned invalid tool names")
+    }
+    names.add(tool.name)
+    schemaFields(tool)
+  }
+  return value.tools
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${stableJson(
+            (value as Record<string, unknown>)[key]
+          )}`
+      )
+      .join(",")}}`
+  }
+  return JSON.stringify(value)
+}
+
+function schemaSignature(tools: DiscoveredTool[]): string {
+  return stableJson(
+    [...tools]
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(({ name, inputSchema }) => ({ name, inputSchema }))
+  )
+}
+
+function materializeBindings(value: TurnBindings): TurnBindings {
+  return Object.fromEntries(
+    TURN_TYPES.map((turnType) => [
+      turnType,
+      {
+        tool: value[turnType].tool,
+        argumentMappings: Object.fromEntries(
+          Object.entries(value[turnType].argumentMappings).map(
+            ([field, source]) => {
+              if (source.source !== "constant") {
+                return [field, { source: source.source }]
+              }
+              try {
+                return [
+                  field,
+                  {
+                    source: "constant",
+                    value: JSON.parse(
+                      source.constantText ?? "null"
+                    ) as JsonValue,
+                  },
+                ]
+              } catch {
+                throw new Error(
+                  `${turnType}.${field} constant must be valid JSON`
+                )
+              }
+            }
+          )
+        ),
+      },
+    ])
+  ) as TurnBindings
+}
+
+function jsonValueType(value: JsonValue): string {
+  if (value === null) return "null"
+  if (Array.isArray(value)) return "array"
+  if (typeof value === "number" && Number.isInteger(value)) return "integer"
+  return typeof value
+}
+
+function mappingSchemaError(
+  field: string,
+  source: ArgumentSource,
+  schemaValue: unknown
+): string | null {
+  if (schemaValue === true) return null
+  if (schemaValue === false) return `${field} is rejected by its live schema`
+  if (!schemaValue || typeof schemaValue !== "object" || Array.isArray(schemaValue)) {
+    return `${field} advertises a malformed field schema`
+  }
+  const schema = schemaValue as Record<string, unknown>
+  const valueType =
+    source.source === "constant" ? jsonValueType(source.value ?? null) : "string"
+  const advertisedType = schema.type
+  const acceptedTypes =
+    typeof advertisedType === "string"
+      ? [advertisedType]
+      : Array.isArray(advertisedType) &&
+          advertisedType.every((candidate) => typeof candidate === "string")
+        ? (advertisedType as string[])
+        : advertisedType === undefined
+          ? []
+          : null
+  if (!acceptedTypes) return `${field} advertises a malformed type constraint`
+  if (
+    acceptedTypes.length > 0 &&
+    !acceptedTypes.includes(valueType) &&
+    !(valueType === "integer" && acceptedTypes.includes("number"))
+  ) {
+    return `${field} expects ${acceptedTypes.join(" or ")}, but ${source.source} supplies ${valueType}`
+  }
+  if (schema.enum !== undefined) {
+    const enumValues = schema.enum
+    if (!Array.isArray(enumValues)) {
+      return `${field} advertises a malformed enum constraint`
+    }
+    const knownDynamicValues =
+      source.source === "surface" ? ["whatsapp", "mcp"] : null
+    const knownDynamicValuesFit =
+      knownDynamicValues &&
+      knownDynamicValues.every((value) =>
+        enumValues.some((candidate) => candidate === value)
+      )
+    if (!knownDynamicValuesFit && source.source !== "constant") {
+      return `${field} is enum-constrained and requires a constant mapping`
+    }
+    if (
+      source.source === "constant" &&
+      !enumValues.some(
+        (candidate) => stableJson(candidate) === stableJson(source.value)
+      )
+    ) {
+      return `${field} constant is absent from the live enum`
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(schema, "const")) {
+    if (source.source !== "constant") {
+      return `${field} is const-constrained and requires a constant mapping`
+    }
+    if (stableJson(schema.const) !== stableJson(source.value)) {
+      return `${field} constant does not match the live const constraint`
+    }
+  }
+  return null
+}
+
+function bindingErrors(
+  bindings: TurnBindings,
+  tools: DiscoveredTool[]
+): string[] {
+  const errors: string[] = []
+  for (const turnType of TURN_TYPES) {
+    const binding = bindings[turnType]
+    const tool = tools.find((candidate) => candidate.name === binding.tool)
+    if (!tool) {
+      errors.push(`${turnType}: choose a tool from the discovered catalog`)
+      continue
+    }
+    const { properties, required } = schemaFields(tool)
+    for (const field of Object.keys(binding.argumentMappings)) {
+      if (!Object.prototype.hasOwnProperty.call(properties, field)) {
+        errors.push(
+          `${turnType}: ${field} is absent from ${tool.name}'s live schema`
+        )
+        continue
+      }
+      const compatibilityError = mappingSchemaError(
+        field,
+        binding.argumentMappings[field],
+        properties[field]
+      )
+      if (compatibilityError) {
+        errors.push(`${turnType}: ${compatibilityError}`)
+      }
+    }
+    for (const field of required) {
+      if (!binding.argumentMappings[field]) {
+        errors.push(
+          `${turnType}: required field ${field} has no source mapping`
+        )
+      }
+    }
+  }
+  return errors
 }
 
 function isCloudProvider(
@@ -143,6 +449,19 @@ export function PhylaxTenantSettings() {
     React.useState<TranscriptionCheck | null>(null)
   const [whatsappNotify, setWhatsappNotify] = React.useState(true)
   const [telegramNotify, setTelegramNotify] = React.useState(false)
+  const [voiceDefault, setVoiceDefault] =
+    React.useState<VoiceDefault>("capture")
+  const [turnBindings, setTurnBindings] = React.useState<TurnBindings | null>(
+    null
+  )
+  const [discoveredTools, setDiscoveredTools] = React.useState<
+    DiscoveredTool[] | null
+  >(null)
+  const [discoveryError, setDiscoveryError] = React.useState<string | null>(
+    null
+  )
+  const [discovering, setDiscovering] = React.useState(false)
+  const [savingConnection, setSavingConnection] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
   const apply = React.useCallback((next: Response) => {
@@ -155,6 +474,8 @@ export function PhylaxTenantSettings() {
     setTranscriptionEnabled(next.settings.transcriptionEnabled)
     setWhatsappNotify(next.settings.notificationPrefs.whatsapp)
     setTelegramNotify(next.settings.notificationPrefs.telegram)
+    setVoiceDefault(next.settings.voiceDefault)
+    setTurnBindings(editableBindings(next.settings.turnBindings))
   }, [])
 
   const load = React.useCallback(async () => {
@@ -209,6 +530,73 @@ export function PhylaxTenantSettings() {
     }
   }
 
+  async function fetchDiscoveredTools(): Promise<DiscoveredTool[]> {
+    const result = await api<ToolDiscoveryResponse>(
+      "/api/phylax/downstream/tools",
+      { method: "POST" }
+    )
+    return validateDiscovery(result)
+  }
+
+  async function discoverTools() {
+    setDiscovering(true)
+    setDiscoveryError(null)
+    try {
+      const tools = await fetchDiscoveredTools()
+      setDiscoveredTools(tools)
+      toast.success(
+        `Discovered ${tools.length} tool${tools.length === 1 ? "" : "s"}`
+      )
+    } catch (error) {
+      const message = errorMessage(error)
+      setDiscoveryError(message)
+      toast.error("Could not discover downstream tools", {
+        description: message,
+      })
+    } finally {
+      setDiscovering(false)
+    }
+  }
+
+  async function saveConnection() {
+    if (!downstreamUrl.trim()) {
+      toast.error("Enter the tenant's memory MCP URL")
+      return
+    }
+    if (!downstreamToken.trim() && !data?.settings.downstreamTokenConfigured) {
+      toast.error("Enter a memory-scoped MCP token")
+      return
+    }
+    setSavingConnection(true)
+    try {
+      const result = await api<{ settings: Settings }>("/api/phylax/settings", {
+        method: "PUT",
+        body: {
+          downstreamUrl: downstreamUrl.trim(),
+          ...(downstreamToken.trim()
+            ? { downstreamToken: downstreamToken.trim() }
+            : {}),
+        },
+      })
+      setData((current) =>
+        current ? { ...current, settings: result.settings } : current
+      )
+      setDownstreamUrl(result.settings.downstreamUrl ?? "")
+      setDownstreamToken("")
+      setDiscoveredTools(null)
+      setDiscoveryError(null)
+      toast.success("Tenant memory connection saved", {
+        description: "Discover its authenticated tools before saving bindings.",
+      })
+    } catch (error) {
+      toast.error("Could not save memory connection", {
+        description: errorMessage(error),
+      })
+    } finally {
+      setSavingConnection(false)
+    }
+  }
+
   async function save() {
     const keyConfigured =
       isCloudProvider(provider) &&
@@ -220,13 +608,32 @@ export function PhylaxTenantSettings() {
       toast.error(`${providerLabel(provider)} requires a provider key`)
       return
     }
+    if (!turnBindings) {
+      toast.error("Binding settings have not loaded")
+      return
+    }
+    if (!discoveredTools) {
+      toast.error("Discover downstream tools before saving bindings")
+      return
+    }
     setSaving(true)
     try {
+      const freshTools = await fetchDiscoveredTools()
+      if (schemaSignature(freshTools) !== schemaSignature(discoveredTools)) {
+        setDiscoveredTools(freshTools)
+        setDiscoveryError(
+          "The downstream tool schema changed. Review every binding, then save again."
+        )
+        throw new Error(
+          "Downstream schema drift detected; mappings were not saved"
+        )
+      }
+      const materialized = materializeBindings(turnBindings)
+      const errors = bindingErrors(materialized, freshTools)
+      if (errors.length > 0) throw new Error(errors.join("; "))
       const result = await api<{ settings: Settings }>("/api/phylax/settings", {
         method: "PUT",
         body: {
-          downstreamUrl,
-          ...(downstreamToken ? { downstreamToken } : {}),
           transcriptionEnabled,
           transcriptionProvider: provider,
           transcriptionModel:
@@ -242,12 +649,15 @@ export function PhylaxTenantSettings() {
             whatsapp: whatsappNotify,
             telegram: telegramNotify,
           },
+          voiceDefault,
+          turnBindings: materialized,
         },
       })
       setData((current) =>
         current ? { ...current, settings: result.settings } : current
       )
-      setDownstreamToken("")
+      setVoiceDefault(result.settings.voiceDefault)
+      setTurnBindings(editableBindings(result.settings.turnBindings))
       setTranscriptionKey("")
       setTranscriptionCheck(null)
       toast.success("Phylax settings saved")
@@ -361,6 +771,75 @@ export function PhylaxTenantSettings() {
     !isCloudProvider(provider) ||
     providerKeyConfigured ||
     transcriptionKey.trim().length > 0
+  const connectionDirty =
+    downstreamUrl.trim() !== (data?.settings.downstreamUrl ?? "") ||
+    downstreamToken.trim().length > 0
+
+  function selectBindingTool(turnType: TurnType, toolName: string) {
+    if (!turnBindings) return
+    const tool = discoveredTools?.find(
+      (candidate) => candidate.name === toolName
+    )
+    const properties = tool ? schemaFields(tool).properties : {}
+    setTurnBindings({
+      ...turnBindings,
+      [turnType]: {
+        tool: toolName,
+        argumentMappings: Object.fromEntries(
+          Object.keys(properties)
+            .filter(
+              (field) =>
+                turnBindings[turnType].argumentMappings[field] !== undefined
+            )
+            .map((field) => [
+              field,
+              turnBindings[turnType].argumentMappings[field],
+            ])
+        ),
+      },
+    })
+  }
+
+  function selectMappingSource(
+    turnType: TurnType,
+    field: string,
+    source: SourceName | ""
+  ) {
+    if (!turnBindings) return
+    const argumentMappings = {
+      ...turnBindings[turnType].argumentMappings,
+    }
+    if (!source) {
+      delete argumentMappings[field]
+    } else {
+      argumentMappings[field] =
+        source === "constant"
+          ? { source, value: null, constantText: "null" }
+          : { source }
+    }
+    setTurnBindings({
+      ...turnBindings,
+      [turnType]: { ...turnBindings[turnType], argumentMappings },
+    })
+  }
+
+  function setConstantText(
+    turnType: TurnType,
+    field: string,
+    constantText: string
+  ) {
+    if (!turnBindings) return
+    setTurnBindings({
+      ...turnBindings,
+      [turnType]: {
+        ...turnBindings[turnType],
+        argumentMappings: {
+          ...turnBindings[turnType].argumentMappings,
+          [field]: { source: "constant", constantText },
+        },
+      },
+    })
+  }
 
   if (!data && loadError)
     return (
@@ -422,9 +901,11 @@ export function PhylaxTenantSettings() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Your Ring downstream</CardTitle>
+          <CardTitle>Tenant memory MCP connection</CardTitle>
           <CardDescription>
-            Inbound messages go directly to this tenant-scoped Ring MCP face.
+            Phylax uses this tenant&apos;s memory-scoped credential only for the
+            configured capture bindings. The saved token stays server-side and
+            is never returned to this browser.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -433,32 +914,249 @@ export function PhylaxTenantSettings() {
               role="alert"
               className="border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive"
             >
-              <strong>Ring connection rejected.</strong> Replace both the
-              tenant-scoped Ring MCP URL and bearer token below, then save and
-              retry your message.
+              <strong>Memory connection rejected.</strong> Replace both the
+              tenant-scoped MCP URL and memory-scoped bearer token below, save
+              the connection, then discover its tools again.
             </div>
           ) : null}
           <Field>
-            <FieldLabel>MCP URL</FieldLabel>
+            <FieldLabel htmlFor="phylax-downstream-url">MCP URL</FieldLabel>
             <Input
+              id="phylax-downstream-url"
               value={downstreamUrl}
               onChange={(e) => setDownstreamUrl(e.target.value)}
-              placeholder="https://ring.zenod.dev/mcp/…"
+              placeholder="https://memory.example/mcp/…"
             />
           </Field>
           <Field>
-            <FieldLabel>Bearer token</FieldLabel>
+            <FieldLabel htmlFor="phylax-downstream-token">
+              Memory-scoped bearer token
+            </FieldLabel>
             <Input
+              id="phylax-downstream-token"
               type="password"
+              autoComplete="off"
               value={downstreamToken}
               onChange={(e) => setDownstreamToken(e.target.value)}
               placeholder={
                 data.settings.downstreamTokenConfigured
                   ? "Saved — enter to replace"
-                  : "Ring token"
+                  : "Required memory-scoped token"
               }
             />
+            <FieldDescription>
+              Use a tenant credential limited to the six memory tools. Do not
+              attach a full-surface agent token.
+            </FieldDescription>
           </Field>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void saveConnection()}
+              disabled={savingConnection || !connectionDirty}
+            >
+              {savingConnection ? "Saving connection…" : "Save connection"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Mechanical capture bindings</CardTitle>
+              <CardDescription>
+                Tools come only from authenticated tools/list. Each target field
+                below is taken from that tool&apos;s exact live input schema.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void discoverTools()}
+              disabled={
+                discovering ||
+                connectionDirty ||
+                !data.settings.downstreamTokenConfigured
+              }
+            >
+              <RefreshCwIcon
+                className={discovering ? "animate-spin" : undefined}
+              />
+              {discovering ? "Discovering…" : "Discover tools"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {connectionDirty ? (
+            <p role="alert" className="text-sm text-destructive">
+              Save the tenant connection before discovery so tools/list uses the
+              saved server-side credential.
+            </p>
+          ) : null}
+          {discoveryError ? (
+            <div
+              role="alert"
+              className="border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              {discoveryError}
+            </div>
+          ) : null}
+          {discoveredTools ? (
+            <p className="text-sm text-muted-foreground">
+              {discoveredTools.length} authenticated tool
+              {discoveredTools.length === 1 ? "" : "s"} discovered. Phylax
+              checks tools/list again immediately before saving.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Discover the saved tenant endpoint before editing or saving
+              bindings.
+            </p>
+          )}
+          <Field>
+            <FieldLabel htmlFor="phylax-voice-default">
+              Standalone voice-note default
+            </FieldLabel>
+            <select
+              id="phylax-voice-default"
+              className="h-9 w-full border border-input bg-transparent px-3 text-sm"
+              value={voiceDefault}
+              onChange={(event) =>
+                setVoiceDefault(event.target.value as VoiceDefault)
+              }
+            >
+              <option value="capture">
+                Capture — store the transcript mechanically
+              </option>
+              <option value="assistant">
+                Assistant — route the transcript to the assistant
+              </option>
+            </select>
+            <FieldDescription>
+              Capture is the safe default. Assistant applies only to standalone
+              voice notes explicitly configured for conversation.
+            </FieldDescription>
+          </Field>
+          {turnBindings
+            ? TURN_TYPES.map((turnType) => {
+                const binding = turnBindings[turnType]
+                const selectedTool = discoveredTools?.find(
+                  (tool) => tool.name === binding.tool
+                )
+                const fields = selectedTool
+                  ? schemaFields(selectedTool)
+                  : { properties: {}, required: new Set<string>() }
+                return (
+                  <section
+                    key={turnType}
+                    className="space-y-4 border border-border p-4"
+                  >
+                    <Field>
+                      <FieldLabel htmlFor={`phylax-binding-${turnType}`}>
+                        {turnType.replace("_", " ")} → MCP tool
+                      </FieldLabel>
+                      <select
+                        id={`phylax-binding-${turnType}`}
+                        className="h-9 w-full border border-input bg-transparent px-3 text-sm"
+                        value={selectedTool ? binding.tool : ""}
+                        onChange={(event) =>
+                          selectBindingTool(turnType, event.target.value)
+                        }
+                        disabled={!discoveredTools}
+                      >
+                        <option value="">
+                          {discoveredTools
+                            ? "Choose a discovered tool"
+                            : "Discover tools first"}
+                        </option>
+                        {(discoveredTools ?? []).map((tool) => (
+                          <option key={tool.name} value={tool.name}>
+                            {tool.name}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedTool?.description ? (
+                        <FieldDescription>
+                          {selectedTool.description}
+                        </FieldDescription>
+                      ) : binding.tool && discoveredTools ? (
+                        <p role="alert" className="text-sm text-destructive">
+                          Saved tool {binding.tool} is absent from the live
+                          catalog.
+                        </p>
+                      ) : null}
+                    </Field>
+                    {selectedTool
+                      ? Object.keys(fields.properties).map((field) => {
+                          const mapping = binding.argumentMappings[field]
+                          return (
+                            <div
+                              key={field}
+                              className="grid gap-3 border-t border-border pt-3 sm:grid-cols-[minmax(10rem,1fr)_minmax(12rem,1fr)]"
+                            >
+                              <div>
+                                <code>{field}</code>
+                                {fields.required.has(field) ? (
+                                  <Badge className="ml-2" variant="outline">
+                                    required
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <div className="space-y-2">
+                                <label
+                                  className="sr-only"
+                                  htmlFor={`phylax-mapping-${turnType}-${field}`}
+                                >
+                                  {turnType} {field} source
+                                </label>
+                                <select
+                                  id={`phylax-mapping-${turnType}-${field}`}
+                                  aria-label={`${turnType} ${field} source`}
+                                  className="h-9 w-full border border-input bg-transparent px-3 text-sm"
+                                  value={mapping?.source ?? ""}
+                                  onChange={(event) =>
+                                    selectMappingSource(
+                                      turnType,
+                                      field,
+                                      event.target.value as SourceName | ""
+                                    )
+                                  }
+                                >
+                                  <option value="">Not mapped</option>
+                                  {SOURCE_OPTIONS.map((option) => (
+                                    <option
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                {mapping?.source === "constant" ? (
+                                  <textarea
+                                    aria-label={`${turnType} ${field} constant JSON`}
+                                    className="min-h-20 w-full border border-input bg-transparent p-2 font-mono text-sm"
+                                    value={mapping.constantText ?? "null"}
+                                    onChange={(event) =>
+                                      setConstantText(
+                                        turnType,
+                                        field,
+                                        event.target.value
+                                      )
+                                    }
+                                  />
+                                ) : null}
+                              </div>
+                            </div>
+                          )
+                        })
+                      : null}
+                  </section>
+                )
+              })
+            : null}
         </CardContent>
       </Card>
       <Card>
@@ -794,6 +1492,8 @@ export function PhylaxTenantSettings() {
           onClick={save}
           disabled={
             saving ||
+            connectionDirty ||
+            !discoveredTools ||
             (transcriptionEnabled && (!cloudReady || !openRouterModelReady))
           }
         >
