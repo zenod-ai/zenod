@@ -170,10 +170,24 @@ export function sanitizeGroundedAnswer(input: {
   question: string;
   text: string;
   readSpans: ReadSpan[];
+  /** Exact host-resolved evidence blocks that bypass question-term narrowing. */
+  pinnedSpans?: ReadSpan[];
 }): string {
   const scoped = scopedSources(input.question, input.readSpans);
+  for (const span of input.pinnedSpans ?? []) {
+    const existing = scoped.get(span.path);
+    scoped.set(span.path, existing ? `${existing}\n\n${span.text}` : span.text);
+  }
   const corpus = [...scoped.values()].join("\n");
   const withoutInvalidAnchors = sanitizeAnchors(input.text, scoped);
   const sanitized = sanitizeExactLiterals(withoutInvalidAnchors, corpus).trim();
   return sanitized || "I couldn't verify that exact detail from the sources read for this question.";
+}
+
+const MUTATION_SUCCESS_LANGUAGE_RE = /\b(?:saved|sent|posted|done)\b/i;
+
+/** D15: a read-only answer has no mutation receipt, so it cannot claim success. */
+export function sanitizeReadOnlyAnswerText(text: string): string {
+  if (!MUTATION_SUCCESS_LANGUAGE_RE.test(text)) return text;
+  return "I couldn't return that draft because it contained an unverified action claim. ask_brain is read-only.";
 }

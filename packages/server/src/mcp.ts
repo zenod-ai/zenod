@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
+import { ContextRefError, sanitizeReadOnlyAnswerText, VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
 import type { CreateGithubIssueInput, CreateGithubIssueResult, EditGithubIssueInput, EditGithubIssueResult } from "zenod";
 import type { IngestJob } from "./ingestStore.js";
 import {
@@ -1048,13 +1048,28 @@ export function buildMcpServer(
       inputSchema: ASK_BRAIN_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ question }) => {
+    async ({ question, contextRefs }) => {
       const engine = await getEngine();
-      const answer = await engine.ask(question);
+      let answer;
+      try {
+        answer = await engine.ask(question, contextRefs ? { contextRefs } : undefined);
+      } catch (error) {
+        if (!(error instanceof ContextRefError)) throw error;
+        return {
+          content: [{ type: "text", text: error.message }],
+          structuredContent: {
+            code: "context_ref_unavailable",
+            message: error.message,
+          },
+          isError: true,
+        };
+      }
+      const answerText = sanitizeReadOnlyAnswerText(answer.text);
       const sources = answer.sources.map((s) => `- ${s.path}${s.githubUrl ? ` (${s.githubUrl})` : ""}`).join("\n");
+      const status = "Read-only answer — no action was performed.";
       return {
-        content: [{ type: "text", text: sources ? `${answer.text}\n\nSources:\n${sources}` : answer.text }],
-        structuredContent: { ...answer },
+        content: [{ type: "text", text: `${sources ? `${answerText}\n\nSources:\n${sources}` : answerText}\n\n${status}` }],
+        structuredContent: { ...answer, text: answerText, status },
       };
     },
   );

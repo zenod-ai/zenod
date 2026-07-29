@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import type {
   Answer,
+  AskOptions,
   BacklogCandidate,
   BacklogDigestInput,
   BacklogDigestResult,
@@ -25,6 +26,7 @@ import type {
   WorkInput,
   WorkResult,
 } from "../types.js";
+import { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN } from "../types.js";
 import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
 import { lintVault } from "../vault/lint.js";
@@ -36,7 +38,7 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
 import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, todayString } from "./evidence.js";
-import { sanitizeGroundedAnswer } from "./answerGrounding.js";
+import { sanitizeGroundedAnswer, sanitizeReadOnlyAnswerText } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import {
   isAffirmativeApproval,
@@ -297,6 +299,8 @@ const MAX_BRIEFING_MEANING_PAGES = 80;
 const MAX_BRIEFING_LOG_FILES = 20;
 const MAX_BRIEFING_ATTACHMENTS = 40;
 const MAX_BRIEFING_SUMMARY_CHARS = 240;
+const MAX_ASK_CONTEXT_REFS = 10;
+const EVIDENCE_CONTEXT_REF_RE = new RegExp(EVIDENCE_CONTEXT_REF_PATTERN);
 
 const DEFAULT_TEMPLATE = `---
 title: "{{title}}"
@@ -1274,11 +1278,54 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }, priority);
   }
 
-  async function ask(question: string): Promise<Answer> {
+  async function ask(question: string, askOptions: AskOptions = {}): Promise<Answer> {
     assertVault(repo);
     await syncForRead();
     const briefing = await vaultBriefing();
-    reportTokenCost("ask", [briefing.text, question], briefing);
+    const contextRefs = [...new Set(askOptions.contextRefs ?? [])];
+    if (contextRefs.length > MAX_ASK_CONTEXT_REFS) {
+      throw new ContextRefError(`At most ${MAX_ASK_CONTEXT_REFS} evidence context refs are allowed.`);
+    }
+    const pinnedSpans: Array<{ path: string; text: string }> = [];
+    const pinnedSources: Answer["sources"] = [];
+    for (const contextRef of contextRefs) {
+      const match = EVIDENCE_CONTEXT_REF_RE.exec(contextRef);
+      if (!match) throw new ContextRefError(`Invalid evidence context ref: ${contextRef}`);
+      const [path, anchor] = contextRef.split("#^") as [string, string];
+      let note: Note;
+      try {
+        note = await getNote(vaultPath, path, location);
+      } catch {
+        throw new ContextRefError(`Evidence context is unavailable in this tenant's vault: ${contextRef}`);
+      }
+      const heading = new RegExp(`^## .*?\\s+\\^${anchor}\\s*$`, "m");
+      const start = note.body.search(heading);
+      if (start < 0) {
+        throw new ContextRefError(`Evidence context is unavailable in this tenant's vault: ${contextRef}`);
+      }
+      const following = note.body.slice(start + 1).search(/^## /m);
+      const end = following < 0 ? note.body.length : start + 1 + following;
+      const text = note.body.slice(start, end).trim();
+      pinnedSpans.push({ path, text });
+      pinnedSources.push({
+        path: contextRef,
+        githubUrl: githubUrl(location, path, `^${anchor}`),
+      });
+    }
+    const pinnedBriefing = pinnedSpans.length > 0
+      ? [
+          "PINNED EVIDENCE CONTEXT — answer from these exact tenant-local evidence blocks first. Cite their refs; use broader vault research only when needed.",
+          ...pinnedSpans.map((span, index) => `[${contextRefs[index]}]\n${span.text}`),
+        ].join("\n\n")
+      : "";
+    const scopedBriefingText = pinnedBriefing ? `${pinnedBriefing}\n\n${briefing.text}` : briefing.text;
+    const scopedBriefing: Briefing = {
+      ...briefing,
+      text: scopedBriefingText,
+      chars: scopedBriefingText.length,
+      estimatedTokens: estimateTokens(scopedBriefingText),
+    };
+    reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
     const tools = readTools();
     const readSpans = new Map<string, string>();
     const groundedTools: VaultReadTools = {
@@ -1294,16 +1341,23 @@ export function createEngine(options: EngineOptions): BrainEngine {
         : {}),
     };
     const result = await llm.answer(
-      { question, vaultBriefing: briefing.text, conversation: [] },
+      { question, vaultBriefing: scopedBriefing.text, conversation: [] },
       groundedTools,
     );
+    const sources = [
+      ...pinnedSources,
+      ...result.readPaths.map((path) => ({ path, githubUrl: githubUrl(location, path) })),
+    ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
     return {
-      text: sanitizeGroundedAnswer({
-        question,
-        text: result.text,
-        readSpans: [...readSpans].map(([path, text]) => ({ path, text })),
-      }),
-      sources: result.readPaths.map((path) => ({ path, githubUrl: githubUrl(location, path) })),
+      text: sanitizeReadOnlyAnswerText(
+        sanitizeGroundedAnswer({
+          question,
+          text: result.text,
+          readSpans: [...readSpans].map(([path, text]) => ({ path, text })),
+          pinnedSpans,
+        }),
+      ),
+      sources,
     };
   }
 

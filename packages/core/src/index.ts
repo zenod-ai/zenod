@@ -2,6 +2,7 @@ export const VERSION = "0.0.1";
 
 export type {
   Answer,
+  AskOptions,
   BacklogCandidate,
   BacklogCandidateType,
   BacklogDifficulty,
@@ -38,6 +39,8 @@ export type {
   WorkInput,
   WorkResult,
 } from "./types.js";
+export { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN } from "./types.js";
+export { sanitizeReadOnlyAnswerText } from "./engine/answerGrounding.js";
 
 export { loadBrainConfig, ConfigError, CONFIG_PATH, type BrainConfig } from "./vault/config.js";
 export { parseNote, serializeNote, type ParsedNote } from "./vault/frontmatter.js";

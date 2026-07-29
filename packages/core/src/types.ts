@@ -79,6 +79,21 @@ export interface Answer {
   sources: SourceRef[];
 }
 
+export const EVIDENCE_CONTEXT_REF_PATTERN =
+  "^Log/\\d{4}-\\d{2}-\\d{2}\\.md#\\^e-[0-9a-f]{6}$";
+
+export interface AskOptions {
+  /** Exact tenant-local evidence blocks to ground before general vault research. */
+  contextRefs?: string[];
+}
+
+export class ContextRefError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContextRefError";
+  }
+}
+
 export interface Reply {
   text: string;
   sources: SourceRef[];
@@ -330,7 +345,7 @@ export interface BrainEngine {
   /** Describe an image via the vision model and return a plain-text description. */
   describeImage(imageData: Uint8Array, mimeType: string, prompt?: string): Promise<string>;
   /** Read-only agent loop: synthesized answer with citations. */
-  ask(question: string): Promise<Answer>;
+  ask(question: string, options?: AskOptions): Promise<Answer>;
   /**
    * Full conversational turn: ask + optional store, with conversation memory.
    * Pass onDelta to stream the answer text, onToolEvent to surface tool

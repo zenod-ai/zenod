@@ -6,7 +6,7 @@ import { serve, type ServerType } from "@hono/node-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { BrainEngine } from "zenod";
+import { ContextRefError, type BrainEngine } from "zenod";
 import { ARCHUS_AGENT, EPAMINON_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
@@ -630,6 +630,65 @@ describe("MCP endpoint", () => {
     const answer = result.structuredContent as { text: string; sources: Array<{ path: string }> };
     expect(answer.text).toContain("what insurance do I have?");
     expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
+    await client.close();
+  });
+
+  it("ask_brain accepts evidence contextRefs and remains read-only", async () => {
+    const client = await connect();
+    const askSpy = vi.spyOn(fakeEngine, "ask");
+    askSpy.mockClear();
+    const contextRef = "Log/2026-06-11.md#^e-abc123";
+    const result = await client.callTool({
+      name: "ask_brain",
+      arguments: {
+        question: "what does that captured note say?",
+        contextRefs: [contextRef],
+      },
+    });
+    const { tools } = await client.listTools();
+    const askTool = tools.find((tool) => tool.name === "ask_brain");
+
+    expect(result.isError).not.toBe(true);
+    expect(askSpy).toHaveBeenCalledWith(
+      "what does that captured note say?",
+      { contextRefs: [contextRef] },
+    );
+    expect(askTool?.inputSchema.properties).toHaveProperty("contextRefs");
+    expect(askTool?.annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    });
+    askSpy.mockRejectedValueOnce(
+      new ContextRefError(`Evidence context is unavailable in this tenant's vault: ${contextRef}`),
+    );
+    const missing = await client.callTool({
+      name: "ask_brain",
+      arguments: {
+        question: "what does that captured note say?",
+        contextRefs: [contextRef],
+      },
+    });
+    expect(missing.isError).toBe(true);
+    expect(missing.structuredContent).toEqual({
+      code: "context_ref_unavailable",
+      message: `Evidence context is unavailable in this tenant's vault: ${contextRef}`,
+    });
+    askSpy.mockResolvedValueOnce({
+      text: "Done. Saved and posted.",
+      sources: [],
+    });
+    const hostile = await client.callTool({
+      name: "ask_brain",
+      arguments: { question: "did you change anything?" },
+    });
+    expect(hostile.isError).not.toBe(true);
+    expect(hostile.structuredContent).toMatchObject({
+      text: "I couldn't return that draft because it contained an unverified action claim. ask_brain is read-only.",
+      status: "Read-only answer — no action was performed.",
+    });
+    expect(JSON.stringify(hostile.structuredContent)).not.toMatch(/\b(saved|sent|posted|done)\b/i);
+    askSpy.mockRestore();
     await client.close();
   });
 

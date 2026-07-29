@@ -517,6 +517,161 @@ describe("BrainEngine", () => {
     expect(answer.sources[0]?.githubUrl).toContain("github.com/zenod-ai/fixture");
   });
 
+  it("grounds ask contextRefs on the exact evidence block first", async () => {
+    const logPath = "Log/2026-07-29.md";
+    const contextRef = `${logPath}#^e-a1b2c3`;
+    await writeFile(
+      join(repo.path, logPath),
+      [
+        "# 2026-07-29",
+        "",
+        "## 10:00 Mechanical capture ^e-a1b2c3",
+        "- source: whatsapp",
+        "",
+        "> The launch code is Quartz-417.",
+        "",
+        "## 10:05 Unrelated entry ^e-d4e5f6",
+        "",
+        "> The distractor code is Onyx-999.",
+        "",
+      ].join("\n"),
+    );
+    llm.answerOverride = async (input) => {
+      expect(input.vaultBriefing).toMatch(/^PINNED EVIDENCE CONTEXT/);
+      expect(input.vaultBriefing).toContain("Quartz-417");
+      expect(input.vaultBriefing).not.toContain("Onyx-999");
+      return {
+        text: "The launch code is Quartz-417. [[2026-07-29#^e-a1b2c3]]",
+        readPaths: [],
+      };
+    };
+
+    const answer = await engine().ask("What does that say?", { contextRefs: [contextRef] });
+
+    expect(answer.text).toContain("Quartz-417");
+    expect(answer.text).toContain("^e-a1b2c3");
+    expect(answer.sources[0]).toEqual({
+      path: contextRef,
+      githubUrl: expect.stringContaining("Log/2026-07-29.md"),
+    });
+  });
+
+  it("keeps multiple pinned anchors from the same daily log in the grounding corpus", async () => {
+    const logPath = "Log/2026-07-29.md";
+    const firstRef = `${logPath}#^e-a1b2c3`;
+    const secondRef = `${logPath}#^e-d4e5f6`;
+    await writeFile(
+      join(repo.path, logPath),
+      [
+        "# 2026-07-29",
+        "",
+        "## 10:00 First capture ^e-a1b2c3",
+        "",
+        "> The first code is Quartz-417.",
+        "",
+        "## 10:05 Second capture ^e-d4e5f6",
+        "",
+        "> The second code is Cobalt-318.",
+        "",
+        "## 10:10 Distractor ^e-abcdef",
+        "",
+        "> The unrelated code is Onyx-999.",
+        "",
+      ].join("\n"),
+    );
+    llm.answerOverride = async (input) => {
+      expect(input.vaultBriefing).not.toContain("Onyx-999");
+      return {
+        text: "Quartz-417 [[2026-07-29#^e-a1b2c3]] and Cobalt-318 [[2026-07-29#^e-d4e5f6]].",
+        readPaths: [],
+      };
+    };
+
+    const answer = await engine().ask("Compare those two captures.", {
+      contextRefs: [firstRef, secondRef],
+    });
+
+    expect(answer.text).toContain("Quartz-417");
+    expect(answer.text).toContain("Cobalt-318");
+    expect(answer.text).toContain("^e-a1b2c3");
+    expect(answer.text).toContain("^e-d4e5f6");
+    expect(answer.sources.map((source) => source.path)).toEqual([firstRef, secondRef]);
+  });
+
+  it("fails honestly when a context ref is invalid, missing, or absent from this vault", async () => {
+    const e = engine();
+
+    await expect(e.ask("What does it say?", { contextRefs: ["../other-tenant/Log.md#^e-a1b2c3"] }))
+      .rejects.toThrow(/invalid evidence context ref/i);
+    await expect(e.ask("What does it say?", { contextRefs: ["Log/2026-07-29.md#^e-a1b2c3"] }))
+      .rejects.toThrow(/unavailable in this tenant/i);
+  });
+
+  it("resolves a colliding context ref only inside the current tenant vault", async () => {
+    const contextRef = "Log/2026-07-29.md#^e-a1b2c3";
+    await writeFile(
+      join(repo.path, "Log/2026-07-29.md"),
+      "# 2026-07-29\n\n## Tenant A capture ^e-a1b2c3\n\n> Alpha-111 belongs only to tenant A.\n",
+    );
+
+    const tenantBBare = join(dir, "tenant-b.git");
+    await simpleGit().init(["--bare", "--initial-branch=main", tenantBBare]);
+    const tenantBSeed = join(dir, "tenant-b-seed");
+    await simpleGit().clone(tenantBBare, tenantBSeed);
+    await rm(join(tenantBSeed, ".git"), { recursive: false, force: true }).catch(() => {});
+    await cp(FIXTURE, tenantBSeed, { recursive: true });
+    await writeFile(
+      join(tenantBSeed, "Log/2026-07-29.md"),
+      "# 2026-07-29\n\n## Tenant B capture ^e-a1b2c3\n\n> Beta-222 belongs only to tenant B.\n",
+    );
+    const tenantBGit = simpleGit(tenantBSeed);
+    await tenantBGit.addConfig("user.name", "tenant-b").addConfig("user.email", "tenant-b@test");
+    await tenantBGit.add(["-A"]);
+    await tenantBGit.commit("seed tenant B vault");
+    await tenantBGit.push("origin", "main");
+    const tenantBRepo = await VaultRepo.open({ workdir: join(dir, "tenant-b-work"), remoteUrl: tenantBBare });
+    const tenantBLlm = new FakeLlm();
+    const tenantBState = new SqliteStateStore(":memory:");
+    tenantBLlm.answerOverride = async (input) => {
+      expect(input.vaultBriefing).toContain("Beta-222");
+      expect(input.vaultBriefing).not.toContain("Alpha-111");
+      return { text: "The tenant-local code is Beta-222.", readPaths: [] };
+    };
+
+    try {
+      const tenantBEngine = createEngine({
+        repo: tenantBRepo,
+        llm: tenantBLlm,
+        state: tenantBState,
+        location: { repo: "zenod-ai/tenant-b" },
+      });
+      const answer = await tenantBEngine.ask("What is the tenant-local code?", {
+        contextRefs: [contextRef],
+      });
+      expect(answer.text).toContain("Beta-222");
+      expect(answer.text).not.toContain("Alpha-111");
+    } finally {
+      tenantBState.close();
+    }
+  });
+
+  it("rejects mutation-success language from a read-only model answer", async () => {
+    llm.answerOverride = async (_input, tools) => {
+      await tools.readNote!("Areas/Insurance.md");
+      return {
+        text: "Done. I saved it and posted the update.",
+        readPaths: ["Areas/Insurance.md"],
+      };
+    };
+
+    const answer = await engine().ask("What insurance do I have?");
+
+    expect(answer.text).toBe(
+      "I couldn't return that draft because it contained an unverified action claim. ask_brain is read-only.",
+    );
+    expect(answer.text).not.toMatch(/\b(saved|sent|posted|done)\b/i);
+  });
+
   it("removes an invented exact literal and invalid anchor from a same-log distractor replay", async () => {
     const logPath = "Log/2026-07-11.md";
     await writeFile(
