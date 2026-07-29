@@ -33,12 +33,19 @@ import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
+const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
 
 /** Compose the shipped customer unit with the ported channels organ. */
 export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
   const env = options.env ?? process.env;
+  const configuredRestartAfter = Number(
+    env.PHYLAX_TRANSPORT_RESTART_AFTER_MS ?? PHYLAX_TRANSPORT_RESTART_AFTER_MS,
+  );
+  const transportRestartAfterMs = Number.isFinite(configuredRestartAfter)
+    ? Math.max(1_000, Math.min(configuredRestartAfter, 900_000))
+    : PHYLAX_TRANSPORT_RESTART_AFTER_MS;
   const storage = options.storage ?? new ChassisStorage({
     dataDir: options.dataDir,
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
@@ -88,17 +95,35 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
 
   const app = new Hono<{ Bindings: HttpBindings }>();
   app.get("/api/health", (c) => {
+    const now = Date.now();
     const whatsapp = runtime.whatsapp.status();
     const worker = runtime.workerHealth();
-    const transportDegraded =
-      whatsapp.receivePath.status === "degraded" || whatsapp.receivePath.status === "terminal";
-    const degraded = transportDegraded || worker.status === "degraded";
+    const receivePathObservableDegradation =
+      whatsapp.receivePath.status !== "ready" && whatsapp.receivePath.status !== "disabled";
+    const outageForMs = whatsapp.receivePath.outageSince === null
+      ? 0
+      : Math.max(0, now - whatsapp.receivePath.outageSince);
+    const transportRestartRequired =
+      whatsapp.receivePath.restartable && outageForMs >= transportRestartAfterMs;
+    const workerRestartRequired = worker.status === "degraded";
+    const restartRequired = transportRestartRequired || workerRestartRequired;
+    const degraded = receivePathObservableDegradation || workerRestartRequired;
     return c.json({
-      status: degraded ? "degraded" : "ok",
+      status: restartRequired ? "unhealthy" : degraded ? "degraded" : "ok",
       name: PHYLAX_AGENT.name,
       version: VERSION,
       sha: resolvedGitSha(),
       worker,
+      restart: {
+        required: restartRequired,
+        reason: workerRestartRequired
+          ? "event-loop-heartbeat-stale"
+          : transportRestartRequired
+            ? "transport-outage-sustained"
+            : null,
+        transportRestartAfterMs,
+        outageForMs,
+      },
       channels: {
         whatsapp: {
           providerMode: whatsapp.providerMode,
@@ -107,7 +132,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
           scope: "transport-lifecycle-only",
         },
       },
-    }, degraded ? 503 : 200);
+    }, restartRequired ? 503 : 200);
   });
   app.get("/api/phylax/settings", (c) => {
     const tenantId = activeTenantId(c, base, env);

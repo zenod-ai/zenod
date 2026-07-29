@@ -490,19 +490,63 @@ describe("WhatsApp lifecycle", () => {
       runtime.settings.setWhatsAppSettings({ enabled: true });
       await gateway.start();
       sockets[0]!.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().receivePath.outageSince).toBeNull();
       sockets[0]!.emitter.emit("connection.update", {
         connection: "close",
         lastDisconnect: { error: { output: { statusCode: 408 } } },
       });
       await vi.advanceTimersByTimeAsync(0);
       expect(gateway.status().receivePath.phase).toBe("retry_wait");
+      const outageSince = gateway.status().receivePath.outageSince;
+      expect(outageSince).toBeTypeOf("number");
       await vi.advanceTimersByTimeAsync(2_000);
       expect(created).toBe(2);
+      expect(gateway.status().receivePath.outageSince).toBe(outageSince);
       sockets[1]!.emitter.emit("connection.update", { connection: "open" });
       expect(gateway.status().receivePath.status).toBe("ready");
+      expect(gateway.status().receivePath.outageSince).toBeNull();
       await gateway.close();
     } finally {
       vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps terminal authentication failure loud without marking it restartable", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-terminal-auth-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      socket.emitter.emit("connection.update", { connection: "open" });
+      socket.emitter.emit("connection.update", {
+        connection: "close",
+        lastDisconnect: { error: { output: { statusCode: 401 } } },
+      });
+      await vi.waitFor(() => expect(gateway.status().receivePath.status).toBe("terminal"));
+      expect(gateway.status().receivePath).toMatchObject({
+        phase: "terminal",
+        restartable: false,
+        operatorActionRequired: true,
+        reason: "WhatsApp logged out. Reset the session and pair again.",
+      });
+      expect(gateway.status().receivePath.outageSince).toBeTypeOf("number");
+      await gateway.disconnect();
+      expect(gateway.status().receivePath).toMatchObject({
+        status: "disabled",
+        outageSince: null,
+      });
+    } finally {
       await runtime.close();
       await rm(dir, { recursive: true, force: true });
     }

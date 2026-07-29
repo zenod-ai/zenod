@@ -94,6 +94,9 @@ export interface WhatsAppReceivePathHealth {
   status: WhatsAppReceivePathStatus;
   socketState: WhatsAppConnectionState;
   phase: WhatsAppLifecyclePhase;
+  restartable: boolean;
+  operatorActionRequired: boolean;
+  outageSince: number | null;
   generation: number;
   nextRetryAt: number | null;
   lastTransitionAt: number;
@@ -629,6 +632,7 @@ export class WhatsAppGateway {
   private lifecyclePhase: WhatsAppLifecyclePhase = "idle";
   private lastTransitionAt = Date.now();
   private lastConnectedAt: number | null = null;
+  private outageSince: number | null = null;
   private nextRetryAt: number | null = null;
   private terminalReason: string | null = null;
   private lastUpsertAt: number | null = null;
@@ -666,6 +670,9 @@ export class WhatsAppGateway {
 
   status(): WhatsAppStatus {
     const settings = this.options.settings.whatsappSettings();
+    // Disabling the binding is an explicit operator reset boundary. Do not let
+    // an earlier outage age leak into a later re-enable.
+    if (!settings.enabled) this.outageSince = null;
     const linked = this.socket?.user?.id ?? this.options.settings.getRaw("whatsapp_linked_jid");
     const cloudState: WhatsAppConnectionState =
       settings.cloudStatus === "connected" ? "connected" : settings.cloudStatus === "error" ? "error" : "disconnected";
@@ -689,6 +696,21 @@ export class WhatsAppGateway {
                 || this.lifecyclePhase === "pairing"
               ? "starting"
               : "degraded";
+    const phase: WhatsAppLifecyclePhase = settings.providerMode === "cloud"
+      ? settings.cloudStatus === "connected"
+        ? "ready"
+        : settings.cloudStatus === "error"
+          ? "terminal"
+          : "idle"
+      : this.lifecyclePhase;
+    const operatorActionRequired = receiveStatus === "terminal" || phase === "pairing";
+    const restartable = settings.enabled
+      && !operatorActionRequired
+      && phase !== "closing"
+      && (receiveStatus === "starting" || receiveStatus === "degraded");
+    const outageSince = receiveStatus === "disabled" || receiveStatus === "ready"
+      ? null
+      : this.outageSince ?? this.lastTransitionAt;
     return {
       enabled: settings.enabled,
       providerMode: settings.providerMode,
@@ -710,13 +732,10 @@ export class WhatsAppGateway {
       receivePath: {
         status: receiveStatus,
         socketState,
-        phase: settings.providerMode === "cloud"
-          ? settings.cloudStatus === "connected"
-            ? "ready"
-            : settings.cloudStatus === "error"
-              ? "terminal"
-              : "idle"
-          : this.lifecyclePhase,
+        phase,
+        restartable,
+        operatorActionRequired,
+        outageSince,
         generation: this.lifecycleGeneration,
         nextRetryAt: this.nextRetryAt,
         lastTransitionAt: this.lastTransitionAt,
@@ -935,7 +954,13 @@ export class WhatsAppGateway {
 
   private transition(phase: WhatsAppLifecyclePhase, terminalReason?: string): void {
     this.lifecyclePhase = phase;
-    this.lastTransitionAt = Date.now();
+    const now = Date.now();
+    this.lastTransitionAt = now;
+    if (phase === "ready" || phase === "idle") {
+      this.outageSince = null;
+    } else if (phase !== "closing" && this.outageSince === null) {
+      this.outageSince = now;
+    }
     if (phase === "terminal") {
       this.terminalReason = terminalReason ?? this.lastError ?? "WhatsApp receive transport needs operator attention";
       this.state = "error";
