@@ -249,7 +249,7 @@ Generic terminal receipt concept:
 
 Deterministic customer reply:
 
-> Saved the full voice note to memory: https://peer.example/returned-by-peer  
+> Saved the full voice note to memory: https://peer.example/returned-by-peer
 > I did not execute the ideas inside it. If you want, ask me to extract actions in a separate pass.
 
 If there is no matching terminal receipt, that success reply is impossible. The renderer must instead say held, failed, cancelled, needs clarification, or could not be verified.
