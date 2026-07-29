@@ -75,6 +75,7 @@ COPY --from=build /app/.gitsha ./.gitsha
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json
 COPY --from=build /app/packages/core/dist ./packages/core/dist
+COPY --from=build /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=build /app/packages/mcp-chassis/package.json ./packages/mcp-chassis/package.json
 COPY --from=build /app/packages/mcp-chassis/dist ./packages/mcp-chassis/dist
 COPY --from=build /app/packages/server/package.json ./packages/server/package.json
