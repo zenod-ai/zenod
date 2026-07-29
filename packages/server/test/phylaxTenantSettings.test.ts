@@ -22,11 +22,15 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function setup() {
+async function setup(defaults: { ringTicketUrl?: string | null } = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), "phylax-settings-"));
   dirs.push(dataDir);
   const storage = new ChassisStorage({ dataDir, vaultEncryptionKey: MASTER_KEY });
-  return { dataDir, storage, store: new PhylaxTenantSettingsStore(dataDir, storage) };
+  return {
+    dataDir,
+    storage,
+    store: new PhylaxTenantSettingsStore(dataDir, storage, defaults),
+  };
 }
 
 describe("PhylaxTenantSettingsStore", () => {
@@ -362,6 +366,59 @@ describe("PhylaxTenantSettingsStore", () => {
     store.registerPhone("alpha", "+34 611 111 111");
     store.update("alpha", { downstreamUrl: "https://ring.zenod.dev/mcp/alpha" });
     expect(store.resolve("whatsapp", "34611111111")).toBeNull();
+  });
+
+  it("keeps post-terminal Ring credentials distinct and isolated per tenant", async () => {
+    const defaultRingUrl = "https://ring.zenod.dev/mcp";
+    const { dataDir, storage, store } = await setup({ ringTicketUrl: defaultRingUrl });
+
+    expect(store.view("alpha")).toMatchObject({
+      ringTicketUrl: defaultRingUrl,
+      ringTicketTokenConfigured: false,
+    });
+    expect(store.ringTicketCredentials("alpha")).toBeNull();
+
+    store.update("alpha", {
+      downstreamUrl: "https://memory.example/mcp/alpha",
+      downstreamToken: "alpha-memory-only",
+      ringTicketToken: "alpha-ring-ticket-only",
+    });
+    store.update("beta", {
+      ringTicketUrl: "https://ring.example/mcp/beta",
+      ringTicketToken: "beta-ring-ticket-only",
+    });
+
+    expect(store.downstreamCredentials("alpha")).toEqual({
+      url: "https://memory.example/mcp/alpha",
+      token: "alpha-memory-only",
+    });
+    expect(store.ringTicketCredentials("alpha")).toEqual({
+      url: defaultRingUrl,
+      token: "alpha-ring-ticket-only",
+    });
+    expect(store.ringTicketCredentials("beta")).toEqual({
+      url: "https://ring.example/mcp/beta",
+      token: "beta-ring-ticket-only",
+    });
+    expect(store.ringTicketCredentials("gamma")).toBeNull();
+
+    const restarted = new PhylaxTenantSettingsStore(dataDir, storage, {
+      ringTicketUrl: defaultRingUrl,
+    });
+    expect(restarted.ringTicketCredentials("alpha")).toEqual({
+      url: defaultRingUrl,
+      token: "alpha-ring-ticket-only",
+    });
+    expect(restarted.ringTicketCredentials("beta")).toEqual({
+      url: "https://ring.example/mcp/beta",
+      token: "beta-ring-ticket-only",
+    });
+
+    const settingsFile = await readFile(store.path, "utf8");
+    expect(settingsFile).not.toContain("alpha-memory-only");
+    expect(settingsFile).not.toContain("alpha-ring-ticket-only");
+    expect(settingsFile).not.toContain("beta-ring-ticket-only");
+    expect(settingsFile).not.toContain("ring.example/mcp/beta");
   });
 
   it("tracks credential rejection without persisting secrets and clears it only through the existing update seam", async () => {

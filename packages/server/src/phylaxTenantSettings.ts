@@ -8,6 +8,8 @@ import type { PhylaxPortedChannel, PhylaxTenantRoute } from "./phylaxChannels.js
 
 const DOWNSTREAM_TOKEN_KEY = "phylax_downstream_token";
 const DOWNSTREAM_URL_KEY = "phylax_downstream_url";
+const RING_TICKET_TOKEN_KEY = "phylax_ring_ticket_token";
+const RING_TICKET_URL_KEY = "phylax_ring_ticket_url";
 const TRANSCRIPTION_TOKEN_KEY = "phylax_transcription_token";
 const VERIFY_TTL_MS = 30 * 60_000;
 export type PhylaxTranscriptionProvider = "local" | "groq" | "openai" | "openrouter";
@@ -82,6 +84,7 @@ export interface PhylaxTenantSettings {
   downstreamCredentialStatus: "unknown" | "healthy" | "rejected";
   downstreamCredentialCheckedAt: string | null;
   downstreamCredentialRevision: string | null;
+  ringTicketUrl: string | null;
   transcriptionEnabled: boolean;
   transcriptionProvider: PhylaxTranscriptionProvider;
   transcriptionModel: string | null;
@@ -97,6 +100,7 @@ export interface PhylaxTenantSettingsView extends Omit<
   "verificationHash" | "downstreamCredentialRevision"
 > {
   downstreamTokenConfigured: boolean;
+  ringTicketTokenConfigured: boolean;
   transcriptionKeyConfigured: boolean;
   transcriptionKeysConfigured: Record<Exclude<PhylaxTranscriptionProvider, "local">, boolean>;
 }
@@ -315,7 +319,10 @@ function updatedTurnBindings(
   return next;
 }
 
-function defaultSettings(tenantId: string): PhylaxTenantSettings {
+function defaultSettings(
+  tenantId: string,
+  defaultRingTicketUrl: string | null,
+): PhylaxTenantSettings {
   return {
     tenantId,
     phoneNumber: null,
@@ -327,6 +334,7 @@ function defaultSettings(tenantId: string): PhylaxTenantSettings {
     downstreamCredentialStatus: "unknown",
     downstreamCredentialCheckedAt: null,
     downstreamCredentialRevision: null,
+    ringTicketUrl: defaultRingTicketUrl,
     transcriptionEnabled: true,
     transcriptionProvider: "local",
     transcriptionModel: null,
@@ -360,23 +368,31 @@ function normalizedDownstreamUrl(value: string): string {
 /** Tenant channel rows plus encrypted downstream-token custody. */
 export class PhylaxTenantSettingsStore {
   readonly path: string;
+  private readonly defaultRingTicketUrl: string | null;
 
-  constructor(dataDir: string, private readonly storage: ChassisStorage) {
+  constructor(
+    dataDir: string,
+    private readonly storage: ChassisStorage,
+    defaults: { ringTicketUrl?: string | null } = {},
+  ) {
     this.path = join(dataDir, "phylax-tenant-settings.json");
+    this.defaultRingTicketUrl = defaults.ringTicketUrl?.trim()
+      ? normalizedDownstreamUrl(defaults.ringTicketUrl)
+      : null;
   }
 
   get(tenantId: string): PhylaxTenantSettings {
     const stored = this.load()[tenantId];
     return stored
       ? {
-          ...defaultSettings(tenantId),
+          ...defaultSettings(tenantId, this.defaultRingTicketUrl),
           ...stored,
           voiceDefault: stored.voiceDefault === "assistant" ? "assistant" : "capture",
           turnBindings: normalizedStoredTurnBindings(stored.turnBindings),
           downstreamCredentialStatus: stored.downstreamCredentialStatus ?? "unknown",
           downstreamCredentialCheckedAt: stored.downstreamCredentialCheckedAt ?? null,
         }
-      : defaultSettings(tenantId);
+      : defaultSettings(tenantId, this.defaultRingTicketUrl);
   }
 
   view(tenantId: string): PhylaxTenantSettingsView {
@@ -396,6 +412,8 @@ export class PhylaxTenantSettingsStore {
       ...settings,
       downstreamUrl: this.encryptedDownstreamUrl(current),
       downstreamTokenConfigured: this.secret(tenantId, DOWNSTREAM_TOKEN_KEY) !== null,
+      ringTicketUrl: this.encryptedRingTicketUrl(current),
+      ringTicketTokenConfigured: this.secret(tenantId, RING_TICKET_TOKEN_KEY) !== null,
       transcriptionKeyConfigured: current.transcriptionProvider === "local"
         ? false
         : transcriptionKeysConfigured[current.transcriptionProvider],
@@ -414,11 +432,21 @@ export class PhylaxTenantSettingsStore {
     return url && token ? { url, token } : null;
   }
 
+  /** Server-only post-terminal Ring ticket connection; never used by capture dispatch. */
+  ringTicketCredentials(tenantId: string): PhylaxDownstreamCredentials | null {
+    const current = this.get(tenantId);
+    const url = this.encryptedRingTicketUrl(current);
+    const token = this.secret(tenantId, RING_TICKET_TOKEN_KEY);
+    return url && token ? { url, token } : null;
+  }
+
   update(
     tenantId: string,
     input: {
       downstreamUrl?: string | null;
       downstreamToken?: string | null;
+      ringTicketUrl?: string | null;
+      ringTicketToken?: string | null;
       transcriptionEnabled?: boolean;
       transcriptionProvider?: PhylaxTenantSettings["transcriptionProvider"];
       transcriptionModel?: string | null;
@@ -441,11 +469,16 @@ export class PhylaxTenantSettingsStore {
     const nextDownstreamUrl = input.downstreamUrl !== undefined
       ? input.downstreamUrl?.trim() ? normalizedDownstreamUrl(input.downstreamUrl) : null
       : currentDownstreamUrl;
+    const currentRingTicketUrl = this.encryptedRingTicketUrl(current);
+    const nextRingTicketUrl = input.ringTicketUrl !== undefined
+      ? input.ringTicketUrl?.trim() ? normalizedDownstreamUrl(input.ringTicketUrl) : this.defaultRingTicketUrl
+      : currentRingTicketUrl;
     const downstreamCredentialChanged = nextDownstreamUrl !== currentDownstreamUrl
       || (input.downstreamToken !== undefined && input.downstreamToken !== null);
     const next: PhylaxTenantSettings = {
       ...current,
       downstreamUrl: null,
+      ringTicketUrl: null,
       ...(downstreamCredentialChanged
         ? {
             downstreamCredentialStatus: "unknown" as const,
@@ -478,6 +511,12 @@ export class PhylaxTenantSettingsStore {
     }
     if (input.downstreamToken !== undefined && input.downstreamToken !== null) {
       this.setSecret(tenantId, DOWNSTREAM_TOKEN_KEY, input.downstreamToken);
+    }
+    if (input.ringTicketUrl !== undefined) {
+      this.setSecret(tenantId, RING_TICKET_URL_KEY, nextRingTicketUrl ?? "");
+    }
+    if (input.ringTicketToken !== undefined && input.ringTicketToken !== null) {
+      this.setSecret(tenantId, RING_TICKET_TOKEN_KEY, input.ringTicketToken);
     }
     return this.view(tenantId);
   }
@@ -665,6 +704,19 @@ export class PhylaxTenantSettingsStore {
     this.setSecret(settings.tenantId, DOWNSTREAM_URL_KEY, settings.downstreamUrl);
     this.put({ ...settings, downstreamUrl: null });
     return settings.downstreamUrl;
+  }
+
+  /** Move legacy/plain Ring ticket URLs into encrypted tenant custody on first read. */
+  private encryptedRingTicketUrl(settings: PhylaxTenantSettings): string | null {
+    const encrypted = this.secret(settings.tenantId, RING_TICKET_URL_KEY);
+    if (encrypted) {
+      if (settings.ringTicketUrl) this.put({ ...settings, ringTicketUrl: null });
+      return encrypted;
+    }
+    if (!settings.ringTicketUrl) return this.defaultRingTicketUrl;
+    this.setSecret(settings.tenantId, RING_TICKET_URL_KEY, settings.ringTicketUrl);
+    this.put({ ...settings, ringTicketUrl: null });
+    return settings.ringTicketUrl;
   }
 
   private ensureDownstreamCredentialRevision(tenantId: string): string {

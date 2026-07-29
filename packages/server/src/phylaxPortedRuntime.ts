@@ -13,6 +13,7 @@ import {
   PhylaxChannelsOrgan,
   phylaxWhatsAppPaths,
   type PhylaxDeliveryReceipt,
+  type PhylaxInboundReceipt,
   type PhylaxTenantDelivery,
   type PhylaxStagedVoice,
   type PhylaxTranscriptionReceipt,
@@ -45,6 +46,15 @@ export class PhylaxPortedRuntime {
   private eventLoopHeartbeatAt = Date.now();
   private eventLoopHeartbeatTimer: NodeJS.Timeout | null = null;
   private readonly probeVoiceDuration: (bytes: Buffer, fileName: string) => Promise<number | null>;
+  private readonly onCaptureJobObserved?: (input: {
+    tenantId: string;
+    surface: "whatsapp" | "telegram";
+    conversationKey: string;
+    providerMessageId: string;
+    jobId: string;
+    terminal: boolean;
+  }) => void;
+  private readonly wakeCaptureTickets?: () => void;
 
   constructor(
     readonly dataDir: string,
@@ -55,6 +65,15 @@ export class PhylaxPortedRuntime {
       telegramFetch?: typeof fetch;
       verifyInbound?: (input: { channel: "whatsapp"; sender: string; text: string }) => Promise<string | null> | string | null;
       probeVoiceDuration?: (bytes: Buffer, fileName: string) => Promise<number | null>;
+      observeCaptureJob?: (input: {
+        tenantId: string;
+        surface: "whatsapp" | "telegram";
+        conversationKey: string;
+        providerMessageId: string;
+        jobId: string;
+        terminal: boolean;
+      }) => void;
+      wakeCaptureTickets?: () => void;
     } = {},
   ) {
     const configuredWindow = Number(env.PHYLAX_MEDIA_COALESCE_WINDOW_MS ?? 300_000);
@@ -75,6 +94,8 @@ export class PhylaxPortedRuntime {
       : 20_000;
     this.probeVoiceDuration = adapters.probeVoiceDuration ?? ((bytes, fileName) =>
       probeAudioDurationSeconds(bytes, fileName));
+    this.onCaptureJobObserved = adapters.observeCaptureJob;
+    this.wakeCaptureTickets = adapters.wakeCaptureTickets;
     this.state = new SqliteStateStore(join(dataDir, "phylax-channels.sqlite"));
     this.settings = new Settings(this.state);
     this.settings.seedFromEnv(env);
@@ -240,6 +261,7 @@ export class PhylaxPortedRuntime {
               },
             });
             if (mediaClaim) this.whatsappStore.completeMediaCoalescing(mediaClaim.canonicalProviderMessageId, "completed");
+            this.observeCaptureJob("whatsapp", event.messageId, result);
             return result;
           } catch (error) {
             if (error instanceof PhylaxChannelError && error.audit) {
@@ -326,6 +348,7 @@ export class PhylaxPortedRuntime {
               }
             : {}),
         });
+        this.observeCaptureJob("telegram", messageId, forwarded);
         return {
           replyText: forwarded.replyText,
           ...(forwarded.afterReply ? { afterReply: forwarded.afterReply } : {}),
@@ -339,6 +362,7 @@ export class PhylaxPortedRuntime {
       } else {
         await this.telegram.sendText(recipient, text);
       }
+      this.wakeCaptureTickets?.();
     });
     queueMicrotask(() => this.kickVoiceWorker());
   }
@@ -420,6 +444,7 @@ export class PhylaxPortedRuntime {
           text: job.captionText,
         };
         const result = await this.organ.forwardStagedVoice(staged, transcription);
+        this.observeCaptureJob("whatsapp", job.providerMessageId, result);
         this.whatsappStore.recordChannelForwarding({
           providerMessageId: job.providerMessageId,
           tenantId: result.tenantId,
@@ -466,6 +491,33 @@ export class PhylaxPortedRuntime {
         this.voiceAbortControllers.delete(job.providerMessageId);
       }
     }
+  }
+
+  private observeCaptureJob(
+    surface: "whatsapp" | "telegram",
+    providerMessageId: string,
+    receipt: PhylaxInboundReceipt,
+  ): void {
+    const structured = receipt.downstream.structuredContent;
+    if (!structured || typeof structured !== "object" || Array.isArray(structured)) return;
+    const candidate = structured as Record<string, unknown>;
+    const jobId = candidate.ticket_id ?? candidate.jobId;
+    const kind = candidate.kind;
+    const state = candidate.state ?? candidate.status;
+    if (
+      typeof jobId !== "string"
+      || !jobId.trim()
+      || (kind !== undefined && kind !== "store" && kind !== "media_ingest")
+      || !["accepted", "queued", "polling", "running", "done"].includes(String(state))
+    ) return;
+    this.onCaptureJobObserved?.({
+      tenantId: receipt.tenantId,
+      surface,
+      conversationKey: `${surface}:${receipt.sender}`,
+      providerMessageId,
+      jobId: jobId.trim(),
+      terminal: state === "done",
+    });
   }
 
   async start(): Promise<void> {

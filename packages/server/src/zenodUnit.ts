@@ -203,6 +203,10 @@ export interface CreateZenodUnitOptions {
   /** Bind tenant-aware hooks into the duplicated chat application. */
   appOptionsForTenant?: (tenantId: string, runtime: Runtime) => Pick<AppOptions, "chatInterceptor">;
   additionalReadTools?: readonly string[];
+  /** Host-internal memory-context tools allowed on this unit's scoped channel token. */
+  additionalMemoryChannelTools?: readonly string[];
+  /** Unit-owned least-privilege MCP credential profiles. */
+  additionalToolProfiles?: Readonly<Record<string, readonly string[]>>;
   customerAdmin?: {
     githubLogin: string;
     mountRoutes?: (app: Hono<{ Bindings: HttpBindings }>) => void;
@@ -254,7 +258,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
     tenantAuth: { store: tenantStore },
     toolProfiles: {
-      "memory-channel": MEMORY_CHANNEL_MCP_TOOLS,
+      "memory-channel": [
+        ...MEMORY_CHANNEL_MCP_TOOLS,
+        ...(options.additionalMemoryChannelTools ?? []),
+      ],
+      ...(options.additionalToolProfiles ?? {}),
     },
     // Enable the RFC 7591 dynamic-client-registration authorization server so MCP
     // connectors can self-register (POST /oauth/register) and complete the OAuth

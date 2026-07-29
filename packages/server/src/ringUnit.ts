@@ -1,4 +1,5 @@
 import { RING_AGENT } from "./agent.js";
+import { registerRingCaptureTicketTool } from "./ringCaptureTicket.js";
 import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 
 /**
@@ -7,6 +8,7 @@ import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
  * this seam by R-S3; the chat, Keys custody, history and MCP face stay shared.
  */
 export function createRingUnit(options: CreateZenodUnitOptions = {}) {
+  const inheritedTools = options.registerAdditionalTools;
   return createZenodUnit({
     ...options,
     agent: RING_AGENT,
@@ -14,6 +16,15 @@ export function createRingUnit(options: CreateZenodUnitOptions = {}) {
     tokenEnvVar: "RING_API_TOKEN",
     defaultTenantName: "Self-hosted Ring",
     panels: ["chat", "keys", "connections", "costs", "mcp"],
+    additionalMemoryChannelTools: options.additionalMemoryChannelTools,
+    additionalToolProfiles: {
+      ...(options.additionalToolProfiles ?? {}),
+      "capture-ticket": ["record_capture_ticket"],
+    },
+    registerAdditionalTools(server, context, runtime) {
+      inheritedTools?.(server, context, runtime);
+      registerRingCaptureTicketTool(server, runtime, context.tenant!.id);
+    },
     customerProduct: {
       product: "ring",
       unit: "ring",

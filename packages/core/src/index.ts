@@ -18,6 +18,8 @@ export type {
   ChatTestAuditRecord,
   ChatTestStatus,
   ChatOptions,
+  ConversationCaptureIdentity,
+  ConversationCaptureTicket,
   ConversationMessage,
   ExternalTaskingTools,
   Hit,
@@ -62,7 +64,8 @@ export {
   type BacklogPriorityRanker,
   type SelectBacklogResult,
 } from "./backlog.js";
-export { createEngine, conversationId, type EngineOptions } from "./engine/engine.js";
+export { createEngine, type EngineOptions } from "./engine/engine.js";
+export { conversationId } from "./conversation.js";
 export { appendEvidence, todayString, type EvidenceEntry } from "./engine/evidence.js";
 export {
   OWNER_AGENT,

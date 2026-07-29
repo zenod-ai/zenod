@@ -7,10 +7,15 @@ import { basename, join } from "node:path";
 import { Hono, type Context } from "hono";
 import { PHYLAX_AGENT } from "./agent.js";
 import { resolvedGitSha } from "./app.js";
+import {
+  captureMemoryAuthorityId,
+  isCaptureMemoryTool,
+} from "./captureMemoryAuthority.js";
 import { readCustomerSession } from "./customerSession.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
-import { discoverPeerTools } from "./peerClient.js";
+import { callPeerTool, discoverPeerTools } from "./peerClient.js";
 import { probePhylaxTranscriptionProvider } from "./phylaxTranscriptionProbe.js";
+import { RingCaptureTicketProducer } from "./ringCaptureTicketProducer.js";
 import {
   DEFAULT_OPENROUTER_STT_MODEL,
   GROQ_STT_MODEL,
@@ -37,6 +42,7 @@ import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
+export const PHYLAX_DEFAULT_RING_TICKET_URL = "https://ring.zenod.dev/mcp";
 const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
@@ -54,13 +60,56 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     dataDir: options.dataDir,
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
   });
-  const tenantSettings = new PhylaxTenantSettingsStore(storage.dataDir, storage);
+  const tenantSettings = new PhylaxTenantSettingsStore(storage.dataDir, storage, {
+    ringTicketUrl: env.PHYLAX_RING_TICKET_URL?.trim() || PHYLAX_DEFAULT_RING_TICKET_URL,
+  });
+  const captureJournalPath = join(storage.dataDir, "phylax-capture-jobs.sqlite");
+  const captureTickets = new RingCaptureTicketProducer(
+    join(storage.dataDir, "ring-capture-ticket-outbox.sqlite"),
+    async (ticket) => {
+      const credentials = tenantSettings.ringTicketCredentials(ticket.tenantId);
+      if (!credentials) return "pending";
+      const result = await callPeerTool(
+        {
+          name: `phylax-ring-${ticket.tenantId}`,
+          url: credentials.url,
+          token: credentials.token,
+          wallet: false,
+        },
+        "record_capture_ticket",
+        {
+          surface: ticket.surface,
+          conversationKey: ticket.conversationKey,
+          providerMessageId: ticket.providerMessageId,
+          jobId: ticket.jobId,
+          memoryAuthorityId: ticket.memoryAuthorityId,
+          captureTool: ticket.captureTool,
+        },
+      );
+      const structured = result.structuredContent;
+      if (!structured || typeof structured !== "object" || Array.isArray(structured)) return "pending";
+      const status = (structured as Record<string, unknown>).status;
+      return status === "recorded" || status === "duplicate" ? status : "pending";
+    },
+  );
   let base!: ReturnType<typeof createZenodUnit>;
-  const organ = createTenantOrgan(storage.dataDir, tenantSettings, () => base, env);
+  const organ = createTenantOrgan(
+    storage.dataDir,
+    tenantSettings,
+    captureTickets,
+    () => base,
+    env,
+  );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ sender, text }) {
       const verified = tenantSettings.verifyInbound(sender, text);
       return verified ? "Your WhatsApp number is verified. Return to Phylax to finish setup." : null;
+    },
+    observeCaptureJob(ticket) {
+      captureTickets.observeJob(ticket, ticket.terminal);
+    },
+    wakeCaptureTickets() {
+      captureTickets.recoverFromCaptureJournal(captureJournalPath);
     },
   });
   const bootLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
@@ -92,9 +141,16 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     customerAdmin: {
       githubLogin: PHYLAX_ADMIN_GITHUB_LOGIN,
       mountRoutes: (app) => mountPhylaxAdminChannelRoutes(app, runtime),
-      close: () => runtime.close(),
+      close: async () => {
+        await runtime.close();
+        await captureTickets.close();
+      },
     },
   });
+  captureTickets.recoverFromCaptureJournal(
+    captureJournalPath,
+  );
+  captureTickets.resume();
   void runtime.start().catch((error) => console.error("phylax channels failed to start:", error));
 
   const app = new Hono<{ Bindings: HttpBindings }>();
@@ -318,6 +374,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     app,
     phylaxRuntime: runtime,
     phylaxTenantSettings: tenantSettings,
+    ringCaptureTickets: captureTickets,
     async close() {
       await base.close();
     },
@@ -350,6 +407,8 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
   const allowed = new Set([
     "downstreamUrl",
     "downstreamToken",
+    "ringTicketUrl",
+    "ringTicketToken",
     "transcriptionEnabled",
     "transcriptionProvider",
     "transcriptionModel",
@@ -391,6 +450,8 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
   return {
     ...(record.downstreamUrl !== undefined ? { downstreamUrl: optionalString(record, "downstreamUrl", 4_096) } : {}),
     ...(record.downstreamToken !== undefined ? { downstreamToken: optionalString(record, "downstreamToken", 8_192) } : {}),
+    ...(record.ringTicketUrl !== undefined ? { ringTicketUrl: optionalString(record, "ringTicketUrl", 4_096) } : {}),
+    ...(record.ringTicketToken !== undefined ? { ringTicketToken: optionalString(record, "ringTicketToken", 8_192) } : {}),
     ...(record.transcriptionEnabled !== undefined
       ? { transcriptionEnabled: optionalBoolean(record, "transcriptionEnabled") }
       : {}),
@@ -503,6 +564,7 @@ export function normalizePhylaxTranscriptionUpdate(
 function createTenantOrgan(
   dataDir: string,
   tenantSettings: PhylaxTenantSettingsStore,
+  captureTickets: RingCaptureTicketProducer,
   baseUnit: () => ReturnType<typeof createZenodUnit>,
   env: NodeJS.ProcessEnv,
 ): PhylaxChannelsOrgan {
@@ -527,6 +589,37 @@ function createTenantOrgan(
       },
       reportDownstreamCredentialStatus: (tenantId, credentialRevision, status) =>
         tenantSettings.reportDownstreamCredentialStatus(tenantId, credentialRevision, status),
+    },
+    async callDownstream(call) {
+      const result = await callPeerTool(
+        {
+          name: `phylax-memory-${call.route.tenantId}`,
+          url: call.route.downstreamUrl,
+          token: call.route.downstreamToken,
+          wallet: false,
+        },
+        call.tool,
+        call.arguments,
+      );
+      if (isCaptureMemoryTool(call.tool) && !result.isError) {
+        const structured = result.structuredContent;
+        if (structured && typeof structured === "object" && !Array.isArray(structured)) {
+          const candidate = structured as Record<string, unknown>;
+          const jobId = candidate.ticket_id ?? candidate.jobId;
+          if (typeof jobId === "string" && jobId.trim()) {
+            captureTickets.bindMemoryJob({
+              tenantId: call.route.tenantId,
+              jobId: jobId.trim(),
+              memoryAuthorityId: captureMemoryAuthorityId({
+                url: call.route.downstreamUrl,
+                token: call.route.downstreamToken,
+              }),
+              captureTool: call.tool,
+            });
+          }
+        }
+      }
+      return result;
     },
     transcriber: {
       async transcribe(input) {

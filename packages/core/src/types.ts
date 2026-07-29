@@ -390,12 +390,40 @@ export interface ChatOptions {
   contextNote?: string;
 }
 
+export interface ConversationCaptureIdentity {
+  /** Authenticated tenant boundary. The state store rejects cross-tenant identities. */
+  tenantId: string;
+  /** Provider namespace; the same provider id may exist on another surface. */
+  surface: Surface;
+  /** Provider chat/conversation namespace; retained even when ids are usually global. */
+  conversationKey: string;
+  /** Stable id assigned by the channel provider. */
+  providerMessageId: string;
+}
+
+export interface ConversationCaptureTicket {
+  /** Canonical tenant + surface + conversation + provider identity. */
+  identity: ConversationCaptureIdentity;
+  /** Bounded host-produced recap. Full capture transcripts are not accepted here. */
+  summary: string;
+  /** Exact durable memory pointer returned by the terminal capture receipt. */
+  evidenceRef: string;
+}
+
 /**
  * Conversation state (and only that — the vault is the memory). SQLite-backed
  * in this repo; the interface exists so a hosted shell can swap in Postgres.
  */
 export interface StateStore {
   appendMessage(conversationId: string, role: "user" | "assistant", text: string, surface: Surface): Promise<void>;
+  /**
+   * Atomically append one host-owned capture context message and claim its
+   * canonical tenant/surface/conversation/provider identity. Returns duplicate
+   * on retry/restart without adding another conversation message.
+   */
+  appendCaptureTicket(
+    ticket: ConversationCaptureTicket,
+  ): Promise<"recorded" | "duplicate">;
   /** Most recent window: last 20 messages or 48h, whichever is smaller. */
   recentWindow(conversationId: string): Promise<ConversationMessage[]>;
   /** Delete every message in a conversation. */

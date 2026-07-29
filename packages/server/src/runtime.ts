@@ -264,7 +264,7 @@ export class Runtime {
       settingFallbacks?: Readonly<Record<string, string>>;
     } = {},
   ) {
-    this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"));
+    this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"), options.tenantId ?? "standalone");
     this.oauth = new OAuthStore(join(dataDir, "oauth.sqlite"));
     this.credentialVault =
       options.credentialVault ??
