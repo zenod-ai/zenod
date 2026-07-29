@@ -99,6 +99,29 @@ async function callTool(
   });
 }
 
+async function listTools(
+  base: string,
+  init?: RequestInit,
+  path = "/mcp",
+): Promise<Response> {
+  const { headers, ...rest } = init ?? {};
+  return fetch(`${base}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      ...headers,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/list",
+      params: {},
+    }),
+    ...rest,
+  });
+}
+
 interface McpToolCallBody {
   result?: {
     content?: Array<{ type: string; text?: string }>;
@@ -860,6 +883,159 @@ describe("createUnit", () => {
       headers: { authorization: `Bearer ${body.token}` },
     });
     expect(mcp.status).toBe(200);
+  });
+
+  it("issues replaceable profile tokens that enforce list and call on hosted paths", async () => {
+    const dataDir = await mkdtemp(
+      join(tmpdir(), "mcp-chassis-profile-token-route-"),
+    );
+    tempDirs.push(dataDir);
+    const tenants = createMemoryTenantStore();
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      storage: { dataDir, vaultEncryptionKey: TEST_VAULT_KEY },
+      controlPlane: { store: tenants, token: "control-secret" },
+      toolProfiles: { "memory-channel": ["read_memory"] },
+      conduct: { toolKinds: { read: ["read_memory"] } },
+      tools(server) {
+        server.registerTool("read_memory", {}, async () => ({
+          content: [{ type: "text", text: "memory read" }],
+        }));
+        server.registerTool("full_surface", {}, async () => ({
+          content: [{ type: "text", text: "full surface" }],
+        }));
+      },
+    });
+    const base = await listen(unit.app);
+    const tenant = await provisionTenant(base, { tenantId: "tenant-a" }).then(
+      (response) => response.json(),
+    );
+    const issueProfileToken = () =>
+      fetch(`${base}/api/tenants/tenant-a/tokens`, {
+        method: "POST",
+        headers: controlPlaneHeaders(),
+        body: JSON.stringify({ profile: "memory-channel" }),
+      });
+    const unauthorizedIssue = await fetch(
+      `${base}/api/tenants/tenant-a/tokens`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ profile: "memory-channel" }),
+      },
+    );
+    const firstResponse = await issueProfileToken();
+    const first = await firstResponse.json();
+
+    expect(unauthorizedIssue.status).toBe(401);
+    expect(firstResponse.status).toBe(200);
+    expect(first).toMatchObject({
+      tenant: { id: "tenant-a" },
+      status: "active",
+      profile: "memory-channel",
+      mcpPath: `/mcp/${first.token}`,
+    });
+    expect(first.token).toMatch(/^zenod_[a-f0-9]{48}$/);
+
+    const primaryList = await listTools(
+      base,
+      { headers: { authorization: `Bearer ${tenant.token}` } },
+      `/mcp/${tenant.token}`,
+    ).then((response) => response.json());
+    expect(primaryList.result.tools.map((tool: { name: string }) => tool.name)).toEqual(
+      expect.arrayContaining([
+        "install_operating_directive",
+        "read_memory",
+        "full_surface",
+      ]),
+    );
+
+    const scopedInit = {
+      headers: { authorization: `Bearer ${first.token}` },
+    };
+    const scopedList = await listTools(
+      base,
+      scopedInit,
+      `/mcp/${first.token}`,
+    ).then((response) => response.json());
+    expect(scopedList.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
+      "read_memory",
+    ]);
+    const allowed = await callTool(
+      base,
+      "read_memory",
+      {},
+      scopedInit,
+      `/mcp/${first.token}`,
+    ).then((response) => response.json());
+    expect(allowed.result.content).toEqual([
+      { type: "text", text: "memory read" },
+    ]);
+    const denied = await callTool(
+      base,
+      "full_surface",
+      {},
+      scopedInit,
+      `/mcp/${first.token}`,
+    ).then((response) => response.json());
+    expect(denied.result.isError).toBe(true);
+    expect(JSON.stringify(denied)).toMatch(/not found/i);
+
+    const second = await issueProfileToken().then((response) => response.json());
+    expect(second.token).not.toBe(first.token);
+    await expect(
+      initialize(
+        base,
+        { headers: { authorization: `Bearer ${first.token}` } },
+        `/mcp/${first.token}`,
+      ),
+    ).resolves.toHaveProperty("status", 401);
+    await expect(
+      initialize(
+        base,
+        { headers: { authorization: `Bearer ${second.token}` } },
+        `/mcp/${second.token}`,
+      ),
+    ).resolves.toHaveProperty("status", 200);
+
+    const unknown = await fetch(`${base}/api/tenants/tenant-a/tokens`, {
+      method: "POST",
+      headers: controlPlaneHeaders(),
+      body: JSON.stringify({ profile: "unknown-profile" }),
+    }).then((response) => response.json());
+    const unknownList = await listTools(
+      base,
+      { headers: { authorization: `Bearer ${unknown.token}` } },
+      `/mcp/${unknown.token}`,
+    ).then((response) => response.json());
+    expect(unknownList.result.tools).toEqual([]);
+    const unknownCall = await callTool(
+      base,
+      "read_memory",
+      {},
+      { headers: { authorization: `Bearer ${unknown.token}` } },
+      `/mcp/${unknown.token}`,
+    ).then((response) => response.json());
+    expect(unknownCall.result.isError).toBe(true);
+
+    const tampered = `${second.token.slice(0, -1)}x`;
+    await expect(
+      initialize(
+        base,
+        { headers: { authorization: `Bearer ${tampered}` } },
+        `/mcp/${tampered}`,
+      ),
+    ).resolves.toHaveProperty("status", 401);
+
+    tenants.setTenantStatus("tenant-a", "suspended");
+    await expect(
+      initialize(
+        base,
+        { headers: { authorization: `Bearer ${second.token}` } },
+        `/mcp/${second.token}`,
+      ),
+    ).resolves.toHaveProperty("status", 401);
   });
 
   it("rejects suspended and deleted tenants during MCP auth", async () => {

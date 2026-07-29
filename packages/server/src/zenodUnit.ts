@@ -24,6 +24,7 @@ import { ChassisCredentialVault } from "./credentialVault.js";
 import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
+import { MEMORY_CHANNEL_MCP_TOOLS } from "./auth.js";
 import { Runtime } from "./runtime.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
@@ -244,6 +245,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       longTools: ZENOD_LONG_TOOLS,
     },
     tenantAuth: { store: tenantStore },
+    toolProfiles: {
+      "memory-channel": MEMORY_CHANNEL_MCP_TOOLS,
+    },
     // Enable the RFC 7591 dynamic-client-registration authorization server so MCP
     // connectors can self-register (POST /oauth/register) and complete the OAuth
     // handshake. Without it, discovery falls through to the SPA and connectors fall
