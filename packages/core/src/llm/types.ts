@@ -1,5 +1,6 @@
 import type { PageIndexEntry } from "../vault/pages.js";
 import type { BacklogCandidate, BacklogDigestInput, BacklogDigestResult, BacklogSourceRef, LintError, StoreResult } from "../types.js";
+import type { TurnPlanCompilation, TurnPlanCompileInput } from "./turnPlan.js";
 
 /**
  * The LLM seam. The engine talks to this interface only, so every pipeline
@@ -37,6 +38,15 @@ export interface BrainLlm {
   work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult>;
   /** Mine provided evidence/context for structured backlog candidates. */
   extractBacklog(input: BacklogExtractInput): Promise<BacklogExtractResult>;
+}
+
+/**
+ * Separate seam until RIV-2/3 reshape the current answer loop around it.
+ * Consumers must use this as the structured output of that one Ring reasoning
+ * call, not insert it as a second preflight call before `answer`.
+ */
+export interface TurnPlanCompiler {
+  compileTurnPlan(input: TurnPlanCompileInput): Promise<TurnPlanCompilation>;
 }
 
 export interface ClassifyInput {
