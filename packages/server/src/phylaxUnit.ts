@@ -29,7 +29,10 @@ import {
   type PhylaxPortedChannel,
 } from "./phylaxChannels.js";
 import { mountPhylaxAdminChannelRoutes, PhylaxPortedRuntime } from "./phylaxPortedRuntime.js";
-import { PhylaxTenantSettingsStore } from "./phylaxTenantSettings.js";
+import {
+  effectivePhylaxTurnBindings,
+  PhylaxTenantSettingsStore,
+} from "./phylaxTenantSettings.js";
 import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
@@ -513,7 +516,15 @@ function createTenantOrgan(
     transcriptionDeadlineMs: configuredDeadline,
     voiceJobDeadlineMs: configuredVoiceJobDeadline,
     routes: {
-      resolve: (channel, sender) => tenantSettings.resolve(channel, sender),
+      resolve: (channel, sender) => {
+        const route = tenantSettings.resolve(channel, sender);
+        return route
+          ? {
+              ...route,
+              turnBindings: effectivePhylaxTurnBindings(tenantSettings.get(route.tenantId)),
+            }
+          : null;
+      },
       reportDownstreamCredentialStatus: (tenantId, credentialRevision, status) =>
         tenantSettings.reportDownstreamCredentialStatus(tenantId, credentialRevision, status),
     },

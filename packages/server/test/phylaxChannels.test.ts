@@ -16,6 +16,7 @@ import {
   registerPhylaxChannelTools,
   type PhylaxDownstreamCall,
 } from "../src/phylaxChannels.js";
+import type { PeerToolResult } from "../src/peerClient.js";
 import { PhylaxPortedRuntime } from "../src/phylaxPortedRuntime.js";
 import { PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
 import {
@@ -46,6 +47,706 @@ describe("PhylaxChannelsOrgan", () => {
     expect(normalizePhylaxVoiceJobDeadlineMs(Number.NaN)).toBe(2 * 60 * 60_000);
     expect(normalizePhylaxVoiceJobDeadlineMs(8 * 60 * 60_000)).toBe(4 * 60 * 60_000);
     expect(normalizePhylaxVoiceJobDeadlineMs(30 * 60_000)).toBe(30 * 60_000);
+  });
+
+  it("dispatches a tenant voice binding mechanically, validates its live schema, and polls to a terminal receipt", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-dispatch-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-scope-only",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: {
+            content: { source: "transcript" as const },
+            source: { source: "constant" as const, value: "whatsapp" },
+          },
+        },
+        text: {
+          tool: "chat_with_ring",
+          argumentMappings: { message: { source: "message" as const } },
+        },
+        media: {
+          tool: "chat_with_ring",
+          argumentMappings: { message: { source: "message" as const } },
+        },
+      },
+    };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "source", "idempotencyKey"],
+            properties: {
+              content: { type: "string", minLength: 1 },
+              source: { const: "whatsapp" },
+              idempotencyKey: { type: "string", minLength: 1 },
+            },
+          },
+          description: "Store memory",
+        }],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        if (call.tool === "store_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: { ticket_id: "job-alpha-1", state: "accepted", status: "queued" },
+          };
+        }
+        const db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"), { readOnly: true });
+        const persisted = db.prepare(
+          "SELECT job_id FROM phylax_capture_jobs WHERE tenant_id = ? AND provider_message_id = ?",
+        ).get("alpha", "provider-voice-1") as { job_id?: string } | undefined;
+        db.close();
+        expect(persisted?.job_id).toBe("job-alpha-1");
+        expect(call).toMatchObject({
+          tool: "get_task_result",
+          arguments: { ticket_id: "job-alpha-1" },
+        });
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "job-alpha-1",
+            state: "done",
+            status: "done",
+            result: {
+              recap: "Remember the launch checklist.",
+              evidenceRef: "Log/2026-07-29.md#^voice-1",
+              evidenceUrl: "https://github.test/log#voice-1",
+              pagesTouched: ["Projects/Launch.md"],
+              pageUrls: ["https://github.test/projects/launch"],
+              commitSha: "abc1234",
+              githubUrls: ["https://github.test/commit/abc1234"],
+              question: "Which owner should be listed?",
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+    });
+
+    const receipt = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-voice-1",
+      transcription: { text_transcript: "Remember the launch checklist." },
+    });
+
+    expect(calls[0]).toMatchObject({
+      tool: "store_memory",
+      arguments: {
+        content: "Remember the launch checklist.",
+        source: "whatsapp",
+        idempotencyKey: "alpha:whatsapp:provider-voice-1",
+      },
+    });
+    expect(receipt.replyText).toContain("Saved ✓");
+    expect(receipt.replyText).toContain("Projects/Launch.md");
+    expect(receipt.replyText).toContain("abc1234");
+    expect(receipt.replyText).toContain("Which owner should be listed?");
+    expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+      .toBe("Log/2026-07-29.md#^voice-1");
+    await organ.close();
+  });
+
+  it("keeps an accepted capture polling through a transient result outage and records only the later terminal success", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-transient-poll-"));
+    dirs.push(dataDir);
+    let pollAttempts = 0;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: { content: { source: "transcript" } },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "chat_with_ring", argumentMappings: {} },
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          description: "Store memory",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string", minLength: 1 },
+              idempotencyKey: { type: "string", minLength: 1 },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: {
+              ticket_id: "job-transient-1",
+              state: "accepted",
+            },
+          };
+        }
+        pollAttempts += 1;
+        const db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"), { readOnly: true });
+        const persisted = db.prepare(
+          "SELECT state, receipt_text FROM phylax_capture_jobs WHERE job_id = ?",
+        ).get("job-transient-1") as { state?: string; receipt_text?: string | null } | undefined;
+        db.close();
+        expect(persisted).toMatchObject({ state: "polling", receipt_text: null });
+        if (pollAttempts === 1) {
+          return {
+            content: [{
+              type: "text",
+              text: 'Could not reach peer agent "phylax-memory-alpha": fetch failed',
+            }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "job-transient-1",
+            state: "done",
+            result: {
+              recap: "Recovered after a transient poll outage.",
+              evidenceRef: "Log/2026-07-29.md#^transient-poll",
+              pagesTouched: ["Inbox/Recovered.md"],
+              commitSha: "cab1234",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+      sleep: async () => {},
+    });
+
+    const receipt = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-transient-1",
+      transcription: { text_transcript: "Remember this despite a brief outage." },
+    });
+
+    expect(pollAttempts).toBe(2);
+    expect(receipt.replyText).toContain("Saved ✓");
+    expect(receipt.replyText).toContain("Recovered after a transient poll outage.");
+    expect(receipt.replyText).not.toContain("could not save");
+    expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+      .toBe("Log/2026-07-29.md#^transient-poll");
+    await organ.close();
+  });
+
+  it("returns the honest pending receipt at the foreground deadline while a poll call remains stalled", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T17:00:00.000Z"));
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-stalled-poll-"));
+    dirs.push(dataDir);
+    let pollCalls = 0;
+    const stalledForegroundPoll = new Promise<PeerToolResult>(() => {});
+    let resolveBackgroundPoll!: (result: PeerToolResult) => void;
+    const backgroundPoll = new Promise<PeerToolResult>((resolve) => {
+      resolveBackgroundPoll = resolve;
+    });
+    const terminalResult: PeerToolResult = {
+      content: [{ type: "text", text: "done" }],
+      structuredContent: {
+        ticket_id: "job-stalled-1",
+        state: "done",
+        result: {
+          recap: "Recovered in the durable background poll.",
+          evidenceRef: "Log/2026-07-29.md#^stalled-poll",
+          pagesTouched: ["Inbox/Recovered.md"],
+          commitSha: "dad1234",
+          githubUrls: [],
+        },
+      },
+    };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: { content: { source: "transcript" } },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "chat_with_ring", argumentMappings: {} },
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          description: "Store memory",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string", minLength: 1 },
+              idempotencyKey: { type: "string", minLength: 1 },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: {
+              ticket_id: "job-stalled-1",
+              state: "accepted",
+            },
+          };
+        }
+        pollCalls += 1;
+        return pollCalls === 1 ? stalledForegroundPoll : backgroundPoll;
+      },
+      captureForegroundDeadlineMs: 100,
+      capturePollIntervalMs: 1,
+    });
+
+    try {
+      let foregroundSettled = false;
+      const receiptPromise = organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "provider-stalled-1",
+        transcription: { text_transcript: "Remember this despite a stalled poll." },
+      }).then((receipt) => {
+        foregroundSettled = true;
+        return receipt;
+      });
+      await vi.advanceTimersByTimeAsync(99);
+      expect(foregroundSettled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const receipt = await receiptPromise;
+
+      expect(receipt.replyText).toBe(
+        "I’m still filing this memory — I’ll confirm here when it is saved.",
+      );
+      expect(pollCalls).toBeGreaterThanOrEqual(1);
+      const db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"), { readOnly: true });
+      const persisted = db.prepare(
+        "SELECT state, receipt_text FROM phylax_capture_jobs WHERE job_id = ?",
+      ).get("job-stalled-1") as { state?: string; receipt_text?: string | null } | undefined;
+      db.close();
+      expect(persisted).toMatchObject({ state: "polling", receipt_text: null });
+
+      receipt.afterReply?.();
+      for (let index = 0; index < 10 && pollCalls < 2; index += 1) {
+        await Promise.resolve();
+      }
+      expect(pollCalls).toBe(2);
+      resolveBackgroundPoll(terminalResult);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+        .toBe("Log/2026-07-29.md#^stalled-poll");
+    } finally {
+      resolveBackgroundPoll(terminalResult);
+      await vi.advanceTimersByTimeAsync(0);
+      await organ.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps structural artifact fields and derives every ingest media class without envelope fallback", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-structural-media-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const structuralBinding = {
+      tool: "inspect_media",
+      argumentMappings: {
+        artifactUrl: { source: "artifactUrl" as const },
+        mediaType: { source: "mediaType" as const },
+        filename: { source: "filename" as const },
+      },
+    };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: structuralBinding,
+            text: structuralBinding,
+            media: structuralBinding,
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "inspect",
+          mcp: "inspect_media",
+          arg: "input",
+          description: "Inspect structural media arguments",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["artifactUrl", "mediaType", "filename"],
+            properties: {
+              artifactUrl: { type: "string", minLength: 1 },
+              mediaType: {
+                enum: ["audio", "screenshot", "image", "pdf", "document", "link"],
+              },
+              filename: { type: "string", minLength: 1 },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: "inspected" }] };
+      },
+    });
+    const cases = [
+      { mimeType: "audio/ogg", fileName: "memo.ogg", expected: "audio" },
+      { mimeType: "image/png", fileName: "Screenshot 2026.png", expected: "screenshot" },
+      { mimeType: "image/jpeg", fileName: "holiday.jpg", expected: "image" },
+      { mimeType: "application/octet-stream", fileName: "brief.pdf", expected: "pdf" },
+      { mimeType: "text/uri-list", fileName: "reference.url", expected: "link" },
+      { mimeType: "application/zip", fileName: "archive.zip", expected: "document" },
+    ] as const;
+
+    for (const [index, mediaCase] of cases.entries()) {
+      const receipt = await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: `structural-${index}`,
+        media: {
+          artifactRef: `https://phylax.test/artifacts/${index}`,
+          mimeType: mediaCase.mimeType,
+          fileName: mediaCase.fileName,
+        },
+      });
+      expect(receipt.replyText).toBe("inspected");
+      expect(calls[index]?.arguments).toEqual({
+        artifactUrl: `https://phylax.test/artifacts/${index}`,
+        mediaType: mediaCase.expected,
+        filename: mediaCase.fileName,
+      });
+      expect(calls[index]?.arguments).not.toHaveProperty("message");
+    }
+
+    await expect(organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "structural-missing-filename",
+      media: {
+        artifactRef: "https://phylax.test/artifacts/missing-filename",
+        mimeType: "image/png",
+      },
+    })).rejects.toMatchObject({
+      code: "invalid_input",
+      message: 'binding source "filename" is unavailable for field "filename"',
+    });
+    expect(calls).toHaveLength(cases.length);
+    await organ.close();
+  });
+
+  it("fails loudly before dispatch when a tenant binding drifts from the discovered schema", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-schema-drift-"));
+    dirs.push(dataDir);
+    let called = false;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: { wrongField: { source: "transcript" } },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "chat_with_ring", argumentMappings: {} },
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+          description: "Store memory",
+        }],
+      }),
+      async callDownstream() {
+        called = true;
+        return { content: [{ type: "text", text: "must not run" }] };
+      },
+    });
+
+    await expect(organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-drift-1",
+      transcription: { text_transcript: "capture me" },
+    })).rejects.toMatchObject({
+      code: "downstream_error",
+      audit: { failureCode: "downstream_schema_drift" },
+    });
+    expect(called).toBe(false);
+    await organ.close();
+  });
+
+  it("returns an honest foreground deadline, then resumes the persisted poll after restart", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-restart-"));
+    dirs.push(dataDir);
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-scope-only",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "transcript" as const } },
+        },
+        text: { tool: "chat_with_ring", argumentMappings: {} },
+        media: { tool: "chat_with_ring", argumentMappings: {} },
+      },
+    };
+    const discovery = async () => ({
+      transport: "connected" as const,
+      tools: "ready" as const,
+      specs: [{
+        as: "memory",
+        mcp: "store_memory",
+        arg: "input",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["content", "idempotencyKey"],
+          properties: {
+            content: { type: "string" },
+            idempotencyKey: { type: "string" },
+          },
+        },
+        description: "Store memory",
+      }],
+    });
+    const first = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      discoverDownstream: discovery,
+      captureForegroundDeadlineMs: 2,
+      capturePollIntervalMs: 1,
+      async callDownstream(call) {
+        return call.tool === "store_memory"
+          ? {
+              content: [{ type: "text", text: "queued" }],
+              structuredContent: { ticket_id: "job-restart-1", state: "accepted" },
+            }
+          : {
+              content: [{ type: "text", text: "running" }],
+              structuredContent: { ticket_id: "job-restart-1", state: "running" },
+            };
+      },
+    });
+    const pending = await first.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-restart-1",
+      transcription: { text_transcript: "capture across restart" },
+    });
+    expect(pending.replyText).toContain("still filing");
+    expect(pending.replyText).not.toContain("Saved");
+    await first.close();
+
+    const delivered: string[] = [];
+    const restarted = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      discoverDownstream: discovery,
+      capturePollIntervalMs: 1,
+      async callDownstream(call) {
+        expect(call.tool).toBe("get_task_result");
+        expect(call.arguments).toEqual({ ticket_id: "job-restart-1" });
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "job-restart-1",
+            state: "done",
+            result: {
+              recap: "Restart-safe capture.",
+              evidenceRef: "Log/2026-07-29.md#^restart-1",
+              pagesTouched: ["Inbox/Restart.md"],
+              commitSha: "def5678",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+    });
+    restarted.setTerminalReceiptDelivery(async (_channel, _recipient, text) => {
+      delivered.push(text);
+    });
+    await restarted.resumePendingCaptures();
+    await vi.waitFor(() => expect(delivered).toHaveLength(1));
+    expect(delivered[0]).toContain("Saved ✓");
+    expect(restarted.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+      .toBe("Log/2026-07-29.md#^restart-1");
+    await restarted.resumePendingCaptures();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(delivered).toHaveLength(1);
+    await restarted.close();
+  });
+
+  it("coalesces a repeated provider message per tenant without crossing same-id tenant jobs", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-multitenant-"));
+    dirs.push(dataDir);
+    const binding = {
+      voice_note: {
+        tool: "store_memory",
+        argumentMappings: { content: { source: "transcript" as const } },
+      },
+      text: { tool: "chat_with_ring", argumentMappings: {} },
+      media: { tool: "chat_with_ring", argumentMappings: {} },
+    };
+    const storeCalls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve(_channel, sender) {
+          const tenantId = sender.endsWith("111") ? "alpha" : "beta";
+          return {
+            tenantId,
+            downstreamUrl: `https://zenod.test/mcp/${tenantId}`,
+            downstreamToken: `${tenantId}-memory-scope`,
+            turnBindings: binding,
+          };
+        },
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+          description: "Store memory",
+        }],
+      }),
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          storeCalls.push(call);
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: {
+              ticket_id: `job-${call.route.tenantId}`,
+              state: "accepted",
+            },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: `job-${call.route.tenantId}`,
+            state: "done",
+            result: {
+              evidenceRef: `Log/2026-07-29.md#^${call.route.tenantId}`,
+              pagesTouched: [`Inbox/${call.route.tenantId}.md`],
+              commitSha: call.route.tenantId === "alpha" ? "aaaaaaa" : "bbbbbbb",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+    });
+    const inbound = (sender: string) => ({
+      channel: "whatsapp" as const,
+      sender,
+      chatId: `chat-${sender}`,
+      messageId: "same-provider-id",
+      transcription: { text_transcript: `memory from ${sender}` },
+    });
+
+    const [alpha, beta] = await Promise.all([
+      organ.receive(inbound("34611111111")),
+      organ.receive(inbound("34622222222")),
+    ]);
+    const alphaDuplicate = await organ.receive(inbound("34611111111"));
+
+    expect(alpha.replyText).toContain("Saved ✓");
+    expect(beta.replyText).toContain("Saved ✓");
+    expect(alphaDuplicate.replyText).toBe(alpha.replyText);
+    expect(storeCalls.map((call) => call.arguments.idempotencyKey)).toEqual([
+      "alpha:whatsapp:same-provider-id",
+      "beta:whatsapp:same-provider-id",
+    ]);
+    expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+      .toBe("Log/2026-07-29.md#^alpha");
+    expect(organ.lastCaptureEvidenceRef("beta", "whatsapp:34622222222"))
+      .toBe("Log/2026-07-29.md#^beta");
+    await organ.close();
   });
 
   it("resolves sender to exactly one tenant downstream and never crosses tokens", async () => {
