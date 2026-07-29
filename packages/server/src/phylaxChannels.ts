@@ -319,6 +319,11 @@ function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string)
   return [
     text,
     "",
+    ...(handoff.reply_context
+      ? [
+          "Phylax trusted host metadata: the quoted capture evidenceRef is a memory source reference, not an async job identifier. Preserve it exactly for the connected read-only memory Q&A capability's contextRefs input.",
+        ]
+      : []),
     "Phylax channel handoff:",
     JSON.stringify(handoff),
   ].filter(Boolean).join("\n");

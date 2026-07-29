@@ -23,8 +23,11 @@ afterEach(async () => {
 });
 
 describe("Ring council unit", () => {
-  it("ports the Console persona and selects Ring mode explicitly", () => {
-    expect(RING_AGENT.persona).toBe(CONSOLE_AGENT.persona);
+  it("ports the Console persona, adds structural capture-reference guidance, and selects Ring mode explicitly", () => {
+    expect(RING_AGENT.persona).toContain(CONSOLE_AGENT.persona);
+    expect(RING_AGENT.persona).toContain("trusted host metadata");
+    expect(RING_AGENT.persona).toContain("not an async job identifier");
+    expect(RING_AGENT.persona).toContain("contextRefs");
     expect(resolveServerMode({ ZENOD_UNIT: "ring" }, RING_AGENT.name)).toBe("ring");
   });
 
