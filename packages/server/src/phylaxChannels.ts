@@ -46,6 +46,8 @@ export interface PhylaxChannelInbound {
   sender: string;
   chatId: string;
   messageId?: string;
+  /** Provider message ID quoted by structural reply metadata; never inferred from text. */
+  replyToMessageId?: string;
   text?: string;
   media?: {
     bytes?: Uint8Array | Buffer;
@@ -91,6 +93,7 @@ export interface PhylaxStagedVoice {
   sender: string;
   chatId: string;
   messageId: string;
+  replyToMessageId?: string | null;
   conversationKey: string;
   artifactRef: string;
   artifactPath: string;
@@ -114,6 +117,7 @@ export interface PhylaxDownstreamCall {
     transcription_failed?: { code: string; message: string };
     transcription_source?: string;
     transcription_timing?: { queue_wait_ms?: number | null; runtime_ms?: number | null };
+    reply_context?: { evidenceRef: string };
   };
 }
 
@@ -123,7 +127,16 @@ export type PhylaxTerminalReceiptDelivery = (
   channel: PhylaxPortedChannel,
   recipient: string,
   text: string,
-) => Promise<void>;
+  captureProviderMessageId: string,
+) => Promise<{ sentMessageId: string }>;
+
+export type PhylaxTerminalReceiptRecovery = (
+  channel: PhylaxPortedChannel,
+  tenantId: string,
+  captureProviderMessageId: string,
+  recipient: string,
+  text: string,
+) => Promise<string | null> | string | null;
 
 export interface PhylaxInboundReceipt {
   tenantId: string;
@@ -298,7 +311,7 @@ function isAudioMedia(media: NonNullable<PhylaxChannelInbound["media"]>): boolea
 }
 
 function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string): string {
-  if (!handoff.artifact_ref && !handoff.transcription_failed) return text;
+  if (!handoff.artifact_ref && !handoff.transcription_failed && !handoff.reply_context) return text;
   return [
     text,
     "",
@@ -368,6 +381,19 @@ class PhylaxCaptureJournal {
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (tenant_id, conversation_key)
       );
+
+      CREATE TABLE IF NOT EXISTS phylax_capture_receipts (
+        tenant_id TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        conversation_key TEXT NOT NULL,
+        provider_receipt_message_id TEXT NOT NULL,
+        capture_provider_message_id TEXT NOT NULL,
+        evidence_ref TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (tenant_id, channel, provider_receipt_message_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_phylax_capture_receipts_lookup
+        ON phylax_capture_receipts(tenant_id, channel, conversation_key, provider_receipt_message_id);
     `);
   }
 
@@ -435,6 +461,25 @@ class PhylaxCaptureJournal {
     ).all() as unknown as Record<string, unknown>[]).map(captureJobFromRow);
   }
 
+  unindexedTerminalReceipts(): PhylaxCaptureJob[] {
+    return (this.db.prepare(
+      `SELECT jobs.tenant_id, jobs.channel, jobs.provider_message_id, jobs.sender, jobs.chat_id,
+              jobs.conversation_key, jobs.tool, jobs.job_id, jobs.state, jobs.receipt_text,
+              jobs.evidence_ref, jobs.delivered_at
+       FROM phylax_capture_jobs AS jobs
+       WHERE jobs.state = 'done'
+         AND jobs.evidence_ref IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1
+           FROM phylax_capture_receipts AS receipts
+           WHERE receipts.tenant_id = jobs.tenant_id
+             AND receipts.channel = jobs.channel
+             AND receipts.capture_provider_message_id = jobs.provider_message_id
+         )
+       ORDER BY jobs.created_at`,
+    ).all() as unknown as Record<string, unknown>[]).map(captureJobFromRow);
+  }
+
   terminal(
     job: PhylaxCaptureJob,
     state: "done" | "error",
@@ -489,6 +534,52 @@ class PhylaxCaptureJournal {
       `SELECT evidence_ref FROM phylax_capture_conversations
        WHERE tenant_id = ? AND conversation_key = ?`,
     ).get(tenantId, conversationKey) as { evidence_ref?: unknown } | undefined;
+    return typeof row?.evidence_ref === "string" ? row.evidence_ref : null;
+  }
+
+  recordReceiptDelivery(
+    tenantId: string,
+    channel: PhylaxPortedChannel,
+    captureProviderMessageId: string,
+    providerReceiptMessageId: string,
+  ): boolean {
+    const job = this.get(tenantId, channel, captureProviderMessageId);
+    const receiptId = providerReceiptMessageId.trim();
+    if (job?.state !== "done" || !job.evidenceRef || !receiptId) return false;
+    this.db.prepare(
+      `INSERT INTO phylax_capture_receipts (
+         tenant_id, channel, conversation_key, provider_receipt_message_id,
+         capture_provider_message_id, evidence_ref, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (tenant_id, channel, provider_receipt_message_id) DO NOTHING`,
+    ).run(
+      tenantId,
+      channel,
+      job.conversationKey,
+      receiptId,
+      captureProviderMessageId,
+      job.evidenceRef,
+      Date.now(),
+    );
+    return true;
+  }
+
+  evidenceForReceipt(
+    tenantId: string,
+    channel: PhylaxPortedChannel,
+    conversationKey: string,
+    providerReceiptMessageId: string,
+  ): string | null {
+    const row = this.db.prepare(
+      `SELECT evidence_ref FROM phylax_capture_receipts
+       WHERE tenant_id = ? AND channel = ? AND conversation_key = ?
+         AND provider_receipt_message_id = ?`,
+    ).get(
+      tenantId,
+      channel,
+      conversationKey,
+      providerReceiptMessageId,
+    ) as { evidence_ref?: unknown } | undefined;
     return typeof row?.evidence_ref === "string" ? row.evidence_ref : null;
   }
 
@@ -658,6 +749,7 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): 
 export class PhylaxChannelsOrgan {
   private readonly captureJournal: PhylaxCaptureJournal;
   private terminalReceiptDelivery: PhylaxTerminalReceiptDelivery | null = null;
+  private terminalReceiptRecovery: PhylaxTerminalReceiptRecovery | null = null;
   private readonly backgroundPolls = new Map<string, Promise<void>>();
   private closing = false;
 
@@ -683,13 +775,66 @@ export class PhylaxChannelsOrgan {
     this.terminalReceiptDelivery = delivery;
   }
 
+  setTerminalReceiptRecovery(recovery: PhylaxTerminalReceiptRecovery): void {
+    this.terminalReceiptRecovery = recovery;
+  }
+
   lastCaptureEvidenceRef(tenantId: string, conversationKey: string): string | null {
     return this.captureJournal.lastEvidenceRef(tenantId, conversationKey);
   }
 
+  captureReceiptReady(
+    channel: PhylaxPortedChannel,
+    tenantId: string,
+    providerMessageId: string,
+  ): boolean {
+    const job = this.captureJournal.get(tenantId, channel, providerMessageId);
+    return job?.state === "done" && Boolean(job.evidenceRef);
+  }
+
+  recordCaptureReceiptDelivery(
+    channel: PhylaxPortedChannel,
+    tenantId: string,
+    captureProviderMessageId: string,
+    providerReceiptMessageId: string,
+  ): boolean {
+    return this.captureJournal.recordReceiptDelivery(
+      tenantId,
+      channel,
+      captureProviderMessageId,
+      providerReceiptMessageId,
+    );
+  }
+
   async resumePendingCaptures(): Promise<void> {
+    await this.reconcileTerminalReceiptDeliveries();
     for (const job of this.captureJournal.pending()) {
       this.startBackgroundPoll(job);
+    }
+  }
+
+  private async reconcileTerminalReceiptDeliveries(): Promise<void> {
+    if (!this.terminalReceiptRecovery) return;
+    for (const job of this.captureJournal.unindexedTerminalReceipts()) {
+      try {
+        const sentMessageId = await this.terminalReceiptRecovery(
+          job.channel,
+          job.tenantId,
+          job.providerMessageId,
+          job.channel === "telegram" ? job.chatId : job.sender,
+          job.receiptText ?? "",
+        );
+        if (sentMessageId?.trim()) {
+          this.captureJournal.recordReceiptDelivery(
+            job.tenantId,
+            job.channel,
+            job.providerMessageId,
+            sentMessageId,
+          );
+        }
+      } catch (error) {
+        console.error(`[phylax] failed to reconcile capture receipt ${job.providerMessageId}:`, error);
+      }
     }
   }
 
@@ -815,11 +960,20 @@ export class PhylaxChannelsOrgan {
         // W-P4 convention: claim the provider boundary durably before the send;
         // a crash after this point is ambiguous and must not duplicate a reply.
         if (!this.captureJournal.claimDelivery(job)) return;
-        await this.terminalReceiptDelivery(
+        const delivery = await this.terminalReceiptDelivery(
           job.channel,
           job.channel === "telegram" ? job.chatId : job.sender,
           completed.receipt.text,
+          job.providerMessageId,
         );
+        if (completed.receipt.state === "done" && completed.receipt.evidenceRef) {
+          this.captureJournal.recordReceiptDelivery(
+            job.tenantId,
+            job.channel,
+            job.providerMessageId,
+            delivery.sentMessageId,
+          );
+        }
       } catch (error) {
         console.error(`[phylax] capture poll ${job.jobId} failed:`, error);
       }
@@ -870,6 +1024,7 @@ export class PhylaxChannelsOrgan {
       sender,
       chatId: input.chatId,
       messageId: input.messageId.trim(),
+      replyToMessageId: input.replyToMessageId?.trim() || null,
       conversationKey: `whatsapp:${sender}`,
       artifactRef: artifact.ref,
       artifactPath: artifact.path,
@@ -927,6 +1082,7 @@ export class PhylaxChannelsOrgan {
       sender: voice.sender,
       chatId: voice.chatId,
       messageId: voice.messageId,
+      ...(voice.replyToMessageId ? { replyToMessageId: voice.replyToMessageId } : {}),
       text: voice.text,
       media: {
         artifactRef: voice.artifactRef,
@@ -1008,6 +1164,19 @@ export class PhylaxChannelsOrgan {
     if (!text && !artifactRef && !transcription.transcription_failed) {
       throw new PhylaxChannelError("invalid_input", "text or media is required");
     }
+    const conversationKey = `${input.channel}:${sender}`;
+    const turnType = captureTurnType(input);
+    const quotedProviderMessageId = input.replyToMessageId?.trim() ?? "";
+    const replyEvidenceRef = input.channel === "whatsapp"
+      && quotedProviderMessageId
+      && (turnType === "text" || turnType === "voice_note")
+      ? this.captureJournal.evidenceForReceipt(
+          route.tenantId,
+          input.channel,
+          conversationKey,
+          quotedProviderMessageId,
+        )
+      : null;
     const handoff: PhylaxDownstreamCall["handoff"] = {
       sender,
       ...(text ? { text_transcript: text } : {}),
@@ -1018,15 +1187,19 @@ export class PhylaxChannelsOrgan {
       ...(transcription.transcription_failed ? { transcription_failed: transcription.transcription_failed } : {}),
       ...(transcription.transcription_source ? { transcription_source: transcription.transcription_source } : {}),
       ...(transcription.transcription_timing ? { transcription_timing: transcription.transcription_timing } : {}),
+      ...(replyEvidenceRef ? { reply_context: { evidenceRef: replyEvidenceRef } } : {}),
     };
     const message = handoffEnvelope(handoff, text || "A channel artifact was received.");
     const surface: "whatsapp" | "mcp" = input.channel === "whatsapp" ? "whatsapp" : "mcp";
-    const conversationKey = `${input.channel}:${sender}`;
-    const turnType = captureTurnType(input);
-    const binding = route.turnBindings?.[turnType];
+    const binding = replyEvidenceRef
+      ? route.turnBindings?.text
+      : route.turnBindings?.[turnType];
     const ingestMediaType = ingestMediaTypeFromHandoff(handoff);
     const bindingInput = {
-      transcript: text,
+      // A tenant may map its Ring text field from either `message` or
+      // `transcript`. Both must carry the structural evidence ref for a known
+      // receipt reply; the raw transcript remains available in `handoff`.
+      transcript: replyEvidenceRef ? message : text,
       sender,
       chatId: input.chatId,
       message,

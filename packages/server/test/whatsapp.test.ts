@@ -6,10 +6,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { conversationId, type BrainEngine, type StoreInput, type StoreResult } from "zenod";
+import {
+  conversationId,
+  SqliteStateStore,
+  type BrainEngine,
+  type StoreInput,
+  type StoreResult,
+} from "zenod";
 import { createApp } from "../src/app.js";
 import { formatConversationTranscript } from "../src/conversationTranscript.js";
 import { Runtime } from "../src/runtime.js";
+import { Settings } from "../src/settings.js";
 import {
   maskPhoneNumber,
   normalizeAllowedSenders,
@@ -233,6 +240,35 @@ describe("WhatsApp helpers", () => {
     expect(eventFromBaileysMessage(textMessage({ key: { id: "m", remoteJid: "1@s.whatsapp.net", fromMe: true } }))).toBe(
       null,
     );
+  });
+
+  it("extracts quoted provider message IDs structurally from text and voice context", () => {
+    const textReply = eventFromBaileysMessage(textMessage({
+      message: {
+        extendedTextMessage: {
+          text: "follow up",
+          contextInfo: { stanzaId: "capture-receipt-text" },
+        },
+      },
+    }));
+    const voiceReply = eventFromBaileysMessage(textMessage({
+      message: {
+        audioMessage: {
+          mimetype: "audio/ogg",
+          ptt: true,
+          contextInfo: { stanzaId: "capture-receipt-voice" },
+        },
+      },
+    }));
+
+    expect(textReply).toMatchObject({
+      body: "follow up",
+      replyToMessageId: "capture-receipt-text",
+    });
+    expect(voiceReply).toMatchObject({
+      mediaType: "ptt",
+      replyToMessageId: "capture-receipt-voice",
+    });
   });
 
   it("prefers Baileys remoteJidAlt (phone JID) over LID remote ids for direct senders", () => {
@@ -767,16 +803,349 @@ describe("WhatsAppGateway", () => {
     }
   });
 
+  it("audits a proactive terminal receipt under its capture provider ID for restart reconciliation", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-terminal-receipt-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      runtime.whatsappStore.recordChannelForwarding({
+        providerMessageId: "capture-provider-1",
+        tenantId: "alpha",
+        senderId: "34611111111",
+        downstreamDestination: "zenod.test#tenant:alpha",
+        replyText: "Saved ✓",
+      });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+
+      const sent = await gateway.sendText(
+        "34611111111",
+        "Saved ✓",
+        "capture-provider-1",
+      );
+
+      expect(sent).toEqual({ sentMessageId: "sent_1" });
+      expect(runtime.whatsappStore.channelAudit("capture-provider-1")).toMatchObject({
+        tenantId: "alpha",
+        outboundProviderId: "sent_1",
+        outboundStatus: "sent",
+      });
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("replays the preallocated background terminal ID after provider success crashes before audit", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-background-outbox-"));
+    const state = new SqliteStateStore(join(dir, "settings.sqlite"));
+    const settings = new Settings(state);
+    const storePath = join(dir, "whatsapp.sqlite");
+    const accepted = new Set<string>();
+    const attempts: string[] = [];
+    const firstStore = new WhatsAppStore(storePath);
+    firstStore.recordChannelForwarding({
+      providerMessageId: "capture-background-1",
+      tenantId: "alpha",
+      senderId: "34611111111",
+      downstreamDestination: "zenod.test#tenant:alpha",
+      replyText: "Saved ✓",
+    });
+    const firstGateway = new WhatsAppGateway({
+      dataDir: join(dir, "session-first"),
+      settings,
+      store: firstStore,
+      getEngine: async () => fakeEngine([]),
+      portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
+      socketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(_jid, _content, options) {
+          const id = options?.messageId ?? "";
+          attempts.push(id);
+          accepted.add(id);
+          firstStore.close();
+          return { key: { id } };
+        },
+      }),
+    });
+
+    await firstGateway.pair();
+    await expect(firstGateway.sendText(
+      "34611111111",
+      "Saved ✓",
+      "capture-background-1",
+    )).rejects.toThrow();
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).not.toBe("");
+
+    const restartedStore = new WhatsAppStore(storePath);
+    const restartedGateway = new WhatsAppGateway({
+      dataDir: join(dir, "session-restarted"),
+      settings,
+      store: restartedStore,
+      getEngine: async () => fakeEngine([]),
+      portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
+      socketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(_jid, _content, options) {
+          const id = options?.messageId ?? "";
+          attempts.push(id);
+          accepted.add(id);
+          return { key: { id } };
+        },
+      }),
+    });
+    try {
+      await restartedGateway.pair();
+      const recovered = await restartedGateway.recoverPortedReceipt(
+        "alpha",
+        "capture-background-1",
+      );
+      expect(recovered).toBe(attempts[0]);
+      expect(attempts).toEqual([recovered, recovered]);
+      expect(accepted).toEqual(new Set([recovered!]));
+      expect(restartedStore.channelAudit("capture-background-1")).toMatchObject({
+        tenantId: "alpha",
+        outboundProviderId: recovered,
+        outboundStatus: "sent",
+      });
+      expect(await restartedGateway.recoverPortedReceipt("beta", "capture-background-1"))
+        .toBeNull();
+    } finally {
+      await restartedGateway.close();
+      restartedStore.close();
+      state.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("recovers the foreground terminal ID without indexing an earlier pending progress intent", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-foreground-outbox-"));
+    const state = new SqliteStateStore(join(dir, "settings.sqlite"));
+    const settings = new Settings(state);
+    settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+    const storePath = join(dir, "whatsapp.sqlite");
+    const firstStore = new WhatsAppStore(storePath);
+    const accepted = new Set<string>();
+    const attempts: string[] = [];
+    const event = {
+      messageId: "capture-foreground-1",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "voice transcript",
+      hasMedia: false,
+      mediaType: null,
+      mimeType: null,
+      fileName: null,
+    } satisfies import("../src/whatsappStore.js").WhatsAppInboundEvent;
+    firstStore.prepareOutboundIntent({
+      sourceMessageId: event.messageId,
+      tenantId: "alpha",
+      providerMessageId: "earlier-progress-id",
+      chatId: event.chatId,
+      contactId: event.senderId,
+      bodyText: "Still working…",
+      successStatus: "processing",
+      receiptEligible: false,
+    });
+    const firstGateway = new WhatsAppGateway({
+      dataDir: join(dir, "session-first"),
+      settings,
+      store: firstStore,
+      getEngine: async () => fakeEngine([]),
+      portedInboundHandler: async () => {
+        firstStore.recordChannelForwarding({
+          providerMessageId: event.messageId,
+          tenantId: "alpha",
+          senderId: event.senderId,
+          downstreamDestination: "zenod.test#tenant:alpha",
+          replyText: "Saved ✓",
+        });
+        return { replyText: "Saved ✓" };
+      },
+      portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
+      socketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(_jid, _content, options) {
+          const id = options?.messageId ?? "";
+          attempts.push(id);
+          accepted.add(id);
+          firstStore.close();
+          return { key: { id } };
+        },
+      }),
+    });
+    await firstGateway.pair();
+    await expect(firstGateway.handleEvent(event)).rejects.toThrow();
+
+    const restartedStore = new WhatsAppStore(storePath);
+    const restartedGateway = new WhatsAppGateway({
+      dataDir: join(dir, "session-restarted"),
+      settings,
+      store: restartedStore,
+      getEngine: async () => fakeEngine([]),
+      portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
+      socketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(_jid, _content, options) {
+          const id = options?.messageId ?? "";
+          attempts.push(id);
+          accepted.add(id);
+          return { key: { id } };
+        },
+      }),
+    });
+    try {
+      await restartedGateway.pair();
+      const recovered = await restartedGateway.recoverPortedReceipt(
+        "alpha",
+        event.messageId,
+      );
+      expect(recovered).toBe(attempts[0]);
+      expect(recovered).not.toBe("earlier-progress-id");
+      expect(accepted).toEqual(new Set([recovered!]));
+      expect(restartedStore.channelAudit(event.messageId)).toMatchObject({
+        tenantId: "alpha",
+        outboundProviderId: recovered,
+      });
+    } finally {
+      await restartedGateway.close();
+      restartedStore.close();
+      state.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reclaims a crashed media-recovery send with the same provider ID", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-recovery-outbox-"));
+    const state = new SqliteStateStore(join(dir, "settings.sqlite"));
+    const settings = new Settings(state);
+    const storePath = join(dir, "whatsapp.sqlite");
+    const event = {
+      messageId: "capture-recovery-1",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: "voice.ogg",
+    } satisfies import("../src/whatsappStore.js").WhatsAppInboundEvent;
+    const seeded = new WhatsAppStore(storePath);
+    seeded.recordInbound(event);
+    seeded.markMessageStatus(event.messageId, "processing");
+    seeded.recordChannelForwarding({
+      providerMessageId: event.messageId,
+      tenantId: "alpha",
+      senderId: event.senderId,
+      downstreamDestination: "zenod.test#tenant:alpha",
+      replyText: "Saved ✓",
+    });
+    seeded.close();
+
+    const accepted = new Set<string>();
+    const attempts: string[] = [];
+    const crashingStore = new WhatsAppStore(storePath);
+    const crashingGateway = new WhatsAppGateway({
+      dataDir: join(dir, "session-first"),
+      settings,
+      store: crashingStore,
+      getEngine: async () => fakeEngine([]),
+      portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
+      socketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(_jid, _content, options) {
+          const id = options?.messageId ?? "";
+          attempts.push(id);
+          accepted.add(id);
+          crashingStore.close();
+          return { key: { id } };
+        },
+      }),
+    });
+    await crashingGateway.pair();
+    await expect(crashingGateway.drainMediaRecovery()).rejects.toThrow();
+
+    const restartedStore = new WhatsAppStore(storePath);
+    expect(restartedStore.mediaRecovery(event.messageId)?.state).toBe("pending");
+    const deliveries: string[] = [];
+    const restartedGateway = new WhatsAppGateway({
+      dataDir: join(dir, "session-restarted"),
+      settings,
+      store: restartedStore,
+      getEngine: async () => fakeEngine([]),
+      recordPortedReplyDelivery: (_inbound, sent) => deliveries.push(sent),
+      portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
+      socketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(_jid, _content, options) {
+          const id = options?.messageId ?? "";
+          attempts.push(id);
+          accepted.add(id);
+          return { key: { id } };
+        },
+      }),
+    });
+    try {
+      await restartedGateway.pair();
+      await restartedGateway.drainMediaRecovery();
+      expect(attempts).toEqual([attempts[0], attempts[0]]);
+      expect(accepted).toEqual(new Set([attempts[0]!]));
+      expect(deliveries).toEqual([attempts[0]]);
+      expect(restartedStore.mediaRecovery(event.messageId)).toMatchObject({
+        state: "recovered_replied",
+        outboundProviderId: attempts[0],
+      });
+      expect(restartedStore.channelAudit(event.messageId)).toMatchObject({
+        tenantId: "alpha",
+        outboundProviderId: attempts[0],
+        outboundStatus: "recovery_sent",
+      });
+      await restartedGateway.drainMediaRecovery();
+      expect(attempts).toHaveLength(2);
+    } finally {
+      await restartedGateway.close();
+      restartedStore.close();
+      state.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("replies to allowlisted text once and denies non-allowlisted senders", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-gateway-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
     const calls: string[] = [];
+    const providerDeliveries: Array<{ inbound: string; sent: string }> = [];
     const gateway = new WhatsAppGateway({
       dataDir: join(dir, "whatsapp"),
       settings: runtime.settings,
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine(calls),
+      recordPortedReplyDelivery: (inbound, sent) => providerDeliveries.push({ inbound, sent }),
       socketFactory: async () => socket,
     });
 
@@ -794,6 +1163,7 @@ describe("WhatsAppGateway", () => {
 
       expect(calls).toEqual(["34611111111:hello"]);
       expect(socket.sent).toEqual([{ jid: "34611111111@s.whatsapp.net", text: "Re: hello" }]);
+      expect(providerDeliveries).toEqual([{ inbound: "msg_1", sent: "sent_1" }]);
       expect(runtime.whatsappStore.countMessages()).toBe(2);
       expect(runtime.whatsappStore.countOutboundAudits("denied")).toBe(1);
       expect(gateway.status().diagnostics.store.processingCounts.replied).toBe(1);

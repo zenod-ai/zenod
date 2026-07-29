@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -6,6 +6,7 @@ import { maskPhoneNumber, normalizeWhatsAppIdentifier } from "./whatsappConfig.j
 
 export interface WhatsAppInboundEvent {
   messageId: string;
+  replyToMessageId?: string | null;
   chatId: string;
   senderId: string;
   senderName: string;
@@ -41,6 +42,23 @@ export interface WhatsAppStoreDiagnostics {
     at: number;
     status: string;
   } | null;
+}
+
+export interface WhatsAppOutboundIntent {
+  intentId: string;
+  sourceMessageId: string;
+  tenantId: string | null;
+  providerMessageId: string;
+  sentProviderMessageId: string | null;
+  chatId: string;
+  contactId: string | null;
+  bodyText: string;
+  successStatus: string;
+  receiptEligible: boolean;
+  state: "pending" | "sent";
+  errorText: string | null;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface WhatsAppDigestStatus {
@@ -268,6 +286,7 @@ export type WhatsAppVoiceJobState =
 
 export interface WhatsAppVoiceJob {
   providerMessageId: string;
+  replyToMessageId: string | null;
   tenantId: string;
   conversationKey: string;
   senderId: string;
@@ -290,6 +309,7 @@ export interface WhatsAppVoiceJob {
 
 export interface CreateWhatsAppVoiceJob {
   providerMessageId: string;
+  replyToMessageId?: string | null;
   tenantId: string;
   conversationKey: string;
   senderId: string;
@@ -365,6 +385,27 @@ function receiptFromOutbound(row: {
     vaultEvidenceRefs: uniqueMatches(row.bodyText, /^Vault evidence:\s*(.+)$/gm),
     vaultCommits: uniqueMatches(row.bodyText, /^Vault commit:\s*([0-9a-f]{7,40})$/gim),
     vaultLinks: uniqueMatches(row.bodyText, /(https:\/\/github\.com\/[^\s)]+)/g),
+  };
+}
+
+function outboundIntentFromRow(row: Record<string, unknown>): WhatsAppOutboundIntent {
+  return {
+    intentId: String(row.intent_id),
+    sourceMessageId: String(row.source_message_id),
+    tenantId: row.tenant_id === null ? null : String(row.tenant_id),
+    providerMessageId: String(row.provider_message_id),
+    sentProviderMessageId: row.sent_provider_message_id === null
+      ? null
+      : String(row.sent_provider_message_id),
+    chatId: String(row.chat_id),
+    contactId: row.contact_id === null ? null : String(row.contact_id),
+    bodyText: String(row.body_text),
+    successStatus: String(row.success_status),
+    receiptEligible: Number(row.receipt_eligible) === 1,
+    state: row.intent_state === "sent" ? "sent" : "pending",
+    errorText: row.error_text === null ? null : String(row.error_text),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
   };
 }
 
@@ -511,8 +552,30 @@ export class WhatsAppStore {
       CREATE INDEX IF NOT EXISTS idx_whatsapp_media_recovery_state
         ON whatsapp_media_recovery(recovery_state, created_at);
 
+      CREATE TABLE IF NOT EXISTS whatsapp_outbound_intents (
+        intent_id TEXT PRIMARY KEY,
+        source_message_id TEXT NOT NULL,
+        tenant_id TEXT,
+        provider_message_id TEXT NOT NULL UNIQUE,
+        sent_provider_message_id TEXT,
+        chat_id TEXT NOT NULL,
+        contact_id TEXT,
+        body_text TEXT NOT NULL,
+        success_status TEXT NOT NULL,
+        receipt_eligible INTEGER NOT NULL DEFAULT 0,
+        intent_state TEXT NOT NULL DEFAULT 'pending',
+        error_text TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_outbound_intents_pending
+        ON whatsapp_outbound_intents(intent_state, receipt_eligible, created_at);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_outbound_intents_source
+        ON whatsapp_outbound_intents(source_message_id, tenant_id, receipt_eligible);
+
       CREATE TABLE IF NOT EXISTS whatsapp_voice_jobs (
         provider_message_id TEXT PRIMARY KEY,
+        reply_to_message_id TEXT,
         tenant_id TEXT NOT NULL,
         conversation_key TEXT NOT NULL,
         sender_id TEXT NOT NULL,
@@ -558,6 +621,10 @@ export class WhatsAppStore {
     }
     if (!auditColumns.some((column) => column.name === "failure_code")) {
       this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN failure_code TEXT");
+    }
+    const voiceColumns = this.db.prepare("PRAGMA table_info(whatsapp_voice_jobs)").all() as unknown as Array<{ name: string }>;
+    if (!voiceColumns.some((column) => column.name === "reply_to_message_id")) {
+      this.db.exec("ALTER TABLE whatsapp_voice_jobs ADD COLUMN reply_to_message_id TEXT");
     }
     for (const column of [
       "media_download_ms",
@@ -639,20 +706,52 @@ export class WhatsAppStore {
            'recovery send outcome unknown after restart', NULL, ?, '{}'
          FROM whatsapp_media_recovery r
          JOIN whatsapp_messages m ON m.message_id = r.provider_message_id
-         WHERE r.recovery_state = 'claimed'`,
+         WHERE r.recovery_state = 'claimed'
+           AND NOT EXISTS (
+             SELECT 1 FROM whatsapp_outbound_intents i
+             WHERE i.source_message_id = r.provider_message_id
+               AND i.intent_state = 'pending'
+               AND i.success_status IN ('recovery_sent', 'recovery_notice_sent')
+               AND i.tenant_id IS (
+                 SELECT a.tenant_id FROM whatsapp_channel_audit a
+                 WHERE a.provider_message_id = r.provider_message_id
+               )
+           )`,
       ).run(now);
       this.db.prepare(
         `UPDATE whatsapp_messages
          SET processing_status = 'failed'
          WHERE message_id IN (
-           SELECT provider_message_id FROM whatsapp_media_recovery WHERE recovery_state = 'claimed'
+           SELECT r.provider_message_id FROM whatsapp_media_recovery r
+           WHERE r.recovery_state = 'claimed'
+             AND NOT EXISTS (
+               SELECT 1 FROM whatsapp_outbound_intents i
+               WHERE i.source_message_id = r.provider_message_id
+                 AND i.intent_state = 'pending'
+                 AND i.success_status IN ('recovery_sent', 'recovery_notice_sent')
+                 AND i.tenant_id IS (
+                   SELECT a.tenant_id FROM whatsapp_channel_audit a
+                   WHERE a.provider_message_id = r.provider_message_id
+                 )
+             )
          )`,
       ).run();
       this.db.prepare(
         `UPDATE whatsapp_channel_audit
          SET lifecycle_state = 'failed', outbound_status = 'recovery_unknown', updated_at = ?
          WHERE provider_message_id IN (
-           SELECT provider_message_id FROM whatsapp_media_recovery WHERE recovery_state = 'claimed'
+           SELECT r.provider_message_id FROM whatsapp_media_recovery r
+           WHERE r.recovery_state = 'claimed'
+             AND NOT EXISTS (
+               SELECT 1 FROM whatsapp_outbound_intents i
+               WHERE i.source_message_id = r.provider_message_id
+                 AND i.intent_state = 'pending'
+                 AND i.success_status IN ('recovery_sent', 'recovery_notice_sent')
+                 AND i.tenant_id IS (
+                   SELECT a2.tenant_id FROM whatsapp_channel_audit a2
+                   WHERE a2.provider_message_id = r.provider_message_id
+                 )
+             )
          )`,
       ).run(now);
       this.db.prepare(
@@ -660,8 +759,35 @@ export class WhatsAppStore {
          SET recovery_state = 'provider_notification_failed',
              error_text = COALESCE(error_text, 'recovery send outcome unknown after restart'),
              completed_at = ?, updated_at = ?
-         WHERE recovery_state = 'claimed'`,
+         WHERE recovery_state = 'claimed'
+           AND NOT EXISTS (
+             SELECT 1 FROM whatsapp_outbound_intents i
+             WHERE i.source_message_id = whatsapp_media_recovery.provider_message_id
+               AND i.intent_state = 'pending'
+               AND i.success_status IN ('recovery_sent', 'recovery_notice_sent')
+               AND i.tenant_id IS (
+                 SELECT a.tenant_id FROM whatsapp_channel_audit a
+                 WHERE a.provider_message_id = whatsapp_media_recovery.provider_message_id
+               )
+           )`,
       ).run(now, now);
+      // A preallocated provider ID makes the old claimed boundary unambiguous:
+      // replay the same ID rather than inventing a second outbound message.
+      this.db.prepare(
+        `UPDATE whatsapp_media_recovery
+         SET recovery_state = 'pending', claimed_at = NULL, updated_at = ?
+         WHERE recovery_state = 'claimed'
+           AND EXISTS (
+             SELECT 1 FROM whatsapp_outbound_intents i
+             WHERE i.source_message_id = whatsapp_media_recovery.provider_message_id
+               AND i.intent_state = 'pending'
+               AND i.success_status IN ('recovery_sent', 'recovery_notice_sent')
+               AND i.tenant_id IS (
+                 SELECT a.tenant_id FROM whatsapp_channel_audit a
+                 WHERE a.provider_message_id = whatsapp_media_recovery.provider_message_id
+               )
+           )`,
+      ).run(now);
       this.db.prepare(
         `UPDATE whatsapp_messages
          SET processing_status = 'replied'
@@ -729,12 +855,13 @@ export class WhatsAppStore {
   createVoiceJob(input: CreateWhatsAppVoiceJob, now = Date.now()): WhatsAppVoiceJob {
     this.db.prepare(
       `INSERT INTO whatsapp_voice_jobs (
-         provider_message_id, tenant_id, conversation_key, sender_id, chat_id,
+         provider_message_id, reply_to_message_id, tenant_id, conversation_key, sender_id, chat_id,
          artifact_ref, artifact_path, artifact_sha256, mime_type, file_name,
          caption_text, duration_seconds, job_state, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       input.providerMessageId,
+      input.replyToMessageId?.trim() || null,
       input.tenantId,
       input.conversationKey,
       input.senderId,
@@ -756,6 +883,7 @@ export class WhatsAppStore {
   voiceJob(providerMessageId: string): WhatsAppVoiceJob | null {
     const row = this.db.prepare(
       `SELECT provider_message_id AS providerMessageId, tenant_id AS tenantId,
+         reply_to_message_id AS replyToMessageId,
          conversation_key AS conversationKey, sender_id AS senderId, chat_id AS chatId,
          artifact_ref AS artifactRef, artifact_path AS artifactPath,
          artifact_sha256 AS artifactSha256, mime_type AS mimeType, file_name AS fileName,
@@ -1495,7 +1623,7 @@ export class WhatsAppStore {
 
   completeInterruptedMediaRecovery(
     claim: WhatsAppMediaRecoveryClaim,
-    outcome: { sentMessageId: string; raw?: unknown } | { error: string },
+    outcome: { sentMessageId: string; intentId?: string; raw?: unknown } | { error: string },
   ): void {
     const now = Date.now();
     const sent = "sentMessageId" in outcome;
@@ -1510,6 +1638,13 @@ export class WhatsAppStore {
       : "recovery_failed";
     this.db.exec("BEGIN IMMEDIATE");
     try {
+      if (sent) {
+        this.db.prepare(
+          `UPDATE whatsapp_outbound_intents
+           SET sent_provider_message_id = ?, intent_state = 'sent', error_text = NULL, updated_at = ?
+           WHERE intent_id = ? AND intent_state = 'pending'`,
+        ).run(outcome.sentMessageId, now, outcome.intentId ?? "");
+      }
       this.db.prepare(
         `INSERT INTO whatsapp_outbound_audit (
            audit_id, message_id, chat_id, contact_id, body_text, status, error_text,
@@ -1641,6 +1776,198 @@ export class WhatsAppStore {
          WHERE provider_message_id = ?`,
       ).run(input.sentMessageId ?? null, input.status, Date.now(), input.messageId);
     }
+  }
+
+  prepareOutboundIntent(input: {
+    sourceMessageId: string;
+    tenantId?: string | null;
+    providerMessageId: string;
+    chatId: string;
+    contactId?: string | null;
+    bodyText: string;
+    successStatus: string;
+    receiptEligible?: boolean;
+  }): WhatsAppOutboundIntent {
+    const receiptEligible = input.receiptEligible === true;
+    const tenantId = input.tenantId?.trim() || null;
+    if (receiptEligible && !tenantId) {
+      throw new Error("A terminal receipt outbound intent requires an exact tenant");
+    }
+    const intentId = `waintent_${createHash("sha256")
+      .update(tenantId ?? "")
+      .update("\0")
+      .update(input.sourceMessageId)
+      .update("\0")
+      .update(input.chatId)
+      .update("\0")
+      .update(input.contactId ?? "")
+      .update("\0")
+      .update(input.successStatus)
+      .update("\0")
+      .update(receiptEligible ? "receipt" : "ordinary")
+      .update("\0")
+      .update(input.bodyText)
+      .digest("hex")}`;
+    const now = Date.now();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(
+        `INSERT OR IGNORE INTO whatsapp_outbound_intents (
+           intent_id, source_message_id, tenant_id, provider_message_id,
+           sent_provider_message_id, chat_id,
+           contact_id, body_text, success_status, receipt_eligible, intent_state,
+           error_text, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)`,
+      ).run(
+        intentId,
+        input.sourceMessageId,
+        tenantId,
+        input.providerMessageId,
+        input.chatId,
+        input.contactId ?? null,
+        input.bodyText,
+        input.successStatus,
+        receiptEligible ? 1 : 0,
+        now,
+        now,
+      );
+      const intent = this.outboundIntentById(intentId);
+      this.db.exec("COMMIT");
+      if (!intent) throw new Error("Failed to persist WhatsApp outbound intent");
+      return intent;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  completeOutboundIntent(
+    intent: WhatsAppOutboundIntent,
+    outcome: { sentMessageId: string; raw?: unknown },
+  ): WhatsAppOutboundIntent {
+    const sentMessageId = outcome.sentMessageId.trim();
+    if (!sentMessageId) throw new Error("WhatsApp provider returned no delivery receipt");
+    const now = Date.now();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const completedNow = this.db.prepare(
+        `UPDATE whatsapp_outbound_intents
+         SET sent_provider_message_id = ?, intent_state = 'sent', error_text = NULL, updated_at = ?
+         WHERE intent_id = ? AND intent_state = 'pending'`,
+      ).run(sentMessageId, now, intent.intentId).changes;
+      if (!completedNow) {
+        const completed = this.outboundIntentById(intent.intentId);
+        this.db.exec("COMMIT");
+        if (!completed) throw new Error("Failed to complete WhatsApp outbound intent");
+        return completed;
+      }
+      this.db.prepare(
+        `INSERT INTO whatsapp_outbound_audit (
+           audit_id, message_id, chat_id, contact_id, body_text, status,
+           error_text, sent_message_id, created_at, raw_json
+         ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+      ).run(
+        `whaudit_${randomUUID().replaceAll("-", "")}`,
+        intent.sourceMessageId,
+        intent.chatId,
+        intent.contactId,
+        intent.bodyText,
+        intent.successStatus,
+        sentMessageId,
+        now,
+        safeJson(outcome.raw),
+      );
+      this.db.prepare(
+        `UPDATE whatsapp_channel_audit
+         SET outbound_provider_id = ?, outbound_status = ?, updated_at = ?
+         WHERE provider_message_id = ?`,
+      ).run(sentMessageId, intent.successStatus, now, intent.sourceMessageId);
+      const completed = this.outboundIntentById(intent.intentId);
+      this.db.exec("COMMIT");
+      if (!completed) throw new Error("Failed to complete WhatsApp outbound intent");
+      return completed;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  recordOutboundIntentFailure(intent: WhatsAppOutboundIntent, error: string): void {
+    const now = Date.now();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const recorded = this.db.prepare(
+        `UPDATE whatsapp_outbound_intents SET error_text = ?, updated_at = ?
+         WHERE intent_id = ? AND intent_state = 'pending'`,
+      ).run(error, now, intent.intentId).changes;
+      if (!recorded) {
+        this.db.exec("COMMIT");
+        return;
+      }
+      this.db.prepare(
+         `INSERT INTO whatsapp_outbound_audit (
+           audit_id, message_id, chat_id, contact_id, body_text, status,
+           error_text, sent_message_id, created_at, raw_json
+         ) VALUES (?, ?, ?, ?, ?, 'failed', ?, ?, ?, '{}')`,
+      ).run(
+        `whaudit_${randomUUID().replaceAll("-", "")}`,
+        intent.sourceMessageId,
+        intent.chatId,
+        intent.contactId,
+        intent.bodyText,
+        error,
+        null,
+        now,
+      );
+      this.db.exec("COMMIT");
+    } catch (failure) {
+      this.db.exec("ROLLBACK");
+      throw failure;
+    }
+  }
+
+  recoverableReceiptIntent(
+    tenantId: string,
+    sourceMessageId: string,
+  ): WhatsAppOutboundIntent | null {
+    const row = this.db.prepare(
+      `SELECT intent_id, source_message_id, tenant_id, provider_message_id,
+         sent_provider_message_id, chat_id,
+         contact_id, body_text, success_status, receipt_eligible, intent_state,
+         error_text, created_at, updated_at
+       FROM whatsapp_outbound_intents
+       WHERE tenant_id = ? AND source_message_id = ? AND receipt_eligible = 1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    ).get(tenantId, sourceMessageId) as Record<string, unknown> | undefined;
+    return row ? outboundIntentFromRow(row) : null;
+  }
+
+  pendingReceiptIntents(): WhatsAppOutboundIntent[] {
+    return (this.db.prepare(
+      `SELECT i.intent_id, i.source_message_id, i.tenant_id, i.provider_message_id,
+         i.sent_provider_message_id, i.chat_id, i.contact_id, i.body_text, i.success_status, i.receipt_eligible,
+         i.intent_state, i.error_text, i.created_at, i.updated_at
+       FROM whatsapp_outbound_intents i
+       WHERE i.intent_state = 'pending'
+         AND i.receipt_eligible = 1
+         AND NOT EXISTS (
+           SELECT 1 FROM whatsapp_media_recovery r
+           WHERE r.provider_message_id = i.source_message_id
+         )
+       ORDER BY i.created_at`,
+    ).all() as unknown as Record<string, unknown>[]).map(outboundIntentFromRow);
+  }
+
+  private outboundIntentById(intentId: string): WhatsAppOutboundIntent | null {
+    const row = this.db.prepare(
+      `SELECT intent_id, source_message_id, tenant_id, provider_message_id,
+         sent_provider_message_id, chat_id,
+         contact_id, body_text, success_status, receipt_eligible, intent_state,
+         error_text, created_at, updated_at
+       FROM whatsapp_outbound_intents WHERE intent_id = ?`,
+    ).get(intentId) as Record<string, unknown> | undefined;
+    return row ? outboundIntentFromRow(row) : null;
   }
 
   lastActivity(): number | null {
