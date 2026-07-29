@@ -23,6 +23,25 @@ const readTools = {
   listPages: async () => "pages",
 };
 
+const trustedPrivateProfile = {
+  exposure: "private" as const,
+  tenantScope: "tenant" as const,
+  financialScope: "none" as const,
+  trustMcpAnnotations: true,
+};
+
+const safeReadAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  openWorldHint: false,
+};
+
+const safeWriteAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  openWorldHint: false,
+};
+
 describe("answer tool-step budget", () => {
   it("bypasses the model and returns host-owned catalog facts verbatim", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
@@ -326,8 +345,8 @@ describe("answer tool-step budget", () => {
     });
 
     expect(result).toContain("ERROR: Blocked open_issue");
-    expect(result).toContain("Archus can directly write only its central backlog repo AlfaBlok/obsidian-brain");
-    expect(result).toContain("use Epaminon/Codex execution instead");
+    expect(result).toContain("this connection can directly write only its configured authority repo AlfaBlok/obsidian-brain");
+    expect(result).toContain("the requested repo is zenod-ai/zenod");
     expect(calls).toHaveLength(0);
     expect(actions).toEqual([
       expect.objectContaining({
@@ -444,6 +463,7 @@ describe("answer tool-step budget", () => {
         },
         calli__createposts__abc123: {
           description: "Publish a post.",
+          connectedMcp: true,
           annotations: { readOnlyHint: false },
           run: async (input) => { mutationCalls.push(input); return "published"; },
         },
@@ -469,6 +489,7 @@ describe("answer tool-step budget", () => {
       {
         peer__unknownfuturetool__abc123: {
           description: "Unknown future behavior.",
+          connectedMcp: true,
           inputSchema: { type: "object" },
           run: async (input) => { calls.push(input); return "called"; },
         },
@@ -557,7 +578,8 @@ describe("answer tool-step budget", () => {
         peer__read_record__abc123: {
           description: "Read one record from a connected MCP.",
           connectedMcp: true,
-          annotations: { readOnlyHint: true },
+          trustedProfile: trustedPrivateProfile,
+          annotations: safeReadAnnotations,
           inputSchema: z.object({
             query: z.object({ filters: z.object({ limit: z.number(), state: z.string() }), terms: z.array(z.string()) }),
           }),
@@ -579,7 +601,7 @@ describe("answer tool-step budget", () => {
     expect(actions).toHaveLength(1);
   });
 
-  it("keeps materially different connected-MCP arguments distinct within one answer", async () => {
+  it("fails closed on a different second connected-MCP proposal within one answer", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     const calls: unknown[] = [];
     await llm.answer(
@@ -591,7 +613,8 @@ describe("answer tool-step budget", () => {
         peer__read_record__abc123: {
           description: "Read one record from a connected MCP.",
           connectedMcp: true,
-          annotations: { readOnlyHint: true },
+          trustedProfile: trustedPrivateProfile,
+          annotations: safeReadAnnotations,
           inputSchema: z.object({ id: z.number() }),
           run: async (input) => { calls.push(input); return `record ${String((input as { id: number }).id)}`; },
         },
@@ -599,8 +622,10 @@ describe("answer tool-step budget", () => {
     );
 
     const peer = captured.config.tools.peer__read_record__abc123;
-    await expect(Promise.all([peer.execute({ id: 1 }), peer.execute({ id: 2 })])).resolves.toEqual(["record 1", "record 2"]);
-    expect(calls).toEqual([{ id: 1 }, { id: 2 }]);
+    const [first, second] = await Promise.all([peer.execute({ id: 1 }), peer.execute({ id: 2 })]);
+    expect(first).toBe("record 1");
+    expect(second).toContain("exactly one connected-tool proposal");
+    expect(calls).toEqual([{ id: 1 }]);
   });
 
   it("does not retry or double-record a duplicate guarded mutation failure", async () => {
@@ -656,7 +681,8 @@ describe("answer tool-step budget", () => {
           description: "Create one remote record.",
           connectedMcp: true,
           verifiedMutationReceipt: true,
-          annotations: { readOnlyHint: false },
+          trustedProfile: trustedPrivateProfile,
+          annotations: safeWriteAnnotations,
           inputSchema: z.object({ value: z.string() }),
           run: async (input) => { calls.push(input); return "ERROR: upstream outcome unknown"; },
         },
@@ -678,7 +704,8 @@ describe("answer tool-step budget", () => {
       peer__read_record__abc123: {
         description: "Read one record from a connected MCP.",
         connectedMcp: true,
-        annotations: { readOnlyHint: true },
+        trustedProfile: trustedPrivateProfile,
+        annotations: safeReadAnnotations,
         inputSchema: z.object({ id: z.number() }),
         run: async (input: unknown) => { calls.push(input); return "record"; },
       },

@@ -802,6 +802,7 @@ export class Runtime {
         tools[spec.as] = {
           description: spec.description,
           ...(peer.wallet ? { connectedMcp: true } : {}),
+          ...(peer.trustedProfile ? { trustedProfile: peer.trustedProfile } : {}),
           ...(inputSchema ? { inputSchema } : {}),
           ...(spec.outputSchema ? { outputSchema: spec.outputSchema } : {}),
           ...(typeof spec.inputSchema === "object" ? { schemaFormat: "json-schema" as const } : {}),

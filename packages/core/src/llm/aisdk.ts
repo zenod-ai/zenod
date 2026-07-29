@@ -16,15 +16,13 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import {
   coerceEditIssueLabelsForUserRequest,
+  HOST_APPROVAL_REQUIRED_GUARD_SENTINEL,
   isAffirmativeApproval,
   NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL,
   NOTHING_PENDING_TO_APPROVE_TEXT,
-  normalizedToolName,
   peerMutationGuardFailure,
-  registerOutboundComposeApproval,
 } from "../taskingPolicy.js";
 import { registerStandingApproval } from "../approvalTokens.js";
-import { isKnownTool } from "../toolKinds.js";
 import { validateMutationReceipt } from "../mutationReceipt.js";
 import type {
   AnswerInput,
@@ -50,6 +48,7 @@ import {
   turnPlanPrompt,
   type TurnPlanCompilation,
   type TurnPlanCompileInput,
+  type TurnPlanOperation,
 } from "./turnPlan.js";
 import type { TurnPlanCompiler } from "./types.js";
 
@@ -1144,16 +1143,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // The promise is cached before the upstream await so concurrent duplicate tool
     // calls share both the result and the single onPeerAction record.
     const sameAnswerPeerCalls = new Map<string, Promise<string>>();
-    // M-1 — retry-stop: the FIRST Blocked result from an outbound send tool ends the
-    // turn. Without this, the model retries the same blocked call (or tries another
-    // send tool) for its remaining step budget, and replyGate.ts's renderActionTurnReply
-    // joins every one of those results into the delivered text — the "tripled error
-    // bubble". Once set, later attempts this turn short-circuit to the SAME rendered
-    // text without recording a second action, and prepareStep (below) stops the model
-    // from spending another step on tools at all.
-    let blockedOutboundTurn: { tool: string; text: string } | null = null;
-    const OUTBOUND_SEND_TOOL_NAMES = new Set(["posttweet", "postreddit", "sendemail"]);
-    const friendlyDraftBlock = () => "Draft's ready — reply \"send\" or \"approve\" to post it.";
+    // D9: one Ring turn may propose one exact connected tool plus arguments.
+    // Identical retries share the same promise; any different second proposal
+    // fails closed before another connected tool can run.
+    let selectedPeerProposal: { key: string; operation: TurnPlanOperation } | null = null;
     const NOTHING_PENDING_TEXT = NOTHING_PENDING_TO_APPROVE_TEXT;
     const repoRefFromPeerArgs = (args: Record<string, unknown>): string | null => {
       const values: string[] = [];
@@ -1171,19 +1164,15 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       const match = values.join("\n").match(/\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:#\d+)?\b/);
       return match?.[1] ?? null;
     };
-    const archusWriteBoundaryFailure = (name: string, peer: PeerTools[string], args: Record<string, unknown>): string | null => {
-      if (peer.owner !== "archus") return null;
-      const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const isArchusWrite =
-        normalized === "openissue" ||
-        normalized === "editissue" ||
-        normalized === "closeissue" ||
-        normalized === "archusrequestbacklogaction";
-      if (!isArchusWrite || !peer.authorityRepo) return null;
+    const connectionAuthorityBoundaryFailure = (
+      name: string,
+      peer: PeerTools[string],
+      args: Record<string, unknown>,
+    ): string | null => {
+      if (!peer.authorityRepo || peer.annotations?.readOnlyHint === true) return null;
       const requestedRepo = repoRefFromPeerArgs(args);
       if (!requestedRepo || requestedRepo === peer.authorityRepo) return null;
-      return `Blocked ${name}: Archus can directly write only its central backlog repo ${peer.authorityRepo}. ` +
-        `The requested repo ${requestedRepo} is a product/target repo. For target-repo issue creation, edits, labels, or code-repo work, use Epaminon/Codex execution instead; if durable tracking is needed, create or update a central backlog item in ${peer.authorityRepo} that names target:${requestedRepo}.`;
+      return `Blocked ${name}: this connection can directly write only its configured authority repo ${peer.authorityRepo}; the requested repo is ${requestedRepo}.`;
     };
     const canonicalToolArgument = (value: unknown): string => {
       if (Array.isArray(value)) return `[${value.map(canonicalToolArgument).join(",")}]`;
@@ -1244,13 +1233,20 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               : undefined;
             const approvalFields = Object.entries(schema?.properties ?? {})
               .filter(([key]) => /(?:approval|approve|confirmation|confirm|authorized|authorised)/i.test(key));
-            const commitOnlyApproval = approvalFields.length === 0 &&
-              /\b(?:approve|confirm|commit)\w*\b/i.test(`${name.replace(/[_-]/g, " ")} ${peer.description}`) &&
-              /(?:standing\s+(?:action|draft)|after[\s\S]{0,50}(?:approval|confirmation)|explicit[\s\S]{0,30}(?:approval|confirmation))/i.test(peer.description);
             if (approvalFields.length) {
               args = Object.fromEntries(Object.entries(args).filter(([key]) => !approvalFields.some(([field]) => field === key)));
             }
             const dedupeKey = peerCallDedupeKey(name, args);
+            const proposalKey = `${name}:${canonicalToolArgument(args)}`;
+            const operation: TurnPlanOperation = { toolId: name, input: args, payloadRef: null };
+            if (peer.connectedMcp) {
+              if (selectedPeerProposal && selectedPeerProposal.key !== proposalKey) {
+                const result = "ERROR: Ring accepts exactly one connected-tool proposal per turn; ask one clarifying question.";
+                input.onPeerAction?.(name, args, result, { peerAction: true });
+                return result;
+              }
+              selectedPeerProposal ??= { key: proposalKey, operation };
+            }
             const existing = sameAnswerPeerCalls.get(dedupeKey);
             if (existing) return existing;
 
@@ -1266,40 +1262,22 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   ...(mutationAttempt && receipt.text ? { verifiedReceiptText: receipt.text } : {}),
                 };
               };
-              const normalized = normalizedToolName(name);
-              const isOutboundSend = OUTBOUND_SEND_TOOL_NAMES.has(normalized);
-
-              if (isOutboundSend && blockedOutboundTurn) {
-                // Retry-stop: already blocked once this turn — never re-attempt, never
-                // record a second (duplicate) action.
-                return blockedOutboundTurn.text;
-              }
-
-              const guardFailure = peer.annotations?.readOnlyHint === true
-                ? null
-                : peerMutationGuardFailure(name, input.question, {
-                    conversationId: input.conversationId,
-                    args,
-                    forceMutation: peer.annotations?.readOnlyHint === false || !isKnownTool(name),
-                    owner: peer.owner,
-                    description: peer.description,
-                    requiresStandingApproval: commitOnlyApproval,
-                  });
+              const guardFailure = peerMutationGuardFailure(name, input.question, {
+                operation: peer.connectedMcp ? selectedPeerProposal?.operation ?? operation : operation,
+                conversationId: input.conversationId,
+                args,
+                connectedMcp: peer.connectedMcp,
+                owner: peer.owner,
+                annotations: peer.annotations,
+                trustedProfile: peer.trustedProfile,
+              });
               if (guardFailure) {
-                if (isOutboundSend) {
-                  // M-1 friendly block template: the raw "ERROR: Blocked …" string is an
-                  // action-turn tool result, so replyGate.ts would otherwise deliver it to
-                  // the user verbatim. Render the honest human affordance instead; the raw
-                  // detail goes to the operator log only.
-                  console.warn(`[peer-guard] blocked ${name}: ${guardFailure}`);
-                  const text = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL ? NOTHING_PENDING_TEXT : friendlyDraftBlock();
-                  blockedOutboundTurn = { tool: name, text };
-                  input.onPeerAction?.(name, args, text, receiptMetadata(text));
-                  return text;
-                }
-                const result = guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL
-                  ? NOTHING_PENDING_TEXT
-                  : `ERROR: ${guardFailure}`;
+                const result =
+                  guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL
+                    ? NOTHING_PENDING_TEXT
+                    : guardFailure === HOST_APPROVAL_REQUIRED_GUARD_SENTINEL
+                      ? "[approval_required] Ring held this exact operation under the connection's trusted risk profile; nothing was executed."
+                      : `ERROR: ${guardFailure}`;
                 input.onPeerAction?.(name, args, result, receiptMetadata(result));
                 return result;
               }
@@ -1308,17 +1286,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   if (property.type === "boolean") args[field] = true;
                 }
               }
-              const boundaryFailure = archusWriteBoundaryFailure(name, peer, args);
+              const boundaryFailure = connectionAuthorityBoundaryFailure(name, peer, args);
               if (boundaryFailure) {
                 const result = `ERROR: ${boundaryFailure}`;
                 input.onPeerAction?.(name, args, result, receiptMetadata(result));
                 return result;
               }
-              // P-1 — ask_outbound composes a draft through Callistheness but never sends,
-              // so it never reaches peerMutationGuardFailure's registration above. Register
-              // the same standing-approval state here so a later "Tweet approved" resolved
-              // via a direct post_tweet/post_reddit/send_email call finds it.
-              registerOutboundComposeApproval(input.conversationId, name, args);
               const result = await caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? ""))));
               if (input.conversationId && peer.owner) {
                 registerStandingApproval(input.conversationId, peer.owner, name, args, result, peer.description);
@@ -1390,15 +1363,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       stopWhen: stepCountIs(this.maxSteps),
       // Some models omit the collision suffix from a long discovered MCP name.
       // Repair only that one exact, unique omission before any tool event or
-      // execution. The selected tool's schema and mutation guard still run.
+      // execution. The selected tool's schema and host authorization still run.
       experimental_repairToolCall: repairConnectedPeerToolCall,
       // Hard guarantee against the empty-reply failure: on the final step,
       // disable tools so the model is forced to produce text from what it has.
       // It can plan around this because the budget is in its system prompt.
-      // M-1 retry-stop: once an outbound send got blocked this turn, also force the
-      // NEXT step to text-only — the model must not spend another round retrying it.
       prepareStep: ({ stepNumber }: { stepNumber: number }) =>
-        stepNumber >= this.maxSteps - 1 || blockedOutboundTurn ? { toolChoice: "none" as const } : {},
+        stepNumber >= this.maxSteps - 1 ? { toolChoice: "none" as const } : {},
       tools: {
         ...taskToolSet,
         ...driveToolSet,

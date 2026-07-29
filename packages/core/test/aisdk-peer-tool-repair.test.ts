@@ -22,6 +22,13 @@ const readTools = {
   listPages: async () => "pages",
 };
 
+const trustedPrivateProfile = {
+  exposure: "private" as const,
+  tenantScope: "tenant" as const,
+  financialScope: "none" as const,
+  trustMcpAnnotations: true,
+};
+
 function missingToolError(toolName: string) {
   return new NoSuchToolError({ toolName, availableTools: Object.keys(captured.config.tools) });
 }
@@ -40,8 +47,9 @@ describe("connected MCP exact tool identifier repair", () => {
       {
         [exact]: {
           connectedMcp: true,
+          trustedProfile: trustedPrivateProfile,
           description: "Search records.",
-          annotations: { readOnlyHint: true },
+          annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
           inputSchema: z.object({ query: z.string() }),
           run: async (input) => {
             calls.push(input);
