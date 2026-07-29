@@ -261,6 +261,36 @@ describe("Phylax customer unit mount", () => {
       return (await sessions.request("/")).headers.get("set-cookie")!.split(";", 1)[0]!;
     };
     try {
+      const health = await unit.app.request("/api/health");
+      expect(health.status).toBe(200);
+      expect(await health.json()).toMatchObject({
+        status: "ok",
+        name: "phylax",
+        process: { status: "ok" },
+        channels: {
+          whatsapp: {
+            state: "disabled",
+            receivePath: {
+              status: "disabled",
+              socketState: "disabled",
+              phase: "idle",
+            },
+          },
+        },
+      });
+      unit.phylaxRuntime.settings.setWhatsAppSettings({ enabled: true });
+      const degradedHealth = await unit.app.request("/api/health");
+      expect(degradedHealth.status).toBe(200);
+      expect(await degradedHealth.json()).toMatchObject({
+        status: "degraded",
+        process: { status: "ok" },
+        channels: {
+          whatsapp: {
+            receivePath: { status: "degraded" },
+          },
+        },
+      });
+      unit.phylaxRuntime.settings.setWhatsAppSettings({ enabled: false });
       expect((await unit.app.request("/admin")).status).toBe(404);
       expect((await unit.app.request("/admin", { headers: { cookie: await cookieFor("someone-else") } })).status).toBe(404);
       expect((await unit.app.request("/api/whatsapp/status", { headers: { cookie: await cookieFor("someone-else") } })).status).toBe(404);

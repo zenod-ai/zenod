@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -17,6 +17,7 @@ import {
   senderIsAllowed,
 } from "../src/whatsappConfig.js";
 import {
+  WhatsAppCredentialStateError,
   WhatsAppGateway,
   eventFromBaileysMessage,
   installBaileysSessionLogRedaction,
@@ -448,6 +449,589 @@ describe("WhatsApp lifecycle", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("aborts a stalled version lookup, then reconnects without accumulating starts", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-version-timeout-"));
+    const runtime = new Runtime(dir);
+    const recovered = new FakeSocket();
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async (_sessionDir, context) => {
+        created += 1;
+        if (created > 1) return recovered;
+        context?.setPhase("version_lookup");
+        return new Promise<SocketLike>((_resolve, reject) => {
+          context?.signal.addEventListener("abort", () => reject(context.signal.reason), { once: true });
+        });
+      },
+      lifecycle: {
+        startupTimeoutMs: 50,
+        factoryAbortDrainMs: 10,
+        retryBaseMs: 100,
+        retryMaxMs: 100,
+        retryJitter: 0,
+      },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      const starting = gateway.start();
+      const rejectedStart = expect(starting).rejects.toThrow("startup timed out");
+      expect(gateway.status().receivePath.phase).toBe("version_lookup");
+      await vi.advanceTimersByTimeAsync(51);
+      await rejectedStart;
+      expect(gateway.status().receivePath.status).toBe("degraded");
+      expect(created).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(created).toBe(2);
+      recovered.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().receivePath).toMatchObject({
+        status: "ready",
+        phase: "ready",
+        reconnectAttempt: 0,
+      });
+    } finally {
+      await gateway.close();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("pauses retries when a factory ignores abort, then safely retires its late socket", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-orphan-guard-"));
+    const runtime = new Runtime(dir);
+    const pending = deferred<SocketLike>();
+    const late = new FakeSocket();
+    late.flushCredentials = vi.fn(async () => undefined);
+    late.end = vi.fn(() => late.emitter.removeAllListeners());
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => {
+        created += 1;
+        return pending.promise;
+      },
+      lifecycle: {
+        startupTimeoutMs: 50,
+        factoryAbortDrainMs: 10,
+        retryBaseMs: 20,
+        retryMaxMs: 20,
+        retryJitter: 0,
+      },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      const starting = gateway.start();
+      const rejectedStart = expect(starting).rejects.toThrow("startup timed out");
+      await vi.advanceTimersByTimeAsync(61);
+      await rejectedStart;
+      expect(gateway.status().receivePath).toMatchObject({
+        status: "terminal",
+        phase: "terminal",
+        reconnectAttempt: 0,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(created).toBe(1);
+
+      pending.resolve(late);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(late.flushCredentials).toHaveBeenCalledTimes(1);
+      expect(late.end).toHaveBeenCalledTimes(1);
+      expect(created).toBe(1);
+    } finally {
+      await gateway.close().catch(() => undefined);
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("flushes credentials before replacing a socket whose handshake stalls", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-handshake-timeout-"));
+    const runtime = new Runtime(dir);
+    const stalled = new FakeSocket();
+    const recovered = new FakeSocket();
+    const order: string[] = [];
+    stalled.flushCredentials = vi.fn(async () => {
+      order.push("flush");
+    });
+    stalled.end = vi.fn(() => {
+      order.push("end");
+      stalled.emitter.removeAllListeners();
+    });
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => (++created === 1 ? stalled : recovered),
+      lifecycle: {
+        handshakeTimeoutMs: 50,
+        retryBaseMs: 100,
+        retryMaxMs: 100,
+        retryJitter: 0,
+      },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      expect(gateway.status().receivePath.phase).toBe("handshake");
+      await vi.advanceTimersByTimeAsync(51);
+      expect(order).toEqual(["flush", "end"]);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(created).toBe(2);
+      recovered.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().receivePath.status).toBe("ready");
+    } finally {
+      await gateway.close();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies terminal auth failures and does not retry them", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-terminal-auth-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    socket.flushCredentials = vi.fn(async () => undefined);
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => {
+        created += 1;
+        return socket;
+      },
+      lifecycle: { retryBaseMs: 10, retryMaxMs: 20, retryJitter: 0 },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      socket.emitter.emit("connection.update", { connection: "open" });
+      socket.emitter.emit("connection.update", {
+        connection: "close",
+        lastDisconnect: { error: { output: { statusCode: 401 } } },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(gateway.status().receivePath).toMatchObject({
+        status: "terminal",
+        phase: "terminal",
+        reconnectAttempt: 0,
+      });
+      expect(gateway.status().receivePath.reason).toContain("logged out");
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(created).toBe(1);
+    } finally {
+      await gateway.close().catch(() => undefined);
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not retry corrupt startup credentials", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-terminal-start-"));
+    const runtime = new Runtime(dir);
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => {
+        created += 1;
+        throw new WhatsAppCredentialStateError();
+      },
+      lifecycle: { retryBaseMs: 10, retryMaxMs: 20, retryJitter: 0 },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await expect(gateway.start()).rejects.toThrow("credentials are corrupt");
+      expect(gateway.status().receivePath).toMatchObject({
+        status: "terminal",
+        phase: "terminal",
+        reconnectAttempt: 0,
+      });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(created).toBe(1);
+    } finally {
+      await gateway.close().catch(() => undefined);
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("retries arbitrary startup prose instead of treating English words as terminal auth state", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-transient-prose-"));
+    const runtime = new Runtime(dir);
+    const recovered = new FakeSocket();
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => {
+        created += 1;
+        if (created === 1) throw new Error("proxy says upstream unauthorized while refreshing metadata");
+        return recovered;
+      },
+      lifecycle: { retryBaseMs: 10, retryMaxMs: 10, retryJitter: 0 },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await expect(gateway.start()).rejects.toThrow("upstream unauthorized");
+      expect(gateway.status().receivePath).toMatchObject({ status: "degraded", phase: "retry_wait" });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(created).toBe(2);
+      recovered.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().receivePath.status).toBe("ready");
+    } finally {
+      await gateway.close();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("claims send-error recovery before an awaited credential flush", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-single-recovery-"));
+    const runtime = new Runtime(dir);
+    const flush = deferred<void>();
+    const dead = new FakeSocket();
+    dead.flushCredentials = vi.fn(() => flush.promise);
+    const recovered = new FakeSocket();
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => (++created === 1 ? dead : recovered),
+      lifecycle: { retryBaseMs: 10, retryMaxMs: 10, retryJitter: 0 },
+    });
+    const recovery = gateway as unknown as { recoverFromSendError(error: unknown): void };
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      dead.emitter.emit("connection.update", { connection: "open" });
+      const failure = Object.assign(new Error("Connection Closed"), { output: { statusCode: 428 } });
+      recovery.recoverFromSendError(failure);
+      recovery.recoverFromSendError(failure);
+      expect(dead.flushCredentials).toHaveBeenCalledTimes(1);
+
+      flush.resolve();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(created).toBe(2);
+      recovered.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().receivePath.status).toBe("ready");
+    } finally {
+      await gateway.close();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not let an obsolete close handler terminalize a replacement socket", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-stale-close-"));
+    const runtime = new Runtime(dir);
+    const flush = deferred<void>();
+    const original = new FakeSocket();
+    original.flushCredentials = vi.fn(() => flush.promise);
+    const replacement = new FakeSocket();
+    replacement.user = { id: "34699999999:1@s.whatsapp.net" };
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => (++created === 1 ? original : replacement),
+      lifecycle: { retryBaseMs: 10, retryMaxMs: 10, retryJitter: 0 },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      original.emitter.emit("connection.update", { connection: "open" });
+      original.emitter.emit("connection.update", {
+        connection: "close",
+        lastDisconnect: { error: { output: { statusCode: 401 } } },
+      });
+      expect(original.flushCredentials).toHaveBeenCalledTimes(1);
+
+      const replacementStart = gateway.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(created).toBe(1);
+      flush.resolve();
+      await replacementStart;
+      replacement.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().receivePath.status).toBe("ready");
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(created).toBe(2);
+      expect(gateway.status().receivePath).toMatchObject({ status: "ready", phase: "ready" });
+      expect(gateway.status().linkedNumber).toBe("••••9999");
+    } finally {
+      await gateway.close();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not let a superseded handshake timeout schedule another replacement", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-stale-handshake-"));
+    const runtime = new Runtime(dir);
+    const flush = deferred<void>();
+    const stalled = new FakeSocket();
+    stalled.flushCredentials = vi.fn(() => flush.promise);
+    const replacement = new FakeSocket();
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => (++created === 1 ? stalled : replacement),
+      lifecycle: { handshakeTimeoutMs: 10, retryBaseMs: 20, retryMaxMs: 20, retryJitter: 0 },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(stalled.flushCredentials).toHaveBeenCalledTimes(1);
+
+      const replacementStart = gateway.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(created).toBe(1);
+      flush.resolve();
+      await replacementStart;
+      replacement.emitter.emit("connection.update", { connection: "open" });
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(created).toBe(2);
+      expect(gateway.status().receivePath).toMatchObject({ status: "ready", phase: "ready" });
+    } finally {
+      await gateway.close();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("waits for an in-flight retirement before resetting the credential directory", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-reset-drain-"));
+    const dataDir = join(dir, "whatsapp");
+    const sessionDir = join(dataDir, "session");
+    const runtime = new Runtime(dir);
+    const flush = deferred<void>();
+    const socket = new FakeSocket();
+    socket.flushCredentials = vi.fn(async () => {
+      await flush.promise;
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(join(sessionDir, "late-credential-write"), "must be removed");
+    });
+    const gateway = new WhatsAppGateway({
+      dataDir,
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+      lifecycle: { retryBaseMs: 10, retryMaxMs: 10, retryJitter: 0 },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      socket.emitter.emit("connection.update", { connection: "open" });
+      socket.emitter.emit("connection.update", {
+        connection: "close",
+        lastDisconnect: { error: { output: { statusCode: 503 } } },
+      });
+      expect(socket.flushCredentials).toHaveBeenCalledTimes(1);
+
+      let resetSettled = false;
+      const resetting = gateway.resetSession().then(() => {
+        resetSettled = true;
+      });
+      await Promise.resolve();
+      expect(resetSettled).toBe(false);
+
+      flush.resolve();
+      await resetting;
+      await expect(access(sessionDir)).rejects.toThrow();
+    } finally {
+      await gateway.close();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("includes a concurrent disconnect retirement in shutdown drain", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-disconnect-close-"));
+    const runtime = new Runtime(dir);
+    const flush = deferred<void>();
+    const socket = new FakeSocket();
+    socket.flushCredentials = vi.fn(() => flush.promise);
+    socket.end = vi.fn(() => socket.emitter.removeAllListeners());
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+
+    try {
+      await gateway.start();
+      const disconnecting = gateway.disconnect();
+      await Promise.resolve();
+      expect(socket.flushCredentials).toHaveBeenCalledTimes(1);
+      let closeSettled = false;
+      const closing = gateway.close().then(() => {
+        closeSettled = true;
+      });
+      await Promise.resolve();
+      expect(closeSettled).toBe(false);
+
+      flush.resolve();
+      await Promise.all([disconnecting, closing]);
+      expect(socket.end).toHaveBeenCalledTimes(1);
+    } finally {
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses capped exponential reconnect backoff and superseded timers cannot replace a ready socket", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-backoff-"));
+    const runtime = new Runtime(dir);
+    const initial = new FakeSocket();
+    const recovered = new FakeSocket();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => {
+        created += 1;
+        if (created === 1) return initial;
+        if (created < 4) throw new Error("temporary socket factory failure");
+        return recovered;
+      },
+      lifecycle: {
+        retryBaseMs: 100,
+        retryMaxMs: 200,
+        retryJitter: 0,
+      },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      initial.emitter.emit("connection.update", { connection: "open" });
+      initial.emitter.emit("connection.update", {
+        connection: "close",
+        lastDisconnect: { error: { output: { statusCode: 503 } } },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(gateway.status().receivePath.nextRetryAt! - Date.now()).toBe(100);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(created).toBe(2);
+      expect(gateway.status().receivePath.nextRetryAt! - Date.now()).toBe(200);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(created).toBe(3);
+      expect(gateway.status().receivePath.nextRetryAt! - Date.now()).toBe(200);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(created).toBe(4);
+      recovered.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().receivePath).toMatchObject({ status: "ready", reconnectAttempt: 0 });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(created).toBe(4);
+    } finally {
+      consoleError.mockRestore();
+      await gateway.close();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("aborts a stalled initial start during shutdown and drains without a replacement", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-start-shutdown-"));
+    const runtime = new Runtime(dir);
+    let aborted = false;
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async (_sessionDir, context) => {
+        created += 1;
+        return new Promise<SocketLike>((_resolve, reject) => {
+          context?.signal.addEventListener("abort", () => {
+            aborted = true;
+            reject(context.signal.reason);
+          }, { once: true });
+        });
+      },
+      lifecycle: { startupTimeoutMs: 10_000 },
+    });
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      const starting = gateway.start();
+      const closing = gateway.close();
+      await expect(starting).rejects.toThrow("closing");
+      await closing;
+      expect(aborted).toBe(true);
+      expect(created).toBe(1);
+      expect(gateway.status().receivePath.phase).toBe("closing");
+    } finally {
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("WhatsAppGateway", () => {
@@ -618,6 +1202,7 @@ describe("WhatsAppGateway", () => {
       await gateway.pair();
       await gateway.handleMessages([textMessage({ key: { id: "m", remoteJid: "1@s.whatsapp.net", fromMe: true } })], "notify");
       expect(gateway.status().diagnostics.lastIgnoredReason).toBe("from_linked_number");
+      expect(gateway.status().receivePath.lastInboundAt).toBeTypeOf("number");
       expect(gateway.status().diagnostics.store.inboundMessages).toBe(0);
 
       await gateway.handleMessages([textMessage({ key: { id: "m2", remoteJid: "1@s.whatsapp.net", fromMe: false } })], "append");
