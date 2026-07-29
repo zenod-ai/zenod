@@ -75,7 +75,33 @@ export interface WhatsAppStatus {
   allowedSenders: string[];
   groupsEnabled: boolean;
   acceptAll: boolean;
+  receivePath: WhatsAppReceivePathHealth;
   diagnostics: WhatsAppDiagnostics;
+}
+
+export type WhatsAppReceivePathStatus = "disabled" | "starting" | "ready" | "degraded" | "terminal";
+export type WhatsAppLifecyclePhase =
+  | "idle"
+  | "starting"
+  | "handshake"
+  | "pairing"
+  | "ready"
+  | "retry_wait"
+  | "terminal"
+  | "closing";
+
+export interface WhatsAppReceivePathHealth {
+  status: WhatsAppReceivePathStatus;
+  socketState: WhatsAppConnectionState;
+  phase: WhatsAppLifecyclePhase;
+  restartable: boolean;
+  operatorActionRequired: boolean;
+  outageSince: number | null;
+  generation: number;
+  nextRetryAt: number | null;
+  lastTransitionAt: number;
+  lastConnectedAt: number | null;
+  reason: string | null;
 }
 
 export interface WhatsAppDiagnostics {
@@ -322,6 +348,40 @@ const WHATSAPP_CREDS_FILE = "creds.json";
 const WHATSAPP_CREDS_BACKUP_FILE = "creds.last-known-good.json";
 const WHATSAPP_CREDENTIAL_FLUSH_MS = 2_000;
 const WHATSAPP_SHUTDOWN_DRAIN_MS = 4_000;
+const WHATSAPP_STARTUP_TIMEOUT_MS = 15_000;
+const WHATSAPP_HANDSHAKE_TIMEOUT_MS = 30_000;
+const WHATSAPP_CONNECT_TIMEOUT_MS = 10_000;
+const WHATSAPP_KEEPALIVE_INTERVAL_MS = 30_000;
+
+function boundedDuration(value: string | undefined, fallback: number, minimum: number, maximum: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(minimum, Math.min(parsed, maximum)) : fallback;
+}
+
+/**
+ * Baileys owns protocol ping/pong and closes an unresponsive transport. Phylax
+ * only configures that native mechanism; it intentionally has no message-age
+ * or duplicate ping watchdog.
+ */
+export function whatsappNativeTransportConfig(env: NodeJS.ProcessEnv = process.env): {
+  connectTimeoutMs: number;
+  keepAliveIntervalMs: number;
+} {
+  return {
+    connectTimeoutMs: boundedDuration(
+      env.PHYLAX_WHATSAPP_CONNECT_TIMEOUT_MS,
+      WHATSAPP_CONNECT_TIMEOUT_MS,
+      1_000,
+      120_000,
+    ),
+    keepAliveIntervalMs: boundedDuration(
+      env.PHYLAX_WHATSAPP_KEEPALIVE_INTERVAL_MS,
+      WHATSAPP_KEEPALIVE_INTERVAL_MS,
+      5_000,
+      300_000,
+    ),
+  };
+}
 
 function validWhatsAppCredentials(raw: Buffer): boolean {
   if (raw.byteLength === 0) return false;
@@ -522,6 +582,7 @@ async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
   const { version } = await fetchLatestBaileysVersion();
   const socket = makeWASocket({
+    ...whatsappNativeTransportConfig(),
     version,
     auth: state,
     logger: pino({ level: process.env.WHATSAPP_LOG_LEVEL ?? "silent" }),
@@ -558,6 +619,7 @@ export class WhatsAppGateway {
   private qr: string | null = null;
   private lastError: string | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private handshakeTimer: NodeJS.Timeout | null = null;
   private reconnectInFlight = false;
   private lifecycleGeneration = 0;
   private startInFlight: Promise<void> | null = null;
@@ -567,6 +629,12 @@ export class WhatsAppGateway {
   private readonly lifecycleFailures: unknown[] = [];
   private readonly activeSocketWork = new Set<Promise<unknown>>();
   private readonly waiters = new Set<() => void>();
+  private lifecyclePhase: WhatsAppLifecyclePhase = "idle";
+  private lastTransitionAt = Date.now();
+  private lastConnectedAt: number | null = null;
+  private outageSince: number | null = null;
+  private nextRetryAt: number | null = null;
+  private terminalReason: string | null = null;
   private lastUpsertAt: number | null = null;
   private lastUpsertType: string | null = null;
   private lastUpsertMessageCount = 0;
@@ -588,6 +656,11 @@ export class WhatsAppGateway {
       recordAssistantMessage?: (event: WhatsAppInboundEvent, text: string) => Promise<void> | void;
       socketFactory?: SocketFactory;
       portedInboundHandler?: WhatsAppPortedInboundHandler;
+      lifecycle?: {
+        startupTimeoutMs?: number;
+        handshakeTimeoutMs?: number;
+        reconnectDelayMs?: number;
+      };
     },
   ) {}
 
@@ -597,9 +670,47 @@ export class WhatsAppGateway {
 
   status(): WhatsAppStatus {
     const settings = this.options.settings.whatsappSettings();
+    // Disabling the binding is an explicit operator reset boundary. Do not let
+    // an earlier outage age leak into a later re-enable.
+    if (!settings.enabled) this.outageSince = null;
     const linked = this.socket?.user?.id ?? this.options.settings.getRaw("whatsapp_linked_jid");
     const cloudState: WhatsAppConnectionState =
       settings.cloudStatus === "connected" ? "connected" : settings.cloudStatus === "error" ? "error" : "disconnected";
+    const socketState = settings.enabled
+      ? (settings.providerMode === "cloud" ? cloudState : this.state)
+      : "disabled";
+    const receiveStatus: WhatsAppReceivePathStatus = !settings.enabled
+      ? "disabled"
+      : settings.providerMode === "cloud"
+        ? settings.cloudStatus === "connected"
+          ? "ready"
+          : settings.cloudStatus === "error"
+            ? "terminal"
+            : "degraded"
+        : this.lifecyclePhase === "terminal"
+          ? "terminal"
+          : socketState === "connected" && this.lifecyclePhase === "ready"
+            ? "ready"
+            : this.lifecyclePhase === "starting"
+                || this.lifecyclePhase === "handshake"
+                || this.lifecyclePhase === "pairing"
+              ? "starting"
+              : "degraded";
+    const phase: WhatsAppLifecyclePhase = settings.providerMode === "cloud"
+      ? settings.cloudStatus === "connected"
+        ? "ready"
+        : settings.cloudStatus === "error"
+          ? "terminal"
+          : "idle"
+      : this.lifecyclePhase;
+    const operatorActionRequired = receiveStatus === "terminal" || phase === "pairing";
+    const restartable = settings.enabled
+      && !operatorActionRequired
+      && phase !== "closing"
+      && (receiveStatus === "starting" || receiveStatus === "degraded");
+    const outageSince = receiveStatus === "disabled" || receiveStatus === "ready"
+      ? null
+      : this.outageSince ?? this.lastTransitionAt;
     return {
       enabled: settings.enabled,
       providerMode: settings.providerMode,
@@ -610,7 +721,7 @@ export class WhatsAppGateway {
         status: settings.cloudStatus,
         testRecipient: settings.testRecipient,
       },
-      state: settings.enabled ? (settings.providerMode === "cloud" ? cloudState : this.state) : "disabled",
+      state: socketState,
       linkedNumber: maskPhoneNumber(linked),
       lastActivity: this.options.store.lastActivity(),
       lastError: this.lastError,
@@ -618,6 +729,23 @@ export class WhatsAppGateway {
       allowedSenders: settings.allowedSenders,
       groupsEnabled: settings.groupsEnabled,
       acceptAll: settings.acceptAll,
+      receivePath: {
+        status: receiveStatus,
+        socketState,
+        phase,
+        restartable,
+        operatorActionRequired,
+        outageSince,
+        generation: this.lifecycleGeneration,
+        nextRetryAt: this.nextRetryAt,
+        lastTransitionAt: this.lastTransitionAt,
+        lastConnectedAt: this.lastConnectedAt,
+        reason: settings.providerMode === "cloud"
+          ? settings.cloudStatus === "error"
+            ? this.lastError ?? "Managed WhatsApp provider reports an error"
+            : null
+          : this.terminalReason ?? (receiveStatus === "degraded" ? this.lastError : null),
+      },
       diagnostics: {
         lastUpsertAt: this.lastUpsertAt,
         lastUpsertType: this.lastUpsertType,
@@ -640,24 +768,50 @@ export class WhatsAppGateway {
   }
 
   async start(): Promise<void> {
-    if (this.terminalClosing || this.socket) return;
+    if (this.terminalClosing || this.socket || this.terminalReason) return;
     if (this.startInFlight) return this.startInFlight;
     const generation = ++this.lifecycleGeneration;
     const start = async (): Promise<void> => {
       this.lastError = null;
       this.state = "disconnected";
+      this.transition("starting");
       const factory = this.options.socketFactory ?? defaultSocketFactory;
       let socket: SocketLike;
+      const factoryWork = factory(this.sessionDir);
+      let timeout: NodeJS.Timeout | null = null;
       try {
-        socket = await factory(this.sessionDir);
+        const timeoutMs = this.options.lifecycle?.startupTimeoutMs ?? WHATSAPP_STARTUP_TIMEOUT_MS;
+        socket = await Promise.race([
+          factoryWork,
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error(`WhatsApp startup timed out after ${timeoutMs}ms`)),
+              timeoutMs,
+            );
+          }),
+        ]);
       } catch (error) {
         if (!this.terminalClosing && generation === this.lifecycleGeneration) {
           this.state = "error";
           this.lastError = error instanceof Error ? error.message : String(error);
-          this.lifecycleFailures.push(error);
-          this.notifyStatusChange();
+          this.transition("retry_wait");
+          const lateSocket = factoryWork.then(async (created) => {
+            if (generation !== this.lifecycleGeneration || this.socket !== created) {
+              try {
+                await this.flushSocketCredentials(created);
+              } finally {
+                created.end?.();
+              }
+            }
+          }, () => undefined);
+          void this.trackSocketWork(lateSocket).catch((lateError: unknown) => {
+            console.error("[whatsapp] late startup socket could not be retired:", lateError);
+          });
+          this.scheduleReconnect(this.lastError, this.options.lifecycle?.reconnectDelayMs ?? 2_000);
         }
         throw error;
+      } finally {
+        if (timeout) clearTimeout(timeout);
       }
       if (this.terminalClosing || generation !== this.lifecycleGeneration) {
         try {
@@ -669,7 +823,9 @@ export class WhatsAppGateway {
       }
       this.socket = socket;
       this.lifecycleFailures.length = 0;
+      this.transition("handshake");
       this.bindSocket(socket, generation);
+      this.armHandshakeDeadline(socket, generation);
     };
     this.startInFlight = start();
     try {
@@ -699,13 +855,15 @@ export class WhatsAppGateway {
 
   async disconnect(options: { keepEnabled?: boolean } = {}): Promise<void> {
     this.clearReconnectTimer();
+    this.clearHandshakeTimer();
     this.lifecycleGeneration += 1;
     if (!options.keepEnabled) this.options.settings.setWhatsAppSettings({ enabled: false });
     const socket = this.socket;
     this.socket = null;
     this.qr = null;
     this.state = "disconnected";
-    this.notifyStatusChange();
+    this.terminalReason = null;
+    this.transition("idle");
     await this.startInFlight?.catch(() => undefined);
     try {
       await this.flushSocketCredentials(socket);
@@ -725,11 +883,12 @@ export class WhatsAppGateway {
     this.terminalClosing = true;
     this.lifecycleGeneration += 1;
     this.clearReconnectTimer();
+    this.clearHandshakeTimer();
     const socket = this.socket;
     this.socket = null;
     this.qr = null;
     this.state = "disconnected";
-    this.notifyStatusChange();
+    this.transition("closing");
     this.closeInFlight = (async () => {
       const failures: unknown[] = this.lifecycleFailures.splice(0);
       try {
@@ -783,6 +942,55 @@ export class WhatsAppGateway {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.reconnectInFlight = false;
+    this.nextRetryAt = null;
+  }
+
+  private clearHandshakeTimer(socket?: SocketLike): void {
+    if (!this.handshakeTimer) return;
+    if (socket && this.socket !== socket) return;
+    clearTimeout(this.handshakeTimer);
+    this.handshakeTimer = null;
+  }
+
+  private transition(phase: WhatsAppLifecyclePhase, terminalReason?: string): void {
+    this.lifecyclePhase = phase;
+    const now = Date.now();
+    this.lastTransitionAt = now;
+    if (phase === "ready" || phase === "idle") {
+      this.outageSince = null;
+    } else if (phase !== "closing" && this.outageSince === null) {
+      this.outageSince = now;
+    }
+    if (phase === "terminal") {
+      this.terminalReason = terminalReason ?? this.lastError ?? "WhatsApp receive transport needs operator attention";
+      this.state = "error";
+      this.nextRetryAt = null;
+    }
+    this.notifyStatusChange();
+  }
+
+  private armHandshakeDeadline(socket: SocketLike, generation: number): void {
+    this.clearHandshakeTimer();
+    const timeoutMs = this.options.lifecycle?.handshakeTimeoutMs ?? WHATSAPP_HANDSHAKE_TIMEOUT_MS;
+    this.handshakeTimer = setTimeout(() => {
+      this.handshakeTimer = null;
+      if (
+        this.terminalClosing
+        || generation !== this.lifecycleGeneration
+        || this.socket !== socket
+        || this.state === "connected"
+        || this.state === "pairing"
+      ) return;
+      this.socket = null;
+      this.lifecycleGeneration += 1;
+      socket.end?.();
+      const reason = `WhatsApp handshake timed out after ${timeoutMs}ms`;
+      this.lastError = reason;
+      this.state = "disconnected";
+      this.transition("retry_wait");
+      this.logHealthEvent("handshake_timed_out", { generation });
+      this.scheduleReconnect(reason, this.options.lifecycle?.reconnectDelayMs ?? 2_000);
+    }, timeoutMs);
   }
 
   /**
@@ -846,11 +1054,13 @@ export class WhatsAppGateway {
     if (this.terminalClosing || !this.options.settings.whatsappSettings().enabled || this.reconnectTimer) return;
     this.lastError = reason;
     this.state = "disconnected";
-    this.notifyStatusChange();
+    this.nextRetryAt = Date.now() + delayMs;
+    this.transition("retry_wait");
     this.reconnectInFlight = true;
     this.logHealthEvent("reconnect_scheduled", { reason, delayMs });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
+      this.nextRetryAt = null;
       this.logHealthEvent("reconnect_attempt");
       void this.start().catch((err: unknown) => {
         this.state = "error";
@@ -902,7 +1112,7 @@ export class WhatsAppGateway {
     if (statusCode === DisconnectReason.restartRequired) {
       this.state = "disconnected";
       this.lastError = "WhatsApp requested a restart after pairing. Saving session before reconnecting…";
-      this.notifyStatusChange();
+      this.transition("retry_wait");
       await this.flushSocketCredentials(socket);
       this.scheduleReconnect("WhatsApp requested a restart after pairing. Reconnecting…", 1_500);
       return;
@@ -911,19 +1121,19 @@ export class WhatsAppGateway {
       this.state = "error";
       this.options.settings.setRaw("whatsapp_linked_jid", "");
       this.lastError = "WhatsApp logged out. Reset the session and pair again.";
-      this.notifyStatusChange();
+      this.transition("terminal", this.lastError);
       return;
     }
     if (statusCode === DisconnectReason.badSession || statusCode === DisconnectReason.multideviceMismatch) {
       this.state = "error";
       this.options.settings.setRaw("whatsapp_linked_jid", "");
       this.lastError = "WhatsApp session is invalid. Reset the session and pair again.";
-      this.notifyStatusChange();
+      this.transition("terminal", this.lastError);
       return;
     }
     this.state = "disconnected";
     this.lastError = statusCode ? `WhatsApp disconnected (${statusCode})` : "WhatsApp disconnected";
-    this.notifyStatusChange();
+    this.transition("retry_wait");
     await this.flushSocketCredentials(socket);
     this.scheduleReconnect(this.lastError, 2_000);
   }
@@ -1109,21 +1319,25 @@ export class WhatsAppGateway {
       if (this.terminalClosing || this.socket !== socket || generation !== this.lifecycleGeneration) return;
       const qr = typeof update.qr === "string" ? update.qr : null;
       if (qr) {
+        this.clearHandshakeTimer(socket);
         this.qr = qr;
         this.state = "pairing";
         this.lastError = null;
-        this.notifyStatusChange();
+        this.transition("pairing");
       }
 
       if (update.connection === "open") {
         const wasReconnecting = this.reconnectInFlight;
+        this.clearHandshakeTimer(socket);
         this.clearReconnectTimer();
         this.qr = null;
         this.state = "connected";
         this.lastError = null;
+        this.terminalReason = null;
+        this.lastConnectedAt = Date.now();
         const linked = socket.user?.id;
         if (linked) this.options.settings.setRaw("whatsapp_linked_jid", linked);
-        this.notifyStatusChange();
+        this.transition("ready");
         if (wasReconnecting) this.logHealthEvent("reconnect_succeeded");
         void this.trackSocketWork(this.refreshAllowedSenderAliases());
         void this.trackSocketWork(this.recoverInterruptedMedia(socket)).catch((error: unknown) => {
@@ -1133,6 +1347,7 @@ export class WhatsAppGateway {
       }
 
       if (update.connection === "close") {
+        this.clearHandshakeTimer(socket);
         const closingSocket = this.socket;
         const statusCode = Number(
           (update.lastDisconnect as { error?: { output?: { statusCode?: unknown } } } | undefined)?.error?.output

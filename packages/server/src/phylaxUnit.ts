@@ -1,10 +1,12 @@
 import type { HttpBindings } from "@hono/node-server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ChassisStorage, hashToken, type UnitContext } from "@zenod/mcp-chassis";
+import { VERSION } from "zenod";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Hono, type Context } from "hono";
 import { PHYLAX_AGENT } from "./agent.js";
+import { resolvedGitSha } from "./app.js";
 import { readCustomerSession } from "./customerSession.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
 import { probePhylaxTranscriptionProvider } from "./phylaxTranscriptionProbe.js";
@@ -31,12 +33,19 @@ import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
+const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
 
 /** Compose the shipped customer unit with the ported channels organ. */
 export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
   const env = options.env ?? process.env;
+  const configuredRestartAfter = Number(
+    env.PHYLAX_TRANSPORT_RESTART_AFTER_MS ?? PHYLAX_TRANSPORT_RESTART_AFTER_MS,
+  );
+  const transportRestartAfterMs = Number.isFinite(configuredRestartAfter)
+    ? Math.max(1_000, Math.min(configuredRestartAfter, 900_000))
+    : PHYLAX_TRANSPORT_RESTART_AFTER_MS;
   const storage = options.storage ?? new ChassisStorage({
     dataDir: options.dataDir,
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
@@ -85,6 +94,46 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
   void runtime.start().catch((error) => console.error("phylax channels failed to start:", error));
 
   const app = new Hono<{ Bindings: HttpBindings }>();
+  app.get("/api/health", (c) => {
+    const now = Date.now();
+    const whatsapp = runtime.whatsapp.status();
+    const worker = runtime.workerHealth();
+    const receivePathObservableDegradation =
+      whatsapp.receivePath.status !== "ready" && whatsapp.receivePath.status !== "disabled";
+    const outageForMs = whatsapp.receivePath.outageSince === null
+      ? 0
+      : Math.max(0, now - whatsapp.receivePath.outageSince);
+    const transportRestartRequired =
+      whatsapp.receivePath.restartable && outageForMs >= transportRestartAfterMs;
+    const workerRestartRequired = worker.status === "degraded";
+    const restartRequired = transportRestartRequired || workerRestartRequired;
+    const degraded = receivePathObservableDegradation || workerRestartRequired;
+    return c.json({
+      status: restartRequired ? "unhealthy" : degraded ? "degraded" : "ok",
+      name: PHYLAX_AGENT.name,
+      version: VERSION,
+      sha: resolvedGitSha(),
+      worker,
+      restart: {
+        required: restartRequired,
+        reason: workerRestartRequired
+          ? "event-loop-heartbeat-stale"
+          : transportRestartRequired
+            ? "transport-outage-sustained"
+            : null,
+        transportRestartAfterMs,
+        outageForMs,
+      },
+      channels: {
+        whatsapp: {
+          providerMode: whatsapp.providerMode,
+          state: whatsapp.state,
+          receivePath: whatsapp.receivePath,
+          scope: "transport-lifecycle-only",
+        },
+      },
+    }, restartRequired ? 503 : 200);
+  });
   app.get("/api/phylax/settings", (c) => {
     const tenantId = activeTenantId(c, base, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);

@@ -26,6 +26,22 @@ services:
     image: zenod-phylax:dokploy
     container_name: zenod-phylax
     restart: unless-stopped
+    # The application health surface covers the worker/event loop and WhatsApp
+    # transport lifecycle only. It does not claim that a user message traversed
+    # the complete inbound path. A failed probe terminates PID 1 so the restart
+    # policy can actually replace the unhealthy container (Docker does not
+    # restart an unhealthy container from HEALTHCHECK state alone).
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:8080/api/health',{signal:AbortSignal.timeout(3000)})
+          .then(r=>{if(!r.ok)throw new Error('unhealthy')})
+          .catch(()=>process.exit(1))" || kill -TERM 1
+      interval: 15s
+      timeout: 5s
+      retries: 1
+      start_period: 60s
     networks: [dokploy-network]
     volumes:
       - zenod-phylax-data:/data

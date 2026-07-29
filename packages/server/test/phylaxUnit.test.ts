@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChassisStorage, createMemoryTenantStore } from "@zenod/mcp-chassis";
@@ -25,6 +25,145 @@ afterEach(async () => {
 });
 
 describe("Phylax customer unit mount", () => {
+  it("restarts only sustained restartable outages or stale workers", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T16:00:00.000Z"));
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-transport-health-"));
+    dirs.push(dataDir);
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        PHYLAX_TRANSPORT_RESTART_AFTER_MS: "5000",
+      },
+    });
+    try {
+      const healthy = await unit.app.request("/api/health");
+      expect(healthy.status).toBe(200);
+      expect(await healthy.json()).toMatchObject({
+        status: "ok",
+        worker: { status: "ok" },
+        restart: { required: false, transportRestartAfterMs: 5_000 },
+        channels: {
+          whatsapp: {
+            state: "disabled",
+            scope: "transport-lifecycle-only",
+            receivePath: { status: "disabled" },
+          },
+        },
+      });
+
+      const heartbeat = unit.phylaxRuntime.workerHealth();
+      expect(unit.phylaxRuntime.workerHealth(
+        heartbeat.lastHeartbeatAt + heartbeat.staleAfterMs + 1,
+      ).status).toBe("degraded");
+
+      const baseStatus = unit.phylaxRuntime.whatsapp.status();
+      const outageSince = Date.now();
+      const status = vi.spyOn(unit.phylaxRuntime.whatsapp, "status");
+      status.mockReturnValue({
+        ...baseStatus,
+        enabled: true,
+        state: "disconnected",
+        receivePath: {
+          ...baseStatus.receivePath,
+          status: "degraded",
+          phase: "retry_wait",
+          restartable: true,
+          operatorActionRequired: false,
+          outageSince,
+          reason: "WhatsApp disconnected (408)",
+        },
+      });
+
+      // The ordinary two-second reconnect window is observable but probe-healthy.
+      await vi.advanceTimersByTimeAsync(2_000);
+      const reconnecting = await unit.app.request("/api/health");
+      expect(reconnecting.status).toBe(200);
+      expect(await reconnecting.json()).toMatchObject({
+        status: "degraded",
+        restart: { required: false, outageForMs: 2_000 },
+        channels: {
+          whatsapp: {
+            receivePath: {
+              status: "degraded",
+              phase: "retry_wait",
+              restartable: true,
+            },
+          },
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(3_000);
+      const sustained = await unit.app.request("/api/health");
+      expect(sustained.status).toBe(503);
+      expect(await sustained.json()).toMatchObject({
+        status: "unhealthy",
+        restart: {
+          required: true,
+          reason: "transport-outage-sustained",
+          outageForMs: 5_000,
+        },
+      });
+
+      status.mockReturnValue({
+        ...baseStatus,
+        enabled: true,
+        state: "error",
+        receivePath: {
+          ...baseStatus.receivePath,
+          status: "terminal",
+          phase: "terminal",
+          restartable: false,
+          operatorActionRequired: true,
+          outageSince,
+          reason: "WhatsApp logged out. Reset the session and pair again.",
+        },
+      });
+      const terminal = await unit.app.request("/api/health");
+      expect(terminal.status).toBe(200);
+      expect(await terminal.json()).toMatchObject({
+        status: "degraded",
+        restart: { required: false },
+        channels: {
+          whatsapp: {
+            receivePath: {
+              status: "terminal",
+              operatorActionRequired: true,
+              reason: "WhatsApp logged out. Reset the session and pair again.",
+            },
+          },
+        },
+      });
+
+      status.mockReturnValue(baseStatus);
+      vi.spyOn(unit.phylaxRuntime, "workerHealth").mockReturnValue({
+        status: "degraded",
+        lastHeartbeatAt: Date.now() - 20_001,
+        staleAfterMs: 20_000,
+      });
+      const workerStalled = await unit.app.request("/api/health");
+      expect(workerStalled.status).toBe(503);
+      expect(await workerStalled.json()).toMatchObject({
+        status: "unhealthy",
+        restart: { required: true, reason: "event-loop-heartbeat-stale" },
+      });
+    } finally {
+      await unit.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("restarts the compose service when its bounded health probe fails", async () => {
+    const compose = await readFile(new URL("../../../docker-compose.phylax.yml", import.meta.url), "utf8");
+    expect(compose).toContain("restart: unless-stopped");
+    expect(compose).toContain("http://127.0.0.1:8080/api/health");
+    expect(compose).toContain("AbortSignal.timeout(3000)");
+    expect(compose).toContain("kill -TERM 1");
+    expect(compose).toContain("start_period: 60s");
+  });
+
   it("strictly parses tenant transcription settings and checks before mutation", () => {
     expect(() => parsePhylaxSettingsUpdate(null)).toThrow("settings body must be an object");
     expect(() => parsePhylaxSettingsUpdate({ transcriptionEnabled: "true" }))
