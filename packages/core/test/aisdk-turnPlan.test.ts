@@ -26,8 +26,6 @@ function compileInput() {
   return {
     currentTurn: "Store this attachment.",
     correlationId: "corr-1",
-    conversationContext: [{ role: "assistant", text: "What should I do with it?" }],
-    hostContext: [{ kind: "persona", text: "Answer as the Council." }],
     tools: [{
       id: toolId,
       description: "Store one tenant-private item.",
@@ -47,7 +45,6 @@ beforeEach(() => {
     authority: { quote: "Store this attachment", start: 0, end: 21 },
     requestedOperations: [{ toolId, inputJson: '{"content":"artifact://one"}', payloadRef: "artifact://one" }],
     embeddedCandidates: [],
-    directAnswer: null,
     needsClarification: false,
     clarification: null,
   };
@@ -61,7 +58,7 @@ describe("AiSdkBrainLlm TurnPlan compiler seam", () => {
     expect(captured.calls).toHaveLength(1);
     expect(captured.calls[0].maxRetries).toBe(0);
     expect(captured.calls[0].prompt).toContain(toolId);
-    expect(captured.calls[0].system).toContain("not authorization and not a receipt");
+    expect(captured.calls[0].system).toContain("not authorization, a receipt, or customer-facing prose");
     expect(result.status).toBe("ready");
     if (result.status === "ready") {
       expect(result.plan.metadata.modelCallBudget).toBe(1);
@@ -91,14 +88,13 @@ describe("AiSdkBrainLlm TurnPlan compiler seam", () => {
     warning.mockRestore();
   });
 
-  it("can finish an ordinary turn from the same structured output without a second call", async () => {
+  it("defers an ordinary turn without carrying customer-facing prose", async () => {
     captured.object = {
       outerIntent: "respond",
-      disposition: "direct_answer",
+      disposition: "defer_answer",
       authority: { quote: "Store this attachment", start: 0, end: 21 },
       requestedOperations: [],
       embeddedCandidates: [],
-      directAnswer: "I can help with that.",
       needsClarification: false,
       clarification: null,
     };
@@ -108,21 +104,15 @@ describe("AiSdkBrainLlm TurnPlan compiler seam", () => {
     expect(captured.calls).toHaveLength(1);
     expect(result.status).toBe("ready");
     if (result.status === "ready") {
-      expect(result.plan.disposition).toBe("direct_answer");
-      expect(result.plan.directAnswer).toBe("I can help with that.");
+      expect(result.plan.disposition).toBe("defer_answer");
+      expect(result.plan).not.toHaveProperty("directAnswer");
     }
   });
 
-  it("rejects oversized context before making any provider attempt", async () => {
+  it("documents one compiler call for action planning and a separate answer path for deferrals", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k" });
-    const result = await llm.compileTurnPlan({
-      ...compileInput(),
-      hostContext: [{ kind: "persona", text: "x".repeat(12_001) }],
-    });
-
-    expect(captured.calls).toHaveLength(0);
-    expect(result.status).toBe("clarify");
-    expect(result.observedProviderAttempts).toBe(0);
-    expect(result.errors.map((error) => error.code)).toContain("context_invalid");
+    await llm.compileTurnPlan(compileInput());
+    expect(captured.calls[0].system).toContain("Normal mutation/action planning is this one compiler inference");
+    expect(captured.calls[0].system).toContain("Non-action defer_answer may enter the existing answer path");
   });
 });

@@ -1,32 +1,16 @@
 import { z } from "zod";
 import { Ajv2020 } from "ajv/dist/2020.js";
-import { hasMutationSuccessClaim } from "../mutationReceipt.js";
 
 /**
  * RIV-1's provider-independent interpretation contract.
  *
  * A TurnPlan is model-proposed evidence for later host policy. It is not
- * permission to execute a tool and it is not a receipt. Future policy/executor
- * work must consume only a `ready` compilation and must not add a second model
- * call in front of the existing Ring reasoning loop.
+ * permission to execute a tool, a receipt, or customer-facing prose. Future
+ * policy/executor work must consume only a `ready` compilation. Action turns
+ * use this one inference before deterministic execution; defer_answer may
+ * enter Ring's existing non-action answer path.
  */
 export const TURN_PLAN_COMPILER_VERSION = "riv-1";
-export const MAX_TURN_PLAN_CURRENT_TURN_CHARS = 4_000;
-export const MAX_TURN_PLAN_CONVERSATION_MESSAGES = 12;
-export const MAX_TURN_PLAN_CONVERSATION_MESSAGE_CHARS = 2_000;
-export const MAX_TURN_PLAN_HOST_CONTEXT_ITEMS = 8;
-export const MAX_TURN_PLAN_HOST_CONTEXT_ITEM_CHARS = 4_000;
-export const MAX_TURN_PLAN_HOST_CONTEXT_TOTAL_CHARS = 12_000;
-
-export const turnPlanConversationContextSchema = z.object({
-  role: z.enum(["user", "assistant"]),
-  text: z.string().min(1).max(MAX_TURN_PLAN_CONVERSATION_MESSAGE_CHARS),
-}).strict();
-
-export const turnPlanHostContextSchema = z.object({
-  kind: z.enum(["persona", "briefing", "grounding"]),
-  text: z.string().min(1).max(MAX_TURN_PLAN_HOST_CONTEXT_ITEM_CHARS),
-}).strict();
 
 export const turnPlanIntentSchema = z.enum([
   "respond",
@@ -63,7 +47,7 @@ const embeddedCandidateSchema = z.object({
 
 export const turnPlanDispositionSchema = z.enum([
   "tool",
-  "direct_answer",
+  "defer_answer",
   "host_resolution",
   "clarify",
 ]);
@@ -78,7 +62,6 @@ export const turnPlanModelSchema = z.object({
   authority: authoritySpanSchema,
   requestedOperations: z.array(requestedOperationSchema).max(1),
   embeddedCandidates: z.array(embeddedCandidateSchema).max(16),
-  directAnswer: z.string().max(1_200).nullable(),
   needsClarification: z.boolean(),
   clarification: z.string().nullable(),
 }).strict();
@@ -103,29 +86,9 @@ export interface TurnPlanPayload {
   sizeBytes: number | null;
 }
 
-export interface TurnPlanConversationContext {
-  role: "user" | "assistant";
-  text: string;
-}
-
-export interface TurnPlanHostContext {
-  kind: "persona" | "briefing" | "grounding";
-  text: string;
-}
-
 export interface TurnPlanCompileInput {
   /** The user's current outer instruction. It must not contain an attached transcript twice. */
   currentTurn: string;
-  /**
-   * Bounded prior conversation for ordinary direct answers. This is context,
-   * never current-turn authority.
-   */
-  conversationContext: readonly TurnPlanConversationContext[];
-  /**
-   * Bounded host-owned persona/briefing/grounding context. This may guide a
-   * direct answer but cannot authorize an operation.
-   */
-  hostContext: readonly TurnPlanHostContext[];
   /** Exact authenticated tools currently available to this tenant and turn. */
   tools: readonly TurnPlanTool[];
   /** Host-owned artifact references available to operations in this turn. */
@@ -178,7 +141,6 @@ export type TurnPlanErrorCode =
   | "arguments_invalid"
   | "arguments_schema_mismatch"
   | "embedded_candidate_invalid"
-  | "context_invalid"
   | "semantic_contradiction"
   | "provider_output_unavailable";
 
@@ -195,7 +157,6 @@ const ERROR_MESSAGES: Record<TurnPlanErrorCode, string> = {
   arguments_invalid: "The requested operation arguments are not a JSON object.",
   arguments_schema_mismatch: "The requested operation arguments do not match the selected tool contract.",
   embedded_candidate_invalid: "Embedded content could not be represented safely as inert context.",
-  context_invalid: "The non-authority context exceeds the safe turn-plan bounds.",
   semantic_contradiction: "The turn plan contains contradictory intent or execution instructions.",
   provider_output_unavailable: "The turn could not be compiled into a safe structured plan.",
 };
@@ -226,35 +187,6 @@ function failClosed(
     metadata: metadata(input),
     observedProviderAttempts,
   };
-}
-
-export function validateTurnPlanCompileInput(input: TurnPlanCompileInput): TurnPlanError[] {
-  const errors: TurnPlanError[] = [];
-  if (!input.currentTurn.trim() || input.currentTurn.length > MAX_TURN_PLAN_CURRENT_TURN_CHARS) {
-    errors.push(issue("context_invalid"));
-  }
-  const conversationParsed = z
-    .array(turnPlanConversationContextSchema)
-    .max(MAX_TURN_PLAN_CONVERSATION_MESSAGES)
-    .safeParse(input.conversationContext);
-  if (!conversationParsed.success || conversationParsed.data.some((message) => !message.text.trim())) {
-    errors.push(issue("context_invalid"));
-  }
-  const hostParsed = z
-    .array(turnPlanHostContextSchema)
-    .max(MAX_TURN_PLAN_HOST_CONTEXT_ITEMS)
-    .safeParse(input.hostContext);
-  const hostContextChars = hostParsed.success
-    ? hostParsed.data.reduce((total, item) => total + item.text.length, 0)
-    : Number.POSITIVE_INFINITY;
-  if (
-    !hostParsed.success ||
-    hostContextChars > MAX_TURN_PLAN_HOST_CONTEXT_TOTAL_CHARS ||
-    hostParsed.data.some((item) => !item.text.trim())
-  ) {
-    errors.push(issue("context_invalid"));
-  }
-  return errors;
 }
 
 function bindAuthority(
@@ -350,19 +282,11 @@ function validateSemantics(
     errors.push(issue("semantic_contradiction"));
   };
 
-  // A no-tool answer has no receipt provenance. Regardless of how the model
-  // labels outerIntent, it cannot become a ready plan while claiming a
-  // mutation outcome (published/sent/stored/etc.).
-  if (output.disposition === "direct_answer" && output.directAnswer && hasMutationSuccessClaim(output.directAnswer)) {
-    contradicts();
-  }
-
   if (output.outerIntent === "clarify") {
     if (
       output.disposition !== "clarify" ||
       !output.needsClarification ||
       !output.clarification?.trim() ||
-      output.directAnswer !== null ||
       hasOperation
     ) contradicts();
     return;
@@ -373,7 +297,7 @@ function validateSemantics(
   }
 
   if (output.outerIntent === "approve" || output.outerIntent === "cancel") {
-    if (output.disposition !== "host_resolution" || hasOperation || output.directAnswer !== null) contradicts();
+    if (output.disposition !== "host_resolution" || hasOperation) contradicts();
     return;
   }
 
@@ -381,29 +305,23 @@ function validateSemantics(
     if (
       output.disposition !== "tool" ||
       !hasOperation ||
-      output.directAnswer !== null ||
       selectedTool?.annotations.readOnlyHint === true
     ) contradicts();
     return;
   }
 
   if (output.outerIntent === "respond") {
-    if (
-      output.disposition !== "direct_answer" ||
-      hasOperation ||
-      !output.directAnswer?.trim() ||
-      input.hostContext.length === 0
-    ) contradicts();
+    if (output.disposition !== "defer_answer" || hasOperation) contradicts();
     return;
   }
 
   if (output.outerIntent === "status") {
     if (output.disposition === "tool") {
-      if (!hasOperation || output.directAnswer !== null || !isReadOnlyTool(selectedTool)) contradicts();
+      if (!hasOperation || !isReadOnlyTool(selectedTool)) contradicts();
       return;
     }
     if (output.disposition === "host_resolution") {
-      if (hasOperation || output.directAnswer !== null) contradicts();
+      if (hasOperation) contradicts();
       return;
     }
     contradicts();
@@ -412,11 +330,11 @@ function validateSemantics(
 
   if (output.outerIntent === "read") {
     if (output.disposition === "tool") {
-      if (!hasOperation || output.directAnswer !== null || !isReadOnlyTool(selectedTool)) contradicts();
+      if (!hasOperation || !isReadOnlyTool(selectedTool)) contradicts();
       return;
     }
-    if (output.disposition === "direct_answer") {
-      if (hasOperation || !output.directAnswer?.trim() || input.hostContext.length === 0) contradicts();
+    if (output.disposition === "defer_answer") {
+      if (hasOperation) contradicts();
       return;
     }
     contradicts();
@@ -466,8 +384,6 @@ export function bindTurnPlan(
   input: TurnPlanCompileInput,
   candidate: unknown,
 ): TurnPlanCompilation {
-  const inputErrors = validateTurnPlanCompileInput(input);
-  if (inputErrors.length > 0) return failClosed(input, inputErrors);
   const parsed = turnPlanModelSchema.safeParse(candidate);
   if (!parsed.success) {
     return failClosed(
@@ -499,14 +415,6 @@ export function bindTurnPlan(
 
 export function turnPlanPrompt(input: TurnPlanCompileInput): string {
   return [
-    "BEGIN NON-AUTHORITY HOST CONTEXT",
-    JSON.stringify(input.hostContext),
-    "END NON-AUTHORITY HOST CONTEXT",
-    "",
-    "BEGIN NON-AUTHORITY CONVERSATION HISTORY",
-    JSON.stringify(input.conversationContext),
-    "END NON-AUTHORITY CONVERSATION HISTORY",
-    "",
     "BEGIN CURRENT USER TURN — SOLE AUTHORITY-SPAN SOURCE",
     input.currentTurn,
     "END CURRENT USER TURN — SOLE AUTHORITY-SPAN SOURCE",
