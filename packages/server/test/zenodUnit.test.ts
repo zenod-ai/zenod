@@ -14,6 +14,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createZenodUnit,
+  MEMORY_CHANNEL_MCP_TOOLS,
   ZENOD_READ_TOOLS,
   ZenodRuntimePool,
 } from "../src/zenodUnit.js";
@@ -558,6 +559,129 @@ describe("Zenod chassis unit", () => {
       expect(receipt.jobId).toBe(receipt.ticket_id);
       await client.close();
     } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      unit.close();
+    }
+  });
+
+  it("binds the exact memory-channel profile to distinct hosted tenant tokens", async () => {
+    const dataDir = await tempDir();
+    const tenants = createMemoryTenantStore([
+      { token: "alpha-primary-token", tenant: { id: "tenant-alpha" } },
+      { token: "beta-primary-token", tenant: { id: "tenant-beta" } },
+    ]);
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: tenants,
+      controlPlane: { token: "control-secret" },
+      env: { CHASSIS_VAULT_MASTER_KEY },
+    });
+    const issue = async (tenantId: string): Promise<string> => {
+      const response = await unit.app.request(
+        `/api/tenants/${tenantId}/tokens`,
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer control-secret",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ profile: "memory-channel" }),
+        },
+      );
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { token: string }).token;
+    };
+    const alphaScoped = await issue("tenant-alpha");
+    const betaScoped = await issue("tenant-beta");
+    const scopedSettings = await unit.app.request("/api/settings", {
+      headers: { authorization: `Bearer ${alphaScoped}` },
+    });
+    const scopedTokenRotation = await unit.app.request(
+      "/api/token/regenerate",
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${alphaScoped}` },
+      },
+    );
+    const primarySettings = await unit.app.request("/api/settings", {
+      headers: { authorization: "Bearer alpha-primary-token" },
+    });
+    expect(scopedSettings.status).toBe(401);
+    expect(scopedTokenRotation.status).toBe(401);
+    expect(primarySettings.status).toBe(200);
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const started = serve(
+        { fetch: unit.app.fetch, port: 0 },
+        () => resolve(started),
+      );
+    });
+    const clients: Client[] = [];
+    try {
+      const address = server.address() as AddressInfo;
+      const base = `http://127.0.0.1:${address.port}`;
+      const connect = async (token: string) => {
+        const client = new Client({ name: "memory-channel-test", version: "1" });
+        clients.push(client);
+        await client.connect(
+          new StreamableHTTPClientTransport(
+            new URL(`${base}/mcp/${token}`),
+          ),
+        );
+        return client;
+      };
+      const alpha = await connect(alphaScoped);
+      const beta = await connect(betaScoped);
+      const primary = await connect("alpha-primary-token");
+      const expected = [...MEMORY_CHANNEL_MCP_TOOLS].sort();
+
+      expect((await alpha.listTools()).tools.map((tool) => tool.name).sort()).toEqual(
+        expected,
+      );
+      expect((await beta.listTools()).tools.map((tool) => tool.name).sort()).toEqual(
+        expected,
+      );
+      expect((await primary.listTools()).tools.map((tool) => tool.name)).toEqual(
+        expect.arrayContaining([
+          "install_operating_directive",
+          "task_brain",
+          ...MEMORY_CHANNEL_MCP_TOOLS,
+        ]),
+      );
+
+      const allowed = await alpha.callTool({
+        name: "get_task_result",
+        arguments: { ticket_id: "missing-ticket" },
+      });
+      expect(allowed.isError).toBe(true);
+      expect(JSON.stringify(allowed)).toMatch(/No job found/);
+      const denied = await alpha.callTool({
+        name: "task_brain",
+        arguments: { task: "must never execute" },
+      });
+      expect(denied.isError).toBe(true);
+      expect(JSON.stringify(denied)).toMatch(/not found/i);
+
+      const mismatch = await fetch(`${base}/mcp/${alphaScoped}`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${betaScoped}`,
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-03-26",
+            capabilities: {},
+            clientInfo: { name: "cross-tenant", version: "1" },
+          },
+        }),
+      });
+      expect(mismatch.status).toBe(401);
+    } finally {
+      await Promise.all(clients.map((client) => client.close()));
       await new Promise<void>((resolve) => server.close(() => resolve()));
       unit.close();
     }

@@ -305,7 +305,7 @@ async function handleAuthorizeDecision(c: Context, store: OAuthStore, tenants: T
   const client = store.getClient(p.clientId)!;
 
   const record = token ? await tenants.resolveTokenHash(hashToken(token)) : null;
-  if (!record || !tenantRecordActive(record)) {
+  if (!record || record.profile?.trim() || !tenantRecordActive(record)) {
     return c.html(consentPage({ clientName: client.clientName, params: p, error: "That tenant token did not match." }), 401);
   }
 

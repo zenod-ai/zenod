@@ -61,6 +61,16 @@ export class SqliteTenantStore implements TenantProvisioningStore {
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_tenants_token_hash ON tenants (token_hash);
+      CREATE TABLE IF NOT EXISTS tenant_token_aliases (
+        token_hash TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        profile TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id),
+        UNIQUE (tenant_id, profile)
+      );
+      CREATE INDEX IF NOT EXISTS idx_tenant_token_aliases_tenant_id
+        ON tenant_token_aliases (tenant_id);
     `);
   }
 
@@ -68,11 +78,21 @@ export class SqliteTenantStore implements TenantProvisioningStore {
     const normalized = normalizeTokenHash(tokenHash);
     const row = this.db
       .prepare(
-        `SELECT tenant_id, name, plan, quota, token_hash, status, expires_at
+        `SELECT tenant_id, name, plan, quota, token_hash, status, expires_at, NULL AS profile
          FROM tenants WHERE token_hash = ?`,
       )
       .get(normalized) as TenantRow | undefined;
-    return row ? rowToRecord(row) : null;
+    if (row) return rowToRecord(row);
+    const alias = this.db
+      .prepare(
+        `SELECT tenants.tenant_id, tenants.name, tenants.plan, tenants.quota,
+                aliases.token_hash, tenants.status, tenants.expires_at, aliases.profile
+         FROM tenant_token_aliases AS aliases
+         JOIN tenants ON tenants.tenant_id = aliases.tenant_id
+         WHERE aliases.token_hash = ?`,
+      )
+      .get(normalized) as TenantRow | undefined;
+    return alias ? rowToRecord(alias) : null;
   }
 
   provisionTenant(input: ProvisionTenantInput = {}): ProvisionTenantResult {
@@ -115,6 +135,41 @@ export class SqliteTenantStore implements TenantProvisioningStore {
       expiresAt: existing.expiresAt ?? null,
     });
     return { token, record };
+  }
+
+  provisionTenantToken(
+    tenantId: string,
+    profile: string,
+  ): ProvisionTenantResult | null {
+    const existing = this.findTenant(tenantId);
+    if (!existing) return null;
+    const normalizedProfile = normalizeCredentialProfile(profile);
+    const token = generateTenantToken();
+    const tokenHash = hashToken(token);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO tenant_token_aliases (token_hash, tenant_id, profile, created_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(tenant_id, profile) DO UPDATE SET
+             token_hash = excluded.token_hash,
+             created_at = excluded.created_at`,
+        )
+        .run(tokenHash, existing.tenant.id, normalizedProfile, Date.now());
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      token,
+      record: {
+        ...existing,
+        tokenHash,
+        profile: normalizedProfile,
+      },
+    };
   }
 
   setTenantStatus(
@@ -213,6 +268,7 @@ interface TenantRow {
   token_hash: string;
   status: TenantStatus;
   expires_at: number | null;
+  profile?: string | null;
 }
 
 function rowToRecord(row: TenantRow): TenantTokenRecord {
@@ -224,9 +280,18 @@ function rowToRecord(row: TenantRow): TenantTokenRecord {
       ...(row.plan !== null ? { plan: row.plan } : {}),
       ...(row.quota !== null ? { quota: row.quota } : {}),
     },
+    ...(typeof row.profile === "string" ? { profile: row.profile } : {}),
     status: row.status,
     expiresAt: row.expires_at,
   };
+}
+
+function normalizeCredentialProfile(profile: string): string {
+  const normalized = profile.trim();
+  if (!normalized) throw new Error("credential profile must be non-empty");
+  if (normalized.length > 100)
+    throw new Error("credential profile must be at most 100 characters");
+  return normalized;
 }
 
 function normalizeTenant(

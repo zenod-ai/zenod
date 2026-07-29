@@ -38,6 +38,15 @@ import {
   zenodSkillBundle,
 } from "./zenodSkill.js";
 
+export const MEMORY_CHANNEL_MCP_TOOLS = Object.freeze([
+  "ask_brain",
+  "chat_with_zenod",
+  "get_task_result",
+  "ingest_memory",
+  "search_memory",
+  "store_memory",
+] as const);
+
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly apps = new Map<string, ReturnType<typeof createApp>>();
@@ -244,6 +253,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       longTools: ZENOD_LONG_TOOLS,
     },
     tenantAuth: { store: tenantStore },
+    toolProfiles: {
+      "memory-channel": MEMORY_CHANNEL_MCP_TOOLS,
+    },
     // Enable the RFC 7591 dynamic-client-registration authorization server so MCP
     // connectors can self-register (POST /oauth/register) and complete the OAuth
     // handshake. Without it, discovery falls through to the SPA and connectors fall

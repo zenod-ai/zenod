@@ -15,6 +15,7 @@ import {
 } from "@hono/node-server/serve-static";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import type { Logger } from "pino";
@@ -95,6 +96,8 @@ export interface TenantContext {
 export interface UnitContext {
   unitName: string;
   tenant: TenantContext | null;
+  /** Profile bound to the presented credential. Null is the ordinary full-surface tenant credential. */
+  credentialProfile: string | null;
   /** Request-scoped pino logger carrying request_id and explicit tenant_id. */
   logger: Logger;
   requestId: string;
@@ -115,6 +118,7 @@ export type UnitHonoEnv = {
   Bindings: HttpBindings;
   Variables: {
     tenant: TenantContext | null;
+    credentialProfile: string | null;
     unitContext: TenantUnitContext;
     requestId: string;
   };
@@ -123,6 +127,8 @@ export type UnitHonoEnv = {
 export interface TenantTokenRecord {
   tokenHash: string;
   tenant: TenantContext;
+  /** Optional least-privilege profile carried by this specific credential. */
+  profile?: string | null;
   status?: TenantStatus;
   expiresAt?: Date | string | number | null;
 }
@@ -177,6 +183,10 @@ export interface TenantProvisioningStore extends TenantTokenStore {
   rotateTenantToken(
     tenantId: string,
   ): Promise<ProvisionTenantResult | null> | ProvisionTenantResult | null;
+  provisionTenantToken(
+    tenantId: string,
+    profile: string,
+  ): Promise<ProvisionTenantResult | null> | ProvisionTenantResult | null;
   setTenantStatus(
     tenantId: string,
     status: TenantStatus,
@@ -187,6 +197,10 @@ export interface MemoryTenantStore extends TenantProvisioningStore {
   put(input: MemoryTenantInput): TenantTokenRecord;
   provisionTenant(input?: ProvisionTenantInput): ProvisionTenantResult;
   rotateTenantToken(tenantId: string): ProvisionTenantResult | null;
+  provisionTenantToken(
+    tenantId: string,
+    profile: string,
+  ): ProvisionTenantResult | null;
   setTenantStatus(
     tenantId: string,
     status: TenantStatus,
@@ -199,6 +213,11 @@ export interface TenantAuthOptions {
   oauth?: TenantOAuthAccessTokenStore;
   oauthChallenge?: boolean;
   realm?: string;
+}
+
+interface AuthenticatedTenantCredential {
+  tenant: TenantContext;
+  profile: string | null;
 }
 
 export interface ControlPlaneOptions {
@@ -299,6 +318,8 @@ export interface CreateUnitOptions {
   version?: string;
   /** Register this unit's MCP tools on each stateless request server. */
   tools?: UnitToolRegistrar;
+  /** Exact MCP tool names exposed by each credential profile. Unknown profiles expose no tools. */
+  toolProfiles?: Readonly<Record<string, readonly string[]>>;
   /** Register unit product APIs on an automatically tenant-authenticated sub-router. */
   routes?: UnitRouteRegistrar;
   /** Optional tenant auth. When set, every MCP request resolves a tenant first. */
@@ -352,8 +373,9 @@ export function generateTenantToken(): string {
 export function createMemoryTenantStore(
   records: MemoryTenantInput[] = [],
 ): MemoryTenantStore {
-  const byHash = new Map<string, string>();
+  const byHash = new Map<string, TenantTokenRecord>();
   const byTenant = new Map<string, TenantTokenRecord>();
+  const profileHashes = new Map<string, string>();
 
   const store: MemoryTenantStore = {
     put(input) {
@@ -363,18 +385,25 @@ export function createMemoryTenantStore(
       const record: TenantTokenRecord = {
         tokenHash,
         tenant: { ...input.tenant },
+        profile: null,
         status: input.status ?? "active",
         expiresAt: input.expiresAt ?? null,
       };
-      byHash.set(tokenHash, record.tenant.id);
+      byHash.set(tokenHash, record);
       byTenant.set(record.tenant.id, record);
       return cloneTenantRecord(record);
     },
 
     resolveTokenHash(tokenHash) {
-      const tenantId = byHash.get(tokenHash);
-      const record = tenantId ? byTenant.get(tenantId) : null;
-      return record ? cloneTenantRecord(record) : null;
+      const credential = byHash.get(tokenHash);
+      if (!credential) return null;
+      const tenant = byTenant.get(credential.tenant.id);
+      if (!tenant) return null;
+      return cloneTenantRecord({
+        ...tenant,
+        tokenHash: credential.tokenHash,
+        profile: credential.profile ?? null,
+      });
     },
 
     provisionTenant(input = {}) {
@@ -398,6 +427,26 @@ export function createMemoryTenantStore(
         status: "active",
         expiresAt: existing.expiresAt ?? null,
       });
+    },
+
+    provisionTenantToken(tenantId, profile) {
+      const id = tenantId.trim();
+      const normalizedProfile = normalizeCredentialProfile(profile);
+      const existing = id ? byTenant.get(id) : null;
+      if (!existing) return null;
+      const profileKey = `${id}\0${normalizedProfile}`;
+      const previousHash = profileHashes.get(profileKey);
+      if (previousHash) byHash.delete(previousHash);
+      const token = generateTenantToken();
+      const record: TenantTokenRecord = {
+        ...existing,
+        tokenHash: hashToken(token),
+        tenant: { ...existing.tenant },
+        profile: normalizedProfile,
+      };
+      byHash.set(record.tokenHash, record);
+      profileHashes.set(profileKey, record.tokenHash);
+      return { token, record: cloneTenantRecord(record) };
     },
 
     setTenantStatus(tenantId, status) {
@@ -443,9 +492,55 @@ function cloneTenantRecord(record: TenantTokenRecord): TenantTokenRecord {
   return {
     tokenHash: record.tokenHash,
     tenant: { ...record.tenant },
+    ...(record.profile ? { profile: record.profile } : {}),
     status: record.status,
     expiresAt: record.expiresAt ?? null,
   };
+}
+
+function normalizeCredentialProfile(profile: string): string {
+  const normalized = profile.trim();
+  if (!normalized) throw new Error("credential profile must be non-empty");
+  if (normalized.length > 100)
+    throw new Error("credential profile must be at most 100 characters");
+  return normalized;
+}
+
+function profileToolAllowlist(
+  profile: string | null,
+  profiles: CreateUnitOptions["toolProfiles"],
+): ReadonlySet<string> | null {
+  if (profile === null) return null;
+  const names = profiles?.[profile];
+  return new Set(names ?? []);
+}
+
+function restrictMcpTools(
+  server: McpServer,
+  allowlist: ReadonlySet<string> | null,
+): McpServer {
+  if (allowlist === null) return server;
+  type ToolRegistrar = (
+    name: string,
+    ...args: unknown[]
+  ) => RegisteredTool;
+  const runtime = server as unknown as {
+    registerTool: ToolRegistrar;
+    tool: ToolRegistrar;
+  };
+  return new Proxy(server, {
+    get(target, property) {
+      if (property === "registerTool" || property === "tool") {
+        return (name: string, ...args: unknown[]) => {
+          const registered = runtime[property](name, ...args);
+          if (!allowlist.has(name)) registered.remove();
+          return registered;
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 function bearerToken(c: Context): string | null {
@@ -533,9 +628,10 @@ export function requireTenantAuth(
 ): UnitAuthMiddleware {
   const realm = options.realm?.trim() || "mcp-chassis";
   return async (c, next) => {
-    const tenant = await resolveAuthenticatedTenant(c, options);
-    if (tenant) {
-      c.set("tenant", tenant);
+    const credential = await resolveAuthenticatedTenant(c, options);
+    if (credential) {
+      c.set("tenant", credential.tenant);
+      c.set("credentialProfile", credential.profile);
       await next();
       return;
     }
@@ -544,23 +640,45 @@ export function requireTenantAuth(
   };
 }
 
+function requireUnprofiledTenantAuth(
+  options: TenantAuthOptions,
+): UnitAuthMiddleware {
+  const realm = options.realm?.trim() || "mcp-chassis";
+  return async (c, next) => {
+    const credential = await resolveAuthenticatedTenant(c, options);
+    if (credential?.profile === null) {
+      c.set("tenant", credential.tenant);
+      c.set("credentialProfile", null);
+      await next();
+      return;
+    }
+    return unauthorized(c, realm, options.oauthChallenge === true);
+  };
+}
+
 async function resolveAuthenticatedTenant(
   c: Context<UnitHonoEnv>,
   options: TenantAuthOptions,
-): Promise<TenantContext | null> {
+): Promise<AuthenticatedTenantCredential | null> {
+  const bearer = bearerToken(c);
+  const path = pathToken(c);
+  if (bearer && path && !timingSafeStringEqual(bearer, path)) return null;
   const token = presentedToken(c);
   const record = token
     ? await options.store.resolveTokenHash(hashToken(token))
     : null;
-  if (record && isActive(record)) return { ...record.tenant };
+  if (record && isActive(record))
+    return {
+      tenant: { ...record.tenant },
+      profile: record.profile?.trim() || null,
+    };
 
-  const bearer = bearerToken(c);
   const oauthToken =
     bearer && options.oauth
       ? await options.oauth.resolveOAuthAccessToken(bearer)
       : null;
   return oauthToken && oauthToken.expiresAt > Date.now()
-    ? { ...oauthToken.tenant }
+    ? { tenant: { ...oauthToken.tenant }, profile: null }
     : null;
 }
 
@@ -663,7 +781,7 @@ async function resolveTenantToken(
 ): Promise<TenantTokenRecord | null> {
   if (!token) return null;
   const record = await store.resolveTokenHash(hashToken(token));
-  return record && isActive(record) ? record : null;
+  return record && isActive(record) && !record.profile?.trim() ? record : null;
 }
 
 type RequiredUiOptions = Required<
@@ -1108,8 +1226,16 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     throw new Error(
       "OAuth routes require tenantAuth so grants can bind to tenants",
     );
-  const auth = options.tenantAuth
+  const mcpAuth = options.tenantAuth
     ? requireTenantAuth({
+        ...options.tenantAuth,
+        ...(oauth?.serverEnabled
+          ? { oauth: oauth.store, oauthChallenge: true }
+          : {}),
+      })
+    : noopAuth();
+  const unprofiledTenantAuth = options.tenantAuth
+    ? requireUnprofiledTenantAuth({
         ...options.tenantAuth,
         ...(oauth?.serverEnabled
           ? { oauth: oauth.store, oauthChallenge: true }
@@ -1146,6 +1272,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     return {
       unitName: name,
       tenant,
+      credentialProfile: c.get("credentialProfile") ?? null,
       ...createRequestLogContext(logger, tenant.id, requestId),
       storage: storage.forTenant(tenant),
       usage: getUsageStore()?.forTenant(tenant) ?? null,
@@ -1413,7 +1540,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       kit: oauth,
       tenantStore: options.tenantAuth.store,
       storage,
-      tenantAuth: auth,
+      tenantAuth: unprofiledTenantAuth,
     });
   }
 
@@ -1455,6 +1582,32 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       },
     );
 
+    app.post(
+      "/api/tenants/:tenantId/tokens",
+      controlPlaneAuth,
+      async (c) => {
+        const body = await c.req.json().catch(() => ({}));
+        const profile =
+          body && typeof body === "object"
+            ? stringOrUndefined((body as Record<string, unknown>).profile)
+            : undefined;
+        if (!profile || profile.length > 100)
+          return c.json({ error: "invalid credential profile" }, 400);
+        const result = await provisioningStore.provisionTenantToken(
+          c.req.param("tenantId") ?? "",
+          profile,
+        );
+        if (!result) return c.json({ error: "tenant not found" }, 404);
+        return c.json({
+          tenant: result.record.tenant,
+          status: result.record.status ?? "active",
+          profile,
+          token: result.token,
+          mcpPath: `/mcp/${result.token}`,
+        });
+      },
+    );
+
     app.delete("/api/tenants/:tenantId", controlPlaneAuth, async (c) => {
       const record = await provisioningStore.setTenantStatus(
         c.req.param("tenantId") ?? "",
@@ -1482,6 +1635,11 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       options.conduct,
     );
     const tenant = c.get("tenant") ?? null;
+    const credentialProfile = c.get("credentialProfile") ?? null;
+    const toolServer = restrictMcpTools(
+      server,
+      profileToolAllowlist(credentialProfile, options.toolProfiles),
+    );
     const usage = tenant ? (getUsageStore()?.forTenant(tenant) ?? null) : null;
     if (tenant && usage) {
       const decision = usage.checkQuota(tenant.quota, 1);
@@ -1491,10 +1649,11 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     const turnPreamble = tenant
       ? await operatingRules.turnPreamble(tenant)
       : null;
-    await installOperatingRulesTools(server, tenant, operatingRules);
-    await options.tools?.(server, {
+    await installOperatingRulesTools(toolServer, tenant, operatingRules);
+    await options.tools?.(toolServer, {
       unitName: name,
       tenant,
+      credentialProfile,
       ...createRequestLogContext(
         logger,
         tenant?.id ?? null,
@@ -1521,8 +1680,8 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     return RESPONSE_ALREADY_SENT;
   };
 
-  app.all("/mcp", auth, handleMcp);
-  app.all("/mcp/:token", auth, handleMcp);
+  app.all("/mcp", mcpAuth, handleMcp);
+  app.all("/mcp/:token", mcpAuth, handleMcp);
 
   if (options.routes) {
     const tenantAuth = options.tenantAuth;
@@ -1535,21 +1694,29 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
         await next();
         return;
       }
-      const tenant =
+      const credential =
         (await resolveAuthenticatedTenant(c, {
           ...tenantAuth,
           ...(oauth?.serverEnabled
             ? { oauth: oauth.store, oauthChallenge: true }
             : {}),
-        })) ?? (ui ? resolveTenantSession(c, ui) : null);
-      if (!tenant) {
+        })) ??
+        (ui
+          ? (() => {
+              const tenant = resolveTenantSession(c, ui);
+              return tenant ? { tenant, profile: null } : null;
+            })()
+          : null);
+      if (!credential || credential.profile !== null) {
         return unauthorized(
           c,
           tenantAuth.realm?.trim() || "mcp-chassis",
           Boolean(oauth?.serverEnabled || tenantAuth.oauthChallenge),
         );
       }
+      const tenant = credential.tenant;
       c.set("tenant", tenant);
+      c.set("credentialProfile", credential.profile);
       const context = await tenantContext(c, tenant);
       if (context.usage) {
         const decision = context.usage.checkQuota(tenant.quota, 1);
@@ -1595,6 +1762,7 @@ function isTenantProvisioningStore(
     store &&
     "provisionTenant" in store &&
     "rotateTenantToken" in store &&
+    "provisionTenantToken" in store &&
     "setTenantStatus" in store,
   );
 }
