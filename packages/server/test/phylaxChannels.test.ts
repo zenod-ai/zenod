@@ -16,6 +16,7 @@ import {
   registerPhylaxChannelTools,
   type PhylaxDownstreamCall,
 } from "../src/phylaxChannels.js";
+import type { PeerToolResult } from "../src/peerClient.js";
 import { PhylaxPortedRuntime } from "../src/phylaxPortedRuntime.js";
 import { PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
 import {
@@ -159,6 +160,331 @@ describe("PhylaxChannelsOrgan", () => {
     expect(receipt.replyText).toContain("Which owner should be listed?");
     expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
       .toBe("Log/2026-07-29.md#^voice-1");
+    await organ.close();
+  });
+
+  it("keeps an accepted capture polling through a transient result outage and records only the later terminal success", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-transient-poll-"));
+    dirs.push(dataDir);
+    let pollAttempts = 0;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: { content: { source: "transcript" } },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "chat_with_ring", argumentMappings: {} },
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          description: "Store memory",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string", minLength: 1 },
+              idempotencyKey: { type: "string", minLength: 1 },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: {
+              ticket_id: "job-transient-1",
+              state: "accepted",
+            },
+          };
+        }
+        pollAttempts += 1;
+        const db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"), { readOnly: true });
+        const persisted = db.prepare(
+          "SELECT state, receipt_text FROM phylax_capture_jobs WHERE job_id = ?",
+        ).get("job-transient-1") as { state?: string; receipt_text?: string | null } | undefined;
+        db.close();
+        expect(persisted).toMatchObject({ state: "polling", receipt_text: null });
+        if (pollAttempts === 1) {
+          return {
+            content: [{
+              type: "text",
+              text: 'Could not reach peer agent "phylax-memory-alpha": fetch failed',
+            }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "job-transient-1",
+            state: "done",
+            result: {
+              recap: "Recovered after a transient poll outage.",
+              evidenceRef: "Log/2026-07-29.md#^transient-poll",
+              pagesTouched: ["Inbox/Recovered.md"],
+              commitSha: "cab1234",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+      sleep: async () => {},
+    });
+
+    const receipt = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-transient-1",
+      transcription: { text_transcript: "Remember this despite a brief outage." },
+    });
+
+    expect(pollAttempts).toBe(2);
+    expect(receipt.replyText).toContain("Saved ✓");
+    expect(receipt.replyText).toContain("Recovered after a transient poll outage.");
+    expect(receipt.replyText).not.toContain("could not save");
+    expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+      .toBe("Log/2026-07-29.md#^transient-poll");
+    await organ.close();
+  });
+
+  it("returns the honest pending receipt at the foreground deadline while a poll call remains stalled", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T17:00:00.000Z"));
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-stalled-poll-"));
+    dirs.push(dataDir);
+    let pollCalls = 0;
+    const stalledForegroundPoll = new Promise<PeerToolResult>(() => {});
+    let resolveBackgroundPoll!: (result: PeerToolResult) => void;
+    const backgroundPoll = new Promise<PeerToolResult>((resolve) => {
+      resolveBackgroundPoll = resolve;
+    });
+    const terminalResult: PeerToolResult = {
+      content: [{ type: "text", text: "done" }],
+      structuredContent: {
+        ticket_id: "job-stalled-1",
+        state: "done",
+        result: {
+          recap: "Recovered in the durable background poll.",
+          evidenceRef: "Log/2026-07-29.md#^stalled-poll",
+          pagesTouched: ["Inbox/Recovered.md"],
+          commitSha: "dad1234",
+          githubUrls: [],
+        },
+      },
+    };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: { content: { source: "transcript" } },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "chat_with_ring", argumentMappings: {} },
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          description: "Store memory",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string", minLength: 1 },
+              idempotencyKey: { type: "string", minLength: 1 },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: {
+              ticket_id: "job-stalled-1",
+              state: "accepted",
+            },
+          };
+        }
+        pollCalls += 1;
+        return pollCalls === 1 ? stalledForegroundPoll : backgroundPoll;
+      },
+      captureForegroundDeadlineMs: 100,
+      capturePollIntervalMs: 1,
+    });
+
+    try {
+      let foregroundSettled = false;
+      const receiptPromise = organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "provider-stalled-1",
+        transcription: { text_transcript: "Remember this despite a stalled poll." },
+      }).then((receipt) => {
+        foregroundSettled = true;
+        return receipt;
+      });
+      await vi.advanceTimersByTimeAsync(99);
+      expect(foregroundSettled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const receipt = await receiptPromise;
+
+      expect(receipt.replyText).toBe(
+        "I’m still filing this memory — I’ll confirm here when it is saved.",
+      );
+      expect(pollCalls).toBeGreaterThanOrEqual(1);
+      const db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"), { readOnly: true });
+      const persisted = db.prepare(
+        "SELECT state, receipt_text FROM phylax_capture_jobs WHERE job_id = ?",
+      ).get("job-stalled-1") as { state?: string; receipt_text?: string | null } | undefined;
+      db.close();
+      expect(persisted).toMatchObject({ state: "polling", receipt_text: null });
+
+      receipt.afterReply?.();
+      for (let index = 0; index < 10 && pollCalls < 2; index += 1) {
+        await Promise.resolve();
+      }
+      expect(pollCalls).toBe(2);
+      resolveBackgroundPoll(terminalResult);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
+        .toBe("Log/2026-07-29.md#^stalled-poll");
+    } finally {
+      resolveBackgroundPoll(terminalResult);
+      await vi.advanceTimersByTimeAsync(0);
+      await organ.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps structural artifact fields and derives every ingest media class without envelope fallback", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-structural-media-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const structuralBinding = {
+      tool: "inspect_media",
+      argumentMappings: {
+        artifactUrl: { source: "artifactUrl" as const },
+        mediaType: { source: "mediaType" as const },
+        filename: { source: "filename" as const },
+      },
+    };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: structuralBinding,
+            text: structuralBinding,
+            media: structuralBinding,
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "inspect",
+          mcp: "inspect_media",
+          arg: "input",
+          description: "Inspect structural media arguments",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["artifactUrl", "mediaType", "filename"],
+            properties: {
+              artifactUrl: { type: "string", minLength: 1 },
+              mediaType: {
+                enum: ["audio", "screenshot", "image", "pdf", "document", "link"],
+              },
+              filename: { type: "string", minLength: 1 },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: "inspected" }] };
+      },
+    });
+    const cases = [
+      { mimeType: "audio/ogg", fileName: "memo.ogg", expected: "audio" },
+      { mimeType: "image/png", fileName: "Screenshot 2026.png", expected: "screenshot" },
+      { mimeType: "image/jpeg", fileName: "holiday.jpg", expected: "image" },
+      { mimeType: "application/octet-stream", fileName: "brief.pdf", expected: "pdf" },
+      { mimeType: "text/uri-list", fileName: "reference.url", expected: "link" },
+      { mimeType: "application/zip", fileName: "archive.zip", expected: "document" },
+    ] as const;
+
+    for (const [index, mediaCase] of cases.entries()) {
+      const receipt = await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: `structural-${index}`,
+        media: {
+          artifactRef: `https://phylax.test/artifacts/${index}`,
+          mimeType: mediaCase.mimeType,
+          fileName: mediaCase.fileName,
+        },
+      });
+      expect(receipt.replyText).toBe("inspected");
+      expect(calls[index]?.arguments).toEqual({
+        artifactUrl: `https://phylax.test/artifacts/${index}`,
+        mediaType: mediaCase.expected,
+        filename: mediaCase.fileName,
+      });
+      expect(calls[index]?.arguments).not.toHaveProperty("message");
+    }
+
+    await expect(organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "structural-missing-filename",
+      media: {
+        artifactRef: "https://phylax.test/artifacts/missing-filename",
+        mimeType: "image/png",
+      },
+    })).rejects.toMatchObject({
+      code: "invalid_input",
+      message: 'binding source "filename" is unavailable for field "filename"',
+    });
+    expect(calls).toHaveLength(cases.length);
     await organ.close();
   });
 

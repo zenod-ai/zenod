@@ -13,6 +13,7 @@ import {
 } from "./peerClient.js";
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { normalizeTelegramEntry } from "./telegramConfig.js";
+import { appendPhylaxCaptureReceiptInvitation } from "./phylaxCaptureReceipt.js";
 import type {
   PhylaxBindingArgumentSource,
   PhylaxTurnBindings,
@@ -518,6 +519,31 @@ function captureTurnType(input: PhylaxChannelInbound): PhylaxTurnType {
   return input.media ? "media" : "text";
 }
 
+type PhylaxIngestMediaType = "audio" | "screenshot" | "image" | "pdf" | "document" | "link";
+
+function ingestMediaTypeFromHandoff(
+  handoff: PhylaxDownstreamCall["handoff"],
+): PhylaxIngestMediaType | undefined {
+  if (!handoff.artifact_ref) return undefined;
+  const mimeType = handoff.artifact_mime_type?.trim().toLowerCase() ?? "";
+  const filename = handoff.artifact_file_name?.trim().toLowerCase() ?? "";
+  if (
+    mimeType.startsWith("audio/")
+    || /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav|webm)$/.test(filename)
+  ) return "audio";
+  if (mimeType === "application/pdf" || filename.endsWith(".pdf")) return "pdf";
+  if (
+    mimeType === "text/uri-list"
+    || /\.(?:url|webloc)$/.test(filename)
+  ) return "link";
+  if (mimeType.startsWith("image/") || /\.(?:avif|bmp|gif|heic|jpeg|jpg|png|webp)$/.test(filename)) {
+    return /(?:^|[-_. ])screen(?:shot|[-_. ]?capture)(?:[-_. ]|$)/.test(filename)
+      ? "screenshot"
+      : "image";
+  }
+  return "document";
+}
+
 function valueFromBindingSource(
   source: PhylaxBindingArgumentSource,
   input: {
@@ -527,17 +553,27 @@ function valueFromBindingSource(
     message: string;
     surface: "whatsapp" | "mcp";
     conversationKey: string;
+    artifactUrl?: string;
+    mediaType?: PhylaxIngestMediaType;
+    filename?: string;
   },
 ): unknown {
   switch (source.source) {
     case "transcript": return input.transcript;
     case "sender": return input.sender;
     case "chatId": return input.chatId;
+    case "artifactUrl": return input.artifactUrl;
+    case "mediaType": return input.mediaType;
+    case "filename": return input.filename;
     case "constant": return source.value;
     case "message": return input.message;
     case "surface": return input.surface;
     case "conversationKey": return input.conversationKey;
   }
+}
+
+function isAsyncCaptureTool(tool: string): tool is "store_memory" | "ingest_memory" {
+  return tool === "store_memory" || tool === "ingest_memory";
 }
 
 function acceptedJobId(result: PeerToolResult): string | null {
@@ -558,7 +594,7 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-function terminalCaptureReceipt(result: PeerToolResult): {
+function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): {
   state: "done" | "error";
   text: string;
   evidenceRef: string | null;
@@ -566,6 +602,8 @@ function terminalCaptureReceipt(result: PeerToolResult): {
   const state = jobState(result);
   if (!state || !["done", "error", "interrupted"].includes(state)) return null;
   const structured = objectValue(result.structuredContent);
+  const responseJobId = structured?.ticket_id ?? structured?.jobId;
+  if (responseJobId !== expectedJobId) return null;
   const payload = objectValue(structured?.result);
   if (state !== "done" || result.isError || !payload) {
     const error = objectValue(structured?.error);
@@ -578,19 +616,26 @@ function terminalCaptureReceipt(result: PeerToolResult): {
       evidenceRef: null,
     };
   }
-  const evidenceRef = typeof payload.evidenceRef === "string" && payload.evidenceRef.trim()
-    ? payload.evidenceRef.trim()
+  const digest = objectValue(payload.digest);
+  const evidenceValue = payload.evidenceRef ?? digest?.evidenceRef;
+  const evidenceRef = typeof evidenceValue === "string" && evidenceValue.trim()
+    ? evidenceValue.trim()
     : null;
-  const evidenceUrl = typeof payload.evidenceUrl === "string" ? payload.evidenceUrl : null;
-  const pages = stringArray(payload.pagesTouched);
-  const pageUrls = stringArray(payload.pageUrls);
-  const commitSha = typeof payload.commitSha === "string" ? payload.commitSha : null;
-  const githubUrls = stringArray(payload.githubUrls);
+  const evidenceUrl = typeof payload.evidenceUrl === "string"
+    ? payload.evidenceUrl
+    : typeof digest?.evidenceUrl === "string" ? digest.evidenceUrl : null;
+  const pages = stringArray(payload.pagesTouched ?? digest?.pagesTouched);
+  const pageUrls = stringArray(payload.pageUrls ?? digest?.pageUrls);
+  const commitValue = payload.commitSha ?? digest?.commitSha;
+  const commitSha = typeof commitValue === "string" ? commitValue : null;
+  const githubUrls = stringArray(payload.githubUrls ?? digest?.githubUrls);
   const question = typeof payload.question === "string" && payload.question.trim()
     ? payload.question.trim()
     : null;
   const recap = typeof payload.recap === "string" && payload.recap.trim()
     ? payload.recap.trim()
+    : typeof payload.message === "string" && payload.message.trim()
+      ? payload.message.trim()
     : "Your memory has been filed.";
   const filed = pages.map((page, index) => pageUrls[index] ? `${page} (${pageUrls[index]})` : page);
   const commitUrl = githubUrls.find((url) => commitSha ? url.includes(commitSha) : false)
@@ -599,15 +644,14 @@ function terminalCaptureReceipt(result: PeerToolResult): {
   return {
     state: "done",
     evidenceRef,
-    text: [
+    text: appendPhylaxCaptureReceiptInvitation([
       "Saved ✓",
       `Recap: ${recap}`,
       ...(filed.length > 0 ? [`Filed: ${filed.join(", ")}`] : []),
       ...(evidenceRef ? [`Evidence: ${evidenceUrl ? `${evidenceRef} (${evidenceUrl})` : evidenceRef}`] : []),
       ...(commitSha ? [`Commit: ${commitUrl ? `${commitSha} (${commitUrl})` : commitSha}`] : []),
       ...(question ? [`Question: ${question}`] : []),
-      "Reply to this message to discuss or act on it.",
-    ].join("\n"),
+    ].join("\n")),
   };
 }
 
@@ -688,38 +732,70 @@ export class PhylaxChannelsOrgan {
     deadlineAt: number | null,
   ): Promise<{ result: PeerToolResult; receipt: ReturnType<typeof terminalCaptureReceipt> } | null> {
     const interval = Math.max(1, this.options.capturePollIntervalMs ?? DEFAULT_CAPTURE_POLL_INTERVAL_MS);
+    const maxTransientBackoff = Math.max(interval, 30_000);
     const sleep = this.options.sleep ?? ((milliseconds: number) =>
       new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, milliseconds);
         timer.unref?.();
       }));
+    const boundedSleep = async (milliseconds: number) => {
+      const remaining = deadlineAt === null
+        ? milliseconds
+        : Math.max(0, deadlineAt - Date.now());
+      if (remaining > 0) await sleep(Math.min(milliseconds, remaining));
+    };
+    let transientFailures = 0;
     for (;;) {
       if (this.closing) return null;
       if (deadlineAt !== null && Date.now() >= deadlineAt) return null;
-      const result = await this.callDownstream({
+      const pendingPoll = Promise.resolve().then(() => this.callDownstream({
         route,
         tool: "get_task_result",
         arguments: { ticket_id: job.jobId },
         handoff,
-      });
-      const terminal = terminalCaptureReceipt(result);
+      }));
+      const observedPoll = pendingPoll.then(
+        (result) => ({ kind: "result" as const, result }),
+        () => ({ kind: "transient_error" as const }),
+      );
+      let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+      const attempt = deadlineAt === null
+        ? await observedPoll
+        : await Promise.race([
+            observedPoll,
+            new Promise<{ kind: "deadline" }>((resolve) => {
+              const remaining = Math.max(0, deadlineAt - Date.now());
+              deadlineTimer = setTimeout(() => resolve({ kind: "deadline" }), remaining);
+              deadlineTimer.unref?.();
+            }),
+          ]).finally(() => {
+            if (deadlineTimer) clearTimeout(deadlineTimer);
+          });
+      if (attempt.kind === "deadline") return null;
+      if (attempt.kind === "transient_error") {
+        transientFailures += 1;
+        await boundedSleep(Math.min(
+          interval * (2 ** Math.min(transientFailures - 1, 10)),
+          maxTransientBackoff,
+        ));
+        continue;
+      }
+      const result = attempt.result;
+      const terminal = terminalCaptureReceipt(result, job.jobId);
       if (terminal) {
         this.captureJournal.terminal(job, terminal.state, terminal.text, terminal.evidenceRef);
         return { result, receipt: terminal };
       }
       if (result.isError) {
-        const failed = terminalCaptureReceipt({
-          ...result,
-          structuredContent: {
-            ...(objectValue(result.structuredContent) ?? {}),
-            state: "error",
-          },
-        });
-        if (!failed) throw new Error("capture poll failed");
-        this.captureJournal.terminal(job, "error", failed.text, null);
-        return { result, receipt: failed };
+        transientFailures += 1;
+        await boundedSleep(Math.min(
+          interval * (2 ** Math.min(transientFailures - 1, 10)),
+          maxTransientBackoff,
+        ));
+        continue;
       }
-      await sleep(interval);
+      transientFailures = 0;
+      await boundedSleep(interval);
     }
   }
 
@@ -944,26 +1020,37 @@ export class PhylaxChannelsOrgan {
       ...(transcription.transcription_timing ? { transcription_timing: transcription.transcription_timing } : {}),
     };
     const message = handoffEnvelope(handoff, text || "A channel artifact was received.");
-    const surface = input.channel === "whatsapp" ? "whatsapp" : "mcp";
+    const surface: "whatsapp" | "mcp" = input.channel === "whatsapp" ? "whatsapp" : "mcp";
     const conversationKey = `${input.channel}:${sender}`;
     const turnType = captureTurnType(input);
     const binding = route.turnBindings?.[turnType];
+    const ingestMediaType = ingestMediaTypeFromHandoff(handoff);
+    const bindingInput = {
+      transcript: text,
+      sender,
+      chatId: input.chatId,
+      message,
+      surface,
+      conversationKey,
+      ...(handoff.artifact_ref ? { artifactUrl: handoff.artifact_ref } : {}),
+      ...(handoff.artifact_file_name ? { filename: handoff.artifact_file_name } : {}),
+      ...(ingestMediaType ? { mediaType: ingestMediaType } : {}),
+    };
     const call: PhylaxDownstreamCall = binding
       ? {
           route,
           tool: binding.tool,
           arguments: Object.fromEntries(
-            Object.entries(binding.argumentMappings).map(([field, source]) => [
-              field,
-              valueFromBindingSource(source, {
-                transcript: text,
-                sender,
-                chatId: input.chatId,
-                message,
-                surface,
-                conversationKey,
-              }),
-            ]),
+            Object.entries(binding.argumentMappings).flatMap(([field, source]) => {
+              const value = valueFromBindingSource(source, bindingInput);
+              if (value === undefined) {
+                throw new PhylaxChannelError(
+                  "invalid_input",
+                  `binding source "${source.source}" is unavailable for field "${field}"`,
+                );
+              }
+              return [[field, value]];
+            }),
           ),
           handoff,
         }
@@ -973,14 +1060,14 @@ export class PhylaxChannelsOrgan {
           arguments: { message, surface, conversationKey },
           handoff,
         };
-    if (call.tool === "store_memory") {
-      const providerMessageId = input.messageId?.trim();
-      if (!providerMessageId) {
-        throw new PhylaxChannelError(
-          "invalid_input",
-          "provider messageId is required for an idempotent memory capture",
-        );
-      }
+    const providerMessageId = input.messageId?.trim();
+    if (isAsyncCaptureTool(call.tool) && !providerMessageId) {
+      throw new PhylaxChannelError(
+        "invalid_input",
+        "provider messageId is required for durable memory capture",
+      );
+    }
+    if (call.tool === "store_memory" && providerMessageId) {
       call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
     }
     const failureAudit = (
@@ -1023,8 +1110,7 @@ export class PhylaxChannelsOrgan {
           );
         }
       }
-      const providerMessageId = input.messageId?.trim();
-      const existing = call.tool === "store_memory" && providerMessageId
+      const existing = isAsyncCaptureTool(call.tool) && providerMessageId
         ? this.captureJournal.get(route.tenantId, input.channel, providerMessageId)
         : null;
       if (existing?.state === "done" && existing.receiptText) {
@@ -1075,11 +1161,11 @@ export class PhylaxChannelsOrgan {
         }
       } else {
         downstream = await this.callDownstream(call);
-        const jobId = call.tool === "store_memory" && !downstream.isError
+        const jobId = isAsyncCaptureTool(call.tool) && !downstream.isError
           ? acceptedJobId(downstream)
           : null;
-        if (call.tool === "store_memory" && !downstream.isError && !jobId) {
-          throw new Error("store_memory returned no canonical ticket_id; capture cannot be polled safely");
+        if (isAsyncCaptureTool(call.tool) && !downstream.isError && !jobId) {
+          throw new Error(`${call.tool} returned no canonical ticket_id; capture cannot be polled safely`);
         }
         if (jobId && providerMessageId) {
           // Synchronous SQLite commit happens before the first await/poll.

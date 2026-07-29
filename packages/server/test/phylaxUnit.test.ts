@@ -6,11 +6,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const peerMocks = vi.hoisted(() => ({
   discoverPeerTools: vi.fn(),
+  callPeerTool: vi.fn(),
 }));
 
 vi.mock("../src/peerClient.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/peerClient.js")>()),
   discoverPeerTools: peerMocks.discoverPeerTools,
+  callPeerTool: peerMocks.callPeerTool,
 }));
 
 import { PHYLAX_AGENT } from "../src/agent.js";
@@ -32,6 +34,7 @@ const MASTER_KEY = "22".repeat(32);
 afterEach(async () => {
   vi.unstubAllGlobals();
   peerMocks.discoverPeerTools.mockReset();
+  peerMocks.callPeerTool.mockReset();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -348,6 +351,248 @@ describe("Phylax customer unit mount", () => {
       });
     } finally {
       unit.close();
+    }
+  });
+
+  it("uses effective tenant bindings for assistant voice, durable voice capture, and durable media ingest", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-production-bindings-"));
+    dirs.push(dataDir);
+    const tenantStore = createMemoryTenantStore([{
+      token: "tenant-alpha-artifact-token",
+      tenant: { id: "tenant-alpha", name: "Tenant Alpha" },
+    }]);
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore,
+      env: {
+        ACCOUNT_STATE_SECRET: "phylax-production-binding-secret",
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        CUSTOMER_APP_URL: "https://phylax.test",
+      },
+    });
+    unit.customerAccounts.upsert("alpha", {
+      account_id: "github-alpha",
+      github_id: 71,
+      github_login: "alpha",
+      subscription_status: "active",
+      tenant_id: "tenant-alpha",
+    });
+    unit.customerTokenVault.put("github-alpha", "tenant-alpha-artifact-token");
+    const registration = unit.phylaxTenantSettings.registerPhone(
+      "tenant-alpha",
+      "+34 611 111 111",
+      "number-alpha",
+    );
+    expect(unit.phylaxTenantSettings.verifyInbound(
+      "34611111111@s.whatsapp.net",
+      registration.keyword,
+    )).toMatchObject({ tenantId: "tenant-alpha", verified: true });
+    unit.phylaxTenantSettings.update("tenant-alpha", {
+      downstreamUrl: "https://memory.test/mcp",
+      downstreamToken: "tenant-alpha-memory-scope",
+      voiceDefault: "assistant",
+    });
+
+    peerMocks.discoverPeerTools.mockResolvedValue({
+      transport: "connected",
+      tools: "ready",
+      specs: [
+        {
+          as: "assistant",
+          mcp: "chat_with_ring",
+          arg: "input",
+          description: "Answer an assistant turn",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["message", "surface", "conversationKey"],
+            properties: {
+              message: { type: "string" },
+              surface: { enum: ["whatsapp", "mcp"] },
+              conversationKey: { type: "string" },
+            },
+          },
+        },
+        {
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          description: "Store a voice memory",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "verbatim", "hints", "idempotencyKey"],
+            properties: {
+              content: { type: "string", minLength: 1 },
+              verbatim: { const: true },
+              hints: { type: "array", items: { type: "string" } },
+              idempotencyKey: { type: "string", minLength: 1 },
+            },
+          },
+        },
+        {
+          as: "media",
+          mcp: "ingest_memory",
+          arg: "input",
+          description: "Ingest media structurally",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["artifactUrl", "mediaType", "filename", "sourceHint"],
+            properties: {
+              artifactUrl: { type: "string", minLength: 1 },
+              mediaType: {
+                enum: ["audio", "screenshot", "image", "pdf", "document", "link"],
+              },
+              filename: { type: "string", minLength: 1 },
+              sourceHint: { const: "WhatsApp media" },
+            },
+          },
+        },
+      ],
+    });
+    peerMocks.callPeerTool.mockImplementation(async (
+      _peer: unknown,
+      tool: string,
+      args: Record<string, unknown>,
+    ) => {
+      if (tool === "chat_with_ring") {
+        return { content: [{ type: "text", text: "Assistant answer." }] };
+      }
+      if (tool === "store_memory") {
+        return {
+          content: [{ type: "text", text: "queued" }],
+          structuredContent: { ticket_id: "voice-job", state: "accepted" },
+        };
+      }
+      if (tool === "ingest_memory") {
+        return {
+          content: [{ type: "text", text: "queued" }],
+          structuredContent: { ticket_id: "media-job", state: "accepted" },
+        };
+      }
+      if (tool === "get_task_result" && args.ticket_id === "voice-job") {
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "voice-job",
+            state: "done",
+            result: {
+              recap: "Remember the launch sequence.",
+              evidenceRef: "Log/2026-07-29.md#^voice-production",
+              pagesTouched: ["Projects/Launch.md"],
+              commitSha: "abc1234",
+              githubUrls: ["https://github.test/commit/abc1234"],
+            },
+          },
+        };
+      }
+      if (tool === "get_task_result" && args.ticket_id === "media-job") {
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "media-job",
+            state: "done",
+            result: {
+              message: "Screenshot filed.",
+              mediaType: "screenshot",
+              digest: {
+                evidenceRef: "Log/2026-07-29.md#^media-production",
+                pagesTouched: ["Inbox/Media.md"],
+                commitSha: "feed123",
+                githubUrls: ["https://github.test/commit/feed123"],
+              },
+            },
+          },
+        };
+      }
+      throw new Error(`unexpected downstream call: ${tool}`);
+    });
+
+    try {
+      const assistant = await unit.phylaxRuntime.organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "assistant-voice-1",
+        transcription: { text_transcript: "What did I save?" },
+      });
+      expect(assistant.replyText).toBe("Assistant answer.");
+      expect(peerMocks.callPeerTool.mock.calls[0]?.[1]).toBe("chat_with_ring");
+      expect(peerMocks.callPeerTool.mock.calls[0]?.[2]).toEqual({
+        message: "What did I save?",
+        surface: "whatsapp",
+        conversationKey: "whatsapp:34611111111",
+      });
+
+      unit.phylaxTenantSettings.update("tenant-alpha", { voiceDefault: "capture" });
+      const voice = await unit.phylaxRuntime.organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "capture-voice-1",
+        transcription: { text_transcript: "Remember the launch sequence." },
+      });
+      expect(peerMocks.callPeerTool.mock.calls[1]?.[1]).toBe("store_memory");
+      expect(peerMocks.callPeerTool.mock.calls[1]?.[2]).toEqual({
+        content: "Remember the launch sequence.",
+        verbatim: true,
+        hints: ["WhatsApp voice note"],
+        idempotencyKey: "tenant-alpha:whatsapp:capture-voice-1",
+      });
+      expect(peerMocks.callPeerTool.mock.calls[2]?.slice(1)).toEqual([
+        "get_task_result",
+        { ticket_id: "voice-job" },
+      ]);
+      expect(voice.replyText).toContain("Saved ✓");
+      expect(voice.replyText).toContain("Log/2026-07-29.md#^voice-production");
+      expect(voice.replyText).toContain("abc1234");
+      expect(voice.replyText).toMatch(
+        /\nreply to this message to discuss or act on it$/,
+      );
+
+      const media = await unit.phylaxRuntime.organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "capture-media-1",
+        media: {
+          bytes: Buffer.from("immutable-screenshot"),
+          mimeType: "image/png",
+          fileName: "Screenshot 2026-07-29.png",
+        },
+      });
+      const ingestArguments = peerMocks.callPeerTool.mock.calls[3]?.[2] as Record<string, unknown>;
+      expect(peerMocks.callPeerTool.mock.calls[3]?.[1]).toBe("ingest_memory");
+      expect(ingestArguments).toEqual({
+        artifactUrl: expect.stringMatching(
+          /^https:\/\/phylax\.test\/mcp\/tenant-alpha-artifact-token\/artifacts\/tenant-alpha\//,
+        ),
+        mediaType: "screenshot",
+        filename: "Screenshot 2026-07-29.png",
+        sourceHint: "WhatsApp media",
+      });
+      expect(ingestArguments).not.toHaveProperty("idempotencyKey");
+      expect(ingestArguments).not.toHaveProperty("bytesRef");
+      expect(ingestArguments).not.toHaveProperty("message");
+      expect(peerMocks.callPeerTool.mock.calls[4]?.slice(1)).toEqual([
+        "get_task_result",
+        { ticket_id: "media-job" },
+      ]);
+      expect(media.replyText).toContain("Saved ✓");
+      expect(media.replyText).toContain("Screenshot filed.");
+      expect(media.replyText).toContain("Inbox/Media.md");
+      expect(media.replyText).toContain("Log/2026-07-29.md#^media-production");
+      expect(media.replyText).toContain("feed123");
+      expect(media.replyText).toMatch(
+        /\nreply to this message to discuss or act on it$/,
+      );
+      expect(unit.phylaxRuntime.organ.lastCaptureEvidenceRef(
+        "tenant-alpha",
+        "whatsapp:34611111111",
+      )).toBe("Log/2026-07-29.md#^media-production");
+    } finally {
+      await unit.close();
     }
   });
 
