@@ -26,6 +26,9 @@ export type PhylaxBindingArgumentSource =
   | { source: "transcript" }
   | { source: "sender" }
   | { source: "chatId" }
+  | { source: "artifactUrl" }
+  | { source: "mediaType" }
+  | { source: "filename" }
   | { source: "constant"; value: PhylaxBindingConstant }
   | { source: "message" }
   | { source: "surface" }
@@ -116,12 +119,54 @@ function legacyChatBinding(): PhylaxTurnBinding {
   };
 }
 
-/** Default is deliberately today's exact downstream call shape (D8). */
+/**
+ * D17's globally approved sane defaults. Existing persisted tenant overrides
+ * remain authoritative; this function contains no tenant-specific branch.
+ */
 export function defaultPhylaxTurnBindings(): PhylaxTurnBindings {
   return {
-    voice_note: legacyChatBinding(),
+    voice_note: {
+      tool: "store_memory",
+      argumentMappings: {
+        content: { source: "transcript" },
+        verbatim: { source: "constant", value: true },
+        hints: { source: "constant", value: ["WhatsApp voice note"] },
+      },
+    },
     text: legacyChatBinding(),
-    media: legacyChatBinding(),
+    media: {
+      tool: "ingest_memory",
+      argumentMappings: {
+        artifactUrl: { source: "artifactUrl" },
+        mediaType: { source: "mediaType" },
+        filename: { source: "filename" },
+        sourceHint: { source: "constant", value: "WhatsApp media" },
+      },
+    },
+  };
+}
+
+/**
+ * Resolve standalone routing from structural facts only. Reply-context routing
+ * is deliberately excluded here and belongs to MC-12.
+ */
+export function resolvePhylaxTurnBinding(
+  settings: Pick<PhylaxTenantSettings, "voiceDefault" | "turnBindings">,
+  turnType: PhylaxTurnType,
+): PhylaxTurnBinding {
+  return turnType === "voice_note" && settings.voiceDefault === "assistant"
+    ? settings.turnBindings.text
+    : settings.turnBindings[turnType];
+}
+
+/** Materialize the route table consumed by the mechanical dispatcher. */
+export function effectivePhylaxTurnBindings(
+  settings: Pick<PhylaxTenantSettings, "voiceDefault" | "turnBindings">,
+): PhylaxTurnBindings {
+  return {
+    voice_note: resolvePhylaxTurnBinding(settings, "voice_note"),
+    text: resolvePhylaxTurnBinding(settings, "text"),
+    media: resolvePhylaxTurnBinding(settings, "media"),
   };
 }
 
@@ -155,6 +200,9 @@ export const PHYLAX_BINDING_ARGUMENT_SOURCES = [
   "transcript",
   "sender",
   "chatId",
+  "artifactUrl",
+  "mediaType",
+  "filename",
   "constant",
   "message",
   "surface",
@@ -243,7 +291,7 @@ function normalizedStoredTurnBindings(value: unknown): PhylaxTurnBindings {
     try {
       defaults[turnType] = normalizedTurnBinding(stored[turnType]);
     } catch {
-      // A corrupt row must not strand a tenant; preserve the D8 no-op default.
+      // A corrupt row must not strand a tenant; preserve the approved D17 default.
     }
   }
   return defaults;

@@ -6,8 +6,14 @@ import { ChassisStorage } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   defaultPhylaxTurnBindings,
+  effectivePhylaxTurnBindings,
   PhylaxTenantSettingsStore,
+  resolvePhylaxTurnBinding,
 } from "../src/phylaxTenantSettings.js";
+import {
+  appendPhylaxCaptureReceiptInvitation,
+  PHYLAX_CAPTURE_RECEIPT_INVITATION,
+} from "../src/phylaxCaptureReceipt.js";
 
 const dirs: string[] = [];
 const MASTER_KEY = "35".repeat(32);
@@ -24,18 +30,18 @@ async function setup() {
 }
 
 describe("PhylaxTenantSettingsStore", () => {
-  it("defaults every turn type and standalone voice routing without changing the legacy call shape", async () => {
+  it("defaults standalone voice to verbatim capture, media to ingest, and ordinary text to Ring", async () => {
     const { store } = await setup();
 
     expect(store.get("alpha")).toMatchObject({
       voiceDefault: "capture",
       turnBindings: {
         voice_note: {
-          tool: "chat_with_ring",
+          tool: "store_memory",
           argumentMappings: {
-            message: { source: "message" },
-            surface: { source: "surface" },
-            conversationKey: { source: "conversationKey" },
+            content: { source: "transcript" },
+            verbatim: { source: "constant", value: true },
+            hints: { source: "constant", value: ["WhatsApp voice note"] },
           },
         },
         text: {
@@ -47,17 +53,35 @@ describe("PhylaxTenantSettingsStore", () => {
           },
         },
         media: {
-          tool: "chat_with_ring",
+          tool: "ingest_memory",
           argumentMappings: {
-            message: { source: "message" },
-            surface: { source: "surface" },
-            conversationKey: { source: "conversationKey" },
+            artifactUrl: { source: "artifactUrl" },
+            mediaType: { source: "mediaType" },
+            filename: { source: "filename" },
+            sourceHint: { source: "constant", value: "WhatsApp media" },
           },
         },
       },
     });
     expect(store.view("alpha").turnBindings).toEqual(defaultPhylaxTurnBindings());
     expect(store.view("alpha").voiceDefault).toBe("capture");
+    expect(store.get("beta").turnBindings).toEqual(defaultPhylaxTurnBindings());
+  });
+
+  it("resolves the per-tenant voice flip structurally while leaving text and media unchanged", async () => {
+    const { store } = await setup();
+    const capture = store.get("alpha");
+    const assistant = store.update("beta", { voiceDefault: "assistant" });
+
+    expect(resolvePhylaxTurnBinding(capture, "voice_note").tool).toBe("store_memory");
+    expect(resolvePhylaxTurnBinding(assistant, "voice_note")).toEqual(assistant.turnBindings.text);
+    expect(effectivePhylaxTurnBindings(assistant)).toEqual({
+      ...assistant.turnBindings,
+      voice_note: assistant.turnBindings.text,
+    });
+    expect(resolvePhylaxTurnBinding(assistant, "text").tool).toBe("chat_with_ring");
+    expect(resolvePhylaxTurnBinding(assistant, "media").tool).toBe("ingest_memory");
+    expect(store.get("alpha").voiceDefault).toBe("capture");
   });
 
   it("persists structured binding patches and voice defaults per tenant", async () => {
@@ -76,6 +100,15 @@ describe("PhylaxTenantSettingsStore", () => {
               source: "constant",
               value: ["WhatsApp voice note", { origin: "phylax" }],
             },
+          },
+        },
+        media: {
+          tool: "ingest_memory",
+          argumentMappings: {
+            artifactUrl: { source: "artifactUrl" },
+            mediaType: { source: "mediaType" },
+            filename: { source: "filename" },
+            sourceHint: { source: "constant", value: "WhatsApp media" },
           },
         },
       },
@@ -97,6 +130,15 @@ describe("PhylaxTenantSettingsStore", () => {
       },
     });
     expect(restarted.get("alpha").turnBindings.text).toEqual(defaultPhylaxTurnBindings().text);
+    expect(restarted.get("alpha").turnBindings.media).toEqual({
+      tool: "ingest_memory",
+      argumentMappings: {
+        artifactUrl: { source: "artifactUrl" },
+        mediaType: { source: "mediaType" },
+        filename: { source: "filename" },
+        sourceHint: { source: "constant", value: "WhatsApp media" },
+      },
+    });
     expect(restarted.get("beta")).toMatchObject({
       voiceDefault: "capture",
       turnBindings: defaultPhylaxTurnBindings(),
@@ -108,7 +150,7 @@ describe("PhylaxTenantSettingsStore", () => {
         turnBindings: {
           voice_note: { tool: "store_memory" },
           text: { tool: "chat_with_ring" },
-          media: { tool: "chat_with_ring" },
+          media: { tool: "ingest_memory" },
         },
       },
     });
@@ -406,5 +448,21 @@ describe("PhylaxTenantSettingsStore", () => {
     expect(recovered).not.toContain("stale-plaintext-path");
     expect(recovered).not.toContain("encrypted-current-path");
     expect(recovered).not.toContain("encrypted-current-bearer");
+  });
+});
+
+describe("Phylax capture receipt copy", () => {
+  it("appends the exact host-owned discussion invitation once", () => {
+    const terminal = appendPhylaxCaptureReceiptInvitation(
+      "Stored: project launch notes\nPages: Projects/Launch.md\nCommit: https://example.test/commit/abc",
+    );
+
+    expect(terminal).toContain(
+      "\n\nreply to this message to discuss or act on it",
+    );
+    expect(PHYLAX_CAPTURE_RECEIPT_INVITATION).toBe(
+      "reply to this message to discuss or act on it",
+    );
+    expect(appendPhylaxCaptureReceiptInvitation(terminal)).toBe(terminal);
   });
 });
