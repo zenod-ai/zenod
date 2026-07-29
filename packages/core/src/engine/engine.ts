@@ -1325,7 +1325,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
           ...pinnedSpans.map((span, index) => `[${contextRefs[index]}]\n${span.text}`),
         ].join("\n\n")
       : "";
-    const scopedBriefingText = pinnedBriefing ? `${pinnedBriefing}\n\n${briefing.text}` : briefing.text;
+    // A resolved contextRef is already the host-verified read result for this ask.
+    // Do not append the broad vault briefing: its ordinary "search/read first"
+    // contract makes the model ignore the exact pinned block, search for vague
+    // pronouns such as "that note", and then falsely report the evidence absent.
+    // Read tools remain available if the pinned block itself points elsewhere.
+    const scopedBriefingText = pinnedBriefing || briefing.text;
     const scopedBriefing: Briefing = {
       ...briefing,
       text: scopedBriefingText,
@@ -1348,7 +1353,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
         : {}),
     };
     const result = await llm.answer(
-      { question, vaultBriefing: scopedBriefing.text, conversation: [] },
+      {
+        question,
+        vaultBriefing: scopedBriefing.text,
+        conversation: [],
+        ...(pinnedBriefing
+          ? {
+              hostInstruction:
+                "The host already resolved and read the exact tenant-local contextRefs shown in PINNED EVIDENCE CONTEXT. Treat those blocks as the primary read result and answer directly from the pinned evidence. Search or read broader vault material only if the pinned evidence explicitly leaves the question unresolved.",
+            }
+          : {}),
+      },
       groundedTools,
     );
     const sources = [
