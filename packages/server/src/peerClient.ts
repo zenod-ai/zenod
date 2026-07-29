@@ -218,6 +218,24 @@ export function councilToolName(peerName: string, mcpToolName: string): string {
 }
 
 /**
+ * Opaque identity for the exact configured connection. Standing approvals must
+ * not survive an endpoint or credential replacement under the same display name.
+ */
+export function peerApprovalConnectionId(
+  peer: Pick<PeerConfig, "name" | "url" | "token">,
+): string {
+  const digest = createHash("sha256")
+    .update(peer.name)
+    .update("\0")
+    .update(peer.url)
+    .update("\0")
+    .update(peer.token)
+    .digest("hex")
+    .slice(0, 32);
+  return `connection:${stableToolSegment(peer.name)}:${digest}`;
+}
+
+/**
  * Authenticated MCP discovery for one wallet peer. The advertised catalog is the
  * authority: descriptions, schemas and annotations are copied without profiles.
  */

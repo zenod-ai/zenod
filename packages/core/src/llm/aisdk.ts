@@ -1144,9 +1144,15 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // calls share both the result and the single onPeerAction record.
     const sameAnswerPeerCalls = new Map<string, Promise<string>>();
     // D9: one Ring turn may propose one exact connected tool plus arguments.
-    // Identical retries share the same promise; any different second proposal
-    // fails closed before another connected tool can run.
+    // `needsApproval` below is used as a host preflight hook: generateText parses
+    // the complete model step and invokes that hook for every tool call before it
+    // executes any tool. That gives the host the whole connected-tool batch, so
+    // identical retries can share one promise while any different proposal makes
+    // the entire batch fail closed before an upstream call.
     let selectedPeerProposal: { key: string; operation: TurnPlanOperation } | null = null;
+    let conflictingPeerProposal = false;
+    const MULTI_PROPOSAL_ERROR =
+      "ERROR: Ring accepts exactly one connected-tool proposal per turn; ask one clarifying question.";
     const NOTHING_PENDING_TEXT = NOTHING_PENDING_TO_APPROVE_TEXT;
     const repoRefFromPeerArgs = (args: Record<string, unknown>): string | null => {
       const values: string[] = [];
@@ -1211,100 +1217,128 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     };
     const peerCallDedupeKey = (name: string, args: Record<string, unknown>): string =>
       `${name}:${canonicalToolArgument(peerCallDedupeArgs(name, args))}`;
+    const registerPeerProposal = (
+      name: string,
+      args: Record<string, unknown>,
+    ): TurnPlanOperation => {
+      const key = `${name}:${canonicalToolArgument(args)}`;
+      const operation: TurnPlanOperation = { toolId: name, input: args, payloadRef: null };
+      if (selectedPeerProposal && selectedPeerProposal.key !== key) {
+        conflictingPeerProposal = true;
+      } else {
+        selectedPeerProposal ??= { key, operation };
+      }
+      return operation;
+    };
     const peerToolSet = Object.fromEntries(
-      peerEntries.map(([name, peer]) => [
-        name,
-        tool({
-          description: peer.description,
-          inputSchema: (peer.schemaFormat === "json-schema"
-            ? jsonSchema(peer.inputSchema as never)
-            : peer.inputSchema ?? z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") })) as never,
-          ...(peer.outputSchema ? {
-            outputSchema: (peer.schemaFormat === "json-schema" ? jsonSchema(peer.outputSchema as never) : peer.outputSchema) as never,
-          } : {}),
-          execute: async (peerInput) => {
-            let args = (peerInput ?? {}) as Record<string, unknown>;
-            // Approval/confirmation inputs are authority fields, not model authority.
-            // Strip whatever the model supplied. After standing-state validation the
-            // host may set advertised boolean fields itself; opaque/string secrets are
-            // never inferred or forwarded from chat.
-            const schema = peer.schemaFormat === "json-schema" && peer.inputSchema && typeof peer.inputSchema === "object"
-              ? peer.inputSchema as { properties?: Record<string, { type?: string; description?: string }> }
-              : undefined;
-            const approvalFields = Object.entries(schema?.properties ?? {})
-              .filter(([key]) => /(?:approval|approve|confirmation|confirm|authorized|authorised)/i.test(key));
-            if (approvalFields.length) {
-              args = Object.fromEntries(Object.entries(args).filter(([key]) => !approvalFields.some(([field]) => field === key)));
-            }
-            const dedupeKey = peerCallDedupeKey(name, args);
-            const proposalKey = `${name}:${canonicalToolArgument(args)}`;
-            const operation: TurnPlanOperation = { toolId: name, input: args, payloadRef: null };
-            if (peer.connectedMcp) {
-              if (selectedPeerProposal && selectedPeerProposal.key !== proposalKey) {
-                const result = "ERROR: Ring accepts exactly one connected-tool proposal per turn; ask one clarifying question.";
-                input.onPeerAction?.(name, args, result, { peerAction: true });
-                return result;
-              }
-              selectedPeerProposal ??= { key: proposalKey, operation };
-            }
-            const existing = sameAnswerPeerCalls.get(dedupeKey);
-            if (existing) return existing;
-
-            const pending = (async () => {
-              const mutationAttempt = peer.verifiedMutationReceipt === true;
-              const receiptMetadata = (result: string) => {
-                if (!mutationAttempt && !peer.connectedMcp) return undefined;
-                const receipt = validateMutationReceipt(name, result);
-                return {
-                  ...(peer.connectedMcp ? { peerAction: true as const } : {}),
-                  ...(mutationAttempt ? { mutationAttempt: true as const } : {}),
-                  ...(mutationAttempt && receipt.verified ? { verifiedMutationReceipt: true as const } : {}),
-                  ...(mutationAttempt && receipt.text ? { verifiedReceiptText: receipt.text } : {}),
-                };
-              };
-              const guardFailure = peerMutationGuardFailure(name, input.question, {
-                operation: peer.connectedMcp ? selectedPeerProposal?.operation ?? operation : operation,
-                conversationId: input.conversationId,
-                args,
-                connectedMcp: peer.connectedMcp,
-                owner: peer.owner,
-                annotations: peer.annotations,
-                trustedProfile: peer.trustedProfile,
-              });
-              if (guardFailure) {
-                const result =
-                  guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL
-                    ? NOTHING_PENDING_TEXT
-                    : guardFailure === HOST_APPROVAL_REQUIRED_GUARD_SENTINEL
-                      ? "[approval_required] Ring held this exact operation under the connection's trusted risk profile; nothing was executed."
-                      : `ERROR: ${guardFailure}`;
-                input.onPeerAction?.(name, args, result, receiptMetadata(result));
-                return result;
-              }
-              if (isAffirmativeApproval(input.question)) {
-                for (const [field, property] of approvalFields) {
-                  if (property.type === "boolean") args[field] = true;
+      peerEntries.map(([name, peer]) => {
+        const schema = peer.schemaFormat === "json-schema" && peer.inputSchema && typeof peer.inputSchema === "object"
+          ? peer.inputSchema as { properties?: Record<string, { type?: string; description?: string }> }
+          : undefined;
+        const approvalFields = Object.entries(schema?.properties ?? {})
+          .filter(([key]) => /(?:approval|approve|confirmation|confirm|authorized|authorised)/i.test(key));
+        const normalizedPeerArgs = (peerInput: unknown): Record<string, unknown> => {
+          const args = (peerInput ?? {}) as Record<string, unknown>;
+          if (!approvalFields.length) return args;
+          return Object.fromEntries(
+            Object.entries(args).filter(([key]) => !approvalFields.some(([field]) => field === key)),
+          );
+        };
+        return [
+          name,
+          tool({
+            description: peer.description,
+            inputSchema: (peer.schemaFormat === "json-schema"
+              ? jsonSchema(peer.inputSchema as never)
+              : peer.inputSchema ?? z.object({ input: z.string().describe("what to ask or tell the peer agent, in natural language") })) as never,
+            ...(peer.outputSchema ? {
+              outputSchema: (peer.schemaFormat === "json-schema" ? jsonSchema(peer.outputSchema as never) : peer.outputSchema) as never,
+            } : {}),
+            ...(peer.connectedMcp ? {
+              // This is not a human-approval request. Returning false preserves
+              // normal execution; the hook exists to collect the complete parsed
+              // model-step batch before generateText crosses any peer boundary.
+              needsApproval: (peerInput: unknown) => {
+                registerPeerProposal(name, normalizedPeerArgs(peerInput));
+                return false;
+              },
+            } : {}),
+            execute: async (peerInput) => {
+              let args = normalizedPeerArgs(peerInput);
+              // Approval/confirmation inputs are authority fields, not model authority.
+              // Strip whatever the model supplied. After standing-state validation the
+              // host may set advertised boolean fields itself; opaque/string secrets are
+              // never inferred or forwarded from chat.
+              const dedupeKey = peerCallDedupeKey(name, args);
+              const operation: TurnPlanOperation = peer.connectedMcp
+                ? registerPeerProposal(name, args)
+                : { toolId: name, input: args, payloadRef: null };
+              if (peer.connectedMcp) {
+                if (conflictingPeerProposal) {
+                  const result = MULTI_PROPOSAL_ERROR;
+                  input.onPeerAction?.(name, args, result, { peerAction: true });
+                  return result;
                 }
               }
-              const boundaryFailure = connectionAuthorityBoundaryFailure(name, peer, args);
-              if (boundaryFailure) {
-                const result = `ERROR: ${boundaryFailure}`;
+              const existing = sameAnswerPeerCalls.get(dedupeKey);
+              if (existing) return existing;
+
+              const pending = (async () => {
+                const mutationAttempt = peer.verifiedMutationReceipt === true;
+                const receiptMetadata = (result: string) => {
+                  if (!mutationAttempt && !peer.connectedMcp) return undefined;
+                  const receipt = validateMutationReceipt(name, result);
+                  return {
+                    ...(peer.connectedMcp ? { peerAction: true as const } : {}),
+                    ...(mutationAttempt ? { mutationAttempt: true as const } : {}),
+                    ...(mutationAttempt && receipt.verified ? { verifiedMutationReceipt: true as const } : {}),
+                    ...(mutationAttempt && receipt.text ? { verifiedReceiptText: receipt.text } : {}),
+                  };
+                };
+                const guardFailure = peerMutationGuardFailure(name, input.question, {
+                  operation: peer.connectedMcp ? selectedPeerProposal?.operation ?? operation : operation,
+                  conversationId: input.conversationId,
+                  args,
+                  connectedMcp: peer.connectedMcp,
+                  owner: peer.owner,
+                  annotations: peer.annotations,
+                  trustedProfile: peer.trustedProfile,
+                });
+                if (guardFailure) {
+                  const result =
+                    guardFailure === NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL
+                      ? NOTHING_PENDING_TEXT
+                      : guardFailure === HOST_APPROVAL_REQUIRED_GUARD_SENTINEL
+                        ? "[approval_required] Ring held this exact operation under the connection's trusted risk profile; nothing was executed."
+                        : `ERROR: ${guardFailure}`;
+                  input.onPeerAction?.(name, args, result, receiptMetadata(result));
+                  return result;
+                }
+                if (isAffirmativeApproval(input.question)) {
+                  for (const [field, property] of approvalFields) {
+                    if (property.type === "boolean") args[field] = true;
+                  }
+                }
+                const boundaryFailure = connectionAuthorityBoundaryFailure(name, peer, args);
+                if (boundaryFailure) {
+                  const result = `ERROR: ${boundaryFailure}`;
+                  input.onPeerAction?.(name, args, result, receiptMetadata(result));
+                  return result;
+                }
+                const result = await caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? ""))));
+                if (input.conversationId && peer.owner) {
+                  registerStandingApproval(input.conversationId, peer.owner, name, args, result, peer.description);
+                }
+                if (peer.authoritativeReadResult) authoritativePeerResult = result;
                 input.onPeerAction?.(name, args, result, receiptMetadata(result));
                 return result;
-              }
-              const result = await caught(() => (peer.inputSchema ? peer.run(args) : peer.run(String(args.input ?? ""))));
-              if (input.conversationId && peer.owner) {
-                registerStandingApproval(input.conversationId, peer.owner, name, args, result, peer.description);
-              }
-              if (peer.authoritativeReadResult) authoritativePeerResult = result;
-              input.onPeerAction?.(name, args, result, receiptMetadata(result));
-              return result;
-            })();
-            sameAnswerPeerCalls.set(dedupeKey, pending);
-            return pending;
-          },
-        }),
-      ]),
+              })();
+              sameAnswerPeerCalls.set(dedupeKey, pending);
+              return pending;
+            },
+          }),
+        ];
+      }),
     );
 
     const briefingExtras = [
@@ -1445,7 +1479,14 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       },
     };
 
-    if (input.onTextDelta || input.onToolEvent) {
+    // streamText executes a tool as soon as its tool-call chunk arrives, before
+    // later chunks reveal whether the same model step contains a second proposal.
+    // The public streaming lifecycle exposes no pre-execution end-of-step barrier,
+    // so connected MCP turns deliberately use generateText's full-step preflight.
+    // This is the authorization boundary; live token streaming is subordinate to
+    // proving the complete connected-tool batch before any upstream side effect.
+    const connectedBatchRequiresGenerate = connectedPeerToolNames.length > 0;
+    if ((input.onTextDelta || input.onToolEvent) && !connectedBatchRequiresGenerate) {
       // Stream the full event chain so tool calls surface as live activity —
       // not just text. The loop still runs every tool to completion before the
       // stream ends, so the turn finishes only once the work is done.
@@ -1490,7 +1531,37 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       return { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
     }
 
-    const result = await generateText(config);
+    const result = await generateText({
+      ...config,
+      ...(connectedBatchRequiresGenerate && input.onToolEvent ? {
+        experimental_onToolCallStart: ({
+          toolCall,
+        }: {
+          toolCall: { toolName: string; input: unknown } | undefined;
+        }) => {
+          if (!toolCall) return;
+          input.onToolEvent?.({
+            phase: "start",
+            tool: toolCall.toolName,
+            label: toolLabel(toolCall.toolName, toolCall.input),
+          });
+        },
+        experimental_onToolCallFinish: ({
+          toolCall,
+          success,
+        }: {
+          toolCall: { toolName: string; input: unknown } | undefined;
+          success: boolean;
+        }) => {
+          if (!toolCall) return;
+          input.onToolEvent?.({
+            phase: success ? "end" : "error",
+            tool: toolCall.toolName,
+            label: toolLabel(toolCall.toolName, toolCall.input),
+          });
+        },
+      } : {}),
+    });
     this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata);
     let text = result.text;
     if (!text.trim()) {
@@ -1501,6 +1572,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         result.reasoningText ?? "",
       );
     }
+    if (connectedBatchRequiresGenerate && text) input.onTextDelta?.(text);
     return { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
   }
 

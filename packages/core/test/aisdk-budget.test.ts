@@ -601,7 +601,7 @@ describe("answer tool-step budget", () => {
     expect(actions).toHaveLength(1);
   });
 
-  it("fails closed on a different second connected-MCP proposal within one answer", async () => {
+  it("fails a different connected-MCP proposal batch before any upstream call", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     const calls: unknown[] = [];
     await llm.answer(
@@ -622,10 +622,12 @@ describe("answer tool-step budget", () => {
     );
 
     const peer = captured.config.tools.peer__read_record__abc123;
+    await peer.needsApproval({ id: 1 });
+    await peer.needsApproval({ id: 2 });
     const [first, second] = await Promise.all([peer.execute({ id: 1 }), peer.execute({ id: 2 })]);
-    expect(first).toBe("record 1");
+    expect(first).toContain("exactly one connected-tool proposal");
     expect(second).toContain("exactly one connected-tool proposal");
-    expect(calls).toEqual([{ id: 1 }]);
+    expect(calls).toEqual([]);
   });
 
   it("does not retry or double-record a duplicate guarded mutation failure", async () => {

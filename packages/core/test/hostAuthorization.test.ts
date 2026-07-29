@@ -134,6 +134,67 @@ describe("D9 model-proposes / host-authorizes contract", () => {
     ).toBe(NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL);
   });
 
+  it("matches standing approval by exact connection, tool, and canonical full arguments", () => {
+    const risky = context({
+      args: {
+        content: "exact proposal",
+        options: { audience: "team", urgent: false },
+      },
+      trustedProfile: { ...privateTenantProfile, exposure: "external" },
+    });
+    expect(
+      peerMutationGuardFailure(
+        "portable__publish__0123456789abcdef",
+        "draft this",
+        risky,
+      ),
+    ).toBe(HOST_APPROVAL_REQUIRED_GUARD_SENTINEL);
+
+    expect(
+      peerMutationGuardFailure(
+        "portable__schedule__fedcba9876543210",
+        "yes, approve",
+        risky,
+      ),
+    ).toContain("selected peer, operation, or exact arguments do not match");
+    expect(
+      peerMutationGuardFailure(
+        "portable__publish__0123456789abcdef",
+        "yes, approve",
+        context({
+          ...risky,
+          owner: "connection-b",
+        }),
+      ),
+    ).toContain("selected peer, operation, or exact arguments do not match");
+    expect(
+      peerMutationGuardFailure(
+        "portable__publish__0123456789abcdef",
+        "yes, approve",
+        context({
+          ...risky,
+          args: {
+            ...risky.args,
+            extra: "not in the held operation",
+          },
+        }),
+      ),
+    ).toContain("selected peer, operation, or exact arguments do not match");
+    expect(
+      peerMutationGuardFailure(
+        "portable__publish__0123456789abcdef",
+        "yes, approve",
+        context({
+          ...risky,
+          args: {
+            options: { urgent: false, audience: "team" },
+            content: "exact proposal",
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
   it.each([
     ["missing profile", context({ trustedProfile: undefined })],
     [
