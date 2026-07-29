@@ -40,6 +40,7 @@ import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceT
 import { appendEvidence, todayString } from "./evidence.js";
 import { sanitizeGroundedAnswer, sanitizeReadOnlyAnswerText } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
+import { conversationId } from "../conversation.js";
 import {
   isAffirmativeApproval,
   normalizeCreateIssueLabels,
@@ -73,15 +74,6 @@ function hasStandingActionEvidence(actions: readonly TaskingAction[]): boolean {
   return actions.some((action) =>
     action.mutationAttempt === true || action.verifiedMutationReceipt === true,
   );
-}
-
-/**
- * The conversation key for a surface. One continuous thread per surface today;
- * the `default:` prefix leaves room for multi-session later.
- */
-export function conversationId(surface: Surface, key = "default"): string {
-  const safeKey = key.trim().replace(/[^\w@.+:-]/g, "_").slice(0, 160) || "default";
-  return `${surface}:${safeKey}`;
 }
 
 /** Human-readable channel name for chat-search results. */

@@ -5,6 +5,7 @@ import type {
   ChatTestAuditInput,
   ChatTestAuditRecord,
   ConversationMessage,
+  ConversationCaptureTicket,
   ConversationSearchHit,
   ConversationSearchOptions,
   SourceRef,
@@ -12,6 +13,7 @@ import type {
   Surface,
 } from "../types.js";
 import type { ChatToolEvent } from "../llm/types.js";
+import { conversationId } from "../conversation.js";
 
 const WINDOW_MESSAGES = 20;
 const WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -23,7 +25,7 @@ const WINDOW_MS = 48 * 60 * 60 * 1000;
 export class SqliteStateStore implements StateStore {
   private readonly db: DatabaseSync;
 
-  constructor(path: string) {
+  constructor(path: string, private readonly tenantId = "standalone") {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec(`
@@ -73,6 +75,94 @@ export class SqliteStateStore implements StateStore {
       );
       CREATE INDEX IF NOT EXISTS idx_approval_tokens_conversation ON approval_tokens (conversation_id, expires_at);
     `);
+    this.ensureCaptureTicketSchema();
+  }
+
+  private ensureCaptureTicketSchema(): void {
+    const table = this.db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='conversation_capture_tickets'",
+    ).get() as { name?: string } | undefined;
+    if (!table) {
+      this.createCaptureTicketTable();
+      return;
+    }
+    const columns = this.db.prepare("PRAGMA table_info(conversation_capture_tickets)").all() as unknown as Array<{
+      name: string;
+      pk: number;
+    }>;
+    const primaryKey = columns
+      .filter((column) => column.pk > 0)
+      .sort((left, right) => left.pk - right.pk)
+      .map((column) => column.name);
+    if (
+      ["tenant_id", "surface", "conversation_key", "provider_message_id"]
+        .every((name) => columns.some((column) => column.name === name)) &&
+      primaryKey.join(",") === "tenant_id,surface,conversation_key,provider_message_id"
+    ) {
+      this.createCaptureTicketIndex();
+      return;
+    }
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.exec(`
+        DROP INDEX IF EXISTS idx_capture_tickets_conversation;
+        ALTER TABLE conversation_capture_tickets RENAME TO conversation_capture_tickets_legacy;
+      `);
+      this.createCaptureTicketTable(false);
+      this.db.prepare(
+        `INSERT OR IGNORE INTO conversation_capture_tickets (
+           tenant_id, surface, conversation_key, provider_message_id,
+           conversation_id, summary, evidence_ref, at
+         )
+         SELECT ?,
+                CASE
+                  WHEN instr(conversation_id, ':') > 0
+                    THEN substr(conversation_id, 1, instr(conversation_id, ':') - 1)
+                  ELSE 'web'
+                END,
+                CASE
+                  WHEN instr(conversation_id, ':') > 0
+                    THEN substr(conversation_id, instr(conversation_id, ':') + 1)
+                  ELSE conversation_id
+                END,
+                capture_id, conversation_id, summary, evidence_ref, at
+         FROM conversation_capture_tickets_legacy`,
+      ).run(this.tenantId);
+      this.db.exec(`
+        DROP TABLE conversation_capture_tickets_legacy;
+        CREATE INDEX idx_capture_tickets_conversation
+          ON conversation_capture_tickets (conversation_id, at);
+        COMMIT;
+      `);
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  private createCaptureTicketTable(withIndex = true): void {
+    this.db.exec(`
+      CREATE TABLE conversation_capture_tickets (
+        tenant_id TEXT NOT NULL,
+        surface TEXT NOT NULL,
+        conversation_key TEXT NOT NULL,
+        provider_message_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        evidence_ref TEXT NOT NULL,
+        at INTEGER NOT NULL,
+        PRIMARY KEY (tenant_id, surface, conversation_key, provider_message_id)
+      );
+    `);
+    if (withIndex) this.createCaptureTicketIndex();
+  }
+
+  private createCaptureTicketIndex(): void {
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_capture_tickets_conversation
+        ON conversation_capture_tickets (conversation_id, at);
+    `);
   }
 
   /** Record an MCP client handshake (from the initialize request's clientInfo). */
@@ -96,6 +186,63 @@ export class SqliteStateStore implements StateStore {
     this.db
       .prepare("INSERT INTO messages (conversation_id, role, text, surface, at) VALUES (?, ?, ?, ?, ?)")
       .run(conversationId, role, text, surface, Date.now());
+  }
+
+  async appendCaptureTicket(
+    ticket: ConversationCaptureTicket,
+  ): Promise<"recorded" | "duplicate"> {
+    const identity = ticket.identity;
+    const tenantId = identity.tenantId.trim();
+    const surface = identity.surface;
+    const conversationKey = identity.conversationKey.trim();
+    const providerMessageId = identity.providerMessageId.trim();
+    const summary = ticket.summary.trim().replace(/\s+/g, " ");
+    const evidenceRef = ticket.evidenceRef.trim();
+    if (!tenantId || tenantId !== this.tenantId) throw new Error("capture ticket tenant identity is invalid");
+    if (!conversationKey || conversationKey.length > 200) throw new Error("capture ticket conversation identity is invalid");
+    if (!providerMessageId || providerMessageId.length > 256) throw new Error("capture ticket provider id is invalid");
+    if (!summary || summary.length > 500) throw new Error("capture ticket summary is invalid");
+    if (!evidenceRef || evidenceRef.length > 512 || /[\r\n]/.test(evidenceRef)) {
+      throw new Error("capture ticket evidenceRef is invalid");
+    }
+    const at = Date.now();
+    const targetConversationId = conversationId(surface, conversationKey);
+    const text = [
+      "Capture context:",
+      `Summary: ${summary}`,
+      `Evidence: ${evidenceRef}`,
+    ].join("\n");
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const claimed = this.db.prepare(
+        `INSERT OR IGNORE INTO conversation_capture_tickets (
+           tenant_id, surface, conversation_key, provider_message_id,
+           conversation_id, summary, evidence_ref, at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        tenantId,
+        surface,
+        conversationKey,
+        providerMessageId,
+        targetConversationId,
+        summary,
+        evidenceRef,
+        at,
+      );
+      if (Number(claimed.changes) === 0) {
+        this.db.exec("COMMIT");
+        return "duplicate";
+      }
+      this.db
+        .prepare("INSERT INTO messages (conversation_id, role, text, surface, at) VALUES (?, 'assistant', ?, ?, ?)")
+        .run(targetConversationId, text, surface, at);
+      this.db.exec("COMMIT");
+      return "recorded";
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   async recentWindow(conversationId: string): Promise<ConversationMessage[]> {
