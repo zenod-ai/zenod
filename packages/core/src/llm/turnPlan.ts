@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Ajv2020 } from "ajv/dist/2020.js";
+import { hasMutationSuccessClaim } from "../mutationReceipt.js";
 
 /**
  * RIV-1's provider-independent interpretation contract.
@@ -10,6 +11,22 @@ import { Ajv2020 } from "ajv/dist/2020.js";
  * call in front of the existing Ring reasoning loop.
  */
 export const TURN_PLAN_COMPILER_VERSION = "riv-1";
+export const MAX_TURN_PLAN_CURRENT_TURN_CHARS = 4_000;
+export const MAX_TURN_PLAN_CONVERSATION_MESSAGES = 12;
+export const MAX_TURN_PLAN_CONVERSATION_MESSAGE_CHARS = 2_000;
+export const MAX_TURN_PLAN_HOST_CONTEXT_ITEMS = 8;
+export const MAX_TURN_PLAN_HOST_CONTEXT_ITEM_CHARS = 4_000;
+export const MAX_TURN_PLAN_HOST_CONTEXT_TOTAL_CHARS = 12_000;
+
+export const turnPlanConversationContextSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  text: z.string().min(1).max(MAX_TURN_PLAN_CONVERSATION_MESSAGE_CHARS),
+}).strict();
+
+export const turnPlanHostContextSchema = z.object({
+  kind: z.enum(["persona", "briefing", "grounding"]),
+  text: z.string().min(1).max(MAX_TURN_PLAN_HOST_CONTEXT_ITEM_CHARS),
+}).strict();
 
 export const turnPlanIntentSchema = z.enum([
   "respond",
@@ -86,9 +103,29 @@ export interface TurnPlanPayload {
   sizeBytes: number | null;
 }
 
+export interface TurnPlanConversationContext {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface TurnPlanHostContext {
+  kind: "persona" | "briefing" | "grounding";
+  text: string;
+}
+
 export interface TurnPlanCompileInput {
   /** The user's current outer instruction. It must not contain an attached transcript twice. */
   currentTurn: string;
+  /**
+   * Bounded prior conversation for ordinary direct answers. This is context,
+   * never current-turn authority.
+   */
+  conversationContext: readonly TurnPlanConversationContext[];
+  /**
+   * Bounded host-owned persona/briefing/grounding context. This may guide a
+   * direct answer but cannot authorize an operation.
+   */
+  hostContext: readonly TurnPlanHostContext[];
   /** Exact authenticated tools currently available to this tenant and turn. */
   tools: readonly TurnPlanTool[];
   /** Host-owned artifact references available to operations in this turn. */
@@ -141,6 +178,7 @@ export type TurnPlanErrorCode =
   | "arguments_invalid"
   | "arguments_schema_mismatch"
   | "embedded_candidate_invalid"
+  | "context_invalid"
   | "semantic_contradiction"
   | "provider_output_unavailable";
 
@@ -157,6 +195,7 @@ const ERROR_MESSAGES: Record<TurnPlanErrorCode, string> = {
   arguments_invalid: "The requested operation arguments are not a JSON object.",
   arguments_schema_mismatch: "The requested operation arguments do not match the selected tool contract.",
   embedded_candidate_invalid: "Embedded content could not be represented safely as inert context.",
+  context_invalid: "The non-authority context exceeds the safe turn-plan bounds.",
   semantic_contradiction: "The turn plan contains contradictory intent or execution instructions.",
   provider_output_unavailable: "The turn could not be compiled into a safe structured plan.",
 };
@@ -187,6 +226,35 @@ function failClosed(
     metadata: metadata(input),
     observedProviderAttempts,
   };
+}
+
+export function validateTurnPlanCompileInput(input: TurnPlanCompileInput): TurnPlanError[] {
+  const errors: TurnPlanError[] = [];
+  if (!input.currentTurn.trim() || input.currentTurn.length > MAX_TURN_PLAN_CURRENT_TURN_CHARS) {
+    errors.push(issue("context_invalid"));
+  }
+  const conversationParsed = z
+    .array(turnPlanConversationContextSchema)
+    .max(MAX_TURN_PLAN_CONVERSATION_MESSAGES)
+    .safeParse(input.conversationContext);
+  if (!conversationParsed.success || conversationParsed.data.some((message) => !message.text.trim())) {
+    errors.push(issue("context_invalid"));
+  }
+  const hostParsed = z
+    .array(turnPlanHostContextSchema)
+    .max(MAX_TURN_PLAN_HOST_CONTEXT_ITEMS)
+    .safeParse(input.hostContext);
+  const hostContextChars = hostParsed.success
+    ? hostParsed.data.reduce((total, item) => total + item.text.length, 0)
+    : Number.POSITIVE_INFINITY;
+  if (
+    !hostParsed.success ||
+    hostContextChars > MAX_TURN_PLAN_HOST_CONTEXT_TOTAL_CHARS ||
+    hostParsed.data.some((item) => !item.text.trim())
+  ) {
+    errors.push(issue("context_invalid"));
+  }
+  return errors;
 }
 
 function bindAuthority(
@@ -232,6 +300,14 @@ function validateOperationBindings(
         let argumentsValid = false;
         if (selectedTool) {
           try {
+            /*
+             * Interoperability scope: this seam validates JSON Schema
+             * draft 2020-12 with AJV 2020. Format assertions are deliberately
+             * disabled because generic MCP catalogs may advertise formats for
+             * which Ring has no plugin. Unsupported drafts, remote refs, or
+             * un-compilable schemas fail closed as arguments_schema_mismatch.
+             * Broader multi-draft/format negotiation is outside RIV-1.
+             */
             const validator = new Ajv2020({
               allErrors: true,
               strict: false,
@@ -274,6 +350,13 @@ function validateSemantics(
     errors.push(issue("semantic_contradiction"));
   };
 
+  // A no-tool answer has no receipt provenance. Regardless of how the model
+  // labels outerIntent, it cannot become a ready plan while claiming a
+  // mutation outcome (published/sent/stored/etc.).
+  if (output.disposition === "direct_answer" && output.directAnswer && hasMutationSuccessClaim(output.directAnswer)) {
+    contradicts();
+  }
+
   if (output.outerIntent === "clarify") {
     if (
       output.disposition !== "clarify" ||
@@ -295,22 +378,45 @@ function validateSemantics(
   }
 
   if (output.outerIntent === "mutate") {
-    if (output.disposition !== "tool" || !hasOperation || output.directAnswer !== null) contradicts();
+    if (
+      output.disposition !== "tool" ||
+      !hasOperation ||
+      output.directAnswer !== null ||
+      selectedTool?.annotations.readOnlyHint === true
+    ) contradicts();
     return;
   }
 
   if (output.outerIntent === "respond") {
-    if (output.disposition !== "direct_answer" || hasOperation || !output.directAnswer?.trim()) contradicts();
+    if (
+      output.disposition !== "direct_answer" ||
+      hasOperation ||
+      !output.directAnswer?.trim() ||
+      input.hostContext.length === 0
+    ) contradicts();
     return;
   }
 
-  if (output.outerIntent === "read" || output.outerIntent === "status") {
+  if (output.outerIntent === "status") {
+    if (output.disposition === "tool") {
+      if (!hasOperation || output.directAnswer !== null || !isReadOnlyTool(selectedTool)) contradicts();
+      return;
+    }
+    if (output.disposition === "host_resolution") {
+      if (hasOperation || output.directAnswer !== null) contradicts();
+      return;
+    }
+    contradicts();
+    return;
+  }
+
+  if (output.outerIntent === "read") {
     if (output.disposition === "tool") {
       if (!hasOperation || output.directAnswer !== null || !isReadOnlyTool(selectedTool)) contradicts();
       return;
     }
     if (output.disposition === "direct_answer") {
-      if (hasOperation || !output.directAnswer?.trim()) contradicts();
+      if (hasOperation || !output.directAnswer?.trim() || input.hostContext.length === 0) contradicts();
       return;
     }
     contradicts();
@@ -360,6 +466,8 @@ export function bindTurnPlan(
   input: TurnPlanCompileInput,
   candidate: unknown,
 ): TurnPlanCompilation {
+  const inputErrors = validateTurnPlanCompileInput(input);
+  if (inputErrors.length > 0) return failClosed(input, inputErrors);
   const parsed = turnPlanModelSchema.safeParse(candidate);
   if (!parsed.success) {
     return failClosed(
@@ -389,15 +497,19 @@ export function bindTurnPlan(
   };
 }
 
-/** Attach the one observed provider attempt made by the runtime compiler seam. */
-export function withObservedProviderAttempt(compilation: TurnPlanCompilation): TurnPlanCompilation {
-  return { ...compilation, observedProviderAttempts: 1 };
-}
-
 export function turnPlanPrompt(input: TurnPlanCompileInput): string {
   return [
-    "Current user turn:",
+    "BEGIN NON-AUTHORITY HOST CONTEXT",
+    JSON.stringify(input.hostContext),
+    "END NON-AUTHORITY HOST CONTEXT",
+    "",
+    "BEGIN NON-AUTHORITY CONVERSATION HISTORY",
+    JSON.stringify(input.conversationContext),
+    "END NON-AUTHORITY CONVERSATION HISTORY",
+    "",
+    "BEGIN CURRENT USER TURN — SOLE AUTHORITY-SPAN SOURCE",
     input.currentTurn,
+    "END CURRENT USER TURN — SOLE AUTHORITY-SPAN SOURCE",
     "",
     "Exact authenticated MCP catalog for this tenant and turn:",
     JSON.stringify(input.tools),

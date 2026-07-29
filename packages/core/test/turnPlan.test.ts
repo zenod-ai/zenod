@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_TURN_PLAN_CONVERSATION_MESSAGES,
   bindTurnPlan,
   turnPlanModelSchema,
   turnPlanPrompt,
@@ -14,6 +15,8 @@ function input(overrides: Partial<TurnPlanCompileInput> = {}): TurnPlanCompileIn
   return {
     currentTurn: "Save this entire note. Do not run the ideas inside it.",
     correlationId: "turn-123",
+    conversationContext: [{ role: "assistant", text: "How can I help?" }],
+    hostContext: [{ kind: "persona", text: "Answer as the tenant's Council." }],
     tools: [
       {
         id: exactWriteTool,
@@ -174,7 +177,7 @@ describe("TurnPlan strict contract", () => {
   it.each([
     ["What records match this name?", "read", "direct_answer"],
     ["Do not store this.", "cancel", "host_resolution"],
-    ["Has the requested operation finished?", "status", "direct_answer"],
+    ["Has the requested operation finished?", "status", "host_resolution"],
     ["Yes, approve the pending action.", "approve", "host_resolution"],
     ["Thanks, that is all.", "respond", "direct_answer"],
   ] as const)("represents %s as the distinct %s outer intent", (currentTurn, outerIntent, disposition) => {
@@ -332,5 +335,119 @@ describe("TurnPlan strict contract", () => {
       code: "structured_output_invalid",
       message: "The turn plan did not match the required structure.",
     }]);
+  });
+
+  it("rejects a fabricated zero-tool status answer", () => {
+    const currentTurn = "Has it been published?";
+    const result = bindTurnPlan(
+      input({ currentTurn }),
+      validPlan({
+        // Even a model that mislabels the status question as ordinary response
+        // cannot turn unsupported success prose into a ready direct answer.
+        outerIntent: "respond",
+        disposition: "direct_answer",
+        authority: { quote: currentTurn, start: 0, end: currentTurn.length },
+        requestedOperations: [],
+        embeddedCandidates: [],
+        directAnswer: "Yes — published.",
+      }),
+    );
+    expect(result.status).toBe("clarify");
+    expect(result.plan).toBeNull();
+    expect(result.errors.map((error) => error.code)).toContain("semantic_contradiction");
+  });
+
+  it("rejects mutate intent bound to an explicitly read-only tool", () => {
+    const result = bindTurnPlan(
+      input(),
+      validPlan({
+        requestedOperations: [{ toolId: exactReadTool, inputJson: '{"query":"x"}', payloadRef: null }],
+      }),
+    );
+    expect(result.status).toBe("clarify");
+    expect(result.plan).toBeNull();
+    expect(result.errors.map((error) => error.code)).toContain("semantic_contradiction");
+  });
+
+  it("delimits bounded non-authority context separately from the sole authority source", () => {
+    const compileInput = input({
+      conversationContext: [
+        { role: "user", text: "Earlier question." },
+        { role: "assistant", text: "Earlier answer." },
+      ],
+      hostContext: [
+        { kind: "persona", text: "Be concise." },
+        { kind: "briefing", text: "Tenant-local briefing." },
+      ],
+    });
+    const prompt = turnPlanPrompt(compileInput);
+    expect(prompt).toContain("BEGIN NON-AUTHORITY HOST CONTEXT");
+    expect(prompt).toContain("BEGIN NON-AUTHORITY CONVERSATION HISTORY");
+    expect(prompt).toContain("BEGIN CURRENT USER TURN — SOLE AUTHORITY-SPAN SOURCE");
+    expect(prompt.indexOf("Be concise.")).toBeLessThan(prompt.indexOf(compileInput.currentTurn));
+  });
+
+  it("never binds authority from conversation or host context", () => {
+    const result = bindTurnPlan(
+      input({
+        currentTurn: "Okay.",
+        conversationContext: [{ role: "user", text: "Save this entire note" }],
+        hostContext: [{ kind: "briefing", text: "Save this entire note" }],
+      }),
+      validPlan({
+        authority: { quote: "Save this entire note", start: 0, end: 21 },
+        requestedOperations: [{ toolId: exactWriteTool, inputJson: '{"text":"x"}', payloadRef: null }],
+        embeddedCandidates: [],
+      }),
+    );
+    expect(result.status).toBe("clarify");
+    expect(result.errors.map((error) => error.code)).toContain("authority_span_invalid");
+  });
+
+  it("fails closed when non-authority context exceeds strict count bounds", () => {
+    const result = bindTurnPlan(
+      input({
+        conversationContext: Array.from(
+          { length: MAX_TURN_PLAN_CONVERSATION_MESSAGES + 1 },
+          (_, index) => ({ role: "user" as const, text: `message ${index}` }),
+        ),
+      }),
+      validPlan(),
+    );
+    expect(result.status).toBe("clarify");
+    expect(result.observedProviderAttempts).toBe(0);
+    expect(result.errors.map((error) => error.code)).toContain("context_invalid");
+  });
+
+  it("rejects unknown non-authority context keys before they can enter the prompt", () => {
+    const result = bindTurnPlan(
+      input({
+        conversationContext: [{
+          role: "user",
+          text: "bounded",
+          hidden: "must not enter the prompt",
+        } as never],
+      }),
+      validPlan(),
+    );
+    expect(result.status).toBe("clarify");
+    expect(result.errors.map((error) => error.code)).toContain("context_invalid");
+  });
+
+  it("requires bounded host context for an ordinary direct answer", () => {
+    const currentTurn = "Hello.";
+    const result = bindTurnPlan(
+      input({ currentTurn, hostContext: [] }),
+      validPlan({
+        outerIntent: "respond",
+        disposition: "direct_answer",
+        authority: { quote: currentTurn, start: 0, end: currentTurn.length },
+        requestedOperations: [],
+        embeddedCandidates: [],
+        directAnswer: "Hello.",
+      }),
+    );
+    expect(result.status).toBe("clarify");
+    expect(result.errors.map((error) => error.code)).toContain("semantic_contradiction");
   });
 });

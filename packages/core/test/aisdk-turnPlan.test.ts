@@ -26,6 +26,8 @@ function compileInput() {
   return {
     currentTurn: "Store this attachment.",
     correlationId: "corr-1",
+    conversationContext: [{ role: "assistant", text: "What should I do with it?" }],
+    hostContext: [{ kind: "persona", text: "Answer as the Council." }],
     tools: [{
       id: toolId,
       description: "Store one tenant-private item.",
@@ -109,5 +111,18 @@ describe("AiSdkBrainLlm TurnPlan compiler seam", () => {
       expect(result.plan.disposition).toBe("direct_answer");
       expect(result.plan.directAnswer).toBe("I can help with that.");
     }
+  });
+
+  it("rejects oversized context before making any provider attempt", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k" });
+    const result = await llm.compileTurnPlan({
+      ...compileInput(),
+      hostContext: [{ kind: "persona", text: "x".repeat(12_001) }],
+    });
+
+    expect(captured.calls).toHaveLength(0);
+    expect(result.status).toBe("clarify");
+    expect(result.observedProviderAttempts).toBe(0);
+    expect(result.errors.map((error) => error.code)).toContain("context_invalid");
   });
 });
