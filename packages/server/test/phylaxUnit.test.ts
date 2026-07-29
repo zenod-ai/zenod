@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChassisStorage, createMemoryTenantStore } from "@zenod/mcp-chassis";
@@ -25,6 +25,55 @@ afterEach(async () => {
 });
 
 describe("Phylax customer unit mount", () => {
+  it("reports honest transport and event-loop health without claiming inbound delivery", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-transport-health-"));
+    dirs.push(dataDir);
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env: { CHASSIS_VAULT_MASTER_KEY: MASTER_KEY },
+    });
+    try {
+      const healthy = await unit.app.request("/api/health");
+      expect(healthy.status).toBe(200);
+      expect(await healthy.json()).toMatchObject({
+        status: "ok",
+        worker: { status: "ok" },
+        channels: {
+          whatsapp: {
+            state: "disabled",
+            scope: "transport-lifecycle-only",
+            receivePath: { status: "disabled" },
+          },
+        },
+      });
+
+      const heartbeat = unit.phylaxRuntime.workerHealth();
+      expect(unit.phylaxRuntime.workerHealth(
+        heartbeat.lastHeartbeatAt + heartbeat.staleAfterMs + 1,
+      ).status).toBe("degraded");
+
+      unit.phylaxRuntime.settings.setWhatsAppSettings({ enabled: true });
+      const degraded = await unit.app.request("/api/health");
+      expect(degraded.status).toBe(503);
+      expect(await degraded.json()).toMatchObject({
+        status: "degraded",
+        channels: { whatsapp: { receivePath: { status: "degraded", phase: "idle" } } },
+      });
+    } finally {
+      await unit.close();
+    }
+  });
+
+  it("restarts the compose service when its bounded health probe fails", async () => {
+    const compose = await readFile(new URL("../../../docker-compose.phylax.yml", import.meta.url), "utf8");
+    expect(compose).toContain("restart: unless-stopped");
+    expect(compose).toContain("http://127.0.0.1:8080/api/health");
+    expect(compose).toContain("AbortSignal.timeout(3000)");
+    expect(compose).toContain("kill -TERM 1");
+    expect(compose).toContain("start_period: 60s");
+  });
+
   it("strictly parses tenant transcription settings and checks before mutation", () => {
     expect(() => parsePhylaxSettingsUpdate(null)).toThrow("settings body must be an object");
     expect(() => parsePhylaxSettingsUpdate({ transcriptionEnabled: "true" }))

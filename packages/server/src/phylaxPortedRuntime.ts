@@ -40,6 +40,10 @@ export class PhylaxPortedRuntime {
   private voiceWorkerWakeRequested = false;
   private voiceWorkerPromise: Promise<void> | null = null;
   private lastVoiceTenantId: string | null = null;
+  private readonly eventLoopHeartbeatIntervalMs: number;
+  private readonly eventLoopHeartbeatStaleMs: number;
+  private eventLoopHeartbeatAt = Date.now();
+  private eventLoopHeartbeatTimer: NodeJS.Timeout | null = null;
   private readonly probeVoiceDuration: (bytes: Buffer, fileName: string) => Promise<number | null>;
 
   constructor(
@@ -61,6 +65,14 @@ export class PhylaxPortedRuntime {
     this.voiceProgressDelayMs = Number.isFinite(configuredProgressDelay)
       ? Math.max(100, Math.min(configuredProgressDelay, 30_000))
       : 5_000;
+    const configuredHeartbeatInterval = Number(env.PHYLAX_EVENT_LOOP_HEARTBEAT_INTERVAL_MS ?? 5_000);
+    this.eventLoopHeartbeatIntervalMs = Number.isFinite(configuredHeartbeatInterval)
+      ? Math.max(100, Math.min(configuredHeartbeatInterval, 60_000))
+      : 5_000;
+    const configuredHeartbeatStale = Number(env.PHYLAX_EVENT_LOOP_HEARTBEAT_STALE_MS ?? 20_000);
+    this.eventLoopHeartbeatStaleMs = Number.isFinite(configuredHeartbeatStale)
+      ? Math.max(this.eventLoopHeartbeatIntervalMs * 2, Math.min(configuredHeartbeatStale, 300_000))
+      : 20_000;
     this.probeVoiceDuration = adapters.probeVoiceDuration ?? ((bytes, fileName) =>
       probeAudioDurationSeconds(bytes, fileName));
     this.state = new SqliteStateStore(join(dataDir, "phylax-channels.sqlite"));
@@ -445,8 +457,30 @@ export class PhylaxPortedRuntime {
   }
 
   async start(): Promise<void> {
+    this.startEventLoopHeartbeat();
     await this.whatsapp.startIfEnabled();
     await this.telegram.startIfEnabled();
+  }
+
+  workerHealth(now = Date.now()): {
+    status: "ok" | "degraded";
+    lastHeartbeatAt: number;
+    staleAfterMs: number;
+  } {
+    return {
+      status: now - this.eventLoopHeartbeatAt <= this.eventLoopHeartbeatStaleMs ? "ok" : "degraded",
+      lastHeartbeatAt: this.eventLoopHeartbeatAt,
+      staleAfterMs: this.eventLoopHeartbeatStaleMs,
+    };
+  }
+
+  private startEventLoopHeartbeat(): void {
+    if (this.eventLoopHeartbeatTimer) return;
+    this.eventLoopHeartbeatAt = Date.now();
+    this.eventLoopHeartbeatTimer = setInterval(() => {
+      this.eventLoopHeartbeatAt = Date.now();
+    }, this.eventLoopHeartbeatIntervalMs);
+    this.eventLoopHeartbeatTimer.unref();
   }
 
   delivery(): PhylaxTenantDelivery {
@@ -469,6 +503,8 @@ export class PhylaxPortedRuntime {
 
   async close(): Promise<void> {
     this.voiceWorkerClosed = true;
+    if (this.eventLoopHeartbeatTimer) clearInterval(this.eventLoopHeartbeatTimer);
+    this.eventLoopHeartbeatTimer = null;
     for (const controller of this.voiceAbortControllers.values()) controller.abort();
     const failures: unknown[] = [];
     const voiceDrain = (async (): Promise<void> => {
