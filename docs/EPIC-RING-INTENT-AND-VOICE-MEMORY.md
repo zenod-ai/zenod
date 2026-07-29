@@ -7,19 +7,19 @@ Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-RING-INTENT-AND-VOICE-MEMORY.md`
 GitHub issues: `https://github.com/zenod-ai/zenod/issues`
 Integration branch: main
-Active spine steward: `/root` planner
-Steward since: 2026-07-29 15:00 CEST
-Last reconciled commit: `cb7b966b1092f566c4af62f25ec4260d5075ec49`
+Active spine steward: `/root` delivery manager
+Steward since: 2026-07-29 15:16 CEST
+Last reconciled commit: `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56`
 Planner: `/root`
-Worker: unassigned until Jordi launches agents
+Worker: `/root` delivery manager with issue-bound ticket workers
 Tester: `/root` plus real human web-chat and WhatsApp journey walker
 
 ## Role Bindings
 
 | Identity | Assignment Identity | Bound Issue / Scope | Authority | Handoff |
 |---|---|---|---|---|
-| Planner | `/root` | This spine and issues RIV-1..RIV-7 | Steward planning, decisions, dependency order, and issue ledger. Do not implement by default. | Dispatch-ready spine, linked issues, exact base, next human decision. |
-| Epic worker | To be launched by Jordi | This spine | Coordinate ticket workers, review passing PRs, integrate only accepted generic contracts, reconcile this spine. | Issue/PR links, exact candidate SHA, tests, residual risks, next live prompt. |
+| Planner | `/root` | This spine and issues RIV-1..RIV-7 | Preserve accepted intent, decisions, dependency order, and Human Gates. | Resolve only scope/acceptance divergence raised by the epic worker. |
+| Epic worker | `/root` delivery manager | This spine | Active steward: coordinate ticket workers, review passing PRs, integrate only accepted generic contracts, and reconcile this spine. | Issue/PR links, exact candidate SHA, tests, residual risks, next live prompt. |
 | Ring worker | To be assigned | [#982](https://github.com/zenod-ai/zenod/issues/982), [#985](https://github.com/zenod-ai/zenod/issues/985), [#984](https://github.com/zenod-ai/zenod/issues/984), [#983](https://github.com/zenod-ai/zenod/issues/983), or [#986](https://github.com/zenod-ai/zenod/issues/986), exactly one issue per worker | Implement only the bound Ring contract on a dedicated `codex/*` branch and worktree. No channel, peer, or production changes. | PR, base/latest commit, focused and regression tests, risks, next action in the issue. |
 | Phylax worker | To be assigned | [#987](https://github.com/zenod-ai/zenod/issues/987) | Implement only bounded connection lifecycle and receive-path health. The review-blocked draft is evidence, not approved code. | PR, lifecycle tests, base/latest commit, risks, next action in the issue. |
 | Integration tester | To be assigned after reviewed integration | [#988](https://github.com/zenod-ai/zenod/issues/988) | Walk real browser/WhatsApp journeys against one exact candidate. No deploy, public post, or historical replay without the Human Gate. | Screenshot/log package, exact SHA, pass/fail per journey, next live prompt. |
@@ -28,7 +28,7 @@ Tester: `/root` plus real human web-chat and WhatsApp journey walker
 ## Write Scope
 
 Bound spine: `docs/EPIC-RING-INTENT-AND-VOICE-MEMORY.md`
-Active steward: `/root` until an explicit stewardship transfer is journaled
+Active steward: `/root` delivery manager
 
 Writable by default:
 
@@ -95,12 +95,12 @@ Make Ring simple and truthful for ordinary human chat, especially WhatsApp voice
 
 ## Current State
 
-Phase: planning review
-Last verified: 2026-07-29 15:20 CEST
+Phase: implementation — Wave 1
+Last verified: 2026-07-29 15:16 CEST
 Integration target: main
 Fresh base commit: `9e64f392e1329e3651374511b7351925dec5f4e0`
-Next action: review and land planning PR [#989](https://github.com/zenod-ai/zenod/pull/989), transfer stewardship to the launched epic worker, then dispatch Wave 1 from a fresh `origin/main`.
-Blockers: no planning blocker; implementation agents are intentionally not launched in this turn.
+Next action: review ticket-worker progress on RIV-1 [#982](https://github.com/zenod-ai/zenod/issues/982) and RIV-6 [#987](https://github.com/zenod-ai/zenod/issues/987); integrate each only after independent review and required tests.
+Blockers: none; Wave 1 is active on exact merged-main base `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56`.
 
 The current production failure is cross-layer but has two distinct causes:
 
@@ -283,18 +283,19 @@ If there is no matching terminal receipt, that success reply is impossible. The 
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#982](https://github.com/zenod-ai/zenod/issues/982) | Ring ticket worker | unassigned / RIV-1 | Compile each Ring turn into one typed intent plan | ready | - | reserved `codex/riv-1-typed-turn-plan` | `9e64f392e1329e3651374511b7351925dec5f4e0` | Strict generic `TurnPlan`; one Ring reasoning call; invalid plans fail closed | Issue created; prior regex failure RCA captured here | 2026-07-29 15:00 CEST | Bind worker after spine lands; record fresh base before worktree creation |
+| [#982](https://github.com/zenod-ai/zenod/issues/982) | Ring ticket worker | `riv_1_typed_turn_plan` / RIV-1 | Compile each Ring turn into one typed intent plan | active | - | `codex/riv-1-typed-turn-plan` / PR pending | `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56` | Strict generic `TurnPlan`; one Ring reasoning call; invalid plans fail closed | [Dispatch record](https://github.com/zenod-ai/zenod/issues/982#issuecomment-5118253901) | 2026-07-29 15:16 CEST | Worker creates isolated worktree, implements, tests, and opens PR |
 | [#985](https://github.com/zenod-ai/zenod/issues/985) | Ring ticket worker | unassigned / RIV-2 | Replace regex mutation authority with deterministic risk policy | ready | #982 | reserved `codex/riv-2-risk-policy` | integrated RIV-1 SHA | Low-risk explicit writes allowed; high/unknown risk held; natural approval binds exact held action | Issue created; #965 proves prior grammar patch was insufficient | 2026-07-29 15:00 CEST | Dispatch only after RIV-1 contract is reviewed |
 | [#984](https://github.com/zenod-ai/zenod/issues/984) | Ring ticket worker | unassigned / RIV-3 | Make generic MCP mutations exactly-once through terminal receipts | ready | #982, #985 | reserved `codex/riv-3-terminal-receipts` | integrated RIV-1/RIV-2 SHA | One logical call, one upstream invocation, one terminal verified result | Issue created; existing Ring/Calli dedupe laws referenced | 2026-07-29 15:00 CEST | Dispatch after RIV-2 integration |
 | [#983](https://github.com/zenod-ai/zenod/issues/983) | Ring ticket worker | unassigned / RIV-4 | Render one clean deterministic reply for Ring mutations | ready | #982; coordinate with #984 | reserved `codex/riv-4-clean-replies` | integrated RIV-1 SHA | One concise customer reply; no raw/duplicate diagnostics or invented links | Issue created; live duplicate guard output reproduced | 2026-07-29 15:00 CEST | Dispatch after RIV-1 types stabilize; rebase-free integrate after review |
 | [#986](https://github.com/zenod-ai/zenod/issues/986) | Ring ticket worker | unassigned / RIV-5 | Apply capture-first semantics to long voice and artifact turns | ready | #982, #985 | reserved `codex/riv-5-capture-first` | integrated RIV-1/RIV-2 SHA | Explicit outer capture produces one store; embedded actions inert; transcript referenced once | Issue created; 20-minute failure shape captured | 2026-07-29 15:00 CEST | Dispatch after RIV-2 integration |
-| [#987](https://github.com/zenod-ai/zenod/issues/987) | Phylax ticket worker | unassigned / RIV-6 | Bound reconnects and expose real receive-path health | ready | - | reserved `codex/riv-6-phylax-liveness` | `9e64f392e1329e3651374511b7351925dec5f4e0` | Bounded lifecycle, no orphan/storm/race, durable creds, truthful liveness | Review-blocked draft findings recorded in issue | 2026-07-29 15:00 CEST | Bind independent Phylax worker in Wave 1; do not merge draft as-is |
+| [#987](https://github.com/zenod-ai/zenod/issues/987) | Phylax ticket worker | `riv_6_phylax_liveness` / RIV-6 | Bound reconnects and expose real receive-path health | active | - | `codex/riv-6-phylax-liveness` / PR pending | `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56` | Bounded lifecycle, no orphan/storm/race, durable creds, truthful liveness | [Dispatch record](https://github.com/zenod-ai/zenod/issues/987#issuecomment-5118253884); blocked predecessor review | 2026-07-29 15:16 CEST | Worker independently implements lifecycle contract and opens tested PR |
 | [#988](https://github.com/zenod-ai/zenod/issues/988) | Integration tester | unassigned / RIV-7 | Prove voice-to-memory through real human chat journeys | ready | #982-#987 | reserved `codex/riv-7-live-acceptance` | exact integrated deploy candidate | One uninterrupted web/WhatsApp pass, screenshots/logs, two-tenant isolation | Issue created with nine human journeys | 2026-07-29 15:00 CEST | Start only after reviewed implementation is integrated and deploy gate is approved |
 
 ## Branch And Integration
 
 - Default integration branch: `main`.
-- Planning branch: `codex/ring-intent-voice-spine`, created in `/Users/jordi/Documents/GitHub/zenod-ring-intent-voice-spine` from exact `origin/main` SHA `9e64f392e1329e3651374511b7351925dec5f4e0`; draft PR [#989](https://github.com/zenod-ai/zenod/pull/989).
+- Planning branch `codex/ring-intent-voice-spine` landed through [#989](https://github.com/zenod-ai/zenod/pull/989) as `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56`.
+- Steward branch/worktree: `codex/riv-spine-steward` in `/Users/jordi/Documents/GitHub/zenod-riv-spine-steward`, based on `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56`.
 - The shared checkout is not an implementation surface. Do not checkout branches there, discard its edits, or mix its untracked evidence into ticket commits.
 - Worker isolation: one ticket worker per dedicated `codex/*` branch and separate worktree.
 - Every worker fetches fresh `origin/main`, records the exact base in its issue, then creates the worktree. Later waves base on the latest reviewed integrated SHA recorded by the steward.
@@ -361,7 +362,7 @@ Takeover rules:
 | 2026-07-29 | Planning base | `9e64f392e1329e3651374511b7351925dec5f4e0` | local isolated worktree | `git fetch origin main && git rev-parse origin/main` | pass | Exact base recorded before branch/worktree creation |
 | 2026-07-29 | Existing issue overlap audit | n/a | GitHub `zenod-ai/zenod` | Search mutation, voice-note, reconnect, prior #965/#972 and related issues | pass | New tickets are scoped follow-ups; earlier grammar/timeout fixes are not misrepresented as absent |
 | 2026-07-29 | GitHub ticket creation | n/a | GitHub | Connected app attempted first; 403; authenticated `gh issue create` fallback | pass | [#982](https://github.com/zenod-ai/zenod/issues/982), [#983](https://github.com/zenod-ai/zenod/issues/983), [#984](https://github.com/zenod-ai/zenod/issues/984), [#985](https://github.com/zenod-ai/zenod/issues/985), [#986](https://github.com/zenod-ai/zenod/issues/986), [#987](https://github.com/zenod-ai/zenod/issues/987), [#988](https://github.com/zenod-ai/zenod/issues/988) |
-| 2026-07-29 | Spine structure | `cb7b966b1092f566c4af62f25ec4260d5075ec49` | local isolated worktree | `python3 skills/epic-spine/scripts/validate_spine.py docs/EPIC-RING-INTENT-AND-VOICE-MEMORY.md --strict` plus `git diff --check` | pass | Draft PR [#989](https://github.com/zenod-ai/zenod/pull/989) |
+| 2026-07-29 | Spine structure and landing | `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56` | GitHub PR and merged `main` | strict spine validator, `git diff --check`, build, Docker build, and full CI rerun | pass; 812 tests passed on rerun after one 5.085-second timeout flake | Merged PR [#989](https://github.com/zenod-ai/zenod/pull/989), [CI run](https://github.com/zenod-ai/zenod/actions/runs/30454547448) |
 | pending | RIV-7 clean journey | exact candidate SHA | Ring web chat + WhatsApp + connected MCPs | Nine journeys in #988 | pending | Screenshot/log test package |
 
 ## Handoff Journal
@@ -397,6 +398,22 @@ Branch / latest commit: `codex/ring-intent-voice-spine` / `cb7b966b1092f566c4af6
 Last verified: 2026-07-29 15:00 CEST.
 
 Links: [#982](https://github.com/zenod-ai/zenod/issues/982), [#985](https://github.com/zenod-ai/zenod/issues/985), [#984](https://github.com/zenod-ai/zenod/issues/984), [#983](https://github.com/zenod-ai/zenod/issues/983), [#986](https://github.com/zenod-ai/zenod/issues/986), [#987](https://github.com/zenod-ai/zenod/issues/987), [#988](https://github.com/zenod-ai/zenod/issues/988), draft PR [#989](https://github.com/zenod-ai/zenod/pull/989).
+
+### 2026-07-29 - Epic worker - Stewardship accepted and Wave 1 dispatched
+
+Context: Jordi explicitly promoted `/root` to delivery manager. Planning PR #989 was marked ready, and its first CI attempt produced one unrelated 5.085-second timeout in `runtimeWalletReceipt.test.ts` after the underlying job had completed. The failed job was rerun unchanged; build, Docker build, and all 812 tests passed. Auto-merge then landed the spine on `main` as `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56`. Wave 1 was dispatched from that exact base: RIV-1 to `riv_1_typed_turn_plan` and RIV-6 to `riv_6_phylax_liveness`, each with a dedicated branch/worktree and issue-only write scope.
+
+Next: monitor issue handoffs, review code and tests independently, and integrate each small PR only after its contract passes. RIV-2 and RIV-4 remain dependency-gated.
+
+Risks: the RIV-1 worker must not convert model output directly into authority or create a second Ring loop. The RIV-6 worker must not merge the blocked predecessor draft as-is or reset a live WhatsApp session.
+
+Assignment identity: `/root` delivery manager; `riv_1_typed_turn_plan`; `riv_6_phylax_liveness`.
+
+Branch / latest commit: steward `codex/riv-spine-steward` from `3cb388af87212ee96d52f4b77c7e4f2f2c1cec56`; worker branches recorded in the ledger.
+
+Last verified: 2026-07-29 15:16 CEST.
+
+Links: [#989](https://github.com/zenod-ai/zenod/pull/989), [#982 dispatch](https://github.com/zenod-ai/zenod/issues/982#issuecomment-5118253901), [#987 dispatch](https://github.com/zenod-ai/zenod/issues/987#issuecomment-5118253884).
 
 ## Open Questions
 
