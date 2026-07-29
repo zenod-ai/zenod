@@ -103,6 +103,42 @@ function parsedPeerResult(result: string): unknown {
   }
 }
 
+function typedAnswerContentText(action: TaskingAction): string | undefined {
+  if (action.peerAction !== true ||
+      action.mutationAttempt === true ||
+      action.verifiedMutationReceipt === true) return undefined;
+  const parsed = parsedPeerResult(action.result);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+  const envelope = parsed as Record<string, unknown>;
+  if (envelope.isError === true) return undefined;
+  const structured = envelope.structuredContent;
+  if (!structured || typeof structured !== "object" || Array.isArray(structured)) return undefined;
+  const answer = structured as Record<string, unknown>;
+  if (answer.type !== "answer_content" || typeof answer.text !== "string") return undefined;
+  const status = answer.status;
+  if (!status || typeof status !== "object" || Array.isArray(status)) return undefined;
+  const readOnlyStatus = status as Record<string, unknown>;
+  if (readOnlyStatus.type !== "read_only_status" || typeof readOnlyStatus.text !== "string") return undefined;
+  if (!Array.isArray(answer.sources)) return undefined;
+  const sourceLines: string[] = [];
+  for (const source of answer.sources) {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return undefined;
+    const value = source as Record<string, unknown>;
+    if (typeof value.path !== "string") return undefined;
+    if (value.githubUrl !== undefined && typeof value.githubUrl !== "string") return undefined;
+    sourceLines.push(`- ${value.path}${value.githubUrl ? ` (${value.githubUrl})` : ""}`);
+  }
+  const expected = `${sourceLines.length > 0
+    ? `${answer.text}\n\nSources:\n${sourceLines.join("\n")}`
+    : answer.text}\n\n${readOnlyStatus.text}`;
+  if (!Array.isArray(envelope.content) || envelope.content.length !== 1) return undefined;
+  const content = envelope.content[0];
+  if (!content || typeof content !== "object" || Array.isArray(content)) return undefined;
+  const textContent = content as Record<string, unknown>;
+  if (textContent.type !== "text" || textContent.text !== expected) return undefined;
+  return expected;
+}
+
 function hasRootFailureSignal(value: Record<string, unknown>): boolean {
   if (value.isError === true || value.ok === false || value.success === false) return true;
   if (typeof value.status === "string") {
@@ -580,6 +616,26 @@ export function applyReplyGate(
     action.mutationAttempt === true || action.verifiedMutationReceipt === true,
   );
   if (actionResults.length === 0) {
+    const typedAnswers = actions
+      .map(typedAnswerContentText)
+      .filter((text): text is string => text !== undefined);
+    if (typedAnswers.length === 1) {
+      const deliveredText = typedAnswers[0]!;
+      const intercepted = deliveredText.trim() !== draftedText.trim();
+      if (intercepted) {
+        onIntercepted?.({
+          tools: actions.filter((action) => action.peerAction).map((action) => action.tool),
+          discardedText: draftedText,
+          deliveredText,
+        });
+      }
+      return {
+        isActionTurn: false,
+        kind: naturalOutcomeKind(deliveredText),
+        text: deliveredText,
+        intercepted,
+      };
+    }
     const groundedMutationPermalinkRead =
       hasGroundedMutationPermalinkRead(draftedText, actions);
     const unsupportedMutationClaim =

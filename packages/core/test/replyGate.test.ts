@@ -927,4 +927,34 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("peer__read__hash");
   });
 
+  it("renders a typed read-only answer containing saved intact", () => {
+    const evidenceRef = "Log/2026-07-29.md#^e-a7f53e";
+    const answer = [
+      "Which receipt wording is clearest when the librarian filed the note?",
+      "Recommendation: show the saved pages and commit first.",
+    ].join(" ");
+    const rendered = `${answer}\n\nSources:\n- ${evidenceRef}\n\nRead-only answer — no action was performed.`;
+    const out = applyReplyGate("The saved pages should be shown first.", [{
+      tool: "zenod__ask_brain__b45ab678d15c6a8f",
+      input: { question: "what were the open questions?", contextRefs: [evidenceRef] },
+      result: JSON.stringify({
+        content: [{ type: "text", text: rendered }],
+        structuredContent: {
+          type: "answer_content",
+          text: answer,
+          sources: [{ path: evidenceRef, githubUrl: "" }],
+          status: {
+            type: "read_only_status",
+            text: "Read-only answer — no action was performed.",
+          },
+        },
+      }),
+      peerAction: true,
+    }]);
+
+    expect(out.kind).toBe("answer");
+    expect(out.text).toBe(rendered);
+    expect(out.text).toContain("saved pages");
+  });
+
 });
