@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChassisStorage } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it } from "vitest";
-import { PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
+import {
+  defaultPhylaxTurnBindings,
+  PhylaxTenantSettingsStore,
+} from "../src/phylaxTenantSettings.js";
 
 const dirs: string[] = [];
 const MASTER_KEY = "35".repeat(32);
@@ -21,6 +24,120 @@ async function setup() {
 }
 
 describe("PhylaxTenantSettingsStore", () => {
+  it("defaults every turn type to the exact legacy chat_with_ring call shape", async () => {
+    const { store } = await setup();
+
+    expect(store.get("alpha").turnBindings).toEqual({
+      voice_note: {
+        tool: "chat_with_ring",
+        argumentTemplate: {
+          message: "{{message}}",
+          surface: "{{surface}}",
+          conversationKey: "{{conversationKey}}",
+        },
+      },
+      text: {
+        tool: "chat_with_ring",
+        argumentTemplate: {
+          message: "{{message}}",
+          surface: "{{surface}}",
+          conversationKey: "{{conversationKey}}",
+        },
+      },
+      media: {
+        tool: "chat_with_ring",
+        argumentTemplate: {
+          message: "{{message}}",
+          surface: "{{surface}}",
+          conversationKey: "{{conversationKey}}",
+        },
+      },
+    });
+    expect(store.view("alpha").turnBindings).toEqual(defaultPhylaxTurnBindings());
+  });
+
+  it("persists binding patches per tenant and round-trips nested argument templates", async () => {
+    const { dataDir, storage, store } = await setup();
+    store.update("alpha", {
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentTemplate: {
+            content: "{{transcript}}",
+            verbatim: true,
+            hints: ["WhatsApp voice note", { sender: "{{sender}}" }],
+          },
+        },
+      },
+    });
+
+    const restarted = new PhylaxTenantSettingsStore(dataDir, storage);
+    expect(restarted.get("alpha").turnBindings.voice_note).toEqual({
+      tool: "store_memory",
+      argumentTemplate: {
+        content: "{{transcript}}",
+        verbatim: true,
+        hints: ["WhatsApp voice note", { sender: "{{sender}}" }],
+      },
+    });
+    expect(restarted.get("alpha").turnBindings.text).toEqual(defaultPhylaxTurnBindings().text);
+    expect(restarted.get("beta").turnBindings).toEqual(defaultPhylaxTurnBindings());
+    expect(JSON.parse(await readFile(store.path, "utf8"))).toMatchObject({
+      alpha: {
+        tenantId: "alpha",
+        turnBindings: {
+          voice_note: { tool: "store_memory" },
+          text: { tool: "chat_with_ring" },
+          media: { tool: "chat_with_ring" },
+        },
+      },
+    });
+  });
+
+  it("rejects unknown turn types and non-JSON argument templates", async () => {
+    const { store } = await setup();
+    expect(() => store.update("alpha", {
+      turnBindings: {
+        unexpected: {
+          tool: "store_memory",
+          argumentTemplate: {},
+        },
+      } as never,
+    })).toThrow("invalid Phylax turn type: unexpected");
+    expect(() => store.update("alpha", {
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentTemplate: { content: undefined },
+        },
+      } as never,
+    })).toThrow("binding argument template must contain only JSON values");
+  });
+
+  it("backfills missing or corrupt legacy binding rows with no-op defaults", async () => {
+    const { store } = await setup();
+    await writeFile(store.path, JSON.stringify({
+      alpha: {
+        tenantId: "alpha",
+        turnBindings: {
+          voice_note: {
+            tool: "store_memory",
+            argumentTemplate: { content: "{{transcript}}", verbatim: true },
+          },
+          text: { tool: "", argumentTemplate: {} },
+        },
+      },
+    }));
+
+    expect(store.get("alpha").turnBindings).toEqual({
+      ...defaultPhylaxTurnBindings(),
+      voice_note: {
+        tool: "store_memory",
+        argumentTemplate: { content: "{{transcript}}", verbatim: true },
+      },
+    });
+  });
+
   it("verifies only the claimed normalized sender using its one-time inbound keyword", async () => {
     const { store } = await setup();
     const registration = store.registerPhone("alpha", "+34 611 111 111", "number-1", 1_000);

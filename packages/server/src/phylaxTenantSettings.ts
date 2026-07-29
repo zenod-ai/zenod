@@ -11,6 +11,23 @@ const DOWNSTREAM_URL_KEY = "phylax_downstream_url";
 const TRANSCRIPTION_TOKEN_KEY = "phylax_transcription_token";
 const VERIFY_TTL_MS = 30 * 60_000;
 export type PhylaxTranscriptionProvider = "local" | "groq" | "openai" | "openrouter";
+export const PHYLAX_TURN_TYPES = ["voice_note", "text", "media"] as const;
+export type PhylaxTurnType = (typeof PHYLAX_TURN_TYPES)[number];
+export type PhylaxBindingArgumentValue =
+  | string
+  | number
+  | boolean
+  | null
+  | PhylaxBindingArgumentValue[]
+  | { [key: string]: PhylaxBindingArgumentValue };
+
+export interface PhylaxTurnBinding {
+  tool: string;
+  argumentTemplate: Record<string, PhylaxBindingArgumentValue>;
+}
+
+export type PhylaxTurnBindings = Record<PhylaxTurnType, PhylaxTurnBinding>;
+
 const CLOUD_TRANSCRIPTION_PROVIDERS = ["groq", "openai", "openrouter"] as const;
 const VERIFICATION_ANIMALS = [
   "badger",
@@ -55,6 +72,7 @@ export interface PhylaxTenantSettings {
   transcriptionEnabled: boolean;
   transcriptionProvider: PhylaxTranscriptionProvider;
   transcriptionModel: string | null;
+  turnBindings: PhylaxTurnBindings;
   telegramBinding: string | null;
   notificationPrefs: { whatsapp: boolean; telegram: boolean };
   updatedAt: string;
@@ -71,6 +89,113 @@ export interface PhylaxTenantSettingsView extends Omit<
 
 type Store = Record<string, PhylaxTenantSettings>;
 
+function legacyChatBinding(): PhylaxTurnBinding {
+  return {
+    tool: "chat_with_ring",
+    argumentTemplate: {
+      message: "{{message}}",
+      surface: "{{surface}}",
+      conversationKey: "{{conversationKey}}",
+    },
+  };
+}
+
+/** Default is deliberately today's exact downstream call shape (D8). */
+export function defaultPhylaxTurnBindings(): PhylaxTurnBindings {
+  return {
+    voice_note: legacyChatBinding(),
+    text: legacyChatBinding(),
+    media: legacyChatBinding(),
+  };
+}
+
+function cloneArgumentValue(
+  value: unknown,
+  seen: Set<object>,
+  depth: number,
+): PhylaxBindingArgumentValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (depth > 16) throw new Error("binding argument template exceeds maximum depth");
+  if (typeof value !== "object") throw new Error("binding argument template must contain only JSON values");
+  if (seen.has(value)) throw new Error("binding argument template must not be circular");
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => cloneArgumentValue(item, seen, depth + 1));
+    }
+    if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+      throw new Error("binding argument template must contain only plain objects");
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, cloneArgumentValue(item, seen, depth + 1)]),
+    );
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function normalizedTurnBinding(value: unknown): PhylaxTurnBinding {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("turn binding must be an object");
+  }
+  const candidate = value as { tool?: unknown; argumentTemplate?: unknown };
+  if (typeof candidate.tool !== "string" || !candidate.tool.trim()) {
+    throw new Error("turn binding tool is required");
+  }
+  if (candidate.tool.trim().length > 128 || /[\u0000-\u001f\u007f]/.test(candidate.tool)) {
+    throw new Error("turn binding tool is invalid");
+  }
+  if (
+    !candidate.argumentTemplate
+    || typeof candidate.argumentTemplate !== "object"
+    || Array.isArray(candidate.argumentTemplate)
+  ) {
+    throw new Error("turn binding argumentTemplate must be an object");
+  }
+  return {
+    tool: candidate.tool.trim(),
+    argumentTemplate: cloneArgumentValue(
+      candidate.argumentTemplate,
+      new Set(),
+      0,
+    ) as Record<string, PhylaxBindingArgumentValue>,
+  };
+}
+
+function normalizedStoredTurnBindings(value: unknown): PhylaxTurnBindings {
+  const defaults = defaultPhylaxTurnBindings();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return defaults;
+  const stored = value as Record<string, unknown>;
+  for (const turnType of PHYLAX_TURN_TYPES) {
+    if (stored[turnType] === undefined) continue;
+    try {
+      defaults[turnType] = normalizedTurnBinding(stored[turnType]);
+    } catch {
+      // A corrupt row must not strand a tenant; preserve the D8 no-op default.
+    }
+  }
+  return defaults;
+}
+
+function updatedTurnBindings(
+  current: PhylaxTurnBindings,
+  patch: Partial<Record<PhylaxTurnType, PhylaxTurnBinding>>,
+): PhylaxTurnBindings {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+    throw new Error("turnBindings must be an object");
+  }
+  const unknownTurnType = Object.keys(patch).find(
+    (turnType) => !PHYLAX_TURN_TYPES.includes(turnType as PhylaxTurnType),
+  );
+  if (unknownTurnType) throw new Error(`invalid Phylax turn type: ${unknownTurnType}`);
+  const next = normalizedStoredTurnBindings(current);
+  for (const turnType of PHYLAX_TURN_TYPES) {
+    if (patch[turnType] !== undefined) next[turnType] = normalizedTurnBinding(patch[turnType]);
+  }
+  return next;
+}
+
 function defaultSettings(tenantId: string): PhylaxTenantSettings {
   return {
     tenantId,
@@ -86,6 +211,7 @@ function defaultSettings(tenantId: string): PhylaxTenantSettings {
     transcriptionEnabled: true,
     transcriptionProvider: "local",
     transcriptionModel: null,
+    turnBindings: defaultPhylaxTurnBindings(),
     telegramBinding: null,
     notificationPrefs: { whatsapp: true, telegram: false },
     updatedAt: new Date(0).toISOString(),
@@ -125,6 +251,7 @@ export class PhylaxTenantSettingsStore {
       ? {
           ...defaultSettings(tenantId),
           ...stored,
+          turnBindings: normalizedStoredTurnBindings(stored.turnBindings),
           downstreamCredentialStatus: stored.downstreamCredentialStatus ?? "unknown",
           downstreamCredentialCheckedAt: stored.downstreamCredentialCheckedAt ?? null,
         }
@@ -164,6 +291,7 @@ export class PhylaxTenantSettingsStore {
       transcriptionProvider?: PhylaxTenantSettings["transcriptionProvider"];
       transcriptionModel?: string | null;
       transcriptionKey?: string | null;
+      turnBindings?: Partial<Record<PhylaxTurnType, PhylaxTurnBinding>>;
       telegramBinding?: string | null;
       notificationPrefs?: Partial<PhylaxTenantSettings["notificationPrefs"]>;
     },
@@ -195,6 +323,9 @@ export class PhylaxTenantSettingsStore {
       ...(input.transcriptionEnabled !== undefined ? { transcriptionEnabled: input.transcriptionEnabled } : {}),
       ...(input.transcriptionProvider !== undefined ? { transcriptionProvider: input.transcriptionProvider } : {}),
       ...(input.transcriptionModel !== undefined ? { transcriptionModel: input.transcriptionModel?.trim() || null } : {}),
+      ...(input.turnBindings !== undefined
+        ? { turnBindings: updatedTurnBindings(current.turnBindings, input.turnBindings) }
+        : {}),
       notificationPrefs: { ...current.notificationPrefs, ...(input.notificationPrefs ?? {}) },
       updatedAt: new Date().toISOString(),
     };
