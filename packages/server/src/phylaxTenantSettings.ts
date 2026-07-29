@@ -13,17 +13,27 @@ const VERIFY_TTL_MS = 30 * 60_000;
 export type PhylaxTranscriptionProvider = "local" | "groq" | "openai" | "openrouter";
 export const PHYLAX_TURN_TYPES = ["voice_note", "text", "media"] as const;
 export type PhylaxTurnType = (typeof PHYLAX_TURN_TYPES)[number];
-export type PhylaxBindingArgumentValue =
+export type PhylaxVoiceDefault = "capture" | "assistant";
+export type PhylaxBindingConstant =
   | string
   | number
   | boolean
   | null
-  | PhylaxBindingArgumentValue[]
-  | { [key: string]: PhylaxBindingArgumentValue };
+  | PhylaxBindingConstant[]
+  | { [key: string]: PhylaxBindingConstant };
+
+export type PhylaxBindingArgumentSource =
+  | { source: "transcript" }
+  | { source: "sender" }
+  | { source: "chatId" }
+  | { source: "constant"; value: PhylaxBindingConstant }
+  | { source: "message" }
+  | { source: "surface" }
+  | { source: "conversationKey" };
 
 export interface PhylaxTurnBinding {
   tool: string;
-  argumentTemplate: Record<string, PhylaxBindingArgumentValue>;
+  argumentMappings: Record<string, PhylaxBindingArgumentSource>;
 }
 
 export type PhylaxTurnBindings = Record<PhylaxTurnType, PhylaxTurnBinding>;
@@ -72,6 +82,7 @@ export interface PhylaxTenantSettings {
   transcriptionEnabled: boolean;
   transcriptionProvider: PhylaxTranscriptionProvider;
   transcriptionModel: string | null;
+  voiceDefault: PhylaxVoiceDefault;
   turnBindings: PhylaxTurnBindings;
   telegramBinding: string | null;
   notificationPrefs: { whatsapp: boolean; telegram: boolean };
@@ -92,10 +103,10 @@ type Store = Record<string, PhylaxTenantSettings>;
 function legacyChatBinding(): PhylaxTurnBinding {
   return {
     tool: "chat_with_ring",
-    argumentTemplate: {
-      message: "{{message}}",
-      surface: "{{surface}}",
-      conversationKey: "{{conversationKey}}",
+    argumentMappings: {
+      message: { source: "message" },
+      surface: { source: "surface" },
+      conversationKey: { source: "conversationKey" },
     },
   };
 }
@@ -109,57 +120,112 @@ export function defaultPhylaxTurnBindings(): PhylaxTurnBindings {
   };
 }
 
-function cloneArgumentValue(
+function cloneConstant(
   value: unknown,
   seen: Set<object>,
   depth: number,
-): PhylaxBindingArgumentValue {
+): PhylaxBindingConstant {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (depth > 16) throw new Error("binding argument template exceeds maximum depth");
-  if (typeof value !== "object") throw new Error("binding argument template must contain only JSON values");
-  if (seen.has(value)) throw new Error("binding argument template must not be circular");
+  if (depth > 16) throw new Error("binding constant exceeds maximum depth");
+  if (typeof value !== "object") throw new Error("binding constant must contain only JSON values");
+  if (seen.has(value)) throw new Error("binding constant must not be circular");
   seen.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((item) => cloneArgumentValue(item, seen, depth + 1));
+      return value.map((item) => cloneConstant(item, seen, depth + 1));
     }
     if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
-      throw new Error("binding argument template must contain only plain objects");
+      throw new Error("binding constant must contain only plain objects");
     }
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, cloneArgumentValue(item, seen, depth + 1)]),
+      Object.entries(value).map(([key, item]) => [key, cloneConstant(item, seen, depth + 1)]),
     );
   } finally {
     seen.delete(value);
   }
 }
 
+export const PHYLAX_BINDING_ARGUMENT_SOURCES = [
+  "transcript",
+  "sender",
+  "chatId",
+  "constant",
+  "message",
+  "surface",
+  "conversationKey",
+] as const;
+
+function normalizedArgumentSource(value: unknown): PhylaxBindingArgumentSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("binding argument source must be an object");
+  }
+  if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+    throw new Error("binding argument source must be a plain object");
+  }
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.source !== "string"
+    || !PHYLAX_BINDING_ARGUMENT_SOURCES.includes(
+      candidate.source as (typeof PHYLAX_BINDING_ARGUMENT_SOURCES)[number],
+    )
+  ) {
+    throw new Error("invalid binding argument source");
+  }
+  const expectedKeys = candidate.source === "constant" ? ["source", "value"] : ["source"];
+  const unknownKey = Object.keys(candidate).find((key) => !expectedKeys.includes(key));
+  if (unknownKey || Object.keys(candidate).length !== expectedKeys.length) {
+    throw new Error(`invalid ${candidate.source} binding argument source`);
+  }
+  if (candidate.source === "constant") {
+    return {
+      source: "constant",
+      value: cloneConstant(candidate.value, new Set(), 0),
+    };
+  }
+  return { source: candidate.source } as PhylaxBindingArgumentSource;
+}
+
+function normalizedArgumentMappings(
+  value: unknown,
+): Record<string, PhylaxBindingArgumentSource> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("turn binding argumentMappings must be an object");
+  }
+  if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+    throw new Error("turn binding argumentMappings must be a plain object");
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([field, source]) => {
+      if (!field.trim() || field !== field.trim() || field.length > 128 || /[\u0000-\u001f\u007f]/.test(field)) {
+        throw new Error("binding target field is invalid");
+      }
+      return [field, normalizedArgumentSource(source)];
+    }),
+  );
+}
+
 function normalizedTurnBinding(value: unknown): PhylaxTurnBinding {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("turn binding must be an object");
   }
-  const candidate = value as { tool?: unknown; argumentTemplate?: unknown };
+  if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+    throw new Error("turn binding must be a plain object");
+  }
+  const candidate = value as { tool?: unknown; argumentMappings?: unknown };
+  const unknownKey = Object.keys(value).find(
+    (key) => key !== "tool" && key !== "argumentMappings",
+  );
+  if (unknownKey) throw new Error(`unsupported turn binding field: ${unknownKey}`);
   if (typeof candidate.tool !== "string" || !candidate.tool.trim()) {
     throw new Error("turn binding tool is required");
   }
   if (candidate.tool.trim().length > 128 || /[\u0000-\u001f\u007f]/.test(candidate.tool)) {
     throw new Error("turn binding tool is invalid");
   }
-  if (
-    !candidate.argumentTemplate
-    || typeof candidate.argumentTemplate !== "object"
-    || Array.isArray(candidate.argumentTemplate)
-  ) {
-    throw new Error("turn binding argumentTemplate must be an object");
-  }
   return {
     tool: candidate.tool.trim(),
-    argumentTemplate: cloneArgumentValue(
-      candidate.argumentTemplate,
-      new Set(),
-      0,
-    ) as Record<string, PhylaxBindingArgumentValue>,
+    argumentMappings: normalizedArgumentMappings(candidate.argumentMappings),
   };
 }
 
@@ -211,6 +277,7 @@ function defaultSettings(tenantId: string): PhylaxTenantSettings {
     transcriptionEnabled: true,
     transcriptionProvider: "local",
     transcriptionModel: null,
+    voiceDefault: "capture",
     turnBindings: defaultPhylaxTurnBindings(),
     telegramBinding: null,
     notificationPrefs: { whatsapp: true, telegram: false },
@@ -251,6 +318,7 @@ export class PhylaxTenantSettingsStore {
       ? {
           ...defaultSettings(tenantId),
           ...stored,
+          voiceDefault: stored.voiceDefault === "assistant" ? "assistant" : "capture",
           turnBindings: normalizedStoredTurnBindings(stored.turnBindings),
           downstreamCredentialStatus: stored.downstreamCredentialStatus ?? "unknown",
           downstreamCredentialCheckedAt: stored.downstreamCredentialCheckedAt ?? null,
@@ -291,6 +359,7 @@ export class PhylaxTenantSettingsStore {
       transcriptionProvider?: PhylaxTenantSettings["transcriptionProvider"];
       transcriptionModel?: string | null;
       transcriptionKey?: string | null;
+      voiceDefault?: PhylaxVoiceDefault;
       turnBindings?: Partial<Record<PhylaxTurnType, PhylaxTurnBinding>>;
       telegramBinding?: string | null;
       notificationPrefs?: Partial<PhylaxTenantSettings["notificationPrefs"]>;
@@ -302,6 +371,9 @@ export class PhylaxTenantSettingsStore {
       input.transcriptionProvider !== undefined &&
       !["local", "groq", "openai", "openrouter"].includes(input.transcriptionProvider)
     ) throw new Error("invalid transcription provider");
+    if (input.voiceDefault !== undefined && !["capture", "assistant"].includes(input.voiceDefault)) {
+      throw new Error("invalid voiceDefault");
+    }
     const nextDownstreamUrl = input.downstreamUrl !== undefined
       ? input.downstreamUrl?.trim() ? normalizedDownstreamUrl(input.downstreamUrl) : null
       : currentDownstreamUrl;
@@ -323,6 +395,7 @@ export class PhylaxTenantSettingsStore {
       ...(input.transcriptionEnabled !== undefined ? { transcriptionEnabled: input.transcriptionEnabled } : {}),
       ...(input.transcriptionProvider !== undefined ? { transcriptionProvider: input.transcriptionProvider } : {}),
       ...(input.transcriptionModel !== undefined ? { transcriptionModel: input.transcriptionModel?.trim() || null } : {}),
+      ...(input.voiceDefault !== undefined ? { voiceDefault: input.voiceDefault } : {}),
       ...(input.turnBindings !== undefined
         ? { turnBindings: updatedTurnBindings(current.turnBindings, input.turnBindings) }
         : {}),

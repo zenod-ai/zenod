@@ -24,67 +24,87 @@ async function setup() {
 }
 
 describe("PhylaxTenantSettingsStore", () => {
-  it("defaults every turn type to the exact legacy chat_with_ring call shape", async () => {
+  it("defaults every turn type and standalone voice routing without changing the legacy call shape", async () => {
     const { store } = await setup();
 
-    expect(store.get("alpha").turnBindings).toEqual({
-      voice_note: {
-        tool: "chat_with_ring",
-        argumentTemplate: {
-          message: "{{message}}",
-          surface: "{{surface}}",
-          conversationKey: "{{conversationKey}}",
+    expect(store.get("alpha")).toMatchObject({
+      voiceDefault: "capture",
+      turnBindings: {
+        voice_note: {
+          tool: "chat_with_ring",
+          argumentMappings: {
+            message: { source: "message" },
+            surface: { source: "surface" },
+            conversationKey: { source: "conversationKey" },
+          },
         },
-      },
-      text: {
-        tool: "chat_with_ring",
-        argumentTemplate: {
-          message: "{{message}}",
-          surface: "{{surface}}",
-          conversationKey: "{{conversationKey}}",
+        text: {
+          tool: "chat_with_ring",
+          argumentMappings: {
+            message: { source: "message" },
+            surface: { source: "surface" },
+            conversationKey: { source: "conversationKey" },
+          },
         },
-      },
-      media: {
-        tool: "chat_with_ring",
-        argumentTemplate: {
-          message: "{{message}}",
-          surface: "{{surface}}",
-          conversationKey: "{{conversationKey}}",
+        media: {
+          tool: "chat_with_ring",
+          argumentMappings: {
+            message: { source: "message" },
+            surface: { source: "surface" },
+            conversationKey: { source: "conversationKey" },
+          },
         },
       },
     });
     expect(store.view("alpha").turnBindings).toEqual(defaultPhylaxTurnBindings());
+    expect(store.view("alpha").voiceDefault).toBe("capture");
   });
 
-  it("persists binding patches per tenant and round-trips nested argument templates", async () => {
+  it("persists structured binding patches and voice defaults per tenant", async () => {
     const { dataDir, storage, store } = await setup();
     store.update("alpha", {
+      voiceDefault: "assistant",
       turnBindings: {
         voice_note: {
           tool: "store_memory",
-          argumentTemplate: {
-            content: "{{transcript}}",
-            verbatim: true,
-            hints: ["WhatsApp voice note", { sender: "{{sender}}" }],
+          argumentMappings: {
+            content: { source: "transcript" },
+            sender: { source: "sender" },
+            chatId: { source: "chatId" },
+            verbatim: { source: "constant", value: true },
+            hints: {
+              source: "constant",
+              value: ["WhatsApp voice note", { origin: "phylax" }],
+            },
           },
         },
       },
     });
 
     const restarted = new PhylaxTenantSettingsStore(dataDir, storage);
+    expect(restarted.get("alpha").voiceDefault).toBe("assistant");
     expect(restarted.get("alpha").turnBindings.voice_note).toEqual({
       tool: "store_memory",
-      argumentTemplate: {
-        content: "{{transcript}}",
-        verbatim: true,
-        hints: ["WhatsApp voice note", { sender: "{{sender}}" }],
+      argumentMappings: {
+        content: { source: "transcript" },
+        sender: { source: "sender" },
+        chatId: { source: "chatId" },
+        verbatim: { source: "constant", value: true },
+        hints: {
+          source: "constant",
+          value: ["WhatsApp voice note", { origin: "phylax" }],
+        },
       },
     });
     expect(restarted.get("alpha").turnBindings.text).toEqual(defaultPhylaxTurnBindings().text);
-    expect(restarted.get("beta").turnBindings).toEqual(defaultPhylaxTurnBindings());
+    expect(restarted.get("beta")).toMatchObject({
+      voiceDefault: "capture",
+      turnBindings: defaultPhylaxTurnBindings(),
+    });
     expect(JSON.parse(await readFile(store.path, "utf8"))).toMatchObject({
       alpha: {
         tenantId: "alpha",
+        voiceDefault: "assistant",
         turnBindings: {
           voice_note: { tool: "store_memory" },
           text: { tool: "chat_with_ring" },
@@ -94,13 +114,13 @@ describe("PhylaxTenantSettingsStore", () => {
     });
   });
 
-  it("rejects unknown turn types and non-JSON argument templates", async () => {
+  it("rejects unknown turn types, free-form templates, and invalid mapping sources", async () => {
     const { store } = await setup();
     expect(() => store.update("alpha", {
       turnBindings: {
         unexpected: {
           tool: "store_memory",
-          argumentTemplate: {},
+          argumentMappings: {},
         },
       } as never,
     })).toThrow("invalid Phylax turn type: unexpected");
@@ -108,32 +128,62 @@ describe("PhylaxTenantSettingsStore", () => {
       turnBindings: {
         voice_note: {
           tool: "store_memory",
-          argumentTemplate: { content: undefined },
+          argumentMappings: { content: "{{transcript}}" },
         },
       } as never,
-    })).toThrow("binding argument template must contain only JSON values");
+    })).toThrow("binding argument source must be an object");
+    expect(() => store.update("alpha", {
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "invented" } },
+        },
+      } as never,
+    })).toThrow("invalid binding argument source");
+    expect(() => store.update("alpha", {
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: {
+            content: { source: "constant", value: undefined },
+          },
+        },
+      } as never,
+    })).toThrow("binding constant must contain only JSON values");
+    expect(() => store.update("alpha", { voiceDefault: "sometimes" as never }))
+      .toThrow("invalid voiceDefault");
   });
 
-  it("backfills missing or corrupt legacy binding rows with no-op defaults", async () => {
+  it("backfills legacy voice routing and missing or corrupt binding rows", async () => {
     const { store } = await setup();
     await writeFile(store.path, JSON.stringify({
       alpha: {
         tenantId: "alpha",
+        voiceDefault: "invalid-legacy-value",
         turnBindings: {
           voice_note: {
             tool: "store_memory",
-            argumentTemplate: { content: "{{transcript}}", verbatim: true },
+            argumentMappings: {
+              content: { source: "transcript" },
+              verbatim: { source: "constant", value: true },
+            },
           },
-          text: { tool: "", argumentTemplate: {} },
+          text: { tool: "", argumentMappings: {} },
         },
       },
     }));
 
-    expect(store.get("alpha").turnBindings).toEqual({
-      ...defaultPhylaxTurnBindings(),
-      voice_note: {
-        tool: "store_memory",
-        argumentTemplate: { content: "{{transcript}}", verbatim: true },
+    expect(store.get("alpha")).toMatchObject({
+      voiceDefault: "capture",
+      turnBindings: {
+        ...defaultPhylaxTurnBindings(),
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: {
+            content: { source: "transcript" },
+            verbatim: { source: "constant", value: true },
+          },
+        },
       },
     });
   });
