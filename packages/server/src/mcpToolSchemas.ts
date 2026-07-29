@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EVIDENCE_CONTEXT_REF_PATTERN } from "zenod";
 
 /**
  * Shared input schemas for the tools the Console's mesh gateway re-publishes.
@@ -18,6 +19,12 @@ export const GET_MEMORY_SHAPE = {
 
 export const ASK_BRAIN_SHAPE = {
   question: z.string().min(1).describe("The question, in natural language"),
+  contextRefs: z
+    .array(z.string().regex(new RegExp(EVIDENCE_CONTEXT_REF_PATTERN)))
+    .min(1)
+    .max(10)
+    .optional()
+    .describe("Exact tenant-local evidence refs to ground first, e.g. Log/2026-06-11.md#^e-7f3a2c"),
 };
 
 export const STORE_MEMORY_SHAPE = {
