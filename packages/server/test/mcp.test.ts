@@ -129,6 +129,17 @@ describe("MCP endpoint", () => {
   }
 
   /** Enqueue a job via an async tool, then poll get_task_result until terminal. */
+  async function pollTaskTerminal(client: Client, ticket_id: string): Promise<Record<string, unknown>> {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const polled = await client.callTool({ name: "get_task_result", arguments: { ticket_id } });
+      const job = polled.structuredContent as { status: string; result: Record<string, unknown> | null };
+      if (job.status === "done") return job as unknown as Record<string, unknown>;
+      if (job.status === "error" || job.status === "interrupted") throw new Error(`job ${ticket_id} ${job.status}`);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error(`job ${ticket_id} did not finish`);
+  }
+
   async function runAsyncToolTerminal(
     client: Client,
     name: string,
@@ -147,14 +158,7 @@ describe("MCP endpoint", () => {
     expect(status).toBe("queued");
     expect(state).toBe("accepted");
     expect(poll).toEqual({ name: "get_task_result", inputField: "ticket_id" });
-    for (let attempt = 0; attempt < 50; attempt++) {
-      const polled = await client.callTool({ name: "get_task_result", arguments: { ticket_id } });
-      const job = polled.structuredContent as { status: string; result: Record<string, unknown> | null };
-      if (job.status === "done") return job;
-      if (job.status === "error" || job.status === "interrupted") throw new Error(`job ${jobId} ${job.status}`);
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    throw new Error(`job ${jobId} did not finish`);
+    return pollTaskTerminal(client, ticket_id);
   }
 
   async function runAsyncTool(
@@ -478,6 +482,52 @@ describe("MCP endpoint", () => {
     })) as { question?: string };
     expect(unsure.question).toBeTruthy();
 
+    await client.close();
+  });
+
+  it("store_memory replays the original job and receipt for an idempotency key", async () => {
+    const client = await connect();
+    const storeSpy = vi.spyOn(fakeEngine, "store");
+    storeSpy.mockClear();
+
+    const first = await client.callTool({
+      name: "store_memory",
+      arguments: {
+        content: "first accepted payload",
+        idempotencyKey: "whatsapp:voice:wamid.duplicate",
+      },
+    });
+    const replay = await client.callTool({
+      name: "store_memory",
+      arguments: {
+        content: "retry payload must not create a second memory",
+        idempotencyKey: "whatsapp:voice:wamid.duplicate",
+      },
+    });
+    const firstJobId = (first.structuredContent as { jobId: string }).jobId;
+    const replayJobId = (replay.structuredContent as { jobId: string }).jobId;
+
+    expect(replayJobId).toBe(firstJobId);
+    const terminal = await pollTaskTerminal(client, firstJobId);
+    expect(terminal.result).toMatchObject({
+      evidenceRef: "Log/2026-06-11.md#^e-abc123",
+      commitSha: "0".repeat(40),
+    });
+    const completedReplay = await client.callTool({
+      name: "store_memory",
+      arguments: {
+        content: "another retry after completion",
+        idempotencyKey: "whatsapp:voice:wamid.duplicate",
+      },
+    });
+    expect(completedReplay.structuredContent).toMatchObject({
+      jobId: firstJobId,
+      status: "done",
+    });
+    expect(storeSpy).toHaveBeenCalledTimes(1);
+    expect(storeSpy).toHaveBeenCalledWith(expect.objectContaining({ content: "first accepted payload" }));
+
+    storeSpy.mockRestore();
     await client.close();
   });
 

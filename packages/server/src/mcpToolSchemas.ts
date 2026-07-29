@@ -24,6 +24,13 @@ export const STORE_MEMORY_SHAPE = {
   content: z.string().min(1).describe("The memory to store, as the user expressed it"),
   hints: z.array(z.string()).optional().describe("Optional filing hints, e.g. 'belongs to the housing project'"),
   verbatim: z.boolean().optional().describe("Force verbatim evidence recording (exact words preserved)"),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .optional()
+    .describe("Optional caller-stable key. Retries return the original durable job and receipt."),
 };
 
 export const INGEST_MEMORY_SHAPE = {
