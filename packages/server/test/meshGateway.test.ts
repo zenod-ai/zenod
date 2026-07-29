@@ -114,7 +114,13 @@ describe("Console mesh gateway contract", () => {
     }
   }
 
-  async function listGatewayTools(): Promise<Array<{ name: string; outputSchema?: unknown }>> {
+  async function listGatewayTools(): Promise<
+    Array<{
+      name: string;
+      inputSchema?: { properties?: Record<string, unknown> };
+      outputSchema?: unknown;
+    }>
+  > {
     const client = await connectGateway();
     try {
       const { tools } = await client.listTools();
@@ -178,6 +184,13 @@ describe("Console mesh gateway contract", () => {
       "send_email",
       "store_memory",
     ]);
+  });
+
+  it("advertises the canonical store_memory idempotency contract", async () => {
+    const tools = await listGatewayTools();
+    const storeMemory = tools.find((tool) => tool.name === "store_memory");
+
+    expect(storeMemory?.inputSchema?.properties).toHaveProperty("idempotencyKey");
   });
 
   it("serves recent conversation transcripts from the Console channel audit store", async () => {

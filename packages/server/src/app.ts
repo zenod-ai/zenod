@@ -2904,7 +2904,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           () => runtime.cleanSlate(),
           (input) => chatTestAudit.recordChatTestRun(input),
           {
-            enqueue: (kind, input) => runtime.taskJobQueue.enqueue(kind, input),
+            enqueue: (kind, input, idempotencyKey) => runtime.taskJobQueue.enqueue(kind, input, idempotencyKey),
             get: (id) => runtime.taskJobQueue.get(id),
           },
           (input) => editGithubIssue(settings, input),

@@ -35,6 +35,33 @@ const settings = {
     openai: false,
     openrouter: false,
   },
+  voiceDefault: "capture" as const,
+  turnBindings: {
+    voice_note: {
+      tool: "chat_with_ring",
+      argumentMappings: {
+        message: { source: "message" as const },
+        surface: { source: "surface" as const },
+        conversationKey: { source: "conversationKey" as const },
+      },
+    },
+    text: {
+      tool: "chat_with_ring",
+      argumentMappings: {
+        message: { source: "message" as const },
+        surface: { source: "surface" as const },
+        conversationKey: { source: "conversationKey" as const },
+      },
+    },
+    media: {
+      tool: "chat_with_ring",
+      argumentMappings: {
+        message: { source: "message" as const },
+        surface: { source: "surface" as const },
+        conversationKey: { source: "conversationKey" as const },
+      },
+    },
+  },
   telegramBinding: null,
   notificationPrefs: { whatsapp: true, telegram: false },
 }
@@ -67,10 +94,59 @@ const options = {
   openrouterCatalog: { cached: false, fallback: false },
 }
 
-function mockApi(overrides: Partial<typeof settings> = {}) {
+type DiscoveredToolFixture = {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+  annotations?: Record<string, unknown>
+}
+
+const tools: DiscoveredToolFixture[] = [
+  {
+    name: "chat_with_ring",
+    description: "Legacy assistant conversation",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        surface: { type: "string", enum: ["mcp", "whatsapp"] },
+        conversationKey: { type: "string" },
+      },
+      required: ["message", "surface", "conversationKey"],
+    },
+  },
+  {
+    name: "store_memory",
+    description: "Store one durable memory",
+    inputSchema: {
+      type: "object",
+      properties: {
+        content: { type: "string" },
+        source: { type: "string" },
+      },
+      required: ["content"],
+    },
+    annotations: { readOnlyHint: false },
+  },
+]
+
+function mockApi(
+  overrides: Partial<typeof settings> = {},
+  catalogs: DiscoveredToolFixture[][] = [tools]
+) {
   const current = { ...settings, ...overrides }
+  let discoveryCall = 0
   mocks.api.mockImplementation(
     (path: string, request?: { method?: string; body?: unknown }) => {
+      if (
+        path === "/api/phylax/downstream/tools" &&
+        request?.method === "POST"
+      ) {
+        const catalog =
+          catalogs[Math.min(discoveryCall, catalogs.length - 1)] ?? []
+        discoveryCall += 1
+        return Promise.resolve({ tools: catalog })
+      }
       if (path === "/api/phylax/settings" && request?.method === "PUT") {
         return Promise.resolve({
           settings: { ...current, ...(request.body as object) },
@@ -172,6 +248,10 @@ describe("Phylax tenant transcription settings", () => {
     fireEvent.change(screen.getByLabelText("OpenRouter transcription model"), {
       target: { value: "openai/gpt-4o-mini-transcribe" },
     })
+    fireEvent.click(screen.getByRole("button", { name: "Discover tools" }))
+    await screen.findByText(
+      "2 authenticated tools discovered. Phylax checks tools/list again immediately before saving."
+    )
     fireEvent.click(screen.getByRole("button", { name: "Test provider" }))
     await screen.findByText("openrouter accepted the tenant-scoped key")
     const checkCall = mocks.api.mock.calls.find(
@@ -195,6 +275,232 @@ describe("Phylax tenant transcription settings", () => {
         transcriptionKey: "sk-or-new",
       })
     })
+  })
+
+  it("uses authenticated discovery for exact tool choices and structured field mappings", async () => {
+    mockApi()
+    render(<PhylaxTenantSettings />)
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discover tools" })
+    )
+    expect(
+      await screen.findByText(
+        "2 authenticated tools discovered. Phylax checks tools/list again immediately before saving."
+      )
+    ).not.toBeNull()
+    const voiceTool = screen.getByLabelText("voice note → MCP tool")
+    expect(screen.getAllByRole("option", { name: "store_memory" }).length).toBe(
+      3
+    )
+    fireEvent.change(voiceTool, { target: { value: "store_memory" } })
+    expect(screen.getByLabelText("voice_note content source")).not.toBeNull()
+    expect(screen.getByLabelText("voice_note source source")).not.toBeNull()
+    const discoveryCalls = mocks.api.mock.calls.filter(
+      ([path]) => path === "/api/phylax/downstream/tools"
+    )
+    expect(discoveryCalls).toEqual([
+      ["/api/phylax/downstream/tools", { method: "POST" }],
+    ])
+    expect(JSON.stringify(discoveryCalls)).not.toContain("token")
+  })
+
+  it("persists assistant voice mode and mappings only after a fresh matching discovery", async () => {
+    mockApi()
+    render(<PhylaxTenantSettings />)
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discover tools" })
+    )
+    await screen.findByText(/2 authenticated tools discovered/)
+    fireEvent.change(screen.getByLabelText("Standalone voice-note default"), {
+      target: { value: "assistant" },
+    })
+    fireEvent.change(screen.getByLabelText("voice note → MCP tool"), {
+      target: { value: "store_memory" },
+    })
+    fireEvent.change(screen.getByLabelText("voice_note content source"), {
+      target: { value: "transcript" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }))
+
+    await waitFor(() => {
+      const discoveryCalls = mocks.api.mock.calls.filter(
+        ([path]) => path === "/api/phylax/downstream/tools"
+      )
+      expect(discoveryCalls).toHaveLength(2)
+      const saveCall = mocks.api.mock.calls.find(
+        ([path, request]) =>
+          path === "/api/phylax/settings" && request?.method === "PUT"
+      )
+      expect(saveCall?.[1]?.body).toMatchObject({
+        voiceDefault: "assistant",
+        turnBindings: {
+          voice_note: {
+            tool: "store_memory",
+            argumentMappings: {
+              content: { source: "transcript" },
+            },
+          },
+        },
+      })
+    })
+  })
+
+  it("rejects schema drift before PUT and replaces the visible catalog", async () => {
+    const changedTools = [
+      tools[0],
+      {
+        ...tools[1],
+        inputSchema: {
+          type: "object",
+          properties: { body: { type: "string" } },
+          required: ["body"],
+        },
+      },
+    ]
+    mockApi({}, [tools, changedTools])
+    render(<PhylaxTenantSettings />)
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discover tools" })
+    )
+    await screen.findByText(/2 authenticated tools discovered/)
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }))
+
+    expect(
+      await screen.findByText(
+        "The downstream tool schema changed. Review every binding, then save again."
+      )
+    ).not.toBeNull()
+    expect(
+      mocks.api.mock.calls.some(
+        ([path, request]) =>
+          path === "/api/phylax/settings" && request?.method === "PUT"
+      )
+    ).toBe(false)
+  })
+
+  it("rejects malformed constant JSON before PUT", async () => {
+    mockApi()
+    render(<PhylaxTenantSettings />)
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discover tools" })
+    )
+    await screen.findByText(/2 authenticated tools discovered/)
+    fireEvent.change(screen.getByLabelText("voice note → MCP tool"), {
+      target: { value: "store_memory" },
+    })
+    fireEvent.change(screen.getByLabelText("voice_note content source"), {
+      target: { value: "constant" },
+    })
+    fireEvent.change(
+      screen.getByLabelText("voice_note content constant JSON"),
+      { target: { value: "{" } }
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }))
+
+    await waitFor(() => {
+      expect(
+        mocks.api.mock.calls.filter(
+          ([path]) => path === "/api/phylax/downstream/tools"
+        )
+      ).toHaveLength(2)
+    })
+    expect(
+      mocks.api.mock.calls.some(
+        ([path, request]) =>
+          path === "/api/phylax/settings" && request?.method === "PUT"
+      )
+    ).toBe(false)
+  })
+
+  it("rejects a materialized constant whose type does not match the live field schema", async () => {
+    mockApi()
+    render(<PhylaxTenantSettings />)
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discover tools" })
+    )
+    await screen.findByText(/2 authenticated tools discovered/)
+    fireEvent.change(screen.getByLabelText("voice note → MCP tool"), {
+      target: { value: "store_memory" },
+    })
+    fireEvent.change(screen.getByLabelText("voice_note content source"), {
+      target: { value: "constant" },
+    })
+    fireEvent.change(
+      screen.getByLabelText("voice_note content constant JSON"),
+      { target: { value: "null" } }
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }))
+
+    await waitFor(() => {
+      expect(
+        mocks.api.mock.calls.filter(
+          ([path]) => path === "/api/phylax/downstream/tools"
+        )
+      ).toHaveLength(2)
+    })
+    expect(
+      mocks.api.mock.calls.some(
+        ([path, request]) =>
+          path === "/api/phylax/settings" && request?.method === "PUT"
+      )
+    ).toBe(false)
+  })
+
+  it("rejects a constant absent from the live field enum", async () => {
+    const enumTools: DiscoveredToolFixture[] = [
+      tools[0],
+      {
+        ...tools[1],
+        inputSchema: {
+          type: "object",
+          properties: {
+            content: { type: "string" },
+            mode: { type: "string", enum: ["append", "replace"] },
+          },
+          required: ["content", "mode"],
+        },
+      },
+    ]
+    mockApi({}, [enumTools])
+    render(<PhylaxTenantSettings />)
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discover tools" })
+    )
+    await screen.findByText(/2 authenticated tools discovered/)
+    fireEvent.change(screen.getByLabelText("voice note → MCP tool"), {
+      target: { value: "store_memory" },
+    })
+    fireEvent.change(screen.getByLabelText("voice_note content source"), {
+      target: { value: "transcript" },
+    })
+    fireEvent.change(screen.getByLabelText("voice_note mode source"), {
+      target: { value: "constant" },
+    })
+    fireEvent.change(
+      screen.getByLabelText("voice_note mode constant JSON"),
+      { target: { value: '"upsert"' } }
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }))
+
+    await waitFor(() => {
+      expect(
+        mocks.api.mock.calls.filter(
+          ([path]) => path === "/api/phylax/downstream/tools"
+        )
+      ).toHaveLength(2)
+    })
+    expect(
+      mocks.api.mock.calls.some(
+        ([path, request]) =>
+          path === "/api/phylax/settings" && request?.method === "PUT"
+      )
+    ).toBe(false)
   })
 
   it("does not reuse a saved OpenRouter key after switching to Groq", async () => {
