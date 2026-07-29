@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
+import { isKnownTool, toolKind } from "../src/toolKinds.js";
 import type { AnswerInput, AnswerResult, BrainLlm, PeerTools, VaultReadTools, VaultTaskTools } from "../src/llm/types.js";
 
 /**
@@ -15,15 +16,21 @@ class ScriptedLlm {
   constructor(
     private readonly peerCall: { tool: string; input: Record<string, unknown>; result: string } | null,
     private readonly draftedText: string,
+    private readonly streamedChunks: string[] = [],
   ) {}
 
   async answer(input: AnswerInput, _tools: VaultReadTools, _taskTools?: VaultTaskTools, _driveTools?: unknown, _peerTools?: PeerTools): Promise<AnswerResult> {
     if (this.peerCall) {
+      const mutating =
+        _peerTools?.[this.peerCall.tool]?.verifiedMutationReceipt === true ||
+        _peerTools?.[this.peerCall.tool]?.annotations?.readOnlyHint === false ||
+        (isKnownTool(this.peerCall.tool) && toolKind(this.peerCall.tool) === "mutate");
       input.onPeerAction?.(this.peerCall.tool, this.peerCall.input, this.peerCall.result, {
         peerAction: _peerTools?.[this.peerCall.tool]?.connectedMcp,
-        verifiedMutationReceipt: _peerTools?.[this.peerCall.tool]?.verifiedMutationReceipt,
+        ...(mutating ? { mutationAttempt: true } : {}),
       });
     }
+    for (const chunk of this.streamedChunks) input.onTextDelta?.(chunk);
     return { text: this.draftedText, readPaths: [] };
   }
 }
@@ -104,6 +111,23 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     expect(reply.text).not.toContain("post_tweet");
     // Still logged: the model tried to narrate its own line instead of relaying verbatim.
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("never emits streamed model mutation prose before the final receipt gate", async () => {
+    const llm = new ScriptedLlm(
+      { tool: "post_tweet", input: { text: "hello world" }, result: "Posted to X. Live URL: https://x.com/i/web/status/42" },
+      "Saved and posted: https://x.com/i/web/status/fabricated",
+      ["Saved and posted: ", "https://x.com/i/web/status/fabricated"],
+    );
+    const engine = vaultlessEngine(llm as unknown as BrainLlm);
+    const delivered: string[] = [];
+
+    const reply = await engine.chat("send it", "web", (delta) => delivered.push(delta));
+
+    expect(reply.text).toBe("Done — the change was verified.\n\nEvidence:\n- Evidence: <https://x.com/i/web/status/42>");
+    expect(delivered).toEqual([reply.text]);
+    expect(delivered.join("")).not.toContain("fabricated");
+    expect(delivered.join("")).not.toContain("Saved and posted");
   });
 
   it("a non-action turn (no side-effect tool ran) is left untouched — the gate never fires", async () => {

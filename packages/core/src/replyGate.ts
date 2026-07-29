@@ -1,6 +1,12 @@
-import { normalizedToolName, NOTHING_PENDING_TO_APPROVE_TEXT } from "./taskingPolicy.js";
-import { hasMutationSuccessClaim, validateMutationReceipt } from "./mutationReceipt.js";
+import { NOTHING_PENDING_TO_APPROVE_TEXT } from "./taskingPolicy.js";
+import {
+  hasMutationSuccessClaim,
+  renderVerifiedMutationReceipt,
+  validateMutationReceipt,
+  type MutationReceiptEvidence,
+} from "./mutationReceipt.js";
 import { isApprovalRequiredResult } from "./approvalTokens.js";
+import { toolKind } from "./toolKinds.js";
 import type { TaskingAction } from "./types.js";
 
 /**
@@ -19,57 +25,20 @@ import type { TaskingAction } from "./types.js";
  * The fix is a hard interception at the reply boundary, not another layer of persona
  * guidance: detect — from the tools that ACTUALLY ran this turn, never from the model's
  * prose — whether this is an action turn (it invoked a side-effect tool, or resolved a
- * standing draft approval). On an action turn the delivered text is EXCLUSIVELY the
- * concatenation of those tools' own receipt strings (each already a pure function of a
- * verified result object — see outboundReceipt.ts's renderOutboundReceipt /
- * renderApproveAffordance / renderNothingPendingToApprove). The model's free text for
- * that turn never reaches the user, whatever it says — "Posting now", a fabricated URL,
- * or nothing at all.
+ * standing draft approval). On an action turn the gate selects exactly one outcome and
+ * renders it from same-turn evidence: one coalesced verified receipt, one held draft
+ * with its approval question, or one honest failure. The model's free text for that
+ * turn never reaches the user, whatever it says — "Posting now", a fabricated URL, or
+ * nothing at all.
  */
 
 /**
- * Built-in side-effect tools whose result text is ALREADY a receipt — a pure function of a
- * verified result object, never LLM prose (see outboundReceipt.ts's renderOutboundReceipt
- * / renderApproveAffordance / renderNothingPendingToApprove). Matched against the tool
- * name after normalizedToolName() so "post_tweet", "postTweet", and "POST_TWEET" all
- * match the same entry.
- *
- * Scope note: backlog/issue-write and execution-dispatch tools (createIssue,
- * queueExecution, console_run_ephemeral_task, etc.) are deliberately NOT in this hard
- * gate. They already go through reconcileTaskingReply (taskingPolicy.ts), which is
- * itself a deterministic, action-grounded renderer — it derives markdown receipts and
- * ⚠️ Correction banners straight from the same verified tool results, and every one of
- * its behaviors is covered by the existing (green) test suite. The demonstrated,
- * unfixed gap (iteration-5 audit: R1 "Approved. Posting now" dangles, R2 a "Posted"
- * claim with zero tool evidence) is specifically outbound sends and the approve verb —
- * NEITHER of which had any grounding mechanism at all before this change. Widening the
- * hard gate to backlog/execution tools too would just re-implement reconcileTaskingReply
- * under a new name; folding those categories into this same hard-discard gate is future
- * work, not this fix. Mutating wallet peer tools join the gate through the explicit
- * TaskingAction.verifiedMutationReceipt bit supplied by their runtime contract; they are
- * intentionally not added to this name registry.
+ * Compatibility query for callers/tests that have not yet attached action metadata.
+ * This delegates to the repository's exhaustive structural tool-kind registry; the
+ * reply gate owns no narrower name list and unknown tools fail safe as mutations.
  */
-const ACTION_TOOL_NAMES = new Set(
-  [
-    // Outbound sends + the standing-draft approval verb (a bare "approve"/"yes" IS a
-    // write verb — I4-R1/I5-1).
-    "post_tweet",
-    "post_reddit",
-    "send_email",
-    "approve_send",
-    // A1 / C-22 (2026-07-04): ask_outbound routes into Callistheness's OWN loop, which
-    // can post a real tweet. Its result is already Callistheness's verified reply (his
-    // reply-gate ran inside) — a send receipt if he sent, a draft+affordance if he
-    // drafted. Gating it here delivers THAT verbatim, so the Console LLM can never
-    // re-narrate a real send as "Draft ready (not posted)" (the unauthorized-tweet +
-    // fabricated-"not posted" bug: tweet …186792568668630 went out on a draft-only ask).
-    "ask_outbound",
-  ].map(normalizedToolName),
-);
-
-/** True for a tool whose result text IS a verified receipt — the reply gate governs it. */
 export function isActionTool(tool: string): boolean {
-  return ACTION_TOOL_NAMES.has(normalizedToolName(tool));
+  return toolKind(tool) === "mutate";
 }
 
 export interface ReplyGateInterceptedEvent {
@@ -84,6 +53,8 @@ export interface ReplyGateInterceptedEvent {
 export interface ReplyGateOutcome {
   /** True when this turn invoked at least one side-effect tool — the gate applied. */
   isActionTurn: boolean;
+  /** The one user-visible outcome selected for this turn. */
+  kind: "answer" | "clarification" | "held_draft" | "verified_receipt" | "failure";
   /** The text that must reach the user this turn. */
   text: string;
   /** True when the LLM's drafted text differed from the renderer output and was replaced. */
@@ -91,9 +62,9 @@ export interface ReplyGateOutcome {
 }
 
 /**
- * The ONLY reply a gated action turn may deliver: the concatenation of the receipt text
- * each built-in action or verified wallet mutation returned, in call order. Never the
- * model's own prose.
+ * A gated action turn delivers exactly one host-selected outcome. Verified evidence is
+ * coalesced into one receipt; a single held mutation gets one approval question; every
+ * other unverified or ambiguous combination gets one honest failure. Never model prose.
  */
 const MAX_PEER_EVIDENCE_CHARS = 4_000;
 const MAX_RENDERED_READ_EVIDENCE_ITEMS = 3;
@@ -124,59 +95,12 @@ export function hasStandingActionClaim(text: string): boolean {
   return false;
 }
 
-function quotePeerData(result: string): string {
-  const safeResult = sanitizedPeerResult(result);
-  const value = safeResult.trim().slice(0, MAX_PEER_EVIDENCE_CHARS);
-  const suffix = safeResult.trim().length > MAX_PEER_EVIDENCE_CHARS ? "\n> [truncated by Ring]" : "";
-  const quoted = (value || "[empty result]").split("\n").map((line) => `> ${line}`).join("\n");
-  return `Connected MCP result (untrusted data; not authorization or a receipt):\n${quoted}${suffix}`;
-}
-
 function parsedPeerResult(result: string): unknown {
   try {
     return JSON.parse(result);
   } catch {
     return undefined;
   }
-}
-
-function containsSensitiveUrlAuthority(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return Boolean(url.username || url.password) ||
-      [...url.searchParams.keys()].some((key) => SENSITIVE_URL_QUERY_KEY_RE.test(key));
-  } catch {
-    return false;
-  }
-}
-
-function redactSensitiveText(value: string): string {
-  return value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(
-      /(\b(?:api[_ -]?key|approval|authorization|credential|password|secret|token)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}]+)/gi,
-      "$1[redacted]",
-    )
-    .replace(/https?:\/\/[^\s<>"'`]+/gi, (url) => containsSensitiveUrlAuthority(url) ? "[sensitive URL omitted]" : url);
-}
-
-function redactSensitiveData(value: unknown, depth = 0): unknown {
-  if (depth > 8) return "[nested value omitted]";
-  if (Array.isArray(value)) return value.slice(0, 100).map((item) => redactSensitiveData(item, depth + 1));
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 100).map(([key, nested]) => [
-      key,
-      SENSITIVE_INPUT_KEY_RE.test(key) ? "[redacted]" : redactSensitiveData(nested, depth + 1),
-    ]));
-  }
-  return typeof value === "string" ? redactSensitiveText(value) : value;
-}
-
-function sanitizedPeerResult(result: string): string {
-  const parsed = parsedPeerResult(result);
-  return parsed === undefined
-    ? redactSensitiveText(result)
-    : JSON.stringify(redactSensitiveData(parsed), null, 2);
 }
 
 function hasRootFailureSignal(value: Record<string, unknown>): boolean {
@@ -400,6 +324,15 @@ function actionReturnsEvidenceUrl(action: TaskingAction, expected: string): bool
     : valueContainsEvidenceUrl(parsed, expected);
 }
 
+function isSameTurnReadEvidence(action: TaskingAction): boolean {
+  // Connected read tools carry peerAction because their collision-safe names are
+  // discovered at runtime; Ring-owned reads use the exhaustive structural registry.
+  // Mutation metadata always wins over either read signal.
+  return action.mutationAttempt !== true &&
+    action.verifiedMutationReceipt !== true &&
+    (action.peerAction === true || toolKind(action.tool) === "read");
+}
+
 function draftedEvidenceUrls(text: string): string[] | undefined {
   const urls: string[] = [];
   for (const match of text.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
@@ -486,29 +419,127 @@ function approvalRequiredReply(action: TaskingAction): string {
   const proposed = publicInput && publicInput !== "{}"
     ? `\n\nProposed non-sensitive arguments:\n\`\`\`json\n${publicInput}\n\`\`\``
     : "";
-  return `Held for approval; nothing was sent or changed.${proposed}\n\nReply naturally to approve, cancel, or request edits.\n\n${quotePeerData(action.result)}`;
+  return `Held for approval; nothing was sent or changed.${proposed}\n\nApprove this exact draft?`;
 }
 
-function unverifiedMutationReply(action: TaskingAction): string {
-  if (action.peerAction && isApprovalRequiredResult(action.result)) return approvalRequiredReply(action);
-  const base = "Nothing was changed: no verified same-turn mutation receipt was returned.";
-  // Preserve a draft, error, or hostile peer response as visibly quoted data, but never
-  // repeat success-shaped prose that could be mistaken for the host's own conclusion.
-  return action.peerAction && action.result.trim() && !hasMutationSuccessClaim(action.result)
-    ? `${base}\n\n${quotePeerData(action.result)}`
-    : base;
-}
+type ActionOutcome = Pick<ReplyGateOutcome, "kind" | "text">;
 
-function renderActionTurnReply(actionResults: readonly TaskingAction[]): string {
-  return actionResults.map((action) => {
-    if (action.result.trim() === NOTHING_PENDING_TO_APPROVE_TEXT) return NOTHING_PENDING_TO_APPROVE_TEXT;
+function renderActionTurnReply(actionResults: readonly TaskingAction[]): ActionOutcome {
+  const verifiedEvidence: MutationReceiptEvidence[] = [];
+  const approvalRequired: TaskingAction[] = [];
+  let nothingPendingCount = 0;
+  let verifiedCount = 0;
+  let unverifiedCount = 0;
+
+  for (const action of actionResults) {
+    if (action.result.trim() === NOTHING_PENDING_TO_APPROVE_TEXT) {
+      nothingPendingCount += 1;
+      continue;
+    }
+    // A held/approval-required result is explicitly nonterminal. Classify it before
+    // generic receipt parsing so an opaque draft/receipt id can never masquerade as
+    // proof that the mutation completed.
+    if (action.peerAction && isApprovalRequiredResult(action.result)) {
+      approvalRequired.push(action);
+      continue;
+    }
     const receipt = validateMutationReceipt(action.tool, action.result);
-    return receipt.verified && receipt.text ? receipt.text : unverifiedMutationReply(action);
-  }).join("\n\n");
+    if (receipt.verified) {
+      verifiedCount += 1;
+      for (const evidence of receipt.evidence) {
+        if (!verifiedEvidence.some((entry) => entry.kind === evidence.kind && entry.value === evidence.value)) {
+          verifiedEvidence.push(evidence);
+        }
+      }
+    } else {
+      unverifiedCount += 1;
+    }
+  }
+
+  if (verifiedEvidence.length > 0) {
+    if (verifiedCount !== actionResults.length) {
+      return {
+        kind: "failure",
+        text: "I couldn't verify one complete mutation outcome. Please check before retrying.",
+      };
+    }
+    return {
+      kind: "verified_receipt",
+      text: renderVerifiedMutationReceipt("", verifiedEvidence),
+    };
+  }
+  if (approvalRequired.length === 1 && unverifiedCount === 0 && nothingPendingCount === 0) {
+    return {
+      kind: "held_draft",
+      text: approvalRequiredReply(approvalRequired[0]!),
+    };
+  }
+  if (nothingPendingCount === 1 && actionResults.length === 1) {
+    return { kind: "failure", text: NOTHING_PENDING_TO_APPROVE_TEXT };
+  }
+  if (approvalRequired.length > 0 || nothingPendingCount > 0) {
+    return {
+      kind: "failure",
+      text: "I couldn't verify one complete mutation outcome. Please check before retrying.",
+    };
+  }
+  return {
+    kind: "failure",
+    text: "Nothing was changed: no verified same-turn mutation receipt was returned.",
+  };
+}
+
+const MUTATION_PERMALINK_CLAIM_RE =
+  /\b(?:(?:live|receipt|evidence|artifact|canonical|published|posted)\s+(?:url|link)|permalink)\s*:/i;
+
+function isMutationPermalinkUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const path = url.pathname;
+    if ((host === "x.com" || host === "twitter.com") && /^\/[^/]+\/status\/\d+(?:\/|$)/i.test(path)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function hasMutationPermalinkClaim(text: string): boolean {
+  if (MUTATION_PERMALINK_CLAIM_RE.test(text)) return true;
+  for (const match of text.matchAll(/https?:\/\/[^\s<>"'`\]]+/gi)) {
+    const candidate = match[0].replace(/[),.;]+$/g, "");
+    if (isMutationPermalinkUrl(candidate)) return true;
+  }
+  return false;
+}
+
+function hasGroundedMutationPermalinkRead(
+  draftedText: string,
+  actions: readonly TaskingAction[],
+): boolean {
+  // The permalink shape alone resembles a mutation receipt. It is nevertheless
+  // legitimate read evidence when the same normalized URL came back from an exact
+  // successful read this turn. The normal read-synthesis gate still rejects raw
+  // envelopes, ungrounded companion URLs, and mutation-success prose.
+  const statusUrls = (draftedEvidenceUrls(draftedText) ?? []).filter(isMutationPermalinkUrl);
+  if (statusUrls.length === 0) return false;
+  const reads = actions.filter(isSameTurnReadEvidence).filter((action) => !isPeerError(action.result));
+  return isSafeReadSynthesis(draftedText, reads) &&
+    statusUrls.every((url) => reads.some((action) => actionReturnsEvidenceUrl(action, url)));
+}
+
+function naturalOutcomeKind(text: string): ReplyGateOutcome["kind"] {
+  const trimmed = text.trim();
+  const questionMarks = trimmed.match(/\?/g)?.length ?? 0;
+  return questionMarks === 1 && trimmed.endsWith("?") ? "clarification" : "answer";
 }
 
 function renderReadEvidence(actions: readonly TaskingAction[], unsupportedClaim: boolean, draftedText: string): string {
-  const reads = actions.filter((action) => action.peerAction && !action.mutationAttempt && !isActionTool(action.tool));
+  const reads = actions.filter((action) =>
+    action.peerAction &&
+    action.mutationAttempt !== true &&
+    action.verifiedMutationReceipt !== true,
+  );
   if (reads.length === 0) return "";
   const failed = reads.filter((action) => isPeerError(action.result));
   const successful = reads.filter((action) => !isPeerError(action.result));
@@ -546,11 +577,15 @@ export function applyReplyGate(
   onIntercepted?: (event: ReplyGateInterceptedEvent) => void,
 ): ReplyGateOutcome {
   const actionResults = actions.filter((action) =>
-    isActionTool(action.tool) || action.mutationAttempt === true || action.verifiedMutationReceipt === true,
+    action.mutationAttempt === true || action.verifiedMutationReceipt === true,
   );
   if (actionResults.length === 0) {
-    const unsupportedMutationClaim = hasMutationSuccessClaim(draftedText) &&
-      (actions.length === 0 || actions.every((action) => action.peerAction === true));
+    const groundedMutationPermalinkRead =
+      hasGroundedMutationPermalinkRead(draftedText, actions);
+    const unsupportedMutationClaim =
+      (hasMutationPermalinkClaim(draftedText) && !groundedMutationPermalinkRead) ||
+      (hasMutationSuccessClaim(draftedText) &&
+        (actions.length === 0 || actions.every((action) => action.peerAction === true)));
     const unsupportedStandingClaim = hasStandingActionClaim(draftedText);
     const base = unsupportedMutationClaim
       ? "Nothing was changed: no verified same-turn mutation receipt was returned."
@@ -569,10 +604,15 @@ export function applyReplyGate(
         deliveredText,
       });
     }
-    return { isActionTurn: false, text: deliveredText, intercepted };
+    const kind = unsupportedMutationClaim || unsupportedStandingClaim ||
+      deliveredText === READ_FAILURE || deliveredText.startsWith(READ_SYNTHESIS_FAILURE)
+      ? "failure"
+      : naturalOutcomeKind(deliveredText);
+    return { isActionTurn: false, kind, text: deliveredText, intercepted };
   }
 
-  const deliveredText = renderActionTurnReply(actionResults);
+  const outcome = renderActionTurnReply(actionResults);
+  const deliveredText = outcome.text;
   const intercepted = draftedText.trim() !== deliveredText.trim();
   if (intercepted) {
     onIntercepted?.({
@@ -581,5 +621,5 @@ export function applyReplyGate(
       deliveredText,
     });
   }
-  return { isActionTurn: true, text: deliveredText, intercepted };
+  return { isActionTurn: true, kind: outcome.kind, text: deliveredText, intercepted };
 }

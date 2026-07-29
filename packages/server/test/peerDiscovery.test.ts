@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RING_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
-import { callPeerTool, callPeerWithArgs, councilToolName, discoverAdvertisedPeerSkill, discoverPeerTools } from "../src/peerClient.js";
+import {
+  callPeerTool,
+  callPeerWithArgs,
+  councilToolName,
+  discoverAdvertisedPeerSkill,
+  discoverPeerTools,
+  peerApprovalConnectionId,
+} from "../src/peerClient.js";
 import { Runtime } from "../src/runtime.js";
 import type { PeerTools } from "zenod";
 
@@ -49,6 +56,19 @@ describe("generic wallet MCP discovery", () => {
     expect(councilToolName("Calli", "read")).not.toBe(councilToolName("calli", "read"));
     expect(councilToolName("p", `${"x".repeat(80)}a`)).not.toBe(councilToolName("p", `${"x".repeat(80)}b`));
     expect(councilToolName("foo bar", "read")).toBe(councilToolName("foo bar", "read"));
+  });
+
+  it("scopes approval identity to the exact endpoint and credential, not the display name", () => {
+    const connection = { name: "Calli", url: "https://calli.example/mcp", token: "token-a" };
+    expect(peerApprovalConnectionId(connection)).toBe(peerApprovalConnectionId({ ...connection }));
+    expect(peerApprovalConnectionId(connection)).not.toBe(peerApprovalConnectionId({
+      ...connection,
+      url: "https://replacement.example/mcp",
+    }));
+    expect(peerApprovalConnectionId(connection)).not.toBe(peerApprovalConnectionId({
+      ...connection,
+      token: "token-b",
+    }));
   });
 
   it("preserves authenticated descriptions, schemas and all MCP annotations", async () => {

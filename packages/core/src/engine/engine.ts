@@ -49,7 +49,11 @@ import {
   reconcileTaskingReply,
   summarizeActionsForReply,
 } from "../taskingPolicy.js";
-import { applyReplyGate, hasStandingActionClaim, isActionTool } from "../replyGate.js";
+import {
+  applyReplyGate,
+  hasStandingActionClaim,
+  type ReplyGateOutcome,
+} from "../replyGate.js";
 import {
   approvalTokenSnapshot,
   cancelStandingApprovals,
@@ -68,7 +72,7 @@ const GROUNDED_STANDING_ACTION_RETRY = [
 
 function hasStandingActionEvidence(actions: readonly TaskingAction[]): boolean {
   return actions.some((action) =>
-    isActionTool(action.tool) || action.mutationAttempt === true || action.verifiedMutationReceipt === true,
+    action.mutationAttempt === true || action.verifiedMutationReceipt === true,
   );
 }
 
@@ -707,8 +711,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   function buildTaskTools(surface: Surface, record?: (action: TaskingAction) => void, rawEvidence?: TaskingInput["rawEvidence"]): VaultTaskTools {
     const sameTurnMutations = new Map<string, Promise<string>>();
-    const recordAction = (tool: string, input: Record<string, unknown>, result: string) => {
-      record?.({ tool, input, result });
+    const recordAction = (
+      tool: string,
+      input: Record<string, unknown>,
+      result: string,
+      mutationAttempt = false,
+    ) => {
+      record?.({
+        tool,
+        input,
+        result,
+        ...(mutationAttempt ? { mutationAttempt: true } : {}),
+      });
     };
     // Mutation tools must leave a recorded action whether they succeed OR throw,
     // so the reply can be reconciled against what really happened — a failed
@@ -721,11 +735,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const pending = (async () => {
         try {
           const result = await run();
-          recordAction(tool, input, result);
+          recordAction(tool, input, result, true);
           return result;
         } catch (err) {
           sameTurnMutations.delete(key);
-          recordAction(tool, input, `ERROR: ${(err as Error).message}`);
+          recordAction(tool, input, `ERROR: ${(err as Error).message}`, true);
           throw err;
         }
       })();
@@ -773,6 +787,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             ...(storeVerbatim !== undefined ? { verbatim: storeVerbatim } : {}),
           },
           "Queued: filing this note to the vault in the background (not yet committed).",
+          true,
         );
         return { evidenceRef: "(queued)", pagesTouched: [], commitSha: "(queued)", githubUrls: [], queued: true };
       },
@@ -791,7 +806,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           ...(executed.commitSha ? [`commit: ${executed.commitSha}`] : []),
           ...(executed.changedPaths?.length ? [`changed: ${executed.changedPaths.join(", ")}`] : []),
         ].join("\n");
-        recordAction("executeVaultTask", { objective, plan }, text);
+        recordAction("executeVaultTask", { objective, plan }, text, true);
         return text;
       },
       digestBacklog: async (input: BacklogDigestInput) => {
@@ -1371,13 +1386,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
   // corrects fabricated mutations, leaving genuine results and read-only summaries
   // untouched). Without this the model could narrate a successful create that 404'd —
   // e.g. "All five tickets placed in zenod/zenod #1..#5" when the repo doesn't resolve.
-  function finalizeReply(rawText: string, actions: TaskingAction[], userMessage: string, cid: string): string {
+  function finalizeReply(
+    rawText: string,
+    actions: TaskingAction[],
+    userMessage: string,
+    cid: string,
+  ): ReplyGateOutcome {
     const gate = applyReplyGate(rawText, actions, (event) => {
       console.warn(
         `[reply-gate] intercepted final reply (${event.tools.join(", ") || "no tools"}) — discarded unsupported model text or preserved MCP evidence. discarded=${JSON.stringify(event.discardedText)}`,
       );
     });
-    if (gate.isActionTurn) return gate.text;
+    if (gate.isActionTurn) return gate;
 
     // P-1 — a bare affirmative ("approved", "yes") that resolved NOTHING this turn (no
     // tool ran at all, so the reply gate above never engaged) must never fall through to
@@ -1387,9 +1407,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // deterministic zero-state the token guard itself renders for a resolved bare
     // affirmative.
     if (actions.length === 0 && isAffirmativeApproval(userMessage)) {
-      return hasAnyLiveApprovalToken(cid)
+      const text = hasAnyLiveApprovalToken(cid)
         ? "Nothing was sent; the pending action was not executed."
         : NOTHING_PENDING_TO_APPROVE_TEXT;
+      return {
+        isActionTurn: false,
+        kind: "failure",
+        text,
+        intercepted: text.trim() !== rawText.trim(),
+      };
     }
 
     const drafted = gate.text.trim()
@@ -1397,7 +1423,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
       : summarizeActionsForReply(actions)
         ? `${summarizeActionsForReply(actions)}\n\n(That's what I did — I ran out of room to write a fuller reply.)`
         : "I couldn't compose a reply to that one — mind rephrasing or sending it again?";
-    return reconcileTaskingReply(drafted, actions);
+    const text = reconcileTaskingReply(drafted, actions);
+    return {
+      ...gate,
+      text,
+      ...(text.trim() !== gate.text.trim()
+        ? { kind: "failure" as const, intercepted: true }
+        : {}),
+    };
   }
 
   async function chat(
@@ -1438,12 +1471,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
       : message;
     reportTokenCost("chat", [briefing.text, ...window.map((m) => m.text), question], briefing);
 
+    // D15: no model delta can cross the chat boundary before the same-turn actions
+    // have been classified and the final reply gate has selected one outcome. Natural
+    // read-only chunks are replayed after that proof; action turns emit one gated block.
+    const pendingDeltas: string[] = [];
     const answerInput: AnswerInput = {
       question,
       conversationId: approvalCid,
       vaultBriefing: briefing.text,
       conversation: window.map((m) => ({ role: m.role, text: m.text })),
-      ...(chatOptions.onDelta ? { onTextDelta: chatOptions.onDelta } : {}),
+      ...(chatOptions.onDelta ? { onTextDelta: (delta: string) => pendingDeltas.push(delta) } : {}),
       ...(chatOptions.onToolEvent ? { onToolEvent: chatOptions.onToolEvent } : {}),
       onPeerAction: (tool, inp, res, metadata) => actions.push({
         tool,
@@ -1473,7 +1510,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
-    const text = finalizeReply(result.text, actions, message, approvalCid);
+    const outcome = finalizeReply(result.text, actions, message, approvalCid);
+    const text = outcome.text;
+    if (chatOptions.onDelta) {
+      const naturalUnchanged =
+        (outcome.kind === "answer" || outcome.kind === "clarification") &&
+        !outcome.intercepted &&
+        pendingDeltas.join("") === text;
+      if (naturalUnchanged) {
+        for (const delta of pendingDeltas) chatOptions.onDelta(delta);
+      } else if (text) {
+        chatOptions.onDelta(text);
+      }
+    }
     await persistApprovalTurn(cid, approvalCid);
     await state.appendMessage(cid, "assistant", text, surface);
 
@@ -1549,7 +1598,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
-    const text = finalizeReply(result.text, actions, input.text, approvalCid);
+    const text = finalizeReply(result.text, actions, input.text, approvalCid).text;
     await persistApprovalTurn(cid, approvalCid);
     await state.appendMessage(cid, "assistant", text, input.surface);
     return { text, actions };

@@ -155,21 +155,82 @@ describe("Ring council unit", () => {
       const saved = await unit.app.request("/api/peers", {
         method: "PUT",
         headers: { authorization: "Bearer ring-alpha", "content-type": "application/json" },
-        body: JSON.stringify({ peers: [{ name: "Zenod", url: "https://alpha-zenod.internal/mcp", token: "downstream-alpha" }] }),
+        body: JSON.stringify({
+          peers: [{
+            name: "Zenod",
+            url: "https://alpha-zenod.internal/mcp",
+            token: "downstream-alpha",
+            trustedProfile: {
+              exposure: "private",
+              tenantScope: "tenant",
+              financialScope: "none",
+              trustMcpAnnotations: true,
+            },
+          }],
+        }),
       });
       expect(saved.status).toBe(200);
       const savedPayload = await saved.json() as { peers: Array<Record<string, unknown>> };
       expect(savedPayload).toMatchObject({
-        peers: [{ name: "Zenod", hasToken: true, status: "error" }],
+        peers: [{
+          name: "Zenod",
+          hasToken: true,
+          status: "error",
+          trustedProfile: {
+            exposure: "private",
+            tenantScope: "tenant",
+            financialScope: "none",
+            trustMcpAnnotations: true,
+          },
+        }],
       });
       expect(savedPayload.peers[0]).not.toHaveProperty("tool");
 
       const alpha = await unit.app.request("/api/peers", { headers: { authorization: "Bearer ring-alpha" } });
       const beta = await unit.app.request("/api/peers?tenantId=tenant-alpha", { headers: { authorization: "Bearer ring-beta" } });
       const alphaPayload = await alpha.json() as { peers: Array<Record<string, unknown>> };
-      expect(alphaPayload).toMatchObject({ peers: [{ name: "Zenod", hasToken: true }] });
+      expect(alphaPayload).toMatchObject({
+        peers: [{
+          name: "Zenod",
+          hasToken: true,
+          trustedProfile: { exposure: "private", tenantScope: "tenant" },
+        }],
+      });
       expect(alphaPayload.peers[0]).not.toHaveProperty("tool");
       expect(await beta.json()).toEqual({ peers: [] });
+
+      const betaSaved = await unit.app.request("/api/peers", {
+        method: "PUT",
+        headers: { authorization: "Bearer ring-beta", "content-type": "application/json" },
+        body: JSON.stringify({
+          peers: [{
+            name: "Public unit",
+            url: "https://alpha-zenod.internal/mcp",
+            token: "downstream-beta",
+            trustedProfile: {
+              exposure: "external",
+              tenantScope: "tenant",
+              financialScope: "financial",
+              trustMcpAnnotations: false,
+            },
+          }],
+        }),
+      });
+      expect(betaSaved.status).toBe(200);
+      const alphaAgain = await unit.app.request("/api/peers", {
+        headers: { authorization: "Bearer ring-alpha" },
+      });
+      expect(await alphaAgain.json()).toMatchObject({
+        peers: [{
+          name: "Zenod",
+          trustedProfile: {
+            exposure: "private",
+            tenantScope: "tenant",
+            financialScope: "none",
+            trustMcpAnnotations: true,
+          },
+        }],
+      });
 
       const denied = await unit.app.request("/api/peers", {
         method: "PUT",
@@ -177,6 +238,20 @@ describe("Ring council unit", () => {
         body: JSON.stringify({ peers: [{ name: "bad", url: "https://127.0.0.1/mcp", token: "secret" }] }),
       });
       expect(denied.status).toBe(400);
+
+      const invalidProfile = await unit.app.request("/api/peers", {
+        method: "PUT",
+        headers: { authorization: "Bearer ring-beta", "content-type": "application/json" },
+        body: JSON.stringify({
+          peers: [{
+            name: "bad-profile",
+            url: "https://alpha-zenod.internal/mcp",
+            token: "secret",
+            trustedProfile: { exposure: "private", tenantScope: "all" },
+          }],
+        }),
+      });
+      expect(invalidProfile.status).toBe(400);
     } finally {
       unit.close();
     }

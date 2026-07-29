@@ -1,11 +1,9 @@
 import {
   classifyApprovalIntent,
-  consumeApprovalToken,
-  hasValidApprovalToken,
-  registerApprovalToken,
-  registerOutboundComposeApprovalToken,
   resolveStandingApproval,
+  registerStandingApproval,
 } from "./approvalTokens.js";
+import type { TurnPlanOperation } from "./llm/turnPlan.js";
 import { toolKind } from "./toolKinds.js";
 
 export const OWNER_AGENT = "owner:agent";
@@ -52,385 +50,198 @@ export interface RecordedAction {
   result: string;
 }
 
-const READ_ONLY_REQUEST_RE =
-  /\b(read[- ]only|do not mutate|don't mutate|do not change|don't change|do not create|don't create|do not open|don't open|do not file|don't file|do not edit|don't edit|do not close|don't close|no mutation|no mutations|just (?:check|read|search|find|list|show|tell)|what (?:is|are|would)|what would|status of|what's the status|show me|tell me about|need(?:s|ed)?\s+(?:context|info|information|details|background)|(?:context|(?:more\s+)?(?:info|information|details|background))\s+on)\b/i;
-const EXECUTION_STATUS_REQUEST_RE =
-  /(?:^\s*(?:did|was|is|has|have|what(?:'s| is))\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished|status)\b|\b(?:execution|run|runner|queue)\s+status\b|\bstatus\b[\s\S]{0,80}\b(?:run|ran|running|execut(?:e|ed|ion)|queued|picked up|pickup|started|launched|dispatched|blocked|completed|finished)\b)/i;
-const QUALIFIED_ISSUE_REF_RE = /\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+\b/;
-
 export function normalizedToolName(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
-
-function isPeerMutationTool(tool: string): boolean {
-  const normalized = normalizedToolName(tool);
-  return (
-    normalized === "askarchus" ||
-    normalized === "openissue" ||
-    normalized === "editissue" ||
-    normalized === "closeissue" ||
-    normalized === "archusrequestbacklogaction" ||
-    normalized === "archusrunissue" ||
-    normalized === "queueexecution" ||
-    normalized === "approveexecution" ||
-    normalized === "posttweet" ||
-    normalized === "postreddit" ||
-    normalized === "sendemail" ||
-    normalized === "delivertoprincipal" ||
-    normalized === "raiseevent"
-  );
-}
-
-function hasAnyArchusWriteIntent(request: string): boolean {
-  return (
-    /\b(create|open|file|log|raise|add)\b[\s\S]{0,80}\b(issue|ticket|bug|backlog)\b/i.test(request) ||
-    /\b(edit|update|change|comment|label|rename|patch|close)\b[\s\S]{0,100}\b(issue|ticket|#\d+|github)\b/i.test(request) ||
-    /\b(run|execute|start|queue|launch|dispatch|approve)\b[\s\S]{0,100}\b(issue|ticket|#\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\b/i.test(
-      request,
-    )
-  );
-}
-
-// A negation anywhere near a verb ("don't send it", "no, cancel that post") must
-// never read as an explicit instruction to mutate, even though the bare verb
-// ("send", "post") appears in the message. Shared by hasExplicitMutationIntent's
-// outbound-send checks and isAffirmativeApproval below.
-const NEGATION_RE = /\b(?:no|not|don'?t|won'?t|never|cancel|stop|abort|nvm|nevermind|hold on|wait)\b/i;
-
-/** True when `verbs` (a global regex) matches somewhere in `request` with no negation word in the ~20 chars before it. */
-function hasUnnegatedVerb(request: string, verbs: RegExp): boolean {
-  for (const m of request.matchAll(verbs)) {
-    const lead = request.slice(Math.max(0, m.index! - 20), m.index);
-    if (!NEGATION_RE.test(lead)) return true;
-  }
-  return false;
-}
-
-const POST_VERB_RE = /\b(?:post|publish|send)\b/gi;
-const EMAIL_VERB_RE = /\b(?:send|email|mail)\b/gi;
-const INTENT_CLAUSE_BOUNDARY_RE = /[.;!?]|\b(?:but|however|instead|then)\b/gi;
-const DYNAMIC_RUN_VERB_RE = /\b(?:run|execute|invoke|call)\b/gi;
-const DYNAMIC_NEGATION_RE = /\b(?:no|not|don'?t|won'?t|never|cancel|stop|abort|nvm|nevermind|without|exclude|except|skip|omit)\b/i;
-const POSTFIX_CANCELLATION_RE =
-  /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this|the\s+call))?|stop|abort|nvm|nevermind|do\s+not\s+(?:do|run|execute|invoke|call|proceed)|don'?t\s+(?:do|run|execute|invoke|call|proceed))\b/i;
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Strict positive `run|execute|invoke|call <exact-tool-leaf>` intent with no later cancellation. */
-function hasExplicitDynamicMutationVerb(tool: string, request: string): boolean {
-  const toolLeaf = tool.split("__")[1] ?? "";
-  if (toolLeaf.length < 4) return false;
-  const exactLeaf = new RegExp(`(?<![A-Za-z0-9_-])${escapeRegex(toolLeaf)}(?![A-Za-z0-9_-])`, "gi");
-  for (const leafMatch of request.matchAll(exactLeaf)) {
-    const beforeLeaf = request.slice(0, leafMatch.index!);
-    let clauseStart = 0;
-    for (const boundary of beforeLeaf.matchAll(INTENT_CLAUSE_BOUNDARY_RE)) {
-      clauseStart = boundary.index! + boundary[0].length;
-    }
-    const clauseBeforeLeaf = request.slice(clauseStart, leafMatch.index!);
-    let runVerb: RegExpMatchArray | undefined;
-    for (const match of clauseBeforeLeaf.matchAll(DYNAMIC_RUN_VERB_RE)) {
-      runVerb = match;
-    }
-    if (!runVerb) continue;
-    const bindingText = clauseBeforeLeaf.slice(runVerb.index! + runVerb[0].length);
-    if (bindingText.length > 100 || DYNAMIC_NEGATION_RE.test(clauseBeforeLeaf)) continue;
-    const afterLeaf = request.slice(leafMatch.index! + leafMatch[0].length);
-    if (POSTFIX_CANCELLATION_RE.test(afterLeaf)) return false;
-    return true;
-  }
-  return false;
-}
-
-function hasExplicitMutationIntent(tool: string, request: string): boolean {
-  const normalized = normalizedToolName(tool);
-  if (normalized === "askarchus") return false;
-  if (normalized === "closeissue") {
-    return (
-      /\b(close|archive)\b[\s\S]{0,80}\b(issue|ticket|#\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\b/i.test(request) ||
-      /\bmark\s+(?:it|issue|ticket|#\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)?\s*(?:as\s+)?(?:done|complete|completed|closed)\b/i.test(
-        request,
-      )
-    );
-  }
-  if (normalized === "openissue") {
-    return /\b(create|open|file|log|raise|add)\b[\s\S]{0,80}\b(issue|ticket|bug|backlog)\b/i.test(request);
-  }
-  if (normalized === "editissue") {
-    return /\b(edit|update|change|comment|label|rename|patch)\b[\s\S]{0,100}\b(issue|ticket|#\d+|github)\b/i.test(request);
-  }
-  if (normalized === "archusrequestbacklogaction") {
-    return (
-      /\b(create|open|file|log|raise|add)\b[\s\S]{0,80}\b(issue|ticket|bug|backlog)\b/i.test(request) ||
-      /\b(edit|update|change|comment|label|rename|patch|close)\b[\s\S]{0,100}\b(issue|ticket|#\d+|github)\b/i.test(request)
-    );
-  }
-  if (normalized === "archusrunissue" || normalized === "queueexecution" || normalized === "approveexecution") {
-    return (
-      !EXECUTION_STATUS_REQUEST_RE.test(request) &&
-      /\b(run|execute|start|queue|launch|dispatch|approve)\b[\s\S]{0,100}\b(issue|ticket|#\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\b/i.test(
-        request,
-      )
-    );
-  }
-  if (normalized === "posttweet" || normalized === "postreddit") {
-    return hasUnnegatedVerb(request, POST_VERB_RE);
-  }
-  if (normalized === "sendemail") {
-    return hasUnnegatedVerb(request, EMAIL_VERB_RE);
-  }
-  if (normalized === "delivertoprincipal" || normalized === "raiseevent") {
-    return /\b(notify|alert|send|raise|tell\s+Jordi)\b/i.test(request);
-  }
-  return false;
-}
-
-// M-1 — outbound sends accept a standing-draft approval token in place of an
-// explicit write verb (see approvalTokens.ts). Scoped to the outbound send tools
-// only: these are the tools whose result text is delivered to the user VERBATIM
-// (replyGate.ts's ACTION_TOOL_NAMES), so a blocked call here either renders as a
-// friendly draft-approval prompt or resolves to a real send — never a raw error.
-const OUTBOUND_SEND_TOOL_NAMES = new Set(["posttweet", "postreddit", "sendemail"]);
 
 /** True when natural language expresses approval. Recognition alone never grants authority. */
 export function isAffirmativeApproval(userRequest: string): boolean {
   return classifyApprovalIntent(userRequest) === "approve";
 }
 
-/** True when a call to an outbound send tool carries an actual draft (not an empty/bare call). */
-function hasSubstantiveDraftContent(args: Record<string, unknown> | undefined): boolean {
-  if (!args) return false;
-  return Object.values(args).some((value) => typeof value === "string" && value.trim().length > 0);
-}
-
 /**
- * peerMutationGuardFailure's sentinel result for "an affirmative resolved no standing
- * draft" (no token, or a token for different content/tool). The caller renders this as
- * the honest zero-state ("Nothing pending to approve.") rather than the generic block —
- * distinct from the ordinary "no explicit verb" block, which doubles as issuing a new
- * draft-approval prompt (registers a token) when the call carries real content.
+ * peerMutationGuardFailure's sentinel result when an affirmative resolves no standing
+ * exact operation. The caller renders the honest zero-state ("Nothing pending to
+ * approve.") rather than inventing or executing a new proposal.
  */
 export const NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL = "__nothing_pending_to_approve__";
 
 /** The single canonical zero-state reply text — shared so it can never drift between the guard, the reply-gate fallback, and the outbound receipt renderer. */
 export const NOTHING_PENDING_TO_APPROVE_TEXT = "Nothing pending to approve.";
 
-export interface PeerMutationGuardContext {
-  /** Conversation this call belongs to — required for the standing-draft token to apply. */
-  conversationId?: string | undefined;
-  /** The tool-call arguments this attempt carries (the draft content, for outbound sends). */
-  args?: Record<string, unknown> | undefined;
-  /** Dynamic MCP tools are classified by their advertised annotations. */
-  forceMutation?: boolean | undefined;
-  /** Discovered peer identity. Standing actions never cross this boundary. */
-  owner?: string | undefined;
-  /** Advertised MCP description, used only to bind natural intent to an operation family. */
-  description?: string | undefined;
-  /** Advertised operation is a commit-only confirmation surface, not a draft-producing mutation. */
-  requiresStandingApproval?: boolean | undefined;
+export const HOST_APPROVAL_REQUIRED_GUARD_SENTINEL = "__host_approval_required__";
+
+export type ConnectionExposure = "private" | "public" | "external" | "unknown";
+export type ConnectionTenantScope = "tenant" | "cross_tenant" | "unknown";
+export type ConnectionFinancialScope = "none" | "financial" | "unknown";
+
+/**
+ * Host-owned policy for one tenant connection. MCP annotations remain untrusted
+ * until this profile explicitly permits Ring to use them as bounded risk hints.
+ */
+export interface TrustedConnectionProfile {
+  exposure: ConnectionExposure;
+  tenantScope: ConnectionTenantScope;
+  financialScope: ConnectionFinancialScope;
+  trustMcpAnnotations: boolean;
 }
 
-interface MutationFamily {
-  tool: RegExp;
-  request: RegExp;
-  leafOnly?: boolean;
-  postfixCancellation?: RegExp;
+export const DEFAULT_TRUSTED_CONNECTION_PROFILE: TrustedConnectionProfile = Object.freeze({
+  exposure: "unknown",
+  tenantScope: "unknown",
+  financialScope: "unknown",
+  trustMcpAnnotations: false,
+});
+
+export function isTrustedConnectionProfile(value: unknown): value is TrustedConnectionProfile {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const profile = value as Record<string, unknown>;
+  return (
+    Object.keys(profile).every((key) =>
+      ["exposure", "tenantScope", "financialScope", "trustMcpAnnotations"].includes(key),
+    ) &&
+    ["private", "public", "external", "unknown"].includes(String(profile.exposure)) &&
+    ["tenant", "cross_tenant", "unknown"].includes(String(profile.tenantScope)) &&
+    ["none", "financial", "unknown"].includes(String(profile.financialScope)) &&
+    typeof profile.trustMcpAnnotations === "boolean"
+  );
 }
 
-const STORAGE_POSTFIX_CANCELLATION_RE =
-  /\b(?:actually\s+no|cancel(?:\s+(?:that|it|this))?|stop|abort|nvm|nevermind)\b|\b(?:do not|don['’]?t|never)\s+(?:save|store|persist|archive|remember|add|keep|put)\b|(?:^|[\s,;:—-])no(?:\s*,?\s*(?:do not|don['’]?t|thanks?|thank\s+you))?[.!]?\s*$|\b(?:do not|don['’]?t)[.!]?\s*$/i;
-
-const TERMINAL_MUTATION_ACTION_FAMILIES = [
-  /\b(?:save|store|persist|remember)\w*\b/i,
-  /\b(?:post|publish|send|share|deliver)\w*\b/i,
-  /\b(?:delete|remove|destroy|revoke)\w*\b/i,
-  /\b(?:create|draft|compose|prepare|submit|add|write|put)\w*\b/i,
-  /\b(?:edit|update|change|rename|patch|revise|rewrite|replace)\w*\b/i,
-  /\b(?:approve|confirm|commit|execute|run)\w*\b/i,
-  /\barchive\w*\b/i,
-] as const;
-
-const MUTATION_FAMILIES: readonly MutationFamily[] = [
-  { tool: /\b(?:delete|remove|destroy|revoke)\w*\b/i, request: /\b(?:delete|remove|destroy|revoke)\w*\b/i },
-  // Memory language requires both a storage action and a memory/note/vault target in
-  // the terminal leaf. It cannot authorize generic financial/account persistence.
-  {
-    tool:
-      /(?:\b(?:save|store|persist|remember)\w*\b[\s\S]{0,40}\b(?:memory|note|vault)\w*\b|\b(?:memory|note|vault)\w*\b[\s\S]{0,40}\b(?:save|store|persist|remember)\w*\b)/i,
-    request:
-      /\b(?:(?:save|store|persist|archive)\w*|remember\s+(?:this|that|these|the following)\b|new\s+memory\b|add\b[\s\S]{0,80}\b(?:to|as)\s+(?:(?:my|the)\s+)?(?:memory|vault)\b|keep\b[\s\S]{0,80}\bfor\s+later\b|put\b[\s\S]{0,80}\b(?:in|into)\s+(?:(?:my|the)\s+)?(?:memory|vault)\b)/i,
-    leafOnly: true,
-    postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE,
-  },
-  // Generic persistence operations require the matching user verb. These remain
-  // leaf-only so description prose cannot broaden an unrelated operation.
-  { tool: /\bsave\w*\b/i, request: /\bsave\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
-  { tool: /\bstore\w*\b/i, request: /\bstore\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
-  { tool: /\bpersist\w*\b/i, request: /\bpersist\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
-  { tool: /\barchive\w*\b/i, request: /\barchive\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
-  { tool: /\badd\w*\b/i, request: /\badd\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
-  { tool: /\bwrite\w*\b/i, request: /\bwrite\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
-  { tool: /\bput\w*\b/i, request: /\bput\w*\b/i, leafOnly: true, postfixCancellation: STORAGE_POSTFIX_CANCELLATION_RE },
-  { tool: /\b(?:create|draft|post|publish|send|compose|prepare|submit)\w*\b/i, request: /\b(?:create|draft|post|publish|send|compose|prepare|submit)\w*\b/i },
-  { tool: /\b(?:create|draft|compose|prepare)\w*\b/i, request: /\b(?:edit|change|revise|rewrite|replace)\w*\b/i },
-  { tool: /\b(?:edit|update|change|rename|patch)\w*\b/i, request: /\b(?:edit|update|change|rename|patch|revise|rewrite)\w*\b/i },
-  { tool: /\b(?:approve|confirm|commit|execute|run)\w*\b/i, request: /\b(?:approve|confirm|commit|execute|run)\w*\b/i },
-] as const;
-
-function operationWords(tool: string, description = ""): string {
-  const leaf = tool.split("__")[1] ?? tool;
-  return `${leaf.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")} ${description}`;
+export interface McpRiskAnnotations {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  openWorldHint?: boolean;
+  [key: string]: unknown;
 }
 
-/** Bind ordinary human mutation language to the discovered operation family. */
-function hasNaturalDynamicMutationIntent(tool: string, request: string, description?: string): boolean {
-  if (EXECUTION_STATUS_REQUEST_RE.test(request) || /\b(?:run|execute|invoke|call)\b/i.test(request)) return false;
-  if (
-    /\b(?:what|whether)\b[\s\S]{0,80}\b(?:support(?:s|ed|ing)?|capabilit(?:y|ies)|(?:can|could)\s+do|able\s+to)\b/i.test(
-      request,
-    )
-  ) return false;
-  if (
-    /^\s*(?:can|could)\s+you\s+\w+\s+(?!(?:this|that|these|those|my|our|the|a|an|saying|named|called)\b)[^:#"'`?]+\?\s*$/i.test(
-      request,
-    )
-  ) return false;
-  const operation = operationWords(tool, description);
-  const leaf = tool.split("__")[1] ?? "";
-  const leafOperation = operationWords(tool);
-  if (TERMINAL_MUTATION_ACTION_FAMILIES.filter((family) => family.test(leafOperation)).length > 1) return false;
-  const humanRequest = leaf
-    ? request.replace(new RegExp(`\b(?:using|via|with)\s+(?:the\s+)?(?:\w+\s+)?${escapeRegex(leaf)}(?:\s+tool)?\b`, "gi"), " ")
-    : request;
-  // The terminal discovered operation is authoritative when it names a family.
-  // Descriptions are fallback context only; this prevents e.g. a delete tool whose
-  // prose mentions "saved records" from being authorized by a request to save.
-  const family = MUTATION_FAMILIES.find((candidate) => candidate.tool.test(leafOperation))
-    ?? MUTATION_FAMILIES.find((candidate) => !candidate.leafOnly && candidate.tool.test(operation));
-  if (!family) return false;
-  return [family].some((family) => {
-    const verbs = new RegExp(family.request.source, "gi");
-    for (const match of humanRequest.matchAll(verbs)) {
-      const lead = humanRequest.slice(0, match.index!);
-      const localLead = lead.slice(Math.max(0, lead.length - 32));
-      const requested = lead.trim().length === 0 || /(?:please|can you|could you|would you|will you|i (?:want|need|would like) you to|let'?s)\s*$/i.test(localLead);
-      if (!requested) continue;
-      const negationLead = humanRequest.slice(Math.max(0, match.index! - 20), match.index);
-      const after = humanRequest.slice(match.index! + match[0].length);
-      if (!NEGATION_RE.test(negationLead) && !family.postfixCancellation?.test(after)) return true;
-    }
-    return false;
-  });
+export type HostAuthorizationDisposition =
+  | "execute"
+  | "hold_for_exact_approval"
+  | "clarify";
+
+export interface HostAuthorizationDecision {
+  disposition: HostAuthorizationDisposition;
+  code:
+    | "private_tenant_safe"
+    | "known_elevated_risk"
+    | "risk_metadata_unknown";
+  operation: TurnPlanOperation;
 }
 
 /**
- * Peer write tools are real side effects routed through other agents. The model
- * may invent a write subtask during a read-only/status turn; block that before
- * it reaches the peer. Prose reconciliation can correct claims, but it cannot
- * undo a closed issue or sent message.
+ * D9 host policy. The model-proposed operation is typed and exact; authorization
+ * depends only on host-owned profile data plus explicitly trusted MCP annotations.
+ */
+export function authorizeTurnPlanOperation(input: {
+  operation: TurnPlanOperation;
+  annotations?: McpRiskAnnotations;
+  profile?: TrustedConnectionProfile;
+}): HostAuthorizationDecision {
+  const profile = input.profile ?? DEFAULT_TRUSTED_CONNECTION_PROFILE;
+  const annotations = input.annotations;
+  const annotationRiskKnown =
+    profile.trustMcpAnnotations &&
+    typeof annotations?.readOnlyHint === "boolean" &&
+    typeof annotations.destructiveHint === "boolean" &&
+    typeof annotations.openWorldHint === "boolean";
+  const profileRiskKnown =
+    profile.exposure !== "unknown" &&
+    profile.tenantScope !== "unknown" &&
+    profile.financialScope !== "unknown";
+
+  if (!annotationRiskKnown || !profileRiskKnown) {
+    return {
+      disposition: "clarify",
+      code: "risk_metadata_unknown",
+      operation: input.operation,
+    };
+  }
+
+  const elevated =
+    profile.exposure !== "private" ||
+    profile.tenantScope !== "tenant" ||
+    profile.financialScope === "financial" ||
+    annotations.destructiveHint === true ||
+    annotations.openWorldHint === true;
+
+  return elevated
+    ? {
+        disposition: "hold_for_exact_approval",
+        code: "known_elevated_risk",
+        operation: input.operation,
+      }
+    : {
+        disposition: "execute",
+        code: "private_tenant_safe",
+        operation: input.operation,
+      };
+}
+
+export interface PeerMutationGuardContext {
+  /** The one exact typed operation proposed by the model for this turn. */
+  operation?: TurnPlanOperation | undefined;
+  /** Conversation this call belongs to — required for the standing-draft token to apply. */
+  conversationId?: string | undefined;
+  /** Exact model-proposed arguments after the discovered tool schema accepted them. */
+  args?: Record<string, unknown> | undefined;
+  /** True only for a tool from this tenant's authenticated MCP catalog. */
+  connectedMcp?: boolean | undefined;
+  /** Discovered connection identity. Standing actions never cross this boundary. */
+  owner?: string | undefined;
+  /** Standard MCP annotations copied from authenticated tools/list. */
+  annotations?: McpRiskAnnotations | undefined;
+  /** Host-side risk limits for this exact tenant connection. */
+  trustedProfile?: TrustedConnectionProfile | undefined;
+}
+
+/**
+ * Compatibility wrapper used at the connected-tool execution boundary.
+ * The user's prose is consulted only to resolve an already-held exact action;
+ * it never authorizes a new proposal.
  */
 export function peerMutationGuardFailure(tool: string, userRequest: string, context?: PeerMutationGuardContext): string | null {
-  const legacyMutationTool = isPeerMutationTool(tool);
-  if (!context?.forceMutation && !legacyMutationTool) return null;
-  const normalized = normalizedToolName(tool);
-  if (normalized === "askarchus" && hasAnyArchusWriteIntent(userRequest) && !READ_ONLY_REQUEST_RE.test(userRequest)) {
-    return `Blocked ${tool}: explicit backlog writes/runs must use the dedicated Archus write/run tool, not ask_archus.`;
-  }
-  if (normalized === "askarchus") return null;
-  if (normalized === "archusrunissue" && !QUALIFIED_ISSUE_REF_RE.test(userRequest)) {
-    return `Blocked ${tool}: running requires an exact work issue already named by the user as owner/repo#N. For create-and-run requests, send the full natural-language request to Archus instead of inventing a target.`;
-  }
-  if (context?.forceMutation && !legacyMutationTool && isAffirmativeApproval(userRequest) && context.conversationId) {
+  if (!context?.connectedMcp) return null;
+  const operation = context.operation ?? {
+    toolId: tool,
+    input: context.args ?? {},
+    payloadRef: null,
+  };
+  const args = operation.input;
+  if (isAffirmativeApproval(userRequest) && context.conversationId) {
     const resolution = resolveStandingApproval({
       conversationId: context.conversationId,
       owner: context.owner ?? "",
-      tool,
-      args: context.args ?? {},
+      tool: operation.toolId,
+      args,
       userRequest,
-      ...(context.description ? { description: context.description } : {}),
     });
     if (resolution === "allowed") return null;
     if (resolution === "ambiguous") return `Blocked ${tool}: more than one standing action matches; ask the user which exact draft to approve.`;
     if (resolution === "mismatch") return `Blocked ${tool}: the selected peer, operation, or exact arguments do not match the standing action.`;
     return NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL;
   }
-  if (context?.forceMutation && !legacyMutationTool && context.requiresStandingApproval) {
-    return NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL;
+  const decision = authorizeTurnPlanOperation({
+    operation,
+    ...(context.annotations ? { annotations: context.annotations } : {}),
+    ...(context.trustedProfile ? { profile: context.trustedProfile } : {}),
+  });
+  if (decision.disposition === "execute") return null;
+  if (decision.disposition === "clarify") {
+    return `Blocked ${tool}: trusted connection risk metadata is incomplete or unknown.`;
   }
-  const explicitDynamicMutation = Boolean(
-    context?.forceMutation &&
-      !legacyMutationTool &&
-      !READ_ONLY_REQUEST_RE.test(userRequest) &&
-      !EXECUTION_STATUS_REQUEST_RE.test(userRequest) &&
-      hasExplicitDynamicMutationVerb(tool, userRequest),
-  );
-  const naturalDynamicMutation = Boolean(
-    context?.forceMutation &&
-      !legacyMutationTool &&
-      hasNaturalDynamicMutationIntent(tool, userRequest, context.description),
-  );
-  const explicitMutation = hasExplicitMutationIntent(tool, userRequest) || explicitDynamicMutation || naturalDynamicMutation;
-  if (READ_ONLY_REQUEST_RE.test(userRequest) && !explicitMutation) {
-    return `Blocked ${tool}: the user's current request is read-only/status-oriented, so mutating peer tools are not allowed this turn.`;
-  }
-  if (explicitMutation) return null;
-
-  if (OUTBOUND_SEND_TOOL_NAMES.has(normalized) && context?.conversationId) {
-    const { conversationId, args } = context;
-    if (isAffirmativeApproval(userRequest)) {
-      if (hasValidApprovalToken(conversationId, normalized, args)) {
-        consumeApprovalToken(conversationId);
-        return null;
-      }
-      return NOTHING_PENDING_TO_APPROVE_GUARD_SENTINEL;
-    }
-    if (hasSubstantiveDraftContent(args)) {
-      // Issuing this block IS the draft-approval prompt — register the token so a
-      // later affirmative on this exact draft resolves without needing a write verb.
-      registerApprovalToken(conversationId, normalized, args);
-    }
-  }
-
-  // #256 · C-19 · doctrine rule 7 — backlog peer writes (open_issue, edit_issue,
-  // close_issue, archus_request_backlog_action) carry semantic mutation intent even
-  // without a canonical write verb ("jot a note on #253", "log this on #12"). The
-  // read-only guard above already blocks pure status turns, and outbound sends stay
-  // approval-gated in their own branch; there is no magic word to require here. Allow
-  // the write — reconcileTaskingReply (#257) makes a blocked/failed result impossible
-  // to render as a fabricated success, so honesty is structural, not keyword-gated.
   if (
-    normalized === "openissue" ||
-    normalized === "editissue" ||
-    normalized === "closeissue" ||
-    normalized === "archusrequestbacklogaction"
+    !context.conversationId ||
+    !registerStandingApproval(
+      context.conversationId,
+      context.owner ?? "",
+      operation.toolId,
+      args,
+      "[approval_required] Held by Ring's deterministic host risk policy.",
+    )
   ) {
-    return null;
+    return `Blocked ${tool}: the elevated-risk operation could not be held with exact arguments.`;
   }
-
-  return `Blocked ${tool}: mutating peer tools require an explicit write/run/send instruction from the user's current message.`;
-}
-
-/**
- * P-1 — ask_outbound composes a draft through Callistheness (the outbound peer) but
- * never sends, so it is not a peer-mutation tool and peerMutationGuardFailure never
- * runs for it: no token was ever registered, and a later "Tweet approved" that resolves
- * to a direct post_tweet/post_reddit/send_email call found nothing pending — the token
- * and the standing draft lived in different places. Any substantive ask_outbound call
- * now registers a standing compose-approval on the SAME conversation-scoped store the
- * direct-ask path uses, so a following natural-language affirmative for ANY outbound
- * send tool resolves it (see approvalTokens.ts's anyOutboundSend).
- */
-export function registerOutboundComposeApproval(
-  conversationId: string | undefined,
-  tool: string,
-  args: Record<string, unknown> | undefined,
-): void {
-  if (!conversationId) return;
-  if (normalizedToolName(tool) !== "askoutbound") return;
-  if (!hasSubstantiveDraftContent(args)) return;
-  registerOutboundComposeApprovalToken(conversationId);
+  return HOST_APPROVAL_REQUIRED_GUARD_SENTINEL;
 }
 
 export function coerceEditIssueLabelsForUserRequest(

@@ -77,6 +77,16 @@ export {
   normalizeCreateIssueLabels,
   normalizeLabelIssueLabels,
   normalizedToolName,
+  authorizeTurnPlanOperation,
+  DEFAULT_TRUSTED_CONNECTION_PROFILE,
+  isTrustedConnectionProfile,
+  type ConnectionExposure,
+  type ConnectionFinancialScope,
+  type ConnectionTenantScope,
+  type HostAuthorizationDecision,
+  type HostAuthorizationDisposition,
+  type McpRiskAnnotations,
+  type TrustedConnectionProfile,
 } from "./taskingPolicy.js";
 export { applyReplyGate, isActionTool, type ReplyGateInterceptedEvent, type ReplyGateOutcome } from "./replyGate.js";
 export {

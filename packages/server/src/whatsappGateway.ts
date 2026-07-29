@@ -6,6 +6,7 @@ import {
   DisconnectReason,
   downloadContentFromMessage,
   fetchLatestBaileysVersion,
+  generateMessageIDV2,
   makeWASocket,
   useMultiFileAuthState,
   type WAMessage,
@@ -40,6 +41,7 @@ import {
   type WhatsAppInboundEvent,
   type WhatsAppChannelTiming,
   type WhatsAppMediaFollowUpLink,
+  type WhatsAppOutboundIntent,
   type WhatsAppStoreDiagnostics,
   type WhatsAppTranscriptFollowUp,
 } from "./whatsappStore.js";
@@ -124,7 +126,11 @@ export interface SocketLike {
     on(event: "messages.upsert", listener: (update: { messages: WAMessage[]; type: string }) => void): void;
   };
   user?: { id?: string | null } | null;
-  sendMessage(jid: string, content: { text: string }): Promise<{ key?: { id?: string | null } } | undefined>;
+  sendMessage(
+    jid: string,
+    content: { text: string },
+    options?: { messageId?: string },
+  ): Promise<{ key?: { id?: string | null } } | undefined>;
   readMessages?(keys: WAMessageKey[]): Promise<void>;
   sendReceipts?(keys: WAMessageKey[], type: "read"): Promise<void>;
   sendPresenceUpdate?(type: "composing" | "paused", toJid?: string): Promise<void>;
@@ -220,9 +226,24 @@ function textField(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function replyToMessageIdFromContent(content: Record<string, unknown>): string | null {
+  for (const key of [
+    "extendedTextMessage",
+    "imageMessage",
+    "videoMessage",
+    "audioMessage",
+    "documentMessage",
+  ]) {
+    const message = content[key] as { contextInfo?: { stanzaId?: unknown } } | undefined;
+    const stanzaId = textField(message?.contextInfo?.stanzaId).trim();
+    if (stanzaId) return stanzaId;
+  }
+  return null;
+}
+
 function extractBodyAndMedia(content: Record<string, unknown>): Omit<
   WhatsAppInboundEvent,
-  "messageId" | "chatId" | "senderId" | "senderName" | "chatName" | "isGroup" | "timestamp" | "raw"
+  "messageId" | "replyToMessageId" | "chatId" | "senderId" | "senderName" | "chatName" | "isGroup" | "timestamp" | "raw"
 > | null {
   if (typeof content.conversation === "string") {
     return {
@@ -313,6 +334,7 @@ export function eventFromBaileysMessage(message: WAMessage): WhatsAppInboundEven
 
   return {
     messageId,
+    replyToMessageId: replyToMessageIdFromContent(content),
     chatId,
     senderId,
     senderName: textField(message.pushName, normalizeWhatsAppIdentifier(senderId) || senderId),
@@ -628,6 +650,7 @@ export class WhatsAppGateway {
   private terminalClosing = false;
   private readonly lifecycleFailures: unknown[] = [];
   private readonly activeSocketWork = new Set<Promise<unknown>>();
+  private readonly outboundIntentSends = new Map<string, Promise<{ sentMessageId: string; raw?: unknown }>>();
   private readonly waiters = new Set<() => void>();
   private lifecyclePhase: WhatsAppLifecyclePhase = "idle";
   private lastTransitionAt = Date.now();
@@ -654,6 +677,13 @@ export class WhatsAppGateway {
       store: WhatsAppStore;
       getEngine: () => Promise<BrainEngine>;
       recordAssistantMessage?: (event: WhatsAppInboundEvent, text: string) => Promise<void> | void;
+      recordPortedReplyDelivery?: (
+        inboundProviderMessageId: string,
+        sentProviderMessageId: string,
+      ) => void;
+      portedReplyIntentScope?: (
+        inboundProviderMessageId: string,
+      ) => { tenantId: string; receiptEligible: boolean } | null;
       socketFactory?: SocketFactory;
       portedInboundHandler?: WhatsAppPortedInboundHandler;
       lifecycle?: {
@@ -1236,25 +1266,112 @@ export class WhatsAppGateway {
   }
 
   /** Ported provider send primitive used by Phylax's tenant-scoped MCP face. */
-  async sendText(recipient: string, text: string): Promise<{ sentMessageId: string }> {
+  async sendText(
+    recipient: string,
+    text: string,
+    auditMessageId?: string,
+  ): Promise<{ sentMessageId: string }> {
     const socket = this.socket;
     if (!socket) throw new Error("WhatsApp is not connected");
     const normalized = normalizeWhatsAppIdentifier(recipient);
     if (!normalized || !text.trim()) throw new Error("WhatsApp recipient and text are required");
     const jid = `${normalized}@s.whatsapp.net`;
-    const sent = await socket.sendMessage(jid, { text });
-    const sentMessageId = sent?.key?.id ?? null;
-    this.options.store.recordOutboundAudit({
-      messageId: `mcp-${randomUUID().replaceAll("-", "")}`,
+    const sourceMessageId = auditMessageId?.trim() || `mcp-${randomUUID().replaceAll("-", "")}`;
+    const scope = this.options.portedReplyIntentScope?.(sourceMessageId) ?? null;
+    const intent = this.options.store.prepareOutboundIntent({
+      sourceMessageId,
+      tenantId: scope?.tenantId ?? null,
+      providerMessageId: generateMessageIDV2(socket.user?.id ?? undefined),
       chatId: jid,
       contactId: jid,
       bodyText: text,
-      status: sentMessageId ? "sent" : "failed",
-      sentMessageId,
-      raw: sent,
+      successStatus: "sent",
+      receiptEligible: scope?.receiptEligible === true,
     });
-    if (!sentMessageId) throw new Error("WhatsApp provider returned no delivery receipt");
-    return { sentMessageId };
+    if (intent.state === "sent") {
+      return { sentMessageId: intent.sentProviderMessageId ?? intent.providerMessageId };
+    }
+    try {
+      const delivery = await this.sendOutboundIntent(socket, intent);
+      this.options.store.completeOutboundIntent(intent, delivery);
+      return { sentMessageId: delivery.sentMessageId };
+    } catch (error) {
+      this.options.store.recordOutboundIntentFailure(
+        intent,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
+  }
+
+  async recoverPortedReceipt(
+    tenantId: string,
+    sourceMessageId: string,
+    missingIntent?: { recipient: string; text: string },
+  ): Promise<string | null> {
+    let intent = this.options.store.recoverableReceiptIntent(tenantId, sourceMessageId);
+    if (!intent && missingIntent) {
+      const normalized = normalizeWhatsAppIdentifier(missingIntent.recipient);
+      const text = missingIntent.text.trim();
+      const scope = this.options.portedReplyIntentScope?.(sourceMessageId) ?? null;
+      if (!normalized || !text || scope?.tenantId !== tenantId || !scope.receiptEligible) {
+        return null;
+      }
+      const jid = `${normalized}@s.whatsapp.net`;
+      intent = this.options.store.prepareOutboundIntent({
+        sourceMessageId,
+        tenantId,
+        providerMessageId: generateMessageIDV2(this.socket?.user?.id ?? undefined),
+        chatId: jid,
+        contactId: jid,
+        bodyText: text,
+        successStatus: "sent",
+        receiptEligible: true,
+      });
+    }
+    if (!intent) return null;
+    if (intent.state === "sent") {
+      return intent.sentProviderMessageId ?? intent.providerMessageId;
+    }
+    const socket = this.socket;
+    if (!socket) return null;
+    try {
+      const delivery = await this.sendOutboundIntent(socket, intent);
+      this.options.store.completeOutboundIntent(intent, delivery);
+      return delivery.sentMessageId;
+    } catch (error) {
+      this.options.store.recordOutboundIntentFailure(
+        intent,
+        error instanceof Error ? error.message : String(error),
+      );
+      this.recoverFromSendError(error);
+      return null;
+    }
+  }
+
+  private sendOutboundIntent(
+    socket: SocketLike,
+    intent: WhatsAppOutboundIntent,
+  ): Promise<{ sentMessageId: string; raw?: unknown }> {
+    const existing = this.outboundIntentSends.get(intent.intentId);
+    if (existing) return existing;
+    const pending = (async () => {
+      const sent = await socket.sendMessage(
+        intent.chatId,
+        { text: intent.bodyText },
+        { messageId: intent.providerMessageId },
+      );
+      const sentMessageId = sent?.key?.id?.trim() ?? "";
+      if (!sentMessageId) {
+        throw new Error("WhatsApp provider returned no delivery receipt");
+      }
+      return {
+        sentMessageId,
+        ...(sent !== undefined ? { raw: sent } : {}),
+      };
+    })().finally(() => this.outboundIntentSends.delete(intent.intentId));
+    this.outboundIntentSends.set(intent.intentId, pending);
+    return pending;
   }
 
   // Send a read receipt (blue ticks) for the inbound message. Uses ONLY the
@@ -1340,7 +1457,7 @@ export class WhatsAppGateway {
         this.transition("ready");
         if (wasReconnecting) this.logHealthEvent("reconnect_succeeded");
         void this.trackSocketWork(this.refreshAllowedSenderAliases());
-        void this.trackSocketWork(this.recoverInterruptedMedia(socket)).catch((error: unknown) => {
+        void this.trackSocketWork(this.recoverDurableOutbound(socket)).catch((error: unknown) => {
           this.lastError = `WhatsApp media recovery failed: ${error instanceof Error ? error.message : String(error)}`;
           console.error("[whatsapp] media recovery failed:", error);
         });
@@ -1385,13 +1502,50 @@ export class WhatsAppGateway {
       if (!claim) return;
       const recipient = claim.contactId || claim.chatId;
       try {
-        const sent = await socket.sendMessage(recipient, { text: claim.replyText });
-        const sentMessageId = sent?.key?.id?.trim() ?? "";
-        if (!sentMessageId) throw new Error("WhatsApp provider returned no recovery delivery receipt");
-        this.options.store.completeInterruptedMediaRecovery(claim, { sentMessageId, raw: sent });
+        const scope = this.options.portedReplyIntentScope?.(claim.providerMessageId) ?? null;
+        const intent = this.options.store.prepareOutboundIntent({
+          sourceMessageId: claim.providerMessageId,
+          tenantId: scope?.tenantId ?? null,
+          providerMessageId: generateMessageIDV2(socket.user?.id ?? undefined),
+          chatId: recipient,
+          contactId: claim.contactId,
+          bodyText: claim.replyText,
+          successStatus: claim.kind === "forwarded_reply" ? "recovery_sent" : "recovery_notice_sent",
+          receiptEligible: scope?.receiptEligible === true,
+        });
+        const delivery = intent.state === "sent"
+          ? { sentMessageId: intent.sentProviderMessageId ?? intent.providerMessageId }
+          : await this.sendOutboundIntent(socket, intent);
+        this.options.store.completeInterruptedMediaRecovery(claim, {
+          sentMessageId: delivery.sentMessageId,
+          intentId: intent.intentId,
+          ...(delivery.raw !== undefined ? { raw: delivery.raw } : {}),
+        });
+        try {
+          if (intent.receiptEligible) {
+            this.options.recordPortedReplyDelivery?.(claim.providerMessageId, delivery.sentMessageId);
+          }
+        } catch (error) {
+          console.error("[whatsapp] failed to index recovered capture receipt:", error);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.options.store.completeInterruptedMediaRecovery(claim, { error: message });
+        this.recoverFromSendError(error);
+      }
+    }
+  }
+
+  private async recoverDurableOutbound(socket: SocketLike): Promise<void> {
+    await this.recoverInterruptedMedia(socket);
+    for (const intent of this.options.store.pendingReceiptIntents()) {
+      try {
+        const delivery = await this.sendOutboundIntent(socket, intent);
+        this.options.store.completeOutboundIntent(intent, delivery);
+        this.options.recordPortedReplyDelivery?.(intent.sourceMessageId, delivery.sentMessageId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.options.store.recordOutboundIntentFailure(intent, message);
         this.recoverFromSendError(error);
       }
     }
@@ -2005,26 +2159,39 @@ export class WhatsAppGateway {
     if (!text) return;
     text = linkifyGithubRefs(text, { markdown: false });
     const recipientJid = this.recipientJid(event);
+    const socket = this.socket;
+    if (!socket) throw new Error("WhatsApp is not connected");
+    const scope = this.options.portedReplyIntentScope?.(event.messageId) ?? null;
+    const intent = this.options.store.prepareOutboundIntent({
+      sourceMessageId: event.messageId,
+      tenantId: scope?.tenantId ?? null,
+      providerMessageId: generateMessageIDV2(socket.user?.id ?? undefined),
+      chatId: recipientJid,
+      contactId: event.senderId,
+      bodyText: text,
+      successStatus: status,
+      receiptEligible: scope?.receiptEligible === true,
+    });
     try {
-      const sent = await this.socket?.sendMessage(recipientJid, { text });
-      this.options.store.recordOutboundAudit({
-        messageId: event.messageId,
-        chatId: recipientJid,
-        contactId: event.senderId,
-        bodyText: text,
-        status,
-        sentMessageId: sent?.key?.id ?? null,
-        raw: sent,
-      });
+      const newlySending = intent.state !== "sent";
+      const delivery = !newlySending
+        ? { sentMessageId: intent.sentProviderMessageId ?? intent.providerMessageId }
+        : await this.sendOutboundIntent(socket, intent);
+      if (newlySending) this.options.store.completeOutboundIntent(intent, delivery);
+      if (newlySending || intent.receiptEligible) {
+        try {
+          this.options.recordPortedReplyDelivery?.(event.messageId, delivery.sentMessageId);
+        } catch (error) {
+          // The provider send has already succeeded. Never turn an indexing
+          // failure into a second WhatsApp reply.
+          console.error("[whatsapp] failed to index capture receipt:", error);
+        }
+      }
     } catch (err) {
-      this.options.store.recordOutboundAudit({
-        messageId: event.messageId,
-        chatId: recipientJid,
-        contactId: event.senderId,
-        bodyText: text,
-        status: "failed",
-        errorText: err instanceof Error ? err.message : String(err),
-      });
+      this.options.store.recordOutboundIntentFailure(
+        intent,
+        err instanceof Error ? err.message : String(err),
+      );
       this.recoverFromSendError(err);
       throw err;
     }

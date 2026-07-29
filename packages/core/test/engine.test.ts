@@ -978,8 +978,8 @@ describe("BrainEngine", () => {
 
     const reply = await engine().chat("EXEC: sweep the junk", "web");
 
-    expect(reply.text).toContain("DONE");
-    expect(reply.text).toMatch(/commit: [0-9a-f]{40}/);
+    expect(reply.text).toContain("Done — the change was verified.");
+    expect(reply.text).toMatch(/Commit: `[0-9a-f]{40}`/);
     await expect(readFile(join(repo.path, "Inbox/junk.md"), "utf8")).rejects.toThrow();
     expect((await engine().lint()).errors).toEqual([]);
   });
@@ -1205,6 +1205,7 @@ describe("BrainEngine", () => {
           comment: "post the smoke-test comment once",
         },
         result: "Edited #92: https://github.com/zenod-ai/zenod/issues/92",
+        mutationAttempt: true,
       },
     ]);
   });
@@ -1280,7 +1281,8 @@ describe("BrainEngine", () => {
     const reply = await e.handleTasking({ text: "EMPTYAFTERCREATE: Real task", surface: "whatsapp", conversationKey: "empty1" });
 
     expect(reply.text.trim()).not.toBe("");
-    expect(reply.text).toContain("Created issue #25");
+    expect(reply.text).toContain("Done — the change was verified.");
+    expect(reply.text).toContain("https://github.com/zenod-ai/zenod/issues/25");
   });
 
   it("never returns an empty reply even when no tools ran — sends a retry notice", async () => {
@@ -1290,7 +1292,7 @@ describe("BrainEngine", () => {
     expect(reply.text).toMatch(/rephrasing|try|again/i);
   });
 
-  it("leaves a genuine 'Created issue #N' reply untouched", async () => {
+  it("host-renders a genuine createIssue receipt", async () => {
     const e = createEngine({
       repo,
       llm,
@@ -1318,10 +1320,11 @@ describe("BrainEngine", () => {
     const reply = await e.handleTasking({ text: "CREATEISSUE: Real task", surface: "whatsapp", conversationKey: "ok" });
 
     expect(reply.text).not.toContain("Correction");
-    expect(reply.text).toContain("Created issue #25");
+    expect(reply.text).toContain("Done — the change was verified.");
+    expect(reply.text).toContain("https://github.com/zenod-ai/zenod/issues/25");
   });
 
-  it("corrects a fabricated 'Created issue #N' reply when the create actually 404'd (the phantom-repo bug)", async () => {
+  it("fails honestly when a createIssue call fails and the model fabricates success", async () => {
     const e = createEngine({
       repo,
       llm,
@@ -1350,10 +1353,9 @@ describe("BrainEngine", () => {
 
     const reply = await e.handleTasking({ text: "FABRICATECREATE: Phantom task", surface: "whatsapp", conversationKey: "fab" });
 
-    expect(reply.text).toMatch(/^⚠️ Correction/);
-    expect(reply.text).toContain("no GitHub issue was created");
-    expect(reply.text).toContain("The create step failed: GitHub returned 404: Not Found");
-    expect(reply.text).toContain("#58");
+    expect(reply.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
+    expect(reply.text).not.toContain("404");
+    expect(reply.text).not.toContain("#58");
   });
 
   it("forces agent-created GitHub issues to proposed instead of queued", async () => {

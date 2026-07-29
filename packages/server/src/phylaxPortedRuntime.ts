@@ -114,6 +114,28 @@ export class PhylaxPortedRuntime {
       settings: this.settings,
       store: this.whatsappStore,
       getEngine: unavailableEngine,
+      recordPortedReplyDelivery: (inboundProviderMessageId, sentProviderMessageId) => {
+        const tenantId = this.whatsappStore.channelAudit(inboundProviderMessageId)?.tenantId;
+        if (!tenantId) return;
+        this.organ.recordCaptureReceiptDelivery(
+          "whatsapp",
+          tenantId,
+          inboundProviderMessageId,
+          sentProviderMessageId,
+        );
+      },
+      portedReplyIntentScope: (inboundProviderMessageId) => {
+        const tenantId = this.whatsappStore.channelAudit(inboundProviderMessageId)?.tenantId;
+        if (!tenantId) return null;
+        return {
+          tenantId,
+          receiptEligible: this.organ.captureReceiptReady(
+            "whatsapp",
+            tenantId,
+            inboundProviderMessageId,
+          ),
+        };
+      },
       portedInboundHandler: async ({ event, text, media, transcription, timing, progress }) => {
         const verificationReply = await adapters.verifyInbound?.({
           channel: "whatsapp",
@@ -152,6 +174,7 @@ export class PhylaxPortedRuntime {
           sender: event.senderId,
           chatId: event.chatId,
           messageId: event.messageId,
+          ...(event.replyToMessageId ? { replyToMessageId: event.replyToMessageId } : {}),
           text,
           ...(media ? { media } : {}),
           ...(transcription
@@ -210,6 +233,7 @@ export class PhylaxPortedRuntime {
           const needsConfirmation = durationSeconds === null || durationSeconds > 30 * 60;
           this.whatsappStore.createVoiceJob({
             providerMessageId: event.messageId,
+            replyToMessageId: staged.replyToMessageId,
             tenantId: staged.tenantId,
             conversationKey: staged.conversationKey,
             senderId: staged.sender,
@@ -356,13 +380,27 @@ export class PhylaxPortedRuntime {
       },
       ...(adapters.telegramFetch ? { fetchImpl: adapters.telegramFetch } : {}),
     });
-    this.organ.setTerminalReceiptDelivery(async (channel, recipient, text) => {
+    this.organ.setTerminalReceiptDelivery(async (channel, recipient, text, captureProviderMessageId) => {
       if (channel === "whatsapp") {
-        await this.whatsapp.sendText(recipient, text);
+        return this.whatsapp.sendText(recipient, text, captureProviderMessageId);
       } else {
-        await this.telegram.sendText(recipient, text);
+        return this.telegram.sendText(recipient, text);
       }
       this.wakeCaptureTickets?.();
+    });
+    this.organ.setTerminalReceiptRecovery(async (
+      channel,
+      tenantId,
+      captureProviderMessageId,
+      recipient,
+      text,
+    ) => {
+      if (channel !== "whatsapp") return null;
+      return this.whatsapp.recoverPortedReceipt(
+        tenantId,
+        captureProviderMessageId,
+        { recipient, text },
+      );
     });
     queueMicrotask(() => this.kickVoiceWorker());
   }
@@ -435,6 +473,7 @@ export class PhylaxPortedRuntime {
           sender: job.senderId,
           chatId: job.chatId,
           messageId: job.providerMessageId,
+          replyToMessageId: job.replyToMessageId,
           conversationKey: job.conversationKey,
           artifactRef: job.artifactRef,
           artifactPath: job.artifactPath,
