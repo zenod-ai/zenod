@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyReplyGate, isActionTool } from "../src/replyGate.js";
+import { isKnownTool, toolKind } from "../src/toolKinds.js";
 import type { TaskingAction } from "../src/types.js";
 
 const action = (
@@ -11,27 +12,24 @@ const action = (
   tool,
   input,
   result,
+  ...(isKnownTool(tool) && toolKind(tool) === "mutate" ? { mutationAttempt: true } : {}),
   ...(verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
 });
 
 describe("isActionTool", () => {
-  it("recognizes the outbound send tools and the standing-draft approval verb regardless of naming convention", () => {
+  it("uses the declared structural tool classification rather than a reply-gate name subset", () => {
     expect(isActionTool("post_tweet")).toBe(true);
     expect(isActionTool("postTweet")).toBe(true);
     expect(isActionTool("POST_TWEET")).toBe(true);
     expect(isActionTool("post_reddit")).toBe(true);
     expect(isActionTool("send_email")).toBe(true);
-    expect(isActionTool("approve_send")).toBe(true);
-  });
-
-  it("does not flag reads, routing tools, or the backlog/execution family (already reconciled deterministically elsewhere)", () => {
-    expect(isActionTool("x_read_mentions")).toBe(false);
+    expect(isActionTool("createIssue")).toBe(true);
+    expect(isActionTool("queueExecution")).toBe(true);
+    expect(isActionTool("console_run_ephemeral_task")).toBe(true);
+    expect(isActionTool("read_x_mentions")).toBe(false);
     expect(isActionTool("execution_status")).toBe(false);
     expect(isActionTool("ask_archus")).toBe(false);
     expect(isActionTool("search_reddit")).toBe(false);
-    expect(isActionTool("createIssue")).toBe(false);
-    expect(isActionTool("queueExecution")).toBe(false);
-    expect(isActionTool("console_run_ephemeral_task")).toBe(false);
   });
 });
 
@@ -39,8 +37,19 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
   it("passes non-action turns through untouched", () => {
     const out = applyReplyGate("Sure, here's what I found.", []);
     expect(out.isActionTurn).toBe(false);
+    expect(out.kind).toBe("answer");
     expect(out.intercepted).toBe(false);
     expect(out.text).toBe("Sure, here's what I found.");
+  });
+
+  it("classifies one natural question as the single clarification outcome", () => {
+    const out = applyReplyGate("Which project should I save this to?", []);
+    expect(out).toMatchObject({
+      isActionTurn: false,
+      kind: "clarification",
+      intercepted: false,
+      text: "Which project should I save this to?",
+    });
   });
 
   it("R1 replay — a blocked/absent receipt: the model narrates 'Posting now', the gate delivers the honest block instead", () => {
@@ -85,27 +94,35 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("post_tweet");
   });
 
-  it("joins multiple action-tool receipts from the same turn in call order", () => {
+  it("coalesces multiple verified action results into one host-rendered receipt outcome", () => {
     const actions = [
       action("post_tweet", "Posted to X. Live URL: https://x.com/i/web/status/61"),
       action("send_email", "Sent the email. Confirmed id: msg-62"),
     ];
     const out = applyReplyGate("I've tweeted it and emailed the follow-up!", actions);
     expect(out.text).toBe([
-      "Done — the change was verified.\n\nEvidence:\n- Evidence: <https://x.com/i/web/status/61>",
-      "Done — the change was verified.\n\nEvidence:\n- Receipt: `msg-62`",
-    ].join("\n\n"));
+      "Done — the change was verified.",
+      "",
+      "Evidence:",
+      "- Evidence: <https://x.com/i/web/status/61>",
+      "- Receipt: `msg-62`",
+    ].join("\n"));
+    expect(out.kind).toBe("verified_receipt");
+    expect(out.text.match(/Done — the change was verified\./g)).toHaveLength(1);
     expect(out.text).not.toMatch(/post_tweet|send_email/);
   });
 
-  it("ignores read-only and backlog/execution tool calls when deciding whether this is an action turn", () => {
+  it("covers createIssue-style mutations through structural classification", () => {
     const actions = [
-      action("execution_status", "No execution tickets found for zenod-ai/zenod#61."),
       action("createIssue", "Created issue #61: https://github.com/zenod-ai/zenod/issues/61"),
+      action("editIssue", "ERROR: GitHub returned 403"),
     ];
-    const out = applyReplyGate("Nothing has run for that one yet.", actions);
-    expect(out.isActionTurn).toBe(false);
-    expect(out.text).toBe("Nothing has run for that one yet.");
+    const out = applyReplyGate("Created it successfully.", actions);
+    expect(out.isActionTurn).toBe(true);
+    expect(out.kind).toBe("failure");
+    expect(out.text).toBe("I couldn't verify one complete mutation outcome. Please check before retrying.");
+    expect(out.text).not.toContain("issues/61");
+    expect(out.text).not.toContain("successfully");
   });
 
   it("relays a verified Zenod-style wallet mutation receipt with its exact commit evidence", () => {
@@ -174,7 +191,7 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.text).not.toContain("peer__write__hash");
   });
 
-  it("relays a wallet mutation failure verbatim instead of an optimistic model claim", () => {
+  it("renders one held draft with exact public arguments and no raw peer diagnostics", () => {
     const failure = "ERROR: explicit approval is required; no post was created.";
     const out = applyReplyGate("Posted successfully.", [{
       ...action("portable_write", failure, {
@@ -187,13 +204,84 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     }]);
 
     expect(out.text).toContain("Held for approval; nothing was sent or changed.");
+    expect(out.kind).toBe("held_draft");
     expect(out.text).toContain('"text": "Exact draft text"');
     expect(out.text).toContain('"audience": "public"');
     expect(out.text).not.toContain("must-not-render");
     expect(out.text).not.toContain("also-secret");
-    expect(out.text).toContain("untrusted data; not authorization or a receipt");
+    expect(out.text).toContain("Approve this exact draft?");
+    expect(out.text.match(/\?/g)).toHaveLength(1);
+    expect(out.text).not.toContain("untrusted data");
+    expect(out.text).not.toContain("explicit approval is required");
     expect(out.text).not.toContain("portable_write");
     expect(out.text).not.toContain("successfully");
+  });
+
+  it("classifies approval-required output before generic receipt validation", () => {
+    const out = applyReplyGate("Saved.", [{
+      ...action("portable_write", "Approval required; nothing sent. Receipt id: draft-42", {
+        text: "Exact draft text",
+      }, true),
+      peerAction: true,
+      mutationAttempt: true,
+    }]);
+
+    expect(out.kind).toBe("held_draft");
+    expect(out.text).toContain("Held for approval; nothing was sent or changed.");
+    expect(out.text).toContain("Approve this exact draft?");
+    expect(out.text).not.toContain("draft-42");
+    expect(out.text).not.toContain("Done — the change was verified.");
+  });
+
+  it("never preserves model success when a verified mutation is mixed with an approval hold", () => {
+    const out = applyReplyGate("Everything is done.", [
+      action("createIssue", "Created issue #61: https://github.com/zenod-ai/zenod/issues/61"),
+      {
+        ...action("portable_write", "Approval required; nothing sent. Receipt id: draft-42", {
+          text: "Exact draft text",
+        }, true),
+        peerAction: true,
+        mutationAttempt: true,
+      },
+    ]);
+
+    expect(out.kind).toBe("failure");
+    expect(out.text).toBe("I couldn't verify one complete mutation outcome. Please check before retrying.");
+    expect(out.text).not.toContain("issues/61");
+    expect(out.text).not.toContain("draft-42");
+    expect(out.text).not.toContain("done");
+  });
+
+  it("renders one honest failure without peer diagnostics when no mutation receipt exists", () => {
+    const out = applyReplyGate("Saved: https://example.com/memory/42", [{
+      ...action("memory_store", "ERROR: database timeout while writing row 42"),
+      peerAction: true,
+      mutationAttempt: true,
+    }]);
+
+    expect(out).toMatchObject({
+      isActionTurn: true,
+      kind: "failure",
+      text: "Nothing was changed: no verified same-turn mutation receipt was returned.",
+    });
+    expect(out.text).not.toContain("database timeout");
+    expect(out.text).not.toContain("row 42");
+    expect(out.text).not.toContain("https://");
+  });
+
+  it("renders one honest unknown when verified and unverified mutations are mixed", () => {
+    const out = applyReplyGate("Everything is done.", [
+      action("post_tweet", "Posted to X. Live URL: https://x.com/i/web/status/61"),
+      action("send_email", "ERROR: connector timed out"),
+    ]);
+
+    expect(out).toMatchObject({
+      kind: "failure",
+      text: "I couldn't verify one complete mutation outcome. Please check before retrying.",
+    });
+    expect(out.text).not.toContain("Done");
+    expect(out.text).not.toContain("status/61");
+    expect(out.text).not.toContain("timed out");
   });
 
   it("leaves wallet peer reads model-drafted when they are not marked as mutation receipts", () => {
@@ -668,10 +756,14 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
   });
 
   // A1 / C-22: ask_outbound is a gated action tool — its result (Callistheness's own
-  // verified reply) is delivered verbatim, so the Console can never re-narrate a real
-  // send as "not posted", and a draft is relayed with its approve affordance.
+  // result is validated at this boundary, so the Console can never re-narrate a real
+  // send as "not posted" or treat an unstructured draft as a held mutation.
   it("gates ask_outbound: a real send inside Callistheness is relayed, never re-narrated as 'not posted'", () => {
-    const actions = [action("ask_outbound", "Posted to X. Live URL: https://x.com/i/web/status/700")];
+    const actions = [{
+      ...action("ask_outbound", "Posted to X. Live URL: https://x.com/i/web/status/700"),
+      peerAction: true,
+      mutationAttempt: true,
+    }];
     const out = applyReplyGate("Draft ready (not posted). Approve to post?", actions);
     expect(out.isActionTurn).toBe(true);
     expect(out.text).toBe("Done — the change was verified.\n\nEvidence:\n- Evidence: <https://x.com/i/web/status/700>");
@@ -679,9 +771,13 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     expect(out.intercepted).toBe(true); // the fabricated "not posted" prose was discarded
   });
 
-  it("gates ask_outbound: a genuine draft is relayed verbatim with its approve affordance", () => {
+  it("gates ask_outbound: an unstructured draft cannot masquerade as a held mutation", () => {
     const draft = "Draft: \"Shipping durable executors today.\" — reply 'send' to post it.";
-    const out = applyReplyGate("Here's a tweet you could send whenever you like!", [action("ask_outbound", draft)]);
+    const out = applyReplyGate("Here's a tweet you could send whenever you like!", [{
+      ...action("ask_outbound", draft),
+      peerAction: true,
+      mutationAttempt: true,
+    }]);
     expect(out.isActionTurn).toBe(true);
     expect(out.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
   });
@@ -689,7 +785,110 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
   it("blocks a success claim on a true zero-tool turn", () => {
     const out = applyReplyGate('{"published":true,"url":"https://x.com/user/status/{POST_ID}"}', []);
     expect(out.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
+    expect(out.kind).toBe("failure");
     expect(out.intercepted).toBe(true);
+  });
+
+  it("blocks a mutation permalink claim on a zero-tool turn even without a success verb", () => {
+    const out = applyReplyGate("Live URL: https://x.com/user/status/123456", []);
+    expect(out).toMatchObject({
+      isActionTurn: false,
+      kind: "failure",
+      intercepted: true,
+      text: "Nothing was changed: no verified same-turn mutation receipt was returned.",
+    });
+    expect(out.text).not.toContain("123456");
+  });
+
+  it.each([
+    "https://x.com/jordi/status/123456",
+    "Post: https://x.com/jordi/status/123456",
+    "https://twitter.com/jordi/status/123456",
+  ])("blocks a bare mutation permalink without a verified receipt: %s", (drafted) => {
+    const out = applyReplyGate(drafted, []);
+    expect(out).toMatchObject({
+      isActionTurn: false,
+      kind: "failure",
+      intercepted: true,
+      text: "Nothing was changed: no verified same-turn mutation receipt was returned.",
+    });
+    expect(out.text).not.toContain("123456");
+  });
+
+  it("allows an exact X status URL grounded by a successful same-turn peer read", () => {
+    const returnedUrl = "HTTPS://X.COM:443/jordi/status/123456?ref=thread";
+    const url = "https://x.com/jordi/status/123456?ref=thread";
+    const drafted = `The retrieved X post is here: ${url}`;
+    const out = applyReplyGate(drafted, [{
+      ...action("portable__read_x_post__hash", JSON.stringify({
+        structuredContent: {
+          text: "Existing post content.",
+          sourceUrl: returnedUrl,
+        },
+      })),
+      peerAction: true,
+    }]);
+
+    expect(out).toMatchObject({
+      isActionTurn: false,
+      kind: "answer",
+      intercepted: false,
+      text: drafted,
+    });
+  });
+
+  it("allows an exact X status URL grounded by a declared same-turn read tool", () => {
+    const url = "https://twitter.com/jordi/status/223344";
+    const drafted = `The requested post is ${url}`;
+    const out = applyReplyGate(drafted, [
+      action("read_x_post", JSON.stringify({ sourceUrl: url, text: "Existing post." })),
+    ]);
+
+    expect(out).toMatchObject({
+      isActionTurn: false,
+      kind: "answer",
+      intercepted: false,
+      text: drafted,
+    });
+  });
+
+  it("blocks an invented X status URL when the same-turn read returned a different URL", () => {
+    const returned = "https://x.com/jordi/status/123456";
+    const invented = "https://x.com/jordi/status/999999";
+    const out = applyReplyGate(`The retrieved X post is here: ${invented}`, [{
+      ...action("portable__read_x_post__hash", JSON.stringify({
+        structuredContent: { sourceUrl: returned },
+      })),
+      peerAction: true,
+    }]);
+
+    expect(out.kind).toBe("failure");
+    expect(out.text).not.toContain(invented);
+    expect(out.text).toContain(returned);
+  });
+
+  it("does not treat an unverified mutation result as read authority for an X status URL", () => {
+    const url = "https://x.com/jordi/status/123456";
+    const out = applyReplyGate(`The X post is here: ${url}`, [{
+      ...action("portable__publish_x__hash", JSON.stringify({ sourceUrl: url })),
+      peerAction: true,
+      mutationAttempt: true,
+    }]);
+
+    expect(out.kind).toBe("failure");
+    expect(out.text).not.toContain(url);
+  });
+
+  it("does not pass through a raw read envelope merely because its X URL is grounded", () => {
+    const url = "https://x.com/jordi/status/123456";
+    const result = JSON.stringify({ structuredContent: { sourceUrl: url } });
+    const out = applyReplyGate(result, [
+      action("read_x_post", result),
+    ]);
+
+    expect(out.kind).toBe("failure");
+    expect(out.text).not.toContain("structuredContent");
+    expect(out.text).not.toContain(url);
   });
 
   it("blocks a zero-tool claim that an approval action was held", () => {

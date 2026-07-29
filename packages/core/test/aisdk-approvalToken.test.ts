@@ -26,6 +26,8 @@ vi.mock("ai", async (importActual) => {
 });
 
 import { createBrainLlm } from "../src/llm/aisdk.js";
+import { createEngine } from "../src/engine/engine.js";
+import { SqliteStateStore } from "../src/state/sqlite.js";
 
 const readTools = {
   searchVault: async () => "no hits",
@@ -298,6 +300,37 @@ describe("D9 exact standing approval at the AI SDK execution boundary", () => {
       "ERROR: Ring accepts exactly one connected-tool proposal per turn; ask one clarifying question.",
       "ERROR: Ring accepts exactly one connected-tool proposal per turn; ask one clarifying question.",
     ]);
+    expect(calls).toEqual([]);
+  });
+
+  it("renders a rejected two-mutation proposal batch as one honest mutation failure at the engine boundary", async () => {
+    const calls: unknown[] = [];
+    const firstName = "portable__first__0123456789abcdef";
+    const secondName = "portable__second__fedcba9876543210";
+    captured.generateImplementation = async (config) => {
+      await config.tools[firstName].needsApproval({ text: "one" });
+      await config.tools[secondName].needsApproval({ text: "two" });
+      const results = await Promise.all([
+        config.tools[firstName].execute({ text: "one" }),
+        config.tools[secondName].execute({ text: "two" }),
+      ]);
+      return {
+        text: results.join("\n"),
+        totalUsage: {},
+        providerMetadata: {},
+      };
+    };
+    const engine = createEngine({
+      llm: createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 }),
+      state: new SqliteStateStore(":memory:"),
+      peerTools: privateBatchPeers(calls),
+    });
+
+    const reply = await engine.chat("Do both.", "tenant-a:ring:two-proposal-outcome");
+
+    expect(reply.text).toBe("Nothing was changed: no verified same-turn mutation receipt was returned.");
+    expect(reply.text).not.toContain("couldn't read");
+    expect(reply.text).not.toContain("exactly one connected-tool proposal");
     expect(calls).toEqual([]);
   });
 

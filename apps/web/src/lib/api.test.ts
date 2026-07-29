@@ -7,7 +7,7 @@ describe("chatStream", () => {
     vi.unstubAllGlobals()
   })
 
-  it("reports the authoritative final text even when streamed deltas contain a draft", async () => {
+  it("never emits unverified streamed prose when the authoritative final gate replaces it", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -38,7 +38,7 @@ describe("chatStream", () => {
       },
     })
 
-    expect(streamed).toBe("Draft answer.")
+    expect(streamed).toBe("Verified receipt: abc123")
     expect(completed).toBe("Verified receipt: abc123")
   })
 

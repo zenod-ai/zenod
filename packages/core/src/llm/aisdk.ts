@@ -23,6 +23,7 @@ import {
   peerMutationGuardFailure,
 } from "../taskingPolicy.js";
 import { registerStandingApproval } from "../approvalTokens.js";
+import { isKnownTool, toolKind } from "../toolKinds.js";
 import { validateMutationReceipt } from "../mutationReceipt.js";
 import type {
   AnswerInput,
@@ -1273,10 +1274,24 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               const operation: TurnPlanOperation = peer.connectedMcp
                 ? registerPeerProposal(name, args)
                 : { toolId: name, input: args, payloadRef: null };
+              const mutationAttempt =
+                peer.verifiedMutationReceipt === true ||
+                peer.annotations?.readOnlyHint === false ||
+                (isKnownTool(name) && toolKind(name) === "mutate");
+              const receiptMetadata = (result: string) => {
+                if (!mutationAttempt && !peer.connectedMcp) return undefined;
+                const receipt = validateMutationReceipt(name, result);
+                return {
+                  ...(peer.connectedMcp ? { peerAction: true as const } : {}),
+                  ...(mutationAttempt ? { mutationAttempt: true as const } : {}),
+                  ...(mutationAttempt && receipt.verified ? { verifiedMutationReceipt: true as const } : {}),
+                  ...(mutationAttempt && receipt.text ? { verifiedReceiptText: receipt.text } : {}),
+                };
+              };
               if (peer.connectedMcp) {
                 if (conflictingPeerProposal) {
                   const result = MULTI_PROPOSAL_ERROR;
-                  input.onPeerAction?.(name, args, result, { peerAction: true });
+                  input.onPeerAction?.(name, args, result, receiptMetadata(result));
                   return result;
                 }
               }
@@ -1284,17 +1299,6 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               if (existing) return existing;
 
               const pending = (async () => {
-                const mutationAttempt = peer.verifiedMutationReceipt === true;
-                const receiptMetadata = (result: string) => {
-                  if (!mutationAttempt && !peer.connectedMcp) return undefined;
-                  const receipt = validateMutationReceipt(name, result);
-                  return {
-                    ...(peer.connectedMcp ? { peerAction: true as const } : {}),
-                    ...(mutationAttempt ? { mutationAttempt: true as const } : {}),
-                    ...(mutationAttempt && receipt.verified ? { verifiedMutationReceipt: true as const } : {}),
-                    ...(mutationAttempt && receipt.text ? { verifiedReceiptText: receipt.text } : {}),
-                  };
-                };
                 const guardFailure = peerMutationGuardFailure(name, input.question, {
                   operation: peer.connectedMcp ? selectedPeerProposal?.operation ?? operation : operation,
                   conversationId: input.conversationId,

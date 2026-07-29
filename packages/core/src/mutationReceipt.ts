@@ -111,6 +111,16 @@ function collectTextEvidence(raw: string, out: MutationReceiptEvidence[]): void 
   for (const match of raw.matchAll(/\b(?:confirmed|receipt|message|ticket|job)\s+(?:id|handle)\s*:\s*([^\s,;]+)/gi)) {
     pushEvidence(out, /ticket|job/i.test(match[0]) ? "ticket_id" : "id", match[1]);
   }
+  // Host task tools return the read-back-verified GitHub issue identity in this
+  // canonical form. Require the same numeric id in the label and URL so a generic
+  // success sentence or unrelated link cannot become mutation evidence.
+  for (const match of raw.matchAll(
+    /\bcreated\s+issue\s+#(\d+)\s*:\s*(https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/(\d+)(?:[?#][^\s]*)?)/gi,
+  )) {
+    if (match[1] !== match[3]) continue;
+    pushEvidence(out, "id", `issue-${match[1]}`);
+    pushEvidence(out, "url", match[2]?.replace(/[),.;]+$/, ""));
+  }
 
   // Legacy peers sometimes return immutable links as otherwise-unlabelled text.
   // A bare URL can augment concrete same-result evidence, but can never prove a

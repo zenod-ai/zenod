@@ -568,6 +568,7 @@ export async function chatStream(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ""
+  const pendingDeltas: string[] = []
 
   const handleLine = (line: string) => {
     const trimmed = line.trim()
@@ -584,16 +585,24 @@ export async function chatStream(
       | { type: "error"; code?: string; message: string }
       | { type: "ping" }
     if (event.type === "ping") return // keep-alive; nothing to render
-    if (event.type === "delta") handlers.onDelta(event.text)
+    if (event.type === "delta") pendingDeltas.push(event.text)
     else if (event.type === "tool")
       handlers.onTool?.({ phase: event.phase, tool: event.tool, label: event.label })
-    else if (event.type === "done")
+    else if (event.type === "done") {
+      // The final event is the host-gated authority. Never expose an earlier model
+      // delta that the gate replaced; replay natural chunks only when they exactly
+      // compose that final text, otherwise emit the gated result as one safe block.
+      if (pendingDeltas.join("") === event.text) {
+        for (const delta of pendingDeltas) handlers.onDelta(delta)
+      } else if (event.text) {
+        handlers.onDelta(event.text)
+      }
       handlers.onDone({
         text: event.text,
         sources: event.sources,
         ...(event.stored ? { stored: event.stored } : {}),
       })
-    else if (event.type === "error") throw new ApiError(503, event.message, event.code)
+    } else if (event.type === "error") throw new ApiError(503, event.message, event.code)
   }
 
   for (;;) {

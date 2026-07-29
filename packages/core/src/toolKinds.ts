@@ -100,6 +100,7 @@ const MUTATE_TOOLS: readonly string[] = [
   "posttweet",
   "postreddit",
   "sendemail",
+  "approvesend",
   // notifier side effect
   "raiseevent",
   "delivertoprincipal",
