@@ -336,6 +336,8 @@ describe("PhylaxChannelsOrgan", () => {
       },
     });
     expect(calls.at(-1)?.arguments.message).toContain("Log/2026-07-29.md#^receipt-seed");
+    expect(calls.at(-1)?.arguments.message).toContain("trusted host metadata");
+    expect(calls.at(-1)?.arguments.message).toContain("not an async job identifier");
 
     await restarted.receive({
       channel: "whatsapp",
