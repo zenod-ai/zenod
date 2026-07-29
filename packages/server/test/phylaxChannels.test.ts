@@ -163,6 +163,245 @@ describe("PhylaxChannelsOrgan", () => {
     await organ.close();
   });
 
+  it("persists receipt refs across restart and routes only same-tenant WhatsApp text or voice replies to Ring", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-receipt-reply-"));
+    dirs.push(dataDir);
+    const captureRoute = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/alpha",
+      downstreamToken: "alpha-memory-scope",
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "transcript" as const } },
+        },
+        text: {
+          tool: "ring_reply",
+          argumentMappings: { message: { source: "message" as const } },
+        },
+        media: {
+          tool: "media_ingest",
+          argumentMappings: { artifact: { source: "artifactUrl" as const } },
+        },
+      },
+    };
+    const first = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => captureRoute },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+          description: "Store memory",
+        }],
+      }),
+      capturePollIntervalMs: 1,
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: { ticket_id: "receipt-seed-job", state: "accepted" },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "receipt-seed-job",
+            state: "done",
+            result: {
+              evidenceRef: "Log/2026-07-29.md#^receipt-seed",
+              pagesTouched: ["Inbox/Receipt seed.md"],
+              commitSha: "abc1234",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+    });
+    await first.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "alpha-chat",
+      messageId: "capture-provider-1",
+      transcription: { text_transcript: "Remember the receipt seed." },
+    });
+    expect(first.recordCaptureReceiptDelivery(
+      "whatsapp",
+      "alpha",
+      "capture-provider-1",
+      "receipt-provider-1",
+    )).toBe(true);
+    await first.close();
+
+    const calls: PhylaxDownstreamCall[] = [];
+    const restarted = new PhylaxChannelsOrgan({
+      dataDir,
+      artifactUrl: (tenantId, artifactId) =>
+        `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      routes: {
+        resolve(_channel, sender) {
+          const tenantId = sender.endsWith("111") ? "alpha" : "beta";
+          return {
+            tenantId,
+            downstreamUrl: `https://zenod.test/mcp/${tenantId}`,
+            downstreamToken: `${tenantId}-memory-scope`,
+            turnBindings: {
+              voice_note: {
+                tool: "capture_voice",
+                argumentMappings: { content: { source: "transcript" } },
+              },
+              text: {
+                tool: "ring_reply",
+                argumentMappings: { message: { source: "transcript" } },
+              },
+              media: {
+                tool: "media_ingest",
+                argumentMappings: { artifact: { source: "artifactUrl" } },
+              },
+            },
+          };
+        },
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [
+          {
+            as: "ring",
+            mcp: "ring_reply",
+            arg: "input",
+            inputSchema: {
+              type: "object",
+              required: ["message"],
+              properties: { message: { type: "string" } },
+            },
+            description: "Reply with Ring",
+          },
+          {
+            as: "memory",
+            mcp: "capture_voice",
+            arg: "input",
+            inputSchema: {
+              type: "object",
+              required: ["content"],
+              properties: { content: { type: "string" } },
+            },
+            description: "Capture voice",
+          },
+          {
+            as: "memory",
+            mcp: "media_ingest",
+            arg: "input",
+            inputSchema: {
+              type: "object",
+              required: ["artifact"],
+              properties: { artifact: { type: "string" } },
+            },
+            description: "Ingest media",
+          },
+        ],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: `called ${call.tool}` }] };
+      },
+    });
+
+    await restarted.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "alpha-chat",
+      messageId: "reply-text-1",
+      replyToMessageId: "receipt-provider-1",
+      text: "What were the open questions?",
+    });
+    expect(calls.at(-1)).toMatchObject({
+      route: { tenantId: "alpha" },
+      tool: "ring_reply",
+      handoff: {
+        reply_context: { evidenceRef: "Log/2026-07-29.md#^receipt-seed" },
+      },
+    });
+    expect(calls.at(-1)?.arguments.message).toContain("Log/2026-07-29.md#^receipt-seed");
+
+    await restarted.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "alpha-chat",
+      messageId: "reply-voice-1",
+      replyToMessageId: "receipt-provider-1",
+      transcription: { text_transcript: "Draft a tweet from that." },
+    });
+    expect(calls.at(-1)).toMatchObject({
+      route: { tenantId: "alpha" },
+      tool: "ring_reply",
+      handoff: {
+        text_transcript: "Draft a tweet from that.",
+        reply_context: { evidenceRef: "Log/2026-07-29.md#^receipt-seed" },
+      },
+    });
+
+    await restarted.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "alpha-chat",
+      messageId: "unknown-reply-voice",
+      replyToMessageId: "not-a-known-receipt",
+      transcription: { text_transcript: "Capture this standalone voice note." },
+    });
+    expect(calls.at(-1)).toMatchObject({
+      route: { tenantId: "alpha" },
+      tool: "capture_voice",
+      arguments: { content: "Capture this standalone voice note." },
+    });
+    expect(calls.at(-1)?.handoff.reply_context).toBeUndefined();
+
+    await restarted.receive({
+      channel: "whatsapp",
+      sender: "34622222222",
+      chatId: "beta-chat",
+      messageId: "cross-tenant-reply-voice",
+      replyToMessageId: "receipt-provider-1",
+      transcription: { text_transcript: "Do not leak alpha evidence." },
+    });
+    expect(calls.at(-1)).toMatchObject({
+      route: { tenantId: "beta" },
+      tool: "capture_voice",
+    });
+    expect(JSON.stringify(calls.at(-1))).not.toContain("receipt-seed");
+
+    await restarted.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "alpha-chat",
+      messageId: "reply-image-1",
+      replyToMessageId: "receipt-provider-1",
+      text: "Screenshot caption",
+      media: {
+        bytes: Buffer.from("standalone-image"),
+        mimeType: "image/png",
+        fileName: "screenshot.png",
+      },
+    });
+    expect(calls.at(-1)).toMatchObject({
+      route: { tenantId: "alpha" },
+      tool: "media_ingest",
+    });
+    expect(calls.at(-1)?.handoff.reply_context).toBeUndefined();
+    await restarted.close();
+  });
+
   it("keeps an accepted capture polling through a transient result outage and records only the later terminal success", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-transient-poll-"));
     dirs.push(dataDir);
@@ -548,7 +787,7 @@ describe("PhylaxChannelsOrgan", () => {
     await organ.close();
   });
 
-  it("returns an honest foreground deadline, then resumes the persisted poll after restart", async () => {
+  it("reconciles a crash after terminal provider send without duplicate delivery or lost reply context", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-restart-"));
     dirs.push(dataDir);
     const route = {
@@ -560,28 +799,53 @@ describe("PhylaxChannelsOrgan", () => {
           tool: "store_memory",
           argumentMappings: { content: { source: "transcript" as const } },
         },
-        text: { tool: "chat_with_ring", argumentMappings: {} },
+        text: {
+          tool: "chat_with_ring",
+          argumentMappings: {
+            message: { source: "message" as const },
+            surface: { source: "surface" as const },
+            conversationKey: { source: "conversationKey" as const },
+          },
+        },
         media: { tool: "chat_with_ring", argumentMappings: {} },
       },
     };
     const discovery = async () => ({
       transport: "connected" as const,
       tools: "ready" as const,
-      specs: [{
-        as: "memory",
-        mcp: "store_memory",
-        arg: "input",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: ["content", "idempotencyKey"],
-          properties: {
-            content: { type: "string" },
-            idempotencyKey: { type: "string" },
+      specs: [
+        {
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
           },
+          description: "Store memory",
         },
-        description: "Store memory",
-      }],
+        {
+          as: "ring",
+          mcp: "chat_with_ring",
+          arg: "input",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["message", "surface", "conversationKey"],
+            properties: {
+              message: { type: "string" },
+              surface: { type: "string" },
+              conversationKey: { type: "string" },
+            },
+          },
+          description: "Chat with Ring",
+        },
+      ],
     });
     const first = new PhylaxChannelsOrgan({
       dataDir,
@@ -613,6 +877,7 @@ describe("PhylaxChannelsOrgan", () => {
     await first.close();
 
     const delivered: string[] = [];
+    const durableProviderAudit = new Map<string, string>();
     const restarted = new PhylaxChannelsOrgan({
       dataDir,
       routes: { resolve: () => route },
@@ -637,18 +902,216 @@ describe("PhylaxChannelsOrgan", () => {
         };
       },
     });
-    restarted.setTerminalReceiptDelivery(async (_channel, _recipient, text) => {
+    restarted.setTerminalReceiptDelivery(async (_channel, _recipient, text, captureProviderMessageId) => {
       delivered.push(text);
+      durableProviderAudit.set(captureProviderMessageId, "wa-restart-receipt-1");
+      throw new Error("simulated crash after provider send and durable audit");
     });
     await restarted.resumePendingCaptures();
     await vi.waitFor(() => expect(delivered).toHaveLength(1));
     expect(delivered[0]).toContain("Saved ✓");
     expect(restarted.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
       .toBe("Log/2026-07-29.md#^restart-1");
-    await restarted.resumePendingCaptures();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(delivered).toHaveLength(1);
     await restarted.close();
+
+    const recoveredCalls: PhylaxDownstreamCall[] = [];
+    const recovered = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      discoverDownstream: discovery,
+      async callDownstream(call) {
+        recoveredCalls.push(call);
+        return { content: [{ type: "text", text: "grounded Ring reply" }] };
+      },
+    });
+    recovered.setTerminalReceiptRecovery((_channel, tenantId, captureProviderMessageId) => {
+      expect(tenantId).toBe("alpha");
+      return durableProviderAudit.get(captureProviderMessageId) ?? null;
+    });
+    recovered.setTerminalReceiptDelivery(async () => {
+      delivered.push("duplicate");
+      return { sentMessageId: "must-not-send" };
+    });
+    await recovered.resumePendingCaptures();
+    await recovered.resumePendingCaptures();
+    expect(delivered).toHaveLength(1);
+
+    const reply = await recovered.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-restart-follow-up-1",
+      text: "What did that captured note say?",
+      replyToMessageId: "wa-restart-receipt-1",
+    });
+    expect(reply.replyText).toBe("grounded Ring reply");
+    expect(recoveredCalls).toHaveLength(1);
+    expect(recoveredCalls[0]).toMatchObject({
+      tool: "chat_with_ring",
+      handoff: {
+        reply_context: { evidenceRef: "Log/2026-07-29.md#^restart-1" },
+      },
+    });
+    expect(JSON.stringify(recoveredCalls[0]?.handoff)).not.toContain("memory-scope-only");
+    await recovered.close();
+  });
+
+  it("re-enters a claimed terminal delivery with no outbox and preserves one provider ID across the next crash", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-terminal-pre-outbox-crash-"));
+    dirs.push(dataDir);
+    const sourceMessageId = "provider-terminal-pre-outbox-1";
+    const receiptText = [
+      "Saved ✓",
+      "Recap: Restart the claimed receipt.",
+      "Evidence: Log/2026-07-29.md#^terminal-pre-outbox-1",
+    ].join("\n");
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-scope-only",
+    };
+
+    // Persist the exact stranded boundary: the capture is terminal and the old
+    // provider claim is set, but the WhatsApp outbound intent does not exist.
+    const schema = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+    });
+    await schema.close();
+    const journal = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
+    const now = Date.now();
+    journal.prepare(
+      `INSERT INTO phylax_capture_jobs (
+         tenant_id, channel, provider_message_id, sender, chat_id,
+         conversation_key, tool, job_id, state, receipt_text, evidence_ref,
+         delivered_at, created_at, updated_at
+       ) VALUES (?, 'whatsapp', ?, ?, ?, ?, 'store_memory', ?, 'done', ?, ?, ?, ?, ?)`,
+    ).run(
+      "alpha",
+      sourceMessageId,
+      "34611111111",
+      "34611111111@s.whatsapp.net",
+      "whatsapp:34611111111",
+      "job-terminal-pre-outbox-1",
+      receiptText,
+      "Log/2026-07-29.md#^terminal-pre-outbox-1",
+      now,
+      now,
+      now,
+    );
+    journal.close();
+    const seededWhatsApp = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
+    seededWhatsApp.recordChannelForwarding({
+      providerMessageId: sourceMessageId,
+      tenantId: "alpha",
+      senderId: "34611111111",
+      downstreamDestination: "zenod.test#tenant:alpha",
+      replyText: receiptText,
+    });
+    expect(seededWhatsApp.recoverableReceiptIntent("alpha", sourceMessageId)).toBeNull();
+    seededWhatsApp.close();
+
+    const attempts: string[] = [];
+    const accepted = new Set<string>();
+    const firstRuntime = new PhylaxPortedRuntime(
+      dataDir,
+      new PhylaxChannelsOrgan({
+        dataDir,
+        routes: { resolve: () => route },
+      }),
+      {},
+      {
+        whatsappSocketFactory: async () => ({
+          ev: { on() {} },
+          user: { id: "34999999999@s.whatsapp.net" },
+          async sendMessage(_jid, _content, options) {
+            const id = options?.messageId ?? "";
+            attempts.push(id);
+            accepted.add(id);
+            return { key: { id } };
+          },
+        }),
+      },
+    );
+    firstRuntime.settings.setWhatsAppSettings({
+      enabled: true,
+      providerMode: "self_host_dev",
+      acceptAll: true,
+    });
+    vi.spyOn(firstRuntime.whatsappStore, "completeOutboundIntent")
+      .mockImplementationOnce(() => {
+        throw new Error("simulated crash after provider success before outbound audit");
+      });
+    await firstRuntime.start();
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).not.toBe("");
+    expect(firstRuntime.whatsappStore.recoverableReceiptIntent("alpha", sourceMessageId))
+      .toMatchObject({
+        providerMessageId: attempts[0],
+        state: "pending",
+        receiptEligible: true,
+      });
+    await firstRuntime.close();
+
+    const afterFirstCrash = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
+    expect((afterFirstCrash.prepare(
+      `SELECT COUNT(*) AS count FROM phylax_capture_receipts
+       WHERE tenant_id = 'alpha' AND channel = 'whatsapp'
+         AND capture_provider_message_id = ?`,
+    ).get(sourceMessageId) as { count: number }).count).toBe(0);
+    afterFirstCrash.close();
+
+    const restarted = new PhylaxPortedRuntime(
+      dataDir,
+      new PhylaxChannelsOrgan({
+        dataDir,
+        routes: { resolve: () => route },
+      }),
+      {},
+      {
+        whatsappSocketFactory: async () => ({
+          ev: { on() {} },
+          user: { id: "34999999999@s.whatsapp.net" },
+          async sendMessage(_jid, _content, options) {
+            const id = options?.messageId ?? "";
+            attempts.push(id);
+            accepted.add(id);
+            return { key: { id } };
+          },
+        }),
+      },
+    );
+    try {
+      await restarted.start();
+      expect(attempts).toEqual([attempts[0], attempts[0]]);
+      expect(accepted).toEqual(new Set([attempts[0]!]));
+      expect(restarted.whatsappStore.channelAudit(sourceMessageId)).toMatchObject({
+        tenantId: "alpha",
+        outboundProviderId: attempts[0],
+        outboundStatus: "sent",
+      });
+      const mapped = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
+      expect(mapped.prepare(
+        `SELECT provider_receipt_message_id AS providerReceiptMessageId,
+           evidence_ref AS evidenceRef
+         FROM phylax_capture_receipts
+         WHERE tenant_id = 'alpha' AND channel = 'whatsapp'
+           AND capture_provider_message_id = ?`,
+      ).all(sourceMessageId)).toEqual([{
+        providerReceiptMessageId: attempts[0],
+        evidenceRef: "Log/2026-07-29.md#^terminal-pre-outbox-1",
+      }]);
+      mapped.close();
+
+      await restarted.organ.resumePendingCaptures();
+      expect(await restarted.whatsapp.recoverPortedReceipt("alpha", sourceMessageId))
+        .toBe(attempts[0]);
+      expect(await restarted.whatsapp.recoverPortedReceipt("beta", sourceMessageId))
+        .toBeNull();
+      expect(attempts).toHaveLength(2);
+    } finally {
+      await restarted.close();
+    }
   });
 
   it("coalesces a repeated provider message per tenant without crossing same-id tenant jobs", async () => {
@@ -2510,8 +2973,10 @@ describe("ported gateway integration", () => {
       conversationKey: string,
       state: "queued" | "awaiting_confirmation",
       createdAt: number,
+      replyToMessageId?: string,
     ) => store.createVoiceJob({
       providerMessageId,
+      replyToMessageId,
       tenantId,
       conversationKey,
       senderId: `${tenantId}-sender`,
@@ -2526,7 +2991,7 @@ describe("ported gateway integration", () => {
       state,
     }, createdAt);
 
-    create("alpha-first", "alpha", "whatsapp:alpha", "queued", 1);
+    create("alpha-first", "alpha", "whatsapp:alpha", "queued", 1, "receipt-provider-1");
     create("alpha-second", "alpha", "whatsapp:alpha", "queued", 2);
     create("beta-first", "beta", "whatsapp:beta", "queued", 3);
     create("alpha-long", "alpha", "whatsapp:alpha", "awaiting_confirmation", 4);
@@ -2545,7 +3010,11 @@ describe("ported gateway integration", () => {
     store.close();
 
     const restarted = new WhatsAppStore(path);
-    expect(restarted.voiceJob("alpha-first")).toMatchObject({ state: "queued", attempts: 1 });
+    expect(restarted.voiceJob("alpha-first")).toMatchObject({
+      state: "queued",
+      attempts: 1,
+      replyToMessageId: "receipt-provider-1",
+    });
     expect(restarted.voiceJob("beta-first")).toMatchObject({ state: "queued", attempts: 1 });
     expect(restarted.voiceJob("beta-long")?.state).toBe("cancelled");
     restarted.close();
