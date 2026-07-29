@@ -58,7 +58,16 @@ import { runExecutionIngestSweep, type MemoryJobStatus } from "./executionIngest
 import { detectStuckIngestJobs, formatStuckIngestAlert, STUCK_INGEST_THRESHOLD_MS } from "./ingestWatchdog.js";
 import { resolveDeliverableManifest, fetchDeliverableFiles, formatDeliverableResult } from "./executionDeliverable.js";
 import { OAuthStore } from "./oauthStore.js";
-import { callPeer, callPeerTool, callPeerWithArgs, discoverAdvertisedPeerSkill, discoverPeerTools, type PeerConfig, type PeerToolSpec } from "./peerClient.js";
+import {
+  callPeer,
+  callPeerTool,
+  callPeerWithArgs,
+  discoverAdvertisedPeerSkill,
+  discoverPeerTools,
+  peerApprovalConnectionId,
+  type PeerConfig,
+  type PeerToolSpec,
+} from "./peerClient.js";
 import { MCP_CATALOG_TOOL_NAME, renderMcpCatalog } from "./peerCatalog.js";
 import { PeerSkillStore, type LoadedPeerSkill, type PeerSkillArtifactMetadata } from "./peerSkillStore.js";
 import { formatConversationTranscript, transcriptQueryFromToolArgs } from "./conversationTranscript.js";
@@ -802,12 +811,13 @@ export class Runtime {
         tools[spec.as] = {
           description: spec.description,
           ...(peer.wallet ? { connectedMcp: true } : {}),
+          ...(peer.trustedProfile ? { trustedProfile: peer.trustedProfile } : {}),
           ...(inputSchema ? { inputSchema } : {}),
           ...(spec.outputSchema ? { outputSchema: spec.outputSchema } : {}),
           ...(typeof spec.inputSchema === "object" ? { schemaFormat: "json-schema" as const } : {}),
           ...(spec.annotations ? { annotations: spec.annotations } : {}),
           ...(verifiedMutationReceipt ? { verifiedMutationReceipt: true } : {}),
-          owner: peer.name,
+          owner: peerApprovalConnectionId(peer),
           ...(peer.repo ? { authorityRepo: peer.repo } : {}),
           run: async (input: string | Record<string, unknown>) => {
             if (inputSchema) {

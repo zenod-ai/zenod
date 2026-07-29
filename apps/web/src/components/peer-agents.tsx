@@ -31,6 +31,7 @@ import { Spinner } from "@/components/ui/spinner"
 import {
   isCurrentOperation,
   isPeerToolsReady,
+  DEFAULT_TRUSTED_CONNECTION_PROFILE,
   nextOperationGeneration,
   peerFromResponse,
   replacePeer,
@@ -38,6 +39,7 @@ import {
   skillFilesFromSelection,
   type Peer,
   type PeerSkill,
+  type TrustedConnectionProfile,
 } from "@/components/peer-agents-model"
 
 /**
@@ -51,6 +53,10 @@ export function PeerAgents({ product = "ring" }: { product?: "ring" | "herald" }
   const [name, setName] = React.useState("")
   const [url, setUrl] = React.useState("")
   const [token, setToken] = React.useState("")
+  const [trustedProfile, setTrustedProfile] =
+    React.useState<TrustedConnectionProfile>({
+      ...DEFAULT_TRUSTED_CONNECTION_PROFILE,
+    })
   const [saving, setSaving] = React.useState(false)
   const [peerActivity, setPeerActivity] = React.useState<
     Record<string, string>
@@ -66,7 +72,12 @@ export function PeerAgents({ product = "ring" }: { product?: "ring" | "herald" }
   }, [])
 
   async function save(
-    next: Array<{ name: string; url: string; token?: string }>
+    next: Array<{
+      name: string
+      url: string
+      token?: string
+      trustedProfile: TrustedConnectionProfile
+    }>
   ) {
     setSaving(true)
     try {
@@ -90,8 +101,18 @@ export function PeerAgents({ product = "ring" }: { product?: "ring" | "herald" }
     // Existing peers are sent without their token (the server keeps it by name);
     // the new peer carries its token.
     const next = [
-      ...(peers ?? []).map((p) => ({ name: p.name, url: p.url })),
-      { name: name.trim(), url: url.trim(), token: token.trim() },
+      ...(peers ?? []).map((p) => ({
+        name: p.name,
+        url: p.url,
+        trustedProfile:
+          p.trustedProfile ?? DEFAULT_TRUSTED_CONNECTION_PROFILE,
+      })),
+      {
+        name: name.trim(),
+        url: url.trim(),
+        token: token.trim(),
+        trustedProfile,
+      },
     ]
     const saved = await save(next)
     if (saved) {
@@ -99,6 +120,7 @@ export function PeerAgents({ product = "ring" }: { product?: "ring" | "herald" }
       setName("")
       setUrl("")
       setToken("")
+      setTrustedProfile({ ...DEFAULT_TRUSTED_CONNECTION_PROFILE })
       if (added && isPeerToolsReady(added)) {
         toast.success(`${isHerald ? "Capability" : "Unit"} "${added.name}" tools ready`, {
           description: `${added.toolCount} discovered ${added.toolCount === 1 ? "tool" : "tools"}.`,
@@ -121,7 +143,12 @@ export function PeerAgents({ product = "ring" }: { product?: "ring" | "herald" }
   async function removePeer(target: string) {
     const next = (peers ?? [])
       .filter((p) => p.name !== target)
-      .map((p) => ({ name: p.name, url: p.url }))
+      .map((p) => ({
+        name: p.name,
+        url: p.url,
+        trustedProfile:
+          p.trustedProfile ?? DEFAULT_TRUSTED_CONNECTION_PROFILE,
+      }))
     if (await save(next)) toast.success(`${isHerald ? "Capability" : "Unit"} "${target}" removed`)
   }
 
@@ -341,6 +368,13 @@ export function PeerAgents({ product = "ring" }: { product?: "ring" | "herald" }
                   <span className="truncate font-mono text-xs text-muted-foreground">
                     {p.url}
                   </span>
+                  <p className="text-xs text-muted-foreground">
+                    Risk profile:{" "}
+                    {(p.trustedProfile ?? DEFAULT_TRUSTED_CONNECTION_PROFILE).exposure} ·{" "}
+                    {(p.trustedProfile ?? DEFAULT_TRUSTED_CONNECTION_PROFILE).tenantScope} ·{" "}
+                    {(p.trustedProfile ?? DEFAULT_TRUSTED_CONNECTION_PROFILE).financialScope} · annotations{" "}
+                    {(p.trustedProfile ?? DEFAULT_TRUSTED_CONNECTION_PROFILE).trustMcpAnnotations ? "trusted" : "untrusted"}
+                  </p>
                   {p.toolsError && (
                     <p className="text-xs text-destructive">{p.toolsError}</p>
                   )}
@@ -526,6 +560,80 @@ export function PeerAgents({ product = "ring" }: { product?: "ring" | "herald" }
             />
             <FieldDescription>Stored write-only; never shown again after saving.</FieldDescription>
           </Field>
+          <Field>
+            <FieldLabel htmlFor="peer-exposure">Connection exposure</FieldLabel>
+            <select
+              id="peer-exposure"
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={trustedProfile.exposure}
+              onChange={(event) =>
+                setTrustedProfile((current) => ({
+                  ...current,
+                  exposure: event.target
+                    .value as TrustedConnectionProfile["exposure"],
+                }))
+              }
+            >
+              <option value="unknown">Unknown — fail closed</option>
+              <option value="private">Private</option>
+              <option value="public">Public</option>
+              <option value="external">External</option>
+            </select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="peer-tenant-scope">Tenant scope</FieldLabel>
+            <select
+              id="peer-tenant-scope"
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={trustedProfile.tenantScope}
+              onChange={(event) =>
+                setTrustedProfile((current) => ({
+                  ...current,
+                  tenantScope: event.target
+                    .value as TrustedConnectionProfile["tenantScope"],
+                }))
+              }
+            >
+              <option value="unknown">Unknown — fail closed</option>
+              <option value="tenant">This tenant only</option>
+              <option value="cross_tenant">Cross-tenant</option>
+            </select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="peer-financial-scope">Financial scope</FieldLabel>
+            <select
+              id="peer-financial-scope"
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={trustedProfile.financialScope}
+              onChange={(event) =>
+                setTrustedProfile((current) => ({
+                  ...current,
+                  financialScope: event.target
+                    .value as TrustedConnectionProfile["financialScope"],
+                }))
+              }
+            >
+              <option value="unknown">Unknown — fail closed</option>
+              <option value="none">No financial effects</option>
+              <option value="financial">Financial effects possible</option>
+            </select>
+          </Field>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={trustedProfile.trustMcpAnnotations}
+              onChange={(event) =>
+                setTrustedProfile((current) => ({
+                  ...current,
+                  trustMcpAnnotations: event.target.checked,
+                }))
+              }
+            />
+            <span>
+              Trust this connection&apos;s MCP risk annotations within the profile
+              limits above.
+            </span>
+          </label>
           <div>
             <Button type="submit" disabled={saving || hasPeerActivity || peers === null || !name.trim() || !url.trim() || !token.trim()}>
               {saving ? <Spinner /> : <NetworkIcon data-icon="inline-start" />}

@@ -21,6 +21,13 @@ const readTools = {
   listPages: async () => "pages",
 };
 
+const trustedPrivateProfile = {
+  exposure: "private" as const,
+  tenantScope: "tenant" as const,
+  financialScope: "none" as const,
+  trustMcpAnnotations: true,
+};
+
 describe("AI SDK peer mutation provenance", () => {
   let sequence = 0;
   beforeEach(() => { captured.config = undefined; });
@@ -38,8 +45,9 @@ describe("AI SDK peer mutation provenance", () => {
       peer__portable_write__hash: {
         description: "Mutate an arbitrary connected MCP.",
         inputSchema: z.object({ value: z.string() }),
-        annotations: { readOnlyHint: false },
+        annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
         connectedMcp: true,
+        trustedProfile: trustedPrivateProfile,
         verifiedMutationReceipt: true,
         run: async () => result,
       },

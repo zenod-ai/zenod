@@ -7,7 +7,13 @@ import { bodyLimit } from "hono/body-limit";
 import type { HttpBindings } from "@hono/node-server";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { conversationId, NoteNotFoundError, VERSION, type CleanSlateResult } from "zenod";
+import {
+  conversationId,
+  isTrustedConnectionProfile,
+  NoteNotFoundError,
+  VERSION,
+  type CleanSlateResult,
+} from "zenod";
 import {
   clearSession,
   hostedRingMode,
@@ -1133,6 +1139,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       // truthful surface is its discovered catalog; never imply ask_brain.
       ...(!isWalletAgent ? { tool: peer.tool ?? "ask_brain" } : {}),
       hasToken: Boolean(peer.token),
+      trustedProfile: peer.trustedProfile ?? {
+        exposure: "unknown",
+        tenantScope: "unknown",
+        financialScope: "unknown",
+        trustMcpAnnotations: false,
+      },
       status: peer.discovery?.transport ?? (isWalletAgent ? "error" : "connected"),
       transportStatus: peer.discovery?.transport ?? (isWalletAgent ? "error" : "connected"),
       toolsStatus: peer.discovery?.tools ?? (peer.tools ? "ready" : "error"),
@@ -1158,8 +1170,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.put("/api/peers", async (c) => {
-    type PeerInput = { name?: string; url?: string; token?: string; tool?: string };
+    type PeerInput = {
+      name?: string;
+      url?: string;
+      token?: string;
+      tool?: string;
+      trustedProfile?: unknown;
+    };
     const body = await c.req.json<{ peers?: PeerInput[] }>().catch(() => ({ peers: [] as PeerInput[] }));
+    if ((body.peers ?? []).some((peer) => peer.trustedProfile !== undefined && !isTrustedConnectionProfile(peer.trustedProfile))) {
+      return c.json({ error: "Each trustedProfile must use the supported risk fields and values." }, 400);
+    }
     const existing = settings.peers();
     const candidates = (body.peers ?? [])
       .map((p) => {
@@ -1174,6 +1195,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           url,
           token,
           ...(!isWalletAgent && p.tool ? { tool: p.tool } : {}),
+          ...(isTrustedConnectionProfile(p.trustedProfile)
+            ? { trustedProfile: p.trustedProfile }
+            : prior?.trustedProfile
+              ? { trustedProfile: prior.trustedProfile }
+              : {}),
           ...(prior?.skillArtifact !== undefined ? { skillArtifact: prior.skillArtifact } : {}),
           ...(prior?.skillAutoImport !== undefined ? { skillAutoImport: prior.skillAutoImport } : {}),
         };
@@ -1203,6 +1229,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       return {
         ...candidate,
         wallet: isWalletAgent,
+        trustedProfile: candidate.trustedProfile ?? {
+          exposure: "unknown",
+          tenantScope: "unknown",
+          financialScope: "unknown",
+          trustMcpAnnotations: false,
+        },
         ...(fleetHosts.has(hostname) ? { allowPrivateHost: true } : {}),
         ...(latestSkill ? { skillArtifact: latestSkill } : {}),
       };

@@ -1,5 +1,6 @@
 import type { PageIndexEntry } from "../vault/pages.js";
 import type { BacklogCandidate, BacklogDigestInput, BacklogDigestResult, BacklogSourceRef, LintError, StoreResult } from "../types.js";
+import type { TrustedConnectionProfile } from "../taskingPolicy.js";
 import type { TurnPlanCompilation, TurnPlanCompileInput } from "./turnPlan.js";
 
 /**
@@ -110,9 +111,8 @@ export interface AnswerInput {
   hostInstruction?: string;
   /**
    * Stable id for the conversation this question belongs to (engine.ts's
-   * conversationId(surface, key)). Scopes the M-1 standing-draft approval token —
-   * without it a peer-mutation guard block cannot register/resolve a token, so it
-   * falls back to the ordinary explicit-verb-only rule.
+   * conversationId(surface, key)). Scopes the exact standing-approval token;
+   * without it, elevated-risk connected operations remain blocked.
    */
   conversationId?: string;
   /** AGENTS.md + folder index context for the system prompt. */
@@ -195,6 +195,8 @@ export interface PeerTool {
   verifiedMutationReceipt?: boolean;
   /** The tool was discovered from a tenant-connected MCP wallet entry. */
   connectedMcp?: boolean;
+  /** Host-owned risk limits for the exact tenant connection that exposed this tool. */
+  trustedProfile?: TrustedConnectionProfile;
   /**
    * Tool results contain tenant-supplied advisory material. The model may use
    * that material as domain guidance, but it never changes instruction priority
@@ -205,12 +207,9 @@ export interface PeerTool {
   authoritativeReadResult?: boolean;
   /** Host-owned MCP catalog inspection, available only for explicit catalog intent. */
   requiresMcpCatalogIntent?: boolean;
-  /**
-   * Repository this peer is allowed to mutate directly. For Archus this is the
-   * central backlog repo, not arbitrary product/code repos.
-   */
+  /** Host-owned repository boundary for this connection's direct mutations. */
   authorityRepo?: string;
-  /** Peer id, e.g. "archus"; used for owner-boundary guards. */
+  /** Connection identity used only to scope exact standing approvals. */
   owner?: string;
   run(input: string | Record<string, unknown>): Promise<string>;
 }
