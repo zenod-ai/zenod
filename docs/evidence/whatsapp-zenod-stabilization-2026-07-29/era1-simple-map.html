@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Simple Map — Era 1 and Era 2</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f1ea; --panel: #ffffff; --ink: #17201b; --muted: #5f6c64;
+        --line: #cdd4ce; --accent: #1b6b4b; --accent-soft: #dceee5;
+        --warning: #9a4f08; --warning-soft: #fff0d8;
+        --danger: #9a302d; --danger-soft: #fbe4e2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0e1310; --panel: #18201b; --ink: #edf4ef; --muted: #a9b6ae;
+          --line: #344239; --accent: #72d4a2; --accent-soft: #193c2c;
+          --warning: #ffbd72; --warning-soft: #432b14;
+          --danger: #ff9690; --danger-soft: #44211f;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--ink);
+        font: 17px/1.55 Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      main { width: min(880px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 90px; }
+      h1 { font-size: clamp(2rem, 6vw, 3.4rem); letter-spacing: -0.04em; line-height: 1.1; margin: 0; }
+      h2 { font-size: clamp(1.4rem, 4vw, 2rem); letter-spacing: -0.02em; margin: 3rem 0 0.4rem; }
+      p { margin: 0.6rem 0 0; }
+      .sub { color: var(--muted); max-width: 640px; }
+      code {
+        padding: 0.1rem 0.35rem; border: 1px solid var(--line); border-radius: 6px;
+        background: var(--panel); font: 0.88em ui-monospace, Menlo, monospace;
+      }
+
+      /* route rows */
+      .route {
+        display: grid; grid-template-columns: 130px 44px 1fr;
+        gap: 0.6rem; align-items: center;
+        margin-top: 0.7rem; padding: 0.9rem 1rem;
+        border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+      }
+      .route .in { font-weight: 800; font-size: 1.02rem; }
+      .route .in small { display: block; color: var(--muted); font-weight: 600; font-size: 0.72rem; }
+      .route .arrow { color: var(--muted); font-weight: 900; text-align: center; }
+      .route .out b { color: var(--accent); }
+      .route .out { font-size: 0.95rem; }
+      .route .out small { display: block; color: var(--muted); font-size: 0.8rem; }
+      .route.dim { opacity: 0.92; }
+      .route.new { border-color: var(--accent); border-width: 2px; }
+
+      .rulebox {
+        margin-top: 1rem; padding: 0.9rem 1.1rem;
+        border-left: 4px solid var(--accent); border-radius: 0 10px 10px 0;
+        background: var(--accent-soft); font-weight: 650;
+      }
+      .rulebox.warn { border-left-color: var(--warning); background: var(--warning-soft); }
+
+      /* scope */
+      .scope { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-top: 1rem; }
+      .scope-col { padding: 1rem 1.1rem; border-radius: 14px; border: 1px solid var(--line); }
+      .scope-col.can { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+      .scope-col.cant { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+      .scope-col h3 { margin: 0 0 0.5rem; font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      .scope-col ul { margin: 0; padding-left: 1.1rem; }
+      .scope-col li { margin-top: 0.3rem; font-size: 0.92rem; }
+      .scope-col .why { margin-top: 0.7rem; color: var(--muted); font-size: 0.82rem; }
+
+      /* glossary */
+      .who { display: grid; gap: 0.5rem; margin-top: 1rem; }
+      .who-row {
+        display: grid; grid-template-columns: 150px 1fr; gap: 0.8rem;
+        padding: 0.7rem 1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+        font-size: 0.93rem;
+      }
+      .who-row b { color: var(--accent); }
+      .who-row span { color: var(--muted); }
+      .who-row.parked { opacity: 0.65; }
+
+      .qa { margin-top: 1rem; }
+      .qa dt { margin-top: 1.1rem; font-weight: 800; }
+      .qa dd { margin: 0.3rem 0 0; color: var(--muted); }
+
+      footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+      @media (max-width: 640px) {
+        .route { grid-template-columns: 1fr; gap: 0.3rem; }
+        .route .arrow { display: none; }
+        .scope { grid-template-columns: 1fr; }
+        .who-row { grid-template-columns: 1fr; gap: 0.2rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>The simple map.</h1>
+      <p class="sub">One page. What goes where, what is scoped, where the Ring went, and how actions come back. Nothing else.</p>
+
+      <h2>Era 1 — what we're building right now</h2>
+      <p class="sub">Yes, your mental model is right: Phylax is a tiny layer-1 router. It routes by <em>shape</em>, never by meaning. Three rows, that's the whole router:</p>
+
+      <div class="route">
+        <div class="in">🎙️ Voice note<small>any voice, always</small></div>
+        <div class="arrow">→</div>
+        <div class="out"><b>Store to memory</b> — transcript saved verbatim, receipt back with recap + commit link<small>Zenod's librarian files it and may ask one filing question</small></div>
+      </div>
+      <div class="route">
+        <div class="in">💬 Text<small>any text, always</small></div>
+        <div class="arrow">→</div>
+        <div class="out"><b>Ask memory</b> — read-only Q&amp;A about what's stored<small>your question about the last note is scoped to that note's evidence</small></div>
+      </div>
+      <div class="route">
+        <div class="in">📷 Image / doc<small>any media, always</small></div>
+        <div class="arrow">→</div>
+        <div class="out"><b>Ingest to memory</b> — same as voice, via the media pipeline</div>
+      </div>
+
+      <div class="rulebox">The rule you hold in your head: <strong>speak to capture, type to ask.</strong></div>
+
+      <div class="rulebox warn">
+        Honest consequence you spotted: if you <em>reply</em> with a voice note, it stores again — yes. Voice never routes to Q&amp;A in era 1. That's the price of a router with zero language understanding, and it's cheap: git is the undo. If typing questions ever gets annoying, that's the signal to build era 2 — not to add cleverness to the router.
+      </div>
+
+      <h2>What's scoped — the safety wall</h2>
+      <p class="sub">The WhatsApp connection holds one token. That token can only see memory tools. Nothing is "refused" — dangerous tools simply don't exist on this connection.</p>
+
+      <div class="scope">
+        <div class="scope-col can">
+          <h3>✓ The token can touch</h3>
+          <ul>
+            <li><code>store_memory</code></li>
+            <li><code>ingest_memory</code></li>
+            <li><code>search_memory</code></li>
+            <li><code>ask_brain</code> (read-only)</li>
+            <li><code>get_task_result</code> (receipts)</li>
+          </ul>
+          <div class="why">Worst possible outcome: an extra note in a git vault. Undoable.</div>
+        </div>
+        <div class="scope-col cant">
+          <h3>✗ Does not exist here</h3>
+          <ul>
+            <li><code>run_task</code> / <code>create_issue</code></li>
+            <li><code>backlog_*</code></li>
+            <li>tweet / publish / send</li>
+            <li>delete anything</li>
+          </ul>
+          <div class="why">"Post a tweet" can't happen — not because a guard read your words, but because there is no tool to call. The wall is the safety, and it never misreads you.</div>
+        </div>
+      </div>
+
+      <h2>Era 2 — where the Ring comes back, and how actions work</h2>
+      <p class="sub">When you actually need actions from chat, exactly one row changes. Voice and media stay mechanical forever.</p>
+
+      <div class="route dim">
+        <div class="in">🎙️ Voice note</div>
+        <div class="arrow">→</div>
+        <div class="out"><b>Store to memory</b> — unchanged, untouchable</div>
+      </div>
+      <div class="route new">
+        <div class="in">💬 Text</div>
+        <div class="arrow">→</div>
+        <div class="out"><b>Ring agent</b> (small, no guard) — reads memory, answers, and can <em>draft</em> actions<small>every action becomes a held draft: "Here's the tweet — reply yes to send." Your "yes" releases it to the actuator. No draft, no action.</small></div>
+      </div>
+
+      <div class="rulebox">Actions = one swapped config row + held drafts. Not a new architecture. The Ring returns as a small agent in the text row — never as a gatekeeper over capture.</div>
+
+      <h2>Who is who</h2>
+      <div class="who">
+        <div class="who-row"><b>Phylax</b><span>The doorman. Owns WhatsApp/Telegram, transcribes, routes by shape. Never thinks.</span></div>
+        <div class="who-row"><b>Zenod</b><span>The memory. Stores, files, answers questions about itself. Never calls anyone. Never acts.</span></div>
+        <div class="who-row parked"><b>Ring</b><span>The future front-desk agent. Parked today — nothing routes to it. Returns in era 2 in the text row.</span></div>
+        <div class="who-row parked"><b>Callisthenes</b><span>The mouth. The only thing that posts to X. Not the Ring — an actuator agents call, with drafts-never-send built in. You never talk to it directly.</span></div>
+        <div class="who-row parked"><b>Epaminon</b><span>The hands. Runs execution work. Also parked from chat's point of view.</span></div>
+      </div>
+
+      <h2>Your questions, straight</h2>
+      <dl class="qa">
+        <dt>"So the text one is directed to the Ring?"</dt>
+        <dd>No — correction. In era 1, text goes to memory Q&amp;A. The Ring gets <em>nothing</em>. It's parked, whole, untouched, waiting for era 2.</dd>
+        <dt>"So we're always talking to the memory in the end?"</dt>
+        <dd>In era 1: yes, deliberately. Capture + recall is the product you actually need this week — it's what the two waiting voice notes are. Everything you say lands in or reads from one place, which is exactly what makes era 2 agents useful later: memory is already full.</dd>
+        <dt>"I still have no ability to trigger actions."</dt>
+        <dd>Correct, and it's a feature of era 1, not a gap: every incident you've had came from machinery that interprets. Era 1 ships only machinery that holds. Actions return in era 2 as held drafts — the one action pattern in your whole codebase that has never failed you (Callisthenes' C-22).</dd>
+        <dt>"Why are you so convinced?"</dt>
+        <dd>Because this splits the system by failure cost. Mechanical lane: mistakes are impossible. Q&amp;A lane: mistakes cost one bad answer. Draft lane (era 2): mistakes cost one "no". Nothing anywhere can lose a 20-minute note again.</dd>
+      </dl>
+
+      <footer>
+        Companion to docs/EPIC-MECHANICAL-CAPTURE.md (the spine, at v1.2) and the sink-design doc in the evidence folder. Era 2 is deliberately NOT in the spine — it gets its own spine when era 1 has survived a week of real use.
+      </footer>
+    </main>
+  </body>
+</html>

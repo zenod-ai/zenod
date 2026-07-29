@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Phylax Already Speaks MCP — and the Sink Can Talk</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f1ea;
+        --panel: rgba(255, 255, 255, 0.82);
+        --panel-strong: #ffffff;
+        --ink: #17201b;
+        --muted: #5f6c64;
+        --line: #cdd4ce;
+        --accent: #1b6b4b;
+        --accent-soft: #dceee5;
+        --warning: #9a4f08;
+        --warning-soft: #fff0d8;
+        --danger: #9a302d;
+        --danger-soft: #fbe4e2;
+        --shadow: 0 20px 55px rgba(32, 43, 36, 0.1);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0e1310;
+          --panel: rgba(24, 31, 27, 0.88);
+          --panel-strong: #18201b;
+          --ink: #edf4ef;
+          --muted: #a9b6ae;
+          --line: #344239;
+          --accent: #72d4a2;
+          --accent-soft: #193c2c;
+          --warning: #ffbd72;
+          --warning-soft: #432b14;
+          --danger: #ff9690;
+          --danger-soft: #44211f;
+          --shadow: 0 20px 55px rgba(0, 0, 0, 0.3);
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(69, 150, 108, 0.14), transparent 28rem),
+          radial-gradient(circle at 90% 12%, rgba(218, 157, 83, 0.1), transparent 26rem),
+          var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 56px 0 96px;
+      }
+
+      h1, h2, h3 { line-height: 1.13; letter-spacing: -0.025em; margin: 0; }
+      h1 { max-width: 940px; font-size: clamp(2.3rem, 6.5vw, 5rem); letter-spacing: -0.055em; }
+      h2 { margin-top: 2.8rem; font-size: clamp(1.65rem, 3.5vw, 2.5rem); }
+      h3 { font-size: 1.1rem; letter-spacing: -0.01em; }
+      p { margin: 0.7rem 0 0; }
+      a { color: var(--accent); }
+
+      code {
+        padding: 0.12rem 0.38rem;
+        border: 1px solid var(--line);
+        border-radius: 0.4rem;
+        background: color-mix(in srgb, var(--panel-strong) 80%, transparent);
+        font: 0.9em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .code-block {
+        margin: 0.8rem 0 0;
+        padding: 1rem;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: color-mix(in srgb, var(--bg) 80%, var(--panel-strong));
+        color: var(--ink);
+        font: 0.82rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        white-space: pre;
+      }
+
+      .eyebrow {
+        display: inline-flex; gap: 0.55rem; align-items: center;
+        margin-bottom: 1.2rem; color: var(--accent);
+        font-size: 0.78rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+      }
+      .eyebrow::before { width: 28px; height: 2px; content: ""; background: currentColor; }
+
+      .lede {
+        max-width: 840px; margin-top: 1.5rem; color: var(--muted);
+        font-size: clamp(1.1rem, 2.2vw, 1.38rem); line-height: 1.55;
+      }
+
+      .meta { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 1.5rem; }
+      .pill {
+        display: inline-flex; align-items: center; min-height: 34px;
+        padding: 0.35rem 0.75rem; border: 1px solid var(--line); border-radius: 999px;
+        color: var(--muted); background: var(--panel); font-size: 0.85rem; font-weight: 700;
+      }
+
+      .hero {
+        padding: clamp(1.4rem, 4vw, 3.2rem);
+        border: 1px solid var(--line); border-radius: 30px;
+        background: var(--panel); box-shadow: var(--shadow); backdrop-filter: blur(16px);
+      }
+
+      .verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+
+      .card {
+        padding: 1.25rem; border: 1px solid var(--line); border-radius: 18px; background: var(--panel);
+      }
+      .card p { color: var(--muted); }
+      .card.danger { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); background: var(--danger-soft); }
+      .card.good { border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); background: var(--accent-soft); }
+
+      .callout {
+        margin-top: 1.2rem; padding: 1.15rem 1.25rem;
+        border-left: 5px solid var(--accent); border-radius: 0 14px 14px 0;
+        background: var(--accent-soft); font-weight: 650;
+      }
+      .callout.warning { border-left-color: var(--warning); background: var(--warning-soft); }
+
+      /* ---------- generic flow diagram ---------- */
+      .flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.65rem; margin-top: 1.2rem; }
+      .flow.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .flow-step {
+        position: relative; min-height: 120px; padding: 1rem;
+        border: 1px solid var(--line); border-radius: 16px; background: var(--panel-strong);
+      }
+      .flow-step:not(:last-child)::after {
+        position: absolute; z-index: 2; top: 50%; right: -0.68rem; width: 0.7rem;
+        content: "→"; color: var(--muted); font-weight: 900; transform: translateY(-50%);
+      }
+      .step-no {
+        display: block; margin-bottom: 0.5rem; color: var(--accent);
+        font-size: 0.72rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase;
+      }
+      .flow-step p { color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+      .flow-step.hot { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); background: var(--danger-soft); }
+      .flow-step.calm { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+
+      /* ---------- two-lane diagram ---------- */
+      .lanes { display: grid; gap: 1rem; margin-top: 1.2rem; }
+      .lane {
+        display: grid; grid-template-columns: 190px 1fr auto; gap: 1rem; align-items: center;
+        padding: 1.1rem 1.25rem; border: 1px solid var(--line); border-radius: 18px; background: var(--panel);
+      }
+      .lane.guaranteed { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); background: var(--accent-soft); }
+      .lane.besteffort { border-color: var(--line); }
+      .lane-name { font-weight: 850; letter-spacing: -0.01em; }
+      .lane-name small { display: block; margin-top: 0.2rem; color: var(--muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+      .lane-path { color: var(--muted); font-size: 0.92rem; }
+      .lane-path b { color: var(--ink); }
+      .lane-tag {
+        white-space: nowrap; padding: 0.3rem 0.7rem; border-radius: 999px;
+        font-size: 0.72rem; font-weight: 850; letter-spacing: 0.07em; text-transform: uppercase;
+      }
+      .lane-tag.g { color: var(--panel-strong); background: var(--accent); }
+      .lane-tag.b { color: var(--ink); background: var(--warning-soft); border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--line)); }
+
+      /* ---------- WhatsApp-style chat mock ---------- */
+      .chat {
+        max-width: 620px; margin: 1.2rem auto 0; padding: 1.2rem;
+        border: 1px solid var(--line); border-radius: 22px;
+        background: color-mix(in srgb, var(--bg) 65%, var(--panel-strong));
+      }
+      .chat-title { margin-bottom: 0.9rem; color: var(--muted); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; text-align: center; }
+      .bubble {
+        position: relative; max-width: 82%;
+        margin-top: 0.65rem; padding: 0.7rem 0.95rem;
+        border-radius: 16px; font-size: 0.92rem; line-height: 1.5;
+        border: 1px solid var(--line);
+      }
+      .bubble.user { margin-left: auto; background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); border-bottom-right-radius: 5px; }
+      .bubble.bot  { margin-right: auto; background: var(--panel-strong); border-bottom-left-radius: 5px; }
+      .bubble .who { display: block; margin-bottom: 0.25rem; color: var(--accent); font-size: 0.68rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+      .bubble .fine { display: block; margin-top: 0.4rem; color: var(--muted); font-size: 0.8rem; }
+      .bubble.faded { opacity: 0.75; }
+      .chat-note { margin-top: 0.9rem; color: var(--muted); font-size: 0.82rem; text-align: center; }
+
+      /* ---------- settings mock ---------- */
+      .settings {
+        margin-top: 1.2rem; padding: 1.4rem;
+        border: 1px solid var(--line); border-radius: 20px; background: var(--panel-strong);
+      }
+      .settings h4 { margin: 0 0 0.2rem; font-size: 0.95rem; letter-spacing: -0.01em; }
+      .settings .hint { margin: 0 0 1rem; color: var(--muted); font-size: 0.82rem; }
+      .field { margin-top: 0.8rem; }
+      .field label { display: block; margin-bottom: 0.3rem; color: var(--muted); font-size: 0.72rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+      .input {
+        display: flex; align-items: center; min-height: 42px;
+        padding: 0.5rem 0.8rem; border: 1px solid var(--line); border-radius: 11px;
+        background: color-mix(in srgb, var(--bg) 60%, var(--panel-strong));
+        color: var(--ink); font: 0.85rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .btn {
+        display: inline-flex; align-items: center; margin-top: 0.9rem;
+        padding: 0.55rem 1rem; border: 0; border-radius: 11px;
+        color: var(--panel-strong); background: var(--accent);
+        font-size: 0.85rem; font-weight: 800;
+      }
+      .binding-table { margin-top: 1.1rem; }
+      .binding-table table { margin-top: 0.4rem; }
+
+      table {
+        width: 100%; margin-top: 1rem;
+        border-collapse: separate; border-spacing: 0; overflow: hidden;
+        border: 1px solid var(--line); border-radius: 16px; background: var(--panel);
+      }
+      th, td { padding: 0.9rem 1rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { color: var(--muted); font-size: 0.76rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      tr:last-child td { border-bottom: 0; }
+
+      .proposal {
+        margin-top: 1rem; padding: clamp(1.2rem, 3vw, 2rem);
+        border: 2px solid var(--accent); border-radius: 22px;
+        background: var(--panel-strong); box-shadow: var(--shadow);
+      }
+      .proposal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+
+      ol, ul { margin: 0.7rem 0 0; padding-left: 1.35rem; }
+      li + li { margin-top: 0.45rem; }
+
+      .decision { display: grid; grid-template-columns: 40px 1fr; gap: 0.8rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+      .decision:last-child { border-bottom: 0; }
+      .decision-no {
+        display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%;
+        color: var(--panel-strong); background: var(--accent); font-weight: 850;
+      }
+
+      footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+
+      @media (max-width: 900px) {
+        .flow, .flow.cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .flow-step:not(:last-child)::after { display: none; }
+        .lane { grid-template-columns: 1fr; gap: 0.4rem; }
+      }
+      @media (max-width: 680px) {
+        main { width: min(100% - 20px, 1120px); padding-top: 20px; }
+        .hero { border-radius: 20px; }
+        .verdict, .proposal-grid { grid-template-columns: 1fr; }
+        .flow, .flow.cols-4 { grid-template-columns: 1fr; }
+        table { display: block; overflow-x: auto; }
+      }
+      @media print {
+        :root { color-scheme: light; }
+        body { background: #fff; }
+        main { width: 100%; padding: 0; }
+        .hero, .proposal { box-shadow: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="eyebrow">Design note · Answers two questions</div>
+        <h1>Phylax already speaks MCP. And the sink can talk.</h1>
+        <p class="lede">
+          You asked two things: is Phylax really Ring-specific, or is it a
+          general MCP client that should let you pick its sink in settings? And
+          if voice notes go straight to memory, doesn't the experience collapse
+          into a dumb sink you can't talk to? Answers, grounded in the code:
+          Phylax is generic except for <em>one hardcoded string</em>, and the
+          sink is only dumb if the receipt is dumb — Zenod's receipt already
+          isn't.
+        </p>
+        <div class="meta">
+          <span class="pill">Prepared 29 July 2026</span>
+          <span class="pill">Grounded in main @ 74ac96a</span>
+          <span class="pill">Phylax = transport · Zenod = memory</span>
+        </div>
+      </section>
+
+      <h2>Question 1 — Is Phylax general, or does it expect a Ring?</h2>
+      <p>
+        It expects an MCP server. This is not a proposal — it is what the code
+        does today. Phylax's downstream is <code>callPeerTool(url, token,
+        tool, args)</code>: a plain MCP tool call against a per-tenant URL and
+        bearer token that already live, encrypted, in tenant settings. The
+        <em>only</em> Ring-specific thing in the entire seam is one hardcoded
+        literal:
+      </p>
+      <pre class="code-block">
+// packages/server/src/phylaxChannels.ts
+export interface PhylaxDownstreamCall {
+  tool: "chat_with_ring";        // ← the one hardcoded string
+  ...
+}
+...
+downstream = await (this.options.callDownstream ?? callRing)(call);
+
+async function callRing(call) {
+  return callPeerTool(
+    { url: call.route.downstreamUrl,      // ← already per-tenant config
+      token: call.route.downstreamToken },// ← already per-tenant config
+    call.tool,                            // ← always "chat_with_ring"
+    call.arguments,
+  );
+}</pre>
+      <div class="callout">
+        Phylax is a generic MCP client wearing a Ring-shaped name tag. Your
+        design — point it at any MCP server, discover the tools, bind one — is
+        not a redesign. It is deleting one string literal and promoting it to
+        configuration.
+      </div>
+      <p>
+        And the other end already fits: Zenod's MCP endpoint exposes
+        <code>store_memory</code> (content, hints, verbatim → jobId), and
+        Phylax polls <code>get_task_result</code> until terminal to get the
+        evidence ref, pages touched, commit SHA — and, importantly for
+        Question 2, <em>a question from the librarian when filing is unclear</em>.
+        There is even <code>ingest_memory</code> for handing over raw audio
+        artifacts, if you ever want Zenod to own transcription too.
+      </p>
+
+      <h2>The settings design: a sink you configure, not a peer you hardcode</h2>
+      <p>
+        This is the "MCP without a model" idea made concrete. MCP stays the
+        universal socket between units — but the tool <em>choice</em> happens
+        once, at config time, by you, in the settings page. Runtime stays
+        completely mechanical. Full MCP generality, zero runtime
+        interpretation.
+      </p>
+      <div class="settings" aria-label="Phylax settings mock">
+        <h4>Phylax · Tenant settings · Downstream sinks</h4>
+        <p class="hint">Phylax delivers each turn to an MCP tool. Add a server, discover its tools, bind by turn type.</p>
+        <div class="field">
+          <label>MCP server URL</label>
+          <div class="input">https://zenod.yourhost.dev/mcp</div>
+        </div>
+        <div class="field">
+          <label>Bearer token</label>
+          <div class="input">••••••••••••••••••••</div>
+        </div>
+        <span class="btn">Discover tools ⌄</span>
+        <div class="binding-table">
+          <table>
+            <thead>
+              <tr><th>Turn type</th><th>Bound tool</th><th>Argument mapping</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Voice note</strong></td>
+                <td><code>store_memory</code></td>
+                <td><code>{ content: transcript, verbatim: true, hints: ["WhatsApp voice note"] }</code></td>
+              </tr>
+              <tr>
+                <td><strong>Text message</strong></td>
+                <td><code>chat_with_ring</code> <em>(or <code>ask_brain</code>, or any chat tool)</em></td>
+                <td><code>{ text, sender, conversation }</code></td>
+              </tr>
+              <tr>
+                <td><strong>Image / document</strong></td>
+                <td><code>ingest_memory</code></td>
+                <td><code>{ mediaType, artifactUrl, sourceHint }</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p>
+        Three properties fall out of this shape. Swappability: the day Ring is
+        trustworthy, rebind text turns to it — no deploy. Independence: the
+        voice-note row never touches Ring, so no Ring regression can ever lose
+        a note again. Honesty: the settings page <em>shows</em> you your
+        architecture instead of hiding it in a string literal.
+      </p>
+
+      <h2>Question 2 — "So it's a dumb sink and I can't talk about my note?"</h2>
+      <p>
+        This worry assumes the reply is <em>"okay, stored."</em> It shouldn't
+        be, and it doesn't have to be — because Zenod's terminal receipt is
+        already rich: a summary, the pages it filed to, the commit link, and a
+        clarifying question when the librarian is unsure. The receipt is not
+        the end of the conversation. It is the <em>opening move</em> of one.
+      </p>
+      <p>
+        The design is two lanes in one WhatsApp thread. Storage is the
+        guaranteed lane. Conversation is the smart lane. They interleave in the
+        same chat, and the smart lane reads what the guaranteed lane just
+        wrote.
+      </p>
+
+      <div class="lanes" aria-label="Two-lane design">
+        <div class="lane guaranteed">
+          <div class="lane-name">Capture lane<small>voice notes, media</small></div>
+          <div class="lane-path">
+            VN → custody → STT → <b>store_memory</b> → poll to terminal →
+            <b>rich receipt reply</b> (recap · filed pages · commit link ·
+            librarian's question)
+          </div>
+          <span class="lane-tag g">Guaranteed</span>
+        </div>
+        <div class="lane besteffort">
+          <div class="lane-name">Conversation lane<small>text replies</small></div>
+          <div class="lane-path">
+            Text → bound chat tool (<b>ask_brain</b> / Ring when ready) → reads
+            the memory the capture lane just committed → answers with citations
+          </div>
+          <span class="lane-tag b">Best-effort</span>
+        </div>
+        <div class="lane besteffort">
+          <div class="lane-name">Reflection<small>optional toggle, later</small></div>
+          <div class="lane-path">
+            After a terminal receipt, fire <b>one</b> timeout-guarded
+            <b>ask_brain</b> call: "three-line reaction + the sharpest open
+            question in this note." If it fails, you still have the receipt.
+          </div>
+          <span class="lane-tag b">Best-effort</span>
+        </div>
+      </div>
+      <div class="callout">
+        Capture is guaranteed even when everything smart is on fire.
+        Conversation is smart because capture already happened. A dumb sink
+        plus a smart lane beats one smart pipeline that can drop your note.
+      </div>
+
+      <h2>What it actually feels like</h2>
+      <div class="chat" aria-label="WhatsApp experience mock">
+        <div class="chat-title">WhatsApp · your one number</div>
+        <div class="bubble user">🎙️ Voice note · 20:14<span class="fine">"So I want to add a note into memory about the real-estate decision…"</span></div>
+        <div class="bubble bot faded"><span class="who">capture lane</span>Got it — transcribing…</div>
+        <div class="bubble bot"><span class="who">capture lane · receipt</span>Saved your 20-min note ✓<br />
+          <strong>Recap:</strong> weighing a personal base in Girona vs. keeping liquidity for yield; three open questions flagged.<br />
+          <strong>Filed:</strong> Areas/Real Estate · Projects/Property Decision<br />
+          <strong>Commit:</strong> github.com/…/Log/2026-07-29.md
+          <span class="fine">One question from the librarian: is this about the Girona flat or the new search?</span></div>
+        <div class="bubble user">the new search. what were my three open questions?</div>
+        <div class="bubble bot"><span class="who">conversation lane</span>Filed under the new search ✓. Your open questions were: ① rent-vs-buy break-even at current rates, ② whether yield beats the flexibility cost, ③ timing against the visa decision. Want me to pull what you've said before about ②?</div>
+        <div class="chat-note">Same thread. The first reply is mechanical and guaranteed; the second is smart and reads the memory the first one committed.</div>
+      </div>
+      <p>
+        Notice what the librarian's question does: the "dumb" lane is already
+        conversational, deterministically — the question comes from Zenod's
+        receipt, not from any router. And your text reply flows down the
+        conversation lane, which can be as smart as you like, because its
+        worst failure is a bad answer about a note that is <em>already
+        safe</em>.
+      </p>
+
+      <h2>The whole flow, end to end</h2>
+      <div class="flow" aria-label="End-to-end mechanical flow">
+        <div class="flow-step calm">
+          <span class="step-no">1 · Custody</span>
+          <strong>Phylax</strong>
+          <p>Provider message, artifact, tenant, idempotency key. Supervised process; staleness restarts it.</p>
+        </div>
+        <div class="flow-step calm">
+          <span class="step-no">2 · Speech</span>
+          <strong>STT</strong>
+          <p>OpenRouter. Failure replies "couldn't transcribe — resend?" in seconds. No silent fallback.</p>
+        </div>
+        <div class="flow-step calm">
+          <span class="step-no">3 · Bind</span>
+          <strong>Rule table</strong>
+          <p>Turn type → configured MCP tool. A lookup, not a decision. No model, no regex, no guard.</p>
+        </div>
+        <div class="flow-step calm">
+          <span class="step-no">4 · Store</span>
+          <strong>Zenod</strong>
+          <p><code>store_memory</code> → poll <code>get_task_result</code> to terminal. Queued ≠ saved.</p>
+        </div>
+        <div class="flow-step calm">
+          <span class="step-no">5 · Receipt</span>
+          <strong>Phylax reply</strong>
+          <p>Recap + pages + commit link + librarian's question, from the terminal receipt. Template, not prose model.</p>
+        </div>
+      </div>
+      <p>
+        Compare with the incident path: the old flow's step 4 was
+        <span style="color: var(--danger); font-weight: 700">Ring guard
+        re-interprets your English</span> — the one red box, and the only one
+        that had no reason to exist for this journey. Every box above is either
+        infrastructure or a lookup.
+      </p>
+
+      <h2>What this is not giving up</h2>
+      <div class="verdict">
+        <article class="card good">
+          <h3>Kept, and strengthened</h3>
+          <ul>
+            <li>MCP as the only seam between units — now visible in settings.</li>
+            <li>Ring, as the future conversational front door — rebindable in one dropdown when it's ready.</li>
+            <li>Multi-agent on shared Zenod memory — every agent reads what capture wrote.</li>
+            <li>Receipts-or-silence: "saved" only ever comes from a commit SHA.</li>
+          </ul>
+        </article>
+        <article class="card danger">
+          <h3>Given up</h3>
+          <ul>
+            <li>One string literal: <code>tool: "chat_with_ring"</code>.</li>
+            <li>The idea that an interpretive layer must sit in the capture path.</li>
+            <li>Nothing else.</li>
+          </ul>
+        </article>
+      </div>
+
+      <h2>Build list — small, ordered, each shippable alone</h2>
+      <div class="decision">
+        <div class="decision-no">1</div>
+        <div>
+          <h3>Promote the tool binding to tenant config</h3>
+          <p>
+            Replace the hardcoded <code>chat_with_ring</code> with a
+            per-turn-type binding (turn type → tool + argument template) in
+            <code>phylaxTenantSettings</code>. Default stays exactly today's
+            behavior, so this ships as a no-op.
+          </p>
+        </div>
+      </div>
+      <div class="decision">
+        <div class="decision-no">2</div>
+        <div>
+          <h3>Settings UI: discover and bind</h3>
+          <p>
+            In the existing Phylax settings panel: MCP URL + token (already
+            there), a "discover tools" call (<code>tools/list</code>), and the
+            binding table above. The dropdown is populated by discovery, never
+            typed by hand.
+          </p>
+        </div>
+      </div>
+      <div class="decision">
+        <div class="decision-no">3</div>
+        <div>
+          <h3>Terminal polling + receipt template</h3>
+          <p>
+            For async tools (jobId responses), Phylax polls
+            <code>get_task_result</code> with a deadline and renders the
+            terminal receipt through a fixed template: recap, pages, commit
+            link, question relay. Bind voice notes to
+            <code>store_memory</code>, flip the switch, and the two real voice
+            notes you're waiting on land in memory.
+          </p>
+        </div>
+      </div>
+      <div class="decision">
+        <div class="decision-no">4</div>
+        <div>
+          <h3>Later: the reflection toggle</h3>
+          <p>
+            One optional best-effort <code>ask_brain</code> reaction after the
+            receipt. Off by default. Never blocks, never replaces the receipt.
+            Ship only after 1–3 have survived a week of real use.
+          </p>
+        </div>
+      </div>
+
+      <footer>
+        <p>
+          Grounded in zenod-ai/zenod @ 74ac96a: phylaxChannels.ts
+          (callPeerTool seam, hardcoded tool literal, callDownstream injection
+          point), phylaxTenantSettings.ts (encrypted per-tenant downstream URL
+          + token), mcp.ts (store_memory / ingest_memory / get_task_result
+          schemas and the librarian's question-on-uncertainty behavior).
+          Naming: Phylax — the guard/transport; Zenod — from Zenodotus, first
+          librarian of Alexandria. This note proposes configuration and a
+          small binding layer; it deletes no Ring code.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

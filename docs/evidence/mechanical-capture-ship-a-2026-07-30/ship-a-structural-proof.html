@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SHIP-A structural proof — 080f985</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #07110e;
+      color: #ecf7f1;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at top right, #173e31, #07110e 46%); }
+    main { width: min(1120px, calc(100% - 48px)); margin: 0 auto; padding: 54px 0 90px; }
+    header { margin-bottom: 32px; }
+    .eyebrow { color: #65e6a7; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { font-size: clamp(34px, 5vw, 62px); line-height: 1.02; margin: 12px 0 16px; max-width: 850px; }
+    .sha { color: #a9cabb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    section {
+      min-height: 620px;
+      margin: 26px 0;
+      padding: 34px;
+      border: 1px solid #2f6d56;
+      border-radius: 22px;
+      background: rgba(8, 25, 19, .92);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .32);
+    }
+    h2 { font-size: 32px; margin: 0 0 14px; }
+    h3 { margin: 26px 0 10px; color: #92d7b7; }
+    .pass { display: inline-block; padding: 7px 12px; border-radius: 999px; color: #05150e; background: #65e6a7; font-weight: 900; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 22px; }
+    .datum { padding: 18px; border-radius: 14px; background: #102b21; border: 1px solid #244c3d; }
+    .label { color: #8fb9a7; font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .value { margin-top: 8px; font: 700 17px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    ul { padding-left: 22px; line-height: 1.75; }
+    code { color: #9bf0c2; }
+    .timeline { margin-top: 22px; border-left: 3px solid #65e6a7; padding-left: 22px; }
+    .timeline p { margin: 0 0 18px; }
+    .muted { color: #a9cabb; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } section { padding: 24px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Mechanical Capture · SHIP-A · Live deployment</div>
+    <h1>Structural proof for the uninterrupted acceptance lap</h1>
+    <p class="sha">Deployed SHA 080f985b0e7a4638f65f4b5a443d7d51fa823fa6</p>
+  </header>
+
+  <section id="step-04">
+    <span class="pass">STEP 4 · PASS</span>
+    <h2>Durable job identity and exactly-once capture</h2>
+    <p>The provider message became one durable Phylax job and one receipt record. Recovery replay did not create a second memory.</p>
+    <div class="grid">
+      <div class="datum"><div class="label">Provider message</div><div class="value">3EB05E7CA6885B94A71DDD</div></div>
+      <div class="datum"><div class="label">Zenod job</div><div class="value">28165f58-8036-4b79-b67d-616ed0b1b2df</div></div>
+      <div class="datum"><div class="label">Final state</div><div class="value">done</div></div>
+      <div class="datum"><div class="label">Evidence</div><div class="value">Log/2026-07-29.md#^e-3a77f3</div></div>
+      <div class="datum"><div class="label">Rows for provider ID</div><div class="value">1 job row</div></div>
+      <div class="datum"><div class="label">Terminal receipt records</div><div class="value">1 receipt row</div></div>
+    </div>
+  </section>
+
+  <section id="step-05">
+    <span class="pass">STEP 5 · PASS</span>
+    <h2>Persisted before await; polling survived restart</h2>
+    <p>The job ID was observed in durable SQLite with state <code>polling</code> before Phylax was restarted. The replacement container resumed that same job and delivered its terminal receipt.</p>
+    <div class="timeline">
+      <p><strong>Before restart</strong><br><span class="muted">container 9f19febde654 · job 28165f58… · state polling</span></p>
+      <p><strong>Forced service restart</strong><br><span class="muted">docker service update --force app-index-back-end-panel-6zm3qg</span></p>
+      <p><strong>After restart</strong><br><span class="muted">container be426bd33059 · same job 28165f58… · state done</span></p>
+      <p><strong>Visible outcome</strong><br><span class="muted">Saved receipt arrived in WhatsApp at 01:17 CEST with evidence ^e-3a77f3</span></p>
+    </div>
+  </section>
+
+  <section id="step-08">
+    <span class="pass">STEP 8 · PASS</span>
+    <h2>Memory-scoped channel credential</h2>
+    <p>Authenticated live <code>tools/list</code> returned exactly six memory tools. No action tool is present.</p>
+    <ul>
+      <li><code>ask_brain</code></li>
+      <li><code>chat_with_zenod</code></li>
+      <li><code>get_task_result</code></li>
+      <li><code>ingest_memory</code></li>
+      <li><code>search_memory</code></li>
+      <li><code>store_memory</code></li>
+    </ul>
+    <div class="grid">
+      <div class="datum"><div class="label">Transport</div><div class="value">connected</div></div>
+      <div class="datum"><div class="label">Catalog</div><div class="value">ready</div></div>
+      <div class="datum"><div class="label">Action tools</div><div class="value">0</div></div>
+      <div class="datum"><div class="label">Secret handling</div><div class="value">server-side only; not serialized</div></div>
+    </div>
+  </section>
+
+  <section id="step-09">
+    <span class="pass">STEP 9 · PASS</span>
+    <h2>Receive-path watchdog recovered a killed WhatsApp socket</h2>
+    <div class="timeline">
+      <p><strong>23:24:27.624Z</strong><br><span class="muted">Socket killed · degraded · retry_wait · generation 2</span></p>
+      <p><strong>23:24:30.051Z</strong><br><span class="muted">Watchdog handshake · starting · generation 3</span></p>
+      <p><strong>23:24:32.429Z</strong><br><span class="muted">Connected · ready · generation 3 · restartRequired false</span></p>
+      <p><strong>01:26 CEST</strong><br><span class="muted">Fresh 24-second recovery voice note accepted and returned a terminal Saved receipt.</span></p>
+    </div>
+  </section>
+
+  <section id="step-10">
+    <span class="pass">STEP 10 · PASS</span>
+    <h2>Natural quiet window</h2>
+    <p>From the 23:27:13.481Z baseline through the 23:42:04.581Z observation, the connection stayed on generation 3 with the same connected timestamp. The receive path remained ready, no restart was requested, and the worker heartbeat advanced.</p>
+    <div class="grid">
+      <div class="datum"><div class="label">Baseline generation</div><div class="value">3</div></div>
+      <div class="datum"><div class="label">Baseline connected at</div><div class="value">1785367470681</div></div>
+      <div class="datum"><div class="label">Receive path</div><div class="value">ready</div></div>
+      <div class="datum"><div class="label">Restart required</div><div class="value">false</div></div>
+      <div class="datum"><div class="label">Final observation</div><div class="value">2026-07-29T23:42:04.581Z</div></div>
+      <div class="datum"><div class="label">Worker heartbeat</div><div class="value">advanced to 1785368521272 · status ok</div></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
