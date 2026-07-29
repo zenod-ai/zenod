@@ -24,6 +24,20 @@ export type PeerSkill = {
   scriptsInert: true
 }
 
+export type TrustedConnectionProfile = {
+  exposure: "private" | "public" | "external" | "unknown"
+  tenantScope: "tenant" | "cross_tenant" | "unknown"
+  financialScope: "none" | "financial" | "unknown"
+  trustMcpAnnotations: boolean
+}
+
+export const DEFAULT_TRUSTED_CONNECTION_PROFILE: TrustedConnectionProfile = {
+  exposure: "unknown",
+  tenantScope: "unknown",
+  financialScope: "unknown",
+  trustMcpAnnotations: false,
+}
+
 export type Peer = {
   name: string
   url: string
@@ -35,6 +49,7 @@ export type Peer = {
   toolCount: number
   tools: PeerTool[]
   skill: PeerSkill | null
+  trustedProfile?: TrustedConnectionProfile
 }
 
 export type SkillFileInput = {

@@ -22,26 +22,28 @@ describe("generic standing-action contract", () => {
     expect(classifyApprovalIntent("Looks good, but wait — do not send it")).toBe("cancel");
   });
 
-  it("requires one same-peer exact-argument commit candidate and consumes it once", () => {
+  it("requires one same-connection, same-tool, exact-argument candidate and consumes it once", () => {
     expect(registerStandingApproval("a", "peer-a", "peer__create__1", { text: "exact" }, "[approval_required] held")).toBe(true);
-    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-b", tool: "peer__approve__2", args: { text: "exact" }, userRequest: "yes" })).toBe("mismatch");
-    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-a", tool: "peer__approve__2", args: { text: "changed" }, userRequest: "yes" })).toBe("mismatch");
-    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-a", tool: "peer__approve__2", args: { text: "exact" }, userRequest: "yes" })).toBe("allowed");
-    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-a", tool: "peer__approve__2", args: { text: "exact" }, userRequest: "yes" })).toBe("nothing_pending");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-b", tool: "peer__create__1", args: { text: "exact" }, userRequest: "yes" })).toBe("mismatch");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-a", tool: "peer__approve__2", args: { text: "exact" }, userRequest: "yes" })).toBe("mismatch");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-a", tool: "peer__create__1", args: { text: "changed" }, userRequest: "yes" })).toBe("mismatch");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-a", tool: "peer__create__1", args: { text: "exact" }, userRequest: "yes" })).toBe("allowed");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer-a", tool: "peer__create__1", args: { text: "exact" }, userRequest: "yes" })).toBe("nothing_pending");
   });
 
-  it("supports a same-tool confirmation shape while retaining exact substantive arguments", () => {
+  it("rejects extra confirmation arguments and accepts only the canonical held arguments", () => {
     registerStandingApproval("a", "peer", "peer__mutate__1", { text: "exact" }, "approval required", "Mutate after confirmation");
     expect(resolveStandingApproval({ conversationId: "a", owner: "peer", tool: "peer__mutate__1", args: { text: "changed", confirmed: true }, userRequest: "yes", description: "Mutate after confirmation" })).toBe("mismatch");
-    expect(resolveStandingApproval({ conversationId: "a", owner: "peer", tool: "peer__mutate__1", args: { text: "exact", confirmed: true }, userRequest: "yes", description: "Mutate after confirmation" })).toBe("allowed");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer", tool: "peer__mutate__1", args: { text: "exact", confirmed: true }, userRequest: "yes", description: "Mutate after confirmation" })).toBe("mismatch");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer", tool: "peer__mutate__1", args: { text: "exact" }, userRequest: "yes" })).toBe("allowed");
   });
 
-  it("uses exact APPROVE text to disambiguate and never carries approval across conversations", () => {
+  it("uses exact tool identity and APPROVE text and never carries approval across conversations", () => {
     registerStandingApproval("a", "peer", "peer__draft__1", { text: "one" }, "[draft_not_approved]");
     registerStandingApproval("a", "peer", "peer__draft__2", { text: "two" }, "approval required");
-    expect(resolveStandingApproval({ conversationId: "a", owner: "peer", tool: "peer__commit__3", args: { text: "one" }, userRequest: "yes" })).toBe("ambiguous");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer", tool: "peer__commit__3", args: { text: "one" }, userRequest: "yes" })).toBe("mismatch");
     expect(resolveStandingApproval({ conversationId: "b", owner: "peer", tool: "peer__commit__3", args: { text: "one" }, userRequest: "yes" })).toBe("nothing_pending");
-    expect(resolveStandingApproval({ conversationId: "a", owner: "peer", tool: "peer__commit__3", args: { text: "two" }, userRequest: 'PPROVE: "two"' })).toBe("allowed");
+    expect(resolveStandingApproval({ conversationId: "a", owner: "peer", tool: "peer__draft__2", args: { text: "two" }, userRequest: 'PPROVE: "two"' })).toBe("allowed");
   });
 
   it("does not let a publish approval cross into a delete operation", () => {
@@ -54,7 +56,7 @@ describe("generic standing-action contract", () => {
     const persisted = approvalTokenSnapshot("old-runtime:a");
     __resetApprovalTokens();
     hydrateApprovalTokens("new-runtime:a", persisted);
-    expect(resolveStandingApproval({ conversationId: "new-runtime:a", owner: "peer", tool: "peer__commit__2", args: { text: "exact" }, userRequest: "yes" })).toBe("allowed");
+    expect(resolveStandingApproval({ conversationId: "new-runtime:a", owner: "peer", tool: "peer__draft__1", args: { text: "exact" }, userRequest: "yes" })).toBe("allowed");
   });
 
   it("persists and clears standing state inside the tenant conversation store", async () => {

@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createHash } from "node:crypto";
-import { VERSION } from "zenod";
+import { VERSION, type TrustedConnectionProfile } from "zenod";
 import { pollPeerJob } from "./pollPeerJob.js";
 import { validateWalletUrl } from "./walletUrl.js";
 import {
@@ -60,6 +60,8 @@ export interface PeerConfig {
   wallet?: boolean;
   /** Set only by server policy when the exact host belongs to the private unit fleet. */
   allowPrivateHost?: boolean;
+  /** Host-owned, tenant-local risk limits for this exact connection. */
+  trustedProfile?: TrustedConnectionProfile;
   /** Last authenticated discovery state. Transport and catalog readiness differ. */
   discovery?: {
     transport: "connected" | "error";
@@ -213,6 +215,24 @@ export function councilToolName(peerName: string, mcpToolName: string): string {
     .digest("hex")
     .slice(0, 16);
   return `${stableToolSegment(peerName)}__${stableToolSegment(mcpToolName)}__${digest}`;
+}
+
+/**
+ * Opaque identity for the exact configured connection. Standing approvals must
+ * not survive an endpoint or credential replacement under the same display name.
+ */
+export function peerApprovalConnectionId(
+  peer: Pick<PeerConfig, "name" | "url" | "token">,
+): string {
+  const digest = createHash("sha256")
+    .update(peer.name)
+    .update("\0")
+    .update(peer.url)
+    .update("\0")
+    .update(peer.token)
+    .digest("hex")
+    .slice(0, 32);
+  return `connection:${stableToolSegment(peer.name)}:${digest}`;
 }
 
 /**

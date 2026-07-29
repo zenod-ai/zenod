@@ -108,15 +108,28 @@ export function hasValidApprovalToken(conversationId: string, tool: string, cont
   return tokens.some((token) => token.anyOutboundSend || (!token.owner && token.tool === tool && token.draftHash === draftHash(content)));
 }
 
-function exactArgsContained(expected: Record<string, unknown>, actual: Record<string, unknown>): boolean {
-  return Object.entries(expected).every(([key, value]) => key in actual && canonicalDraft(actual[key]) === canonicalDraft(value));
+function canonicalExactArgs(value: unknown): string {
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalExactArgs).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalExactArgs(item)}`)
+      .join(",")}}`;
+  }
+  return value === undefined ? "undefined" : JSON.stringify(value);
+}
+
+function exactArgsMatch(expected: Record<string, unknown>, actual: Record<string, unknown>): boolean {
+  return canonicalExactArgs(expected) === canonicalExactArgs(actual);
 }
 
 export type StandingApprovalResolution = "allowed" | "nothing_pending" | "ambiguous" | "mismatch";
 
 /**
  * Validate a model-selected commit candidate against host-owned standing state.
- * The candidate must stay on the same peer and carry every exact draft argument.
+ * The candidate must stay on the same connection, exact tool, and canonical
+ * full argument object. Extra arguments are a different operation.
  */
 export function resolveStandingApproval(input: {
   conversationId: string;
@@ -133,17 +146,14 @@ export function resolveStandingApproval(input: {
     ? tokens
     : tokens.filter((token) => Object.values(token.args!).some((value) => typeof value === "string" && value === exactText));
   if (candidates.length === 0) return "mismatch";
-  if (candidates.length !== 1) return "ambiguous";
-  const candidate = candidates[0]!;
-  const sourceOperation = `${candidate.tool.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")} ${candidate.description ?? ""}`;
-  const targetOperation = `${input.tool.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")} ${input.description ?? ""}`;
-  const sourceDeletes = /\b(?:delete|remove|destroy|revoke)\w*\b/i.test(sourceOperation);
-  const targetDeletes = /\b(?:delete|remove|destroy|revoke)\w*\b/i.test(targetOperation);
-  if (
-    candidate.owner !== input.owner ||
-    sourceDeletes !== targetDeletes ||
-    !exactArgsContained(candidate.args!, input.args)
-  ) return "mismatch";
+  const exactCandidates = candidates.filter((candidate) =>
+    candidate.owner === input.owner &&
+    candidate.tool === input.tool &&
+    exactArgsMatch(candidate.args!, input.args),
+  );
+  if (exactCandidates.length === 0) return "mismatch";
+  if (exactCandidates.length !== 1) return "ambiguous";
+  const candidate = exactCandidates[0]!;
   tokensByConversation.set(input.conversationId, liveTokens(input.conversationId).filter((token) => token !== candidate));
   return "allowed";
 }
