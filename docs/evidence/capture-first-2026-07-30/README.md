@@ -231,6 +231,126 @@ exit=0
 
 ## Post-merge deployment and live MT replay
 
-Pending merge and production deployment. Append the one allowed live ambiguous
-MT terminal receipt here after deployment; it must say saved and contain no
-question on any surface.
+PR [#1042](https://github.com/zenod-ai/zenod/pull/1042) merged to `main` as
+`10f60835c383d0f5ea71a962c414410fb4582b8f`. The normal `Publish image`
+workflow built, smoke-tested, and pushed the immutable
+`ghcr.io/zenod-ai/zenod:sha-10f6083` image.
+
+```console
+$ gh run view 30559261176 --repo zenod-ai/zenod --json databaseId,displayTitle,headSha,status,conclusion,url,workflowName --jq '{databaseId,workflowName,displayTitle,headSha,status,conclusion,url}'
+{"conclusion":"success","databaseId":30559261176,"displayTitle":"capture-first: file always, curate later; remove blocking store quest…","headSha":"10f60835c383d0f5ea71a962c414410fb4582b8f","status":"completed","url":"https://github.com/zenod-ai/zenod/actions/runs/30559261176","workflowName":"Publish image"}
+```
+
+Zenod MT, Ring, and Phylax were updated and deployed through Dokploy's
+`application.update` and `application.deploy` API. All existing environment
+and service settings were preserved. The persisted `GIT_SHA` override was
+updated with the image so `/api/health` reports the running release rather
+than the previous release.
+
+```console
+$ DOKPLOY_SAVED_TOKEN=$(jq -r .token /Users/jordi/.npm/_npx/bf18c59539a3b7e3/node_modules/@dokploy/cli/config.json); for app_id in 2dkayH_eAur427leH64MT hkdStWh6zfJ9d-uohdJHt urbFsgl6eImbQ4MTIZl5N; do curl -fsS -H "x-api-key: $DOKPLOY_SAVED_TOKEN" "https://dokploy.polyqu.com/api/application.one?applicationId=$app_id" | jq -r '[.name,.applicationStatus,.dockerImage,((.env // "")|split("\n")|map(select(startswith("GIT_SHA=")))|join(","))]|@tsv'; done
+zenod-mt	done	ghcr.io/zenod-ai/zenod:sha-10f6083	GIT_SHA=10f60835c383d0f5ea71a962c414410fb4582b8f
+ring	done	ghcr.io/zenod-ai/zenod:sha-10f6083	GIT_SHA=10f60835c383d0f5ea71a962c414410fb4582b8f
+phylax	done	ghcr.io/zenod-ai/zenod:sha-10f6083	GIT_SHA=10f60835c383d0f5ea71a962c414410fb4582b8f
+```
+
+The three public health surfaces all reported the exact merge SHA before the
+live replay.
+
+```console
+$ for url in https://cloud.zenod.dev/api/health https://ring.zenod.dev/api/health https://phylax.zenod.dev/api/health; do printf '%s\t' "$url"; curl -fsS -H 'Cache-Control: no-cache' "$url?evidence=capture-first-10f6083" | jq -c '{status,name,sha}'; done
+https://cloud.zenod.dev/api/health	{"status":"ok","name":"zenod","sha":"10f60835c383d0f5ea71a962c414410fb4582b8f"}
+https://ring.zenod.dev/api/health	{"status":"ok","name":"ring","sha":"10f60835c383d0f5ea71a962c414410fb4582b8f"}
+https://phylax.zenod.dev/api/health	{"status":"ok","name":"phylax","sha":"10f60835c383d0f5ea71a962c414410fb4582b8f"}
+```
+
+Exactly one live ambiguous `store_memory` call was made through the Zenod MT
+surface. The accepted ticket was polled; the store call was not retried.
+
+```json
+{
+  "tool": "zenod_mt.store_memory",
+  "input": {
+    "content": "Capture-first production replay, 2026-07-30: the blue cedar should stay near the north room, or perhaps the archive; preserve this memory without deciding which context it belongs to.",
+    "idempotencyKey": "capture-first-live-2026-07-30-10f6083",
+    "verbatim": true
+  },
+  "accepted": {
+    "ticket_id": "651203f3-db06-46bd-b7fb-cfc1f7ee92a4",
+    "jobId": "651203f3-db06-46bd-b7fb-cfc1f7ee92a4",
+    "kind": "store",
+    "status": "queued",
+    "state": "accepted",
+    "poll": {
+      "name": "get_task_result",
+      "inputField": "ticket_id"
+    }
+  }
+}
+```
+
+The exact terminal MT text receipt was:
+
+```text
+Saved — filed to Inbox; the filing question is logged in the note.
+evidence: Log/2026-07-30.md#^e-aa9b9d
+evidence URL: https://github.com/AlfaBlok/obsidian-brain/blob/c31dd498927fda0800129d1a85375f7b36a8f97e/Log/2026-07-30.md#L98
+pages: Inbox/needs-filing-2026-07-30T16-15-18.md
+commit: c31dd498927fda0800129d1a85375f7b36a8f97e
+https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-30.md
+https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-07-30T16-15-18.md
+```
+
+The exact terminal structured receipt was:
+
+```json
+{
+  "found": true,
+  "ticket_id": "651203f3-db06-46bd-b7fb-cfc1f7ee92a4",
+  "jobId": "651203f3-db06-46bd-b7fb-cfc1f7ee92a4",
+  "kind": "store",
+  "status": "done",
+  "state": "done",
+  "result": {
+    "evidenceRef": "Log/2026-07-30.md#^e-aa9b9d",
+    "evidenceUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c31dd498927fda0800129d1a85375f7b36a8f97e/Log/2026-07-30.md#L98",
+    "pagesTouched": [
+      "Inbox/needs-filing-2026-07-30T16-15-18.md"
+    ],
+    "pageUrls": [
+      "https://github.com/AlfaBlok/obsidian-brain/blob/c31dd498927fda0800129d1a85375f7b36a8f97e/Inbox/needs-filing-2026-07-30T16-15-18.md"
+    ],
+    "commitSha": "c31dd498927fda0800129d1a85375f7b36a8f97e",
+    "githubUrls": [
+      "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-30.md",
+      "https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-07-30T16-15-18.md"
+    ],
+    "filing": "inbox"
+  },
+  "evidence": [
+    {
+      "kind": "memory_stored",
+      "id": "651203f3-db06-46bd-b7fb-cfc1f7ee92a4",
+      "ticket_id": "651203f3-db06-46bd-b7fb-cfc1f7ee92a4",
+      "jobId": "651203f3-db06-46bd-b7fb-cfc1f7ee92a4",
+      "status": "done",
+      "evidenceRef": "Log/2026-07-30.md#^e-aa9b9d",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c31dd498927fda0800129d1a85375f7b36a8f97e/Log/2026-07-30.md#L98",
+      "commitSha": "c31dd498927fda0800129d1a85375f7b36a8f97e",
+      "pagesTouched": [
+        "Inbox/needs-filing-2026-07-30T16-15-18.md"
+      ],
+      "githubUrls": [
+        "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-30.md",
+        "https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-07-30T16-15-18.md"
+      ],
+      "pageUrls": [
+        "https://github.com/AlfaBlok/obsidian-brain/blob/c31dd498927fda0800129d1a85375f7b36a8f97e/Inbox/needs-filing-2026-07-30T16-15-18.md"
+      ]
+    }
+  ]
+}
+```
+
+The terminal text starts with `Saved`, contains no interrogative, and the
+structured receipt has no `question` property. No rollback was required.
