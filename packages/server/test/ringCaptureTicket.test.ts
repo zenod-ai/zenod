@@ -29,6 +29,7 @@ function stored(evidenceRef: string, page: string): StoreResult {
     pagesTouched: [page],
     commitSha: "a".repeat(40),
     githubUrls: [],
+    filing: "filed",
   };
 }
 

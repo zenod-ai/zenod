@@ -100,7 +100,7 @@ describe.skipIf(!API_KEY)("M0 Definition of Done (live)", () => {
     expect(result.evidenceRef).toMatch(/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]{6}$/);
     expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(result.githubUrls.length).toBeGreaterThan(0);
-    if (!result.question) {
+    if (result.filing !== "inbox") {
       expect(result.pagesTouched.length).toBeGreaterThan(0);
     }
     expect(await newLintErrors()).toEqual([]);
@@ -147,16 +147,17 @@ describe.skipIf(!API_KEY)("M0 Definition of Done (live)", () => {
     FULL_RUN ? 3_600_000 : 600_000,
   );
 
-  it("DoD #6 — low-confidence store asks instead of guessing", async () => {
+  it("DoD #6 — low-confidence store logs uncertainty instead of asking", async () => {
     const result = await engine.store({
       content: "glorp zzz quux — no idea where this goes, deliberately ambiguous nonsense",
       source: "cli",
       hints: ["do not guess"],
     });
-    // either an Inbox stub with a question, or (if the model was confident) a filed page — assert the contract
-    if (result.question) {
+    // Either an Inbox fallback or a filed page; the receipt itself never asks.
+    if (result.filing === "inbox") {
       expect(result.pagesTouched[0]).toMatch(/^Inbox\//);
     }
+    expect(result).not.toHaveProperty("question");
     expect(await newLintErrors()).toEqual([]);
   }, 120_000);
 });

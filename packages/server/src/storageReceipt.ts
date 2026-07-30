@@ -1,11 +1,13 @@
 import type { VoiceArchiveResult } from "./voiceArchive.js";
 
+type StoreFiling = "filed" | "uncertain" | "inbox" | "pending";
+
 interface StoreResultLike {
   evidenceRef: string;
   pagesTouched: string[];
   commitSha: string;
   githubUrls: string[];
-  question?: string;
+  filing: StoreFiling;
 }
 
 export interface StorageReceiptInput {
@@ -20,15 +22,20 @@ export interface StorageReceiptInput {
 }
 
 function asStoreResult(value: unknown): StoreResultLike | null {
-  const v = value as Partial<StoreResultLike> | null | undefined;
+  const v = value as (Partial<StoreResultLike> & { question?: unknown }) | null | undefined;
   if (!v || typeof v !== "object") return null;
   if (typeof v.evidenceRef !== "string") return null;
+  const filing = ["filed", "uncertain", "inbox", "pending"].includes(String(v.filing))
+    ? v.filing as StoreFiling
+    : typeof v.question === "string"
+      ? "inbox"
+      : "filed";
   return {
     evidenceRef: v.evidenceRef,
     pagesTouched: Array.isArray(v.pagesTouched) ? v.pagesTouched.filter((p): p is string => typeof p === "string") : [],
     commitSha: typeof v.commitSha === "string" ? v.commitSha : "",
     githubUrls: Array.isArray(v.githubUrls) ? v.githubUrls.filter((u): u is string => typeof u === "string") : [],
-    ...(typeof v.question === "string" ? { question: v.question } : {}),
+    filing,
   };
 }
 
@@ -44,6 +51,13 @@ export function formatStorageReceipt(input: StorageReceiptInput): string | null 
 
   const lines = ["Storage receipt"];
   if (stored) {
+    if (stored.filing === "uncertain") {
+      lines.push(`Saved — filed to ${stored.pagesTouched[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`);
+    } else if (stored.filing === "inbox") {
+      lines.push("Saved — filed to Inbox; the filing question is logged in the note.");
+    } else {
+      lines.push(stored.filing === "pending" ? "Filing pending." : "Saved.");
+    }
     lines.push(`Vault evidence: ${stored.evidenceRef}`);
     lines.push(`Vault note(s): ${stored.pagesTouched.length ? stored.pagesTouched.join(", ") : "(inbox / no page returned)"}`);
     if (stored.commitSha) lines.push(`Vault commit: ${stored.commitSha}`);
@@ -51,7 +65,6 @@ export function formatStorageReceipt(input: StorageReceiptInput): string | null 
       lines.push("Vault link(s):");
       for (const url of stored.githubUrls) lines.push(`- ${url}`);
     }
-    if (stored.question) lines.push(`Open question: ${stored.question}`);
   } else if (input.filingStatus === "error") {
     lines.push(`Vault filing: failed${input.filingError ? ` — ${input.filingError}` : ""}`);
   } else if (input.filingStatus === "timeout") {

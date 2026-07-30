@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createHash } from "node:crypto";
-import { VERSION, type TrustedConnectionProfile } from "zenod";
+import { VERSION, type StoreResult, type TrustedConnectionProfile } from "zenod";
 import { validateWalletUrl } from "./walletUrl.js";
 import {
   PEER_SKILL_LIMITS,
@@ -460,7 +460,7 @@ interface VerifiedStoreReceipt {
   pageUrls?: string[];
   commitSha: string;
   githubUrls?: string[];
-  question?: string;
+  filing: StoreResult["filing"];
 }
 
 function verifiedStoreReceipt(
@@ -474,7 +474,20 @@ function verifiedStoreReceipt(
     || typeof receipt.commitSha !== "string"
     || receipt.commitSha.length !== 40
   ) return null;
-  return receipt as unknown as VerifiedStoreReceipt;
+  const filing = ["filed", "uncertain", "inbox", "pending"].includes(String(receipt.filing))
+    ? receipt.filing as StoreResult["filing"]
+    : typeof receipt.question === "string"
+      ? "inbox"
+      : "filed";
+  return {
+    evidenceRef: receipt.evidenceRef,
+    ...(typeof receipt.evidenceUrl === "string" ? { evidenceUrl: receipt.evidenceUrl } : {}),
+    ...(Array.isArray(receipt.pagesTouched) ? { pagesTouched: receipt.pagesTouched.filter((value): value is string => typeof value === "string") } : {}),
+    ...(Array.isArray(receipt.pageUrls) ? { pageUrls: receipt.pageUrls.filter((value): value is string => typeof value === "string") } : {}),
+    commitSha: receipt.commitSha,
+    ...(Array.isArray(receipt.githubUrls) ? { githubUrls: receipt.githubUrls.filter((value): value is string => typeof value === "string") } : {}),
+    filing,
+  };
 }
 
 /** Call a peer tool with full structured arguments, returning readable text for the chat loop. */
@@ -494,15 +507,23 @@ export async function callPeerWithArgs(
       const completed = await pollPeerMcpJob(peer, jobId, 1_000, 180_000);
       const receipt = verifiedStoreReceipt(completed);
       if (receipt) {
+        const message = receipt.filing === "uncertain"
+          ? `Saved — filed to ${receipt.pagesTouched?.[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`
+          : receipt.filing === "inbox"
+            ? "Saved — filed to Inbox; the filing question is logged in the note."
+            : receipt.filing === "pending"
+              ? "Filing pending."
+              : "Saved.";
         return JSON.stringify({
           status: "done",
-          message: receipt.question ? `QUESTION FOR THE USER: ${receipt.question}` : "Stored.",
+          message,
           evidenceRef: receipt.evidenceRef,
           ...(receipt.evidenceUrl ? { evidenceUrl: receipt.evidenceUrl } : {}),
           ...(receipt.pagesTouched ? { pagesTouched: receipt.pagesTouched } : {}),
           ...(receipt.pageUrls ? { pageUrls: receipt.pageUrls } : {}),
           commitSha: receipt.commitSha,
           ...(receipt.githubUrls ? { githubUrls: receipt.githubUrls } : {}),
+          filing: receipt.filing,
         });
       }
       if (completed.status === "done") return `Zenod filing returned an invalid terminal receipt for job ${jobId}.`;

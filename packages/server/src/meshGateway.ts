@@ -222,7 +222,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "zenod",
     title: "Store a memory",
     description:
-      "File a memory into the user's vault through Zenod's librarian pipeline: it records immutable evidence, classifies + composes where the meaning belongs, files it onto the right page(s) with citations, validates, and commits to GitHub. If the librarian is unsure where it belongs it returns a question instead of guessing — relay that to the user. ASYNC: returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the evidence ref, pages touched, and commit SHA.",
+      "File a memory into the user's vault through Zenod's librarian pipeline: it records immutable evidence, classifies where the meaning belongs, files it onto the right page with citations or an uncertainty marker, validates, and commits to GitHub. Filing always completes: uncertainty is logged in the vault for voluntary later review, never returned as a question to relay or answer. ASYNC: returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the saved receipt, evidence ref, pages touched, commit SHA, and filing disposition.",
     inputSchema: STORE_MEMORY_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },

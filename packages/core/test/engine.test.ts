@@ -34,7 +34,7 @@ class FakeLlm implements BrainLlm {
   composeCalls = 0;
   confidence = 0.95;
   failComposeAttempts = 0;
-  classifyPath = "Areas/Insurance.md";
+  classifyPath: string | null = "Areas/Insurance.md";
   answerInputs: AnswerInput[] = [];
   answerOverride: ((input: AnswerInput, tools: VaultReadTools) => Promise<AnswerResult>) | null = null;
   workInputs: WorkLoopInput[] = [];
@@ -45,7 +45,9 @@ class FakeLlm implements BrainLlm {
       confidence: this.confidence,
       summary: "note new insurance fact",
       tags: ["insurance"],
-      pages: [{ path: this.classifyPath, action: "update", title: "Insurance" }],
+      pages: this.classifyPath
+        ? [{ path: this.classifyPath, action: "update", title: "Insurance" }]
+        : [],
       ...(this.confidence < 0.7 ? { question: "Which area does this belong to?" } : {}),
     };
   }
@@ -391,7 +393,8 @@ describe("BrainEngine", () => {
       source: "cli",
     });
 
-    expect(result.question).toBeUndefined();
+    expect(result.filing).toBe("filed");
+    expect(result).not.toHaveProperty("question");
     expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
     expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(result.evidenceRef).toMatch(/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]{6}$/);
@@ -421,28 +424,61 @@ describe("BrainEngine", () => {
       source: "cli",
     });
 
-    expect(result.question).toBeUndefined();
+    expect(result.filing).toBe("filed");
     expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
     await expect(readFile(join(repo.path, "Areas/Insurance.md"), "utf8")).resolves.toContain("# Insurance");
     await expect(readFile(join(repo.path, "Areas/Insurance"), "utf8")).rejects.toThrow();
     expect((await engine().lint()).errors).toEqual([]);
   });
 
-  it("low confidence lands as an Inbox stub with a question (DoD #6)", async () => {
+  it("low confidence with a candidate appends a searchable, removable, lint-clean uncertainty block (DoD #6)", async () => {
     llm.confidence = 0.3;
     const result = await engine().store({ content: "something cryptic", source: "mcp" });
 
-    expect(result.question).toBeTruthy();
+    expect(result.filing).toBe("uncertain");
+    expect(result).not.toHaveProperty("question");
+    expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
+    expect(llm.composeCalls).toBe(0);
+
+    const pagePath = result.pagesTouched[0]!;
+    const page = await readFile(join(repo.path, pagePath), "utf8");
+    expect(page).toMatch(/## Unverified capture — \d{4}-\d{2}-\d{2}  \^uc-e-[0-9a-f]{6}/);
+    expect(page).toContain("#filing/uncertain");
+    expect(page).toContain("> [!question] Which area does this belong to?");
+    expect(page).toMatch(/> Evidence: \[\[\d{4}-\d{2}-\d{2}#\^e-[0-9a-f]{6}\]\] · confidence 0\.30/);
+    expect(page).toContain("> something cryptic");
+    expect((await engine().lint()).errors).toEqual([]);
+
+    const byContent = await engine().search("something cryptic");
+    expect(byContent.some((hit) => hit.path === pagePath)).toBe(true);
+    const byTag = await engine().search("filing/uncertain");
+    expect(byTag.some((hit) => hit.path === pagePath)).toBe(true);
+
+    await writeFile(
+      join(repo.path, pagePath),
+      page.replace(/\n## Unverified capture —[\s\S]*$/, "\n"),
+    );
+    expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("low confidence without candidates lands as an Inbox stub", async () => {
+    llm.confidence = 0.3;
+    llm.classifyPath = null;
+    const result = await engine().store({ content: "something with no candidate", source: "mcp" });
+
+    expect(result.filing).toBe("inbox");
+    expect(result).not.toHaveProperty("question");
     expect(result.pagesTouched[0]).toMatch(/^Inbox\/needs-filing-/);
     const stub = await readFile(join(repo.path, result.pagesTouched[0]!), "utf8");
     expect(stub).toContain("status: needs-filing");
+    expect(stub).toContain("Which area does this belong to?");
     expect((await engine().lint()).errors).toEqual([]);
   });
 
   it("retries failed validation, then succeeds (validate-with-retry)", async () => {
     llm.failComposeAttempts = 1;
     const result = await engine().store({ content: "insurance detail", source: "cli" });
-    expect(result.question).toBeUndefined();
+    expect(result.filing).toBe("filed");
     expect(llm.composeCalls).toBe(2);
     expect((await engine().lint()).errors).toEqual([]);
   });
@@ -451,8 +487,10 @@ describe("BrainEngine", () => {
     llm.failComposeAttempts = 99;
     const result = await engine().store({ content: "insurance detail", source: "cli" });
 
-    expect(result.question).toContain("could not file it");
+    expect(result.filing).toBe("inbox");
     expect(result.pagesTouched[0]).toMatch(/^Inbox\//);
+    const stub = await readFile(join(repo.path, result.pagesTouched[0]!), "utf8");
+    expect(stub).toContain("could not file it");
     // the meaning page was NOT half-modified
     const page = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
     expect(page).not.toContain("Broken page");

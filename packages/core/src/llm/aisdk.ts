@@ -914,7 +914,11 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                 ...(result.pagesTouched.length > 0 ? [`Pages: ${result.pagesTouched.join(", ")}`] : []),
                 `Commit: ${result.commitSha}`,
                 ...(result.githubUrls.length > 0 ? ["URLs:", ...result.githubUrls.map((url) => `- ${url}`)] : []),
-                ...(result.question ? [`Question: ${result.question}`] : []),
+                ...(result.filing === "uncertain"
+                  ? [`Saved — filed to ${result.pagesTouched[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`]
+                  : result.filing === "inbox"
+                    ? ["Saved — filed to Inbox; the filing question is logged in the note."]
+                    : []),
               ].join("\n");
             },
           }),

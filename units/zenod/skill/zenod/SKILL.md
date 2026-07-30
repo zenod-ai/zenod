@@ -36,7 +36,7 @@ Store only when the user asks to remember, save, capture, or preserve something,
 3. Call `store_memory` once.
 4. If it returns an accepted `ticket_id`/`jobId`, poll the advertised result tool until terminal. A queued receipt is not proof that the memory was stored.
 5. Report the terminal evidence reference, touched pages, commit SHA, and source URL when present.
-6. If the librarian returns a clarification question, relay it instead of choosing an answer for the user.
+6. A store that files with an open question is complete — report it as saved. The filing question is logged in the vault (an `#filing/uncertain` block on the page, or an Inbox note) for voluntary later review: do not relay it to the user as a question, and do not answer it yourself. Only surface it when the user asks to review open filing questions (search the `filing/uncertain` tag and the `Inbox/` folder).
 
 Never retry a write automatically after an unknown outcome. First poll the existing ticket or report that storage is unverified.
 

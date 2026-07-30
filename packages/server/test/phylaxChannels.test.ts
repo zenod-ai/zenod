@@ -159,7 +159,8 @@ describe("PhylaxChannelsOrgan", () => {
     expect(receipt.replyText).toContain("Saved ✓");
     expect(receipt.replyText).toContain("Projects/Launch.md");
     expect(receipt.replyText).toContain("abc1234");
-    expect(receipt.replyText).toContain("Which owner should be listed?");
+    expect(receipt.replyText).toContain("saved to Inbox");
+    expect(receipt.replyText).not.toContain("Which owner should be listed?");
     expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
       .toBe("Log/2026-07-29.md#^voice-1");
     await organ.close();
