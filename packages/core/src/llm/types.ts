@@ -120,6 +120,11 @@ export interface AnswerInput {
   /** Prior conversation turns (chat mode); empty for one-shot ask. */
   conversation: Array<{ role: "user" | "assistant"; text: string }>;
   /**
+   * Host-owned typed terminal capture records for this exact conversation,
+   * newest first. These are authority-bearing context, never assistant prose.
+   */
+  captureContext?: import("../types.js").ConversationCaptureContext[];
+  /**
    * If set, the loop streams the answer: each text chunk is delivered as it
    * arrives. The full text is still returned in AnswerResult when the loop ends.
    */

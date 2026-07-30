@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import type {
   ChatTestAuditInput,
   ChatTestAuditRecord,
+  ConversationCaptureContext,
   ConversationMessage,
   ConversationCaptureTicket,
   ConversationSearchHit,
@@ -207,12 +208,6 @@ export class SqliteStateStore implements StateStore {
     }
     const at = Date.now();
     const targetConversationId = conversationId(surface, conversationKey);
-    const text = [
-      "Capture context:",
-      `Summary: ${summary}`,
-      `Evidence: ${evidenceRef}`,
-    ].join("\n");
-
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const claimed = this.db.prepare(
@@ -234,9 +229,6 @@ export class SqliteStateStore implements StateStore {
         this.db.exec("COMMIT");
         return "duplicate";
       }
-      this.db
-        .prepare("INSERT INTO messages (conversation_id, role, text, surface, at) VALUES (?, 'assistant', ?, ?, ?)")
-        .run(targetConversationId, text, surface, at);
       this.db.exec("COMMIT");
       return "recorded";
     } catch (error) {
@@ -249,9 +241,15 @@ export class SqliteStateStore implements StateStore {
     const cutoff = Date.now() - WINDOW_MS;
     const rows = this.db
       .prepare(
-        `SELECT role, text, surface, at FROM messages
-         WHERE conversation_id = ? AND at >= ?
-         ORDER BY at DESC, id DESC LIMIT ?`,
+        `SELECT messages.role, messages.text, messages.surface, messages.at
+         FROM messages
+         LEFT JOIN conversation_capture_tickets AS capture
+           ON capture.conversation_id = messages.conversation_id
+          AND capture.at = messages.at
+          AND messages.role = 'assistant'
+         WHERE messages.conversation_id = ? AND messages.at >= ?
+           AND capture.provider_message_id IS NULL
+         ORDER BY messages.at DESC, messages.id DESC LIMIT ?`,
       )
       .all(conversationId, cutoff, WINDOW_MESSAGES) as Array<{
       role: "user" | "assistant";
@@ -262,8 +260,49 @@ export class SqliteStateStore implements StateStore {
     return rows.reverse().map((r) => ({ role: r.role, text: r.text, surface: r.surface, at: new Date(r.at) }));
   }
 
+  async recentCaptureTickets(
+    targetConversationId: string,
+    limit = 10,
+  ): Promise<ConversationCaptureContext[]> {
+    const boundedLimit = Math.max(1, Math.min(20, Math.trunc(limit)));
+    const rows = this.db.prepare(
+      `SELECT tenant_id AS tenantId,
+              surface,
+              conversation_key AS conversationKey,
+              provider_message_id AS providerMessageId,
+              summary,
+              evidence_ref AS evidenceRef,
+              at
+       FROM conversation_capture_tickets
+       WHERE tenant_id = ? AND conversation_id = ?
+       ORDER BY at DESC, rowid DESC
+       LIMIT ?`,
+    ).all(this.tenantId, targetConversationId, boundedLimit) as unknown as Array<{
+      tenantId: string;
+      surface: Surface;
+      conversationKey: string;
+      providerMessageId: string;
+      summary: string;
+      evidenceRef: string;
+      at: number;
+    }>;
+    return rows.map((row) => ({
+      identity: {
+        tenantId: row.tenantId,
+        surface: row.surface,
+        conversationKey: row.conversationKey,
+        providerMessageId: row.providerMessageId,
+      },
+      summary: row.summary,
+      evidenceRef: row.evidenceRef,
+      terminal: true,
+      recordedAt: new Date(row.at),
+    }));
+  }
+
   async clearConversation(conversationId: string): Promise<void> {
     this.db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(conversationId);
+    this.db.prepare("DELETE FROM conversation_capture_tickets WHERE conversation_id = ?").run(conversationId);
     this.db.prepare("DELETE FROM approval_tokens WHERE conversation_id = ?").run(conversationId);
   }
 

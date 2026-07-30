@@ -1465,6 +1465,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const cid = conversationId(surface, chatOptions.conversationKey);
     const approvalCid = await prepareApprovalTurn(cid, message);
     const window = await state.recentWindow(cid);
+    const captureContext = await state.recentCaptureTickets?.(cid);
     await state.appendMessage(cid, "user", message, surface);
 
     const wantsStore = /\b(remember|store|save|capture|log) (this|that|it)\b/i.test(message);
@@ -1493,6 +1494,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       conversationId: approvalCid,
       vaultBriefing: briefing.text,
       conversation: window.map((m) => ({ role: m.role, text: m.text })),
+      ...(captureContext?.length ? { captureContext } : {}),
       ...(chatOptions.onDelta ? { onTextDelta: (delta: string) => pendingDeltas.push(delta) } : {}),
       ...(chatOptions.onToolEvent ? { onToolEvent: chatOptions.onToolEvent } : {}),
       onPeerAction: (tool, inp, res, metadata) => actions.push({
@@ -1551,6 +1553,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const cid = conversationId(input.surface, input.conversationKey);
     const approvalCid = await prepareApprovalTurn(cid, input.text);
     const window = await state.recentWindow(cid);
+    const captureContext = await state.recentCaptureTickets?.(cid);
     await state.appendMessage(cid, "user", input.text, input.surface);
 
     const actions: TaskingAction[] = [];
@@ -1580,6 +1583,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       conversationId: approvalCid,
       vaultBriefing: briefing.text,
       conversation: window.map((m) => ({ role: m.role, text: m.text })),
+      ...(captureContext?.length ? { captureContext } : {}),
       onPeerAction: (tool, inp, res, metadata) => actions.push({
         tool,
         input: inp,

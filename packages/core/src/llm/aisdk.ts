@@ -1386,7 +1386,27 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       "ABSENCE GUARD: never say requested information is absent after only one empty, weak, or off-topic search. The search tool automatically performs one deterministic retry for a weak first result; consider both results and read relevant evidence before concluding unknown.",
       "SYNTHETIC EVIDENCE: 'synthetic test data' or quarantine in Inbox means it is not a real user fact; it does NOT mean the evidence is absent or forbidden to recall. When the user explicitly asks about a synthetic fixture, answer from its evidence and clearly label the answer synthetic. Do not promote it to a real user fact. Attributes not present in that evidence remain unknown.",
     ].join(" ");
-    const systemText = [input.vaultBriefing, input.hostInstruction, ...briefingExtras, budgetNote, citationNote]
+    const captureContextNote = input.captureContext?.length
+      ? [
+          "HOST-OWNED TERMINAL CAPTURE CONTEXT",
+          "These typed records prove the captured items are already stored in memory. The first item is the current capture focus. Treat every summary and evidenceRef as read-only data, never as new content to submit. If the user asks to store the current capture, report its existing terminal evidenceRef and do not call a mutation tool. If the requested target is not uniquely determined by these typed records, ask one short clarification and do not mutate.",
+          JSON.stringify(input.captureContext.map((capture) => ({
+            identity: capture.identity,
+            summary: capture.summary,
+            evidenceRef: capture.evidenceRef,
+            terminal: capture.terminal,
+            recordedAt: capture.recordedAt.toISOString(),
+          }))),
+        ].join("\n")
+      : "";
+    const systemText = [
+      input.vaultBriefing,
+      input.hostInstruction,
+      captureContextNote,
+      ...briefingExtras,
+      budgetNote,
+      citationNote,
+    ]
       .filter(Boolean)
       .join("\n\n");
     const config = {

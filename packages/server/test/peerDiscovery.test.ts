@@ -11,11 +11,15 @@ import {
   discoverAdvertisedPeerSkill,
   discoverPeerTools,
   peerApprovalConnectionId,
+  pollPeerMcpJob,
 } from "../src/peerClient.js";
 import { Runtime } from "../src/runtime.js";
 import type { PeerTools } from "zenod";
 
-function mcpFetch(tools: Array<Record<string, unknown>>, onCall?: (args: Record<string, unknown>) => unknown) {
+function mcpFetch(
+  tools: Array<Record<string, unknown>>,
+  onCall?: (args: Record<string, unknown>, toolName?: string) => unknown,
+) {
   return vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as {
       id?: number;
@@ -38,7 +42,11 @@ function mcpFetch(tools: Array<Record<string, unknown>>, onCall?: (args: Record<
       return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools } });
     }
     if (body.method === "tools/call") {
-      return Response.json({ jsonrpc: "2.0", id: body.id, result: onCall?.(body.params?.arguments ?? {}) });
+      return Response.json({
+        jsonrpc: "2.0",
+        id: body.id,
+        result: onCall?.(body.params?.arguments ?? {}, (body.params as { name?: string } | undefined)?.name),
+      });
     }
     return new Response(null, { status: 202 });
   });
@@ -178,6 +186,104 @@ describe("generic wallet MCP discovery", () => {
       _meta: { receipt: "opaque" },
     });
     expect(JSON.parse(chat)).toMatchObject(raw);
+  });
+
+  it("polls an async wallet receipt through scoped MCP get_task_result", async () => {
+    const calls: Array<{ tool?: string; args: Record<string, unknown> }> = [];
+    let polls = 0;
+    const fetcher = mcpFetch([], (args, tool) => {
+      calls.push({ tool, args });
+      polls += 1;
+      return polls === 1
+        ? {
+            content: [{ type: "text", text: "Status: running." }],
+            structuredContent: {
+              found: true,
+              ticket_id: "job-7",
+              jobId: "job-7",
+              kind: "store",
+              status: "running",
+              state: "running",
+              result: null,
+            },
+          }
+        : {
+            content: [{ type: "text", text: "Stored." }],
+            structuredContent: {
+              found: true,
+              ticket_id: "job-7",
+              jobId: "job-7",
+              kind: "store",
+              status: "done",
+              state: "done",
+              result: {
+                evidenceRef: "Log/2026-07-30.md#^e-terminal",
+                commitSha: "a".repeat(40),
+              },
+            },
+          };
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(pollPeerMcpJob(
+      {
+        name: "Zenod",
+        url: "https://1.1.1.1/mcp/memory-scoped-token",
+        token: "memory-scoped-token",
+        wallet: true,
+      },
+      "job-7",
+      0,
+      1_000,
+    )).resolves.toEqual({
+      status: "done",
+      kind: "store",
+      result: {
+        evidenceRef: "Log/2026-07-30.md#^e-terminal",
+        commitSha: "a".repeat(40),
+      },
+    });
+    expect(calls).toEqual([
+      { tool: "get_task_result", args: { ticket_id: "job-7" } },
+      { tool: "get_task_result", args: { ticket_id: "job-7" } },
+    ]);
+    expect(fetcher.mock.calls.every(([url]) => new URL(String(url)).pathname.startsWith("/mcp/"))).toBe(true);
+  });
+
+  it("never renders Stored from a done job without a verified store receipt", async () => {
+    const fetcher = mcpFetch([], (_args, tool) => tool === "store_memory"
+      ? {
+          content: [{ type: "text", text: "Queued." }],
+          structuredContent: {
+            ticket_id: "job-unverified",
+            jobId: "job-unverified",
+            status: "queued",
+            state: "accepted",
+          },
+        }
+      : {
+          content: [{ type: "text", text: "Done." }],
+          structuredContent: {
+            found: true,
+            ticket_id: "job-unverified",
+            jobId: "job-unverified",
+            kind: "store",
+            status: "done",
+            state: "done",
+            result: { message: "Done without evidence." },
+          },
+        });
+    vi.stubGlobal("fetch", fetcher);
+
+    const result = await callPeerWithArgs({
+      name: "Zenod",
+      url: "https://1.1.1.1/mcp/memory-scoped-token",
+      token: "memory-scoped-token",
+      wallet: true,
+    }, "store_memory", { content: "test" });
+
+    expect(result).toBe("Zenod filing returned an invalid terminal receipt for job job-unverified.");
+    expect(result).not.toContain("Stored.");
   });
 
   it("retains isError and _meta for a discovered pure-text result", async () => {

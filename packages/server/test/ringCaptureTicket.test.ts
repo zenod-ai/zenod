@@ -370,10 +370,10 @@ describe("Ring capture context ticket", () => {
         status: "recorded",
         evidenceRef: "Log/2026-07-29.md#^exact",
       });
-      expect(await ringRuntime.state.recentWindow(
+      expect(await ringRuntime.state.recentCaptureTickets?.(
         conversationId("whatsapp", "whatsapp:34611111111"),
       )).toMatchObject([{
-        text: expect.stringContaining("Areas/Exact.md"),
+        summary: expect.stringContaining("Areas/Exact.md"),
       }]);
     } finally {
       await client.close();
@@ -571,17 +571,14 @@ describe("Ring capture context ticket", () => {
         // producer observation/drain calls.
         receipt.afterReply?.();
         await vi.waitFor(async () => {
-          expect(await ringRuntime.state.recentWindow(cid)).toMatchObject([{
-            role: "assistant",
-            surface: capture.channel,
-            text: [
-              "Capture context:",
-              `Summary: Filed memory in ${capture.page}.`,
-              `Evidence: ${capture.evidenceRef}`,
-            ].join("\n"),
+          expect(await ringRuntime.state.recentCaptureTickets?.(cid)).toMatchObject([{
+            identity: { surface: capture.channel },
+            summary: `Filed memory in ${capture.page}.`,
+            evidenceRef: capture.evidenceRef,
+            terminal: true,
           }]);
         }, { timeout: 5_000 });
-        expect(await ringRuntime.state.recentWindow(cid)).toHaveLength(1);
+        expect(await ringRuntime.state.recentCaptureTickets?.(cid)).toHaveLength(1);
       }
 
       expect(whatsappSend).toHaveBeenCalledTimes(1);

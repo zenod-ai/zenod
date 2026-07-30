@@ -410,6 +410,13 @@ export interface ConversationCaptureTicket {
   evidenceRef: string;
 }
 
+export interface ConversationCaptureContext extends ConversationCaptureTicket {
+  /** Capture tickets enter conversation state only after canonical terminal verification. */
+  terminal: true;
+  /** Host receipt time, used to select the newest capture without interpreting prose. */
+  recordedAt: Date;
+}
+
 /**
  * Conversation state (and only that — the vault is the memory). SQLite-backed
  * in this repo; the interface exists so a hosted shell can swap in Postgres.
@@ -417,13 +424,17 @@ export interface ConversationCaptureTicket {
 export interface StateStore {
   appendMessage(conversationId: string, role: "user" | "assistant", text: string, surface: Surface): Promise<void>;
   /**
-   * Atomically append one host-owned capture context message and claim its
-   * canonical tenant/surface/conversation/provider identity. Returns duplicate
-   * on retry/restart without adding another conversation message.
+   * Atomically claim one host-owned terminal capture with its canonical
+   * tenant/surface/conversation/provider identity. Returns duplicate on retry.
    */
   appendCaptureTicket(
     ticket: ConversationCaptureTicket,
   ): Promise<"recorded" | "duplicate">;
+  /** Newest verified terminal captures for this exact tenant-scoped conversation. */
+  recentCaptureTickets?(
+    conversationId: string,
+    limit?: number,
+  ): Promise<ConversationCaptureContext[]>;
   /** Most recent window: last 20 messages or 48h, whichever is smaller. */
   recentWindow(conversationId: string): Promise<ConversationMessage[]>;
   /** Delete every message in a conversation. */

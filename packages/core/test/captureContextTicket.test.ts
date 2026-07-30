@@ -13,7 +13,7 @@ afterEach(async () => {
 });
 
 describe("SqliteStateStore capture context tickets", () => {
-  it("atomically appends one summary-and-evidence context message across retries and restarts", async () => {
+  it("atomically appends one typed terminal capture across retries and restarts", async () => {
     const dir = await mkdtemp(join(tmpdir(), "ring-capture-context-"));
     dirs.push(dir);
     const path = join(dir, "ring.sqlite");
@@ -32,22 +32,18 @@ describe("SqliteStateStore capture context tickets", () => {
     const first = new SqliteStateStore(path, "tenant-alpha");
     expect(await first.appendCaptureTicket(ticket)).toBe("recorded");
     expect(await first.appendCaptureTicket(ticket)).toBe("duplicate");
-    expect(await first.recentWindow(conversationId)).toMatchObject([
-      {
-        role: "assistant",
-        surface: "whatsapp",
-        text: [
-          "Capture context:",
-          "Summary: The note compares Girona housing options.",
-          "Evidence: Log/2026-07-29.md#^e-a1b2c3",
-        ].join("\n"),
-      },
-    ]);
+    expect(await first.recentWindow(conversationId)).toEqual([]);
+    expect(await first.recentCaptureTickets(conversationId)).toMatchObject([{
+      identity: ticket.identity,
+      summary: ticket.summary,
+      evidenceRef: ticket.evidenceRef,
+    }]);
     first.close();
 
     const restarted = new SqliteStateStore(path, "tenant-alpha");
     expect(await restarted.appendCaptureTicket(ticket)).toBe("duplicate");
-    expect(await restarted.recentWindow(conversationId)).toHaveLength(1);
+    expect(await restarted.recentWindow(conversationId)).toEqual([]);
+    expect(await restarted.recentCaptureTickets(conversationId)).toHaveLength(1);
     restarted.close();
   });
 
@@ -73,9 +69,28 @@ describe("SqliteStateStore capture context tickets", () => {
     expect(await store.appendCaptureTicket(ticket("whatsapp", "whatsapp:chat-b", "Other WhatsApp chat."))).toBe("recorded");
     expect(await store.appendCaptureTicket(ticket("whatsapp", "whatsapp:chat-a", "Retry ignored."))).toBe("duplicate");
 
-    expect(await store.recentWindow("whatsapp:whatsapp:chat-a")).toHaveLength(1);
-    expect(await store.recentWindow("telegram:telegram:chat-a")).toHaveLength(1);
-    expect(await store.recentWindow("whatsapp:whatsapp:chat-b")).toHaveLength(1);
+    expect(await store.recentCaptureTickets("whatsapp:whatsapp:chat-a")).toHaveLength(1);
+    expect(await store.recentCaptureTickets("telegram:telegram:chat-a")).toHaveLength(1);
+    expect(await store.recentCaptureTickets("whatsapp:whatsapp:chat-b")).toHaveLength(1);
+    store.close();
+  });
+
+  it("clears typed capture focus with the exact conversation", async () => {
+    const store = new SqliteStateStore(":memory:", "tenant-alpha");
+    await store.appendCaptureTicket({
+      identity: {
+        tenantId: "tenant-alpha",
+        surface: "whatsapp",
+        conversationKey: "whatsapp:chat-a",
+        providerMessageId: "42",
+      },
+      summary: "Stored capture.",
+      evidenceRef: "Log/2026-07-30.md#^e-clear",
+    });
+
+    await store.clearConversation("whatsapp:whatsapp:chat-a");
+
+    expect(await store.recentCaptureTickets("whatsapp:whatsapp:chat-a")).toEqual([]);
     store.close();
   });
 
