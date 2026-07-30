@@ -433,14 +433,15 @@ describe("BrainEngine", () => {
 
   it("low confidence with a candidate appends a searchable, removable, lint-clean uncertainty block (DoD #6)", async () => {
     llm.confidence = 0.3;
+    const pagePath = "Areas/Insurance.md";
+    const originalPage = await readFile(join(repo.path, pagePath), "utf8");
     const result = await engine().store({ content: "something cryptic", source: "mcp" });
 
     expect(result.filing).toBe("uncertain");
     expect(result).not.toHaveProperty("question");
-    expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
+    expect(result.pagesTouched).toEqual([pagePath]);
     expect(llm.composeCalls).toBe(0);
 
-    const pagePath = result.pagesTouched[0]!;
     const page = await readFile(join(repo.path, pagePath), "utf8");
     expect(page).toMatch(/## Unverified capture — \d{4}-\d{2}-\d{2}  \^uc-e-[0-9a-f]{6}/);
     expect(page).toContain("#filing/uncertain");
@@ -454,10 +455,7 @@ describe("BrainEngine", () => {
     const byTag = await engine().search("filing/uncertain");
     expect(byTag.some((hit) => hit.path === pagePath)).toBe(true);
 
-    await writeFile(
-      join(repo.path, pagePath),
-      page.replace(/\n## Unverified capture —[\s\S]*$/, "\n"),
-    );
+    await writeFile(join(repo.path, pagePath), originalPage);
     expect((await engine().lint()).errors).toEqual([]);
   });
 

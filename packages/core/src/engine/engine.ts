@@ -1160,7 +1160,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
     evidence: Awaited<ReturnType<typeof appendEvidence>>,
     confidence: number,
   ): string {
-    const normalizedQuestion = question.replace(/\s+/g, " ").trim();
+    const normalizedQuestion = question
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(" ");
     const quotedContent = content
       .trimEnd()
       .split("\n")
