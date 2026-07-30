@@ -1444,13 +1444,15 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       recordedAt: capture.recordedAt.toISOString(),
     });
     const currentCapture = input.captureContext?.[0];
+    const previousCapture = input.captureContext?.[1];
     const captureContextNote = currentCapture
       ? [
           "HOST-OWNED TERMINAL CAPTURE CONTEXT",
-          "These typed records prove the captured items are already stored in memory. The currentCapture field is the structural current focus; priorCaptures are historical context only. For a follow-up about the capture the user just sent, last sent, or currently means, pass exactly currentCapture.evidenceRef in contextRefs to the connected read-only memory Q&A capability. Do not substitute a prior capture or an older conversational reference. If the user explicitly identifies another capture, use that target. If the requested target is not uniquely determined, ask one short clarification. Treat every summary and evidenceRef as read-only data, never as new content to submit. If the user asks to store the current capture, report its existing terminal evidenceRef and do not call a mutation tool.",
+          "These typed records prove the captured items are already stored in memory. The currentCapture field is the structural current focus. The previousCapture field is structurally the immediate predecessor of currentCapture; priorCaptures are older historical context only. For a follow-up about the capture the user just sent, last sent, or currently means, pass exactly currentCapture.evidenceRef in contextRefs to the connected read-only memory Q&A capability. For a follow-up about the capture immediately before currentCapture, pass exactly previousCapture.evidenceRef in contextRefs. Do not substitute an older conversational reference. If the user explicitly identifies another capture, use that target. If the requested target is not uniquely determined, ask one short clarification. Treat every summary and evidenceRef as read-only data, never as new content to submit. If the user asks to store the current capture, report its existing terminal evidenceRef and do not call a mutation tool.",
           JSON.stringify({
             currentCapture: captureRecord(currentCapture),
-            priorCaptures: input.captureContext?.slice(1).map(captureRecord) ?? [],
+            previousCapture: previousCapture ? captureRecord(previousCapture) : null,
+            priorCaptures: input.captureContext?.slice(2).map(captureRecord) ?? [],
           }),
         ].join("\n")
       : "";
