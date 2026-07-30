@@ -1525,7 +1525,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
-    const outcome = finalizeReply(result.text, actions, message, approvalCid);
+    const answerContent = { type: "answer_content" as const, text: result.text };
+    const readOnlyStatus = {
+      type: "read_only_status" as const,
+      text: "Read-only answer — no action was performed.",
+    };
+    const outcome = captureContext?.length && actions.length === 0
+      ? {
+          isActionTurn: false,
+          kind: "answer" as const,
+          text: `${answerContent.text}\n\n${readOnlyStatus.text}`,
+          intercepted: true,
+        }
+      : finalizeReply(result.text, actions, message, approvalCid);
     const text = outcome.text;
     if (chatOptions.onDelta) {
       const naturalUnchanged =
@@ -1615,7 +1627,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
-    const text = finalizeReply(result.text, actions, input.text, approvalCid).text;
+    const answerContent = { type: "answer_content" as const, text: result.text };
+    const readOnlyStatus = {
+      type: "read_only_status" as const,
+      text: "Read-only answer — no action was performed.",
+    };
+    const text = captureContext?.length && actions.length === 0
+      ? `${answerContent.text}\n\n${readOnlyStatus.text}`
+      : finalizeReply(result.text, actions, input.text, approvalCid).text;
     await persistApprovalTurn(cid, approvalCid);
     await state.appendMessage(cid, "assistant", text, input.surface);
     return { text, actions };
