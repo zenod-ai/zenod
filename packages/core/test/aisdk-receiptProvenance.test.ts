@@ -179,6 +179,12 @@ describe("AI SDK peer mutation provenance", () => {
     expect(system).toContain("previousCapture");
     expect(system).toContain("priorCaptures");
     expect(system).toContain("The currentCapture field is the structural current focus");
+    expect(system).toContain(
+      "Voice-note chronology is defined by these typed capture records, not by elapsed time",
+    );
+    expect(system).toContain(
+      "do not call a channel-history or recent-conversation capability to rediscover it",
+    );
     expect(system).toContain("pass exactly currentCapture.evidenceRef in contextRefs");
     expect(system).toContain("The previousCapture field is structurally the immediate predecessor");
     expect(system).toContain("pass exactly previousCapture.evidenceRef in contextRefs");
