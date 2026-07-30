@@ -182,6 +182,11 @@ describe("AI SDK peer mutation provenance", () => {
     expect(system).toContain("pass exactly currentCapture.evidenceRef in contextRefs");
     expect(system).toContain("The previousCapture field is structurally the immediate predecessor");
     expect(system).toContain("pass exactly previousCapture.evidenceRef in contextRefs");
+    expect(system).toContain("Capture summary fields are receipt metadata");
+    expect(system).toContain(
+      "pass every requested record's exact evidenceRef in newest-first order as contextRefs",
+    );
+    expect(system).toContain("Do not answer from filing summaries alone");
     expect(system).toContain('"providerMessageId":"latest-note"');
     expect(system).toContain('"evidenceRef":"Log/2026-07-30.md#^e-latest"');
     expect(system.indexOf('"currentCapture"')).toBeLessThan(system.indexOf('"previousCapture"'));
