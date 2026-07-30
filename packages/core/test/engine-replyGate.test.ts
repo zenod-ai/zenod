@@ -153,6 +153,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
       summary: "The current capture is already stored.",
       evidenceRef: "Log/2026-07-30.md#^e-1d0d28",
     });
+    await new Promise((resolve) => setTimeout(resolve, 2));
     const modelAnswer =
       "The current capture is already stored at **Log/2026-07-30.md#^e-1d0d28**. No mutation tool was called.";
     const engine = createEngine({
@@ -170,6 +171,11 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     expect(reply.text).toBe(
       `${modelAnswer}\n\nRead-only answer — no action was performed.`,
     );
+    const conversation = await state.recentWindow("whatsapp:whatsapp:34611111111");
+    expect(conversation.at(-1)).toMatchObject({
+      role: "assistant",
+      text: modelAnswer,
+    });
   });
 
   it("renders one host status when the model repeats status prose after a typed peer answer", async () => {
@@ -216,6 +222,56 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     );
 
     expect(reply.text).toBe(rendered);
+  });
+
+  it("keeps a typed host status out of the next model conversation", async () => {
+    const state = new SqliteStateStore(":memory:");
+    const answer = "The latest voice note was about Intermarché.";
+    const status = "Read-only answer — no action was performed.";
+    const rendered = `${answer}\n\n${status}`;
+    const typedResult = JSON.stringify({
+      content: [{ type: "text", text: rendered }],
+      structuredContent: {
+        type: "answer_content",
+        text: answer,
+        sources: [],
+        status: {
+          type: "read_only_status",
+          text: status,
+        },
+      },
+    });
+    const engine = createEngine({
+      llm: new ScriptedLlm(
+        {
+          tool: "generic_memory_read",
+          input: { question: "what was the last voice note about?" },
+          result: typedResult,
+        },
+        `${answer}\n\n${status}\n\n${status}`,
+      ) as unknown as BrainLlm,
+      state,
+      peerTools: {
+        generic_memory_read: {
+          description: "Ask connected memory",
+          connectedMcp: true,
+          annotations: { readOnlyHint: true },
+          async run() { return typedResult; },
+        },
+      },
+    });
+
+    const reply = await engine.chat(
+      "what was the last voice note about?",
+      "whatsapp",
+    );
+    const conversation = await state.recentWindow("whatsapp:default");
+
+    expect(reply.text).toBe(rendered);
+    expect(conversation.at(-1)).toMatchObject({
+      role: "assistant",
+      text: answer,
+    });
   });
 
   it("relays a wallet peer mutation receipt verbatim through the real chat boundary", async () => {
