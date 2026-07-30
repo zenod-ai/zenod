@@ -141,6 +141,37 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("renders the typed terminal-capture answer intact without treating quoted storage state as a receipt", async () => {
+    const state = new SqliteStateStore(":memory:", "tenant-alpha");
+    await state.appendCaptureTicket({
+      identity: {
+        tenantId: "tenant-alpha",
+        surface: "whatsapp",
+        conversationKey: "whatsapp:34611111111",
+        providerMessageId: "latest-note",
+      },
+      summary: "The current capture is already stored.",
+      evidenceRef: "Log/2026-07-30.md#^e-1d0d28",
+    });
+    const modelAnswer =
+      "The current capture is already stored at **Log/2026-07-30.md#^e-1d0d28**. No mutation tool was called.";
+    const engine = createEngine({
+      llm: new ScriptedLlm(null, modelAnswer) as unknown as BrainLlm,
+      state,
+    });
+
+    const reply = await engine.handleTasking({
+      text: "for now simply store the note into memory",
+      surface: "whatsapp",
+      conversationKey: "whatsapp:34611111111",
+    });
+
+    expect(reply.actions).toEqual([]);
+    expect(reply.text).toBe(
+      `${modelAnswer}\n\nRead-only answer — no action was performed.`,
+    );
+  });
+
   it("relays a wallet peer mutation receipt verbatim through the real chat boundary", async () => {
     const receipt = `Stored.\ncommit: ${"c".repeat(40)}\nhttps://github.com/AlfaBlok/obsidian-brain/commit/${"c".repeat(40)}`;
     const llm = new ScriptedLlm(
