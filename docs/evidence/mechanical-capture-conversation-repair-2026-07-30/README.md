@@ -1,10 +1,31 @@
 # Mechanical Capture — Ring conversation repair — 2026-07-30
 
-Live acceptance candidate: `bc218baa74c37ee63c03948a8349b7694381365a`
+Live acceptance candidate: `59732ddae8954b8c39678f35980d590bbca3687a`
 
 Tenant: `github-63050995`
 
-Result: normal WhatsApp voice-note capture and conversation passed end to end. A fresh voice note produced one terminal Zenod memory at `Log/2026-07-30.md#^e-a96277`; two natural follow-up questions cited that exact note, the second conversational turn rendered one read-only status, and neither read created another memory commit.
+Result: normal WhatsApp voice-note capture and conversation passed end to end. The final uninterrupted read lap returned the exact newest capture, exact predecessor, and grounded summaries of the five newest captures with no false “Makro” or unrelated property content. Each answer rendered one host-owned read-only status, each question made one `ask_brain` call, and none of the reads created a memory commit.
+
+## Final grounded chronology lap
+
+Deployed SHA: `59732ddae8954b8c39678f35980d590bbca3687a`
+
+1. Asked `what was last vn about?`; the answer returned Intermarché from exact evidence `Log/2026-07-30.md#^e-3ffa72`.
+2. Asked `and what was the vn before that about?`; the answer returned Conflent from exact evidence `Log/2026-07-30.md#^e-23ece7`.
+3. Asked for one-line summaries of the five latest captured voice notes; the answer returned, newest first:
+   - `^e-3ffa72` — Intermarché.
+   - `^e-23ece7` — Conflent.
+   - `^e-a96277` — Silver Orchard 4; verify the capture ledger Tuesday.
+   - `^e-9ce34e` — Cobalt Med 09; inspect the receipt queue Monday.
+   - `^e-e09e41` — Amber Lighthouse 7; review the tenant binding table Friday.
+4. The predecessor answer contained neither “Makro” nor unrelated property content.
+5. Each answer rendered exactly one host-owned read-only status. Runtime logs showed exactly one `zenod__ask_brain` call for each question and no recent-conversation rediscovery call.
+6. Brain HEAD remained `c85378b6483c5f3b8ff8b4fd12974e3017e888eb` throughout the Q1–Q3 lap, proving zero read-side writes.
+7. Zenod, Ring, and Phylax all reported the exact deployed SHA; Phylax reported WhatsApp connected and receive-path ready.
+
+Screenshot: `final-whatsapp-read-lap.jpg`.
+
+The final mechanical boundary is PR [#1040](https://github.com/zenod-ai/zenod/pull/1040): when `ask_brain` re-reads a path named by supplied pinned evidence refs, the host exposes only the exact pinned anchored spans from that path, not unrelated entries in the same daily log. This fixes the observed failure without output scanning, lexical policy, regex, or changes to `taskingPolicy.ts` / `replyGate.ts`.
 
 ## Final normal-operation lap
 
