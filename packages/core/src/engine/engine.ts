@@ -1154,6 +1154,30 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return path;
   }
 
+  function uncertaintyBlock(
+    content: string,
+    question: string,
+    evidence: Awaited<ReturnType<typeof appendEvidence>>,
+    confidence: number,
+  ): string {
+    const normalizedQuestion = question.replace(/\s+/g, " ").trim();
+    const quotedContent = content
+      .trimEnd()
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+    return [
+      `## Unverified capture — ${evidence.date}  ^uc-${evidence.anchor}`,
+      "#filing/uncertain",
+      `> [!question] ${normalizedQuestion}`,
+      `> Evidence: [[${evidence.date}#^${evidence.anchor}]] · confidence ${confidence.toFixed(2)}`,
+      "",
+      "> [!quote] Captured content",
+      quotedContent,
+      "",
+    ].join("\n");
+  }
+
   /**
    * The librarian pipeline — docs/M0-SPEC.md § The librarian pipeline.
    * `priority` defaults to interactive (direct callers — MCP, Drive, chat —
@@ -1201,8 +1225,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         pages: classification.pages.map((page) => ({ ...page, path: normalizeMarkdownNotePath(page.path) })),
       };
 
-      // 4. Branch on confidence — ask, don't guess.
-      if (classification.confidence < config.confidenceThreshold || classification.pages.length === 0) {
+      // 4. With no candidate, preserve the evidence and question in an Inbox stub.
+      if (classification.pages.length === 0) {
         const question =
           classification.question ?? "Where should this memory be filed? I could not classify it confidently.";
         const stubPath = await writeInboxStub(input.content, question, evidenceRef);
@@ -1220,6 +1244,67 @@ export function createEngine(options: EngineOptions): BrainEngine {
           githubUrls: [githubUrl(location, evidence.logPath), githubUrl(location, stubPath)].filter(Boolean),
           filing: "inbox",
         };
+      }
+
+      // Below threshold, file to the top candidate with a deterministic marker.
+      if (classification.confidence < config.confidenceThreshold) {
+        const page = classification.pages[0]!;
+        try {
+          const folder = page.path.split("/")[0] ?? "";
+          if (!MEANING_FOLDERS[folder]) {
+            throw new Error(`classifier proposed a non-meaning path: ${page.path}`);
+          }
+          const absolute = join(vaultPath, page.path);
+          const currentContent = await readFile(absolute, "utf8");
+          const question =
+            classification.question ?? "Where should this memory be filed? I could not classify it confidently.";
+          const block = uncertaintyBlock(input.content, question, evidence, classification.confidence);
+          const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
+          await writeFile(absolute, `${currentContent}${separator}${block}`);
+
+          const report = await lintVault(vaultPath, [page.path]);
+          const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
+          if (errors.length > 0) {
+            throw new Error(
+              `uncertainty block failed validation: ${errors
+                .map((error) => `${error.path} [${error.rule}] ${error.message}`)
+                .join("; ")}`,
+            );
+          }
+
+          const sha = await repo.commitAndPush(`memory: (uncertain) ${classification.summary}`);
+          const canonicalLocation = { ...location, branch: sha };
+          return {
+            evidenceRef,
+            ...(githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`)
+              ? { evidenceUrl: githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`) }
+              : {}),
+            pagesTouched: [page.path],
+            pageUrls: [githubUrl(canonicalLocation, page.path)].filter(Boolean),
+            commitSha: sha,
+            githubUrls: [githubUrl(location, evidence.logPath), githubUrl(location, page.path)].filter(Boolean),
+            filing: "uncertain",
+          };
+        } catch (err) {
+          await repo.discardChanges();
+          const retried = await appendEvidence(vaultPath, input.content, input.source, verbatim, now());
+          const retriedRef = `${retried.logPath}#^${retried.anchor}`;
+          const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
+          const stubPath = await writeInboxStub(input.content, question, retriedRef);
+          const sha = await repo.commitAndPush(`memory: (inbox) ${classification.summary}`);
+          const canonicalLocation = { ...location, branch: sha };
+          return {
+            evidenceRef: retriedRef,
+            ...(githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`)
+              ? { evidenceUrl: githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`) }
+              : {}),
+            pagesTouched: [stubPath],
+            pageUrls: [githubUrl(canonicalLocation, stubPath)].filter(Boolean),
+            commitSha: sha,
+            githubUrls: [githubUrl(location, retried.logPath), githubUrl(location, stubPath)].filter(Boolean),
+            filing: "inbox",
+          };
+        }
       }
 
       // 5-6. Update meaning pages with validate-and-retry; never half-apply.
