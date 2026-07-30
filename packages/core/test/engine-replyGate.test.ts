@@ -172,6 +172,52 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     );
   });
 
+  it("renders one host status when the model repeats status prose after a typed peer answer", async () => {
+    const evidenceRef = "Log/2026-07-30.md#^e-23ece7";
+    const answer = "The voice note before the last one was about exploring el Conflent.";
+    const status = "Read-only answer — no action was performed.";
+    const rendered = `${answer}\n\nSources:\n- ${evidenceRef}\n\n${status}`;
+    const typedResult = JSON.stringify({
+      content: [{ type: "text", text: rendered }],
+      structuredContent: {
+        type: "answer_content",
+        text: answer,
+        sources: [{ path: evidenceRef }],
+        status: {
+          type: "read_only_status",
+          text: status,
+        },
+      },
+    });
+    const llm = new ScriptedLlm(
+      {
+        tool: "generic_memory_read",
+        input: { question: "what was the voice note before the last one about?" },
+        result: typedResult,
+      },
+      `${answer}\n\n${status}\n\n${status}`,
+    );
+    const engine = createEngine({
+      llm: llm as unknown as BrainLlm,
+      state: new SqliteStateStore(":memory:"),
+      peerTools: {
+        generic_memory_read: {
+          description: "Ask connected memory",
+          connectedMcp: true,
+          annotations: { readOnlyHint: true },
+          async run() { return typedResult; },
+        },
+      },
+    });
+
+    const reply = await engine.chat(
+      "what was the voice note before the last one about?",
+      "whatsapp",
+    );
+
+    expect(reply.text).toBe(rendered);
+  });
+
   it("relays a wallet peer mutation receipt verbatim through the real chat boundary", async () => {
     const receipt = `Stored.\ncommit: ${"c".repeat(40)}\nhttps://github.com/AlfaBlok/obsidian-brain/commit/${"c".repeat(40)}`;
     const llm = new ScriptedLlm(

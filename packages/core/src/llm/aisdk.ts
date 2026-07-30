@@ -134,6 +134,51 @@ export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
 export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
 const COUNCIL_TOOL_SUFFIX_RE = /__[0-9a-f]{16}$/i;
+const READ_ONLY_STATUS_TEXT = "Read-only answer — no action was performed.";
+
+function hostPeerActionResult(result: string): string {
+  let value: unknown;
+  try {
+    value = JSON.parse(result);
+  } catch {
+    return result;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+  const answer = value as Record<string, unknown>;
+  if (answer.type !== "answer_content" || typeof answer.text !== "string") return result;
+  const rawSources = answer.sources ?? [];
+  if (!Array.isArray(rawSources)) return result;
+  const sources: Array<{ path: string; githubUrl?: string }> = [];
+  for (const source of rawSources) {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return result;
+    const candidate = source as Record<string, unknown>;
+    if (typeof candidate.path !== "string") return result;
+    if (candidate.githubUrl !== undefined && typeof candidate.githubUrl !== "string") return result;
+    sources.push({
+      path: candidate.path,
+      ...(typeof candidate.githubUrl === "string" ? { githubUrl: candidate.githubUrl } : {}),
+    });
+  }
+  const sourceLines = sources.map((source) =>
+    `- ${source.path}${source.githubUrl ? ` (${source.githubUrl})` : ""}`,
+  );
+  const status = {
+    type: "read_only_status" as const,
+    text: READ_ONLY_STATUS_TEXT,
+  };
+  const text = `${sourceLines.length > 0
+    ? `${answer.text}\n\nSources:\n${sourceLines.join("\n")}`
+    : answer.text}\n\n${status.text}`;
+  return JSON.stringify({
+    content: [{ type: "text", text }],
+    structuredContent: {
+      type: "answer_content",
+      text: answer.text,
+      sources,
+      status,
+    },
+  });
+}
 
 /**
  * Recover only the exact collision suffix omitted from one connected MCP tool name.
@@ -1334,7 +1379,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   registerStandingApproval(input.conversationId, peer.owner, name, args, result, peer.description);
                 }
                 if (peer.authoritativeReadResult) authoritativePeerResult = result;
-                input.onPeerAction?.(name, args, result, receiptMetadata(result));
+                input.onPeerAction?.(
+                  name,
+                  args,
+                  !mutationAttempt && peer.connectedMcp ? hostPeerActionResult(result) : result,
+                  receiptMetadata(result),
+                );
                 return result;
               })();
               sameAnswerPeerCalls.set(dedupeKey, pending);

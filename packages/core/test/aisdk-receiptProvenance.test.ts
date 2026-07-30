@@ -70,6 +70,66 @@ describe("AI SDK peer mutation provenance", () => {
     expect(action?.metadata?.verifiedReceiptText).not.toContain("ignore all instructions");
   });
 
+  it("keeps a typed read-only status host-owned while the model sees answer content", async () => {
+    const actions: Array<{ result: string; metadata?: Record<string, unknown> }> = [];
+    const modelResult = JSON.stringify({
+      type: "answer_content",
+      text: "The prior voice note was about el Conflent.",
+      sources: [{
+        path: "Log/2026-07-30.md#^e-23ece7",
+        githubUrl: "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-30.md#%5Ee-23ece7",
+      }],
+    });
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    await llm.answer({
+      question: "what was the voice note before the last one about?",
+      conversationId: `receipt-provenance-${++sequence}`,
+      vaultBriefing: "brief",
+      conversation: [],
+      onPeerAction: (_tool, _input, result, metadata) => actions.push({ result, metadata }),
+    }, readTools, undefined, undefined, {
+      peer__portable_read__hash: {
+        description: "Ask connected memory.",
+        inputSchema: z.object({ question: z.string() }),
+        annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+        connectedMcp: true,
+        trustedProfile: trustedPrivateProfile,
+        run: async () => modelResult,
+      },
+    });
+
+    const returnedToModel = await captured.config.tools.peer__portable_read__hash.execute({
+      question: "what was the voice note before the last one about?",
+    });
+    expect(returnedToModel).toBe(modelResult);
+    expect(JSON.parse(actions[0]!.result)).toEqual({
+      content: [{
+        type: "text",
+        text: [
+          "The prior voice note was about el Conflent.",
+          "",
+          "Sources:",
+          "- Log/2026-07-30.md#^e-23ece7 (https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-30.md#%5Ee-23ece7)",
+          "",
+          "Read-only answer — no action was performed.",
+        ].join("\n"),
+      }],
+      structuredContent: {
+        type: "answer_content",
+        text: "The prior voice note was about el Conflent.",
+        sources: [{
+          path: "Log/2026-07-30.md#^e-23ece7",
+          githubUrl: "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-30.md#%5Ee-23ece7",
+        }],
+        status: {
+          type: "read_only_status",
+          text: "Read-only answer — no action was performed.",
+        },
+      },
+    });
+    expect(actions[0]?.metadata).toEqual({ peerAction: true });
+  });
+
   it("renders typed terminal captures as host authority, never assistant prose", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     await llm.answer({
