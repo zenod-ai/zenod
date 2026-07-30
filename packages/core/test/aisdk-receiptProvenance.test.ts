@@ -159,20 +159,38 @@ describe("AI SDK peer mutation provenance", () => {
         evidenceRef: "Log/2026-07-29.md#^e-prior",
         terminal: true,
         recordedAt: new Date("2026-07-29T23:00:00.000Z"),
+      }, {
+        identity: {
+          tenantId: "tenant-alpha",
+          surface: "whatsapp",
+          conversationKey: "whatsapp:34611111111",
+          providerMessageId: "older-note",
+        },
+        summary: "Older filed memory.",
+        evidenceRef: "Log/2026-07-29.md#^e-older",
+        terminal: true,
+        recordedAt: new Date("2026-07-29T22:00:00.000Z"),
       }],
     }, readTools);
 
     const system = captured.config.messages[0].content as string;
     expect(system).toContain("HOST-OWNED TERMINAL CAPTURE CONTEXT");
     expect(system).toContain("currentCapture");
+    expect(system).toContain("previousCapture");
     expect(system).toContain("priorCaptures");
     expect(system).toContain("The currentCapture field is the structural current focus");
     expect(system).toContain("pass exactly currentCapture.evidenceRef in contextRefs");
+    expect(system).toContain("The previousCapture field is structurally the immediate predecessor");
+    expect(system).toContain("pass exactly previousCapture.evidenceRef in contextRefs");
     expect(system).toContain('"providerMessageId":"latest-note"');
     expect(system).toContain('"evidenceRef":"Log/2026-07-30.md#^e-latest"');
-    expect(system.indexOf('"currentCapture"')).toBeLessThan(system.indexOf('"priorCaptures"'));
+    expect(system.indexOf('"currentCapture"')).toBeLessThan(system.indexOf('"previousCapture"'));
+    expect(system.indexOf('"previousCapture"')).toBeLessThan(system.indexOf('"priorCaptures"'));
     expect(system.indexOf('"providerMessageId":"latest-note"')).toBeLessThan(
       system.indexOf('"providerMessageId":"prior-note"'),
+    );
+    expect(system.indexOf('"providerMessageId":"prior-note"')).toBeLessThan(
+      system.indexOf('"providerMessageId":"older-note"'),
     );
     expect(system).toContain("already stored");
     expect(system).toContain("do not call a mutation tool");
