@@ -88,13 +88,32 @@ describe("AI SDK peer mutation provenance", () => {
         evidenceRef: "Log/2026-07-30.md#^e-latest",
         terminal: true,
         recordedAt: new Date("2026-07-30T00:00:00.000Z"),
+      }, {
+        identity: {
+          tenantId: "tenant-alpha",
+          surface: "whatsapp",
+          conversationKey: "whatsapp:34611111111",
+          providerMessageId: "prior-note",
+        },
+        summary: "Previously filed memory.",
+        evidenceRef: "Log/2026-07-29.md#^e-prior",
+        terminal: true,
+        recordedAt: new Date("2026-07-29T23:00:00.000Z"),
       }],
     }, readTools);
 
     const system = captured.config.messages[0].content as string;
     expect(system).toContain("HOST-OWNED TERMINAL CAPTURE CONTEXT");
+    expect(system).toContain("currentCapture");
+    expect(system).toContain("priorCaptures");
+    expect(system).toContain("The currentCapture field is the structural current focus");
+    expect(system).toContain("pass exactly currentCapture.evidenceRef in contextRefs");
     expect(system).toContain('"providerMessageId":"latest-note"');
     expect(system).toContain('"evidenceRef":"Log/2026-07-30.md#^e-latest"');
+    expect(system.indexOf('"currentCapture"')).toBeLessThan(system.indexOf('"priorCaptures"'));
+    expect(system.indexOf('"providerMessageId":"latest-note"')).toBeLessThan(
+      system.indexOf('"providerMessageId":"prior-note"'),
+    );
     expect(system).toContain("already stored");
     expect(system).toContain("do not call a mutation tool");
     expect(captured.config.messages).not.toContainEqual(expect.objectContaining({
