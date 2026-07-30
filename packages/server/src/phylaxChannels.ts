@@ -729,9 +729,12 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): 
   const commitValue = payload.commitSha ?? digest?.commitSha;
   const commitSha = typeof commitValue === "string" ? commitValue : null;
   const githubUrls = stringArray(payload.githubUrls ?? digest?.githubUrls);
-  const question = typeof payload.question === "string" && payload.question.trim()
-    ? payload.question.trim()
-    : null;
+  const filingValue = payload.filing ?? digest?.filing;
+  const filing = ["filed", "uncertain", "inbox", "pending"].includes(String(filingValue))
+    ? String(filingValue)
+    : typeof payload.question === "string"
+      ? "inbox"
+      : "filed";
   const recap = typeof payload.recap === "string" && payload.recap.trim()
     ? payload.recap.trim()
     : typeof payload.message === "string" && payload.message.trim()
@@ -750,7 +753,11 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): 
       ...(filed.length > 0 ? [`Filed: ${filed.join(", ")}`] : []),
       ...(evidenceRef ? [`Evidence: ${evidenceUrl ? `${evidenceRef} (${evidenceUrl})` : evidenceRef}`] : []),
       ...(commitSha ? [`Commit: ${commitUrl ? `${commitSha} (${commitUrl})` : commitSha}`] : []),
-      ...(question ? [`Question: ${question}`] : []),
+      ...(filing === "uncertain"
+        ? [`Filing: saved to ${pages[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`]
+        : filing === "inbox"
+          ? ["Filing: saved to Inbox; the filing question is logged in the note."]
+          : []),
     ].join("\n")),
   };
 }

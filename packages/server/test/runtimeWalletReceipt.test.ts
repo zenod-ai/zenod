@@ -70,13 +70,14 @@ describe("Ring wallet receipt", () => {
 
       expect(JSON.parse(result)).toEqual({
         status: "done",
-        message: "Stored.",
+        message: "Saved.",
         evidenceRef: "Log/2026-07-11.md#^e-ring",
         evidenceUrl: `https://github.com/AlfaBlok/obsidian-brain/blob/${"b".repeat(40)}/Log/2026-07-11.md#L9`,
         pagesTouched: ["Projects/Ring.md"],
         pageUrls: [`https://github.com/AlfaBlok/obsidian-brain/blob/${"b".repeat(40)}/Projects/Ring.md`],
         commitSha: "b".repeat(40),
         githubUrls: ["https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Ring.md"],
+        filing: "filed",
       });
     } finally {
       zenodServer?.close();

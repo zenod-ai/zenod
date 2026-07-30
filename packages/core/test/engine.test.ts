@@ -391,7 +391,8 @@ describe("BrainEngine", () => {
       source: "cli",
     });
 
-    expect(result.question).toBeUndefined();
+    expect(result.filing).toBe("filed");
+    expect(result).not.toHaveProperty("question");
     expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
     expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(result.evidenceRef).toMatch(/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]{6}$/);
@@ -421,18 +422,19 @@ describe("BrainEngine", () => {
       source: "cli",
     });
 
-    expect(result.question).toBeUndefined();
+    expect(result.filing).toBe("filed");
     expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
     await expect(readFile(join(repo.path, "Areas/Insurance.md"), "utf8")).resolves.toContain("# Insurance");
     await expect(readFile(join(repo.path, "Areas/Insurance"), "utf8")).rejects.toThrow();
     expect((await engine().lint()).errors).toEqual([]);
   });
 
-  it("low confidence lands as an Inbox stub with a question (DoD #6)", async () => {
+  it("low confidence lands as an Inbox stub with the filing question in the note (DoD #6)", async () => {
     llm.confidence = 0.3;
     const result = await engine().store({ content: "something cryptic", source: "mcp" });
 
-    expect(result.question).toBeTruthy();
+    expect(result.filing).toBe("inbox");
+    expect(result).not.toHaveProperty("question");
     expect(result.pagesTouched[0]).toMatch(/^Inbox\/needs-filing-/);
     const stub = await readFile(join(repo.path, result.pagesTouched[0]!), "utf8");
     expect(stub).toContain("status: needs-filing");
@@ -442,7 +444,7 @@ describe("BrainEngine", () => {
   it("retries failed validation, then succeeds (validate-with-retry)", async () => {
     llm.failComposeAttempts = 1;
     const result = await engine().store({ content: "insurance detail", source: "cli" });
-    expect(result.question).toBeUndefined();
+    expect(result.filing).toBe("filed");
     expect(llm.composeCalls).toBe(2);
     expect((await engine().lint()).errors).toEqual([]);
   });
@@ -451,8 +453,10 @@ describe("BrainEngine", () => {
     llm.failComposeAttempts = 99;
     const result = await engine().store({ content: "insurance detail", source: "cli" });
 
-    expect(result.question).toContain("could not file it");
+    expect(result.filing).toBe("inbox");
     expect(result.pagesTouched[0]).toMatch(/^Inbox\//);
+    const stub = await readFile(join(repo.path, result.pagesTouched[0]!), "utf8");
+    expect(stub).toContain("could not file it");
     // the meaning page was NOT half-modified
     const page = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
     expect(page).not.toContain("Broken page");

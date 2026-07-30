@@ -25,7 +25,7 @@ const fakeEngine: BrainEngine = {
       ...(!legacyResult ? { pageUrls: [`https://github.com/o/r/blob/${commitSha}/Areas/Insurance.md`] } : {}),
       commitSha,
       githubUrls: legacyResult ? [logUrl, pageUrl] : [pageUrl],
-      ...(input.content.includes("cryptic") ? { question: "Where does this belong?" } : {}),
+      filing: input.content.includes("cryptic") ? "inbox" : "filed",
     };
   },
   async describeImage(data, mimeType) {
@@ -473,14 +473,16 @@ describe("MCP endpoint", () => {
 
     const stored = (await runAsyncTool(client, "store_memory", {
       content: "I renewed my insurance",
-    })) as { commitSha: string; question?: string };
+    })) as { commitSha: string; filing: string; question?: string };
     expect(stored.commitSha).toBe("0".repeat(40));
-    expect(stored.question).toBeUndefined();
+    expect(stored.filing).toBe("filed");
+    expect(stored).not.toHaveProperty("question");
 
     const unsure = (await runAsyncTool(client, "store_memory", {
       content: "something cryptic",
-    })) as { question?: string };
-    expect(unsure.question).toBeTruthy();
+    })) as { filing: string; question?: string };
+    expect(unsure.filing).toBe("inbox");
+    expect(unsure).not.toHaveProperty("question");
 
     await client.close();
   });

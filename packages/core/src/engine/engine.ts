@@ -813,7 +813,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return {
       captureNote: async (content: string, hints?: string[]) => {
         if (!repo) {
-          return { evidenceRef: "(no vault)", pagesTouched: [], commitSha: "(no vault)", githubUrls: [], queued: false };
+          return {
+            evidenceRef: "(no vault)",
+            pagesTouched: [],
+            commitSha: "(no vault)",
+            githubUrls: [],
+            filing: "pending",
+            queued: false,
+          };
         }
         const storeContent = rawEvidence?.content ?? content;
         const storeHints = [...(hints ?? []), ...(rawEvidence?.hints ?? [])];
@@ -853,7 +860,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
           "Queued: filing this note to the vault in the background (not yet committed).",
           true,
         );
-        return { evidenceRef: "(queued)", pagesTouched: [], commitSha: "(queued)", githubUrls: [], queued: true };
+        return {
+          evidenceRef: "(queued)",
+          pagesTouched: [],
+          commitSha: "(queued)",
+          githubUrls: [],
+          filing: "pending",
+          queued: true,
+        };
       },
       proposeTask: async (objective: string) => {
         if (!repo) return "Vault tasks are unavailable on this agent (it has no vault).";
@@ -1204,7 +1218,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           pageUrls,
           commitSha: sha,
           githubUrls: [githubUrl(location, evidence.logPath), githubUrl(location, stubPath)].filter(Boolean),
-          question,
+          filing: "inbox",
         };
       }
 
@@ -1304,7 +1318,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           pageUrls,
           commitSha: sha,
           githubUrls: [githubUrl(location, retried.logPath), githubUrl(location, stubPath)].filter(Boolean),
-          question,
+          filing: "inbox",
         };
       }
 
@@ -1324,6 +1338,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           githubUrl(location, evidence.logPath),
           ...touched.map((path) => githubUrl(location, path)),
         ].filter(Boolean),
+        filing: "filed",
       };
       if (shouldDigestForBacklog(input)) {
         const sourceRefs = [{ path: evidenceRef, githubUrl: githubUrl(location, evidence.logPath) }];

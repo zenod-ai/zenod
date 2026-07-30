@@ -1984,7 +1984,11 @@ export class WhatsAppGateway {
       ...(summary.length > 0 ? summary.slice(0, 6).map((line) => `- ${line}`) : ["- Transcript filed as WhatsApp evidence."]),
       `Filed: ${filed.length > 0 ? filed.join("; ") : "no filed paths returned"}.`,
       backlogLine,
-      stored?.question ? `Open questions: ${stored.question}` : "Open questions: none reported.",
+      stored?.filing === "uncertain"
+        ? "Open filing question: logged in the filed page for voluntary review."
+        : stored?.filing === "inbox"
+          ? "Open filing question: logged in the Inbox note for voluntary review."
+          : "Open filing questions: none reported.",
       `Source: WhatsApp ${sourcePointer}; transcript pointer ${stored?.evidenceRef ?? "unavailable"}; digest job wa-${event.messageId}.`,
     ].join("\n");
   }

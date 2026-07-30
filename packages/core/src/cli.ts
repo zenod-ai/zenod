@@ -197,7 +197,13 @@ async function main(): Promise<number> {
       }
       const engine = await buildEngine();
       const result = await engine.store({ content, source: "cli" });
-      if (result.question) console.log(`? ${result.question}`);
+      if (result.filing === "uncertain") {
+        console.log(`Saved — filed to ${result.pagesTouched[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`);
+      } else if (result.filing === "inbox") {
+        console.log("Saved — filed to Inbox; the filing question is logged in the note.");
+      } else {
+        console.log(result.filing === "pending" ? "Filing pending." : "Saved.");
+      }
       console.log(`evidence: ${result.evidenceRef}`);
       for (const page of result.pagesTouched) console.log(`filed: ${page}`);
       console.log(`commit: ${result.commitSha}`);

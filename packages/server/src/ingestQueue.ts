@@ -195,9 +195,11 @@ export class IngestQueue {
 
       this.store.update(job.id, {
         status: "done",
-        step: stored.question
-          ? `Filed to Inbox — ${stored.question}`
-          : stored.backlog?.candidates.length
+        step: stored.filing === "uncertain"
+          ? `Saved — filed to ${stored.pagesTouched[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`
+          : stored.filing === "inbox"
+            ? "Saved — filed to Inbox; the filing question is logged in the note."
+            : stored.backlog?.candidates.length
             ? `Filed; proposed ${stored.backlog.candidates.length} backlog candidate${stored.backlog.candidates.length === 1 ? "" : "s"}`
             : null,
         progress: 100,

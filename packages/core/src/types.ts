@@ -38,11 +38,8 @@ export interface StoreResult {
   commitSha: string;
   /** Compatibility collection retained for existing consumers. */
   githubUrls: string[];
-  /**
-   * Present when classification confidence was below threshold: the store
-   * landed as an Inbox stub and this is the question to relay to the user.
-   */
-  question?: string;
+  /** Durable filing disposition for this store operation. */
+  filing: "filed" | "uncertain" | "inbox" | "pending";
   /**
    * Present when the store path also ran the conservative backlog digester.
    * This is advisory: candidates are proposed unless explicitly written.

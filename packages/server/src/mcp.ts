@@ -390,8 +390,15 @@ function publicExecutionResponse(toolName: string, ticket: ExecutionTicket) {
 
 /** Human-facing text for a finished store_memory job — mirrors the old reply. */
 function formatStoreResult(result: StoreResult): string {
+  const status = result.filing === "uncertain"
+    ? `Saved — filed to ${result.pagesTouched[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`
+    : result.filing === "inbox"
+      ? "Saved — filed to Inbox; the filing question is logged in the note."
+      : result.filing === "pending"
+        ? "Filing pending."
+        : "Saved.";
   return [
-    result.question ? `QUESTION FOR THE USER: ${result.question}` : "Stored.",
+    status,
     `evidence: ${result.evidenceRef}`,
     ...(result.evidenceUrl ? [`evidence URL: ${result.evidenceUrl}`] : []),
     `pages: ${result.pagesTouched.join(", ")}`,
