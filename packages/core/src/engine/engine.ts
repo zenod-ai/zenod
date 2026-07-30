@@ -1409,8 +1409,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
       ...(tools.readNote
         ? {
             readNote: async (path: string) => {
+              const normalizedPath = normalizeMarkdownNotePath(path);
+              const pinnedForPath = pinnedSpans.filter(
+                (span) => normalizeMarkdownNotePath(span.path) === normalizedPath,
+              );
+              if (pinnedForPath.length > 0) {
+                const text = pinnedForPath.map((span) => span.text).join("\n\n");
+                readSpans.set(normalizedPath, text);
+                return text;
+              }
               const text = await tools.readNote!(path);
-              readSpans.set(normalizeMarkdownNotePath(path), text);
+              readSpans.set(normalizedPath, text);
               return text;
             },
           }
