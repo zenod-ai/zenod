@@ -76,6 +76,50 @@ function hasStandingActionEvidence(actions: readonly TaskingAction[]): boolean {
   );
 }
 
+function typedAnswerContentForConversation(
+  actions: readonly TaskingAction[],
+  deliveredText: string,
+): string | undefined {
+  const answers: string[] = [];
+  for (const action of actions) {
+    if (
+      action.peerAction !== true
+      || action.mutationAttempt === true
+      || action.verifiedMutationReceipt === true
+    ) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(action.result);
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+    const envelope = parsed as Record<string, unknown>;
+    if (!Array.isArray(envelope.content) || envelope.content.length !== 1) continue;
+    const content = envelope.content[0];
+    if (!content || typeof content !== "object" || Array.isArray(content)) continue;
+    const textContent = content as Record<string, unknown>;
+    if (textContent.type !== "text" || textContent.text !== deliveredText) continue;
+    const structured = envelope.structuredContent;
+    if (!structured || typeof structured !== "object" || Array.isArray(structured)) continue;
+    const answer = structured as Record<string, unknown>;
+    if (
+      answer.type !== "answer_content"
+      || typeof answer.text !== "string"
+      || !Array.isArray(answer.sources)
+    ) continue;
+    const status = answer.status;
+    if (!status || typeof status !== "object" || Array.isArray(status)) continue;
+    const readOnlyStatus = status as Record<string, unknown>;
+    if (
+      readOnlyStatus.type !== "read_only_status"
+      || typeof readOnlyStatus.text !== "string"
+    ) continue;
+    answers.push(answer.text);
+  }
+  return answers.length === 1 ? answers[0] : undefined;
+}
+
 /** Human-readable channel name for chat-search results. */
 function channelName(surface: Surface): string {
   switch (surface) {
@@ -1551,7 +1595,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }
     }
     await persistApprovalTurn(cid, approvalCid);
-    await state.appendMessage(cid, "assistant", text, surface);
+    const conversationText = captureContext?.length && actions.length === 0
+      ? answerContent.text
+      : typedAnswerContentForConversation(actions, text) ?? text;
+    await state.appendMessage(cid, "assistant", conversationText, surface);
 
     return {
       text,
@@ -1636,7 +1683,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       ? `${answerContent.text}\n\n${readOnlyStatus.text}`
       : finalizeReply(result.text, actions, input.text, approvalCid).text;
     await persistApprovalTurn(cid, approvalCid);
-    await state.appendMessage(cid, "assistant", text, input.surface);
+    const conversationText = captureContext?.length && actions.length === 0
+      ? answerContent.text
+      : typedAnswerContentForConversation(actions, text) ?? text;
+    await state.appendMessage(cid, "assistant", conversationText, input.surface);
     return { text, actions };
   }
 
