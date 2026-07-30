@@ -536,12 +536,15 @@ describe("BrainEngine", () => {
         "",
       ].join("\n"),
     );
-    llm.answerOverride = async (input) => {
+    llm.answerOverride = async (input, tools) => {
       expect(input.vaultBriefing).toMatch(/^PINNED EVIDENCE CONTEXT/);
       expect(input.vaultBriefing).toContain("Quartz-417");
       expect(input.vaultBriefing).not.toContain("Onyx-999");
       expect(input.vaultBriefing).not.toContain("Active insurance policies");
       expect(input.hostInstruction).toContain("answer directly from the pinned evidence");
+      const reread = await tools.readNote!(logPath);
+      expect(reread).toContain("Quartz-417");
+      expect(reread).not.toContain("Onyx-999");
       return {
         text: "The launch code is Quartz-417. [[2026-07-29#^e-a1b2c3]]",
         readPaths: [],
