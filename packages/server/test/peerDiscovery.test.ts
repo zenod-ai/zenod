@@ -188,6 +188,37 @@ describe("generic wallet MCP discovery", () => {
     expect(JSON.parse(chat)).toMatchObject(raw);
   });
 
+  it("passes typed answer content to the model without the host-only status", async () => {
+    vi.stubGlobal("fetch", mcpFetch([], () => ({
+      content: [{
+        type: "text",
+        text: "The note says saved verbatim.\n\nRead-only answer — no action was performed.",
+      }],
+      structuredContent: {
+        type: "answer_content",
+        text: "The note says saved verbatim.",
+        sources: [{ path: "Log/2026-07-29.md#^e-a7f53e" }],
+        status: {
+          type: "read_only_status",
+          text: "Read-only answer — no action was performed.",
+        },
+      },
+    })));
+
+    const chat = await callPeerWithArgs(
+      { name: "Zenod", url: "https://peer.example/mcp", token: "secret" },
+      "ask_brain",
+      { question: "What did the note say?" },
+      { preserveFullResult: true },
+    );
+
+    expect(JSON.parse(chat)).toEqual({
+      type: "answer_content",
+      text: "The note says saved verbatim.",
+      sources: [{ path: "Log/2026-07-29.md#^e-a7f53e" }],
+    });
+  });
+
   it("polls an async wallet receipt through scoped MCP get_task_result", async () => {
     const calls: Array<{ tool?: string; args: Record<string, unknown> }> = [];
     let polls = 0;

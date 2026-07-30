@@ -510,6 +510,18 @@ export async function callPeerWithArgs(
       return `Zenod filing receipt timed out for job ${jobId}.`;
     }
   }
+  const structured = objectRecord(result.structuredContent);
+  if (
+    !result.isError
+    && structured?.type === "answer_content"
+    && typeof structured.text === "string"
+  ) {
+    return JSON.stringify({
+      type: "answer_content",
+      text: structured.text,
+      ...(Array.isArray(structured.sources) ? { sources: structured.sources } : {}),
+    });
+  }
   if (options.preserveFullResult) return JSON.stringify(result);
   if (result.structuredContent || result.content.some((item) => item.type !== "text")) {
     return JSON.stringify(result);
