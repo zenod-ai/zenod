@@ -227,14 +227,16 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
   it("keeps a typed host status out of the next model conversation", async () => {
     const state = new SqliteStateStore(":memory:");
     const answer = "The latest voice note was about Intermarché.";
+    const evidenceRef = "Log/2026-07-30.md#^e-3ffa72";
     const status = "Read-only answer — no action was performed.";
-    const rendered = `${answer}\n\n${status}`;
+    const answerWithSources = `${answer}\n\nSources:\n- ${evidenceRef}`;
+    const rendered = `${answerWithSources}\n\n${status}`;
     const typedResult = JSON.stringify({
       content: [{ type: "text", text: rendered }],
       structuredContent: {
         type: "answer_content",
         text: answer,
-        sources: [],
+        sources: [{ path: evidenceRef }],
         status: {
           type: "read_only_status",
           text: status,
@@ -270,7 +272,7 @@ describe("engine.chat — the reply gate at the real runtime boundary (iteration
     expect(reply.text).toBe(rendered);
     expect(conversation.at(-1)).toMatchObject({
       role: "assistant",
-      text: answer,
+      text: answerWithSources,
     });
   });
 

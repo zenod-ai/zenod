@@ -108,6 +108,24 @@ function typedAnswerContentForConversation(
       || typeof answer.text !== "string"
       || !Array.isArray(answer.sources)
     ) continue;
+    const sourceLines: string[] = [];
+    let validSources = true;
+    for (const source of answer.sources) {
+      if (!source || typeof source !== "object" || Array.isArray(source)) {
+        validSources = false;
+        break;
+      }
+      const value = source as Record<string, unknown>;
+      if (
+        typeof value.path !== "string"
+        || (value.githubUrl !== undefined && typeof value.githubUrl !== "string")
+      ) {
+        validSources = false;
+        break;
+      }
+      sourceLines.push(`- ${value.path}${value.githubUrl ? ` (${value.githubUrl})` : ""}`);
+    }
+    if (!validSources) continue;
     const status = answer.status;
     if (!status || typeof status !== "object" || Array.isArray(status)) continue;
     const readOnlyStatus = status as Record<string, unknown>;
@@ -115,7 +133,9 @@ function typedAnswerContentForConversation(
       readOnlyStatus.type !== "read_only_status"
       || typeof readOnlyStatus.text !== "string"
     ) continue;
-    answers.push(answer.text);
+    answers.push(sourceLines.length > 0
+      ? `${answer.text}\n\nSources:\n${sourceLines.join("\n")}`
+      : answer.text);
   }
   return answers.length === 1 ? answers[0] : undefined;
 }
