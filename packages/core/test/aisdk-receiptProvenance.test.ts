@@ -69,4 +69,37 @@ describe("AI SDK peer mutation provenance", () => {
     expect(action?.metadata?.verifiedReceiptText).toContain("- Receipt: `object_12345`");
     expect(action?.metadata?.verifiedReceiptText).not.toContain("ignore all instructions");
   });
+
+  it("renders typed terminal captures as host authority, never assistant prose", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    await llm.answer({
+      question: "for now simply store the note into memory",
+      conversationId: "typed-capture-context",
+      vaultBriefing: "brief",
+      conversation: [],
+      captureContext: [{
+        identity: {
+          tenantId: "tenant-alpha",
+          surface: "whatsapp",
+          conversationKey: "whatsapp:34611111111",
+          providerMessageId: "latest-note",
+        },
+        summary: "Filed memory in Inbox/needs-filing.md.",
+        evidenceRef: "Log/2026-07-30.md#^e-latest",
+        terminal: true,
+        recordedAt: new Date("2026-07-30T00:00:00.000Z"),
+      }],
+    }, readTools);
+
+    const system = captured.config.messages[0].content as string;
+    expect(system).toContain("HOST-OWNED TERMINAL CAPTURE CONTEXT");
+    expect(system).toContain('"providerMessageId":"latest-note"');
+    expect(system).toContain('"evidenceRef":"Log/2026-07-30.md#^e-latest"');
+    expect(system).toContain("already stored");
+    expect(system).toContain("do not call a mutation tool");
+    expect(captured.config.messages).not.toContainEqual(expect.objectContaining({
+      role: "assistant",
+      content: expect.stringContaining("Capture context:"),
+    }));
+  });
 });

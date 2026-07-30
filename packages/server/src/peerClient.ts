@@ -3,7 +3,6 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createHash } from "node:crypto";
 import { VERSION, type TrustedConnectionProfile } from "zenod";
-import { pollPeerJob } from "./pollPeerJob.js";
 import { validateWalletUrl } from "./walletUrl.js";
 import {
   PEER_SKILL_LIMITS,
@@ -344,6 +343,49 @@ export async function callPeer(
  */
 export type PeerToolResult = CallToolResult;
 
+export interface PeerMcpJobPollResult {
+  status: "done" | "error" | "timeout";
+  error?: string;
+  kind?: string;
+  result?: unknown;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function typedPeerJobTerminal(
+  response: PeerToolResult,
+  expectedJobId: string,
+): PeerMcpJobPollResult | null {
+  const structured = objectRecord(response.structuredContent);
+  if (!structured) return null;
+  const responseJobId = structured.ticket_id ?? structured.jobId;
+  if (responseJobId !== expectedJobId) {
+    return { status: "error", error: "Peer returned a receipt for a different job." };
+  }
+  const state = structured.state ?? structured.status;
+  if (state === "done") {
+    return {
+      status: "done",
+      ...(typeof structured.kind === "string" ? { kind: structured.kind } : {}),
+      result: structured.result,
+    };
+  }
+  if (state === "error" || state === "interrupted") {
+    const error = objectRecord(structured.error);
+    return {
+      status: "error",
+      error: typeof error?.message === "string"
+        ? error.message
+        : `Peer job ${state}.`,
+    };
+  }
+  return null;
+}
+
 /**
  * Call a peer's MCP tool with a FULL argument object and relay its result
  * unchanged. This is the mesh GATEWAY primitive: the Console re-publishes a
@@ -389,6 +431,52 @@ export async function callPeerTool(
   }
 }
 
+/**
+ * Poll a wallet job through the peer's advertised MCP receipt tool. Profiled
+ * channel credentials are MCP-only and must never be presented to generic REST.
+ */
+export async function pollPeerMcpJob(
+  peer: PeerConfig,
+  jobId: string,
+  intervalMs = 1_000,
+  timeoutMs = 180_000,
+): Promise<PeerMcpJobPollResult> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const terminal = typedPeerJobTerminal(
+      await callPeerTool(peer, "get_task_result", { ticket_id: jobId }),
+      jobId,
+    );
+    if (terminal) return terminal;
+    await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return { status: "timeout" };
+}
+
+interface VerifiedStoreReceipt {
+  evidenceRef: string;
+  evidenceUrl?: string;
+  pagesTouched?: string[];
+  pageUrls?: string[];
+  commitSha: string;
+  githubUrls?: string[];
+  question?: string;
+}
+
+function verifiedStoreReceipt(
+  completed: PeerMcpJobPollResult,
+): VerifiedStoreReceipt | null {
+  if (completed.status !== "done" || completed.kind !== "store") return null;
+  const receipt = objectRecord(completed.result);
+  if (
+    typeof receipt?.evidenceRef !== "string"
+    || !receipt.evidenceRef.trim()
+    || typeof receipt.commitSha !== "string"
+    || receipt.commitSha.length !== 40
+  ) return null;
+  return receipt as unknown as VerifiedStoreReceipt;
+}
+
 /** Call a peer tool with full structured arguments, returning readable text for the chat loop. */
 export async function callPeerWithArgs(
   peer: PeerConfig,
@@ -399,31 +487,25 @@ export async function callPeerWithArgs(
   const result = await callPeerTool(peer, mcpTool, args);
   const text = extractText(result);
   if (peer.wallet && mcpTool === "store_memory" && !result.isError) {
-    const structuredJobId = typeof result.structuredContent?.jobId === "string" ? result.structuredContent.jobId : null;
-    const jobId = structuredJobId ?? text.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i)?.[0];
+    const queued = objectRecord(result.structuredContent);
+    const queuedJobId = queued?.ticket_id ?? queued?.jobId;
+    const jobId = typeof queuedJobId === "string" ? queuedJobId : null;
     if (jobId) {
-      const completed = await pollPeerJob([peer], jobId, 1_000, 180_000);
-      if (completed.status === "done" && completed.result && typeof completed.result === "object") {
-        const receipt = completed.result as {
-          evidenceRef?: string;
-          evidenceUrl?: string;
-          pagesTouched?: string[];
-          pageUrls?: string[];
-          commitSha?: string;
-          githubUrls?: string[];
-          question?: string;
-        };
+      const completed = await pollPeerMcpJob(peer, jobId, 1_000, 180_000);
+      const receipt = verifiedStoreReceipt(completed);
+      if (receipt) {
         return JSON.stringify({
           status: "done",
           message: receipt.question ? `QUESTION FOR THE USER: ${receipt.question}` : "Stored.",
-          ...(receipt.evidenceRef ? { evidenceRef: receipt.evidenceRef } : {}),
+          evidenceRef: receipt.evidenceRef,
           ...(receipt.evidenceUrl ? { evidenceUrl: receipt.evidenceUrl } : {}),
           ...(receipt.pagesTouched ? { pagesTouched: receipt.pagesTouched } : {}),
           ...(receipt.pageUrls ? { pageUrls: receipt.pageUrls } : {}),
-          ...(receipt.commitSha ? { commitSha: receipt.commitSha } : {}),
+          commitSha: receipt.commitSha,
           ...(receipt.githubUrls ? { githubUrls: receipt.githubUrls } : {}),
         });
       }
+      if (completed.status === "done") return `Zenod filing returned an invalid terminal receipt for job ${jobId}.`;
       if (completed.status === "error") return `Zenod filing failed: ${completed.error ?? "unknown error"}`;
       return `Zenod filing receipt timed out for job ${jobId}.`;
     }

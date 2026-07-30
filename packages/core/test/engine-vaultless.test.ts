@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
 import type { AnswerInput, AnswerResult, BrainLlm, PeerTools, VaultReadTools, VaultTaskTools } from "../src/llm/types.js";
@@ -30,12 +30,13 @@ class StubLlm {
 
 function vaultlessEngine(peerTools?: PeerTools) {
   const llm = new StubLlm();
+  const state = new SqliteStateStore(":memory:", "tenant-alpha");
   const engine = createEngine({
     llm: llm as unknown as BrainLlm,
-    state: new SqliteStateStore(":memory:"),
+    state,
     ...(peerTools ? { peerTools } : {}),
   });
-  return { engine, llm };
+  return { engine, llm, state };
 }
 
 describe("engine — vaultless (Console shell)", () => {
@@ -111,6 +112,54 @@ describe("engine — vaultless (Console shell)", () => {
     await engine.chat("and what did I ask?", "web", { conversationKey: "grounded-chat" });
     expect(llm.lastInput?.conversation[0]).toEqual({ role: "user", text: "what is our current plan?" });
     expect(llm.lastInput?.conversation[0]?.text).not.toContain("Approved briefing v2");
+  });
+
+  it("keeps terminal capture tickets typed and makes the newest capture the host-owned focus", async () => {
+    const { engine, llm, state } = vaultlessEngine();
+    const now = vi.spyOn(Date, "now");
+    now.mockReturnValueOnce(1_000);
+    await state.appendCaptureTicket({
+      identity: {
+        tenantId: "tenant-alpha",
+        surface: "whatsapp",
+        conversationKey: "whatsapp:34611111111",
+        providerMessageId: "older-note",
+      },
+      summary: "An older expense note.",
+      evidenceRef: "Log/2026-07-29.md#^e-older",
+    });
+    now.mockReturnValueOnce(2_000);
+    await state.appendCaptureTicket({
+      identity: {
+        tenantId: "tenant-alpha",
+        surface: "whatsapp",
+        conversationKey: "whatsapp:34611111111",
+        providerMessageId: "latest-note",
+      },
+      summary: "Filed memory in Inbox/needs-filing.md.",
+      evidenceRef: "Log/2026-07-30.md#^e-latest",
+    });
+    now.mockRestore();
+
+    await engine.handleTasking({
+      text: "for now simply store the note into memory",
+      surface: "whatsapp",
+      conversationKey: "whatsapp:34611111111",
+    });
+
+    expect(llm.lastInput?.captureContext).toMatchObject([
+      {
+        identity: { providerMessageId: "latest-note" },
+        evidenceRef: "Log/2026-07-30.md#^e-latest",
+        terminal: true,
+      },
+      {
+        identity: { providerMessageId: "older-note" },
+        evidenceRef: "Log/2026-07-29.md#^e-older",
+        terminal: true,
+      },
+    ]);
+    expect(llm.lastInput?.conversation).toEqual([]);
   });
 
   it("gates the vault-only methods with a clear error", async () => {
