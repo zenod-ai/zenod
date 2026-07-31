@@ -267,6 +267,7 @@ export class PhylaxChannelError extends Error {
     readonly code: "unmatched_sender" | "invalid_input" | "downstream_error" | "delivery_error",
     message: string,
     readonly audit?: PhylaxFailureAudit,
+    readonly retryDisposition: "idempotent_capture" | null = null,
   ) {
     super(message);
     this.name = "PhylaxChannelError";
@@ -1408,12 +1409,15 @@ export class PhylaxChannelsOrgan {
         await this.reportDownstreamCredentialStatus(call.route, "rejected");
         throw downstreamCredentialRejectedError(
           failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
+          call.tool === "chat_with_ring" ? "assistant" : "memory",
+          call.tool === "store_memory" && Boolean(providerMessageId),
         );
       }
       throw new PhylaxChannelError(
         "downstream_error",
         error instanceof Error ? error.message : "tenant downstream request failed",
         failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
+        call.tool === "store_memory" && providerMessageId ? "idempotent_capture" : null,
       );
     }
     const downstreamMs = Math.max(0, Date.now() - downstreamStartedAt);
@@ -1425,7 +1429,11 @@ export class PhylaxChannelsOrgan {
         : "downstream_rejected";
       if (failureCode === "downstream_unauthorized") {
         await this.reportDownstreamCredentialStatus(call.route, "rejected");
-        throw downstreamCredentialRejectedError(failureAudit(downstreamMs, failureCode, audit));
+        throw downstreamCredentialRejectedError(
+          failureAudit(downstreamMs, failureCode, audit),
+          call.tool === "chat_with_ring" ? "assistant" : "memory",
+          call.tool === "store_memory" && Boolean(providerMessageId),
+        );
       }
       throw new PhylaxChannelError(
         "downstream_error",
@@ -1525,11 +1533,18 @@ export class PhylaxChannelsOrgan {
   }
 }
 
-function downstreamCredentialRejectedError(audit: PhylaxFailureAudit): PhylaxChannelError {
+function downstreamCredentialRejectedError(
+  audit: PhylaxFailureAudit,
+  target: "memory" | "assistant",
+  retryableCapture: boolean,
+): PhylaxChannelError {
   return new PhylaxChannelError(
     "downstream_error",
-    "Your Ring connection needs attention. Open Phylax settings and replace the Ring MCP URL and bearer token, then retry.",
+    target === "memory"
+      ? "Your Zenod memory connection needs attention. Open Phylax settings and replace the memory MCP URL and bearer token."
+      : "Your Ring connection needs attention. Open Phylax settings and replace the Ring MCP URL and bearer token, then retry.",
     audit,
+    retryableCapture ? "idempotent_capture" : null,
   );
 }
 

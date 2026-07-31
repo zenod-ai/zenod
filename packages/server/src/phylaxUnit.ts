@@ -273,7 +273,9 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     try {
       const body = parsePhylaxSettingsUpdate(await c.req.json<unknown>());
       const normalized = normalizePhylaxTranscriptionUpdate(tenantSettings, tenantId, body);
-      return c.json({ settings: tenantSettings.update(tenantId, normalized) });
+      const settings = tenantSettings.update(tenantId, normalized);
+      runtime.retryPendingVoiceCaptures(tenantId);
+      return c.json({ settings });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : "invalid settings" }, 400);
     }

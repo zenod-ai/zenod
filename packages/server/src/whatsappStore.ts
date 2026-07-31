@@ -282,6 +282,7 @@ export type WhatsAppVoiceJobState =
   | "completed"
   | "cancelled"
   | "failed"
+  | "capture_retry_pending"
   | "ring_outcome_unknown";
 
 export interface WhatsAppVoiceJob {
@@ -943,7 +944,13 @@ export class WhatsAppStore {
   }
 
   cancelLatestVoiceJob(tenantId: string, conversationKey: string, now = Date.now()): WhatsAppVoiceJob | null {
-    const states: WhatsAppVoiceJobState[] = ["awaiting_confirmation", "queued", "transcribing", "transcribed"];
+    const states: WhatsAppVoiceJobState[] = [
+      "awaiting_confirmation",
+      "queued",
+      "transcribing",
+      "transcribed",
+      "capture_retry_pending",
+    ];
     const placeholders = states.map(() => "?").join(", ");
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -1059,7 +1066,16 @@ export class WhatsAppStore {
         `INSERT INTO whatsapp_media_recovery (
            provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
          ) VALUES (?, 'forwarded_reply', 'pending', ?, ?, ?)
-         ON CONFLICT(provider_message_id) DO NOTHING`,
+         ON CONFLICT(provider_message_id) DO UPDATE SET
+           recovery_kind = 'forwarded_reply',
+           recovery_state = 'pending',
+           reply_text = excluded.reply_text,
+           outbound_provider_id = NULL,
+           error_text = NULL,
+           claimed_at = NULL,
+           completed_at = NULL,
+           updated_at = excluded.updated_at
+         WHERE whatsapp_media_recovery.recovery_kind = 'interrupted_failure'`,
       ).run(providerMessageId, bounded, now, now);
       this.db.exec("COMMIT");
     } catch (error) {
@@ -1136,6 +1152,73 @@ export class WhatsAppStore {
          WHERE canonical_provider_message_id = ?`,
       ).run(now, providerMessageId);
       this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  deferIdempotentVoiceCapture(providerMessageId: string, replyText: string, now = Date.now()): boolean {
+    const bounded = boundedRecoveryReply(replyText);
+    if (!bounded) throw new Error("capture retry notice is empty");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'capture_retry_pending', error_text = ?, updated_at = ?
+         WHERE provider_message_id = ? AND job_state = 'forwarding'`,
+      ).run(bounded, now, providerMessageId).changes;
+      if (!changed) {
+        this.db.exec("COMMIT");
+        return false;
+      }
+      this.db.prepare(
+        `INSERT INTO whatsapp_media_recovery (
+           provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
+         ) VALUES (?, 'interrupted_failure', 'pending', ?, ?, ?)
+         ON CONFLICT(provider_message_id) DO UPDATE SET
+           recovery_kind = 'interrupted_failure',
+           recovery_state = 'pending',
+           reply_text = excluded.reply_text,
+           outbound_provider_id = NULL,
+           error_text = NULL,
+           claimed_at = NULL,
+           completed_at = NULL,
+           updated_at = excluded.updated_at`,
+      ).run(providerMessageId, bounded, now, now);
+      this.db.prepare(
+        `UPDATE whatsapp_media_coalescing SET outcome_state = 'failed', updated_at = ?
+         WHERE canonical_provider_message_id = ?`,
+      ).run(now, providerMessageId);
+      this.db.exec("COMMIT");
+      return true;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  resumeIdempotentVoiceCaptures(tenantId: string, now = Date.now()): number {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const pending = this.db.prepare(
+        `SELECT provider_message_id AS providerMessageId
+         FROM whatsapp_voice_jobs
+         WHERE tenant_id = ? AND job_state = 'capture_retry_pending'`,
+      ).all(tenantId) as unknown as Array<{ providerMessageId: string }>;
+      const changed = this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'transcribed', error_text = NULL, updated_at = ?
+         WHERE tenant_id = ? AND job_state = 'capture_retry_pending'`,
+      ).run(now, tenantId).changes;
+      for (const row of pending) {
+        this.db.prepare(
+          `UPDATE whatsapp_media_coalescing SET outcome_state = 'processing', updated_at = ?
+           WHERE canonical_provider_message_id = ?`,
+        ).run(now, row.providerMessageId);
+      }
+      this.db.exec("COMMIT");
+      return Number(changed);
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
