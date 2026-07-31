@@ -124,8 +124,14 @@ export class DriveArtifactArchiveProvider implements ArtifactArchiveProvider {
     const now = this.options.now?.() ?? new Date();
     const base = handleBase(input, now);
     const archiveFolderId = await this.client.ensureFolder(DEFAULT_DRIVE_ARCHIVE_FOLDER, this.rootFolderId);
-    const prefix = `${now.toISOString().replace(/[:.]/g, "-")}-${base.sha256.slice(0, 12)}`;
-    const uploaded = await this.client.uploadFile(`${prefix}-${base.filename}`, input.mediaType, Buffer.from(input.data), archiveFolderId);
+    const storedName = `${base.sha256}-${base.filename}`;
+    const existing = (await this.client.listFiles({
+      folderId: archiveFolderId,
+      nameContains: storedName,
+      pageSize: 20,
+    })).find((file) => file.name === storedName && file.mimeType === input.mediaType);
+    const uploaded = existing
+      ?? await this.client.uploadFile(storedName, input.mediaType, Buffer.from(input.data), archiveFolderId);
 
     return {
       ...base,

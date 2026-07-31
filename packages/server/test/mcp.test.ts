@@ -215,6 +215,7 @@ describe("MCP endpoint", () => {
       arguments: {
         mediaType: "screenshot",
         bytesRef: "ring://media/screenshot-1",
+        idempotencyKey: "tenant-a:whatsapp:image-message-1",
         filename: "screen.png",
         sourceHint: "mcp fixture",
         contentHint: "remember the renewal date visible in the screenshot",
@@ -222,12 +223,28 @@ describe("MCP endpoint", () => {
         hints: ["insurance"],
       },
     });
+    expect(enqueued.structuredContent).toBeTruthy();
     const queued = enqueued.structuredContent as { ticket_id: string; jobId: string; kind: string; status: string; state: string };
     expect(queued.jobId).toBeTruthy();
     expect(queued.ticket_id).toBe(queued.jobId);
     expect(queued.kind).toBe("media_ingest");
     expect(queued.status).toBe("queued");
     expect(queued.state).toBe("accepted");
+
+    const replay = await client.callTool({
+      name: "ingest_memory",
+      arguments: {
+        mediaType: "screenshot",
+        bytesRef: "ring://media/screenshot-1",
+        idempotencyKey: "tenant-a:whatsapp:image-message-1",
+        filename: "screen.png",
+        sourceHint: "mcp fixture",
+        contentHint: "remember the renewal date visible in the screenshot",
+        senderTimestamp: "2026-07-09T12:00:00Z",
+        hints: ["insurance"],
+      },
+    });
+    expect((replay.structuredContent as { jobId: string }).jobId).toBe(queued.jobId);
 
     let terminal: { status: string; result: Record<string, unknown> | null } | null = null;
     for (let attempt = 0; attempt < 50; attempt++) {
@@ -291,9 +308,12 @@ describe("MCP endpoint", () => {
     });
     expect(receipt.digest).toEqual({
       evidenceRef: "Log/2026-06-11.md#^e-abc123",
+      evidenceUrl: `https://github.com/o/r/blob/${"0".repeat(40)}/Log/2026-06-11.md#L3`,
       pagesTouched: ["Areas/Insurance.md"],
+      pageUrls: [`https://github.com/o/r/blob/${"0".repeat(40)}/Areas/Insurance.md`],
       commitSha: "0".repeat(40),
       githubUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
+      filing: "filed",
     });
 
     await client.close();

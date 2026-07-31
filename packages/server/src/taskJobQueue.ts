@@ -198,7 +198,7 @@ async function archiveMediaInput(settings: Settings, input: TaskJobInput): Promi
       source,
       timestamp,
       metadata: {
-        artifactUrl: input.artifactUrl,
+        bytesRefKind: "transport-capability",
         mediaTypeHint: input.mediaType,
         contentHint: input.contentHint,
         hints: input.mediaHints,
@@ -314,17 +314,21 @@ async function processMediaIngest(
       kind: extraction.kind,
       provider: extraction.provider,
       rawArtifact: archived.handle.uri,
-      sourceLink: archived.sourceLink,
+      ...(archived.sourceKind === "drive" && archived.sourceLink
+        ? { sourceLink: archived.sourceLink }
+        : {}),
       contentHint: input.contentHint,
     },
   });
 
   const content = [
     `${extraction.label} "${archived.filename}" ingested through Zenod media seam.`,
-    ...(archived.sourceLink ? [`Original: ${archived.sourceLink}`] : []),
     `Raw artifact: ${archived.handle.uri}`,
     ...(archived.handle.url ? [`Raw artifact URL: ${archived.handle.url}`] : []),
     `Raw artifact sha256: ${archived.handle.sha256}`,
+    `Media type: ${archived.mediaType}`,
+    `Source: ${input.sourceHint ?? archived.sourceKind}`,
+    ...(input.senderTimestamp ? [`Source timestamp: ${input.senderTimestamp}`] : []),
     `${extraction.kind === "audio" ? "Transcribed" : "Extracted"} by ${extraction.provider}.`,
     `Extraction artifact: ${extractionHandle.uri}`,
     ...(input.contentHint ? [`User context: ${input.contentHint}`] : []),
@@ -353,9 +357,12 @@ async function processMediaIngest(
     },
     digest: {
       evidenceRef: stored.evidenceRef,
+      ...(stored.evidenceUrl ? { evidenceUrl: stored.evidenceUrl } : {}),
       pagesTouched: stored.pagesTouched,
+      ...(stored.pageUrls ? { pageUrls: stored.pageUrls } : {}),
       commitSha: stored.commitSha,
       githubUrls: stored.githubUrls,
+      ...(stored.filing ? { filing: stored.filing } : {}),
     },
   };
 }
@@ -416,8 +423,6 @@ function extractTextMedia(archived: ArchivedMediaInput): { body: string; provide
 
 function receiptSource(input: TaskJobInput): MediaIngestReceipt["source"] {
   return {
-    ...(input.artifactUrl ? { artifactUrl: input.artifactUrl } : {}),
-    ...(input.bytesRef ? { bytesRef: input.bytesRef } : {}),
     ...(input.filename ? { filename: input.filename } : {}),
     ...(input.sourceHint ? { sourceHint: input.sourceHint } : {}),
     ...(input.senderTimestamp ? { senderTimestamp: input.senderTimestamp } : {}),
@@ -469,8 +474,6 @@ function mediaIngestUnavailableReceipt(input: TaskJobInput, rawArtifact: Artifac
       "Media ingest MCP seam accepted the job, but raw artifact archive, transcription/OCR/extraction, and digest processors are not wired in this instance yet. Implement #660-#662 adapters before treating media ingest as green.",
     mediaType: input.mediaType ?? "unknown",
     source: {
-      ...(input.artifactUrl ? { artifactUrl: input.artifactUrl } : {}),
-      ...(input.bytesRef ? { bytesRef: input.bytesRef } : {}),
       ...(input.filename ? { filename: input.filename } : {}),
       ...(input.sourceHint ? { sourceHint: input.sourceHint } : {}),
       ...(input.senderTimestamp ? { senderTimestamp: input.senderTimestamp } : {}),

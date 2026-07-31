@@ -964,9 +964,9 @@ export function buildMcpServer(
       description:
         "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, Drive file refs, or staged transport handles that the user wants remembered. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, commit SHA, and GitHub/archive URLs. Opaque transport handles that Zenod cannot resolve fail loudly with media_ingest_processor_unavailable.",
       inputSchema: INGEST_MEMORY_SHAPE,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ mediaType, artifactUrl, bytesRef, filename, sourceHint, contentHint, senderTimestamp, hints }) => {
+    async ({ mediaType, artifactUrl, bytesRef, filename, sourceHint, contentHint, senderTimestamp, hints, idempotencyKey }) => {
       if (!artifactUrl && !bytesRef) {
         return {
           content: [{ type: "text", text: "Invalid media ingest input: provide artifactUrl or bytesRef." }],
@@ -988,7 +988,7 @@ export function buildMcpServer(
         ...(hints ? { mediaHints: hints } : {}),
       };
       if (taskJobs) {
-        const job = taskJobs.enqueue("media_ingest", input);
+        const job = taskJobs.enqueue("media_ingest", input, idempotencyKey);
         return enqueuedResponse(job);
       }
       const result: MediaIngestReceipt = {
@@ -997,8 +997,6 @@ export function buildMcpServer(
         message: "Media ingest queue is not configured for this embedding; wire taskJobs and the #660-#662 processors before using ingest_memory.",
         mediaType,
         source: {
-          ...(artifactUrl ? { artifactUrl } : {}),
-          ...(bytesRef ? { bytesRef } : {}),
           ...(filename ? { filename } : {}),
           ...(sourceHint ? { sourceHint } : {}),
           ...(senderTimestamp ? { senderTimestamp } : {}),

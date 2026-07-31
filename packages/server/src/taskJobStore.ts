@@ -23,11 +23,11 @@ export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupt
 /** Non-terminal state a boot-time restart should surface as interrupted. */
 const IN_FLIGHT_STATE = "running" as const;
 
-// C-27 / #580 — "acknowledged writes are never lost". A `store` job (vault filing +
-// add_memory) that a restart interrupts is RE-QUEUED on boot so the worker resumes/retries
-// it to completion with the normal receipt — bounded so a job that keeps crashing the
-// server eventually fails honestly instead of looping forever.
-const MAX_STORE_RESUME_ATTEMPTS = 3;
+// C-27 / #580 and D21 — "acknowledged writes are never lost". Durable capture jobs
+// (`store` and `media_ingest`) interrupted by a restart are RE-QUEUED so the worker
+// resumes/retries them to completion with the normal receipt. The retry bound prevents
+// a repeatedly crashing job from looping forever.
+const MAX_CAPTURE_RESUME_ATTEMPTS = 3;
 export const TASK_JOB_LEASE_MS = 4 * 60_000;
 
 export interface TaskJobInput {
@@ -69,8 +69,6 @@ export interface MediaIngestReceipt {
   message: string;
   mediaType: string;
   source: {
-    artifactUrl?: string;
-    bytesRef?: string;
     filename?: string;
     sourceHint?: string;
     senderTimestamp?: string;
@@ -91,9 +89,12 @@ export interface MediaIngestReceipt {
   };
   digest: {
     evidenceRef: string | null;
+    evidenceUrl?: string;
     pagesTouched: string[];
+    pageUrls?: string[];
     commitSha: string | null;
     githubUrls: string[];
+    filing?: "filed" | "uncertain" | "inbox" | "pending";
   };
   nextAdapterIssues?: string[];
 }
@@ -202,9 +203,8 @@ export class TaskJobStore {
    * startup alone is not evidence that a running job was interrupted.
    */
   recoverExpiredRunning(now: number = Date.now()): void {
-    // C-27 / #580 — an expired WRITE claim (kind 'store' — vault filing +
-    // add_memory) is re-queued so a surviving worker resumes it, bounded by
-    // MAX_STORE_RESUME_ATTEMPTS.
+    // C-27 / #580 and D21 — expired durable-capture claims are re-queued so a
+    // surviving worker resumes them, bounded by MAX_CAPTURE_RESUME_ATTEMPTS.
     this.db
       .prepare(
         `UPDATE task_jobs
@@ -213,18 +213,18 @@ export class TaskJobStore {
              owner_id=NULL,
              lease_expires_at=NULL,
              updated_at=?
-         WHERE tenant_id=? AND status=? AND kind='store' AND attempts < ?
+         WHERE tenant_id=? AND status=? AND kind IN ('store', 'media_ingest') AND attempts < ?
            AND (lease_expires_at IS NULL OR lease_expires_at<=?)`,
       )
-      .run(now, this.tenantId, IN_FLIGHT_STATE, MAX_STORE_RESUME_ATTEMPTS, now);
+      .run(now, this.tenantId, IN_FLIGHT_STATE, MAX_CAPTURE_RESUME_ATTEMPTS, now);
     // Everything else still in-flight (non-write jobs — their durability lives in the
-    // executor; and 'store' jobs that already exhausted their retries) is surfaced as
+    // executor; and capture jobs that exhausted their retries) is surfaced as
     // interrupted so the caller's poll resolves instead of hanging.
     this.db
       .prepare(
         `UPDATE task_jobs
            SET status='interrupted',
-               error=CASE WHEN kind='store'
+               error=CASE WHEN kind IN ('store', 'media_ingest')
                           THEN 'interrupted by a server restart (gave up after ' || attempts || ' retries)'
                           ELSE 'interrupted by a server restart' END,
                owner_id=NULL,
@@ -249,8 +249,8 @@ export class TaskJobStore {
     if (normalizedKey && normalizedKey.length > 512) {
       throw new Error("idempotencyKey must be at most 512 characters");
     }
-    if (normalizedKey && kind !== "store") {
-      throw new Error("idempotencyKey is only supported for store jobs");
+    if (normalizedKey && kind !== "store" && kind !== "media_ingest") {
+      throw new Error("idempotencyKey is only supported for durable capture jobs");
     }
 
     const id = randomUUID();
@@ -266,7 +266,7 @@ export class TaskJobStore {
       const existing = this.db
         .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? AND idempotency_key=?`)
         .get(this.tenantId, normalizedKey) as Row | undefined;
-      if (!existing) throw new Error("Failed to resolve idempotent store job");
+      if (!existing) throw new Error("Failed to resolve idempotent capture job");
       return rowToJob(existing);
     }
 

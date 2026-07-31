@@ -107,6 +107,44 @@ describe("Zenod chassis unit", () => {
     }
   });
 
+  it("preserves an explicit tenant Drive archive selection across runtime restarts", async () => {
+    const dataDir = await tempDir();
+    const storage = new ChassisStorage({
+      dataDir,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    });
+    const context = contextFor(storage, "tenant-drive");
+    let pool = new ZenodRuntimePool();
+    const first = pool.forContext(context);
+    first.settings.set("artifact_archive_provider", "drive");
+    first.settings.set("google_drive_folder_id", "folder-tenant-drive");
+    await pool.close();
+
+    pool = new ZenodRuntimePool();
+    try {
+      const restarted = pool.forContext(context);
+      expect(restarted.settings.get("artifact_archive_provider")).toBe("drive");
+      expect(restarted.settings.get("google_drive_folder_id")).toBe("folder-tenant-drive");
+    } finally {
+      await pool.close();
+    }
+  });
+
+  it("defaults new production tenants to Drive without a tenant-zero special case", async () => {
+    const dataDir = await tempDir();
+    const storage = new ChassisStorage({
+      dataDir,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    });
+    const pool = new ZenodRuntimePool({ NODE_ENV: "production" });
+    try {
+      expect(pool.forContext(contextFor(storage, "tenant-new")).settings.get("artifact_archive_provider"))
+        .toBe("drive");
+    } finally {
+      await pool.close();
+    }
+  });
+
   it("boots through createUnit and delegates provisioning to the chassis store", async () => {
     const dataDir = await tempDir();
     const tenants = createMemoryTenantStore();
