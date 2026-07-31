@@ -2031,6 +2031,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });
     settings.setRaw("google_oauth_refresh_token", result.refreshToken);
     settings.setRaw("google_oauth_email", result.email ?? "");
+    settings.set("artifact_archive_provider", "drive");
     runtime.invalidate();
     if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
     return c.redirect("/");

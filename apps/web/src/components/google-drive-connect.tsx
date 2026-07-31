@@ -179,6 +179,7 @@ export function GoogleDriveConnect() {
         body: {
           ...(json.trim() !== "" ? { google_service_account_json: json } : {}),
           google_drive_folder_id: folderId,
+          artifact_archive_provider: "drive",
         },
       })
       setJson("")
