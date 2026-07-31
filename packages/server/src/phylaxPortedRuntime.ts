@@ -517,7 +517,17 @@ export class PhylaxPortedRuntime {
         }
         const message = error instanceof Error ? error.message : String(error);
         if (current?.state === "forwarding") {
-          this.whatsappStore.markVoiceRingOutcomeUnknown(job.providerMessageId);
+          if (
+            error instanceof PhylaxChannelError
+            && error.retryDisposition === "idempotent_capture"
+          ) {
+            this.whatsappStore.deferIdempotentVoiceCapture(
+              job.providerMessageId,
+              "⚠️ Your voice note was transcribed, but Zenod has not returned a save receipt. The transcript is safely retained in Phylax; retry after the memory connection is repaired is idempotent and cannot create a second memory.",
+            );
+          } else {
+            this.whatsappStore.markVoiceRingOutcomeUnknown(job.providerMessageId);
+          }
         } else {
           this.whatsappStore.queueVoiceFailureReply(
             job.providerMessageId,
@@ -529,6 +539,12 @@ export class PhylaxPortedRuntime {
         this.voiceAbortControllers.delete(job.providerMessageId);
       }
     }
+  }
+
+  retryPendingVoiceCaptures(tenantId: string): number {
+    const resumed = this.whatsappStore.resumeIdempotentVoiceCaptures(tenantId);
+    if (resumed > 0) this.kickVoiceWorker();
+    return resumed;
   }
 
   private observeCaptureJob(

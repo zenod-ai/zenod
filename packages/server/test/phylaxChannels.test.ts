@@ -2940,6 +2940,146 @@ describe("ported gateway integration", () => {
     }
   });
 
+  it("retains an idempotent Zenod voice capture across credential repair and delivers its terminal receipt", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-capture-credential-repair-"));
+    dirs.push(dataDir);
+    const sent: string[] = [];
+    const storeKeys: string[] = [];
+    let memoryAvailable = false;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          assistantUrl: "https://ring.test/mcp/assistant",
+          assistantToken: "assistant-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: { content: { source: "transcript" } },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "ingest_memory", argumentMappings: {} },
+          },
+        }),
+      },
+      artifactUrl: (tenantId, artifactId) =>
+        `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe() {
+          return {
+            text_transcript: "retain this transcript through credential repair",
+            transcription_source: "test-stt",
+          };
+        },
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          description: "Store memory",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          storeKeys.push(String(call.arguments.idempotencyKey));
+          if (!memoryAvailable) {
+            throw new Error('Streamable HTTP error: {"error":"unauthorized"}');
+          }
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: { ticket_id: "job-credential-repair", state: "accepted" },
+          };
+        }
+        expect(call.tool).toBe("get_task_result");
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "job-credential-repair",
+            state: "done",
+            result: {
+              recap: "Credential-repaired capture.",
+              evidenceRef: "Log/2026-07-31.md#^credential-repair",
+              pagesTouched: ["Inbox/Credential Repair.md"],
+              commitSha: "abc1234",
+              githubUrls: [],
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+      sleep: async () => {},
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      probeVoiceDuration: async () => 60,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: `capture-credential-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const event: WhatsAppInboundEvent = {
+      messageId: "voice-capture-credential-repair",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: { testBytes: "credential-repair-audio" },
+    };
+    try {
+      await runtime.whatsapp.handleEvent(event);
+      await vi.waitFor(() =>
+        expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("capture_retry_pending"));
+      await vi.waitFor(() => expect(sent).toHaveLength(2));
+      expect(sent[1]).toContain("Zenod has not returned a save receipt");
+      expect(sent[1]).toContain("cannot create a second memory");
+      expect(storeKeys).toEqual(["alpha:whatsapp:voice-capture-credential-repair"]);
+
+      memoryAvailable = true;
+      expect(runtime.retryPendingVoiceCaptures("alpha")).toBe(1);
+      await vi.waitFor(() =>
+        expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
+      expect(storeKeys).toEqual([
+        "alpha:whatsapp:voice-capture-credential-repair",
+        "alpha:whatsapp:voice-capture-credential-repair",
+      ]);
+      expect(sent).toHaveLength(3);
+      expect(sent[2]).toContain("Saved ✓");
+      expect(sent[2]).toContain("Log/2026-07-31.md#^credential-repair");
+      expect(runtime.whatsappStore.mediaRecovery(event.messageId)).toMatchObject({
+        kind: "forwarded_reply",
+        state: "recovered_replied",
+      });
+    } finally {
+      await runtime.close();
+    }
+  });
+
   it("forwards captioned and uncaptioned images once with authenticated artifacts and metadata", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-ported-images-"));
     dirs.push(dataDir);
