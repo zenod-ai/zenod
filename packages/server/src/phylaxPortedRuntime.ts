@@ -20,6 +20,19 @@ import {
 } from "./phylaxChannels.js";
 import { probeAudioDurationSeconds } from "./transcribe.js";
 
+function normalizedWhatsAppSenderTimestamp(value: unknown): string | undefined {
+  let numeric: number;
+  if (typeof value === "object" && value !== null && "low" in value) {
+    numeric = Number((value as { low: unknown }).low);
+  } else {
+    numeric = Number(value);
+  }
+  if (!Number.isFinite(numeric) || numeric <= 0) return undefined;
+  const milliseconds = numeric < 1_000_000_000_000 ? numeric * 1_000 : numeric;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
 /**
  * The shipped channels organ, mounted without the old fused BrainEngine path.
  * It directly composes the existing Baileys store/session gateway, Telegram
@@ -169,11 +182,13 @@ export class PhylaxPortedRuntime {
             afterReply: () => this.kickVoiceWorker(),
           };
         }
+        const senderTimestamp = normalizedWhatsAppSenderTimestamp(event.timestamp);
         const inbound = {
           channel: "whatsapp",
           sender: event.senderId,
           chatId: event.chatId,
           messageId: event.messageId,
+          ...(senderTimestamp ? { senderTimestamp } : {}),
           ...(event.replyToMessageId ? { replyToMessageId: event.replyToMessageId } : {}),
           text,
           ...(media ? { media } : {}),

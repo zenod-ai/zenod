@@ -50,6 +50,8 @@ export interface PhylaxChannelInbound {
   sender: string;
   chatId: string;
   messageId?: string;
+  /** Original provider timestamp normalized by the transport adapter. */
+  senderTimestamp?: string;
   /** Provider message ID quoted by structural reply metadata; never inferred from text. */
   replyToMessageId?: string;
   text?: string;
@@ -718,6 +720,7 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): 
     };
   }
   const digest = objectValue(payload.digest);
+  const rawArtifact = objectValue(payload.rawArtifact);
   const evidenceValue = payload.evidenceRef ?? digest?.evidenceRef;
   const evidenceRef = typeof evidenceValue === "string" && evidenceValue.trim()
     ? evidenceValue.trim()
@@ -751,6 +754,9 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): 
     text: appendPhylaxCaptureReceiptInvitation([
       "Saved ✓",
       `Recap: ${recap}`,
+      ...(typeof rawArtifact?.archiveUrl === "string" && rawArtifact.archiveUrl.trim()
+        ? [`Media: ${rawArtifact.archiveUrl.trim()}`]
+        : []),
       ...(filed.length > 0 ? [`Filed: ${filed.join(", ")}`] : []),
       ...(evidenceRef ? [`Evidence: ${evidenceUrl ? `${evidenceRef} (${evidenceUrl})` : evidenceRef}`] : []),
       ...(commitSha ? [`Commit: ${commitUrl ? `${commitSha} (${commitUrl})` : commitSha}`] : []),
@@ -1216,6 +1222,12 @@ export class PhylaxChannelsOrgan {
       ...(transcription.transcription_timing ? { transcription_timing: transcription.transcription_timing } : {}),
       ...(replyEvidenceRef ? { reply_context: { evidenceRef: replyEvidenceRef } } : {}),
     };
+    const auditHandoff: PhylaxDownstreamCall["handoff"] = handoff.artifact_ref
+      ? {
+          ...handoff,
+          artifact_ref: artifact?.sha256 ? `sha256:${artifact.sha256}` : "transport-artifact",
+        }
+      : handoff;
     const message = handoffEnvelope(handoff, text || "A channel artifact was received.");
     const surface: "whatsapp" | "mcp" = input.channel === "whatsapp" ? "whatsapp" : "mcp";
     const binding = replyEvidenceRef
@@ -1270,8 +1282,14 @@ export class PhylaxChannelsOrgan {
         "provider messageId is required for durable memory capture",
       );
     }
-    if (call.tool === "store_memory" && providerMessageId) {
+    if (isAsyncCaptureTool(call.tool) && providerMessageId) {
       call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
+    }
+    if (call.tool === "ingest_memory" && text && call.arguments.contentHint === undefined) {
+      call.arguments.contentHint = text;
+    }
+    if (call.tool === "ingest_memory" && input.senderTimestamp && call.arguments.senderTimestamp === undefined) {
+      call.arguments.senderTimestamp = input.senderTimestamp;
     }
     const failureAudit = (
       downstreamMs: number,
@@ -1286,7 +1304,7 @@ export class PhylaxChannelsOrgan {
       transcriptText: handoff.text_transcript ?? null,
       transcriptProvenance: handoff.transcription_source ?? (input.media ? "whatsapp-media" : "whatsapp-text"),
       transcriptionFailureCode: handoff.transcription_failed?.code ?? null,
-      artifactRef: handoff.artifact_ref ?? null,
+      artifactRef: auditHandoff.artifact_ref ?? null,
       artifactSha256: artifact?.sha256 ?? null,
       downstreamDestination: safeDownstreamDestination(call.route),
       downstreamCorrelationId: audit.correlationId,
@@ -1455,7 +1473,7 @@ export class PhylaxChannelsOrgan {
       sender,
       replyText,
       downstream,
-      handoff,
+      handoff: auditHandoff,
       artifactSha256: artifact?.sha256 ?? null,
       downstreamDestination: safeDownstreamDestination(call.route),
       downstreamCorrelationId: audit.correlationId,

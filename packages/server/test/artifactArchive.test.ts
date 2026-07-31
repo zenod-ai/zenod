@@ -15,8 +15,9 @@ import type { Settings } from "../src/settings.js";
 
 const fixedNow = () => new Date("2026-07-09T12:34:56.000Z");
 
-class MockDriveClient implements Pick<DriveClient, "ensureFolder" | "uploadFile"> {
+class MockDriveClient implements Pick<DriveClient, "ensureFolder" | "listFiles" | "uploadFile"> {
   uploaded: Array<{ name: string; mimeType: string; data: Buffer; parentFolderId: string }> = [];
+  files: DriveFile[] = [];
 
   async ensureFolder(name: string, parentId: string): Promise<string> {
     expect(name).toBe("Raw Artifacts");
@@ -24,14 +25,20 @@ class MockDriveClient implements Pick<DriveClient, "ensureFolder" | "uploadFile"
     return "raw-artifacts";
   }
 
+  async listFiles(): Promise<DriveFile[]> {
+    return [...this.files];
+  }
+
   async uploadFile(name: string, mimeType: string, data: Buffer, parentFolderId: string): Promise<DriveFile> {
     this.uploaded.push({ name, mimeType, data, parentFolderId });
-    return {
+    const file = {
       id: "drive-file-1",
       name,
       mimeType,
       webViewLink: "https://drive.google.com/file/d/drive-file-1/view",
     };
+    this.files.push(file);
+    return file;
   }
 }
 
@@ -112,6 +119,25 @@ describe("DriveArtifactArchiveProvider", () => {
     });
     expect(client.uploaded[0]!.name).toContain("voice_note.ogg");
     expect(client.uploaded[0]!.data.toString("utf8")).toBe("voice bytes");
+  });
+
+  it("reuses the content-addressed Drive object when a durable media job resumes", async () => {
+    const client = new MockDriveClient();
+    const provider = new DriveArtifactArchiveProvider(client as unknown as DriveClient, "drive-root", { now: fixedNow });
+    const input = {
+      data: Buffer.from("same image bytes"),
+      filename: "photo.png",
+      mediaType: "image/png",
+      source: "whatsapp",
+    };
+
+    const first = await provider.archive(input);
+    const replay = await provider.archive(input);
+
+    expect(replay.id).toBe(first.id);
+    expect(replay.sha256).toBe(first.sha256);
+    expect(client.uploaded).toHaveLength(1);
+    expect(client.uploaded[0]!.name).toBe(`${first.sha256}-photo.png`);
   });
 });
 

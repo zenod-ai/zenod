@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1563,7 +1564,7 @@ describe("PhylaxChannelsOrgan", () => {
       media: { bytes: Buffer.from("ogg"), fileName: "voice.ogg", mimeType: "audio/ogg" },
     });
     expect(passed.handoff).toMatchObject({ sender: "34611111111", text_transcript: "voice text", transcription_usage: { seconds: 2 }, transcription_source: "phylax@test" });
-    expect(passed.handoff.artifact_ref).toMatch(/^https:\/\/phylax\.zenod\.dev\/mcp\/alpha-token\/artifacts\/alpha\//);
+    expect(passed.handoff.artifact_ref).toBe("sha256:90308fe99871113bf5490ec73a8813b667adc60fe01530102a6c7bfb73c66481");
     expect(passed.artifactSha256).toBe("90308fe99871113bf5490ec73a8813b667adc60fe01530102a6c7bfb73c66481");
     expect(passed.evidence[0]).toMatchObject({
       downstream_url: "https://ring.test",
@@ -1622,7 +1623,7 @@ describe("PhylaxChannelsOrgan", () => {
 
     expect(aborted).toBe(true);
     expect(result.handoff.transcription_failed).toMatchObject({ code: "timeout" });
-    expect(result.handoff.artifact_ref).toMatch(/^https:\/\/phylax\.zenod\.dev\/mcp\/token\/artifacts\/alpha\//);
+    expect(result.handoff.artifact_ref).toBe(`sha256:${createHash("sha256").update("timeout-audio").digest("hex")}`);
     expect(calls).toHaveLength(1);
     expect(calls[0].arguments.message).toContain('"code":"timeout"');
     expect(existsSync(join(phylaxWhatsAppPaths(dataDir).artifacts, "alpha"))).toBe(true);
@@ -1977,7 +1978,7 @@ describe("ported gateway integration", () => {
         totalLifecycleMs: 155,
       },
     });
-    expect(trace?.artifactRef).toMatch(/^https:\/\/phylax\.zenod\.dev\/artifacts\/alpha\//);
+    expect(trace?.artifactRef).toBe(`sha256:${trace?.artifactSha256}`);
     expect(JSON.stringify(trace)).not.toMatch(/token-bearing-path|ring-secret|do-not-store|\/mcp\/secret|authorization/i);
     store.close();
   });
@@ -3162,6 +3163,117 @@ describe("ported gateway integration", () => {
     } finally {
       runtime.close();
     }
+  });
+
+  it("dispatches a captioned image as an idempotent ingest and renders its Drive link only from the terminal receipt", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-image-ingest-contract-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-token",
+      turnBindings: {
+        voice_note: { tool: "store_memory", argumentMappings: { content: { source: "transcript" as const } } },
+        text: { tool: "chat_with_ring", argumentMappings: { message: { source: "message" as const } } },
+        media: {
+          tool: "ingest_memory",
+          argumentMappings: {
+            artifactUrl: { source: "artifactUrl" as const },
+            mediaType: { source: "mediaType" as const },
+            filename: { source: "filename" as const },
+            sourceHint: { source: "constant" as const, value: "WhatsApp media" },
+          },
+        },
+      },
+    };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => route },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "ingest_memory",
+          arg: "input",
+          description: "Ingest media",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["artifactUrl", "mediaType", "filename", "contentHint", "senderTimestamp", "idempotencyKey"],
+            properties: {
+              artifactUrl: { type: "string" },
+              mediaType: { type: "string" },
+              filename: { type: "string" },
+              sourceHint: { type: "string" },
+              contentHint: { type: "string", minLength: 1 },
+              senderTimestamp: { type: "string", minLength: 1 },
+              idempotencyKey: { type: "string", minLength: 1 },
+            },
+          },
+        }],
+      }),
+      capturePollIntervalMs: 1,
+      sleep: async () => undefined,
+      async callDownstream(call) {
+        calls.push(call);
+        if (call.tool === "ingest_memory") {
+          return {
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: { ticket_id: "image-job-1", jobId: "image-job-1", status: "queued", state: "accepted" },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "image-job-1",
+            jobId: "image-job-1",
+            status: "done",
+            state: "done",
+            result: {
+              status: "done",
+              message: "Image archived and filed.",
+              rawArtifact: { archiveUrl: "https://drive.google.com/file/d/image-1/view" },
+              digest: {
+                evidenceRef: "Log/2026-07-31.md#^e-image1",
+                pagesTouched: ["Projects/Launch.md"],
+                commitSha: "a".repeat(40),
+                githubUrls: ["https://github.com/o/r/commit/" + "a".repeat(40)],
+                filing: "filed",
+              },
+            },
+          },
+        };
+      },
+    });
+
+    const result = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "image-provider-1",
+      senderTimestamp: "2026-07-31T15:00:00.000Z",
+      text: "This is the signed launch agreement",
+      media: {
+        artifactRef: "https://phylax.test/artifacts/alpha/image.png?expires=1&signature=signed",
+        mimeType: "image/png",
+        fileName: "launch.png",
+      },
+    });
+
+    expect(calls[0]).toMatchObject({
+      tool: "ingest_memory",
+      arguments: {
+        contentHint: "This is the signed launch agreement",
+        senderTimestamp: "2026-07-31T15:00:00.000Z",
+        idempotencyKey: "alpha:whatsapp:image-provider-1",
+      },
+    });
+    expect(result.replyText).toContain("Saved ✓");
+    expect(result.replyText).toContain("https://drive.google.com/file/d/image-1/view");
+    expect(result.replyText).toContain("Log/2026-07-31.md#^e-image1");
+    await organ.close();
   });
 
   it("atomically coalesces 20 identical media contenders to one downstream call and one provider reply", async () => {

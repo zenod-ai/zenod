@@ -16,6 +16,7 @@ vi.mock("../src/peerClient.js", async (importOriginal) => ({
 }));
 
 import { PHYLAX_AGENT } from "../src/agent.js";
+import { createPhylaxArtifactCapabilityUrl, phylaxArtifactCapabilitySecret } from "../src/phylaxArtifactCapability.js";
 import {
   createPhylaxUnit,
   normalizePhylaxTranscriptionUpdate,
@@ -440,7 +441,7 @@ describe("Phylax customer unit mount", () => {
           inputSchema: {
             type: "object",
             additionalProperties: false,
-            required: ["artifactUrl", "mediaType", "filename", "sourceHint"],
+            required: ["artifactUrl", "mediaType", "filename", "sourceHint", "idempotencyKey"],
             properties: {
               artifactUrl: { type: "string", minLength: 1 },
               mediaType: {
@@ -448,6 +449,7 @@ describe("Phylax customer unit mount", () => {
               },
               filename: { type: "string", minLength: 1 },
               sourceHint: { const: "WhatsApp media" },
+              idempotencyKey: { type: "string", minLength: 1 },
             },
           },
         },
@@ -575,14 +577,18 @@ describe("Phylax customer unit mount", () => {
       const ingestArguments = peerMocks.callPeerTool.mock.calls[3]?.[2] as Record<string, unknown>;
       expect(peerMocks.callPeerTool.mock.calls[3]?.[1]).toBe("ingest_memory");
       expect(ingestArguments).toEqual({
-        artifactUrl: expect.stringMatching(
-          /^https:\/\/phylax\.test\/mcp\/tenant-alpha-artifact-token\/artifacts\/tenant-alpha\//,
-        ),
+        artifactUrl: expect.any(String),
         mediaType: "screenshot",
         filename: "Screenshot 2026-07-29.png",
         sourceHint: "WhatsApp media",
+        idempotencyKey: "tenant-alpha:whatsapp:capture-media-1",
       });
-      expect(ingestArguments).not.toHaveProperty("idempotencyKey");
+      const artifactCapability = new URL(String(ingestArguments.artifactUrl));
+      expect(artifactCapability.origin).toBe("https://phylax.test");
+      expect(artifactCapability.pathname.startsWith("/artifacts/tenant-alpha/")).toBe(true);
+      expect(artifactCapability.searchParams.get("expires")).not.toBeNull();
+      expect(artifactCapability.searchParams.get("signature")).not.toBeNull();
+      expect(artifactCapability.toString()).not.toContain("tenant-alpha-artifact-token");
       expect(ingestArguments).not.toHaveProperty("bytesRef");
       expect(ingestArguments).not.toHaveProperty("message");
       expect(peerMocks.callPeerTool.mock.calls[4]?.slice(1)).toEqual([
@@ -785,7 +791,7 @@ describe("Phylax customer unit mount", () => {
     }
   });
 
-  it("serves artifacts only to the matching tenant token and rejects traversal", async () => {
+  it("serves artifacts only with an exact signed capability and never accepts a tenant token URL", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-artifact-"));
     dirs.push(dataDir);
     const tenantStore = createMemoryTenantStore([
@@ -798,17 +804,33 @@ describe("Phylax customer unit mount", () => {
     await writeFile(join(artifactDir, "voice.ogg"), "alpha-audio");
     await writeFile(join(artifactDir, "screenshot.png"), "alpha-image");
     try {
-      const own = await unit.app.request("/mcp/alpha-token/artifacts/alpha/voice.ogg");
+      const secret = phylaxArtifactCapabilitySecret({ CHASSIS_VAULT_MASTER_KEY: MASTER_KEY });
+      const capability = (tenantId: string, file: string) => {
+        const url = new URL(createPhylaxArtifactCapabilityUrl({
+          baseUrl: "https://phylax.test",
+          secret,
+          tenantId,
+          file,
+          expiresAt: Date.now() + 60_000,
+        }));
+        return `${url.pathname}${url.search}`;
+      };
+      const own = await unit.app.request(capability("alpha", "voice.ogg"));
       expect(own.status).toBe(200);
       expect(own.headers.get("content-type")).toContain("audio/ogg");
       expect(await own.text()).toBe("alpha-audio");
-      const image = await unit.app.request("/mcp/alpha-token/artifacts/alpha/screenshot.png");
+      const image = await unit.app.request(capability("alpha", "screenshot.png"));
       expect(image.status).toBe(200);
       expect(image.headers.get("content-type")).toContain("image/png");
       expect(await image.text()).toBe("alpha-image");
-      expect((await unit.app.request("/mcp/beta-token/artifacts/alpha/voice.ogg")).status).toBe(404);
-      expect((await unit.app.request("/mcp/beta-token/artifacts/alpha/screenshot.png")).status).toBe(404);
-      expect((await unit.app.request("/mcp/alpha-token/artifacts/alpha/%2e%2e")).status).toBe(404);
+      expect((await unit.app.request("/mcp/alpha-token/artifacts/alpha/voice.ogg")).status).toBe(404);
+      const wrongTenant = new URL(capability("alpha", "voice.ogg"), "https://phylax.test");
+      wrongTenant.pathname = "/artifacts/beta/voice.ogg";
+      expect((await unit.app.request(`${wrongTenant.pathname}${wrongTenant.search}`)).status).toBe(404);
+      const tamperedFile = new URL(capability("alpha", "voice.ogg"), "https://phylax.test");
+      tamperedFile.pathname = "/artifacts/alpha/screenshot.png";
+      expect((await unit.app.request(`${tamperedFile.pathname}${tamperedFile.search}`)).status).toBe(404);
+      expect((await unit.app.request("/artifacts/alpha/%2e%2e?expires=1&signature=x")).status).toBe(404);
     } finally {
       unit.close();
     }

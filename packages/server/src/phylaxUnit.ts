@@ -1,6 +1,6 @@
 import type { HttpBindings } from "@hono/node-server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ChassisStorage, hashToken, type UnitContext } from "@zenod/mcp-chassis";
+import { ChassisStorage, type UnitContext } from "@zenod/mcp-chassis";
 import { VERSION } from "zenod";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -12,6 +12,11 @@ import {
   isCaptureMemoryTool,
 } from "./captureMemoryAuthority.js";
 import { readCustomerSession } from "./customerSession.js";
+import {
+  createPhylaxArtifactCapabilityUrl,
+  phylaxArtifactCapabilitySecret,
+  verifyPhylaxArtifactCapability,
+} from "./phylaxArtifactCapability.js";
 import { openRouterTranscriptionModels } from "./openrouterModels.js";
 import { callPeerTool, discoverPeerTools } from "./peerClient.js";
 import { probePhylaxTranscriptionProvider } from "./phylaxTranscriptionProbe.js";
@@ -65,6 +70,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     assistantUrl: env.PHYLAX_ASSISTANT_URL?.trim() || PHYLAX_DEFAULT_ASSISTANT_URL,
     ringTicketUrl: env.PHYLAX_RING_TICKET_URL?.trim() || PHYLAX_DEFAULT_RING_TICKET_URL,
   });
+  const artifactCapabilitySecret = phylaxArtifactCapabilitySecret(env);
   const captureJournalPath = join(storage.dataDir, "phylax-capture-jobs.sqlite");
   const captureTickets = new RingCaptureTicketProducer(
     join(storage.dataDir, "ring-capture-ticket-outbox.sqlite"),
@@ -99,8 +105,8 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     storage.dataDir,
     tenantSettings,
     captureTickets,
-    () => base,
     env,
+    artifactCapabilitySecret,
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ sender, text }) {
@@ -343,15 +349,22 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
       return c.json({ error: error instanceof Error ? error.message : "invalid phone number" }, 400);
     }
   });
-  app.get("/mcp/:token/artifacts/:tenantId/:file", async (c) => {
-    const token = c.req.param("token");
+  app.get("/artifacts/:tenantId/:file", async (c) => {
     const tenantId = c.req.param("tenantId");
     const file = c.req.param("file");
-    if (!file || basename(file) !== file || file === "." || file === "..") {
-      return c.json({ error: "not found" }, 404);
-    }
-    const record = await base.tenantStore.resolveTokenHash(hashToken(token));
-    if (!record || (record.status ?? "active") !== "active" || record.tenant.id !== tenantId) {
+    if (
+      !file
+      || basename(file) !== file
+      || file === "."
+      || file === ".."
+      || !verifyPhylaxArtifactCapability({
+        secret: artifactCapabilitySecret,
+        tenantId,
+        file,
+        expires: c.req.query("expires"),
+        signature: c.req.query("signature"),
+      })
+    ) {
       return c.json({ error: "not found" }, 404);
     }
     const path = join(phylaxWhatsAppPaths(base.storage.dataDir).artifacts, tenantId, file);
@@ -573,8 +586,8 @@ function createTenantOrgan(
   dataDir: string,
   tenantSettings: PhylaxTenantSettingsStore,
   captureTickets: RingCaptureTicketProducer,
-  baseUnit: () => ReturnType<typeof createZenodUnit>,
   env: NodeJS.ProcessEnv,
+  artifactCapabilitySecret: string,
 ): PhylaxChannelsOrgan {
   const configuredDeadline = Number(env.PHYLAX_TRANSCRIPTION_DEADLINE_MS ?? 60_000);
   const configuredVoiceJobDeadline = Number(
@@ -667,11 +680,13 @@ function createTenantOrgan(
       },
     },
     artifactUrl(tenantId, artifactId) {
-      const base = baseUnit();
-      const account = base.customerAccounts.list().find((candidate) => candidate.tenant_id === tenantId);
-      const token = account ? base.customerTokenVault.get(account.account_id) : null;
-      if (!token) throw new PhylaxChannelError("invalid_input", "tenant artifact token is unavailable");
-      return `${(env.CUSTOMER_APP_URL || "https://phylax.zenod.dev").replace(/\/$/, "")}/mcp/${token}/artifacts/${tenantId}/${artifactId}`;
+      return createPhylaxArtifactCapabilityUrl({
+        baseUrl: env.CUSTOMER_APP_URL || "https://phylax.zenod.dev",
+        secret: artifactCapabilitySecret,
+        tenantId,
+        file: artifactId,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1_000,
+      });
     },
   });
 }

@@ -121,6 +121,43 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     store.close();
   });
 
+  it("returns and resumes the original media ingest for a repeated artifact key", () => {
+    const path = tmpDb();
+    let store = new TaskJobStore(path, "tenant-alpha");
+    const accepted = store.enqueue(
+      "media_ingest",
+      {
+        mediaType: "image",
+        artifactUrl: "https://phylax.invalid/artifacts/tenant-alpha/photo.jpg?capability=secret",
+        filename: "photo.jpg",
+        contentHint: "Whiteboard after the planning meeting",
+      },
+      "whatsapp:image:message-42",
+    );
+    store.update(accepted.id, { status: "running" });
+
+    store = new TaskJobStore(path, "tenant-alpha");
+    const replay = store.enqueue(
+      "media_ingest",
+      {
+        mediaType: "image",
+        artifactUrl: "https://phylax.invalid/artifacts/tenant-alpha/retry.jpg?capability=different",
+        filename: "retry.jpg",
+      },
+      "whatsapp:image:message-42",
+    );
+
+    expect(replay.id).toBe(accepted.id);
+    expect(replay.status).toBe("queued");
+    expect(replay.attempts).toBe(1);
+    expect(replay.input).toMatchObject({
+      filename: "photo.jpg",
+      contentHint: "Whiteboard after the planning meeting",
+    });
+    expect(store.recent()).toHaveLength(1);
+    store.close();
+  });
+
   it("atomically coalesces competing enqueue calls for the same tenant key", () => {
     const path = tmpDb();
     const firstConnection = new TaskJobStore(path, "tenant-alpha");
@@ -305,6 +342,23 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     expect(beta.get(alphaJob.id)).toBeNull();
     expect(alpha.recent().map((job) => job.id)).toEqual([alphaJob.id]);
     expect(beta.recent().map((job) => job.id)).toEqual([betaJob.id]);
+    alpha.close();
+    beta.close();
+  });
+
+  it("isolates media ingest jobs and receipts for the same provider key across tenants", () => {
+    const path = tmpDb();
+    const alpha = new TaskJobStore(path, "tenant-alpha");
+    const beta = new TaskJobStore(path, "tenant-beta");
+    const key = "whatsapp:image:shared-provider-id";
+    const alphaJob = alpha.enqueue("media_ingest", { mediaType: "image", bytesRef: "alpha" }, key);
+    const betaJob = beta.enqueue("media_ingest", { mediaType: "image", bytesRef: "beta" }, key);
+
+    expect(betaJob.id).not.toBe(alphaJob.id);
+    expect(alpha.get(betaJob.id)).toBeNull();
+    expect(beta.get(alphaJob.id)).toBeNull();
+    expect(alpha.get(alphaJob.id)?.input.bytesRef).toBe("alpha");
+    expect(beta.get(betaJob.id)?.input.bytesRef).toBe("beta");
     alpha.close();
     beta.close();
   });

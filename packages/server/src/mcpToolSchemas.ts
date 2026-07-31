@@ -55,6 +55,13 @@ export const INGEST_MEMORY_SHAPE = {
   contentHint: z.string().min(1).optional().describe("User-provided context for filing/digesting, e.g. 'remember the renewal date shown here'."),
   senderTimestamp: z.string().min(1).optional().describe("Original sender/source timestamp, preferably ISO-8601."),
   hints: z.array(z.string().min(1)).optional().describe("Optional filing hints for the eventual memory digest."),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .optional()
+    .describe("Optional caller-stable key. Retries return the original durable media job and receipt."),
 };
 
 export const GET_TASK_RESULT_SHAPE = {

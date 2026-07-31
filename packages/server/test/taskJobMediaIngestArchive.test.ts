@@ -1,7 +1,7 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrainEngine, StoreInput } from "zenod";
 
 import { Settings } from "../src/settings.js";
@@ -16,6 +16,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
   const dirs: string[] = [];
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
@@ -123,6 +124,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
       filename: "launch-screenshot.png",
       sourceHint: "mcp-test",
       contentHint: "remember the launch metric",
+      senderTimestamp: "2026-07-31T15:00:00.000Z",
       mediaHints: ["launch"],
     });
 
@@ -147,8 +149,116 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(stored[0]!.content).toContain("Raw artifact sha256:");
     expect(stored[0]!.content).toContain("Extracted by vision model.");
     expect(stored[0]!.content).toContain("launch revenue is EUR 500");
+    expect(stored[0]!.content).toContain("User context: remember the launch metric");
+    expect(stored[0]!.content).toContain("Media type: image/png");
+    expect(stored[0]!.content).toContain("Source: mcp-test");
+    expect(stored[0]!.content).toContain("Source timestamp: 2026-07-31T15:00:00.000Z");
     expect(stored[0]!.hints).toEqual(["launch"]);
     expect(stored[0]!.verbatim).toBe(true);
+  });
+
+  it("archives a capability-fetched image without persisting the transient capability", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-media-capability-"));
+    dirs.push(dir);
+    const archiveDir = join(dir, "archive");
+    const transientUrl = "https://phylax.test/artifacts/tenant/photo.png?expires=1999999999999&signature=transient-secret";
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request) => {
+      expect(String(url)).toBe(transientUrl);
+      return new Response(Buffer.from("capability image bytes"), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }));
+    const settings = {
+      get: (key: string) =>
+        ({
+          artifact_archive_provider: "local",
+          artifact_archive_local_dir: archiveDir,
+        })[key] ?? null,
+    } as unknown as Settings;
+    const stored: StoreInput[] = [];
+    const engine = {
+      async describeImage() {
+        return "A handwritten launch checklist with three checked items.";
+      },
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-07-31.md#^e-capability",
+          evidenceUrl: "https://github.test/log#L8",
+          pagesTouched: ["Projects/Launch.md"],
+          pageUrls: ["https://github.test/launch"],
+          commitSha: "d".repeat(40),
+          githubUrls: ["https://github.test/commit/" + "d".repeat(40)],
+          filing: "filed" as const,
+        };
+      },
+    } as unknown as BrainEngine;
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings);
+
+    const job = queue.enqueue("media_ingest", {
+      mediaType: "image",
+      artifactUrl: transientUrl,
+      filename: "photo.png",
+      sourceHint: "WhatsApp media",
+      contentHint: "Planning board after the meeting",
+    });
+    let done = store.get(job.id);
+    for (let i = 0; i < 50 && done?.status !== "done"; i += 1) {
+      await sleep(10);
+      done = store.get(job.id);
+    }
+
+    expect(done?.status).toBe("done");
+    expect(JSON.stringify(done?.result)).not.toContain(transientUrl);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.content).not.toContain(transientUrl);
+    expect(done?.result).toMatchObject({
+      digest: {
+        evidenceUrl: "https://github.test/log#L8",
+        pageUrls: ["https://github.test/launch"],
+        filing: "filed",
+      },
+    });
+    const archivedFiles = await readdir(archiveDir, { recursive: true });
+    const metadataFiles = archivedFiles.filter((file) => String(file).endsWith(".metadata.json"));
+    const metadata = await Promise.all(metadataFiles.map((file) => readFile(join(archiveDir, String(file)), "utf8")));
+    expect(metadata.join("\n")).not.toContain(transientUrl);
+    await queue.close();
+    store.close();
+  });
+
+  it("fails loudly before filing when production Drive custody is unavailable", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-media-drive-required-"));
+    dirs.push(dir);
+    const settings = {
+      get: (key: string) => key === "artifact_archive_provider" ? "drive" : null,
+    } as unknown as Settings;
+    const engine = { store: vi.fn(), describeImage: vi.fn() } as unknown as BrainEngine;
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings);
+
+    const job = queue.enqueue("media_ingest", {
+      mediaType: "image",
+      bytesRef: `data:image/png;base64,${Buffer.from("unarchived image").toString("base64")}`,
+      filename: "must-go-to-drive.png",
+    });
+    let failed = store.get(job.id);
+    for (let i = 0; i < 50 && failed?.status !== "error"; i += 1) {
+      await sleep(10);
+      failed = store.get(job.id);
+    }
+
+    expect(failed).toMatchObject({
+      status: "error",
+      result: null,
+      error: "artifact archive provider is drive, but Google Drive is not connected",
+    });
+    expect((engine.store as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    expect((engine.describeImage as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    await queue.close();
+    store.close();
   });
 
   it("extracts embedded text from a PDF ingest job and records digest receipts", async () => {

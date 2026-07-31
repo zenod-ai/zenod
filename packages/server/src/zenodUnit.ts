@@ -80,13 +80,19 @@ export class ZenodRuntimePool {
       credentialVault: new ChassisCredentialVault(tenantStorage, {
         legacyMasterKey: this.env.ZENOD_CREDENTIAL_MASTER_KEY,
       }),
-      settingFallbacks: sharedGithubSettingFallbacks(this.sharedGithubApp),
+      settingFallbacks: {
+        ...sharedGithubSettingFallbacks(this.sharedGithubApp),
+      },
     });
-    runtime.settings.set("artifact_archive_provider", "local");
-    runtime.settings.set(
-      "artifact_archive_local_dir",
-      tenantStorage.dir("media"),
-    );
+    if (runtime.settings.get("artifact_archive_provider") === null) {
+      runtime.settings.set(
+        "artifact_archive_provider",
+        this.env.NODE_ENV === "production" ? "drive" : "local",
+      );
+    }
+    if (runtime.settings.get("artifact_archive_local_dir") === null) {
+      runtime.settings.set("artifact_archive_local_dir", tenantStorage.dir("media"));
+    }
     this.runtimes.set(tenantId, runtime);
     return runtime;
   }
