@@ -666,6 +666,7 @@ describe("drive tools + API", () => {
     runtime.settings.set("google_service_account_json", SA_JSON);
     runtime.settings.set("google_oauth_client_id", "client-id");
     runtime.settings.set("google_oauth_client_secret", "client-secret");
+    runtime.settings.set("artifact_archive_provider", "local");
     runtime.settings.setAdminPassword("hunter2hunter2");
     const app = createApp(runtime);
     const login = await app.request("/api/auth/login", {
@@ -688,6 +689,7 @@ describe("drive tools + API", () => {
     expect(callback.status).toBe(302);
     expect(runtime.settings.getRaw("google_oauth_refresh_token")).toBe("refresh-123");
     expect(runtime.settings.getRaw("google_oauth_email")).toBe("jordi@example.com");
+    expect(runtime.settings.get("artifact_archive_provider")).toBe("drive");
 
     const status = await app.request("/api/drive/status", { headers: { cookie } });
     const body = await status.json();

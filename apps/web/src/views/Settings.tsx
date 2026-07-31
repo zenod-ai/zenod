@@ -36,6 +36,7 @@ import { VaultTab } from "@/views/settings/VaultTab"
 import { ChatTab } from "@/views/ChatTab"
 import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
 import { HeraldLoopPanels } from "@/components/herald-loop-panels"
+import { GoogleDriveConnect } from "@/components/google-drive-connect"
 
 const SECTION_ICONS = {
   connect: PlugZapIcon,
@@ -219,7 +220,10 @@ export function Settings({
           })}
         </TabsList>
         <TabsContent value="connect" className="mt-4">
-          <DashboardOverview overview={overview} />
+          <div className="flex flex-col gap-6">
+            <DashboardOverview overview={overview} />
+            <GoogleDriveConnect />
+          </div>
         </TabsContent>
         <TabsContent value="vault" className="mt-4">
           <VaultTab />
