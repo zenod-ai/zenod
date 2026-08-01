@@ -8,6 +8,16 @@ import type { ChatToolEvent } from "./llm/types.js";
 export type Surface = "cli" | "mcp" | "whatsapp" | "telegram" | "web" | "drive" | "selftest";
 export type TaskingSurface = "whatsapp" | "telegram" | "web" | "mcp" | "selftest";
 
+export type MemoryContentType =
+  | "text"
+  | "voice_note"
+  | "audio"
+  | "image"
+  | "screenshot"
+  | "pdf"
+  | "document"
+  | "link";
+
 export interface StoreInput {
   /** The memory to store: a message, a fact, a capture. */
   content: string;
@@ -17,6 +27,12 @@ export interface StoreInput {
   hints?: string[];
   /** Force verbatim evidence recording (also auto-detected for quoted speech). */
   verbatim?: boolean;
+  /** Structural kind of the captured entry, independent of its subject matter. */
+  contentType?: MemoryContentType;
+  /** Original source timestamp when the transport knows it. */
+  capturedAt?: string;
+  /** Stable source/provider identifier, such as a channel message id. */
+  sourceId?: string;
   /** Files to attach; copied into _attachments/<area>/. */
   attachments?: AttachmentInput[];
 }
@@ -246,6 +262,29 @@ export interface Hit {
   githubUrl: string;
 }
 
+export interface MemoryEntry {
+  evidenceRef: string;
+  path: string;
+  anchor: string;
+  title: string;
+  content: string;
+  source: Surface;
+  verbatim: boolean;
+  contentType?: MemoryContentType;
+  capturedAt: string;
+  sourceId?: string;
+  githubUrl: string;
+}
+
+export interface MemoryEntryQuery {
+  source?: Surface;
+  contentType?: MemoryContentType;
+  capturedAfter?: string;
+  capturedBefore?: string;
+  order?: "newest" | "oldest";
+  limit?: number;
+}
+
 export interface Note {
   path: string;
   frontmatter: Record<string, unknown>;
@@ -373,6 +412,10 @@ export interface BrainEngine {
   digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult>;
   /** Deterministic two-pass search. No LLM. */
   search(query: string): Promise<Hit[]>;
+  /** Deterministic retrieval of immutable memory entries by structural metadata. */
+  searchEntries(query?: MemoryEntryQuery): Promise<MemoryEntry[]>;
+  /** Deterministic exact evidence-entry fetch. */
+  getEntry(evidenceRef: string): Promise<MemoryEntry>;
   /** Deterministic note fetch. No LLM. */
   get(path: string): Promise<Note>;
   /** Deterministic vault validation. No LLM. */

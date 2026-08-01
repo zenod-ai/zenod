@@ -62,7 +62,6 @@ describe("Zenod chassis unit", () => {
       "ask_brain",
       "get_ingest_result",
       "get_memory",
-      "get_recent_conversation_transcript",
       "get_task_result",
       "list_drive_files",
       "read_llm_timeline",
@@ -671,6 +670,7 @@ describe("Zenod chassis unit", () => {
       const beta = await connect(betaScoped);
       const primary = await connect("alpha-primary-token");
       const expected = [...MEMORY_CHANNEL_MCP_TOOLS].sort();
+      const primaryTools = (await primary.listTools()).tools;
 
       expect((await alpha.listTools()).tools.map((tool) => tool.name).sort()).toEqual(
         expected,
@@ -678,13 +678,27 @@ describe("Zenod chassis unit", () => {
       expect((await beta.listTools()).tools.map((tool) => tool.name).sort()).toEqual(
         expected,
       );
-      expect((await primary.listTools()).tools.map((tool) => tool.name)).toEqual(
+      expect(primaryTools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining([
           "install_operating_directive",
           "task_brain",
           ...MEMORY_CHANNEL_MCP_TOOLS,
         ]),
       );
+      expect(primaryTools.map((tool) => tool.name)).not.toContain(
+        "get_recent_conversation_transcript",
+      );
+      expect(primaryTools.find((tool) => tool.name === "search_memory")?.inputSchema)
+        .toMatchObject({
+          properties: {
+            source: {},
+            contentType: {},
+            capturedAfter: {},
+            capturedBefore: {},
+            order: {},
+            limit: {},
+          },
+        });
 
       const allowed = await alpha.callTool({
         name: "get_task_result",

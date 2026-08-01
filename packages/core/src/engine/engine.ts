@@ -12,6 +12,8 @@ import type {
   ExternalTaskingTools,
   Hit,
   LintReport,
+  MemoryEntry,
+  MemoryEntryQuery,
   Note,
   Reply,
   StateStore,
@@ -37,7 +39,7 @@ import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import type { VaultRepo } from "../git/vaultRepo.js";
 import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
-import { appendEvidence, todayString } from "./evidence.js";
+import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { sanitizeGroundedAnswer } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
@@ -1200,7 +1202,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const verbatim = input.verbatim ?? /verbatim|exact words/i.test(input.content);
 
       // 1-2. Normalize + record evidence (append-only).
-      const evidence = await appendEvidence(vaultPath, input.content, input.source, verbatim, now());
+      const evidenceMetadata = {
+        ...(input.contentType ? { contentType: input.contentType } : {}),
+        ...(input.capturedAt ? { capturedAt: input.capturedAt } : {}),
+        ...(input.sourceId ? { sourceId: input.sourceId } : {}),
+      };
+      const evidence = await appendEvidence(vaultPath, input.content, input.source, verbatim, now(), evidenceMetadata);
       const citation = `[[${evidence.date}#^${evidence.anchor}]]`;
       const evidenceRef = `${evidence.logPath}#^${evidence.anchor}`;
 
@@ -1291,7 +1298,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           };
         } catch (err) {
           await repo.discardChanges();
-          const retried = await appendEvidence(vaultPath, input.content, input.source, verbatim, now());
+          const retried = await appendEvidence(vaultPath, input.content, input.source, verbatim, now(), evidenceMetadata);
           const retriedRef = `${retried.logPath}#^${retried.anchor}`;
           const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
           const stubPath = await writeInboxStub(input.content, question, retriedRef);
@@ -1391,7 +1398,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       } catch (err) {
         // Fallback: revert everything, re-record evidence, land as an Inbox question.
         await repo.discardChanges();
-        const retried = await appendEvidence(vaultPath, input.content, input.source, verbatim, now());
+        const retried = await appendEvidence(vaultPath, input.content, input.source, verbatim, now(), evidenceMetadata);
         const retriedRef = `${retried.logPath}#^${retried.anchor}`;
         const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
         const stubPath = await writeInboxStub(input.content, question, retriedRef);
@@ -1836,6 +1843,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
       assertVault(repo);
       await syncForRead();
       return searchVault(vaultPath, query, location);
+    },
+    searchEntries: async (query: MemoryEntryQuery = {}): Promise<MemoryEntry[]> => {
+      assertVault(repo);
+      await syncForRead();
+      return searchEvidenceEntries(vaultPath, query, location);
+    },
+    getEntry: async (evidenceRef: string): Promise<MemoryEntry> => {
+      assertVault(repo);
+      await syncForRead();
+      return getEvidenceEntry(vaultPath, evidenceRef, location);
     },
     get: async (path: string): Promise<Note> => {
       assertVault(repo);

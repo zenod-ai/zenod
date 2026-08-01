@@ -65,7 +65,10 @@ describe("PhylaxChannelsOrgan", () => {
           tool: "store_memory",
           argumentMappings: {
             content: { source: "transcript" as const },
-            source: { source: "constant" as const, value: "whatsapp" },
+            source: { source: "channel" as const },
+            contentType: { source: "constant" as const, value: "voice_note" },
+            capturedAt: { source: "senderTimestamp" as const },
+            sourceId: { source: "providerMessageId" as const },
           },
         },
         text: {
@@ -91,10 +94,13 @@ describe("PhylaxChannelsOrgan", () => {
           inputSchema: {
             type: "object",
             additionalProperties: false,
-            required: ["content", "source", "idempotencyKey"],
+            required: ["content", "source", "contentType", "capturedAt", "sourceId", "idempotencyKey"],
             properties: {
               content: { type: "string", minLength: 1 },
               source: { const: "whatsapp" },
+              contentType: { const: "voice_note" },
+              capturedAt: { type: "string" },
+              sourceId: { type: "string" },
               idempotencyKey: { type: "string", minLength: 1 },
             },
           },
@@ -146,6 +152,7 @@ describe("PhylaxChannelsOrgan", () => {
       sender: "34611111111",
       chatId: "chat-alpha",
       messageId: "provider-voice-1",
+      senderTimestamp: "2026-08-01T10:00:00.000Z",
       transcription: { text_transcript: "Remember the launch checklist." },
     });
 
@@ -154,6 +161,9 @@ describe("PhylaxChannelsOrgan", () => {
       arguments: {
         content: "Remember the launch checklist.",
         source: "whatsapp",
+        contentType: "voice_note",
+        capturedAt: "2026-08-01T10:00:00.000Z",
+        sourceId: "provider-voice-1",
         idempotencyKey: "alpha:whatsapp:provider-voice-1",
       },
     });

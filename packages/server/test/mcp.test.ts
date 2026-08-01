@@ -49,6 +49,25 @@ const fakeEngine: BrainEngine = {
   async search(query) {
     return [{ path: "Areas/Insurance.md", snippet: `about ${query}`, score: 9, githubUrl: "" }];
   },
+  async searchEntries() {
+    return [];
+  },
+  async getEntry(evidenceRef) {
+    const marker = evidenceRef.lastIndexOf("#^");
+    return {
+      evidenceRef,
+      path: evidenceRef.slice(0, marker),
+      anchor: evidenceRef.slice(marker + 2),
+      title: "Exact entry",
+      content: "Exact transcript only",
+      source: "whatsapp",
+      verbatim: true,
+      contentType: "voice_note",
+      capturedAt: "2026-08-01T10:00:00.000Z",
+      sourceId: "wamid.exact",
+      githubUrl: "https://github.com/o/r/blob/main/Log/2026-08-01.md",
+    };
+  },
   async get(path) {
     return { path, frontmatter: { title: "Insurance" }, body: "# Insurance", githubUrl: "" };
   },
@@ -505,6 +524,53 @@ describe("MCP endpoint", () => {
     expect(unsure).not.toHaveProperty("question");
 
     await client.close();
+  });
+
+  it("retrieves newest stored entries through generic structural search and exact get_memory", async () => {
+    const client = await connect();
+    const originalStore = fakeEngine.store;
+    let sequence = 0;
+    fakeEngine.store = async (input) => {
+      sequence += 1;
+      return {
+        evidenceRef: `Log/2026-08-01.md#^e-00000${sequence}`,
+        evidenceUrl: `https://github.com/o/r/blob/main/Log/2026-08-01.md#entry-${sequence}`,
+        pagesTouched: ["Areas/Test.md"],
+        commitSha: String(sequence).repeat(40),
+        githubUrls: [],
+        filing: "filed",
+      };
+    };
+    try {
+      for (const sourceId of ["wamid.one", "wamid.two", "wamid.three"]) {
+        await runAsyncTool(client, "store_memory", {
+          content: `Transcript ${sourceId}`,
+          hints: ["WhatsApp voice note"],
+          verbatim: true,
+          idempotencyKey: `tenant-test:whatsapp:${sourceId}`,
+        });
+      }
+
+      const result = await client.callTool({
+        name: "search_memory",
+        arguments: { source: "whatsapp", contentType: "voice_note", order: "newest", limit: 2 },
+      });
+      const entries = (result.structuredContent as { entries: Array<Record<string, unknown>> }).entries;
+      expect(entries.map((entry) => entry.sourceId)).toEqual(["wamid.three", "wamid.two"]);
+      expect(entries.every((entry) => entry.source === "whatsapp" && entry.contentType === "voice_note")).toBe(true);
+
+      const exact = await client.callTool({ name: "get_memory", arguments: { path: "Log/2026-08-01.md#^e-000003" } });
+      expect(exact.structuredContent).toMatchObject({
+        entry: {
+          evidenceRef: "Log/2026-08-01.md#^e-000003",
+          content: "Exact transcript only",
+          sourceId: "wamid.exact",
+        },
+      });
+    } finally {
+      fakeEngine.store = originalStore;
+      await client.close();
+    }
   });
 
   it("store_memory replays the original job and receipt for an idempotency key", async () => {

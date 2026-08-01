@@ -1364,8 +1364,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       as: "search_memory",
       mcp: "search_memory",
       arg: "query",
+      inputSchema: "zenod.search_memory",
       description:
-        "Fast keyword search over the user's memory vault — returns ranked note paths with snippets. Use to locate memories quickly; then get_memory to read one in full.",
+        "Deterministic memory retrieval. Use query for semantic note search; use source, contentType, time bounds, order, and limit for typed entry lists such as the newest voice notes. Results include exact evidence refs; pass one to get_memory to read only that entry.",
     },
     {
       as: "get_memory",
@@ -1379,14 +1380,6 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       arg: "content",
       description:
         "File a new memory into the user's vault through Zenod's librarian (records evidence + files the meaning with citations). Use when the user wants something remembered. ASYNC — returns 'queued'; the filing finishes in the background. Only say it's stored once that's confirmed.",
-    },
-    {
-      as: "get_recent_conversation_transcript",
-      mcp: "get_recent_conversation_transcript",
-      arg: "contactId",
-      inputSchema: "zenod.get_recent_conversation_transcript",
-      description:
-        "Owner: Zenod. Deterministically read recent WhatsApp/phone conversation transcript from the channel audit store. Use messageId when the user names a specific WhatsApp message or voice note; that returns the matching row and linked replies/receipts. Use broader window/contact filters for 'last two hours phone transcript' or recent voice-note review; returns timestamps, inbound/outbound text, message ids, status, and voice-note transcript text when available.",
     },
   ];
   // Archus's "top tools": named delegation handles that ALL route to Archus's chat
@@ -2927,7 +2920,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
               };
             }
           },
-          (input) => runtime.whatsappStore.recentTranscript(input),
+          agent.name === "zenod" ? undefined : (input) => runtime.whatsappStore.recentTranscript(input),
           (query) => runtime.usageStore.timeline(query),
           (reference) => runtime.fetchExecutionDeliverable(reference),
         )
@@ -2939,6 +2932,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           {
             enqueue: (kind, input, idempotencyKey) => runtime.taskJobQueue.enqueue(kind, input, idempotencyKey),
             get: (id) => runtime.taskJobQueue.get(id),
+            recent: (limit) => runtime.taskJobQueue.recent(limit),
           },
           (input) => editGithubIssue(settings, input),
           (input) => createGithubIssue(settings, input),

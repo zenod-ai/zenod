@@ -46,6 +46,10 @@ describe("PhylaxTenantSettingsStore", () => {
             content: { source: "transcript" },
             verbatim: { source: "constant", value: true },
             hints: { source: "constant", value: ["WhatsApp voice note"] },
+            source: { source: "channel" },
+            contentType: { source: "constant", value: "voice_note" },
+            capturedAt: { source: "senderTimestamp" },
+            sourceId: { source: "providerMessageId" },
           },
         },
         text: {

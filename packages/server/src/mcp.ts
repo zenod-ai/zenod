@@ -1,6 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ContextRefError, VERSION, type BrainEngine, type CleanSlateResult, type DriveSourceTools, type StoreResult, type TaskingReply, type WorkResult } from "zenod";
+import {
+  ContextRefError,
+  VERSION,
+  type BrainEngine,
+  type CleanSlateResult,
+  type DriveSourceTools,
+  type MemoryContentType,
+  type MemoryEntry,
+  type StoreResult,
+  type Surface,
+  type TaskingReply,
+  type WorkResult,
+} from "zenod";
 import type { CreateGithubIssueInput, CreateGithubIssueResult, EditGithubIssueInput, EditGithubIssueResult } from "zenod";
 import type { IngestJob } from "./ingestStore.js";
 import {
@@ -58,6 +70,7 @@ import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./to
 export interface TaskJobs {
   enqueue(kind: TaskJobKind, input: TaskJobInput, idempotencyKey?: string): TaskJob;
   get(id: string): TaskJob | null;
+  recent?(limit?: number): TaskJob[];
 }
 
 export interface MediaIngestJobs {
@@ -466,6 +479,110 @@ function formatMediaIngestResult(result: MediaIngestReceipt): string {
   ].join("\n");
 }
 
+function captureIdentity(idempotencyKey: string | null): { surface?: Surface; sourceId?: string } {
+  if (!idempotencyKey) return {};
+  const first = idempotencyKey.indexOf(":");
+  const second = first < 0 ? -1 : idempotencyKey.indexOf(":", first + 1);
+  if (first < 0 || second < 0) return {};
+  const channel = idempotencyKey.slice(first + 1, second);
+  if (channel !== "whatsapp" && channel !== "telegram") return {};
+  const sourceId = idempotencyKey.slice(second + 1).trim();
+  return { surface: channel, ...(sourceId ? { sourceId } : {}) };
+}
+
+function resultEvidenceRef(job: TaskJob): string | null {
+  if (!job.result || typeof job.result !== "object") return null;
+  const result = job.result as unknown as Record<string, unknown>;
+  if (typeof result.evidenceRef === "string") return result.evidenceRef;
+  const digest = result.digest;
+  if (!digest || typeof digest !== "object") return null;
+  const evidenceRef = (digest as Record<string, unknown>).evidenceRef;
+  return typeof evidenceRef === "string" ? evidenceRef : null;
+}
+
+function resultEvidenceUrl(job: TaskJob): string {
+  if (!job.result || typeof job.result !== "object") return "";
+  const result = job.result as unknown as Record<string, unknown>;
+  if (typeof result.evidenceUrl === "string") return result.evidenceUrl;
+  const digest = result.digest;
+  if (!digest || typeof digest !== "object") return "";
+  const evidenceUrl = (digest as Record<string, unknown>).evidenceUrl;
+  return typeof evidenceUrl === "string" ? evidenceUrl : "";
+}
+
+function sourceFromJob(job: TaskJob): Surface {
+  if (job.input.source) return job.input.source;
+  const identity = captureIdentity(job.idempotencyKey);
+  if (identity.surface) return identity.surface;
+  const hint = job.input.sourceHint?.trim().toLowerCase() ?? "";
+  if (hint.startsWith("whatsapp")) return "whatsapp";
+  if (hint.startsWith("telegram")) return "telegram";
+  if (hint.startsWith("drive")) return "drive";
+  return "mcp";
+}
+
+function contentTypeFromJob(job: TaskJob, source: Surface): MemoryContentType {
+  if (job.input.contentType) return job.input.contentType;
+  if (job.kind === "media_ingest" && job.input.mediaType) return job.input.mediaType;
+  if (job.kind === "store" && (source === "whatsapp" || source === "telegram")) return "voice_note";
+  return "text";
+}
+
+function titleFromContent(content: string): string {
+  const first = content.split("\n")[0]?.trim() ?? "";
+  return first.length > 100 ? `${first.slice(0, 97)}...` : first || "Memory entry";
+}
+
+function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
+  if (job.status !== "done" || (job.kind !== "store" && job.kind !== "media_ingest")) return null;
+  const evidenceRef = resultEvidenceRef(job);
+  if (!evidenceRef) return null;
+  const marker = evidenceRef.lastIndexOf("#^");
+  if (marker < 0) return null;
+  const source = sourceFromJob(job);
+  const identity = captureIdentity(job.idempotencyKey);
+  const content = job.input.content ?? base?.content ?? job.input.contentHint ?? "";
+  return {
+    evidenceRef,
+    path: evidenceRef.slice(0, marker),
+    anchor: evidenceRef.slice(marker + 2),
+    title: base?.title ?? titleFromContent(content),
+    content,
+    source,
+    verbatim: job.input.verbatim ?? base?.verbatim ?? false,
+    contentType: contentTypeFromJob(job, source),
+    capturedAt: job.input.capturedAt ?? job.input.senderTimestamp ?? new Date(job.createdAt).toISOString(),
+    sourceId: job.input.sourceId ?? identity.sourceId,
+    githubUrl: resultEvidenceUrl(job) || base?.githubUrl || "",
+  };
+}
+
+function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[]): MemoryEntry[] {
+  const byRef = new Map(entries.map((entry) => [entry.evidenceRef, entry]));
+  for (const job of jobs) {
+    const evidenceRef = resultEvidenceRef(job);
+    const derived = entryFromJob(job, evidenceRef ? byRef.get(evidenceRef) : undefined);
+    if (derived) byRef.set(derived.evidenceRef, derived);
+  }
+  return [...byRef.values()];
+}
+
+function memoryEntrySummaries(entries: MemoryEntry[]) {
+  return entries.map((entry) => ({
+    evidenceRef: entry.evidenceRef,
+    path: entry.path,
+    anchor: entry.anchor,
+    title: entry.title,
+    source: entry.source,
+    contentType: entry.contentType ?? null,
+    capturedAt: entry.capturedAt,
+    sourceId: entry.sourceId ?? null,
+    chars: entry.content.length,
+    snippet: entry.content.slice(0, 280),
+    githubUrl: entry.githubUrl,
+  }));
+}
+
 /** Human-facing text for a finished run_task job — mirrors the old reply. */
 function formatWorkResult(result: WorkResult): string {
   const lines =
@@ -869,22 +986,47 @@ export function buildMcpServer(
     {
       title: "Search memory",
       description:
-        "Deterministic search over the user's memory vault. Returns ranked note paths with snippets, scores, and GitHub source URLs. Fast (no LLM) — call this first to locate memories; then use get_memory to read one. For fuzzy or synthesis questions, prefer ask_brain.",
+        "Deterministic search over the user's memory vault. Text queries return ranked notes. Structural filters return immutable memory entries with exact evidence refs, source, content type, capture time, source id, and snippets; use source/contentType/order/limit for requests such as newest captures from any integration. Then pass a note path or exact evidenceRef to get_memory. Fast and model-free.",
       inputSchema: SEARCH_MEMORY_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ query }) => {
+    async ({ query, source, contentType, capturedAfter, capturedBefore, order, limit }) => {
       const engine = await getEngine();
-      const hits = await engine.search(query);
-      const output = { hits };
+      const hits = query ? await engine.search(query) : [];
+      const structuralQuery = Boolean(source || contentType || capturedAfter || capturedBefore || order === "newest" || order === "oldest" || !query);
+      let entries: ReturnType<typeof memoryEntrySummaries> = [];
+      if (structuralQuery) {
+        const vaultEntries = await engine.searchEntries({ limit: 500, order: "newest" });
+        const merged = mergeMemoryEntries(vaultEntries, taskJobs?.recent?.(500) ?? []);
+        const requestedOrder = order === "oldest" ? "oldest" : "newest";
+        const selected = merged
+          .filter((entry) => !source || entry.source === source)
+          .filter((entry) => !contentType || entry.contentType === contentType)
+          .filter((entry) => !capturedAfter || entry.capturedAt >= capturedAfter)
+          .filter((entry) => !capturedBefore || entry.capturedAt <= capturedBefore)
+          .sort((left, right) => {
+            const comparison = left.capturedAt.localeCompare(right.capturedAt) || left.evidenceRef.localeCompare(right.evidenceRef);
+            return requestedOrder === "newest" ? -comparison : comparison;
+          })
+          .slice(0, limit ?? 20);
+        entries = memoryEntrySummaries(selected);
+      }
+      const output = { hits, entries };
+      const noteText = hits.length === 0
+        ? query ? `No note paths match '${query}'.` : ""
+        : hits.map((hit) => `${hit.path} (score ${hit.score}) — ${hit.snippet}${hit.githubUrl ? `\n  ${hit.githubUrl}` : ""}`).join("\n");
+      const entryText = entries.length === 0
+        ? structuralQuery ? "No memory entries match the structural filters." : ""
+        : entries.map((entry) => [
+            `${entry.capturedAt} · ${entry.source}/${entry.contentType ?? "unknown"} · ${entry.evidenceRef}`,
+            entry.snippet,
+            entry.githubUrl,
+          ].filter(Boolean).join("\n  ")).join("\n");
       return {
         content: [
           {
             type: "text",
-            text:
-              hits.length === 0
-                ? `No memories match '${query}'.`
-                : hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}${h.githubUrl ? `\n  ${h.githubUrl}` : ""}`).join("\n"),
+            text: [noteText, entryText].filter(Boolean).join("\n\n"),
           },
         ],
         structuredContent: output,
@@ -897,12 +1039,19 @@ export function buildMcpServer(
     {
       title: "Get memory",
       description:
-        "Read one note from the memory vault by its vault-relative path (e.g. 'Areas/Insurance.md'). Returns frontmatter, full content, and the GitHub source URL. Paths come from search_memory results.",
+        "Read one memory by a vault-relative note path or an exact immutable evidenceRef returned by search_memory (for example Log/2026-08-01.md#^e-123abc). Evidence refs return only that entry, never neighboring entries from the same daily log.",
       inputSchema: GET_MEMORY_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ path }) => {
       const engine = await getEngine();
+      if (path.includes("#^")) {
+        const entry = await engine.getEntry(path);
+        return {
+          content: [{ type: "text", text: `${entry.evidenceRef}\nsource: ${entry.source}\ncontentType: ${entry.contentType ?? "unknown"}\ncapturedAt: ${entry.capturedAt}\n${entry.githubUrl ? `source URL: ${entry.githubUrl}\n` : ""}${entry.content}` }],
+          structuredContent: { entry },
+        };
+      }
       const note = await engine.get(path);
       return {
         content: [
@@ -925,11 +1074,15 @@ export function buildMcpServer(
       inputSchema: STORE_MEMORY_SHAPE,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ content, hints, verbatim, idempotencyKey }) => {
+    async ({ content, hints, verbatim, source, contentType, capturedAt, sourceId, idempotencyKey }) => {
       const input: TaskJobInput = {
         content,
         ...(hints ? { hints } : {}),
         ...(verbatim !== undefined ? { verbatim } : {}),
+        ...(source ? { source } : {}),
+        ...(contentType ? { contentType } : {}),
+        ...(capturedAt ? { capturedAt } : {}),
+        ...(sourceId ? { sourceId } : {}),
       };
       if (taskJobs) {
         const job = taskJobs.enqueue("store", input, idempotencyKey);
@@ -949,9 +1102,12 @@ export function buildMcpServer(
       const engine = await getEngine();
       const result = await engine.store({
         content,
-        source: "mcp",
+        source: source ?? "mcp",
         ...(hints ? { hints } : {}),
         ...(verbatim !== undefined ? { verbatim } : {}),
+        ...(contentType ? { contentType } : {}),
+        ...(capturedAt ? { capturedAt } : {}),
+        ...(sourceId ? { sourceId } : {}),
       });
       return { content: [{ type: "text", text: formatStoreResult(result) }], structuredContent: { ...result } };
     },

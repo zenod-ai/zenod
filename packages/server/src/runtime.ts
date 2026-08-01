@@ -80,6 +80,7 @@ import {
   EPAMINON_RUN_TASK_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
   RUN_ISSUE_SHAPE,
+  SEARCH_MEMORY_SHAPE,
   V4_FIND_ISSUE_SHAPE,
   V4_GET_ISSUE_SHAPE,
   V4_LIST_ISSUES_SHAPE,
@@ -129,6 +130,8 @@ function peerToolInputSchema(schemaKey?: string | Record<string, unknown>): ZodT
       return z.object(V4_LIST_ISSUES_SHAPE);
     case "zenod.get_recent_conversation_transcript":
       return z.object(GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE);
+    case "zenod.search_memory":
+      return z.object(SEARCH_MEMORY_SHAPE);
     case "epaminon.run_existing_issue":
       return z.object(RUN_ISSUE_SHAPE);
     case "epaminon.run_task":
