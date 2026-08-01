@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { StoreResult, TaskingReply, WorkResult } from "zenod";
+import type { MemoryContentType, StoreResult, Surface, TaskingReply, WorkResult } from "zenod";
 import { openZenodSqlite } from "./sqlite.js";
 
 /**
@@ -45,6 +45,14 @@ export interface TaskJobInput {
   hints?: string[];
   /** store: force verbatim evidence recording. */
   verbatim?: boolean;
+  /** store: structural origin supplied by the integration. */
+  source?: Surface;
+  /** store: structural content type supplied by the integration. */
+  contentType?: MemoryContentType;
+  /** store: original source timestamp. */
+  capturedAt?: string;
+  /** store: stable source/provider entry identifier. */
+  sourceId?: string;
   /** media_ingest: artifact class. */
   mediaType?: "audio" | "screenshot" | "image" | "pdf" | "document" | "link";
   /** media_ingest: fetchable raw artifact URL. */
@@ -104,6 +112,8 @@ export type TaskJobResult = TaskingReply | WorkResult | StoreResult | MediaInges
 export interface TaskJob {
   id: string;
   kind: TaskJobKind;
+  /** Durable caller identity for capture replay and legacy provenance recovery. */
+  idempotencyKey: string | null;
   input: TaskJobInput;
   status: TaskJobStatus;
   result: TaskJobResult | null;
@@ -117,6 +127,7 @@ export interface TaskJob {
 interface Row {
   id: string;
   kind: string;
+  idempotency_key: string | null;
   input_json: string;
   status: string;
   result_json: string | null;
@@ -130,6 +141,7 @@ function rowToJob(row: Row): TaskJob {
   return {
     id: row.id,
     kind: row.kind as TaskJobKind,
+    idempotencyKey: row.idempotency_key,
     input: JSON.parse(row.input_json || "{}") as TaskJobInput,
     status: row.status as TaskJobStatus,
     result: row.result_json ? (JSON.parse(row.result_json) as TaskJobResult) : null,

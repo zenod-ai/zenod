@@ -659,6 +659,9 @@ function valueFromBindingSource(
     artifactUrl?: string;
     mediaType?: PhylaxIngestMediaType;
     filename?: string;
+    channel: PhylaxPortedChannel;
+    providerMessageId?: string;
+    senderTimestamp?: string;
   },
 ): unknown {
   switch (source.source) {
@@ -668,6 +671,9 @@ function valueFromBindingSource(
     case "artifactUrl": return input.artifactUrl;
     case "mediaType": return input.mediaType;
     case "filename": return input.filename;
+    case "channel": return input.channel;
+    case "providerMessageId": return input.providerMessageId;
+    case "senderTimestamp": return input.senderTimestamp;
     case "constant": return source.value;
     case "message": return input.message;
     case "surface": return input.surface;
@@ -1247,6 +1253,9 @@ export class PhylaxChannelsOrgan {
       ...(handoff.artifact_ref ? { artifactUrl: handoff.artifact_ref } : {}),
       ...(handoff.artifact_file_name ? { filename: handoff.artifact_file_name } : {}),
       ...(ingestMediaType ? { mediaType: ingestMediaType } : {}),
+      channel: input.channel,
+      ...(input.messageId ? { providerMessageId: input.messageId } : {}),
+      senderTimestamp: input.senderTimestamp ?? new Date().toISOString(),
     };
     const selectedRoute = binding?.tool === "chat_with_ring"
       ? assistantRoute(route)

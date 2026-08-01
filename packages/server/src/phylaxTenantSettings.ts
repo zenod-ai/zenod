@@ -33,6 +33,9 @@ export type PhylaxBindingArgumentSource =
   | { source: "artifactUrl" }
   | { source: "mediaType" }
   | { source: "filename" }
+  | { source: "channel" }
+  | { source: "providerMessageId" }
+  | { source: "senderTimestamp" }
   | { source: "constant"; value: PhylaxBindingConstant }
   | { source: "message" }
   | { source: "surface" }
@@ -139,6 +142,10 @@ export function defaultPhylaxTurnBindings(): PhylaxTurnBindings {
         content: { source: "transcript" },
         verbatim: { source: "constant", value: true },
         hints: { source: "constant", value: ["WhatsApp voice note"] },
+        source: { source: "channel" },
+        contentType: { source: "constant", value: "voice_note" },
+        capturedAt: { source: "senderTimestamp" },
+        sourceId: { source: "providerMessageId" },
       },
     },
     text: legacyChatBinding(),
@@ -211,6 +218,9 @@ export const PHYLAX_BINDING_ARGUMENT_SOURCES = [
   "artifactUrl",
   "mediaType",
   "filename",
+  "channel",
+  "providerMessageId",
+  "senderTimestamp",
   "constant",
   "message",
   "surface",

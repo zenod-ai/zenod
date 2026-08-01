@@ -429,6 +429,10 @@ describe("Phylax customer unit mount", () => {
               content: { type: "string", minLength: 1 },
               verbatim: { const: true },
               hints: { type: "array", items: { type: "string" } },
+              source: { enum: ["whatsapp", "telegram"] },
+              contentType: { const: "voice_note" },
+              capturedAt: { type: "string", minLength: 1 },
+              sourceId: { type: "string", minLength: 1 },
               idempotencyKey: { type: "string", minLength: 1 },
             },
           },
@@ -539,6 +543,7 @@ describe("Phylax customer unit mount", () => {
         sender: "34611111111",
         chatId: "chat-alpha",
         messageId: "capture-voice-1",
+        senderTimestamp: "2026-08-01T14:00:00.000Z",
         transcription: { text_transcript: "Remember the launch sequence." },
       });
       expect(peerMocks.callPeerTool.mock.calls[1]?.[0]).toMatchObject({
@@ -550,6 +555,10 @@ describe("Phylax customer unit mount", () => {
         content: "Remember the launch sequence.",
         verbatim: true,
         hints: ["WhatsApp voice note"],
+        source: "whatsapp",
+        contentType: "voice_note",
+        capturedAt: "2026-08-01T14:00:00.000Z",
+        sourceId: "capture-voice-1",
         idempotencyKey: "tenant-alpha:whatsapp:capture-voice-1",
       });
       expect(peerMocks.callPeerTool.mock.calls[2]?.slice(1)).toEqual([

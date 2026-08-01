@@ -10,7 +10,19 @@ import { EVIDENCE_CONTEXT_REF_PATTERN } from "zenod";
  */
 
 export const SEARCH_MEMORY_SHAPE = {
-  query: z.string().min(1).describe("Search terms, e.g. 'travel insurance'"),
+  query: z.string().min(1).optional().describe("Optional semantic search terms, e.g. 'travel insurance'."),
+  source: z
+    .enum(["cli", "mcp", "whatsapp", "telegram", "web", "drive", "selftest"])
+    .optional()
+    .describe("Optional structural source filter."),
+  contentType: z
+    .enum(["text", "voice_note", "audio", "image", "screenshot", "pdf", "document", "link"])
+    .optional()
+    .describe("Optional structural content-type filter."),
+  capturedAfter: z.string().min(1).optional().describe("Optional inclusive ISO-8601 lower bound for the source capture time."),
+  capturedBefore: z.string().min(1).optional().describe("Optional inclusive ISO-8601 upper bound for the source capture time."),
+  order: z.enum(["newest", "oldest", "relevance"]).optional().describe("Ordering. Defaults to relevance for text queries and newest for structural entry queries."),
+  limit: z.number().int().min(1).max(100).optional().describe("Maximum results. Defaults to 20."),
 };
 
 export const GET_MEMORY_SHAPE = {
@@ -31,6 +43,16 @@ export const STORE_MEMORY_SHAPE = {
   content: z.string().min(1).describe("The memory to store, as the user expressed it"),
   hints: z.array(z.string()).optional().describe("Optional filing hints, e.g. 'belongs to the housing project'"),
   verbatim: z.boolean().optional().describe("Force verbatim evidence recording (exact words preserved)"),
+  source: z
+    .enum(["cli", "mcp", "whatsapp", "telegram", "web", "drive", "selftest"])
+    .optional()
+    .describe("Structural origin of the memory. Defaults to mcp when the caller does not know it."),
+  contentType: z
+    .enum(["text", "voice_note", "audio", "image", "screenshot", "pdf", "document", "link"])
+    .optional()
+    .describe("Structural content type, independent of the memory's subject."),
+  capturedAt: z.string().min(1).optional().describe("Original source timestamp in ISO-8601 form."),
+  sourceId: z.string().trim().min(1).max(512).optional().describe("Stable source/provider entry identifier."),
   idempotencyKey: z
     .string()
     .trim()

@@ -145,6 +145,7 @@ function registerZenodTools(
     {
       enqueue: (kind, input, idempotencyKey) => runtime.taskJobQueue.enqueue(kind, input, idempotencyKey),
       get: (id) => runtime.taskJobQueue.get(id),
+      recent: (limit) => runtime.taskJobQueue.recent(limit),
     },
     (input) => editGithubIssue(settings, input),
     (input) => createGithubIssue(settings, input),
@@ -152,7 +153,9 @@ function registerZenodTools(
     undefined,
     undefined,
     undefined,
-    (input) => runtime.whatsappStore.recentTranscript(input),
+    // Conversation transport audit belongs to the Console/Phylax operational
+    // surface. It is deliberately not part of Zenod's memory API.
+    undefined,
     undefined,
     undefined,
     (query) => runtime.usageStore.timeline(query),
@@ -224,7 +227,6 @@ export const ZENOD_READ_TOOLS = [
   "ask_brain",
   "get_ingest_result",
   "get_memory",
-  "get_recent_conversation_transcript",
   "get_task_result",
   "list_drive_files",
   "read_llm_timeline",

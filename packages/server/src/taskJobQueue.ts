@@ -102,9 +102,12 @@ export class TaskJobQueue {
         const engine = await this.getEngine();
         const result = await engine.store({
           content: job.input.content ?? "",
-          source: "mcp",
+          source: job.input.source ?? "mcp",
           ...(job.input.hints ? { hints: job.input.hints } : {}),
           ...(job.input.verbatim !== undefined ? { verbatim: job.input.verbatim } : {}),
+          ...(job.input.contentType ? { contentType: job.input.contentType } : {}),
+          ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
+          ...(job.input.sourceId ? { sourceId: job.input.sourceId } : {}),
         });
         completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else if (job.kind === "media_ingest") {
@@ -337,8 +340,10 @@ async function processMediaIngest(
   ].join("\n");
   const stored = await engine.store({
     content,
-    source: "mcp",
+    source: sourceFromHint(input.sourceHint),
     verbatim: true,
+    contentType: input.mediaType ?? extraction.kind,
+    ...(input.senderTimestamp ? { capturedAt: input.senderTimestamp } : {}),
     ...(input.mediaHints?.length ? { hints: input.mediaHints } : {}),
   });
 
@@ -365,6 +370,14 @@ async function processMediaIngest(
       ...(stored.filing ? { filing: stored.filing } : {}),
     },
   };
+}
+
+function sourceFromHint(sourceHint: string | undefined): "mcp" | "whatsapp" | "telegram" | "drive" {
+  const normalized = sourceHint?.trim().toLowerCase() ?? "";
+  if (normalized.startsWith("whatsapp")) return "whatsapp";
+  if (normalized.startsWith("telegram")) return "telegram";
+  if (normalized.startsWith("drive")) return "drive";
+  return "mcp";
 }
 
 async function transcribeMedia(
