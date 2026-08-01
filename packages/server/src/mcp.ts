@@ -1046,7 +1046,9 @@ export function buildMcpServer(
     async ({ path }) => {
       const engine = await getEngine();
       if (path.includes("#^")) {
-        const entry = await engine.getEntry(path);
+        const storedEntry = await engine.getEntry(path);
+        const entry = mergeMemoryEntries([storedEntry], taskJobs?.recent?.(500) ?? [])
+          .find((candidate) => candidate.evidenceRef === storedEntry.evidenceRef) ?? storedEntry;
         return {
           content: [{ type: "text", text: `${entry.evidenceRef}\nsource: ${entry.source}\ncontentType: ${entry.contentType ?? "unknown"}\ncapturedAt: ${entry.capturedAt}\n${entry.githubUrl ? `source URL: ${entry.githubUrl}\n` : ""}${entry.content}` }],
           structuredContent: { entry },

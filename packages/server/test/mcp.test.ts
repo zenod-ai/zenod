@@ -563,8 +563,10 @@ describe("MCP endpoint", () => {
       expect(exact.structuredContent).toMatchObject({
         entry: {
           evidenceRef: "Log/2026-08-01.md#^e-000003",
-          content: "Exact transcript only",
-          sourceId: "wamid.exact",
+          content: "Transcript wamid.three",
+          source: "whatsapp",
+          contentType: "voice_note",
+          sourceId: "wamid.three",
         },
       });
     } finally {
