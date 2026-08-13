@@ -28,6 +28,7 @@ import {
   type PaidTier,
   PRICING_OPTIONS,
   readCustomerSession,
+  readProductionReadiness,
   SIGN_IN_PATH,
   SignInRequiredError,
 } from "@/lib/customer"
@@ -135,6 +136,7 @@ interface CustomerJourney {
   loading: boolean
   busyTier: PaidTier | null
   error: string | null
+  paidSignupReady: boolean
   subscribe: (tier: PaidTier) => void
 }
 
@@ -147,6 +149,7 @@ function useCustomerJourney(): CustomerJourney {
   const [loading, setLoading] = React.useState(true)
   const [busyTier, setBusyTier] = React.useState<PaidTier | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [paidSignupReady, setPaidSignupReady] = React.useState(false)
 
   const beginCheckout = React.useCallback(async (tier: PaidTier) => {
     setBusyTier(tier)
@@ -189,6 +192,20 @@ function useCustomerJourney(): CustomerJourney {
     }
   }, [beginCheckout])
 
+  React.useEffect(() => {
+    let active = true
+    readProductionReadiness()
+      .then((readiness) => {
+        if (active) setPaidSignupReady(readiness.ready && readiness.publicPaidSignup)
+      })
+      .catch(() => {
+        if (active) setPaidSignupReady(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
   const subscribe = React.useCallback(
     (tier: PaidTier) => {
       if (loading || !session) {
@@ -201,7 +218,7 @@ function useCustomerJourney(): CustomerJourney {
     [beginCheckout, loading, session],
   )
 
-  return { session, loading, busyTier, error, subscribe }
+  return { session, loading, busyTier, error, paidSignupReady, subscribe }
 }
 
 function SiteHeader({ customer }: { customer: CustomerJourney }) {
@@ -297,10 +314,14 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
                 <Button
                   size="lg"
                   className="w-full rounded-none"
-                  disabled={customer.busyTier !== null}
+                  disabled={customer.busyTier !== null || !customer.paidSignupReady}
                   onClick={() => plan.tier && customer.subscribe(plan.tier)}
                 >
-                  {customer.busyTier === plan.tier ? "Opening checkout…" : `Choose ${plan.tier}`}
+                  {customer.busyTier === plan.tier
+                    ? "Opening checkout…"
+                    : customer.paidSignupReady
+                      ? `Choose ${plan.tier}`
+                      : "Hosted beta opening soon"}
                   <ArrowUpRightIcon data-icon="inline-end" />
                 </Button>
               )}
@@ -314,7 +335,9 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
         </p>
       ) : null}
       <p className="label-caps mt-5 text-muted-foreground/70">
-        Paid plans use Stripe checkout. GitHub is the only sign-in method.
+        {customer.paidSignupReady
+          ? "Paid plans use Stripe checkout. GitHub is the only sign-in method."
+          : "Hosted signups open only after billing, legal, support, and restore checks are green."}
       </p>
     </section>
   )
@@ -673,8 +696,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
 
           <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
             <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-rust" />
-            Honest reading: competitor checkmarks are shipped at scale; Zenod is pre-alpha running
-            code — we are user #1. Memory APIs = Mem0, supermemory, Zep, Letta. And two things we
+            Honest reading: competitor checkmarks are shipped at scale; Zenod is early-access running
+            code with a gated hosted beta. Memory APIs = Mem0, supermemory, Zep, Letta. And two things we
             deliberately concede: local-first purism, and benchmark recall at enterprise scale.
             That's the funded players' game. Ours is a library you own.
           </p>
@@ -730,8 +753,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
             <div>
               <p className="font-display text-2xl font-bold tracking-tight">ZENOD</p>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                A self-hosted AI memory agent that owns your personal library. Pre-alpha — we are
-                user #1, and the whole thing is open source.
+                A self-hosted AI memory agent that owns your personal library. Early access, with
+                hosted subscriptions opened only after the production-readiness gate passes.
               </p>
             </div>
             <nav className="label-caps flex flex-wrap gap-x-8 gap-y-3 text-muted-foreground">

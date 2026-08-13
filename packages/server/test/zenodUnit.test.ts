@@ -156,6 +156,10 @@ describe("Zenod chassis unit", () => {
     try {
       const health = await unit.app.request("/healthz");
       expect(health.status).toBe(200);
+      expect(health.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(health.headers.get("x-frame-options")).toBe("DENY");
+      expect(health.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+      expect(health.headers.get("content-security-policy")).toContain("https://avatars.githubusercontent.com");
       await expect(health.json()).resolves.toMatchObject({
         status: "ok",
         name: "zenod",
@@ -163,6 +167,7 @@ describe("Zenod chassis unit", () => {
 
       const publicHealth = await unit.app.request("/api/health");
       expect(publicHealth.status).toBe(200);
+      expect(publicHealth.headers.get("cache-control")).toBe("no-store");
       await expect(publicHealth.json()).resolves.toMatchObject({
         status: "ok",
         name: "zenod",

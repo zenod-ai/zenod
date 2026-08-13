@@ -26,6 +26,7 @@ function checkoutSession(overrides: Partial<Stripe.Checkout.Session> = {}): Stri
     payment_status: "paid",
     status: "complete",
     subscription: "sub_test_customer",
+    customer: "cus_test_customer",
     url: "https://checkout.stripe.test/session",
     ...overrides,
   } as Stripe.Checkout.Session;
@@ -58,6 +59,22 @@ describe("hosted customer layer", () => {
           retrieve: vi.fn(async () => session),
         },
       },
+      billingPortal: {
+        sessions: {
+          create: vi.fn(async () => ({
+            id: "bps_test_customer",
+            object: "billing_portal.session",
+            configuration: "bpc_test",
+            created: 1,
+            customer: "cus_test_customer",
+            livemode: false,
+            locale: null,
+            on_behalf_of: null,
+            return_url: `${DESTINATION}/app/account`,
+            url: "https://billing.stripe.test/session",
+          }) as Stripe.BillingPortal.Session),
+        },
+      },
       webhooks: {
         constructEvent: vi.fn(
           () =>
@@ -82,6 +99,7 @@ describe("hosted customer layer", () => {
       STRIPE_SECRET_KEY: "sk_test_not-used",
       STRIPE_WEBHOOK_SECRET: "whsec_test",
       STRIPE_MODE: "test",
+      ZENOD_ALLOW_TEST_CHECKOUT: "1",
       PRICE_MONTHLY: "price_monthly",
       PRICE_YEARLY: "price_yearly",
     };
@@ -216,6 +234,9 @@ describe("hosted customer layer", () => {
       mode: "subscription",
       client_reference_id: customerAccountId(42),
       line_items: [{ price: "price_monthly", quantity: 1 }],
+      billing_address_collection: "required",
+      tax_id_collection: { enabled: true },
+      consent_collection: { terms_of_service: "required" },
       success_url: `${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     });
 
@@ -286,6 +307,129 @@ describe("hosted customer layer", () => {
       }),
     ]);
     tenants.close();
+  });
+
+  it("opens the Stripe customer portal for the signed-in billing owner", async () => {
+    const app = locallyBoundCustomerApp();
+    const cookie = await signInCookie(app);
+    await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+
+    const portal = await app.request("/api/billing/portal", { method: "POST", headers: { cookie } });
+    expect(portal.status).toBe(200);
+    expect(await portal.json()).toEqual({ url: "https://billing.stripe.test/session" });
+    expect(stripe.billingPortal?.sessions.create).toHaveBeenCalledWith({
+      customer: "cus_test_customer",
+      return_url: `${DESTINATION}/app/account`,
+    });
+
+    const duplicate = await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toEqual({ error: "an active subscription already exists" });
+  });
+
+  it("tracks recurring billing state and suspends only terminal subscriptions", async () => {
+    const app = locallyBoundCustomerApp();
+    const cookie = await signInCookie(app);
+    await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+
+    const subscription = (status: Stripe.Subscription.Status, cancelAtPeriodEnd = false) => ({
+      id: "sub_test_customer",
+      object: "subscription",
+      customer: "cus_test_customer",
+      status,
+      cancel_at_period_end: cancelAtPeriodEnd,
+      current_period_end: 1_800_000_000,
+    }) as Stripe.Subscription;
+
+    vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+      type: "customer.subscription.updated",
+      livemode: false,
+      data: { object: subscription("past_due", true) },
+    } as Stripe.Event);
+    const pastDue = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid" },
+      body: "{}",
+    });
+    expect(await pastDue.json()).toEqual({ received: true, result: "past_due" });
+    expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("active");
+
+    const invoice = {
+      id: "in_test_customer",
+      object: "invoice",
+      customer: "cus_test_customer",
+      subscription: "sub_test_customer",
+    } as Stripe.Invoice;
+    vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+      type: "invoice.paid",
+      livemode: false,
+      data: { object: invoice },
+    } as Stripe.Event);
+    const paid = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid" },
+      body: "{}",
+    });
+    expect(await paid.json()).toEqual({ received: true, result: "active" });
+
+    vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+      type: "customer.subscription.deleted",
+      livemode: false,
+      data: { object: subscription("canceled") },
+    } as Stripe.Event);
+    const canceled = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid" },
+      body: "{}",
+    });
+    expect(await canceled.json()).toEqual({ received: true, result: "canceled" });
+    expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("suspended");
+
+    vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+      type: "invoice.payment_failed",
+      livemode: false,
+      data: { object: invoice },
+    } as Stripe.Event);
+    const terminalInvoice = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid" },
+      body: "{}",
+    });
+    expect(await terminalInvoice.json()).toEqual({ received: true, result: "canceled" });
+
+    vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+      type: "customer.subscription.updated",
+      livemode: false,
+      data: { object: subscription("active") },
+    } as Stripe.Event);
+    await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid" },
+      body: "{}",
+    });
+    expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("active");
   });
 
   it("leaves existing pilot tenant rows untouched", async () => {
@@ -369,7 +513,12 @@ describe("hosted customer layer", () => {
     expect(completed).toEqual([session.id]);
 
     const accountResponse = await app.request("/api/console/account", { headers: { cookie } });
-    expect(accountResponse.status).toBe(404);
+    expect(accountResponse.status).toBe(200);
+    expect(await accountResponse.json()).toMatchObject({
+      subscription_status: "active",
+      mcp_url: null,
+      token: null,
+    });
 
     const persisted = await readFile(join(dir, "customer-accounts.json"), "utf8");
     expect(persisted).not.toMatch(/dokploy|watchdog|claim_url|domain_host|console_password/i);

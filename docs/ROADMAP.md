@@ -1,20 +1,24 @@
 # Zenod Roadmap
 
-Last updated: 2026-06-11. This document is the development plan for the open-source, self-hosted Zenod — the only product this repository builds.
+Last updated: 2026-08-13. This document began as the development plan for self-hosted Zenod. The hosted
+multi-tenant product now ships from the same repository and image; historical sections below explain
+the path to that architecture.
 
-## The two-repo split (decided 2026-06-11)
+## Current product split (supersedes the 2026-06-11 two-repo plan)
 
-| | **This repo (`zenod-ai/zenod`)** | **Hosted repo (private, later)** |
+| | **Self-hosted mode** | **Hosted mode** |
 |---|---|---|
-| Product | Self-hosted Zenod: one container you run on your own VPS | Managed Zenod: we run it for you |
+| Product | One Zenod container you run on your own VPS | Shared tenant-isolated Zenod service operated at `cloud.zenod.dev` |
 | Users | People who can run a Docker container | Everyone else |
 | Anthropic key | Bring your own | Platform key, usage metered per user |
 | GitHub access | Your PAT, configured in the settings UI | GitHub App, OAuth flow |
 | Tenancy | Single user per container | Multi-tenant |
-| Billing | None, ever | Stripe |
-| License | AGPL-3.0 | Proprietary |
+| Billing | None | Stripe subscriptions with webhook-driven access and customer portal |
+| License | AGPL-3.0 | Same open-source runtime; hosted operation and customer configuration are managed |
 
-The hosted repo wraps this engine; this repo never depends on the hosted repo. Engine interfaces (`BrainEngine`, `StateStore`, `BrainRuntime`, per-user write queue) stay clean so the hosted shell can reuse them without forking — but single-user self-hosting is the design center here, not a degraded mode of a SaaS.
+Both modes share the engine and image. Hosted-only behavior is activated by explicit environment
+configuration and fails closed when live-billing or operational evidence is incomplete. Self-host mode
+remains a first-class path and does not require Stripe or hosted credentials.
 
 ## The core design problem — the storage substrate IS the product
 
@@ -75,9 +79,13 @@ Ingestion conditions (configurable):
 
 The "someone who isn't us installs it in 15 minutes" milestone: install docs, versioned Docker images on a registry, settings export/backup story, schema migrations, the compactor's first pass (nightly audit cron producing proposals, not auto-fixes).
 
-### M3 — Hosted Zenod (separate repo)
+### M3 — Hosted Zenod (shipped; production hardening active)
 
-Multi-tenant shell, GitHub App, Stripe, provisioning, platform-key metering. Built on the engine this repo ships; tracked elsewhere. Target design: [HOSTED-MULTI-TENANT-SPIKE.md](HOSTED-MULTI-TENANT-SPIKE.md).
+The shared multi-tenant runtime, GitHub App onboarding, Stripe checkout, tenant-row provisioning,
+authenticated MCP URLs, and usage metering now ship from this repository. Production hardening adds
+recurring subscription state, customer self-service billing, security headers, accurate tenant/data
+disclosures, dependency remediation, and a fail-closed public-signup gate backed by recent restore
+evidence. The earlier target design remains at [HOSTED-MULTI-TENANT-SPIKE.md](HOSTED-MULTI-TENANT-SPIKE.md).
 
 ### Deferred / v2+
 

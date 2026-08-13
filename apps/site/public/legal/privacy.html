@@ -3,79 +3,83 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="robots" content="noindex" />
-<title>Privacy Policy (DRAFT) — Zenod</title>
+<title>Privacy Policy — Zenod</title>
 <style>
   :root { color-scheme: light dark; }
   body { max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 6rem;
     font: 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   h1 { font-size: 1.6rem; margin-bottom: .25rem; }
   h2 { font-size: 1.15rem; margin-top: 2rem; }
-  .draft { border: 1px solid #d97706; background: #fffbeb; color: #7c2d12;
-    padding: .75rem 1rem; border-radius: .5rem; margin: 1rem 0 2rem; font-weight: 600; }
-  @media (prefers-color-scheme: dark) { .draft { background:#2a1c04; color:#fbbf24; border-color:#a16207; } }
   a { color: inherit; }
   footer { margin-top: 3rem; font-size: .85rem; opacity: .7; }
 </style>
 </head>
 <body>
 <h1>Privacy Policy</h1>
-<p class="draft">⚠ DRAFT — lawyer review pending. Not legally binding. Placeholder privacy text for
-the Zenod hosted launch (H-11). It will be replaced by counsel-reviewed text before any paid signup
-goes live.</p>
-
-<p>Last updated: <strong>DRAFT (2026-07-09)</strong>. This policy explains what data the hosted Zenod
-service, operated by Alpha9 ("we", "us"), collects and how we use it.</p>
+<p><strong>Effective 13 August 2026 · Version 2026-08-13.</strong> This policy explains how Alpha
+Analytics SL, trading as Zenod, processes personal data as the controller for hosted Zenod. Our
+business address is Aribau 168, 1º 1ª, 08036 Barcelona, Spain. Contact:
+<a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>.</p>
 
 <h2>1. The short version</h2>
-<p>Your project data — memory, backlog, agent outputs — lives in <strong>your own Git vault
-repository</strong>, not in a shared database we own. We hold the minimum needed to run your account:
-billing details (via Stripe), the credentials you connect, operational logs, and model-usage metering.</p>
+<p>Your knowledge vault lives in a Git repository you control. Hosted Zenod also processes the minimum
+account, tenant, credential, usage, and operational data needed to provide and secure the Service.</p>
 
 <h2>2. What we collect</h2>
 <ul>
   <li><strong>Account &amp; billing:</strong> email, and payment records held by our processor Stripe
   (we do not store card numbers).</li>
-  <li><strong>Connected-account credentials:</strong> OAuth tokens / app installations for the services
-  you connect (GitHub, X, Google Drive, etc.), stored per-tenant and encrypted, never written into your
-  vault repo.</li>
+  <li><strong>Connected-account credentials:</strong> scoped OAuth tokens or app installations for
+  services you connect, stored in encrypted tenant-scoped custody and never written into the vault.</li>
   <li><strong>Vault content:</strong> the notes, memory, transcripts, and extracted records your Zenod instance creates - stored in
   <em>your</em> repository. We access it only to operate your tenant.</li>
-  <li><strong>Usage metering:</strong> per-call model tokens and cost, kept in your tenant's local
-  ledger to power the credit meter and your usage dashboard.</li>
+  <li><strong>Usage metering:</strong> per-call model, token, operation, and cost records used for limits,
+  reliability, and the account dashboard.</li>
   <li><strong>Operational logs:</strong> limited technical logs for reliability and support.</li>
 </ul>
 
-<h2>3. How we use it</h2>
-<p>To provision and operate your Zenod instance, meter and bill usage, provide support, keep the Service
-secure, and comply with law. We do not sell your data. We do not use your vault content to train
-models.</p>
+<h2>3. Purposes and legal bases</h2>
+<p>We process account, tenant, vault, and usage data as necessary to perform the service contract;
+security and limited operational logs for our legitimate interests in preventing abuse and keeping the
+Service reliable; billing and tax records to comply with legal obligations; and optional integrations
+or marketing only with consent where consent is required. We do not sell personal data or use vault
+content to train our models.</p>
 
 <h2>4. Sub-processors and model providers</h2>
-<p>Model calls are routed to LLM providers (e.g. via OpenRouter/our metering gateway) to generate agent
-responses. Payments run through Stripe. Hosting runs on our infrastructure providers (e.g. Hetzner) via
-Dokploy. Each processes data only to deliver its part of the Service. A current sub-processor list is
-available on request and will be maintained here before launch.</p>
+<p>GitHub provides identity and repository access; Stripe processes checkout, subscriptions, tax data,
+and invoices; Hetzner hosts the service; and configured model providers, including providers reached
+through OpenRouter, process prompts needed to generate responses. Providers may process data outside
+the EEA under their published transfer safeguards. Ask us for the current sub-processor list.</p>
 
 <h2>5. Where data lives</h2>
-<p>Your tenant runs in an isolated single-tenant container; your vault repository lives on GitHub under
-the account you designate. Hosting region is documented at signup.</p>
+<p>The hosted service runs in the EU. Customer data is logically isolated by tenant inside the shared
+runtime and tenant-prefixed storage. Your vault repository lives in the GitHub account you designate.</p>
 
 <h2>6. Retention and deletion</h2>
-<p>We keep account and billing records as required for tax and accounting. On deletion we export your
-vault repository to you and destroy your container volume and stored credentials. Usage ledgers are
-destroyed with the tenant volume.</p>
+<p>We keep active account data while the Service is provided. Following a verified deletion request, we
+revoke credentials and remove tenant runtime data from active systems within 30 days, subject to backup
+rotation and legal holds. Billing and tax records are kept for legally required periods. Routine
+operational logs are normally kept for up to 30 days unless needed to investigate an incident.</p>
 
 <h2>7. Your rights</h2>
-<p>You can access, export, correct, or delete your data. Because your vault is a Git repository you
-control, most of your content is already directly portable. For everything else, contact us.</p>
+<p>Depending on applicable law, you may request access, correction, deletion, restriction, portability,
+or object to processing, and may withdraw consent without affecting earlier processing. Because your
+vault is a Git repository you control, most content is already portable. Email us to exercise a right.
+You may also complain to the Spanish Data Protection Agency (AEPD) or your local supervisory authority.</p>
 
-<h2>8. Contact</h2>
-<p>Data questions: <a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>.</p>
+<h2>8. Security, cookies, and children</h2>
+<p>We use encryption in transit, encrypted credential custody, tenant-scoped authorization, signed
+sessions, restricted tokens, and tested backups. No system is perfectly secure; report concerns to the
+contact below. Zenod uses essential sign-in and security cookies and does not use advertising cookies.
+The hosted Service is not directed to children under 18.</p>
+
+<h2>9. Contact and changes</h2>
+<p>Privacy requests: <a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>. We will post material policy
+changes here and update the effective date.</p>
 
 <footer>
   See also: <a href="/legal/terms.html">Terms of Service</a> ·
-  <a href="/legal/data-handling.html">Data Handling</a>. All DRAFT, pending legal review.
+  <a href="/legal/data-handling.html">Data Handling</a>.
 </footer>
 </body>
 </html>

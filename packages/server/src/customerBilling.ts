@@ -12,6 +12,14 @@ export interface CustomerStripeClient {
       retrieve(id: string): Promise<Stripe.Checkout.Session>;
     };
   };
+  billingPortal?: {
+    sessions: {
+      create(input: Stripe.BillingPortal.SessionCreateParams): Promise<Stripe.BillingPortal.Session>;
+    };
+  };
+  subscriptions?: {
+    retrieve(id: string): Promise<Stripe.Subscription>;
+  };
   webhooks: {
     constructEvent(payload: string | Buffer, signature: string, secret: string): Stripe.Event;
   };
@@ -28,6 +36,8 @@ export interface CustomerBillingConfig {
   domain: string;
   stripeMode: "test" | "live";
   stripeWebhookSecret: string;
+  portalConfigurationId?: string;
+  automaticTax: boolean;
   prices: Record<CheckoutTier, string | undefined>;
 }
 
@@ -47,6 +57,8 @@ export function loadCustomerBillingConfig(
     domain: (env.CUSTOMER_APP_URL || env.DOMAIN || product.defaultDomain).replace(/\/$/, ""),
     stripeMode,
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || "",
+    portalConfigurationId: env.STRIPE_PORTAL_CONFIGURATION_ID || undefined,
+    automaticTax: env.STRIPE_AUTOMATIC_TAX === "1",
     prices: {
       monthly: env.PRICE_MONTHLY,
       yearly: env.PRICE_YEARLY,
@@ -84,6 +96,10 @@ export async function createCustomerCheckout(
     client_reference_id: accountId,
     metadata,
     subscription_data: { metadata },
+    billing_address_collection: "required",
+    tax_id_collection: { enabled: true },
+    consent_collection: { terms_of_service: "required" },
+    ...(config.automaticTax ? { automatic_tax: { enabled: true } } : {}),
     success_url: `${config.domain}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${config.domain}/pricing?checkout=cancelled`,
   });
@@ -117,10 +133,77 @@ export async function completeCustomerCheckout(
   await onCheckoutCompleted?.(account, session);
   accounts.upsert(session.id, {
     stripe_email: session.customer_details?.email ?? session.customer_email ?? null,
+    stripe_customer_id:
+      typeof session.customer === "string" ? session.customer : session.customer?.id ?? null,
     stripe_subscription_id:
       typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null,
     subscription_status: "active",
     checkout_completed_at: new Date().toISOString(),
   });
   return "completed";
+}
+
+export type CustomerSubscriptionStatus = CustomerAccount["subscription_status"];
+
+function stripeObjectId(value: string | { id?: string | null } | null | undefined): string | null {
+  if (typeof value === "string") return value;
+  return value?.id ?? null;
+}
+
+function accountStatusForStripe(status: Stripe.Subscription.Status): CustomerSubscriptionStatus {
+  if (status === "active" || status === "trialing") return "active";
+  if (status === "past_due" || status === "incomplete") return "past_due";
+  if (status === "paused") return "paused";
+  return "canceled";
+}
+
+export function applyCustomerSubscriptionEvent(
+  accounts: CustomerAccountStore,
+  subscription: Stripe.Subscription,
+): CustomerAccount | null {
+  const account = accounts.resolveForSubscription(subscription.id);
+  const resolvedAccount = account ?? accounts.resolveForAccountId(subscription.metadata.account_id ?? "");
+  if (!resolvedAccount) return null;
+  const status = accountStatusForStripe(subscription.status);
+  return accounts.upsert(resolvedAccount.session_id, {
+    subscription_status: status,
+    stripe_subscription_id: subscription.id,
+    stripe_customer_id: stripeObjectId(subscription.customer),
+    cancel_at_period_end: subscription.cancel_at_period_end,
+    current_period_end: subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000).toISOString()
+      : null,
+  });
+}
+
+export function applyCustomerInvoiceEvent(
+  accounts: CustomerAccountStore,
+  invoice: Stripe.Invoice,
+  paid: boolean,
+): CustomerAccount | null {
+  const subscriptionId = stripeObjectId(invoice.subscription);
+  const account = subscriptionId
+    ? accounts.resolveForSubscription(subscriptionId)
+    : accounts.resolveForStripeCustomer(stripeObjectId(invoice.customer) ?? "");
+  if (!account || account.subscription_status === "canceled") return account;
+  return accounts.upsert(account.session_id, {
+    subscription_status: paid ? "active" : "past_due",
+    stripe_customer_id: stripeObjectId(invoice.customer) ?? account.stripe_customer_id,
+  });
+}
+
+export async function createCustomerPortalSession(
+  stripe: CustomerStripeClient,
+  config: CustomerBillingConfig,
+  account: CustomerAccount,
+): Promise<string> {
+  if (!stripe.billingPortal) throw new Error("billing portal is not configured");
+  if (!account.stripe_customer_id) throw new Error("Stripe customer is not recorded");
+  const session = await stripe.billingPortal.sessions.create({
+    customer: account.stripe_customer_id,
+    return_url: `${config.domain}/app/account`,
+    ...(config.portalConfigurationId ? { configuration: config.portalConfigurationId } : {}),
+  });
+  if (!session.url) throw new Error("Stripe billing portal did not return a URL");
+  return session.url;
 }

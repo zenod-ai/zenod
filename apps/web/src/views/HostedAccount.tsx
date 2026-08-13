@@ -17,7 +17,9 @@ type Me = { login: string; avatar_url: string }
 type Account = {
   account_id: string
   tier: string | null
-  subscription_status: "checkout_pending" | "active" | "canceled" | null
+  subscription_status: "checkout_pending" | "active" | "past_due" | "paused" | "canceled" | null
+  cancel_at_period_end: boolean
+  current_period_end: string | null
   mcp_url: string | null
   token: string | null
   token_hint: string | null
@@ -69,6 +71,8 @@ export function HostedAccount() {
   const [me, setMe] = React.useState<Me | null>(null)
   const [account, setAccount] = React.useState<Account | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [billingBusy, setBillingBusy] = React.useState(false)
+  const [billingError, setBillingError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     Promise.all([optionalJson<Me>("/api/me"), optionalJson<Account>("/api/console/account")])
@@ -101,6 +105,21 @@ export function HostedAccount() {
   const claude = endpoint
     ? `claude mcp add --transport http zenod ${endpoint} --header "Authorization: Bearer ${token}"`
     : ""
+
+  async function openBillingPortal() {
+    setBillingBusy(true)
+    setBillingError(null)
+    try {
+      const response = await fetch("/api/billing/portal", { method: "POST" })
+      if (!response.ok) throw new Error("Billing management is temporarily unavailable")
+      const payload = (await response.json()) as { url?: unknown }
+      if (typeof payload.url !== "string") throw new Error("Billing management returned an invalid destination")
+      window.location.assign(payload.url)
+    } catch (error) {
+      setBillingError(error instanceof Error ? error.message : "Could not open billing management")
+      setBillingBusy(false)
+    }
+  }
 
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-5 p-6">
@@ -148,6 +167,25 @@ export function HostedAccount() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm font-medium capitalize">{account.subscription_status?.replace("_", " ") ?? "Pending"}</p>
+                {account.cancel_at_period_end && account.current_period_end ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Access remains active until {new Date(account.current_period_end).toLocaleDateString()}.
+                  </p>
+                ) : null}
+                {account.subscription_status === "past_due" ? (
+                  <p className="mt-2 text-sm text-destructive">Payment needs attention. Update your payment method to avoid interruption.</p>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-4 rounded-none"
+                  disabled={billingBusy}
+                  onClick={() => void openBillingPortal()}
+                >
+                  {billingBusy ? "Opening…" : "Manage billing"}
+                  <ExternalLinkIcon data-icon="inline-end" />
+                </Button>
+                {billingError ? <p className="mt-2 text-sm text-destructive">{billingError}</p> : null}
               </CardContent>
             </Card>
             <Card className="rounded-none">

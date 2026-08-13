@@ -39,6 +39,28 @@ export interface CustomerSession {
   avatarUrl: string | null
 }
 
+export interface PublicProductionReadiness {
+  ready: boolean
+  publicPaidSignup: boolean
+}
+
+export async function readProductionReadiness(
+  fetcher: typeof fetch = fetch,
+): Promise<PublicProductionReadiness> {
+  const response = await fetcher("/api/public/production-readiness", {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  })
+  const payload = (await response.json().catch(() => ({}))) as {
+    ready?: unknown
+    publicPaidSignup?: unknown
+  }
+  return {
+    ready: payload.ready === true,
+    publicPaidSignup: payload.publicPaidSignup === true,
+  }
+}
+
 export class SignInRequiredError extends Error {
   constructor() {
     super("Sign in before subscribing")

@@ -3,82 +3,91 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="robots" content="noindex" />
-<title>Terms of Service (DRAFT) — Zenod</title>
+<title>Terms of Service — Zenod</title>
 <style>
   :root { color-scheme: light dark; }
   body { max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 6rem;
     font: 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   h1 { font-size: 1.6rem; margin-bottom: .25rem; }
   h2 { font-size: 1.15rem; margin-top: 2rem; }
-  .draft { border: 1px solid #d97706; background: #fffbeb; color: #7c2d12;
-    padding: .75rem 1rem; border-radius: .5rem; margin: 1rem 0 2rem; font-weight: 600; }
-  @media (prefers-color-scheme: dark) { .draft { background:#2a1c04; color:#fbbf24; border-color:#a16207; } }
   a { color: inherit; }
   footer { margin-top: 3rem; font-size: .85rem; opacity: .7; }
 </style>
 </head>
 <body>
 <h1>Terms of Service</h1>
-<p class="draft">⚠ DRAFT — lawyer review pending. Not legally binding. Placeholder terms for the
-Zenod hosted launch (H-11). Do not rely on these; they will be replaced by counsel-reviewed text
-before any paid signup goes live.</p>
-
-<p>Last updated: <strong>DRAFT (2026-07-09)</strong>. These Terms govern your use of the hosted
-Zenod service ("the Service") operated by Alpha9 ("we", "us"). By purchasing or using
-the Service you agree to them.</p>
+<p><strong>Effective 13 August 2026 · Version 2026-08-13.</strong> These Terms govern the hosted
+Zenod beta service (the "Service") operated by Alpha Analytics SL, trading as Zenod ("we", "us").
+Our business address is Aribau 168, 1º 1ª, 08036 Barcelona, Spain. By creating a paid
+subscription you agree to these Terms and ask us to begin providing the Service immediately.</p>
 
 <h2>1. What the Service is</h2>
-<p>Zenod provisions a dedicated, single-tenant memory server that reads and writes to
-a project "vault" (a Git repository) and can use connected accounts you authorize for memory
-operations (e.g. GitHub or Google Drive). Each customer runs in an isolated container running the same open-source image we
-publish; no other customer shares your runtime.</p>
+<p>Zenod is an early-access memory service for AI agents. It stores each customer in a logically
+isolated tenant inside the hosted Zenod service and reads or writes a Git-based knowledge vault that
+you connect. The hosted software is based on the open-source Zenod runtime.</p>
 
-<h2>2. You own your vault and your data</h2>
-<p>Your memory, backlog, and outputs live in a Git repository that is <strong>yours</strong>. On the
-Console tier the vault repo is created under your own GitHub account; on the Agency tier we may hold
-it on your behalf and will export/transfer it to you on request. Your data is one action away from
-leaving. We claim no ownership of your content.</p>
+<h2>2. Eligibility and account</h2>
+<p>You must be at least 18 and able to enter into a contract. GitHub is the account identity provider.
+You are responsible for your GitHub account, the repositories you connect, and keeping issued MCP
+tokens confidential. Contact us immediately if you believe a token or connected account is compromised.</p>
 
-<h2>3. Credentials and connected accounts</h2>
+<h2>3. You own your vault and your data</h2>
+<p>Your memory and outputs live in a Git repository in the GitHub account you authorize. You can clone
+or disconnect it at any time. We claim no ownership of your content.</p>
+
+<h2>4. Credentials and connected accounts</h2>
 <p>You connect third-party accounts (GitHub, Google Drive, and others) via their own OAuth or
 app-install flows. You authorize Zenod to use those accounts within the scopes you grant, and
 you are responsible for the actions you direct it to take (e.g. posts published to your social
 accounts). You may revoke any connection at any time; doing so disables the journeys that depend on it.</p>
 
-<h2>4. Acceptable use</h2>
+<h2>5. Acceptable use</h2>
 <p>You will not use the Service to break the law, violate a third party's rights, send spam, or
 violate the terms of any connected platform (including automated-posting policies of social networks).
 We may suspend a tenant that we reasonably believe is causing harm, abuse, or platform bans.</p>
 
-<h2>5. Billing and credits</h2>
-<p>The Service is sold as a prepaid credit bundle (and/or subscription, as shown at checkout). Model
-usage is metered and drawn from your credit balance. When credit reaches zero, new agent work is
-paused until you top up; Zenod will tell you before and when this happens rather than failing
-silently. Prices, taxes, and refund terms are as stated at checkout. Payments are processed by Stripe;
-we do not store your card details.</p>
+<h2>6. Billing, renewal, cancellation, and refunds</h2>
+<p>Monthly and yearly plans renew automatically until cancelled. The checkout page shows the price,
+billing interval, and applicable tax before purchase. Payments are processed by Stripe; we do not
+store card numbers. You can update payment details, obtain invoices, or cancel from <strong>Manage
+billing</strong> in your Zenod account. Unless the portal says otherwise, cancellation takes effect at
+the end of the paid billing period.</p>
+<p>For a first subscription, you may request a full refund within 14 days of purchase by emailing
+<a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>. This contractual refund policy is additional to,
+and does not limit, any mandatory consumer rights. Model usage and product limits are shown in the
+account. If a payment remains unpaid or a subscription ends, hosted MCP access may be suspended while
+your vault remains yours.</p>
 
-<h2>6. Availability, and the honest disclaimer</h2>
-<p>The Service is provided "as is". AI agents can be wrong, can misjudge, and can take actions you did
-not intend within their granted scopes. You are responsible for reviewing agent output before relying
-on it, and for the guardrails you configure. To the maximum extent permitted by law, our liability is
-limited to the fees you paid in the prior three months.</p>
+<h2>7. Beta service and AI limitations</h2>
+<p>The Service is in beta and has no uptime service-level agreement. We will use reasonable care to
+operate it and communicate material incidents. AI output can be wrong or incomplete. Do not rely on it
+as professional, medical, legal, or financial advice, and review consequential actions before use.</p>
 
-<h2>7. Suspension and deletion</h2>
-<p>You may cancel at any time. On cancellation we stop your stack and revoke your metering key; on
-deletion we export your vault repository to you and destroy the container volume. We may suspend for
-non-payment or abuse.</p>
+<h2>8. Suspension, export, and deletion</h2>
+<p>We may suspend access for non-payment, security risk, abuse, or a material breach of these Terms.
+Where practicable we will give notice and a chance to cure. You can clone your vault at any time. On a
+verified deletion request we revoke hosted access and delete tenant runtime data according to the
+retention periods in the Privacy Policy; Git repositories in your account remain under your control.</p>
 
-<h2>8. Changes</h2>
+<h2>9. Liability</h2>
+<p>Nothing in these Terms excludes liability or remedies that cannot legally be excluded, including
+mandatory consumer rights. To the extent permitted by law, neither party is liable for indirect or
+consequential loss, and our aggregate liability relating to the Service is limited to the amount you
+paid for it in the preceding 12 months.</p>
+
+<h2>10. Changes</h2>
 <p>We may update these Terms; material changes will be notified. Continued use after a change means you
 accept the updated Terms.</p>
 
-<h2>9. Contact</h2>
-<p>Questions: <a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>.</p>
+<h2>11. Governing law and contact</h2>
+<p>These Terms are governed by the laws of Spain, without limiting any mandatory protections or forum
+rights available to a consumer in their country of residence. Questions, refund requests, and support:
+<a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a> or Alpha Analytics SL, Aribau 168, 1º 1ª,
+08036 Barcelona, Spain.</p>
 
 <footer>
   See also: <a href="/legal/privacy.html">Privacy Policy</a> ·
-  <a href="/legal/data-handling.html">Data Handling</a>. All DRAFT, pending legal review.
+  <a href="/legal/data-handling.html">Data Handling</a>.
 </footer>
 </body>
 </html>
