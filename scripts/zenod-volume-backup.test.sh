@@ -61,5 +61,10 @@ archive_line=$(grep -n 'tar -czf /archive/' "$MOCK_CALL_LOG" | cut -d: -f1)
 up_line=$(grep -n '^unpause zenod-task-container$' "$MOCK_CALL_LOG" | cut -d: -f1)
 verify_line=$(grep -n 'verify-zenod-data.mjs' "$MOCK_CALL_LOG" | cut -d: -f1)
 [[ "$down_line" -lt "$archive_line" && "$archive_line" -lt "$up_line" && "$up_line" -lt "$verify_line" ]]
+grep -Eq -- '--volume zenod-restore-[^ ]+:/data .*verify-zenod-data.mjs' "$MOCK_CALL_LOG"
+if grep -Eq -- '--volume zenod-restore-[^ ]+:/data:ro .*verify-zenod-data.mjs' "$MOCK_CALL_LOG"; then
+  echo 'SQLite restore verification needs a writable disposable volume for WAL sidecars' >&2
+  exit 1
+fi
 
 echo 'zenod-volume-backup Swarm quiescence test passed'
