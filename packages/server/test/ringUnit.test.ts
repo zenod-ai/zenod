@@ -514,6 +514,7 @@ describe("Ring council unit", () => {
       GITHUB_OAUTH_CLIENT_ID: "ring-client",
       GITHUB_OAUTH_CLIENT_SECRET: "ring-client-secret",
       CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+      ZENOD_ALLOW_TEST_CHECKOUT: "1",
       PRICE_MONTHLY: "price_ring_monthly",
     };
     const tenants = createMemoryTenantStore();

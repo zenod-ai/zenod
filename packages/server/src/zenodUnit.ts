@@ -351,6 +351,25 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
   );
   const app = new Hono<{ Bindings: HttpBindings }>();
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("X-Frame-Options", "DENY");
+    c.header("Referrer-Policy", "same-origin");
+    c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
+    const contentSecurityPolicy =
+      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com; connect-src 'self'; form-action 'self' https://checkout.stripe.com";
+    c.header(
+      "Content-Security-Policy",
+      env.NODE_ENV === "production" ? `${contentSecurityPolicy}; upgrade-insecure-requests` : contentSecurityPolicy,
+    );
+    if (c.req.path.startsWith("/api/") || c.req.path.startsWith("/auth/") || c.req.path.startsWith("/checkout/")) {
+      c.header("Cache-Control", "no-store");
+    }
+    if (env.NODE_ENV === "production") {
+      c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+  });
   if (agent.name === "zenod") {
     app.get("/.well-known/atomic-unit-skill.json", (c) =>
       unit.app.fetch(c.req.raw, c.env),

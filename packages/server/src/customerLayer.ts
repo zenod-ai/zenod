@@ -6,6 +6,9 @@ import { CustomerAccountStore, customerAccountId, type CustomerAccount } from ".
 import {
   completeCustomerCheckout,
   createCustomerCheckout,
+  createCustomerPortalSession,
+  applyCustomerInvoiceEvent,
+  applyCustomerSubscriptionEvent,
   loadCustomerBillingConfig,
   resolveCheckoutTier,
   type CustomerStripeClient,
@@ -18,6 +21,11 @@ import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
 import { hashToken } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
+import {
+  assertPublicSignupIsReady,
+  checkoutEnabledForOwner,
+  productionReadinessReport,
+} from "./productionReadiness.js";
 
 // Customer HTTP layer transplanted from zenod-ai/cloud services/webhook/src/server.ts
 // and services/console/src/api.ts @ 6bdb318.
@@ -77,6 +85,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   const product = options.product ?? { product: "zenod", unit: "zenod", defaultDomain: "https://cloud.zenod.dev" };
   const accounts = new CustomerAccountStore(host.dataDir, product.product);
   const billing = loadCustomerBillingConfig(env, product);
+  assertPublicSignupIsReady(env);
   const tokenVault = new CustomerTokenVault(host.dataDir, customerStateSecret(env));
   if (env.STRIPE_SECRET_KEY) {
     const expectedMarker = billing.stripeMode === "live" ? "_live_" : "_test_";
@@ -105,6 +114,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       tokenVault,
     });
   const app = new Hono<{ Bindings: HttpBindings }>();
+
+  app.get("/api/public/production-readiness", (c) => {
+    const report = productionReadinessReport(env);
+    return c.json(report, report.ready ? 200 : 503);
+  });
 
   app.get("/auth/signin", (c) => {
     if (!identity || !customerStateSecret(env)) return c.text("Sign-in is not configured.", 503);
@@ -224,20 +238,21 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   app.get("/api/console/account", async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
-    const account = accounts.resolveActiveTenantForUser(session.github_id);
-    const token = account ? tokenVault.get(account.account_id) : null;
-    const tenantRecord = token ? await options.tenantStore?.resolveTokenHash(hashToken(token)) : null;
-    if (
-      !account ||
-      !account.tenant_id ||
-      !token ||
-      !tenantRecord ||
-      tenantRecord.tenant.id !== account.tenant_id ||
-      (tenantRecord.status ?? "active") !== "active"
-    ) {
+    const account = accounts.resolveForUser(session.github_id);
+    if (!account || account.subscription_status === "checkout_pending") {
       return c.json({ error: "no_account" }, 404);
     }
-    const runtime = host.runtimeForAccount?.(account) ?? null;
+    const token = account ? tokenVault.get(account.account_id) : null;
+    const tenantRecord = token ? await options.tenantStore?.resolveTokenHash(hashToken(token)) : null;
+    const hasAccess = Boolean(
+      account.tenant_id &&
+        token &&
+        tenantRecord &&
+        tenantRecord.tenant.id === account.tenant_id &&
+        (tenantRecord.status ?? "active") === "active" &&
+        (account.subscription_status === "active" || account.subscription_status === "past_due"),
+    );
+    const runtime = hasAccess ? host.runtimeForAccount?.(account) ?? null : null;
     const summary = runtime?.usageStore.summary(Date.now() - 7 * 24 * 60 * 60_000) ?? {
       since: Date.now() - 7 * 24 * 60 * 60_000,
       calls: 0,
@@ -254,11 +269,13 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       account_id: account.account_id,
       tier: account.tier,
       subscription_status: account.subscription_status,
+      cancel_at_period_end: account.cancel_at_period_end,
+      current_period_end: account.current_period_end,
       tenant_id: account.tenant_id,
       slug: account.tenant_slug,
-      mcp_url: `${billing.domain}/mcp/${token}`,
-      token,
-      token_hint: token.slice(-4),
+      mcp_url: hasAccess && token ? `${billing.domain}/mcp/${token}` : null,
+      token: hasAccess ? token : null,
+      token_hint: hasAccess && token ? token.slice(-4) : null,
       vault_repo: account.vault_repo ?? runtime?.settings.get("vault_repo") ?? null,
       vault_repo_url: account.vault_repo_url,
       ...metering,
@@ -294,6 +311,13 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   async function startCheckout(c: Context<{ Bindings: HttpBindings }>, tierInput: unknown) {
     const owner = readCustomerSession(c, env);
     if (!owner) return c.json({ error: "sign in before subscribing" }, 401);
+    if (!checkoutEnabledForOwner(owner.github_id, env)) {
+      return c.json({ error: "paid signup is not open" }, 503);
+    }
+    const existing = accounts.resolveForUser(owner.github_id);
+    if (existing?.subscription_status === "active" || existing?.subscription_status === "past_due") {
+      return c.json({ error: "an active subscription already exists" }, 409);
+    }
     if (!stripe) return c.json({ error: "checkout is not configured" }, 503);
     const resolved = resolveCheckoutTier(tierInput, billing);
     if ("error" in resolved) return c.json({ error: resolved.error }, 400);
@@ -311,6 +335,20 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   app.post("/create-checkout-session", async (c) => {
     const body = await c.req.json<{ tier?: string }>().catch((): { tier?: string } => ({}));
     return startCheckout(c, body.tier);
+  });
+
+  app.post("/api/billing/portal", async (c) => {
+    const owner = readCustomerSession(c, env);
+    if (!owner) return c.json({ error: "unauthorized" }, 401);
+    if (!stripe) return c.json({ error: "billing is not configured" }, 503);
+    const account = accounts.resolveForUser(owner.github_id);
+    if (!account?.stripe_customer_id) return c.json({ error: "billing account unavailable" }, 409);
+    try {
+      return c.json({ url: await createCustomerPortalSession(stripe, billing, account) });
+    } catch (error) {
+      console.error("billing portal session failed:", error);
+      return c.json({ error: "billing portal unavailable" }, 503);
+    }
   });
 
   app.get("/checkout/complete", async (c) => {
@@ -346,14 +384,49 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       return c.json({ error: "invalid Stripe signature" }, 400);
     }
     if (event.livemode !== (billing.stripeMode === "live")) return c.json({ error: "stripe mode mismatch" }, 400);
-    if (event.type !== "checkout.session.completed") return c.json({ received: true });
-    const result = await completeCustomerCheckout(
-      event.data.object as Stripe.Checkout.Session,
-      accounts,
-      onCheckoutCompleted,
-      product.product,
-    );
-    return c.json({ received: true, result });
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const result = await completeCustomerCheckout(
+        session,
+        accounts,
+        onCheckoutCompleted,
+        product.product,
+      );
+      const subscriptionId = typeof session.subscription === "string"
+        ? session.subscription
+        : session.subscription?.id;
+      if (result === "completed" && subscriptionId && stripe.subscriptions) {
+        applyCustomerSubscriptionEvent(accounts, await stripe.subscriptions.retrieve(subscriptionId));
+      }
+      return c.json({ received: true, result });
+    }
+    if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+      const delivered = event.data.object as Stripe.Subscription;
+      const current = stripe.subscriptions ? await stripe.subscriptions.retrieve(delivered.id) : delivered;
+      const account = applyCustomerSubscriptionEvent(accounts, current);
+      if (account?.tenant_id && options.tenantStore) {
+        if (account.subscription_status === "active") {
+          await options.tenantStore.setTenantStatus(account.tenant_id, "active");
+        } else if (account.subscription_status === "canceled" || account.subscription_status === "paused") {
+          await options.tenantStore.setTenantStatus(account.tenant_id, "suspended");
+        }
+      }
+      return c.json({ received: true, result: account ? account.subscription_status : "unmatched" });
+    }
+    if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
+      const invoice = event.data.object as Stripe.Invoice;
+      const subscriptionId = typeof invoice.subscription === "string"
+        ? invoice.subscription
+        : invoice.subscription?.id;
+      const account = subscriptionId && stripe.subscriptions
+        ? applyCustomerSubscriptionEvent(accounts, await stripe.subscriptions.retrieve(subscriptionId))
+        : applyCustomerInvoiceEvent(accounts, invoice, event.type === "invoice.paid");
+      if (account?.tenant_id && account.subscription_status === "active" && options.tenantStore) {
+        await options.tenantStore.setTenantStatus(account.tenant_id, "active");
+      }
+      return c.json({ received: true, result: account ? account.subscription_status : "unmatched" });
+    }
+    return c.json({ received: true, result: "ignored" });
   });
 
   return { app, accounts, tokenVault };

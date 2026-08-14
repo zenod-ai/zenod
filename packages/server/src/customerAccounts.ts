@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 // Transplanted from zenod-ai/cloud services/webhook/src/accounts.ts @ 6bdb318.
@@ -12,8 +13,11 @@ export interface CustomerAccount {
   tier: string | null;
   stripe_email: string | null;
   stripe_client_reference_id: string | null;
+  stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
-  subscription_status: "checkout_pending" | "active" | "canceled" | null;
+  subscription_status: "checkout_pending" | "active" | "past_due" | "paused" | "canceled" | null;
+  cancel_at_period_end: boolean;
+  current_period_end: string | null;
   github_id: number;
   github_login: string;
   github_email: string | null;
@@ -44,14 +48,16 @@ export class CustomerAccountStore {
     if (!existsSync(this.path)) return {};
     try {
       return JSON.parse(readFileSync(this.path, "utf8")) as Store;
-    } catch {
-      return {};
+    } catch (error) {
+      throw new Error(`customer account store is unreadable: ${this.path}`, { cause: error });
     }
   }
 
   private save(store: Store): void {
     mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(this.path, JSON.stringify(store, null, 2), "utf8");
+    const pendingPath = `${this.path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+    writeFileSync(pendingPath, JSON.stringify(store, null, 2), { encoding: "utf8", mode: 0o600 });
+    renameSync(pendingPath, this.path);
   }
 
   get(sessionId: string): CustomerAccount | null {
@@ -68,8 +74,11 @@ export class CustomerAccountStore {
       tier: null,
       stripe_email: null,
       stripe_client_reference_id: null,
+      stripe_customer_id: null,
       stripe_subscription_id: null,
       subscription_status: null,
+      cancel_at_period_end: false,
+      current_period_end: null,
       github_id: existing?.github_id ?? required.github_id,
       github_login: existing?.github_login ?? required.github_login,
       github_email: null,
@@ -95,7 +104,31 @@ export class CustomerAccountStore {
 
   resolveForUser(githubId: number): CustomerAccount | null {
     const accounts = Object.values(this.load()).filter((account) => account.github_id === githubId);
-    return accounts.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
+    const completed = accounts.filter((account) => account.subscription_status !== "checkout_pending");
+    return (completed.length > 0 ? completed : accounts)
+      .sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
+  }
+
+  resolveForSubscription(subscriptionId: string): CustomerAccount | null {
+    if (!subscriptionId) return null;
+    const matches = Object.values(this.load()).filter(
+      (account) => account.stripe_subscription_id === subscriptionId,
+    );
+    return matches.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
+  }
+
+  resolveForAccountId(accountId: string): CustomerAccount | null {
+    if (!accountId) return null;
+    const matches = Object.values(this.load()).filter((account) => account.account_id === accountId);
+    return matches.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
+  }
+
+  resolveForStripeCustomer(customerId: string): CustomerAccount | null {
+    if (!customerId) return null;
+    const matches = Object.values(this.load()).filter(
+      (account) => account.stripe_customer_id === customerId,
+    );
+    return matches.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
   }
 
   resolveActiveTenantForUser(githubId: number): CustomerAccount | null {
@@ -104,7 +137,9 @@ export class CustomerAccountStore {
       if (account.github_id !== githubId || !account.tenant_id || account.subscription_status === "checkout_pending") continue;
       if (!latestByTenant.has(account.tenant_id)) latestByTenant.set(account.tenant_id, account);
     }
-    const active = [...latestByTenant.values()].filter((account) => account.subscription_status === "active");
+    const active = [...latestByTenant.values()].filter(
+      (account) => account.subscription_status === "active" || account.subscription_status === "past_due",
+    );
     return active.length === 1 ? active[0]! : null;
   }
 

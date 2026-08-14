@@ -89,6 +89,7 @@ COPY --from=build /app/apps/ring-site/dist ./apps/ring-site/dist
 COPY --from=build /app/apps/herald-site/dist ./apps/herald-site/dist
 COPY --from=build /app/apps/phylax-site/dist ./apps/phylax-site/dist
 COPY units/zenod/skill/zenod ./units/zenod/skill/zenod
+COPY scripts/verify-zenod-data.mjs ./scripts/verify-zenod-data.mjs
 
 VOLUME /data
 EXPOSE 8080

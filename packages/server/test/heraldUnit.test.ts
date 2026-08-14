@@ -538,6 +538,7 @@ describe("Herald council unit", () => {
       GITHUB_OAUTH_CLIENT_ID: "herald-client",
       GITHUB_OAUTH_CLIENT_SECRET: "herald-client-secret",
       CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+      ZENOD_ALLOW_TEST_CHECKOUT: "1",
       PRICE_MONTHLY: "price_herald_monthly",
     };
     const tenants = createMemoryTenantStore();

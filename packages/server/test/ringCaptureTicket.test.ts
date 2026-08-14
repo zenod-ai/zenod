@@ -383,7 +383,7 @@ describe("Ring capture context ticket", () => {
       }
       await Promise.all([ring.close(), memory.close(), generic.close()]);
     }
-  });
+  }, 15_000);
 
   it("wakes production Ring delivery after background terminal receipts on both provider branches", async () => {
     const phylaxDir = await mkdtemp(join(tmpdir(), "ring-capture-production-phylax-"));

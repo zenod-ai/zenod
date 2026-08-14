@@ -3,17 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="robots" content="noindex" />
-<title>Data Handling (DRAFT) — Zenod</title>
+<title>Data Handling — Zenod</title>
 <style>
   :root { color-scheme: light dark; }
   body { max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 6rem;
     font: 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   h1 { font-size: 1.6rem; margin-bottom: .25rem; }
   h2 { font-size: 1.15rem; margin-top: 2rem; }
-  .draft { border: 1px solid #d97706; background: #fffbeb; color: #7c2d12;
-    padding: .75rem 1rem; border-radius: .5rem; margin: 1rem 0 2rem; font-weight: 600; }
-  @media (prefers-color-scheme: dark) { .draft { background:#2a1c04; color:#fbbf24; border-color:#a16207; } }
   a { color: inherit; }
   table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .95rem; }
   th, td { border: 1px solid #8884; padding: .5rem .6rem; text-align: left; vertical-align: top; }
@@ -22,45 +18,47 @@
 </head>
 <body>
 <h1>Data Handling</h1>
-<p class="draft">⚠ DRAFT — lawyer review pending. Not legally binding. This page explains, in plain
-terms, where your data lives and who touches it in hosted Zenod (H-11). It complements the
+<p><strong>Effective 13 August 2026 · Version 2026-08-13.</strong> This page explains, in plain
+terms, where your data lives and who touches it in hosted Zenod. It complements the
 <a href="/legal/privacy.html">Privacy Policy</a>.</p>
 
 <p>The design principle behind hosted Zenod: <strong>the customer owns the vault repo.</strong> Your
 knowledge is not locked inside our database — it is a Git repository you can clone, read, and take with
 you at any time. This page maps each kind of data to where it lives and how it is isolated.</p>
 
-<h2>The container-per-tenant boundary</h2>
-<p>Every customer gets a dedicated, single-tenant stack on a private per-tenant network. The network is
-the tenant boundary: your agents can reach each other but cannot see any other customer's containers or
-credentials. You run the exact same open-source image we publish and dogfood — no special hosted fork of
-the product.</p>
+<h2>The tenant boundary</h2>
+<p>Hosted Zenod is a multi-tenant service. Each request is authenticated to a tenant; tokens are stored
+as hashes, tenant state is rooted under a separate storage prefix, credentials are encrypted with
+tenant-bound associated data, and suspended tenants cannot use MCP. Automated isolation tests exercise
+cross-tenant token, session, settings, and storage boundaries.</p>
 
 <h2>Where each kind of data lives</h2>
 <table>
   <thead><tr><th>Data</th><th>Location</th><th>Isolation / ownership</th></tr></thead>
   <tbody>
-    <tr><td>Memory, backlog, agent outputs (the "vault")</td><td>A Git repository — yours (Console tier:
-      your GitHub account; Agency tier: platform-held with export)</td><td>You own it; directly cloneable
-      and portable</td></tr>
-    <tr><td>Connected-account credentials (GitHub / X / Drive tokens)</td><td>Per-tenant encrypted store
-      inside your container</td><td>Never written to the vault; never leaves your tenant network</td></tr>
-    <tr><td>Model-usage ledger (tokens, cost per call)</td><td>Local sqlite in your tenant volume</td>
-      <td>Powers your meter/dashboard; destroyed on deletion</td></tr>
+    <tr><td>Memory and agent outputs (the "vault")</td><td>A Git repository in the GitHub account you
+      authorize</td><td>You own it; directly cloneable and portable</td></tr>
+    <tr><td>Connected-account credentials (GitHub / Drive tokens)</td><td>Encrypted tenant-scoped store
+      in the hosted data volume</td><td>Never written to the vault; available only in the authenticated tenant context</td></tr>
+    <tr><td>Model-usage ledger (tokens, cost per call)</td><td>Tenant-prefixed SQLite state</td>
+      <td>Powers limits and the dashboard; removed under the deletion process</td></tr>
     <tr><td>Payment details</td><td>Stripe</td><td>We never see or store card numbers</td></tr>
     <tr><td>Message content sent to the LLM</td><td>Transits to the model provider to produce a
-      response</td><td>Not used for training; routed through our metering gateway</td></tr>
+      response</td><td>Processed under the configured provider's terms; Zenod does not use it to train models</td></tr>
     <tr><td>Operational logs</td><td>Our infrastructure</td><td>Minimal, for reliability and support</td></tr>
   </tbody>
 </table>
 
 <h2>Backups</h2>
-<p>Your vault's backup is built in: it is a Git repository, pushed continuously, so its history is your
-backup. For tenant runtime state (sqlite), we add volume snapshots as part of hosted operations.</p>
+<p>Your vault is committed and pushed to its Git repository when a write journey completes. Hosted
+runtime state is also covered by checksummed, access-restricted cold volume backups. Public paid signup
+fails closed unless an operator has recorded a successful isolated restore verification within the
+preceding 31 days.</p>
 
 <h2>Export and deletion</h2>
-<p>Export: clone your vault repo any time — nothing to request. On account deletion we transfer any
-platform-held vault to you and destroy your container volume (including credentials and usage ledger).</p>
+<p>Export: clone your vault repo any time. On a verified account deletion request we revoke the tenant's
+MCP tokens and connected credentials and remove tenant runtime data according to the Privacy Policy.
+Deleting hosted data does not delete a repository in your GitHub account.</p>
 
 <h2>Who processes your data</h2>
 <p>See the sub-processor list in the <a href="/legal/privacy.html">Privacy Policy</a> (model providers,
@@ -68,7 +66,7 @@ Stripe for payments, our hosting provider). Each touches only the slice needed t
 
 <footer>
   See also: <a href="/legal/terms.html">Terms of Service</a> ·
-  <a href="/legal/privacy.html">Privacy Policy</a>. All DRAFT, pending legal review.
+  <a href="/legal/privacy.html">Privacy Policy</a>.
 </footer>
 </body>
 </html>

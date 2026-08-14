@@ -4,6 +4,7 @@ import {
   createHostedCheckout,
   PRICING_OPTIONS,
   readCustomerSession,
+  readProductionReadiness,
   SignInRequiredError,
 } from "./customer"
 
@@ -33,6 +34,24 @@ describe("customer route contracts", () => {
     await expect(readCustomerSession(fetcher)).resolves.toEqual({
       login: "alex",
       avatarUrl: "https://github.com/alex.png",
+    })
+  })
+
+  it("fails paid signup closed unless the server reports every production gate green", async () => {
+    const ready = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({ ready: true, publicPaidSignup: true }),
+    )
+    await expect(readProductionReadiness(ready)).resolves.toEqual({
+      ready: true,
+      publicPaidSignup: true,
+    })
+
+    const blocked = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({ ready: false, publicPaidSignup: true }, { status: 503 }),
+    )
+    await expect(readProductionReadiness(blocked)).resolves.toEqual({
+      ready: false,
+      publicPaidSignup: true,
     })
   })
 
