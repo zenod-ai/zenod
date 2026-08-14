@@ -26,30 +26,59 @@ mounted_volume=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination 
 
 image_ref=$(docker inspect --format '{{.Config.Image}}' "$container_name")
 [[ -n "$image_ref" ]] || { echo "Cannot resolve the container image" >&2; exit 2; }
+swarm_service=$(docker inspect --format '{{ index .Config.Labels "com.docker.swarm.service.name" }}' "$container_name")
+[[ "$swarm_service" != "<no value>" ]] || swarm_service=""
+service_replicas=""
+if [[ -n "$swarm_service" ]]; then
+  service_replicas=$(docker service inspect --format '{{.Spec.Mode.Replicated.Replicas}}' "$swarm_service")
+  [[ "$service_replicas" == "1" ]] || {
+    echo "Refusing backup: Swarm service $swarm_service must have exactly one replica" >&2
+    exit 2
+  }
+fi
 mkdir -p "$archive_dir"
 
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 archive_name="zenod-data-${timestamp}.tar.gz"
 archive_path="${archive_dir}/${archive_name}"
 pending_path="${archive_path}.partial"
-restore_volume="zenod-restore-${timestamp,,}-$$"
+restore_volume="zenod-restore-${timestamp}-$$"
 was_running=$(docker inspect --format '{{.State.Running}}' "$container_name")
 restore_created=0
+service_scaled_down=0
+
+restore_workload() {
+  if [[ "$service_scaled_down" == "1" ]]; then
+    docker service scale "${swarm_service}=${service_replicas}" >/dev/null 2>&1 || true
+    service_scaled_down=0
+  elif [[ "$was_running" == "true" && -z "$swarm_service" ]]; then
+    docker start "$container_name" >/dev/null 2>&1 || true
+  fi
+}
 
 cleanup() {
   if [[ "$restore_created" == "1" ]]; then
     docker volume rm "$restore_volume" >/dev/null 2>&1 || true
   fi
-  if [[ "$was_running" == "true" ]]; then
-    docker start "$container_name" >/dev/null 2>&1 || true
-  fi
+  restore_workload
   if [[ -f "$pending_path" ]]; then
     rm -f -- "$pending_path"
   fi
 }
 trap cleanup EXIT
 
-if [[ "$was_running" == "true" ]]; then
+if [[ -n "$swarm_service" ]]; then
+  service_scaled_down=1
+  docker service scale "${swarm_service}=0" >/dev/null
+  for _attempt in $(seq 1 30); do
+    [[ -z "$(docker service ps --filter desired-state=running --format '{{.ID}}' "$swarm_service")" ]] && break
+    sleep 1
+  done
+  [[ -z "$(docker service ps --filter desired-state=running --format '{{.ID}}' "$swarm_service")" ]] || {
+    echo "Swarm service $swarm_service did not quiesce" >&2
+    exit 1
+  }
+elif [[ "$was_running" == "true" ]]; then
   docker stop --time 30 "$container_name" >/dev/null
 fi
 
@@ -72,22 +101,26 @@ docker run --rm --volume "${restore_volume}:/data:ro" "$image_ref" \
 
 docker volume rm "$restore_volume" >/dev/null
 restore_created=0
-if [[ "$was_running" == "true" ]]; then
+if [[ -n "$swarm_service" ]]; then
+  docker service scale "${swarm_service}=${service_replicas}" >/dev/null
+  service_scaled_down=0
+elif [[ "$was_running" == "true" ]]; then
   docker start "$container_name" >/dev/null
-  if [[ -n "${ZENOD_HEALTH_URL:-}" ]]; then
-    healthy=0
-    for _attempt in $(seq 1 30); do
-      if curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
-        "$ZENOD_HEALTH_URL" >/dev/null; then
-        healthy=1
-        break
-      fi
-      sleep 1
-    done
-    [[ "$healthy" == "1" ]] || { echo "Restored container did not become healthy" >&2; exit 1; }
-  fi
+fi
+if [[ -n "${ZENOD_HEALTH_URL:-}" ]]; then
+  healthy=0
+  for _attempt in $(seq 1 30); do
+    if curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+      "$ZENOD_HEALTH_URL" >/dev/null; then
+      healthy=1
+      break
+    fi
+    sleep 1
+  done
+  [[ "$healthy" == "1" ]] || { echo "Restored workload did not become healthy" >&2; exit 1; }
 fi
 
 trap - EXIT
-printf 'backup=%s\nchecksum=%s\nrestore_verified_at=%s\n' \
-  "$archive_path" "${archive_path}.sha256" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf 'backup=%s\nchecksum=%s\nquiesced=%s\nrestore_verified_at=%s\n' \
+  "$archive_path" "${archive_path}.sha256" "${swarm_service:-$container_name}" \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
