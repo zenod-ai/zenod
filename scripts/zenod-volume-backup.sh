@@ -45,14 +45,15 @@ pending_path="${archive_path}.partial"
 restore_volume="zenod-restore-${timestamp}-$$"
 was_running=$(docker inspect --format '{{.State.Running}}' "$container_name")
 restore_created=0
-service_scaled_down=0
+workload_quiesced=0
 
 restore_workload() {
-  if [[ "$service_scaled_down" == "1" ]]; then
-    docker service scale "${swarm_service}=${service_replicas}" >/dev/null 2>&1 || true
-    service_scaled_down=0
-  elif [[ "$was_running" == "true" && -z "$swarm_service" ]]; then
+  if [[ "$workload_quiesced" == "1" && -n "$swarm_service" ]]; then
+    docker unpause "$container_name" >/dev/null 2>&1 || true
+    workload_quiesced=0
+  elif [[ "$workload_quiesced" == "1" && "$was_running" == "true" ]]; then
     docker start "$container_name" >/dev/null 2>&1 || true
+    workload_quiesced=0
   fi
 }
 
@@ -68,18 +69,15 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ -n "$swarm_service" ]]; then
-  service_scaled_down=1
-  docker service scale "${swarm_service}=0" >/dev/null
-  for _attempt in $(seq 1 30); do
-    [[ -z "$(docker service ps --filter desired-state=running --format '{{.ID}}' "$swarm_service")" ]] && break
-    sleep 1
-  done
-  [[ -z "$(docker service ps --filter desired-state=running --format '{{.ID}}' "$swarm_service")" ]] || {
-    echo "Swarm service $swarm_service did not quiesce" >&2
+  docker pause "$container_name" >/dev/null
+  workload_quiesced=1
+  [[ "$(docker inspect --format '{{.State.Paused}}' "$container_name")" == "true" ]] || {
+    echo "Swarm task $container_name did not pause" >&2
     exit 1
   }
 elif [[ "$was_running" == "true" ]]; then
   docker stop --time 30 "$container_name" >/dev/null
+  workload_quiesced=1
 fi
 
 docker run --rm \
@@ -87,6 +85,7 @@ docker run --rm \
   --volume "${archive_dir}:/archive" \
   "$image_ref" sh -c "cd /source && tar -czf /archive/${archive_name}.partial ."
 mv -- "$pending_path" "$archive_path"
+restore_workload
 sha256sum "$archive_path" >"${archive_path}.sha256"
 tar -tzf "$archive_path" >/dev/null
 
@@ -101,12 +100,6 @@ docker run --rm --volume "${restore_volume}:/data:ro" "$image_ref" \
 
 docker volume rm "$restore_volume" >/dev/null
 restore_created=0
-if [[ -n "$swarm_service" ]]; then
-  docker service scale "${swarm_service}=${service_replicas}" >/dev/null
-  service_scaled_down=0
-elif [[ "$was_running" == "true" ]]; then
-  docker start "$container_name" >/dev/null
-fi
 if [[ -n "${ZENOD_HEALTH_URL:-}" ]]; then
   healthy=0
   for _attempt in $(seq 1 30); do
