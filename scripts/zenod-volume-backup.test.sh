@@ -17,6 +17,7 @@ docker() {
           *'.Config.Image'*) printf '%s\n' 'ghcr.io/zenod-ai/zenod:sha-test' ;;
           *'com.docker.swarm.service.name'*) printf '%s\n' 'zenod-mt-service' ;;
           *'.State.Running'*) printf '%s\n' 'true' ;;
+          *'.State.Paused'*) printf '%s\n' 'true' ;;
         esac
       fi
       ;;
@@ -36,7 +37,7 @@ docker() {
         /usr/bin/tar -czf "$MOCK_ARCHIVE_DIR/${BASH_REMATCH[1]}" --files-from /dev/null
       fi
       ;;
-    start|stop) : ;;
+    pause|unpause|start|stop) : ;;
   esac
 }
 
@@ -48,17 +49,17 @@ output=$(ZENOD_HEALTH_URL=https://cloud.zenod.dev/healthz \
   zenod-task-container zenod-mt-data "$MOCK_ARCHIVE_DIR")
 
 grep -q '^quiesced=zenod-mt-service$' <<<"$output"
-grep -q 'service scale zenod-mt-service=0' "$MOCK_CALL_LOG"
-grep -q 'service scale zenod-mt-service=1' "$MOCK_CALL_LOG"
+grep -q '^pause zenod-task-container$' "$MOCK_CALL_LOG"
+grep -q '^unpause zenod-task-container$' "$MOCK_CALL_LOG"
 if grep -q '^stop ' "$MOCK_CALL_LOG"; then
   echo 'Swarm backup must not stop an individual task container' >&2
   exit 1
 fi
 
-down_line=$(grep -n 'service scale zenod-mt-service=0' "$MOCK_CALL_LOG" | cut -d: -f1)
+down_line=$(grep -n '^pause zenod-task-container$' "$MOCK_CALL_LOG" | cut -d: -f1)
 archive_line=$(grep -n 'tar -czf /archive/' "$MOCK_CALL_LOG" | cut -d: -f1)
+up_line=$(grep -n '^unpause zenod-task-container$' "$MOCK_CALL_LOG" | cut -d: -f1)
 verify_line=$(grep -n 'verify-zenod-data.mjs' "$MOCK_CALL_LOG" | cut -d: -f1)
-up_line=$(grep -n 'service scale zenod-mt-service=1' "$MOCK_CALL_LOG" | cut -d: -f1)
-[[ "$down_line" -lt "$archive_line" && "$archive_line" -lt "$verify_line" && "$verify_line" -lt "$up_line" ]]
+[[ "$down_line" -lt "$archive_line" && "$archive_line" -lt "$up_line" && "$up_line" -lt "$verify_line" ]]
 
 echo 'zenod-volume-backup Swarm quiescence test passed'
