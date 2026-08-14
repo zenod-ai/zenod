@@ -68,10 +68,13 @@ corresponding check below succeeds:
 
 ## Cold backup and restore drill
 
-Run on the VPS. The script resolves the exact mounted volume before stopping anything, stops only the
-named container, creates a mode-0600 checksummed archive, restores it into a temporary Docker volume,
-parses every JSON file, runs SQLite `integrity_check`, restarts the original container, and probes
-health. The temporary restore volume is deleted; the archive and checksum are retained.
+Run on the VPS. The script resolves the exact mounted volume before quiescing anything. For the
+one-replica production Swarm service it freezes the exact task with `docker pause`, which prevents
+writes without inviting the scheduler to create a replacement task; standalone containers are
+stopped normally. It atomically finalizes the archive, resumes the workload, creates a mode-0600
+checksum, restores into a disposable writable Docker volume, parses every JSON file, runs SQLite
+`integrity_check`, and probes health. The source archive is always read-only during restore and the
+temporary restore volume is deleted; the archive and checksum are retained.
 
 ```sh
 ZENOD_HEALTH_URL=https://cloud.zenod.dev/healthz \
@@ -110,5 +113,5 @@ start checkout.
 To close sales without taking the service down, set `ZENOD_PUBLIC_PAID_SIGNUP=0` and redeploy. To roll
 back code, restore the prior immutable image and its captured environment while preserving
 `zenod-mt-data`. Never roll back by deleting or recreating the data volume. If a data restore is
-required, stop the exact container and restore a verified archive into a new volume first; retain the
-original volume until application and MCP checks pass.
+required, quiesce the exact workload and restore a verified archive into a new volume first; retain
+the original volume until application and MCP checks pass.
