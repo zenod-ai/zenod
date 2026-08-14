@@ -95,7 +95,10 @@ docker run --rm \
   --volume "${restore_volume}:/restore" \
   --volume "${archive_dir}:/archive:ro" \
   "$image_ref" sh -c "cd /restore && tar -xzf /archive/${archive_name}"
-docker run --rm --volume "${restore_volume}:/data:ro" "$image_ref" \
+# SQLite databases captured in WAL mode may need writable temporary -shm state
+# during integrity_check. Only the disposable restore volume is writable here;
+# the source archive remains mounted read-only above.
+docker run --rm --volume "${restore_volume}:/data" "$image_ref" \
   node /app/scripts/verify-zenod-data.mjs /data
 
 docker volume rm "$restore_volume" >/dev/null
