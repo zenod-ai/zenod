@@ -2,13 +2,13 @@
 
 Status: active
 Created: 2026-07-09
-Updated: 2026-07-09
+Updated: 2026-08-16
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `8658d72` plus current Foundation working tree
+Last reconciled commit: `1a39166` plus current Foundation and Zenod Alpha spine working tree
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -84,12 +84,12 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: planning
-Last verified: 2026-07-09 19:55 CEST
+Phase: Zenod Alpha child delivery surface ready for first dispatch
+Last verified: 2026-08-16 17:07 CEST
 Integration target: `main`
-Fresh base commit: `8658d72` for Zenod; `3ab84fa` for the merged public package
-Next action: create GitHub issues for the remaining rollout tickets and link them into the Issue Ledger.
-Blockers: GitHub issue URLs not yet created for this foundation track.
+Fresh base commit: `1a39166bc252cf9a0f6b0a1482ab33e4c388c80e` on `main`; control-plane docs are on `codex/alpha-launch-control` until merged
+Next action: on “continue,” bind as Zenod Alpha delivery manager, open `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`, dispatch [ZAL-1 #1058](https://github.com/zenod-ai/zenod/issues/1058) and [ZAL-2 #1059](https://github.com/zenod-ai/zenod/issues/1059) in isolated worktrees, and remain the single spine steward while reconciling their handoffs.
+Blockers: none for the first dispatch batch. Later production mutation, live billing, signup opening, package/WhatsApp promise, and external promotion remain explicit Jordi gates in the child spine.
 
 ## Bootstrap Map
 
@@ -103,6 +103,9 @@ Read in this order:
 | 4 | `skills/epic-spine/assets/github-issue-template.md` | Template for GitHub execution tickets. | Planner |
 | 5 | `docs/epic-spine-deck.html` | Human onboarding deck for the pattern. | Always |
 | 6 | `docs/EPIC-0-STORY.md` | Existing Epic 0 story spine; read-only from this track. | When routing story/launch consequences |
+| 7 | [`Log/2026-08-15.md#^e-5c1e43`](https://github.com/AlfaBlok/obsidian-brain/blob/c18c1f92cbd26ce5a12518f9c7af7c59ff5eb928/Log/2026-08-15.md#L21) | Product-direction voice note: alpha launch, promotion, and the memory + execution lane. | Alpha-launch or voice-execution planning |
+| 8 | [`Log/2026-08-15.md#^e-063285`](https://github.com/AlfaBlok/obsidian-brain/blob/a58d731c33000a780f4bd94bbe02b0432e2282db/Log/2026-08-15.md#L27) | Readiness voice note: incorrect recent recap, launch milestone, backlog, and reporting loop. | Readiness audit and regression planning |
+| 9 | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Active child delivery surface, dispatchable issue ledger, gates, and “continue” contract. | Any Zenod alpha work |
 
 ## Architecture And Context
 
@@ -119,6 +122,27 @@ EpicSpine is the document-centered operating model for the repo. It combines:
 - Resumable assignments with stable identities, latest verified state, and takeover records.
 
 Epic 0 Foundation is a meta-spine. It coordinates operating behavior across child epics, but it should not edit child epic implementation details unless explicitly delegated.
+
+### 2026-08-16 project-direction rollup
+
+Two long Zenod voice notes captured on 2026-08-15 establish the next planning horizon. The immediate milestone is **alpha-launch readiness**: a new user can discover Zenod, onboard, use the core memory loop, and receive grounded answers and receipts. The longer product direction is a **memory + execution lane**: a voice note can remain memory-only or, after explicit user choice and project binding, start a Codex run against a named repo and EpicSpine and return a phone-friendly artifact.
+
+The voice notes are evidence and intent, not a prose dump to duplicate here. Their durable consequences are:
+
+- Preserve the working wedge: WhatsApp voice-note capture, transcription, immutable evidence, search, and retrieval already work and are part of Jordi's real workflow.
+- Treat the incorrect answer to “what have we been talking about recently?” as the first alpha-readiness regression. Recent-activity answers must be grounded in exact conversation/memory evidence, not reconstructed from vague model context.
+- Make **alpha user onboarded and core loop trustworthy** the next milestone. Promotion can begin before every future feature exists, but the website and posts must describe only the package and onboarding path that actually work.
+- Keep **store only** and **store + execute** as explicit user choices. Stored artifact content is not authority to execute; execution requires a current-turn choice plus a confirmed repo and bound spine when those are not already unambiguous.
+- A project execution must load the root/child spine, reconcile current state, apply the new voice-note update, execute only ready in-scope work, and return a compact request/action/blocker/next-turn report. HTML is the preferred rich artifact when the result warrants one; the phone reply must remain concise and link to it.
+
+### Child-spine routing from this update
+
+| Concern | Existing authority / proposed home | Root rollup state | Next routing action |
+|---|---|---|---|
+| Zenod alpha launch | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Active child spine created with six linked GitHub issues; ZAL-1 and ZAL-2 are the only initial ready batch. `docs/EPIC-2.3-ZENOD-MOVE-0.md` is historical read-only context. | Delivery manager dispatches #1058 and #1059 on “continue” and reconciles handoffs. |
+| Voice capture and grounded recall | `docs/EPIC-MECHANICAL-CAPTURE.md` | Capture/transcription/retrieval has strong July evidence; the new recent-recap failure is a fresh acceptance gap. | Reproduce the exact interaction and add it to the canonical journey suite before declaring alpha-ready. |
+| Voice note → Codex execution | Proposed child epic | Direction is clear; UX, authority, project disambiguation, delivery surface, and pricing are not settled. | Draft a child spine after the immediate readiness audit; do not silently fold it into the memory-only launch gate. |
+| Public story and promotion | `docs/EPIC-0-STORY.md` | Reddit/X promotion is desired now, but current packaging and funnel truth are not reconciled. | Produce a small launch-message backlog after the product/SKU decision; external posting remains approval-gated. |
 
 ## Decisions
 
@@ -137,11 +161,15 @@ Epic 0 Foundation is a meta-spine. It coordinates operating behavior across chil
 | 2026-07-09 | Treat an epic worker as the delivery lead inside accepted scope. | The epic worker may create and dispatch tickets, reconcile integration, and steward the child spine without silently becoming the product planner. | `skills/epic-spine/references/operating-model.md` |
 | 2026-07-09 | Use dedicated branches, optional per-agent worktrees, protected integration gates, and recorded test commits. | Worktrees isolate files but do not replace branches; frequent integration must still require review/checks and reproducible validation. | `skills/epic-spine/references/operating-model.md` |
 | 2026-07-09 | Make assignments resumable and human gates precise. | A stalled agent can be replaced safely only when owner, commits, evidence, blocker, next action, and required human decision are explicit. | `skills/epic-spine/assets/epic-spine-template.md` |
+| 2026-08-16 | Use alpha-user launch readiness as Zenod's next milestone. | The immediate outcome is a discoverable, onboardable, trustworthy core memory product, not completion of every future execution feature. | [`^e-063285`](https://github.com/AlfaBlok/obsidian-brain/blob/a58d731c33000a780f4bd94bbe02b0432e2282db/Log/2026-08-15.md#L27) |
+| 2026-08-16 | Treat memory + execution as the strategic product direction, with an explicit store-only / store-and-execute choice. | Voice capture is already useful; binding it to a configured Codex harness, repo, and spine closes the loop from intent to work without making every capture executable authority. | [`^e-5c1e43`](https://github.com/AlfaBlok/obsidian-brain/blob/c18c1f92cbd26ce5a12518f9c7af7c59ff5eb928/Log/2026-08-15.md#L21) |
+| 2026-08-16 | Keep the launch-readiness backlog separate from the future execution-lane backlog. | Grounded recall, packaging, onboarding, website truth, and alpha support must be made shippable now; repo/spine selection, execution authority, Codex reportback, and artifact hosting form a distinct larger epic. | 2026-08-15 voice-note pair and this rollup |
 
 ## Issue Ledger
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | active / ready to dispatch | - | `codex/alpha-launch-control` | `1a39166` | Child DoD covers readiness truth, recap regression, offer decision, production gate, stranger acceptance, promotion draft, and resumable state. | [#1058](https://github.com/zenod-ai/zenod/issues/1058)–[#1063](https://github.com/zenod-ai/zenod/issues/1063) created; #1058/#1059 ready. | 2026-08-16 17:07 CEST | Publish spine; then dispatch #1058 and #1059 on “continue.” |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
 | draft | Tester | unassigned | Validate bootstrap from a cold start | ready | Child epic applied | - | `8658d72` | Fresh agent can read the target spine and report authority, current state, active issues, blockers, and next action without chat history. | Skill validator passes. | 2026-07-09 19:55 CEST | Run cold-start test after child epic update. |
@@ -165,6 +193,9 @@ Epic 0 Foundation is a meta-spine. It coordinates operating behavior across chil
 | Product intent or acceptance change | Jordi | Proposed behavior changes the EpicSpine contract or rollout acceptance | Approve the revised intent or criteria | Documentation and validation inside existing scope |
 | Public release or registry submission | Jordi | Publishing beyond the existing AlfaBlok GitHub repository and Pages site | Approve target registry and release posture | Local package, README, deck, and repository updates |
 | Destructive, privileged, or irreversible action | Jordi | Credentials, deletion, production mutation, or irreversible external action is required | Approve the exact action and target | Read-only investigation and reversible preparation |
+| Alpha package and public promise | Jordi | Readiness audit exposes multiple viable hosted/self-hosted/WhatsApp offers | Approve the exact offer, price, included surfaces, and onboarding promise | Readiness testing and draft-only launch materials |
+| External promotion | Jordi | A Reddit/X/email draft is ready | Approve the exact final content and destination | Research, strategy, and drafts |
+| Voice-triggered execution authority | Jordi | The proposed execution child spine is ready to move beyond design | Approve the store+execute interaction, repo/spine confirmation rule, pricing posture, and mutation gates | Read-only design and local prototypes |
 
 ## Recovery And Takeover
 
@@ -176,6 +207,10 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Planner Queue
 
+- Treat `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` as the sole active alpha delivery board; do not select work from the global open-issue list.
+- On “continue,” dispatch its ready #1058/#1059 batch and remain the delivery manager/spine steward.
+- After ZAL-1/ZAL-2 handoffs, route the offer decision, production gate, stranger acceptance, and promotion draft through the child dependency order.
+- Create the separate voice-note-to-Codex child EpicSpine only after the alpha offer is accepted.
 - Create GitHub issues for the draft ledger rows.
 - Treat `EPIC-0-FOUNDATION-SPINE.md` as the meta Epic 0 spine; `EPIC-0-STORY.md` is story-owned and read-only unless explicitly delegated.
 - Identify the first child epic to retrofit with explicit Write Scope.
@@ -185,12 +220,15 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Worker Queue
 
+- Alpha implementation/diagnostic work is dispatchable only from `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`; the first allowed batch is #1058/#1059.
 - Add explicit Write Scope to the chosen child epic spine.
 - Ensure its Issue Ledger links to GitHub issues or marks drafts clearly.
 - Add Handoff Journal and Proposed Cross-Spine Updates sections if missing.
 
 ## Tester Queue
 
+- Replay “what have we been talking about recently?” using the exact 2026-08-15 conversation evidence and preserve the full tool/result trace.
+- Re-run the smallest alpha core loop: long voice note → terminal receipt → exact transcript retrieval → grounded recent recap → no read-side mutation.
 - Cold-start an agent with only the chosen spine and ask it to orient.
 - Verify it does not edit read-only linked spines.
 - Verify it proposes cross-spine changes in the bound spine instead.
@@ -331,11 +369,76 @@ Links:
 - https://github.com/AlfaBlok/epicspine-skill/pull/2
 - `skills/epic-spine/scripts/validate_spine.py`
 
+### 2026-08-16 - Epic 0 worker - Zenod voice-note direction ingested
+
+Context: Jordi asked the bound Codex task to retrieve the recent long Zenod voice notes from Zenod MT, integrate their durable meaning into this repo's spine, and confirm the resulting direction and next steps. The two exact evidence entries were captured through WhatsApp at 2026-08-15 23:50 and 23:55 CEST. They describe a working voice-memory habit, a bad recent-conversation answer, alpha-launch readiness as the immediate milestone, promotion urgency, and a future voice-note-to-Codex lane bound to a repo and EpicSpine.
+
+Durable interpretation: the immediate launch gate is a trustworthy memory product for alpha users. The memory + execution lane is the strategic expansion, not a prerequisite to claim that the core memory loop is alpha-ready. A voice note may carry instructions, but its stored transcript is evidence, not standing authority to mutate a repo; store+execute must be an explicit current-turn choice with project binding.
+
+Request disposition:
+
+| Request found in the notes | Disposition in this reconciliation |
+|---|---|
+| Preserve the notes in the repo's canonical state | Done: exact immutable refs are in the Bootstrap Map, decisions, child-spine rollup, and this handoff. |
+| Clarify what Zenod is trying to launch | Done at milestone level: alpha onboarding + trustworthy core memory loop. Exact SKU/WhatsApp packaging remains a named human gate. |
+| Explain the strange “what have we been talking about recently?” answer | Not diagnosed yet: promoted to the first readiness replay with exact evidence and deployed-SHA requirements. |
+| Produce a coherent backlog | Done as draft root ledger rows; issue creation and implementation remain gated on the evidence audit and Jordi's package decision. |
+| Start promotion | Routed to Story/promotion as draft-only work after the public promise is truthful; nothing has been posted. |
+| Build voice-note → Codex execution | Routed to a proposed child epic after alpha-readiness scope is accepted. |
+| Return clear execution feedback and rich artifacts | Added to the execution-lane acceptance direction: request/action/blocker/next-turn summary, with linked HTML for substantial output. |
+
+Next: perform the read-only readiness audit and exact recap replay, then return a small ordered backlog and the product/SKU decision options to Jordi before dispatching implementation.
+
+Risks: existing launch documents contain substantial July state and may be stale relative to the current runtime. The working tree was already dirty with unrelated untracked artifacts, so this reconciliation changed only the bound Foundation spine.
+
+Assignment identity: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
+
+Branch / latest commit: `capture-first-live-evidence` at `529ee7a` plus this uncommitted spine update
+
+Evidence:
+
+- [`Log/2026-08-15.md#^e-5c1e43`](https://github.com/AlfaBlok/obsidian-brain/blob/c18c1f92cbd26ce5a12518f9c7af7c59ff5eb928/Log/2026-08-15.md#L21)
+- [`Log/2026-08-15.md#^e-063285`](https://github.com/AlfaBlok/obsidian-brain/blob/a58d731c33000a780f4bd94bbe02b0432e2282db/Log/2026-08-15.md#L27)
+- `docs/EPIC-MECHANICAL-CAPTURE.md`
+- `docs/EPIC-2.3-ZENOD-MOVE-0.md`
+
+### 2026-08-16 - Epic 0 worker - Alpha board made dispatchable
+
+Context: A cold-start audit showed that the Foundation spine could orient a manager but GitHub could not safely drive execution. The repository had roughly one hundred heterogeneous open issues, while the new alpha work existed only as root-level draft rows. Current `main` was also nineteen commits ahead of the local capture branch and already contained production-readiness implementation through PRs #1053–#1057.
+
+Action: created `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` as the active child delivery surface and materialized six bounded GitHub issues. [ZAL-1 #1058](https://github.com/zenod-ai/zenod/issues/1058) and [ZAL-2 #1059](https://github.com/zenod-ai/zenod/issues/1059) are the only initial `ready` batch. [#1060](https://github.com/zenod-ai/zenod/issues/1060)–[#1063](https://github.com/zenod-ai/zenod/issues/1063) encode dependencies and named product, production, financial, signup, and promotion gates. No worker was launched and no production or external-posting action occurred.
+
+Delivery-manager contract: a fresh task receiving “continue” opens the child spine, reconciles its linked issues and latest `main`, dispatches #1058/#1059 into separate issue branches/worktrees, and remains the sole spine steward. Ticket workers write deep detail and handoffs to GitHub; the delivery manager alone updates the child spine and rolls durable state up here.
+
+Next: land the two control-plane spine files. Then “continue” is an execution command, not another process-design conversation.
+
+Risks: global GitHub issue state remains intentionally unclean; it is not the alpha board. Only the child spine's linked ledger is selectable.
+
+Assignment identity: Epic 0 Foundation planner / Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
+
+Branch / latest commit: `codex/alpha-launch-control` from `1a39166` plus the validated control-plane changes
+
+Last verified: 2026-08-16 17:07 CEST
+
+Links:
+
+- `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`
+- https://github.com/zenod-ai/zenod/issues/1058
+- https://github.com/zenod-ai/zenod/issues/1059
+- https://github.com/zenod-ai/zenod/issues/1060
+- https://github.com/zenod-ai/zenod/issues/1061
+- https://github.com/zenod-ai/zenod/issues/1062
+- https://github.com/zenod-ai/zenod/issues/1063
+
 ## Open Questions
 
 - Should `docs/EPIC-2.9-EPAMINON-MOVE-0.md` remain 2.9 permanently, or be renumbered after the Ring numbering settles?
 - Which child epic should be the first real retrofit target?
 - Should future agents treat "epicspine Epic 0" as Foundation by default, Story by default, or require disambiguation? Current answer: Foundation by default for meta/coordination; Story only when explicitly about public positioning or launch copy.
+- What is the one alpha offer: memory-only hosted Zenod, self-hosted Zenod, hosted Zenod with WhatsApp transport, or an explicitly tiered combination?
+- Which onboarding path and price can the public site truthfully promise after the current runtime/Stripe audit?
+- For store+execute, when may recent context select the repo/spine automatically, and when must the phone UI ask for confirmation?
+- Is the first promotion target a product-learning Reddit post, an alpha-user invitation, or a build-in-public demonstration of the working voice-memory loop?
 
 ## Proposed Cross-Spine Updates
 
@@ -343,6 +446,10 @@ Links:
 |---|---|---|---|---|---|
 | 2026-07-09 | `docs/EPIC-0-STORY.md` | Add a read-only link to Foundation if Jordi confirms Story is a child/sibling of Foundation. | This spine and existing story scope differ. | Epic 0 Story planner | proposed |
 | 2026-07-09 | `docs/EPIC-2.9-EPAMINON-MOVE-0.md` | Review and accept/adjust the new Epaminon executor-unit spine; then mint GitHub execution issues. | Epaminon exists as a headless internal MCP/server but lacks unit product spine. | Epic 0 Foundation planner | proposed |
+| 2026-08-16 | `docs/EPIC-2.3-ZENOD-MOVE-0.md` | Reconcile the current runtime, funnel, billing, website, onboarding, and memory acceptance against the alpha-launch milestone; retire stale claims instead of appending another historical layer blindly. | Voice-note pair plus current repo/runtime audit to be run. | Zenod alpha-launch spine steward | proposed |
+| 2026-08-16 | `docs/EPIC-MECHANICAL-CAPTURE.md` | Add the exact incorrect recent-conversation interaction as a launch-gating grounded-recap journey after reproducing it against the deployed SHA. | `^e-063285` reports the failure after successful voice capture. | Mechanical Capture steward/tester | proposed |
+| 2026-08-16 | `docs/EPIC-0-STORY.md` | Reframe the first public story around the proven voice-memory wedge and alpha invitation; defer claims about store+execute until its child epic passes acceptance. | `^e-5c1e43` asks to begin Reddit/X promotion while also exposing packaging ambiguity. | Epic 0 Story planner | proposed |
+| 2026-08-16 | new child spine | Create the voice-note-to-Codex execution epic: explicit store+execute selection, repo/spine binding, harness, authority, reportback, HTML hosting, and commercial boundary. | `^e-5c1e43` | Epic 0 Foundation planner after Jordi's scope approval | proposed |
 
 ## Appendix
 
