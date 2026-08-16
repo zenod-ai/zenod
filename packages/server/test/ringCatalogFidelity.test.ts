@@ -259,6 +259,90 @@ describe("MC-16 Ring catalog fidelity acceptance package", () => {
     ].sort());
   });
 
+  it("ZAL-2 preserves structural recent-memory search and exact-read contracts through Ring", async () => {
+    const runtime = await ringRuntime("zal-2-recent-recap");
+    const url = "https://zenod.example/mcp";
+    const seen: SeenRequest[] = [];
+    installMcpFetch(new Map([[url, [
+      tool("search_memory", {
+        description: "List immutable memory entries by structural provenance and chronology.",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            source: { type: "string", enum: ["whatsapp"] },
+            contentType: { type: "string", enum: ["voice_note"] },
+            capturedAfter: { type: "string" },
+            order: { type: "string", enum: ["newest", "oldest", "relevance"] },
+            limit: { type: "integer", minimum: 1, maximum: 100 },
+          },
+        },
+      }),
+      tool("get_memory", {
+        description: "Read one exact immutable evidence ref without neighboring entries.",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["path"],
+          properties: {
+            path: {
+              type: "string",
+              pattern: "^Log/\\d{4}-\\d{2}-\\d{2}\\.md#\\^e-[0-9a-f]{6}$",
+            },
+          },
+        },
+      }),
+    ]]]), seen);
+    runtime.settings.setPeers([walletPeer("Zenod", url, "zenod-token")]);
+    await runtime.refreshWalletPeerTools();
+
+    const tools = peerTools(runtime);
+    const searchName = councilToolName("Zenod", "search_memory");
+    const getName = councilToolName("Zenod", "get_memory");
+    expect(tools[searchName]?.inputSchema).toMatchObject({
+      properties: {
+        source: { enum: ["whatsapp"] },
+        contentType: { enum: ["voice_note"] },
+        order: { enum: ["newest", "oldest", "relevance"] },
+        limit: { type: "integer" },
+      },
+    });
+    expect(tools[getName]?.inputSchema).toMatchObject({
+      required: ["path"],
+      properties: { path: { pattern: expect.stringContaining("Log/") } },
+    });
+
+    const searchResult = await tools[searchName]!.run({
+      source: "whatsapp",
+      contentType: "voice_note",
+      capturedAfter: "2026-08-15T00:00:00Z",
+      order: "newest",
+      limit: 2,
+    });
+    const getResult = await tools[getName]!.run({ path: "Log/2026-08-15.md#^e-063285" });
+
+    expect(JSON.parse(String(searchResult))).toMatchObject({
+      structuredContent: {
+        invoked: "search_memory",
+        arguments: {
+          source: "whatsapp",
+          contentType: "voice_note",
+          capturedAfter: "2026-08-15T00:00:00Z",
+          order: "newest",
+          limit: 2,
+        },
+      },
+    });
+    expect(JSON.parse(String(getResult))).toMatchObject({
+      structuredContent: {
+        invoked: "get_memory",
+        arguments: { path: "Log/2026-08-15.md#^e-063285" },
+      },
+    });
+    expect(seen.filter((request) => request.method === "tools/call").map((request) => request.tool))
+      .toEqual(["search_memory", "get_memory"]);
+  });
+
   it("MC-16.5 refresh detects added, removed, and contract-changed tools", async () => {
     const runtime = await ringRuntime("refresh-diff");
     const url = "https://refresh.example/mcp";
