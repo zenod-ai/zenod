@@ -84,12 +84,12 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Zenod Alpha first delivery batch active
-Last verified: 2026-08-16 17:22 CEST
+Phase: Zenod Alpha first delivery batch runtime-blocked
+Last verified: 2026-08-16 23:42 CEST
 Integration target: `main`
-Fresh base commit: `f1c5949afa885a938a5652ca9fdb66b82fec550f` on `codex/alpha-launch-control`; control-plane PR #1064 is green, mergeable, and still draft
-Next action: remain bound as Zenod Alpha delivery manager and reconcile the active [ZAL-1 #1058](https://github.com/zenod-ai/zenod/issues/1058) and [ZAL-2 #1059](https://github.com/zenod-ai/zenod/issues/1059) issue/PR handoffs before advancing package or production-gated work.
-Blockers: none for the first dispatch batch. Later production mutation, live billing, signup opening, package/WhatsApp promise, and external promotion remain explicit Jordi gates in the child spine.
+Fresh base commit: `dee9c7e` on `codex/alpha-launch-control`; worker worktrees remain clean at `f1c5949afa885a938a5652ca9fdb66b82fec550f`
+Next action: when Codex sub-agent transport is available, resume the stable [ZAL-1 #1058](https://github.com/zenod-ai/zenod/issues/1058) and [ZAL-2 #1059](https://github.com/zenod-ai/zenod/issues/1059) assignments from their terminal manager checkpoints and existing worktrees; reconcile completed issue/PR handoffs before advancing package or production work.
+Blockers: three consecutive sub-agent process attempts disconnected before any worker write or commit. Later production mutation, live billing, signup opening, package/WhatsApp promise, and external promotion also remain explicit Jordi gates in the child spine.
 
 ## Bootstrap Map
 
@@ -139,7 +139,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Concern | Existing authority / proposed home | Root rollup state | Next routing action |
 |---|---|---|---|
-| Zenod alpha launch | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Active child spine created with six linked GitHub issues; ZAL-1 and ZAL-2 are active in isolated worktrees. `docs/EPIC-2.3-ZENOD-MOVE-0.md` is historical read-only context. | Delivery manager reconciles #1058 and #1059 handoffs before later gates. |
+| Zenod alpha launch | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Active child spine with six linked issues; ZAL-1 and ZAL-2 retain stable identities and isolated clean worktrees but are runtime-blocked after three transport-disconnected attempts. | Resume #1058/#1059 from their terminal manager checkpoints when sub-agent transport is available. |
 | Voice capture and grounded recall | `docs/EPIC-MECHANICAL-CAPTURE.md` | Capture/transcription/retrieval has strong July evidence; the new recent-recap failure is a fresh acceptance gap. | Reproduce the exact interaction and add it to the canonical journey suite before declaring alpha-ready. |
 | Voice note → Codex execution | Proposed child epic | Direction is clear; UX, authority, project disambiguation, delivery surface, and pricing are not settled. | Draft a child spine after the immediate readiness audit; do not silently fold it into the memory-only launch gate. |
 | Public story and promotion | `docs/EPIC-0-STORY.md` | Reddit/X promotion is desired now, but current packaging and funnel truth are not reconciled. | Produce a small launch-message backlog after the product/SKU decision; external posting remains approval-gated. |
@@ -169,7 +169,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | active / first batch executing | - | [PR #1064](https://github.com/zenod-ai/zenod/pull/1064) / `codex/alpha-launch-control` | `f1c5949` | Child DoD covers readiness truth, recap regression, offer decision, production gate, stranger acceptance, promotion draft, and resumable state. | #1058/#1059 dispatched to stable workers and isolated worktrees; PR #1064 CI green. | 2026-08-16 17:22 CEST | Reconcile #1058/#1059 terminal handoffs. |
+| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | blocked / resumable | Codex sub-agent transport | [PR #1064](https://github.com/zenod-ai/zenod/pull/1064) / `codex/alpha-launch-control` | `f1c5949` | Child DoD covers readiness truth, recap regression, offer decision, production gate, stranger acceptance, promotion draft, and resumable state. | [#1058 checkpoint](https://github.com/zenod-ai/zenod/issues/1058#issuecomment-5309823141) and [#1059 checkpoint](https://github.com/zenod-ai/zenod/issues/1059#issuecomment-5309823218); clean worktrees; no worker PRs. | 2026-08-16 23:42 CEST | Resume #1058/#1059 stable assignments when transport is available. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
 | draft | Tester | unassigned | Validate bootstrap from a cold start | ready | Child epic applied | - | `8658d72` | Fresh agent can read the target spine and report authority, current state, active issues, blockers, and next action without chat history. | Skill validator passes. | 2026-07-09 19:55 CEST | Run cold-start test after child epic update. |
