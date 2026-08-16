@@ -80,12 +80,12 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Current State
 
-Phase: first truth batch integrated; offer decision packet active
-Last verified: 2026-08-17 00:40 CEST
+Phase: offer decision packet integrated; blocked on Jordi's exact contract choice
+Last verified: 2026-08-17 00:55 CEST
 Integration target: `main`
-Fresh base commit: `0bb5b3df740be9e8f026dba8a19cd9076fb7de44` on `main`
-Next action: reconcile the ZAL-3 decision packet and present its single bounded offer/WhatsApp decision to Jordi; keep ZAL-2 open in testing for the approved post-deploy replay.
-Blockers: none for the resumed read-only/branch-isolated batch. Production mutation, live billing drill, signup opening, final alpha package, WhatsApp launch promise, and external promotion remain explicit Jordi gates.
+Fresh base commit: `e091eb2a9153eee50165f7a888ec51c8346dab1e` on `main`
+Next action: Jordi replies `APPROVE A`, `APPROVE B`, or `APPROVE C` using the integrated ZAL-3 definitions; the delivery manager then closes ZAL-3 and shapes ZAL-4/ZAL-5/ZAL-6 to that exact contract.
+Blockers: the exact first-alpha offer/WhatsApp contract requires Jordi's choice. Production mutation, live billing drill, signup opening, any WhatsApp-session change, and external promotion remain separate later approvals.
 
 ## Role Goals
 
@@ -136,7 +136,7 @@ The repository's global issue list is not the alpha board. It contains many hist
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | [#1058](https://github.com/zenod-ai/zenod/issues/1058) | Ticket worker | ZAL-1-readiness-audit-worker | ZAL-1 · Reconcile alpha-launch truth and readiness matrix | done | - | [merged PR #1066](https://github.com/zenod-ai/zenod/pull/1066) / `main` | `7454715` | Evidence matrix and smallest ordered backlog are committed; no production mutation. | [Terminal handoff](https://github.com/zenod-ai/zenod/issues/1058#issuecomment-5309945858); artifact `601d3a6`; CI green; merged as `e478965`; issue closed. | 2026-08-17 00:37 CEST | None. |
 | [#1059](https://github.com/zenod-ai/zenod/issues/1059) | Ticket worker | ZAL-2-recent-recap-worker | ZAL-2 · Reproduce and repair the incorrect recent-conversation recap | testing | approved Ring deployment/replay | [merged PR #1067](https://github.com/zenod-ai/zenod/pull/1067) / `main` | `7454715` | Exact interaction is reproduced and fixed with regression, or current pass is proved with full trace; no production deploy. | [Manager review](https://github.com/zenod-ai/zenod/issues/1059#issuecomment-5310028378); exact evidence and fix `8811326`; CI/review green; merged as `0bb5b3d`. | 2026-08-17 00:37 CEST | Under ZAL-4 approval, deploy named Ring image and replay exact trace before closing. |
-| [#1060](https://github.com/zenod-ai/zenod/issues/1060) | Planner | ZAL-3-offer-decision-planner | ZAL-3 · Frame the alpha offer and WhatsApp boundary for decision | active | [#1058](https://github.com/zenod-ai/zenod/issues/1058) done | `codex/zal-3-offer-decision` · `/Users/jordi/Documents/GitHub/wt-zal-3-offer-decision` | `0bb5b3d` | 2–3 truthful options, recommendation, promise matrix, and exact Jordi decision are recorded. | [Dispatch receipt](https://github.com/zenod-ai/zenod/issues/1060#issuecomment-5310043465); ZAL-1 matrix accepted; no mutation authorized. | 2026-08-17 00:40 CEST | Reconcile decision-ready issue/PR handoff and present exact question to Jordi. |
+| [#1060](https://github.com/zenod-ai/zenod/issues/1060) | Planner | ZAL-3-offer-decision-planner | ZAL-3 · Frame the alpha offer and WhatsApp boundary for decision | decision-ready / human gate | Jordi contract choice | [merged PR #1068](https://github.com/zenod-ai/zenod/pull/1068) / `main` | `0bb5b3d` | 2–3 truthful options, recommendation, promise matrix, and exact Jordi decision are recorded. | [Manager acceptance](https://github.com/zenod-ai/zenod/issues/1060#issuecomment-5310093149); artifact `5d7dbd4`; CI green; merged as `e091eb2`. | 2026-08-17 00:55 CEST | Jordi replies `APPROVE A`, `APPROVE B`, or `APPROVE C`; then reconcile downstream scope. |
 | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | Epic worker / operator | unassigned | ZAL-4 · Execute the fail-closed production-readiness gate | blocked | [#1058](https://github.com/zenod-ai/zenod/issues/1058), [#1059](https://github.com/zenod-ai/zenod/issues/1059), [#1060](https://github.com/zenod-ai/zenod/issues/1060), production approval | `codex/zal-4-production-gate` | `1a39166` | Every runbook check has current evidence; signup remains closed until exact approval, then opens and verifies or rolls back safely. | `docs/PRODUCTION-READINESS.md`; public signup disabled pending evidence. | 2026-08-16 17:07 CEST | Prepare read-only packet; request exact production/real-card/signup approval. |
 | [#1062](https://github.com/zenod-ai/zenod/issues/1062) | Tester | unassigned | ZAL-5 · Stranger alpha onboarding and memory acceptance | waiting | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | `codex/zal-5-stranger-acceptance` | `1a39166` | One uninterrupted public-page → onboarding → MCP memory journey passes on the named deployed SHA; approved WhatsApp promise is included if applicable. | Existing founder/live component evidence only. | 2026-08-16 17:07 CEST | Dispatch after production gate passes. |
 | [#1063](https://github.com/zenod-ai/zenod/issues/1063) | Planner / outbound drafter | unassigned | ZAL-6 · Draft the first proof-led alpha invitation | waiting | [#1060](https://github.com/zenod-ai/zenod/issues/1060); may run beside [#1061](https://github.com/zenod-ai/zenod/issues/1061) | `codex/zal-6-alpha-invitation` | `1a39166` | Exact Reddit/X options and landing target match proved capabilities; nothing is published. | Promotion requested in `^e-5c1e43`. | 2026-08-16 17:07 CEST | Draft after offer decision; request exact-content approval before posting. |
@@ -196,10 +196,32 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 | 2026-08-16 | Production-readiness implementation | `1a39166` | GitHub `main` | PRs #1053–#1057; repository runbook and merged test evidence | code-ready; operational gate pending | `docs/PRODUCTION-READINESS.md` |
 | 2026-08-17 | ZAL-1 alpha readiness truth audit | `601d3a6` merged as `e478965` | Repository, public edge, and read-only VPS/Docker metadata | Direct surface checks, backup metadata, focused suites, link/diff/secret checks, and PR CI | pass for audit acceptance; launch remains gated 10/13 | `docs/evidence/zenod-alpha-readiness-2026-08-16/README.md`; [PR #1066](https://github.com/zenod-ai/zenod/pull/1066) |
 | 2026-08-17 | ZAL-2 recap failure boundary and branch fix | `8811326` merged as `0bb5b3d` | Preserved Ring audit state, deployed replay, live Zenod reads, local/CI | Exact interaction recovery, isolated replay, vault immutability, structural refs, focused 17/17, full 904-server suite, typecheck, reviewer | pass for integration; post-deploy model behavior remains testing | `docs/evidence/zal-2-recent-recap-2026-08-17/README.md`; [PR #1067](https://github.com/zenod-ai/zenod/pull/1067) |
+| 2026-08-17 | ZAL-3 first-alpha offer decision packet | `5d7dbd4` merged as `e091eb2` | Repository and rechecked public promise/status surfaces | Three exact contracts, promise matrix, one recommendation, safe-work boundary, exact Jordi choice, link/diff checks, PR CI | decision-ready; no option approved | `docs/evidence/zenod-alpha-offer-decision-2026-08-17/README.md`; [PR #1068](https://github.com/zenod-ai/zenod/pull/1068) |
 | 2026-08-01 | Typed recent-memory retrieval | `d4eaac4` deployed at time of proof | Zenod MT MCP | newest-first structural `search_memory` plus exact evidence-ref `get_memory` | pass | `docs/evidence/generic-entry-retrieval-2026-08-01/` |
 | 2026-08-16 | Child spine structure | working tree from `1a39166` | local | `python3 skills/epic-spine/scripts/validate_spine.py --strict docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | pending final issue links | this file |
 
 ## Handoff Journal
+
+### 2026-08-17 - Epic worker - ZAL-3 decision packet integrated; human gate reached
+
+Context: ZAL-3 reconciled the accepted readiness and recap evidence into three exact first-alpha contracts and recommended Option A. The manager verified that the packet preserves Jordi's decision authority and all later action-specific gates. PR #1068 passed CI and merged as `e091eb2`; no offer was approved by the merge.
+
+Next: Jordi replies exactly `APPROVE A`, `APPROVE B`, or `APPROVE C` as defined in `docs/evidence/zenod-alpha-offer-decision-2026-08-17/README.md`. Any mixed or modified contract must be restated before downstream work treats it as accepted.
+
+Risks: Option A still requires the Zenod production gate and stranger journey; Option B changes the critical path to unproved clean-host self-host onboarding; Option C expands the launch to coordinated Zenod/Ring/Phylax proof and manual WhatsApp capacity. No deploy, billing, signup, session, or publication gate is approved.
+
+Assignment identity: Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
+
+Branch / latest commit: ZAL-3 `5d7dbd4`; integrated `main` `e091eb2`; steward branch `codex/alpha-launch-resume`
+
+Last verified: 2026-08-17 00:55 CEST
+
+Links:
+
+- https://github.com/zenod-ai/zenod/pull/1068
+- https://github.com/zenod-ai/zenod/issues/1060#issuecomment-5310076257
+- https://github.com/zenod-ai/zenod/issues/1060#issuecomment-5310093149
+- `docs/evidence/zenod-alpha-offer-decision-2026-08-17/README.md`
 
 ### 2026-08-17 - Epic worker - ZAL-2 repair integrated; live replay retained
 
