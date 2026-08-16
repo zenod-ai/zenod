@@ -80,12 +80,12 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Current State
 
-Phase: first audit and regression batch blocked on sub-agent runtime
-Last verified: 2026-08-16 23:42 CEST
+Phase: first audit and regression batch resumed from merged control plane
+Last verified: 2026-08-16 23:56 CEST
 Integration target: `main`
-Fresh base commit: `f1c5949afa885a938a5652ca9fdb66b82fec550f`
-Next action: when the Codex sub-agent transport is stable, resume the same ZAL-1 and ZAL-2 assignment identities in their existing clean worktrees, consume the terminal manager checkpoints in #1058/#1059, and complete the artifact/trace handoffs before advancing later work.
-Blockers: three consecutive worker-process attempts ended in Codex service transport disconnects before any worktree write or commit. Production mutation, live billing drill, signup opening, final alpha package, WhatsApp launch promise, and external promotion also remain explicit Jordi gates.
+Fresh base commit: `7454715a299b97ea410269b14586ac79c14334c9` on `main`
+Next action: reconcile the resumed ZAL-1 and ZAL-2 issue/PR handoffs, independently review their evidence, and keep later work dependency-gated.
+Blockers: none for the resumed read-only/branch-isolated batch. Production mutation, live billing drill, signup opening, final alpha package, WhatsApp launch promise, and external promotion remain explicit Jordi gates.
 
 ## Role Goals
 
@@ -134,8 +134,8 @@ The repository's global issue list is not the alpha board. It contains many hist
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#1058](https://github.com/zenod-ai/zenod/issues/1058) | Ticket worker | ZAL-1-readiness-audit-worker | ZAL-1 · Reconcile alpha-launch truth and readiness matrix | blocked | Codex sub-agent transport | `codex/zal-1-readiness-audit` · `/Users/jordi/Documents/GitHub/wt-zal-1-readiness-audit` | `f1c5949` | Evidence matrix and smallest ordered backlog are committed; no production mutation. | [Terminal manager checkpoint](https://github.com/zenod-ai/zenod/issues/1058#issuecomment-5309823141); partial read-only findings; worktree clean; no PR. | 2026-08-16 23:42 CEST | Resume the stable assignment in the existing worktree when transport is available. |
-| [#1059](https://github.com/zenod-ai/zenod/issues/1059) | Ticket worker | ZAL-2-recent-recap-worker | ZAL-2 · Reproduce and repair the incorrect recent-conversation recap | blocked | Codex sub-agent transport | `codex/zal-2-recent-recap` · `/Users/jordi/Documents/GitHub/wt-zal-2-recent-recap` | `f1c5949` | Exact interaction is reproduced and fixed with regression, or current pass is proved with full trace; no production deploy. | [Terminal manager checkpoint](https://github.com/zenod-ai/zenod/issues/1059#issuecomment-5309823218); exact refs recovered; exact bad answer/replay/fix incomplete; worktree clean; no PR. | 2026-08-16 23:42 CEST | Resume the stable assignment in the existing worktree when transport is available. |
+| [#1058](https://github.com/zenod-ai/zenod/issues/1058) | Ticket worker | ZAL-1-readiness-audit-worker | ZAL-1 · Reconcile alpha-launch truth and readiness matrix | active | - | `codex/zal-1-readiness-audit` · `/Users/jordi/Documents/GitHub/wt-zal-1-readiness-audit` | `7454715` | Evidence matrix and smallest ordered backlog are committed; no production mutation. | [Resume dispatch](https://github.com/zenod-ai/zenod/issues/1058#issuecomment-5309874908); clean branch pushed from merged control plane. | 2026-08-16 23:56 CEST | Reconcile the terminal issue/PR handoff. |
+| [#1059](https://github.com/zenod-ai/zenod/issues/1059) | Ticket worker | ZAL-2-recent-recap-worker | ZAL-2 · Reproduce and repair the incorrect recent-conversation recap | active | - | `codex/zal-2-recent-recap` · `/Users/jordi/Documents/GitHub/wt-zal-2-recent-recap` | `7454715` | Exact interaction is reproduced and fixed with regression, or current pass is proved with full trace; no production deploy. | [Resume dispatch](https://github.com/zenod-ai/zenod/issues/1059#issuecomment-5309875002); clean branch pushed from merged control plane. | 2026-08-16 23:56 CEST | Reconcile the terminal issue/PR handoff. |
 | [#1060](https://github.com/zenod-ai/zenod/issues/1060) | Planner | unassigned | ZAL-3 · Frame the alpha offer and WhatsApp boundary for decision | waiting | [#1058](https://github.com/zenod-ai/zenod/issues/1058) | `codex/zal-3-offer-decision` | `1a39166` | 2–3 truthful options, recommendation, promise matrix, and exact Jordi decision are recorded. | Hosted €5/month and self-host split exist; WhatsApp promise unresolved. | 2026-08-16 17:07 CEST | Start after ZAL-1 handoff. |
 | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | Epic worker / operator | unassigned | ZAL-4 · Execute the fail-closed production-readiness gate | blocked | [#1058](https://github.com/zenod-ai/zenod/issues/1058), [#1059](https://github.com/zenod-ai/zenod/issues/1059), [#1060](https://github.com/zenod-ai/zenod/issues/1060), production approval | `codex/zal-4-production-gate` | `1a39166` | Every runbook check has current evidence; signup remains closed until exact approval, then opens and verifies or rolls back safely. | `docs/PRODUCTION-READINESS.md`; public signup disabled pending evidence. | 2026-08-16 17:07 CEST | Prepare read-only packet; request exact production/real-card/signup approval. |
 | [#1062](https://github.com/zenod-ai/zenod/issues/1062) | Tester | unassigned | ZAL-5 · Stranger alpha onboarding and memory acceptance | waiting | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | `codex/zal-5-stranger-acceptance` | `1a39166` | One uninterrupted public-page → onboarding → MCP memory journey passes on the named deployed SHA; approved WhatsApp promise is included if applicable. | Existing founder/live component evidence only. | 2026-08-16 17:07 CEST | Dispatch after production gate passes. |
@@ -168,7 +168,8 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 
 | Issue | Previous Assignment | Takeover Assignment | Starting Commit | Unverified Work | Recorded At |
 |---|---|---|---|---|---|
-| none | - | - | `1a39166` | none | 2026-08-16 17:07 CEST |
+| [#1058](https://github.com/zenod-ai/zenod/issues/1058) | ZAL-1-readiness-audit-worker processes interrupted by transport | ZAL-1-readiness-audit-worker / resume-main process | `7454715` | Partial read-only checkpoint only; independently reverify. | 2026-08-16 23:56 CEST |
+| [#1059](https://github.com/zenod-ai/zenod/issues/1059) | ZAL-2-recent-recap-worker processes interrupted by transport | ZAL-2-recent-recap-worker / resume-main process | `7454715` | Partial read-only checkpoint only; exact bad answer/replay/fix still unverified. | 2026-08-16 23:56 CEST |
 
 ## Planner Queue
 
@@ -180,7 +181,7 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 
 ## Worker Queue
 
-- ZAL-1 and ZAL-2 remain the only batch; both are runtime-blocked and keep their stable identities/worktrees for resumption.
+- ZAL-1 and ZAL-2 remain the only batch; both stable assignments are active in refreshed isolated worktrees.
 - ZAL-4 may prepare a read-only preflight packet while blocked, but may not deploy, charge, or open signup.
 
 ## Tester Queue
@@ -197,6 +198,26 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 | 2026-08-16 | Child spine structure | working tree from `1a39166` | local | `python3 skills/epic-spine/scripts/validate_spine.py --strict docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | pending final issue links | this file |
 
 ## Handoff Journal
+
+### 2026-08-16 - Epic worker - Control plane merged and stable assignments resumed
+
+Context: PR #1064 passed CI and merged to `main` as `7454715`. The manager fast-forwarded both clean dedicated worker branches to that exact commit, pushed them, updated the bound issues from blocked to active, and launched fresh processes under the existing stable assignment identities. Earlier checkpoints remain evidence leads, not accepted proof.
+
+Next: review and reconcile the terminal ZAL-1/ZAL-2 issue and PR handoffs. Do not advance ZAL-3 or ZAL-4 until their dependencies are satisfied.
+
+Risks: sub-agent transport previously disconnected repeatedly. If it recurs, preserve any new branch/issue evidence and name the exact latest commit instead of resetting the assignments. Human production and public-promise gates are unchanged.
+
+Assignment identity: Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
+
+Branch / latest commit: `codex/alpha-launch-resume` from `7454715`; worker branches start at `7454715`
+
+Last verified: 2026-08-16 23:56 CEST
+
+Links:
+
+- https://github.com/zenod-ai/zenod/pull/1064
+- https://github.com/zenod-ai/zenod/issues/1058#issuecomment-5309874908
+- https://github.com/zenod-ai/zenod/issues/1059#issuecomment-5309875002
 
 ### 2026-08-16 - Epic worker - First batch runtime-blocked after three attempts
 
