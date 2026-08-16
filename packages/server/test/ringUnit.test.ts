@@ -28,6 +28,12 @@ describe("Ring council unit", () => {
     expect(RING_AGENT.persona).toContain("trusted host metadata");
     expect(RING_AGENT.persona).toContain("not an async job identifier");
     expect(RING_AGENT.persona).toContain("contextRefs");
+    expect(RING_AGENT.persona).toContain("A broad recent-conversation recap");
+    expect(RING_AGENT.persona).toContain("`search_memory`");
+    expect(RING_AGENT.persona).toContain("`order: newest`");
+    expect(RING_AGENT.persona).toContain("then call `get_memory` for the exact evidence refs");
+    expect(RING_AGENT.persona).toContain("an empty or failed transcript is an explicit evidence gap, never a terminal answer");
+    expect(RING_AGENT.persona).toContain("do not add mutation-status prose");
     expect(resolveServerMode({ ZENOD_UNIT: "ring" }, RING_AGENT.name)).toBe("ring");
   });
 
