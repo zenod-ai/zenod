@@ -9,9 +9,9 @@ GitHub issues: `https://github.com/zenod-ai/zenod/issues`
 Integration branch: `main`
 Active spine steward: Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
 Steward since: 2026-08-16 17:07 CEST
-Last reconciled commit: `130a2720dcdd78577bf7458c323f2da770c57922` plus current spine working tree
+Last reconciled commit: `131b80cf67f37b31ec32b7476b1b4725a47b7ffd` plus current spine working tree
 Planner: Jordi + Zenod Alpha delivery manager
-Worker: ZAL-3E-unit-economics-worker ([#1069](https://github.com/zenod-ai/zenod/issues/1069))
+Worker: unassigned
 Tester: unassigned
 
 ## Role Bindings
@@ -80,12 +80,12 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Current State
 
-Phase: offer economics prerequisite active; original A/B/C choice superseded pending priced usage contract
-Last verified: 2026-08-20 17:12 CEST
+Phase: unit economics integrated; exact priced usage contract at Jordi human gate
+Last verified: 2026-08-20 17:41 CEST
 Integration target: `main`
-Fresh base commit: `130a2720dcdd78577bf7458c323f2da770c57922` on `main`
-Next action: complete and review [ZAL-3E #1069](https://github.com/zenod-ai/zenod/issues/1069), then restate the hosted and BYOK offers with explicit included usage, limits, and contribution-margin evidence for Jordi's choice.
-Blockers: the €5/month and €50/year offers do not yet define an economically defensible included allowance, limit behavior, or BYOK price. The original A/B/C choice is therefore not actionable. Production mutation, live billing drill, signup opening, any WhatsApp-session change, and external promotion remain separate later approvals.
+Fresh base commit: `131b80cf67f37b31ec32b7476b1b4725a47b7ffd` on `main`
+Next action: Jordi replies `APPROVE ECONOMICS CONTRACT` for the exact managed/BYOK contract in the integrated ZAL-3E artifact, or names the price/allowance/support assumption to revise; the delivery manager then creates the smallest dependency-ordered implementation batch.
+Blockers: the exact priced usage contract requires Jordi's approval. Even after approval, managed inference is not launchable until platform credential custody, automatic monthly tenant keys, plan entitlements/model allowlist, fail-closed warning/stop UX, and provider-ledger reconciliation are implemented and proved. Production mutation, live billing drill, signup opening, any WhatsApp-session change, and external promotion remain separate later approvals.
 
 ## Role Goals
 
@@ -137,8 +137,8 @@ The repository's global issue list is not the alpha board. It contains many hist
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | [#1058](https://github.com/zenod-ai/zenod/issues/1058) | Ticket worker | ZAL-1-readiness-audit-worker | ZAL-1 · Reconcile alpha-launch truth and readiness matrix | done | - | [merged PR #1066](https://github.com/zenod-ai/zenod/pull/1066) / `main` | `7454715` | Evidence matrix and smallest ordered backlog are committed; no production mutation. | [Terminal handoff](https://github.com/zenod-ai/zenod/issues/1058#issuecomment-5309945858); artifact `601d3a6`; CI green; merged as `e478965`; issue closed. | 2026-08-17 00:37 CEST | None. |
 | [#1059](https://github.com/zenod-ai/zenod/issues/1059) | Ticket worker | ZAL-2-recent-recap-worker | ZAL-2 · Reproduce and repair the incorrect recent-conversation recap | testing | approved Ring deployment/replay | [merged PR #1067](https://github.com/zenod-ai/zenod/pull/1067) / `main` | `7454715` | Exact interaction is reproduced and fixed with regression, or current pass is proved with full trace; no production deploy. | [Manager review](https://github.com/zenod-ai/zenod/issues/1059#issuecomment-5310028378); exact evidence and fix `8811326`; CI/review green; merged as `0bb5b3d`. | 2026-08-17 00:37 CEST | Under ZAL-4 approval, deploy named Ring image and replay exact trace before closing. |
-| [#1060](https://github.com/zenod-ai/zenod/issues/1060) | Planner | ZAL-3-offer-decision-planner | ZAL-3 · Frame the alpha offer and WhatsApp boundary for decision | waiting on economics | [#1069](https://github.com/zenod-ai/zenod/issues/1069), then Jordi contract choice | [merged PR #1068](https://github.com/zenod-ai/zenod/pull/1068) / `main` | `0bb5b3d` | 2–3 truthful options, recommendation, promise matrix, and exact Jordi decision are recorded, including a defensible usage and BYOK contract. | Original artifact `5d7dbd4` is integrated but its €5/€50 recommendation lacks usage economics; superseded pending #1069. | 2026-08-20 17:12 CEST | Consume #1069 and restate the exact decision options before requesting approval. |
-| [#1069](https://github.com/zenod-ai/zenod/issues/1069) | Ticket worker / analyst | ZAL-3E-unit-economics-worker | ZAL-3E · Define alpha usage limits, BYOK pricing, and unit economics | active | current provider/payment/hosting evidence | `codex/zal-3e-unit-economics` | `130a2720` | Reproducible margin and break-even analysis defines platform-funded and BYOK prices, included usage, limit behavior, sensitivity, and one recommendation without changing live systems. | Issue contract created; isolated worker dispatched from exact `main` base. | 2026-08-20 17:12 CEST | Produce, independently review, and reconcile the economics artifact. |
+| [#1060](https://github.com/zenod-ai/zenod/issues/1060) | Planner | ZAL-3-offer-decision-planner | ZAL-3 · Frame the alpha offer and WhatsApp boundary for decision | decision-ready / human gate | Jordi approves or revises exact economics contract | [merged PR #1068](https://github.com/zenod-ai/zenod/pull/1068) plus [ZAL-3E PR #1071](https://github.com/zenod-ai/zenod/pull/1071) / `main` | `0bb5b3d` | Truthful offer, usage/BYOK economics, promise matrix, and exact Jordi decision are recorded. | ZAL-3E artifact merged as `131b80c`; manager acceptance recorded; recommended exact contract awaits approval. | 2026-08-20 17:41 CEST | Jordi replies `APPROVE ECONOMICS CONTRACT` or names the assumption to revise. |
+| [#1069](https://github.com/zenod-ai/zenod/issues/1069) | Ticket worker / analyst | ZAL-3E-unit-economics-worker | ZAL-3E · Define alpha usage limits, BYOK pricing, and unit economics | done | current provider/payment/hosting evidence | [merged PR #1071](https://github.com/zenod-ai/zenod/pull/1071) / `main` | `130a2720` | Reproducible margin and break-even analysis defines platform-funded and BYOK prices, included usage, limit behavior, sensitivity, and one recommendation without changing live systems. | [Manager acceptance](https://github.com/zenod-ai/zenod/issues/1069#issuecomment-5358203918); artifact `d4dfc18`; CI green; merged as `131b80c`; issue closed. | 2026-08-20 17:41 CEST | None; consume through #1060 human gate. |
 | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | Epic worker / operator | unassigned | ZAL-4 · Execute the fail-closed production-readiness gate | blocked | [#1058](https://github.com/zenod-ai/zenod/issues/1058), [#1059](https://github.com/zenod-ai/zenod/issues/1059), [#1060](https://github.com/zenod-ai/zenod/issues/1060), [#1069](https://github.com/zenod-ai/zenod/issues/1069), production approval | `codex/zal-4-production-gate` | `1a39166` | Every runbook check has current evidence; signup remains closed until exact approval, then opens and verifies or rolls back safely. | `docs/PRODUCTION-READINESS.md`; public signup disabled pending evidence. | 2026-08-20 17:12 CEST | Prepare read-only packet; wait for approved priced usage contract and exact production/real-card/signup approval. |
 | [#1062](https://github.com/zenod-ai/zenod/issues/1062) | Tester | unassigned | ZAL-5 · Stranger alpha onboarding and memory acceptance | waiting | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | `codex/zal-5-stranger-acceptance` | `1a39166` | One uninterrupted public-page → onboarding → MCP memory journey passes on the named deployed SHA; approved WhatsApp promise is included if applicable. | Existing founder/live component evidence only. | 2026-08-16 17:07 CEST | Dispatch after production gate passes. |
 | [#1063](https://github.com/zenod-ai/zenod/issues/1063) | Planner / outbound drafter | unassigned | ZAL-6 · Draft the first proof-led alpha invitation | waiting | [#1060](https://github.com/zenod-ai/zenod/issues/1060), [#1069](https://github.com/zenod-ai/zenod/issues/1069); may run beside [#1061](https://github.com/zenod-ai/zenod/issues/1061) | `codex/zal-6-alpha-invitation` | `1a39166` | Exact Reddit/X options and landing target match proved capabilities; nothing is published. | Promotion requested in `^e-5c1e43`. | 2026-08-20 17:12 CEST | Draft only after the priced offer is approved; request exact-content approval before posting. |
@@ -158,7 +158,7 @@ The repository's global issue list is not the alpha board. It contains many hist
 
 | Gate | Human Owner | Trigger | Exact Approval / Input Required | What May Continue |
 |---|---|---|---|---|
-| Alpha offer, usage contract, and WhatsApp promise | Jordi | ZAL-3E economics reviewed and ZAL-3 options restated | Approve exact hosted/self-hosted/BYOK offer, price, included usage, limit behavior, WhatsApp inclusion, onboarding, and support promise. | ZAL-1/ZAL-2, #1069 analysis, and draft-only prep. |
+| Alpha offer, usage contract, and WhatsApp promise | Jordi | ZAL-3E economics integrated and ZAL-3 contract restated | Reply `APPROVE ECONOMICS CONTRACT` to approve managed €5/month or €50/year plus VAT with $0.50 monthly provider cap/80% warning/100% hard stop/no overage, and BYOK €4/month plus VAT with no included AI/no alpha annual plan; or name an assumption to revise. | ZAL-1/ZAL-2 and draft-only prep. |
 | Production deployment and configuration | Jordi | ZAL-4 preflight ready | Approve exact immutable image, Dokploy target, redacted env-key change set, and rollback plan. | Read-only checks and local validation. |
 | Live billing drill | Jordi | Closed signup deploy is healthy | Approve one exact real-card €5 drill and intended refund/cancellation handling. | Non-financial readiness checks. |
 | Open public signup | Jordi | All production evidence is current | Approve setting `ZENOD_PUBLIC_PAID_SIGNUP=1` on the named SHA/environment. | Closed alpha testing. |
@@ -175,14 +175,14 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 
 ## Planner Queue
 
-- Reconcile ZAL-3E's economics handoff and independent review into the offer decision packet.
-- Restate the ZAL-3 options with explicit platform-funded/BYOK prices, included usage, and stop/overage behavior; do not request a bare A/B/C choice from the superseded packet.
+- Present the integrated ZAL-3E recommendation as the exact economics contract; preserve Jordi's approval gate.
+- After approval, create the smallest dependency-ordered implementation batch for managed credential/key lifecycle, plan entitlements/model lock, fail-closed enforcement/UX, and reconciliation; keep BYOK launch prep separate where it can move earlier.
 - Keep ZAL-4 fail-closed until every named production approval is explicit.
 - Draft the separate voice-note-to-Codex child epic after the alpha offer is accepted; it is not part of this board.
 
 ## Worker Queue
 
-- ZAL-3E is the only active ticket worker, bound to #1069 on `codex/zal-3e-unit-economics` from `130a2720`.
+- No ticket worker is active while the economics contract awaits Jordi's exact approval or revision.
 - ZAL-4 may prepare a read-only preflight packet while blocked, but may not deploy, charge, or open signup.
 
 ## Tester Queue
@@ -198,10 +198,31 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 | 2026-08-17 | ZAL-1 alpha readiness truth audit | `601d3a6` merged as `e478965` | Repository, public edge, and read-only VPS/Docker metadata | Direct surface checks, backup metadata, focused suites, link/diff/secret checks, and PR CI | pass for audit acceptance; launch remains gated 10/13 | `docs/evidence/zenod-alpha-readiness-2026-08-16/README.md`; [PR #1066](https://github.com/zenod-ai/zenod/pull/1066) |
 | 2026-08-17 | ZAL-2 recap failure boundary and branch fix | `8811326` merged as `0bb5b3d` | Preserved Ring audit state, deployed replay, live Zenod reads, local/CI | Exact interaction recovery, isolated replay, vault immutability, structural refs, focused 17/17, full 904-server suite, typecheck, reviewer | pass for integration; post-deploy model behavior remains testing | `docs/evidence/zal-2-recent-recap-2026-08-17/README.md`; [PR #1067](https://github.com/zenod-ai/zenod/pull/1067) |
 | 2026-08-17 | ZAL-3 first-alpha offer decision packet | `5d7dbd4` merged as `e091eb2` | Repository and rechecked public promise/status surfaces | Three exact contracts, promise matrix, one recommendation, safe-work boundary, exact Jordi choice, link/diff checks, PR CI | decision-ready; no option approved | `docs/evidence/zenod-alpha-offer-decision-2026-08-17/README.md`; [PR #1068](https://github.com/zenod-ai/zenod/pull/1068) |
+| 2026-08-20 | ZAL-3E usage, BYOK, and unit economics | `d4dfc18` merged as `131b80c` | Repository, redacted aggregate live production state, and current primary-source provider/payment/hosting prices | Independent repo/live and market-cost audits; reproducible Node model; invariant/link/diff checks; PR CI; manager review | pass for analysis acceptance; exact economics contract awaits Jordi approval; managed inference remains implementation-blocked | `docs/evidence/zenod-alpha-unit-economics-2026-08-20/README.md`; [PR #1071](https://github.com/zenod-ai/zenod/pull/1071) |
 | 2026-08-01 | Typed recent-memory retrieval | `d4eaac4` deployed at time of proof | Zenod MT MCP | newest-first structural `search_memory` plus exact evidence-ref `get_memory` | pass | `docs/evidence/generic-entry-retrieval-2026-08-01/` |
 | 2026-08-16 | Child spine structure | working tree from `1a39166` | local | `python3 skills/epic-spine/scripts/validate_spine.py --strict docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | pending final issue links | this file |
 
 ## Handoff Journal
+
+### 2026-08-20 - Epic worker - ZAL-3E accepted; exact economics contract at human gate
+
+Context: ZAL-3E reconciled the implemented BYOK path, absence of live managed funding/caps, one redacted 30-day founder usage trace, current OpenRouter/Stripe/Hetzner assumptions, and a reproducible sensitivity model. Independent audits and manager review found no blocker; PR #1071 passed CI and merged as `131b80c`. The recommended contract is managed €5/month or €50/year plus applicable VAT with a locked model set, $0.50 monthly provider cap, 80% warning, 100% hard stop, UTC reset, and no overage/fallback; BYOK is €4/month plus VAT with no included AI spend and no alpha annual plan.
+
+Next: Jordi replies `APPROVE ECONOMICS CONTRACT` or names the price, allowance, tax treatment, infrastructure allocation, or support assumption to revise. Approval authorizes creation/dispatch of implementation tickets and offer-copy preparation only; it does not authorize credentials, Stripe mutation, deployment, publication, or signup.
+
+Risks: production today is BYOK-capable but not managed-inference-capable. The one usage trace is founder dogfood, not a customer distribution, and excludes speech-to-text. The base model retains only about €1.13/month managed contribution at cap, €0.55 annual-equivalent, and €0.62 BYOK after €1 allocated infrastructure and €2 support; average support beyond roughly five to seven minutes removes margin.
+
+Assignment identity: Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
+
+Branch / latest commit: ZAL-3E `d4dfc18`; integrated `main` `131b80c`; steward branch `codex/alpha-economics-decision-gate`
+
+Last verified: 2026-08-20 17:41 CEST
+
+Links:
+
+- https://github.com/zenod-ai/zenod/pull/1071
+- https://github.com/zenod-ai/zenod/issues/1069#issuecomment-5358203918
+- `docs/evidence/zenod-alpha-unit-economics-2026-08-20/README.md`
 
 ### 2026-08-20 - Epic worker - ZAL-3E economics prerequisite dispatched
 
