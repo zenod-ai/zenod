@@ -8,7 +8,7 @@ Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `130a2720` plus current Foundation and Zenod Alpha spine working tree
+Last reconciled commit: `131b80c` plus current Foundation and Zenod Alpha spine working tree
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -84,12 +84,12 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Zenod Alpha usage economics active; offer choice deferred until priced contract is complete
-Last verified: 2026-08-20 17:12 CEST
+Phase: Zenod Alpha economics integrated; exact priced usage contract at Jordi human gate
+Last verified: 2026-08-20 17:41 CEST
 Integration target: `main`
-Fresh base commit: `130a2720dcdd78577bf7458c323f2da770c57922` on `main`; ZAL-1/ZAL-2/ZAL-3 artifacts are integrated and ZAL-3E #1069 is active from this base
-Next action: complete and review ZAL-3E's usage, BYOK, and contribution-margin analysis, then restate the first-alpha offer for Jordi's exact choice.
-Blockers: the integrated €5/month and €50/year recommendation does not yet say what workload is included, how limits behave, or what a BYOK tier costs. Production mutation, live billing, signup opening, WhatsApp-session changes, and external promotion remain separate later gates.
+Fresh base commit: `131b80cf67f37b31ec32b7476b1b4725a47b7ffd` on `main`; ZAL-1/ZAL-2/ZAL-3/ZAL-3E evidence is integrated
+Next action: Jordi replies `APPROVE ECONOMICS CONTRACT` for the exact managed/BYOK contract in the active child spine, or names the assumption to revise; the child delivery manager then creates the smallest implementation batch.
+Blockers: the exact priced usage contract requires Jordi's approval. Managed inference additionally requires credential/key lifecycle, entitlements/model lock, fail-closed allowance enforcement/UX, and provider-ledger reconciliation before it can launch. Production mutation, live billing, signup opening, WhatsApp-session changes, and external promotion remain separate later gates.
 
 ## Bootstrap Map
 
@@ -139,7 +139,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Concern | Existing authority / proposed home | Root rollup state | Next routing action |
 |---|---|---|---|
-| Zenod alpha launch | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Active child spine; ZAL-1/ZAL-2 are integrated, while ZAL-3's price-only choice is superseded by active economics ticket ZAL-3E #1069. | Complete and review #1069, then present an explicit platform-funded/BYOK usage contract for Jordi's choice. |
+| Zenod alpha launch | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Active child spine; ZAL-3E is integrated and defines one exact managed/BYOK usage contract, but no commercial option or implementation is approved by that merge. | Jordi approves or revises the economics contract; child delivery manager then dispatches the smallest implementation batch. |
 | Voice capture and grounded recall | `docs/EPIC-MECHANICAL-CAPTURE.md` | Capture/transcription/retrieval has strong July evidence; the new recent-recap failure is a fresh acceptance gap. | Reproduce the exact interaction and add it to the canonical journey suite before declaring alpha-ready. |
 | Voice note → Codex execution | Proposed child epic | Direction is clear; UX, authority, project disambiguation, delivery surface, and pricing are not settled. | Draft a child spine after the immediate readiness audit; do not silently fold it into the memory-only launch gate. |
 | Public story and promotion | `docs/EPIC-0-STORY.md` | Reddit/X promotion is desired now, but current packaging and funnel truth are not reconciled. | Produce a small launch-message backlog after the product/SKU decision; external posting remains approval-gated. |
@@ -170,7 +170,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | economics active | ZAL-3E #1069, then Jordi chooses exact priced usage contract | ZAL-3E `codex/zal-3e-unit-economics`; earlier ZAL PRs merged | `130a2720` | Child DoD covers readiness truth, recap regression, economically defined offer, production gate, stranger acceptance, promotion draft, and resumable state. | [#1069](https://github.com/zenod-ai/zenod/issues/1069) is bound from exact current `main`; original A/B/C price recommendation is superseded pending analysis. | 2026-08-20 17:12 CEST | Review #1069, then restate the exact offer decision. |
+| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | decision-ready / human gate | Jordi approves or revises exact economics contract | [ZAL-3E PR #1071](https://github.com/zenod-ai/zenod/pull/1071) plus earlier ZAL PRs merged | `131b80c` | Child DoD covers readiness truth, recap regression, economically defined offer, production gate, stranger acceptance, promotion draft, and resumable state. | [#1069 manager acceptance](https://github.com/zenod-ai/zenod/issues/1069#issuecomment-5358203918); reproducible economics integrated; recommended contract awaits approval. | 2026-08-20 17:41 CEST | Jordi replies `APPROVE ECONOMICS CONTRACT` or names the assumption to revise. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
 | draft | Tester | unassigned | Validate bootstrap from a cold start | ready | Child epic applied | - | `8658d72` | Fresh agent can read the target spine and report authority, current state, active issues, blockers, and next action without chat history. | Skill validator passes. | 2026-07-09 19:55 CEST | Run cold-start test after child epic update. |
@@ -194,7 +194,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 | Product intent or acceptance change | Jordi | Proposed behavior changes the EpicSpine contract or rollout acceptance | Approve the revised intent or criteria | Documentation and validation inside existing scope |
 | Public release or registry submission | Jordi | Publishing beyond the existing AlfaBlok GitHub repository and Pages site | Approve target registry and release posture | Local package, README, deck, and repository updates |
 | Destructive, privileged, or irreversible action | Jordi | Credentials, deletion, production mutation, or irreversible external action is required | Approve the exact action and target | Read-only investigation and reversible preparation |
-| Alpha package and public promise | Jordi | ZAL-3E economics and the restated offer expose viable hosted/self-hosted/BYOK/WhatsApp contracts | Approve the exact offer, price, included usage and limit behavior, included surfaces, and onboarding promise | Economics analysis, readiness testing, and draft-only launch materials |
+| Alpha package and public promise | Jordi | Integrated ZAL-3E economics defines the exact managed/BYOK contract | Reply `APPROVE ECONOMICS CONTRACT` for managed €5/month or €50/year plus VAT with $0.50 monthly provider cap/80% warning/100% stop/no overage and BYOK €4/month plus VAT/no included AI/no annual alpha plan; or name an assumption to revise. | Readiness testing and draft-only launch materials |
 | External promotion | Jordi | A Reddit/X/email draft is ready | Approve the exact final content and destination | Research, strategy, and drafts |
 | Voice-triggered execution authority | Jordi | The proposed execution child spine is ready to move beyond design | Approve the store+execute interaction, repo/spine confirmation rule, pricing posture, and mutation gates | Read-only design and local prototypes |
 
@@ -210,7 +210,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 - Treat `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` as the sole active alpha delivery board; do not select work from the global open-issue list.
 - On “continue,” execute the active child spine's single next action and remain the delivery manager/spine steward.
-- Reconcile ZAL-3E #1069 before requesting a final alpha offer decision; then route production gate, stranger acceptance, and promotion through the revised child dependency order.
+- Preserve the active child's exact economics human gate; after approval, route its smallest implementation batch, production gate, stranger acceptance, and promotion through the revised dependency order.
 - Create the separate voice-note-to-Codex child EpicSpine only after the alpha offer is accepted.
 - Create GitHub issues for the draft ledger rows.
 - Treat `EPIC-0-FOUNDATION-SPINE.md` as the meta Epic 0 spine; `EPIC-0-STORY.md` is story-owned and read-only unless explicitly delegated.
@@ -221,7 +221,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Worker Queue
 
-- Alpha implementation/diagnostic work is dispatchable only from `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`; the current active ticket is ZAL-3E #1069.
+- Alpha implementation/diagnostic work is dispatchable only from `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`; no ticket worker is active while the economics contract awaits Jordi's choice.
 - Add explicit Write Scope to the chosen child epic spine.
 - Ensure its Issue Ledger links to GitHub issues or marks drafts clearly.
 - Add Handoff Journal and Proposed Cross-Spine Updates sections if missing.
@@ -249,6 +249,20 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 | 2026-07-09 | Public Pages deployment and visual QA | `3ab84fa` | GitHub Pages | Pages build returned `built`; live deck rendered 14 slides with working navigation, no console warnings/errors, no desktop overflow at 1280x720, and no horizontal mobile overflow at 390x844. | pass | https://alfablok.github.io/epicspine-skill/ |
 
 ## Handoff Journal
+
+### 2026-08-20 - Epic 0 worker - Zenod Alpha economics integrated; human gate ready
+
+Action: accepted and integrated ZAL-3E's reproducible usage/BYOK economics as `131b80c`. The active child now recommends managed €5/month or €50/year plus VAT with a locked model set, $0.50 monthly provider cap, 80% warning, 100% hard stop, UTC reset, and no overage/fallback; BYOK €4/month plus VAT with no included AI spend and no alpha annual plan. No commercial choice or live action was approved by the evidence merge.
+
+Evidence: [PR #1071](https://github.com/zenod-ai/zenod/pull/1071) passed CI at exact ticket head `d4dfc18`; independent repo/live and current primary-source cost audits, calculation invariants, link/diff checks, and manager review passed. Production remains BYOK-capable but lacks the managed platform credential, automatic monthly child keys, entitlements/model lock, fail-closed stop UX, and reconciliation needed for the managed promise.
+
+Next action: Jordi replies `APPROVE ECONOMICS CONTRACT` or names the assumption to revise. Approval permits backlog implementation and offer-copy preparation only; credentials, Stripe mutation, deployment, publication, and signup retain their own gates.
+
+Assignment identity: Epic 0 Foundation planner (`Jordi + current bound Codex task`); Zenod Alpha delivery manager
+
+Branch / latest commit: ZAL-3E `d4dfc18`; integrated `main` `131b80c`; steward `codex/alpha-economics-decision-gate`
+
+Last verified: 2026-08-20 17:41 CEST
 
 ### 2026-08-20 - Epic 0 worker - Zenod Alpha economics prerequisite activated
 
