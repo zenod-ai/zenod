@@ -84,12 +84,12 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: P-S5 journey loop — WhatsApp text, voice transcription, and MCP delivery receipt pass live; Telegram and two-tenant isolation remain
-Last verified: 2026-07-12T17:56:00+02:00 (exact-SHA runtime receipt reconciled; SHIP 1–12 completion audit recorded)
+Phase: P-S5 journey loop — WhatsApp text/voice, WhatsApp MCP receipt, Telegram binding, and Telegram MCP receipt pass live; two-tenant isolation remains
+Last verified: 2026-07-12T20:27:21+02:00 (dedicated `@zenod_bot` connected; live Telegram provider receipt on exact SHA `5dcc773`)
 Integration target: main
 Fresh base commit: `31e69bbbc20e2e4a2b053a2d30adf44f18b34245` — PINNED at dispatch; no rebases until the journey passes (D19c)
-Next action: bind a real Telegram bot/identity and exercise one Telegram delivery; then verify isolation with a second tenant and a second sender number.
-Blockers: no Telegram bot token is configured on the Phylax service; the two available WhatsApp numbers are already the paired transport number and the sole verified tenant sender, so SHIP 11 still needs a second sender identity. See `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` for the requirement-by-requirement proof state.
+Next action: capture the received Telegram message for the visual package, then verify isolation with a second tenant and a second WhatsApp sender number.
+Blockers: the two available WhatsApp numbers are already the paired transport number and the sole verified tenant sender, so SHIP 11 still needs a second sender identity. See `docs/evidence/phylax-ship-2026-07-12/14-telegram-reuse-receipt.md` for the dedicated-bot configuration and Telegram receipt.
 
 ## Role Goals
 
@@ -149,7 +149,7 @@ Wave 1: P-S1 ∥ P-S2. Wave 2: P-S3, P-S4. Then P-S5. Heartbeats, budgets, workt
 | [#871](https://github.com/zenod-ai/zenod/issues/871) | Ticket worker | P-S2-worker | P-S2 channels organ port (Baileys+Telegram+faces) | done | EPIC R SHIP satisfied | [#877](https://github.com/zenod-ai/zenod/pull/877) / `codex/p-s2-channels-port` | `31e69bb` | SHIP 8, 10 mechanics | 45 focused tests + typecheck + CI; manager review; merged `c0a2f6b` | 2026-07-11T05:17:00+02:00 | integrated |
 | [#872](https://github.com/zenod-ai/zenod/issues/872) | Ticket worker | P-S3-worker | P-S3 tenant settings + keyword verification + transcription | done | P-S1, P-S2 done | [#881](https://github.com/zenod-ai/zenod/pull/881) / `codex/p-s3-tenant-settings` | `c0a2f6b` | SHIP 6–7, 9 | 645 full + 24 post-merge focused tests; CI; manager review; merged `78aaee6` | 2026-07-11T05:34:00+02:00 | integrated |
 | [#873](https://github.com/zenod-ai/zenod/issues/873) | Ticket worker | P-S4-worker | P-S4 admin gate (alfablok) + billing + domain | done | P-S1, P-S2 admin surface done | [#880](https://github.com/zenod-ai/zenod/pull/880), [#883](https://github.com/zenod-ai/zenod/pull/883) / `codex/p-s4-admin-billing-domain` | `c0a2f6b` | SHIP 2, 4, 5 | CI + focused checks; live `51242ac`; root/health 200, MCP 401, logged-out admin 404 | 2026-07-11T05:54:31+02:00 | integrated and deployed |
-| [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | in progress; SHIP 10 Telegram + SHIP 11 need Human Gate inputs | P-S1..4 done | manager loop; [#917](https://github.com/zenod-ai/zenod/pull/917) | live `f6cc22c` | SHIP 1–12 | fresh QR paired; inbound keyword verified; clean text pipe; serialized Whisper voice pipe with artifact handoff; external WhatsApp MCP delivery receipt | 2026-07-12T17:38:01+02:00 | configure Telegram bot/identity; obtain second sender identity for isolation |
+| [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | in progress; SHIP 11 needs Human Gate input | P-S1..4 done | manager loop; [#917](https://github.com/zenod-ai/zenod/pull/917), [#921](https://github.com/zenod-ai/zenod/pull/921) | live `5dcc773` | SHIP 1–12 | fresh QR + verification; clean WhatsApp text/voice; WhatsApp and Telegram structured MCP provider receipts; Telegram tenant binding `alfablok` | 2026-07-12T20:22:50+02:00 | capture Telegram arrival; obtain second sender identity for isolation |
 
 ## Branch And Integration
 
@@ -196,7 +196,8 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-12 | P-S5 MCP server WhatsApp face | `f6cc22c` | live tenant MCP endpoint | external MCP client `send_message` to verified phone | PASS: provider receipt `whatsapp:3EB0A5D62BF7283727DC42:sent` (not silent ack) | live structured MCP receipt |
 | 2026-07-12 | Exact-SHA deployment reconciliation | `f6cc22c` | Dokploy application `urbFsgl6eImbQ4MTIZl5N` + Swarm service | reconcile desired image and `GIT_SHA`; restart preserved fresh Baileys volume/session | PASS: `/api/health` reports full `f6cc22ccc3b7210a5e8afceb9f619ac76a73c734`; WhatsApp reconnected to linked number ending `0219` | `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` |
 | 2026-07-12 | P-S5 completion audit | `f6cc22c` | live deployment + durable stores + screenshots + focused/full tests | inspect every SHIP 1–12 requirement and reject indirect evidence where real-account proof is required | SHIP 1–6, 8–9 pass; SHIP 7/10 Telegram and SHIP 11 live second-tenant isolation remain incomplete | `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` |
-| pending | SHIP journey clean pass | `f6cc22c` | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending Telegram exercise and two-tenant isolation | test package |
+| 2026-07-12 | P-S5 Telegram bind + MCP server face | `5dcc773` | live tenant dashboard settings + dedicated `@zenod_bot` + live tenant MCP endpoint | bind `alfablok`; connect dedicated bot; call `send_message` | PASS: dedicated bot connected; structured provider receipt `telegram:129:sent`; Dioptra service untouched | `docs/evidence/phylax-ship-2026-07-12/14-telegram-reuse-receipt.md` |
+| pending | SHIP journey clean pass | `5dcc773` | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending Telegram arrival screenshot and two-tenant isolation | test package |
 
 ## Handoff Journal
 
@@ -241,6 +242,14 @@ Context: the live container was already running image `sha-f6cc22c`, but Dokploy
 Validation: the manager inspected every SHIP criterion against live HTTP behavior, durable tenant/account/channel stores, Ring/WhatsApp receipts, screenshots, and current code tests. Focused Phylax coverage passed 27 tests and the repository test command passed. The audit refuses to treat automated isolation as the required real second-tenant lap: Telegram remains unbound/unexercised and the live deployment still has one tenant with one verified sender.
 
 Next: obtain the named Telegram and second-sender inputs, run those two live laps, then restart the full journey at step 1 for the uninterrupted clean-pass package.
+
+### 2026-07-12 - Phylax delivery manager - dedicated `@zenod_bot` connected; bind and receipt pass
+
+Context: Jordi supplied Telegram handle `alfablok`. Discovery found valid `@dioptra_bot` and `@LambdaAdmin9_Bot` credentials in the running Dioptra service, with both bots actively long-polling. Jordi then supplied the dedicated `@zenod_bot` token and required both existing bots to remain unchanged. The manager replaced the temporary Phylax credential with the dedicated bot, enabled its own polling gateway, and saved the tenant handle through the dashboard settings API. P-S5 exposed the port seam between the UI's friendly handle and Telegram's numeric `chat_id`; PR #921 fixed it by resolving only the unambiguous one-owner allowlist case and failing closed otherwise.
+
+Validation: PR #921 passed CI, image `sha-5dcc773` passed publish smoke, the exact SHA is live, the fresh WhatsApp session reconnected, `@zenod_bot` reports connected with no error, and an external tenant MCP call returned structured Telegram provider receipt `telegram:129:sent`. Neither existing bot process was stopped or modified. Telegram binding and SHIP 10 delivery now pass; the visual package still needs arrival evidence, and SHIP 11 still needs a second real WhatsApp sender/tenant.
+
+Next: capture the received Telegram message, then obtain a second verified sender and run the live isolation lap before the uninterrupted final journey.
 
 ## Open Questions
 
