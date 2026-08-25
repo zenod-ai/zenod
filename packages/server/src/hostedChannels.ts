@@ -1,4 +1,9 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -10,7 +15,11 @@ import {
   defaultPhylaxTurnBindings,
   type PhylaxTenantSettingsStore,
 } from "./phylaxTenantSettings.js";
-import { maskPhoneNumber } from "./whatsappConfig.js";
+import { normalizeTelegramEntry } from "./telegramConfig.js";
+import {
+  maskPhoneNumber,
+  normalizeWhatsAppIdentifier,
+} from "./whatsappConfig.js";
 
 export type HostedWhatsAppState =
   | "off"
@@ -18,9 +27,7 @@ export type HostedWhatsAppState =
   | "verified"
   | "degraded"
   | "paused";
-
 export type HostedTelegramState = "off" | "connected" | "degraded";
-
 export interface HostedChannelsView {
   whatsapp: {
     state: HostedWhatsAppState;
@@ -30,57 +37,55 @@ export interface HostedChannelsView {
     lastInboundAt: number | null;
     lastReceiptAt: number | null;
   };
-  telegram: {
-    state: HostedTelegramState;
-    identityHint: string | null;
-  };
+  telegram: { state: HostedTelegramState; identityHint: string | null };
 }
-
 export type HostedChannelMutationName =
   | "whatsapp.challenge"
+  | "whatsapp.verify"
   | "whatsapp.test"
-  | "whatsapp.disconnect";
-
+  | "whatsapp.disconnect"
+  | "telegram.connect"
+  | "telegram.test"
+  | "telegram.disconnect";
 export interface HostedChannelMutationOutcome {
   operationId: string;
   operation: HostedChannelMutationName;
   outcome: "succeeded" | "rejected" | "failed";
   at: number;
 }
-
 export interface HostedChannelChallengeResponse {
   channels: HostedChannelsView;
-  challenge: {
-    code: string;
-    sharedNumber: string;
-    expiresAt: number;
-  };
+  challenge: { code: string; sharedNumber: string; expiresAt: number };
   mutation: HostedChannelMutationOutcome;
 }
-
 export interface HostedChannelTestResponse {
   channels: HostedChannelsView;
   receipt: { deliveredAt: number };
   mutation: HostedChannelMutationOutcome;
 }
-
 export interface HostedChannelDisconnectResponse {
   channels: HostedChannelsView;
   mutation: HostedChannelMutationOutcome;
 }
-
+export interface HostedChannelConnectResponse {
+  channels: HostedChannelsView;
+  mutation: HostedChannelMutationOutcome;
+}
 export interface HostedChannelErrorResponse {
   error: {
     code:
       | "invalid_request"
       | "sender_in_use"
+      | "identity_in_use"
+      | "already_connected"
       | "not_connected"
+      | "operation_conflict"
+      | "operation_in_progress"
       | "channels_unavailable";
     message: string;
   };
   mutation?: HostedChannelMutationOutcome;
 }
-
 export interface HostedChannelMutationAudit {
   operationId: string;
   tenantId: string;
@@ -90,27 +95,25 @@ export interface HostedChannelMutationAudit {
   at: number;
 }
 
-interface AuditRow {
+interface OperationRow {
   operation_id: string;
   tenant_id: string;
   operation: HostedChannelMutationName;
+  request_hash: string | null;
+  state: string | null;
   outcome: HostedChannelMutationOutcome["outcome"];
   error_code: string | null;
+  http_status: number | null;
+  result_json: string | null;
   created_at: number;
 }
+type ClaimedOperation =
+  | { kind: "claimed" }
+  | { kind: "pending" }
+  | { kind: "conflict" }
+  | { kind: "replay"; status: number; body: unknown };
 
-function auditFromRow(row: AuditRow): HostedChannelMutationAudit {
-  return {
-    operationId: row.operation_id,
-    tenantId: row.tenant_id,
-    operation: row.operation,
-    outcome: row.outcome,
-    errorCode: row.error_code,
-    at: row.created_at,
-  };
-}
-
-/** Durable, secret-free audit of every Hosted customer channel mutation. */
+/** Durable operation claim, terminal replay, and secret-free mutation audit. */
 export class HostedChannelMutationAuditStore {
   private readonly db: DatabaseSync;
 
@@ -126,21 +129,140 @@ export class HostedChannelMutationAuditStore {
         operation_id TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL,
         operation TEXT NOT NULL,
+        request_hash TEXT,
+        state TEXT,
         outcome TEXT NOT NULL,
         error_code TEXT,
-        created_at INTEGER NOT NULL
+        http_status INTEGER,
+        result_json TEXT,
+        created_at INTEGER NOT NULL,
+        completed_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS hosted_channel_mutations_tenant_time
         ON hosted_channel_mutations(tenant_id, created_at DESC);
     `);
+    const columns = new Set(
+      (
+        this.db
+          .prepare("PRAGMA table_info(hosted_channel_mutations)")
+          .all() as Array<{ name: string }>
+      ).map(({ name }) => name),
+    );
+    for (const [name, type] of [
+      ["request_hash", "TEXT"],
+      ["state", "TEXT"],
+      ["http_status", "INTEGER"],
+      ["result_json", "TEXT"],
+      ["completed_at", "INTEGER"],
+    ] as const) {
+      if (!columns.has(name))
+        this.db.exec(
+          `ALTER TABLE hosted_channel_mutations ADD COLUMN ${name} ${type}`,
+        );
+    }
+    this.db.exec(
+      "UPDATE hosted_channel_mutations SET state='terminal', completed_at=created_at WHERE state IS NULL",
+    );
+  }
+
+  claim(input: {
+    operationId: string;
+    tenantId: string;
+    operation: HostedChannelMutationName;
+    requestHash: string;
+    at: number;
+  }): ClaimedOperation {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.db
+        .prepare("SELECT * FROM hosted_channel_mutations WHERE operation_id=?")
+        .get(input.operationId) as OperationRow | undefined;
+      if (row) {
+        this.db.exec("COMMIT");
+        if (
+          row.tenant_id !== input.tenantId ||
+          row.operation !== input.operation ||
+          row.request_hash !== input.requestHash
+        ) {
+          return { kind: "conflict" };
+        }
+        if (row.state === "terminal" && row.http_status && row.result_json) {
+          return {
+            kind: "replay",
+            status: row.http_status,
+            body: JSON.parse(row.result_json) as unknown,
+          };
+        }
+        return { kind: "pending" };
+      }
+      this.db
+        .prepare(
+          `INSERT INTO hosted_channel_mutations
+          (operation_id, tenant_id, operation, request_hash, state, outcome, error_code, created_at)
+         VALUES (?, ?, ?, ?, 'claimed', 'failed', NULL, ?)`,
+        )
+        .run(
+          input.operationId,
+          input.tenantId,
+          input.operation,
+          input.requestHash,
+          input.at,
+        );
+      this.db.exec("COMMIT");
+      return { kind: "claimed" };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  terminal(input: {
+    operationId: string;
+    outcome: HostedChannelMutationOutcome["outcome"];
+    errorCode: string | null;
+    status: number;
+    body: unknown;
+    at: number;
+  }): void {
+    this.db
+      .prepare(
+        `UPDATE hosted_channel_mutations
+       SET state='terminal', outcome=?, error_code=?, http_status=?, result_json=?, completed_at=?
+       WHERE operation_id=? AND state='claimed'`,
+      )
+      .run(
+        input.outcome,
+        input.errorCode,
+        input.status,
+        JSON.stringify(input.body),
+        input.at,
+        input.operationId,
+      );
+  }
+
+  replay(operationId: string): { status: number; body: unknown } | null {
+    const row = this.db
+      .prepare(
+        "SELECT http_status, result_json, state FROM hosted_channel_mutations WHERE operation_id=?",
+      )
+      .get(operationId) as
+      | Pick<OperationRow, "http_status" | "result_json" | "state">
+      | undefined;
+    if (row?.state !== "terminal" || !row.http_status || !row.result_json)
+      return null;
+    return {
+      status: row.http_status,
+      body: JSON.parse(row.result_json) as unknown,
+    };
   }
 
   record(input: HostedChannelMutationAudit): void {
     this.db
       .prepare(
         `INSERT INTO hosted_channel_mutations
-         (operation_id, tenant_id, operation, outcome, error_code, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+        (operation_id, tenant_id, operation, request_hash, state, outcome, error_code,
+         http_status, result_json, created_at, completed_at)
+       VALUES (?, ?, ?, '', 'terminal', ?, ?, 200, '{}', ?, ?)
        ON CONFLICT(operation_id) DO NOTHING`,
       )
       .run(
@@ -150,24 +272,48 @@ export class HostedChannelMutationAuditStore {
         input.outcome,
         input.errorCode,
         input.at,
+        input.at,
       );
   }
 
+  recordVerification(tenantId: string, sender: string, at = Date.now()): void {
+    const senderHash = createHash("sha256")
+      .update(sender)
+      .digest("hex")
+      .slice(0, 20);
+    this.record({
+      operationId: `verify-${tenantId}-${senderHash}-${at}`,
+      tenantId,
+      operation: "whatsapp.verify",
+      outcome: "succeeded",
+      errorCode: null,
+      at,
+    });
+  }
+
   recent(tenantId: string, limit = 20): HostedChannelMutationAudit[] {
-    return (
-      this.db
-        .prepare(
-          `SELECT operation_id, tenant_id, operation, outcome, error_code, created_at
-       FROM hosted_channel_mutations
-       WHERE tenant_id=?
-       ORDER BY created_at DESC
-       LIMIT ?`,
-        )
-        .all(
-          tenantId,
-          Math.max(1, Math.min(100, limit)),
-        ) as unknown as AuditRow[]
-    ).map(auditFromRow);
+    const rows = this.db
+      .prepare(
+        `SELECT operation_id, tenant_id, operation, outcome, error_code, created_at
+       FROM hosted_channel_mutations WHERE tenant_id=? AND state='terminal'
+       ORDER BY created_at DESC LIMIT ?`,
+      )
+      .all(tenantId, Math.max(1, Math.min(100, limit))) as unknown as Array<{
+      operation_id: string;
+      tenant_id: string;
+      operation: HostedChannelMutationName;
+      outcome: HostedChannelMutationOutcome["outcome"];
+      error_code: string | null;
+      created_at: number;
+    }>;
+    return rows.map((row) => ({
+      operationId: row.operation_id,
+      tenantId: row.tenant_id,
+      operation: row.operation,
+      outcome: row.outcome,
+      errorCode: row.error_code,
+      at: row.created_at,
+    }));
   }
 
   close(): void {
@@ -183,24 +329,69 @@ function normalizedTenantId(value: string): string | null {
     ? tenantId
     : null;
 }
-
-function safeOperationId(value: unknown): string {
-  return typeof value === "string" && /^[a-zA-Z0-9._:-]{1,160}$/.test(value)
+function safeOperationId(value: unknown): string | null {
+  return typeof value === "string" && /^[a-zA-Z0-9._:-]{8,160}$/.test(value)
     ? value
-    : randomUUID();
+    : null;
 }
-
+function requestHash(
+  operation: HostedChannelMutationName,
+  body: Record<string, unknown>,
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ operation, body }))
+    .digest("hex");
+}
 function tokenMatches(expected: string, provided: string): boolean {
   const left = createHash("sha256").update(expected).digest();
   const right = createHash("sha256").update(provided).digest();
   return timingSafeEqual(left, right);
 }
-
 function privateToken(c: Context, expected: string | undefined): boolean {
   if (!expected?.trim()) return false;
-  const authorization = c.req.header("authorization") ?? "";
-  const provided = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? "";
+  const provided =
+    (c.req.header("authorization") ?? "")
+      .match(/^Bearer\s+(.+)$/i)?.[1]
+      ?.trim() ?? "";
   return Boolean(provided) && tokenMatches(expected.trim(), provided);
+}
+function normalizeHostedPhone(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\s*\+?[\d ()-]+\s*$/.test(value))
+    return null;
+  const normalized = normalizeWhatsAppIdentifier(value);
+  return /^\d{8,15}$/.test(normalized) ? normalized : null;
+}
+function normalizeHostedTelegram(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim().length > 64) return null;
+  const normalized = normalizeTelegramEntry(value);
+  if (
+    !normalized ||
+    (!/^-?\d{1,20}$/.test(normalized) && !/^[a-z0-9_]{5,32}$/.test(normalized))
+  )
+    return null;
+  return normalized;
+}
+
+const CHALLENGE_ANIMALS = [
+  "badger",
+  "falcon",
+  "otter",
+  "panda",
+  "raven",
+  "tiger",
+  "whale",
+  "wolf",
+] as const;
+function challengeCode(
+  secret: string,
+  tenantId: string,
+  operationId: string,
+  sender: string,
+): string {
+  const digest = createHmac("sha256", secret)
+    .update(`${tenantId}\n${operationId}\n${sender}`)
+    .digest();
+  return `${10 + ((digest[0] ?? 0) % 90)}-${CHALLENGE_ANIMALS[(digest[1] ?? 0) % CHALLENGE_ANIMALS.length] ?? "otter"}`;
 }
 
 function channelView(
@@ -228,15 +419,14 @@ function channelView(
     settings.verificationExpiresAt &&
     settings.verificationExpiresAt > now,
   );
-  const transportReady = transport.state === "connected";
   const whatsappState: HostedWhatsAppState = settings.verified
-    ? transportReady && settings.downstreamCredentialStatus !== "rejected"
+    ? transport.state === "connected" &&
+      settings.downstreamCredentialStatus !== "rejected"
       ? "verified"
       : "degraded"
     : awaiting
       ? "awaiting_code"
       : "off";
-  const telegramReady = runtime.telegram.status().state === "connected";
   return {
     whatsapp: {
       state: whatsappState,
@@ -248,16 +438,18 @@ function channelView(
     },
     telegram: {
       state: settings.telegramBinding
-        ? telegramReady
+        ? runtime.telegram.status().state === "connected"
           ? "connected"
           : "degraded"
         : "off",
-      identityHint: settings.telegramBinding,
+      identityHint: settings.telegramBinding
+        ? `@${settings.telegramBinding.replace(/^@/, "")}`
+        : null,
     },
   };
 }
 
-function safeFailure(
+function failure(
   operationId: string,
   operation: HostedChannelMutationName,
   code: HostedChannelErrorResponse["error"]["code"],
@@ -271,6 +463,129 @@ function safeFailure(
   };
 }
 
+async function waitForTerminal(
+  store: HostedChannelMutationAuditStore,
+  operationId: string,
+) {
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    const replay = store.replay(operationId);
+    if (replay) return replay;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return null;
+}
+
+async function executeOnce(
+  store: HostedChannelMutationAuditStore,
+  input: {
+    operationId: string;
+    tenantId: string;
+    operation: HostedChannelMutationName;
+    requestBody: Record<string, unknown>;
+    deriveChallenge?: () => string;
+  },
+  effect: () =>
+    | Promise<{ status: number; body: unknown }>
+    | { status: number; body: unknown },
+): Promise<{ status: number; body: unknown }> {
+  const at = Date.now();
+  const claim = store.claim({
+    operationId: input.operationId,
+    tenantId: input.tenantId,
+    operation: input.operation,
+    requestHash: requestHash(input.operation, input.requestBody),
+    at,
+  });
+  const rehydrate = (result: { status: number; body: unknown }) => {
+    if (
+      !input.deriveChallenge ||
+      !result.body ||
+      typeof result.body !== "object"
+    )
+      return result;
+    const root = result.body as Record<string, unknown>;
+    if (!root.challenge || typeof root.challenge !== "object") return result;
+    return {
+      ...result,
+      body: {
+        ...root,
+        challenge: {
+          ...(root.challenge as object),
+          code: input.deriveChallenge(),
+        },
+      },
+    };
+  };
+  if (claim.kind === "replay") return rehydrate(claim);
+  if (claim.kind === "conflict") {
+    return {
+      status: 409,
+      body: failure(
+        input.operationId,
+        input.operation,
+        "operation_conflict",
+        "This request key was already used for a different action.",
+        "rejected",
+        at,
+      ),
+    };
+  }
+  if (claim.kind === "pending") {
+    const replay = await waitForTerminal(store, input.operationId);
+    return replay
+      ? rehydrate(replay)
+      : {
+          status: 409,
+          body: failure(
+            input.operationId,
+            input.operation,
+            "operation_in_progress",
+            "This channel action is still in progress. Retry with the same request key.",
+            "failed",
+            at,
+          ),
+        };
+  }
+  let result: { status: number; body: unknown };
+  try {
+    result = await effect();
+  } catch {
+    result = {
+      status: 503,
+      body: failure(
+        input.operationId,
+        input.operation,
+        "channels_unavailable",
+        "This channel action is temporarily unavailable. Try again shortly.",
+        "failed",
+      ),
+    };
+  }
+  const response = result.body as {
+    mutation?: HostedChannelMutationOutcome;
+    error?: { code?: string };
+  };
+  const storedBody =
+    input.deriveChallenge && result.body && typeof result.body === "object"
+      ? {
+          ...(result.body as Record<string, unknown>),
+          challenge: {
+            ...((result.body as { challenge?: object }).challenge ?? {}),
+            code: "__derived__",
+          },
+        }
+      : result.body;
+  store.terminal({
+    operationId: input.operationId,
+    outcome: response.mutation?.outcome ?? "failed",
+    errorCode: response.error?.code ?? null,
+    status: result.status,
+    body: storedBody,
+    at: response.mutation?.at ?? Date.now(),
+  });
+  return result;
+}
+
 export function mountPhylaxHostedChannelRoutes(
   app: Hono<{ Bindings: HttpBindings }>,
   input: {
@@ -282,10 +597,14 @@ export function mountPhylaxHostedChannelRoutes(
 ): void {
   const authorize = (c: Context) =>
     privateToken(c, input.env.ZENOD_CHANNELS_PRIVATE_TOKEN);
+  const parse = (c: Context): Promise<Record<string, unknown>> =>
+    c.req
+      .json<Record<string, unknown>>()
+      .catch((): Record<string, unknown> => ({}));
 
   app.get("/internal/zenod/channels/:tenantId", (c) => {
     if (!authorize(c)) return c.json({ error: "not found" }, 404);
-    const tenantId = normalizedTenantId(c.req.param("tenantId"));
+    const tenantId = normalizedTenantId(c.req.param("tenantId") ?? "");
     if (!tenantId)
       return c.json(
         {
@@ -303,271 +622,713 @@ export function mountPhylaxHostedChannelRoutes(
     "/internal/zenod/channels/:tenantId/whatsapp/challenge",
     async (c) => {
       if (!authorize(c)) return c.json({ error: "not found" }, 404);
-      const tenantId = normalizedTenantId(c.req.param("tenantId"));
-      const body = await c.req
-        .json<Record<string, unknown>>()
-        .catch((): Record<string, unknown> => ({}));
+      const tenantId = normalizedTenantId(c.req.param("tenantId") ?? "");
+      const body = await parse(c);
       const operationId = safeOperationId(body.operationId);
       const operation = "whatsapp.challenge" as const;
-      const at = Date.now();
+      const sender =
+        normalizeHostedPhone(body.sender) ??
+        (tenantId ? input.settings.get(tenantId).phoneNumber : null);
       if (
         !tenantId ||
-        typeof body.sender !== "string" ||
+        !operationId ||
+        !sender ||
         typeof body.downstreamUrl !== "string" ||
         typeof body.downstreamToken !== "string" ||
         !body.downstreamToken.trim()
       ) {
-        const response = safeFailure(
-          operationId,
-          operation,
-          "invalid_request",
-          "Enter a valid WhatsApp sender number.",
-          "rejected",
-          at,
-        );
-        if (tenantId)
-          input.audit.record({
-            ...response.mutation!,
-            tenantId,
-            errorCode: response.error.code,
-          });
-        return c.json(response, 400);
-      }
-      try {
-        input.settings.assertPhoneAvailable(tenantId, body.sender);
-        const sharedNumber = input.runtime.whatsapp.status().linkedNumber;
-        if (!sharedNumber) throw new Error("transport unavailable");
-        input.settings.update(tenantId, {
-          downstreamUrl: body.downstreamUrl,
-          downstreamToken: body.downstreamToken,
-          voiceDefault: "capture",
-          turnBindings: defaultPhylaxTurnBindings(),
-        });
-        const registration = input.settings.registerPhone(
-          tenantId,
-          body.sender,
-          "primary",
-          at,
-        );
-        const expiresAt = registration.settings.verificationExpiresAt ?? at;
-        const mutation: HostedChannelMutationOutcome = {
-          operationId,
-          operation,
-          outcome: "succeeded",
-          at,
-        };
-        input.audit.record({ ...mutation, tenantId, errorCode: null });
-        return c.json({
-          channels: channelView(tenantId, input.settings, input.runtime, at),
-          challenge: { code: registration.keyword, sharedNumber, expiresAt },
-          mutation,
-        } satisfies HostedChannelChallengeResponse);
-      } catch (error) {
-        const collision =
-          error instanceof Error &&
-          error.message === "phone number is already registered";
-        const response = safeFailure(
-          operationId,
-          operation,
-          collision ? "sender_in_use" : "channels_unavailable",
-          collision
-            ? "That sender is already connected to another Zenod account."
-            : "WhatsApp setup is temporarily unavailable. Try again shortly.",
-          collision ? "rejected" : "failed",
-          at,
-        );
-        input.audit.record({
-          ...response.mutation!,
-          tenantId,
-          errorCode: response.error.code,
-        });
-        return c.json(response, collision ? 409 : 503);
-      }
-    },
-  );
-
-  app.post("/internal/zenod/channels/:tenantId/whatsapp/test", async (c) => {
-    if (!authorize(c)) return c.json({ error: "not found" }, 404);
-    const tenantId = normalizedTenantId(c.req.param("tenantId"));
-    const body = await c.req
-      .json<Record<string, unknown>>()
-      .catch((): Record<string, unknown> => ({}));
-    const operationId = safeOperationId(body.operationId);
-    const operation = "whatsapp.test" as const;
-    const at = Date.now();
-    const settings = tenantId ? input.settings.get(tenantId) : null;
-    if (!tenantId || !settings?.verified || !settings.phoneNumber) {
-      const response = safeFailure(
-        operationId,
-        operation,
-        "not_connected",
-        "Connect and verify your WhatsApp sender before sending a test.",
-        "rejected",
-        at,
-      );
-      if (tenantId)
-        input.audit.record({
-          ...response.mutation!,
-          tenantId,
-          errorCode: response.error.code,
-        });
-      return c.json(response, 409);
-    }
-    try {
-      await input.runtime
-        .delivery()
-        .send(
-          "whatsapp",
-          settings.phoneNumber,
-          "Zenod WhatsApp test: this sender is connected to your memory.",
-        );
-      const mutation: HostedChannelMutationOutcome = {
-        operationId,
-        operation,
-        outcome: "succeeded",
-        at,
-      };
-      input.audit.record({ ...mutation, tenantId, errorCode: null });
-      return c.json({
-        channels: channelView(tenantId, input.settings, input.runtime, at),
-        receipt: { deliveredAt: at },
-        mutation,
-      } satisfies HostedChannelTestResponse);
-    } catch {
-      const response = safeFailure(
-        operationId,
-        operation,
-        "channels_unavailable",
-        "Zenod could not deliver the WhatsApp test. Try again shortly.",
-        "failed",
-        at,
-      );
-      input.audit.record({
-        ...response.mutation!,
-        tenantId,
-        errorCode: response.error.code,
-      });
-      return c.json(response, 503);
-    }
-  });
-
-  app.post(
-    "/internal/zenod/channels/:tenantId/whatsapp/disconnect",
-    async (c) => {
-      if (!authorize(c)) return c.json({ error: "not found" }, 404);
-      const tenantId = normalizedTenantId(c.req.param("tenantId"));
-      const body = await c.req
-        .json<Record<string, unknown>>()
-        .catch((): Record<string, unknown> => ({}));
-      const operationId = safeOperationId(body.operationId);
-      const operation = "whatsapp.disconnect" as const;
-      const at = Date.now();
-      if (!tenantId) {
         return c.json(
-          safeFailure(
-            operationId,
+          failure(
+            operationId ?? randomUUID(),
             operation,
             "invalid_request",
-            "Invalid channel request.",
+            "Enter a valid WhatsApp sender number.",
             "rejected",
-            at,
           ),
           400,
         );
       }
-      input.settings.disconnectPhone(tenantId, at);
-      const mutation: HostedChannelMutationOutcome = {
+      const code = challengeCode(
+        input.env.ZENOD_CHANNELS_PRIVATE_TOKEN ?? "",
+        tenantId,
         operationId,
-        operation,
-        outcome: "succeeded",
-        at,
-      };
-      input.audit.record({ ...mutation, tenantId, errorCode: null });
-      return c.json({
-        channels: channelView(tenantId, input.settings, input.runtime, at),
-        mutation,
-      } satisfies HostedChannelDisconnectResponse);
+        sender,
+      );
+      const result = await executeOnce(
+        input.audit,
+        {
+          operationId,
+          tenantId,
+          operation,
+          requestBody: { sender, downstreamUrl: body.downstreamUrl },
+          deriveChallenge: () => code,
+        },
+        () => {
+          const at = Date.now();
+          try {
+            const current = input.settings.get(tenantId);
+            if (current.verified && current.phoneNumber) {
+              return {
+                status: 409,
+                body: failure(
+                  operationId,
+                  operation,
+                  "already_connected",
+                  "Disconnect the current sender before connecting another one.",
+                  "rejected",
+                  at,
+                ),
+              };
+            }
+            input.settings.assertPhoneAvailable(tenantId, sender);
+            const sharedNumber = input.runtime.whatsapp.status().linkedNumber;
+            if (!sharedNumber) throw new Error("transport unavailable");
+            input.settings.update(tenantId, {
+              downstreamUrl: body.downstreamUrl as string,
+              downstreamToken: body.downstreamToken as string,
+              voiceDefault: "capture",
+              turnBindings: defaultPhylaxTurnBindings(),
+            });
+            const registration = input.settings.registerPhone(
+              tenantId,
+              sender,
+              "primary",
+              at,
+              code,
+            );
+            const mutation: HostedChannelMutationOutcome = {
+              operationId,
+              operation,
+              outcome: "succeeded",
+              at,
+            };
+            return {
+              status: 200,
+              body: {
+                channels: channelView(
+                  tenantId,
+                  input.settings,
+                  input.runtime,
+                  at,
+                ),
+                challenge: {
+                  code,
+                  sharedNumber,
+                  expiresAt: registration.settings.verificationExpiresAt ?? at,
+                },
+                mutation,
+              } satisfies HostedChannelChallengeResponse,
+            };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "";
+            const collision = message === "phone number is already registered";
+            const invalid = message === "invalid WhatsApp phone number";
+            return {
+              status: invalid ? 400 : collision ? 409 : 503,
+              body: failure(
+                operationId,
+                operation,
+                invalid
+                  ? "invalid_request"
+                  : collision
+                    ? "sender_in_use"
+                    : "channels_unavailable",
+                invalid
+                  ? "Enter a valid WhatsApp sender number."
+                  : collision
+                    ? "That sender is already connected to another Zenod account."
+                    : "WhatsApp setup is temporarily unavailable. Try again shortly.",
+                invalid || collision ? "rejected" : "failed",
+                at,
+              ),
+            };
+          }
+        },
+      );
+      return c.json(result.body, result.status as ContentfulStatusCode);
     },
   );
+
+  const testRoute =
+    (channel: "whatsapp" | "telegram") => async (c: Context) => {
+      if (!authorize(c)) return c.json({ error: "not found" }, 404);
+      const tenantId = normalizedTenantId(c.req.param("tenantId") ?? "");
+      const body = await parse(c);
+      const operationId = safeOperationId(body.operationId);
+      const operation = `${channel}.test` as HostedChannelMutationName;
+      if (!tenantId || !operationId)
+        return c.json(
+          failure(
+            operationId ?? randomUUID(),
+            operation,
+            "invalid_request",
+            "Invalid channel request.",
+            "rejected",
+          ),
+          400,
+        );
+      const result = await executeOnce(
+        input.audit,
+        { operationId, tenantId, operation, requestBody: {} },
+        async () => {
+          const at = Date.now();
+          const settings = input.settings.get(tenantId);
+          const recipient =
+            channel === "whatsapp"
+              ? settings.verified
+                ? settings.phoneNumber
+                : null
+              : settings.telegramBinding;
+          if (!recipient)
+            return {
+              status: 409,
+              body: failure(
+                operationId,
+                operation,
+                "not_connected",
+                `Connect ${channel === "whatsapp" ? "WhatsApp" : "Telegram"} before sending a test.`,
+                "rejected",
+                at,
+              ),
+            };
+          try {
+            await input.runtime
+              .delivery()
+              .send(
+                channel,
+                recipient,
+                channel === "whatsapp"
+                  ? "Zenod WhatsApp test: this sender is connected to your memory."
+                  : "Zenod Telegram test: this identity is connected to your memory.",
+              );
+            const mutation: HostedChannelMutationOutcome = {
+              operationId,
+              operation,
+              outcome: "succeeded",
+              at,
+            };
+            return {
+              status: 200,
+              body: {
+                channels: channelView(
+                  tenantId,
+                  input.settings,
+                  input.runtime,
+                  at,
+                ),
+                receipt: { deliveredAt: at },
+                mutation,
+              } satisfies HostedChannelTestResponse,
+            };
+          } catch {
+            return {
+              status: 503,
+              body: failure(
+                operationId,
+                operation,
+                "channels_unavailable",
+                `Zenod could not deliver the ${channel === "whatsapp" ? "WhatsApp" : "Telegram"} test. Try again shortly.`,
+                "failed",
+                at,
+              ),
+            };
+          }
+        },
+      );
+      return c.json(result.body, result.status as ContentfulStatusCode);
+    };
+  app.post(
+    "/internal/zenod/channels/:tenantId/whatsapp/test",
+    testRoute("whatsapp"),
+  );
+  app.post(
+    "/internal/zenod/channels/:tenantId/telegram/test",
+    testRoute("telegram"),
+  );
+
+  const disconnectRoute =
+    (channel: "whatsapp" | "telegram") => async (c: Context) => {
+      if (!authorize(c)) return c.json({ error: "not found" }, 404);
+      const tenantId = normalizedTenantId(c.req.param("tenantId") ?? "");
+      const body = await parse(c);
+      const operationId = safeOperationId(body.operationId);
+      const operation = `${channel}.disconnect` as HostedChannelMutationName;
+      if (!tenantId || !operationId)
+        return c.json(
+          failure(
+            operationId ?? randomUUID(),
+            operation,
+            "invalid_request",
+            "Invalid channel request.",
+            "rejected",
+          ),
+          400,
+        );
+      const result = await executeOnce(
+        input.audit,
+        { operationId, tenantId, operation, requestBody: {} },
+        () => {
+          const at = Date.now();
+          if (channel === "whatsapp")
+            input.settings.disconnectPhone(tenantId, at);
+          else input.settings.disconnectTelegram(tenantId);
+          const mutation: HostedChannelMutationOutcome = {
+            operationId,
+            operation,
+            outcome: "succeeded",
+            at,
+          };
+          return {
+            status: 200,
+            body: {
+              channels: channelView(
+                tenantId,
+                input.settings,
+                input.runtime,
+                at,
+              ),
+              mutation,
+            } satisfies HostedChannelDisconnectResponse,
+          };
+        },
+      );
+      return c.json(result.body, result.status as ContentfulStatusCode);
+    };
+  app.post(
+    "/internal/zenod/channels/:tenantId/whatsapp/disconnect",
+    disconnectRoute("whatsapp"),
+  );
+  app.post(
+    "/internal/zenod/channels/:tenantId/telegram/disconnect",
+    disconnectRoute("telegram"),
+  );
+
+  app.post("/internal/zenod/channels/:tenantId/telegram/connect", async (c) => {
+    if (!authorize(c)) return c.json({ error: "not found" }, 404);
+    const tenantId = normalizedTenantId(c.req.param("tenantId") ?? "");
+    const body = await parse(c);
+    const operationId = safeOperationId(body.operationId);
+    const identity = normalizeHostedTelegram(body.identity);
+    const operation = "telegram.connect" as const;
+    if (
+      !tenantId ||
+      !operationId ||
+      !identity ||
+      typeof body.downstreamUrl !== "string" ||
+      typeof body.downstreamToken !== "string" ||
+      !body.downstreamToken.trim()
+    ) {
+      return c.json(
+        failure(
+          operationId ?? randomUUID(),
+          operation,
+          "invalid_request",
+          "Enter a valid Telegram username or numeric chat ID.",
+          "rejected",
+        ),
+        400,
+      );
+    }
+    const result = await executeOnce(
+      input.audit,
+      {
+        operationId,
+        tenantId,
+        operation,
+        requestBody: { identity, downstreamUrl: body.downstreamUrl },
+      },
+      () => {
+        const at = Date.now();
+        try {
+          const normalized = input.settings.assertTelegramAvailable(
+            tenantId,
+            identity,
+          );
+          input.settings.update(tenantId, {
+            downstreamUrl: body.downstreamUrl as string,
+            downstreamToken: body.downstreamToken as string,
+            telegramBinding: normalized,
+            notificationPrefs: { telegram: true },
+            voiceDefault: "capture",
+            turnBindings: defaultPhylaxTurnBindings(),
+          });
+          const mutation: HostedChannelMutationOutcome = {
+            operationId,
+            operation,
+            outcome: "succeeded",
+            at,
+          };
+          return {
+            status: 200,
+            body: {
+              channels: channelView(
+                tenantId,
+                input.settings,
+                input.runtime,
+                at,
+              ),
+              mutation,
+            } satisfies HostedChannelConnectResponse,
+          };
+        } catch (error) {
+          const collision =
+            error instanceof Error &&
+            error.message === "Telegram identity is already registered";
+          return {
+            status: collision ? 409 : 400,
+            body: failure(
+              operationId,
+              operation,
+              collision ? "identity_in_use" : "invalid_request",
+              collision
+                ? "That Telegram identity is already connected to another Zenod account."
+                : "Enter a valid Telegram username or numeric chat ID.",
+              "rejected",
+              at,
+            ),
+          };
+        }
+      },
+    );
+    return c.json(result.body, result.status as ContentfulStatusCode);
+  });
 }
 
 export interface HostedChannelCustomerTenant {
   tenantId: string;
   downstreamToken: string;
+  /** ZAL-10 admission may pause processing without destroying channel bindings. */
+  processingPaused?: boolean;
 }
 
-function privateChannelsBase(env: NodeJS.ProcessEnv): string | null {
+function configuredPrivateOrigin(env: NodeJS.ProcessEnv): string | null {
   const configured = env.ZENOD_CHANNELS_URL?.trim();
-  if (!configured) return null;
+  const allowed = (env.ZENOD_CHANNELS_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!configured || allowed.length === 0) return null;
   try {
     const parsed = new URL(configured);
-    if (!["http:", "https:"].includes(parsed.protocol)) return null;
-    return parsed.toString().replace(/\/$/, "");
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash ||
+      (parsed.pathname && parsed.pathname !== "/")
+    )
+      return null;
+    const allowedOrigins = allowed.map((value) => new URL(value).origin);
+    return allowedOrigins.includes(parsed.origin) ? parsed.origin : null;
   } catch {
     return null;
   }
 }
-
+export function hostedChannelsConfigured(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(
+    configuredPrivateOrigin(env) && env.ZENOD_CHANNELS_PRIVATE_TOKEN?.trim(),
+  );
+}
 function memoryDownstreamUrl(env: NodeJS.ProcessEnv): string {
-  const configured = env.ZENOD_CHANNELS_MEMORY_URL?.trim();
-  if (configured) return configured;
-  return `${(env.CUSTOMER_APP_URL || env.DOMAIN || "https://cloud.zenod.dev").replace(/\/$/, "")}/mcp`;
+  return (
+    env.ZENOD_CHANNELS_MEMORY_URL?.trim() ||
+    `${(env.CUSTOMER_APP_URL || env.DOMAIN || "https://cloud.zenod.dev").replace(/\/$/, "")}/mcp`
+  );
+}
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+function nullableString(value: unknown): string | null | undefined {
+  return value === null ? null : typeof value === "string" ? value : undefined;
+}
+function nullableNumber(value: unknown): number | null | undefined {
+  return value === null
+    ? null
+    : typeof value === "number" && Number.isFinite(value)
+      ? value
+      : undefined;
+}
+function projectChannels(value: unknown): HostedChannelsView | null {
+  const root = record(value);
+  const whatsapp = record(root?.whatsapp);
+  const telegram = record(root?.telegram);
+  if (!root || !whatsapp || !telegram) return null;
+  if (
+    !["off", "awaiting_code", "verified", "degraded", "paused"].includes(
+      String(whatsapp.state),
+    ) ||
+    !["off", "connected", "degraded"].includes(String(telegram.state))
+  )
+    return null;
+  const senderHint = nullableString(whatsapp.senderHint);
+  const sharedNumber = nullableString(whatsapp.sharedNumber);
+  const verificationExpiresAt = nullableNumber(whatsapp.verificationExpiresAt);
+  const lastInboundAt = nullableNumber(whatsapp.lastInboundAt);
+  const lastReceiptAt = nullableNumber(whatsapp.lastReceiptAt);
+  const identityHint = nullableString(telegram.identityHint);
+  if (
+    senderHint === undefined ||
+    sharedNumber === undefined ||
+    verificationExpiresAt === undefined ||
+    lastInboundAt === undefined ||
+    lastReceiptAt === undefined ||
+    identityHint === undefined
+  )
+    return null;
+  if (
+    (senderHint !== null && !/^••••\d{1,8}$/.test(senderHint)) ||
+    (sharedNumber !== null && !/^\+?[\d ()-]{8,32}$/.test(sharedNumber)) ||
+    (identityHint !== null && !/^@[-a-zA-Z0-9_]{1,64}$/.test(identityHint))
+  )
+    return null;
+  return {
+    whatsapp: {
+      state: whatsapp.state as HostedWhatsAppState,
+      senderHint: senderHint!,
+      sharedNumber: sharedNumber!,
+      verificationExpiresAt: verificationExpiresAt!,
+      lastInboundAt: lastInboundAt!,
+      lastReceiptAt: lastReceiptAt!,
+    },
+    telegram: {
+      state: telegram.state as HostedTelegramState,
+      identityHint: identityHint!,
+    },
+  };
+}
+function projectMutation(
+  value: unknown,
+  expected: HostedChannelMutationName,
+  expectedId?: string,
+): HostedChannelMutationOutcome | null {
+  const item = record(value);
+  if (
+    !item ||
+    item.operation !== expected ||
+    !safeOperationId(item.operationId) ||
+    (expectedId !== undefined && item.operationId !== expectedId) ||
+    !["succeeded", "rejected", "failed"].includes(String(item.outcome)) ||
+    typeof item.at !== "number" ||
+    !Number.isFinite(item.at)
+  )
+    return null;
+  return {
+    operationId: item.operationId as string,
+    operation: expected,
+    outcome: item.outcome as HostedChannelMutationOutcome["outcome"],
+    at: item.at,
+  };
+}
+function publicErrorMessage(
+  code: HostedChannelErrorResponse["error"]["code"],
+): string {
+  switch (code) {
+    case "invalid_request":
+      return "Check the channel details and try again.";
+    case "sender_in_use":
+      return "That sender is already connected to another Zenod account.";
+    case "identity_in_use":
+      return "That Telegram identity is already connected to another Zenod account.";
+    case "already_connected":
+      return "Disconnect the current binding before connecting another one.";
+    case "not_connected":
+      return "Connect this channel before using that action.";
+    case "operation_conflict":
+      return "This request key was already used for a different action.";
+    case "operation_in_progress":
+      return "This channel action is still in progress. Retry with the same request key.";
+    case "channels_unavailable":
+      return "Channels are temporarily unavailable. Try again shortly.";
+  }
+}
+function projectError(
+  value: unknown,
+  expected?: HostedChannelMutationName,
+  expectedId?: string,
+): HostedChannelErrorResponse | null {
+  const root = record(value);
+  const error = record(root?.error);
+  const codes = [
+    "invalid_request",
+    "sender_in_use",
+    "identity_in_use",
+    "already_connected",
+    "not_connected",
+    "operation_conflict",
+    "operation_in_progress",
+    "channels_unavailable",
+  ];
+  if (
+    !root ||
+    !error ||
+    !codes.includes(String(error.code)) ||
+    typeof error.message !== "string"
+  )
+    return null;
+  const code = error.code as HostedChannelErrorResponse["error"]["code"];
+  const mutation =
+    expected && root.mutation
+      ? projectMutation(root.mutation, expected, expectedId)
+      : null;
+  if (expected && !mutation) return null;
+  return {
+    error: { code, message: publicErrorMessage(code) },
+    ...(mutation ? { mutation } : {}),
+  };
+}
+function projectAction(
+  value: unknown,
+  operation: HostedChannelMutationName,
+  expectedId: string,
+): unknown | null {
+  const root = record(value);
+  const channels = projectChannels(root?.channels);
+  const mutation = projectMutation(root?.mutation, operation, expectedId);
+  if (!root || !channels || !mutation) return null;
+  if (operation === "whatsapp.challenge") {
+    const challenge = record(root.challenge);
+    if (
+      !challenge ||
+      typeof challenge.code !== "string" ||
+      !/^\d{2}-[a-z]{2,24}$/.test(challenge.code) ||
+      typeof challenge.sharedNumber !== "string" ||
+      !/^\+?[\d ()-]{8,32}$/.test(challenge.sharedNumber) ||
+      typeof challenge.expiresAt !== "number" ||
+      !Number.isFinite(challenge.expiresAt)
+    )
+      return null;
+    return {
+      channels,
+      challenge: {
+        code: challenge.code,
+        sharedNumber: challenge.sharedNumber,
+        expiresAt: challenge.expiresAt,
+      },
+      mutation,
+    } satisfies HostedChannelChallengeResponse;
+  }
+  if (operation.endsWith(".test")) {
+    const receipt = record(root.receipt);
+    if (
+      !receipt ||
+      typeof receipt.deliveredAt !== "number" ||
+      !Number.isFinite(receipt.deliveredAt)
+    )
+      return null;
+    return {
+      channels,
+      receipt: { deliveredAt: receipt.deliveredAt },
+      mutation,
+    } satisfies HostedChannelTestResponse;
+  }
+  return { channels, mutation } satisfies HostedChannelConnectResponse;
+}
+
+function applyProcessingPause(value: unknown, paused: boolean): unknown {
+  if (!paused || !value || typeof value !== "object") return value;
+  const root = value as Record<string, unknown>;
+  const channels =
+    "channels" in root ? projectChannels(root.channels) : projectChannels(root);
+  if (
+    !channels ||
+    !["verified", "degraded", "paused"].includes(channels.whatsapp.state)
+  )
+    return value;
+  const nextChannels: HostedChannelsView = {
+    ...channels,
+    whatsapp: { ...channels.whatsapp, state: "paused" },
+  };
+  return "channels" in root
+    ? { ...root, channels: nextChannels }
+    : nextChannels;
 }
 
 async function proxyChannels(
   env: NodeJS.ProcessEnv,
   tenant: HostedChannelCustomerTenant,
   path: string,
-  init?: { method: "POST"; body: Record<string, unknown> },
+  input?: {
+    operation?: HostedChannelMutationName;
+    body: Record<string, unknown>;
+    includeCredentials?: boolean;
+  },
 ): Promise<{ status: number; body: unknown }> {
-  const base = privateChannelsBase(env);
+  const base = configuredPrivateOrigin(env);
   const token = env.ZENOD_CHANNELS_PRIVATE_TOKEN?.trim();
-  if (!base || !token) {
-    return {
-      status: 503,
-      body: {
-        error: {
-          code: "channels_unavailable",
-          message: "WhatsApp is temporarily unavailable. Try again shortly.",
-        },
-      } satisfies HostedChannelErrorResponse,
-    };
-  }
+  const unavailableMutation =
+    input?.operation && typeof input.body.operationId === "string"
+      ? {
+          operationId: input.body.operationId,
+          operation: input.operation,
+          outcome: "failed" as const,
+          at: Date.now(),
+        }
+      : null;
+  const unavailable = {
+    status: 503,
+    body: {
+      error: {
+        code: "channels_unavailable",
+        message: "Channels are temporarily unavailable. Try again shortly.",
+      },
+      ...(unavailableMutation ? { mutation: unavailableMutation } : {}),
+    } satisfies HostedChannelErrorResponse,
+  };
+  if (!base || !token) return unavailable;
   try {
     const response = await fetch(
       `${base}/internal/zenod/channels/${encodeURIComponent(tenant.tenantId)}${path}`,
       {
-        method: init?.method ?? "GET",
+        method: input ? "POST" : "GET",
         headers: {
           authorization: `Bearer ${token}`,
-          ...(init ? { "content-type": "application/json" } : {}),
+          ...(input ? { "content-type": "application/json" } : {}),
         },
-        ...(init
+        ...(input
           ? {
               body: JSON.stringify({
-                ...init.body,
-                downstreamUrl: memoryDownstreamUrl(env),
-                downstreamToken: tenant.downstreamToken,
+                ...input.body,
+                ...(input.includeCredentials
+                  ? {
+                      downstreamUrl: memoryDownstreamUrl(env),
+                      downstreamToken: tenant.downstreamToken,
+                    }
+                  : {}),
               }),
             }
           : {}),
+        redirect: "error",
         signal: AbortSignal.timeout(8_000),
       },
     );
-    const body = await response.json().catch(() => null);
-    if (!body || typeof body !== "object")
-      throw new Error("malformed channels response");
-    return { status: response.status, body };
+    const raw = await response.json().catch(() => null);
+    if (!response.ok) {
+      const expectedId =
+        typeof input?.body.operationId === "string"
+          ? input.body.operationId
+          : undefined;
+      const error = projectError(raw, input?.operation, expectedId);
+      return error ? { status: response.status, body: error } : unavailable;
+    }
+    const expectedId =
+      typeof input?.body.operationId === "string" ? input.body.operationId : "";
+    const projected = input?.operation
+      ? projectAction(raw, input.operation, expectedId)
+      : projectChannels(raw);
+    return projected
+      ? {
+          status: response.status,
+          body: applyProcessingPause(
+            projected,
+            tenant.processingPaused === true,
+          ),
+        }
+      : unavailable;
   } catch {
-    return {
-      status: 503,
-      body: {
-        error: {
-          code: "channels_unavailable",
-          message: "WhatsApp is temporarily unavailable. Try again shortly.",
-        },
-      } satisfies HostedChannelErrorResponse,
-    };
+    return unavailable;
   }
 }
 
@@ -589,28 +1350,40 @@ export function mountHostedChannelsCustomerRoutes(
     const response = await proxyChannels(input.env, tenant, "");
     return c.json(response.body, response.status as ContentfulStatusCode);
   });
-
-  for (const action of ["challenge", "test", "disconnect"] as const) {
-    app.post(`/api/channels/whatsapp/${action}`, async (c) => {
+  const actions = [
+    ["whatsapp", "challenge", "whatsapp.challenge", true],
+    ["whatsapp", "test", "whatsapp.test", false],
+    ["whatsapp", "disconnect", "whatsapp.disconnect", false],
+    ["telegram", "connect", "telegram.connect", true],
+    ["telegram", "test", "telegram.test", false],
+    ["telegram", "disconnect", "telegram.disconnect", false],
+  ] as const;
+  for (const [channel, action, operation, includeCredentials] of actions) {
+    app.post(`/api/channels/${channel}/${action}`, async (c) => {
       const tenant = await input.resolveTenant(c);
       if (!tenant) return c.json({ error: "unauthorized" }, 401);
-      const body: { sender?: unknown } =
-        action === "challenge"
-          ? await c.req
-              .json<{ sender?: unknown }>()
-              .catch((): { sender?: unknown } => ({}))
-          : {};
+      const raw = await c.req
+        .json<Record<string, unknown>>()
+        .catch((): Record<string, unknown> => ({}));
+      const operationId = safeOperationId(raw.operationId);
+      if (!operationId)
+        return c.json(
+          {
+            error: {
+              code: "invalid_request",
+              message: "A valid request key is required.",
+            },
+          },
+          400,
+        );
+      const body: Record<string, unknown> = { operationId };
+      if (operation === "whatsapp.challenge") body.sender = raw.sender;
+      if (operation === "telegram.connect") body.identity = raw.identity;
       const response = await proxyChannels(
         input.env,
         tenant,
-        `/whatsapp/${action}`,
-        {
-          method: "POST",
-          body: {
-            operationId: randomUUID(),
-            ...(action === "challenge" ? { sender: body.sender } : {}),
-          },
-        },
+        `/${channel}/${action}`,
+        { operation, body, includeCredentials },
       );
       return c.json(response.body, response.status as ContentfulStatusCode);
     });

@@ -86,7 +86,7 @@ export function HostedChannelsConnections({
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <HostedWhatsAppConnect initial={channels} onChanged={onChanged} />
-      <HostedTelegramConnect channels={channels} />
+      <HostedTelegramConnect channels={channels} onChanged={onChanged} />
     </div>
   )
 }
@@ -138,7 +138,9 @@ export function ConnectionsTab() {
 
   React.useEffect(() => {
     let cancelled = false
-    api<{ name?: string; vaultless?: boolean; hostedMode?: "ring" | null }>("/api/agent")
+    api<{ name?: string; vaultless?: boolean; hostedMode?: "ring" | null }>(
+      "/api/agent"
+    )
       .then((result) => {
         if (!cancelled) {
           setRingMode(Boolean(result.vaultless))
@@ -219,11 +221,17 @@ export function ConnectionsTab() {
 
   async function handleRevoke(clientId: string) {
     try {
-      await api("/api/connections/revoke", { method: "POST", body: { clientId } })
+      await api("/api/connections/revoke", {
+        method: "POST",
+        body: { clientId },
+      })
       setData((previous) =>
         previous === null
           ? previous
-          : { ...previous, grants: previous.grants.filter((g) => g.clientId !== clientId) }
+          : {
+              ...previous,
+              grants: previous.grants.filter((g) => g.clientId !== clientId),
+            }
       )
       toast.success("Access revoked")
     } catch (err) {
@@ -242,8 +250,9 @@ export function ConnectionsTab() {
         <CardHeader>
           <CardTitle>GitHub</CardTitle>
           <CardDescription>
-            Connect GitHub once here. The Console uses it to provision the agents it enables
-            (so they can reach their repos) — connect-once, the shared-connection model.
+            Connect GitHub once here. The Console uses it to provision the
+            agents it enables (so they can reach their repos) — connect-once,
+            the shared-connection model.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -257,8 +266,9 @@ export function ConnectionsTab() {
             <CardHeader>
               <CardTitle>Managed Phylax channels</CardTitle>
               <CardDescription>
-                WhatsApp and Telegram use the hosted provider connection. Channel health,
-                sender policy, and delivery receipts are managed here without device QR pairing.
+                WhatsApp and Telegram use the hosted provider connection.
+                Channel health, sender policy, and delivery receipts are managed
+                here without device QR pairing.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -395,8 +405,8 @@ export function ConnectionsTab() {
             code={`URL: ${codexDesktopUrl}\nBearer token env var: ${codexDesktopEnvVar}`}
           />
           <p className="text-sm text-muted-foreground">
-            The actual token must be set in the environment of the Codex
-            process before Codex starts. A shell{" "}
+            The actual token must be set in the environment of the Codex process
+            before Codex starts. A shell{" "}
             <span className="font-mono">export</span> only lasts for that shell
             session and child processes.
           </p>

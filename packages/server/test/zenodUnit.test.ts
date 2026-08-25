@@ -11,7 +11,7 @@ import {
   hashToken,
   type UnitContext,
 } from "@zenod/mcp-chassis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createZenodUnit,
   MEMORY_CHANNEL_MCP_TOOLS,
@@ -30,6 +30,8 @@ async function tempDir(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   await Promise.all(
     tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
   );
@@ -419,6 +421,9 @@ describe("Zenod chassis unit", () => {
       GITHUB_OAUTH_CLIENT_ID: "client-id",
       GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
       CHASSIS_VAULT_MASTER_KEY,
+      ZENOD_CHANNELS_URL: "http://channels.internal:8080",
+      ZENOD_CHANNELS_ALLOWED_ORIGINS: "http://channels.internal:8080",
+      ZENOD_CHANNELS_PRIVATE_TOKEN: "private-channels-token",
     };
     const unit = createZenodUnit({
       dataDir,
@@ -447,10 +452,43 @@ describe("Zenod chassis unit", () => {
       });
       unit.customerTokenVault.put("github-42", "customer-token");
       const cookie = await signInCustomer(unit);
+      const privateFetch = vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          whatsapp: {
+            state: "off",
+            senderHint: null,
+            sharedNumber: null,
+            verificationExpiresAt: null,
+            lastInboundAt: null,
+            lastReceiptAt: null,
+          },
+          telegram: { state: "off", identityHint: null },
+        }),
+      );
+      vi.stubGlobal("fetch", privateFetch);
+
+      expect(
+        (
+          await unit.app.request("/api/channels", {
+            headers: { authorization: "Bearer customer-token" },
+          })
+        ).status,
+      ).toBe(401);
+      expect(privateFetch).not.toHaveBeenCalled();
 
       tenants.setTenantStatus("github-42", "suspended");
       expect((await unit.app.request("/api/settings", { headers: { cookie } })).status).toBe(401);
+      expect((await unit.app.request("/api/channels", { headers: { cookie } })).status).toBe(401);
+      expect(privateFetch).not.toHaveBeenCalled();
       tenants.setTenantStatus("github-42", "active");
+
+      expect((await unit.app.request("/api/channels", { headers: { cookie } })).status).toBe(200);
+      expect(privateFetch).toHaveBeenCalledTimes(1);
+
+      unit.customerTokenVault.put("github-42", "second-token");
+      expect((await unit.app.request("/api/channels", { headers: { cookie } })).status).toBe(401);
+      expect(privateFetch).toHaveBeenCalledTimes(1);
+      unit.customerTokenVault.put("github-42", "customer-token");
 
       unit.customerAccounts.upsert("canceled", {
         ...base,
@@ -459,6 +497,7 @@ describe("Zenod chassis unit", () => {
         claimed_at: new Date(Date.now() + 1_000).toISOString(),
       });
       expect((await unit.app.request("/api/settings", { headers: { cookie } })).status).toBe(401);
+      expect((await unit.app.request("/api/channels", { headers: { cookie } })).status).toBe(401);
 
       unit.customerAccounts.upsert("reactivated", {
         ...base,
@@ -475,6 +514,7 @@ describe("Zenod chassis unit", () => {
         claimed_at: new Date(Date.now() + 3_000).toISOString(),
       });
       expect((await unit.app.request("/api/settings", { headers: { cookie } })).status).toBe(401);
+      expect((await unit.app.request("/api/channels", { headers: { cookie } })).status).toBe(401);
     } finally {
       unit.close();
     }
@@ -549,6 +589,7 @@ describe("Zenod chassis unit", () => {
       expect(await (await unit.app.request("/", { headers: { host: "zenod.dev" } })).text()).toContain("PUBLIC SITE");
       expect(await (await unit.app.request("/", { headers: { host: "cloud.zenod.dev" } })).text()).toContain("CUSTOMER APP");
       expect(await (await unit.app.request("/app", { headers: { host: "cloud.zenod.dev" } })).text()).toContain("CUSTOMER APP");
+      expect((await unit.app.request("/api/channels")).status).toBe(404);
     } finally {
       unit.close();
     }

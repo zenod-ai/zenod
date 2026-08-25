@@ -398,8 +398,12 @@ export type HostedChannelMutation = {
   operationId: string
   operation:
     | "whatsapp.challenge"
+    | "whatsapp.verify"
     | "whatsapp.test"
     | "whatsapp.disconnect"
+    | "telegram.connect"
+    | "telegram.test"
+    | "telegram.disconnect"
   outcome: "succeeded" | "rejected" | "failed"
   at: number
 }
@@ -424,6 +428,10 @@ export type HostedWhatsAppDisconnectResponse = {
   channels: HostedChannelsResponse
   mutation: HostedChannelMutation
 }
+
+export type HostedTelegramConnectResponse = HostedWhatsAppDisconnectResponse
+export type HostedTelegramTestResponse = HostedWhatsAppTestResponse
+export type HostedTelegramDisconnectResponse = HostedWhatsAppDisconnectResponse
 
 export type SettingsResponse = {
   settings: SettingsValues
@@ -628,7 +636,12 @@ export async function chatStream(
     if (!trimmed) return
     const event = JSON.parse(trimmed) as
       | { type: "delta"; text: string }
-      | { type: "tool"; phase: ChatToolEvent["phase"]; tool: string; label: string }
+      | {
+          type: "tool"
+          phase: ChatToolEvent["phase"]
+          tool: string
+          label: string
+        }
       | {
           type: "done"
           text: string
@@ -640,7 +653,11 @@ export async function chatStream(
     if (event.type === "ping") return // keep-alive; nothing to render
     if (event.type === "delta") pendingDeltas.push(event.text)
     else if (event.type === "tool")
-      handlers.onTool?.({ phase: event.phase, tool: event.tool, label: event.label })
+      handlers.onTool?.({
+        phase: event.phase,
+        tool: event.tool,
+        label: event.label,
+      })
     else if (event.type === "done") {
       // The final event is the host-gated authority. Never expose an earlier model
       // delta that the gate replaced; replay natural chunks only when they exactly
@@ -655,7 +672,8 @@ export async function chatStream(
         sources: event.sources,
         ...(event.stored ? { stored: event.stored } : {}),
       })
-    } else if (event.type === "error") throw new ApiError(503, event.message, event.code)
+    } else if (event.type === "error")
+      throw new ApiError(503, event.message, event.code)
   }
 
   for (;;) {

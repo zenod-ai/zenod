@@ -34,6 +34,7 @@ const off: HostedChannelsResponse = {
 afterEach(() => {
   cleanup()
   mocks.api.mockReset()
+  window.localStorage.clear()
 })
 
 describe("Hosted Zenod channels", () => {
@@ -89,7 +90,10 @@ describe("Hosted Zenod channels", () => {
     expect(screen.getByText("+34 699 000 111")).not.toBeNull()
     expect(mocks.api).toHaveBeenCalledWith("/api/channels/whatsapp/challenge", {
       method: "POST",
-      body: { sender: "+34 611 111 111" },
+      body: {
+        operationId: expect.any(String),
+        sender: "+34 611 111 111",
+      },
     })
     expect(container.textContent).not.toMatch(
       /Phylax|Ring|provider|OpenRouter|downstream|operationId/i
@@ -131,13 +135,16 @@ describe("Hosted Zenod channels", () => {
 
     const { container } = render(<HostedChannelsPanel />)
     expect(await screen.findByText("••••1111")).not.toBeNull()
-    fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+    fireEvent.click(screen.getAllByRole("button", { name: "Send test" })[0]!)
     await waitFor(() => {
       expect(mocks.api).toHaveBeenCalledWith("/api/channels/whatsapp/test", {
         method: "POST",
+        body: { operationId: expect.any(String) },
       })
     })
-    expect(screen.getByRole("button", { name: "Disconnect" })).not.toBeNull()
+    expect(screen.getAllByRole("button", { name: "Disconnect" })).toHaveLength(
+      2
+    )
     expect(container.textContent).not.toMatch(
       /Reset session|Pair number|Allowed senders|Accept every sender/i
     )
@@ -156,5 +163,124 @@ describe("Hosted Zenod channels", () => {
     expect(container.textContent).not.toMatch(
       /private-channels|stack|ECONN|token/i
     )
+  })
+
+  it("recovers awaiting verification after reload without exposing a stored code", async () => {
+    const awaiting: HostedChannelsResponse = {
+      ...off,
+      whatsapp: {
+        ...off.whatsapp,
+        state: "awaiting_code",
+        senderHint: "••••1111",
+        verificationExpiresAt: Date.now() + 60_000,
+      },
+    }
+    window.localStorage.setItem(
+      "zenod.hosted-channel.operation.whatsapp.challenge",
+      "reload-safe-operation"
+    )
+    mocks.api.mockImplementation(
+      (path: string, request?: { method?: string }) => {
+        if (path === "/api/channels" && !request)
+          return Promise.resolve(awaiting)
+        if (path === "/api/channels/whatsapp/challenge") {
+          return Promise.resolve({
+            channels: awaiting,
+            challenge: {
+              code: "42-otter",
+              sharedNumber: "+34 699 000 111",
+              expiresAt: Date.now() + 60_000,
+            },
+            mutation: {
+              operationId: "reload-safe-operation",
+              operation: "whatsapp.challenge",
+              outcome: "succeeded",
+              at: Date.now(),
+            },
+          })
+        }
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      }
+    )
+    render(<HostedChannelsPanel />)
+    expect(
+      await screen.findByText("Verification is still waiting")
+    ).not.toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Show code again" }))
+    expect(await screen.findByText("42-otter")).not.toBeNull()
+    expect(mocks.api).toHaveBeenCalledWith("/api/channels/whatsapp/challenge", {
+      method: "POST",
+      body: { operationId: "reload-safe-operation" },
+    })
+    expect(
+      screen.getByRole("button", { name: "Issue new code" })
+    ).not.toBeNull()
+    expect(screen.getByRole("button", { name: "Cancel setup" })).not.toBeNull()
+  })
+
+  it("preserves a degraded binding instead of rendering a new sender form", async () => {
+    const degraded: HostedChannelsResponse = {
+      ...off,
+      whatsapp: {
+        ...off.whatsapp,
+        state: "degraded",
+        senderHint: "••••1111",
+      },
+    }
+    mocks.api.mockResolvedValue(degraded)
+    render(<HostedChannelsPanel />)
+    expect(
+      await screen.findByText("Your sender is still connected")
+    ).not.toBeNull()
+    expect(screen.queryByLabelText("Your WhatsApp sender number")).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "Create one-time code" })
+    ).toBeNull()
+  })
+
+  it("connects the Hosted Telegram tenant binding through the existing Channels card", async () => {
+    const allOff: HostedChannelsResponse = {
+      ...off,
+      telegram: { state: "off", identityHint: null },
+    }
+    const connected: HostedChannelsResponse = {
+      ...allOff,
+      telegram: { state: "connected", identityHint: "@jordi_test" },
+    }
+    mocks.api.mockImplementation(
+      (path: string, request?: { method?: string }) => {
+        if (path === "/api/channels" && !request) return Promise.resolve(allOff)
+        if (path === "/api/channels/telegram/connect") {
+          return Promise.resolve({
+            channels: connected,
+            mutation: {
+              operationId: "telegram-connect-operation",
+              operation: "telegram.connect",
+              outcome: "succeeded",
+              at: Date.now(),
+            },
+          })
+        }
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      }
+    )
+    render(<HostedChannelsPanel />)
+    fireEvent.change(
+      await screen.findByLabelText("Your Telegram username or chat ID"),
+      { target: { value: "@jordi_test" } }
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Connect Telegram" }))
+    await waitFor(() => {
+      expect(mocks.api).toHaveBeenCalledWith("/api/channels/telegram/connect", {
+        method: "POST",
+        body: {
+          identity: "@jordi_test",
+          operationId: expect.any(String),
+        },
+      })
+    })
+    expect(
+      await screen.findByText("Linked identity @jordi_test.")
+    ).not.toBeNull()
   })
 })

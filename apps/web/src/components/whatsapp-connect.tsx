@@ -54,6 +54,13 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import {
+  clearHostedChannelOperation,
+  clearHostedWhatsAppRecovery,
+  hostedChannelOperationKey,
+  rememberedHostedWhatsAppSender,
+  rememberHostedWhatsAppSender,
+} from "@/lib/hosted-channel-operations"
 
 type NotifyReceipt = {
   sent: number
@@ -619,7 +626,9 @@ export function HostedWhatsAppConnect({
   initial: HostedChannelsResponse | null
   onChanged: (channels: HostedChannelsResponse) => void
 }) {
-  const [sender, setSender] = React.useState("")
+  const [sender, setSender] = React.useState(() =>
+    rememberedHostedWhatsAppSender()
+  )
   const [challenge, setChallenge] = React.useState<
     HostedWhatsAppChallengeResponse["challenge"] | null
   >(null)
@@ -643,6 +652,7 @@ export function HostedWhatsAppConnect({
           publish(next)
           if (next.whatsapp.state === "verified") {
             setChallenge(null)
+            clearHostedWhatsAppRecovery()
             toast.success("WhatsApp connected to Zenod")
           }
         })
@@ -651,13 +661,23 @@ export function HostedWhatsAppConnect({
     return () => window.clearInterval(timer)
   }, [initial?.whatsapp.state, publish])
 
-  async function createChallenge() {
+  async function createChallenge(resetOperation = false) {
     setBusy("challenge")
     setError(null)
     try {
+      if (sender.trim()) rememberHostedWhatsAppSender(sender)
       const result = await api<HostedWhatsAppChallengeResponse>(
         "/api/channels/whatsapp/challenge",
-        { method: "POST", body: { sender } }
+        {
+          method: "POST",
+          body: {
+            operationId: hostedChannelOperationKey(
+              "whatsapp.challenge",
+              resetOperation
+            ),
+            ...(sender.trim() ? { sender } : {}),
+          },
+        }
       )
       publish(result.channels)
       setChallenge(result.challenge)
@@ -675,9 +695,15 @@ export function HostedWhatsAppConnect({
     try {
       const result = await api<HostedWhatsAppTestResponse>(
         "/api/channels/whatsapp/test",
-        { method: "POST" }
+        {
+          method: "POST",
+          body: {
+            operationId: hostedChannelOperationKey("whatsapp.test"),
+          },
+        }
       )
       publish(result.channels)
+      clearHostedChannelOperation("whatsapp.test")
       toast.success("Zenod test delivered")
     } catch (err) {
       setError(errorMessage(err))
@@ -692,9 +718,16 @@ export function HostedWhatsAppConnect({
     try {
       const result = await api<HostedWhatsAppDisconnectResponse>(
         "/api/channels/whatsapp/disconnect",
-        { method: "POST" }
+        {
+          method: "POST",
+          body: {
+            operationId: hostedChannelOperationKey("whatsapp.disconnect"),
+          },
+        }
       )
       publish(result.channels)
+      clearHostedChannelOperation("whatsapp.disconnect")
+      clearHostedWhatsAppRecovery()
       setChallenge(null)
       setSender("")
       toast.success("WhatsApp disconnected")
@@ -708,6 +741,8 @@ export function HostedWhatsAppConnect({
   const status = initial?.whatsapp ?? null
   const connected = status?.state === "verified"
   const awaiting = status?.state === "awaiting_code"
+  const preservedBinding =
+    connected || status?.state === "degraded" || status?.state === "paused"
 
   return (
     <Card>
@@ -750,19 +785,52 @@ export function HostedWhatsAppConnect({
           </Alert>
         )}
 
+        {awaiting && !challenge && (
+          <Alert>
+            <SendIcon />
+            <AlertTitle>Verification is still waiting</AlertTitle>
+            <AlertDescription>
+              For safety, Zenod does not store the one-time code. Show the same
+              code again, issue a new one, or cancel this setup.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {status?.state === "degraded" && (
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>Your sender is still connected</AlertTitle>
+            <AlertDescription>
+              Delivery needs attention. Refresh or send a test; Zenod will not
+              replace the verified sender.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {status?.state === "paused" && (
+          <Alert>
+            <TriangleAlertIcon />
+            <AlertTitle>Your sender is connected but paused</AlertTitle>
+            <AlertDescription>
+              The verified sender is preserved. Send a test after service
+              resumes; no new verification is required.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {status?.senderHint && (
           <FieldValue
             label="Verified sender"
             value={status.senderHint}
             detail={
-              connected
+              preservedBinding
                 ? `Last message ${timeAgo(status.lastInboundAt)}`
                 : "Verification is not complete yet"
             }
           />
         )}
 
-        {!connected && !awaiting && (
+        {!preservedBinding && !awaiting && (
           <Field>
             <FieldLabel htmlFor="hosted-whatsapp-sender">
               Your WhatsApp sender number
@@ -783,7 +851,7 @@ export function HostedWhatsAppConnect({
         )}
       </CardContent>
       <CardFooter className="flex flex-wrap gap-2">
-        {!connected && !awaiting && (
+        {!preservedBinding && !awaiting && (
           <Button
             type="button"
             onClick={() => void createChallenge()}
@@ -793,7 +861,36 @@ export function HostedWhatsAppConnect({
             Create one-time code
           </Button>
         )}
-        {connected && (
+        {awaiting && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void createChallenge(false)}
+              disabled={busy !== null}
+            >
+              {busy === "challenge" ? <Spinner /> : <RefreshCwIcon />}
+              Show code again
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void createChallenge(true)}
+              disabled={busy !== null}
+            >
+              Issue new code
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void disconnect()}
+              disabled={busy !== null}
+            >
+              Cancel setup
+            </Button>
+          </>
+        )}
+        {preservedBinding && (
           <>
             <Button
               type="button"

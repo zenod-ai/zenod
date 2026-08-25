@@ -118,6 +118,9 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ sender, text }) {
       const verified = tenantSettings.verifyInbound(sender, text);
+      if (verified) {
+        hostedChannelAudit.recordVerification(verified.tenantId, sender);
+      }
       return verified ? ZENOD_WHATSAPP_VERIFICATION_REPLY : null;
     },
     observeCaptureJob(ticket) {

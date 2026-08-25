@@ -616,11 +616,14 @@ export class PhylaxTenantSettingsStore {
     phoneNumber: string,
     numberId = "primary",
     now = Date.now(),
+    keyword = friendlyVerificationKeyword(),
   ): { settings: PhylaxTenantSettingsView; keyword: string } {
     const normalized = normalizeWhatsAppIdentifier(phoneNumber);
     if (!normalized) throw new Error("invalid WhatsApp phone number");
     this.assertPhoneAvailable(tenantId, normalized);
-    const keyword = friendlyVerificationKeyword();
+    if (!/^\d{2}-[a-z]{2,24}$/.test(keyword)) {
+      throw new Error("invalid verification keyword");
+    }
     this.put({
       ...this.get(tenantId),
       phoneNumber: normalized,
@@ -656,6 +659,25 @@ export class PhylaxTenantSettingsStore {
       updatedAt: new Date(now).toISOString(),
     });
     return this.view(tenantId);
+  }
+
+  /** Validate one tenant's Telegram identity without changing another tenant. */
+  assertTelegramAvailable(tenantId: string, identity: string): string {
+    const normalized = normalizeTelegramEntry(identity);
+    if (!normalized) throw new Error("invalid Telegram identity");
+    const collision = Object.values(this.load()).find(
+      (entry) => entry.tenantId !== tenantId && entry.telegramBinding === normalized,
+    );
+    if (collision) throw new Error("Telegram identity is already registered");
+    return normalized;
+  }
+
+  /** Remove only the tenant binding; the shared Telegram gateway is untouched. */
+  disconnectTelegram(tenantId: string): PhylaxTenantSettingsView {
+    return this.update(tenantId, {
+      telegramBinding: null,
+      notificationPrefs: { telegram: false },
+    });
   }
 
   verifyInbound(sender: string, text: string, now = Date.now()): PhylaxTenantSettings | null {
