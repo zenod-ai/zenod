@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { HostedUsageCard, type HostedCustomerUsage } from "@/components/hosted-usage-card"
 
 // Transplanted from zenod-ai/cloud services/console/src/App.tsx and api.ts @ 6bdb318.
 
@@ -25,13 +26,7 @@ type Account = {
   token_hint: string | null
   vault_repo: string | null
   vault_repo_url: string | null
-  balance: {
-    limitUsd: number | null
-    usageUsd: number
-    remainingUsd: number | null
-    state: "ok" | "warn" | "blocked"
-  } | null
-  ledger: { calls: number; tokens: number; costUsd: number }
+  usage: HostedCustomerUsage
 }
 
 async function optionalJson<T>(path: string): Promise<T | null> {
@@ -39,10 +34,6 @@ async function optionalJson<T>(path: string): Promise<T | null> {
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`${response.status}`)
   return response.json() as Promise<T>
-}
-
-function usd(value: number | null): string {
-  return value === null ? "Not set" : `$${value.toFixed(2)}`
 }
 
 function CopyButton({ value }: { value: string }) {
@@ -188,17 +179,7 @@ export function HostedAccount() {
                 {billingError ? <p className="mt-2 text-sm text-destructive">{billingError}</p> : null}
               </CardContent>
             </Card>
-            <Card className="rounded-none">
-              <CardHeader>
-                <CardTitle>Credit and usage</CardTitle>
-                <CardDescription>
-                  {account.balance ? `${usd(account.balance.remainingUsd)} remaining` : "Gateway balance unavailable"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {account.ledger.calls.toLocaleString()} calls, {account.ledger.tokens.toLocaleString()} tokens, {usd(account.ledger.costUsd)}
-              </CardContent>
-            </Card>
+            <HostedUsageCard usage={account.usage} />
           </div>
 
           {endpoint && (

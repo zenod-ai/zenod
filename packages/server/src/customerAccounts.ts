@@ -29,6 +29,15 @@ export interface CustomerAccount {
   vault_repo: string | null;
   vault_repo_url: string | null;
   checkout_completed_at: string | null;
+  /** Safe OpenRouter child-key metadata. The inference key itself lives only in the tenant credential vault. */
+  managed_ai_key_hash: string | null;
+  managed_ai_key_name: string | null;
+  managed_ai_limit_usd: number | null;
+  managed_ai_limit_override_usd: number | null;
+  managed_ai_status: "unconfigured" | "provisioning" | "active" | "warn" | "paused" | "unavailable" | "orphaned";
+  managed_ai_updated_at: string | null;
+  managed_ai_last_reconciled_at: string | null;
+  managed_ai_error_code: string | null;
 }
 
 type Store = Record<string, CustomerAccount>;
@@ -90,6 +99,14 @@ export class CustomerAccountStore {
       vault_repo: null,
       vault_repo_url: null,
       checkout_completed_at: null,
+      managed_ai_key_hash: null,
+      managed_ai_key_name: null,
+      managed_ai_limit_usd: null,
+      managed_ai_limit_override_usd: null,
+      managed_ai_status: "unconfigured",
+      managed_ai_updated_at: null,
+      managed_ai_last_reconciled_at: null,
+      managed_ai_error_code: null,
       ...existing,
       ...patch,
       session_id: sessionId,
@@ -120,6 +137,12 @@ export class CustomerAccountStore {
   resolveForAccountId(accountId: string): CustomerAccount | null {
     if (!accountId) return null;
     const matches = Object.values(this.load()).filter((account) => account.account_id === accountId);
+    return matches.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
+  }
+
+  resolveForTenantId(tenantId: string): CustomerAccount | null {
+    if (!tenantId) return null;
+    const matches = Object.values(this.load()).filter((account) => account.tenant_id === tenantId);
     return matches.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
   }
 
