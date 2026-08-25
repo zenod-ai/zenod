@@ -96,7 +96,11 @@ function FieldValue({
   )
 }
 
-export function TelegramConnect() {
+export function TelegramConnect({
+  presentation = "transport-admin",
+}: {
+  presentation?: "transport-admin" | "zenod-self-hosted"
+}) {
   const [status, setStatus] = React.useState<TelegramStatus | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [handle, setHandle] = React.useState("")
@@ -185,7 +189,10 @@ export function TelegramConnect() {
           surface: "telegram",
           eventType: "phylax.channel_test",
           severity: "info",
-          text: "Phylax Telegram channel test: Ring outbound delivery path is reachable.",
+          text:
+            presentation === "zenod-self-hosted"
+              ? "Zenod Telegram channel test: outbound delivery is reachable."
+              : "Phylax Telegram channel test: Ring outbound delivery path is reachable.",
         },
       })
       setTestReceipt(result)
@@ -206,6 +213,7 @@ export function TelegramConnect() {
   }
 
   const connected = status?.state === "connected"
+  const zenodSelfHosted = presentation === "zenod-self-hosted"
   const canConnect =
     handle.trim().length > 0 && (status?.hasToken || botToken.trim().length > 0)
 
@@ -221,9 +229,9 @@ export function TelegramConnect() {
           </Badge>
         </CardTitle>
         <CardDescription>
-          Phylax handles Telegram transport for the Ring: inbound bot updates go
-          to Ring, outbound responses come from Ring. It does not decide,
-          remember, transcribe, archive, or digest.
+          {zenodSelfHosted
+            ? "Use a Telegram bot token you own to talk directly to this Zenod."
+            : "Phylax handles Telegram transport for the Ring: inbound bot updates go to Ring, outbound responses come from Ring. It does not decide, remember, transcribe, archive, or digest."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -247,7 +255,11 @@ export function TelegramConnect() {
           <FieldValue
             label="Provider"
             value="Telegram Bot API"
-            detail="bot token held by Phylax"
+            detail={
+              zenodSelfHosted
+                ? "bot token stored by this Zenod"
+                : "bot token held by Phylax"
+            }
           />
           <FieldValue
             label="Bot"
@@ -267,47 +279,49 @@ export function TelegramConnect() {
           />
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
-          <div className="rounded-lg border p-3">
-            <div className="mb-2 flex items-center gap-2 font-medium">
-              <RouteIcon className="size-4 text-muted-foreground" />
-              Ring handoff
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Telegram updates are handed to Ring. Ring replies through Phylax
-              using the same channel and chat provenance.
-            </p>
-          </div>
-          <div className="rounded-lg border p-3">
-            <div className="mb-2 flex items-center gap-2 font-medium">
-              <FileCheckIcon className="size-4 text-muted-foreground" />
-              Media handoff
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Phylax exposes Telegram file handles to Ring. Zenod owns ingest,
-              archive, transcription, OCR, digest, filing, and receipts.
-            </p>
-          </div>
-          <div className="rounded-lg border p-3">
-            <div className="mb-2 flex items-center gap-2 font-medium">
-              <ListChecksIcon className="size-4 text-muted-foreground" />
-              Delivery log
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Telegram delivery receipts are not exposed as a live feed yet.
-            </p>
-            {testReceipt ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Last test sent to {testReceipt.sent} recipient
-                {testReceipt.sent === 1 ? "" : "s"}.
+        {!zenodSelfHosted && (
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <div className="mb-2 flex items-center gap-2 font-medium">
+                <RouteIcon className="size-4 text-muted-foreground" />
+                Ring handoff
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Telegram updates are handed to Ring. Ring replies through Phylax
+                using the same channel and chat provenance.
               </p>
-            ) : (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Use Send test after the bot has seen an allowed numeric chat.
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="mb-2 flex items-center gap-2 font-medium">
+                <FileCheckIcon className="size-4 text-muted-foreground" />
+                Media handoff
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Phylax exposes Telegram file handles to Ring. Zenod owns ingest,
+                archive, transcription, OCR, digest, filing, and receipts.
               </p>
-            )}
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="mb-2 flex items-center gap-2 font-medium">
+                <ListChecksIcon className="size-4 text-muted-foreground" />
+                Delivery log
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Telegram delivery receipts are not exposed as a live feed yet.
+              </p>
+              {testReceipt ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Last test sent to {testReceipt.sent} recipient
+                  {testReceipt.sent === 1 ? "" : "s"}.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use Send test after the bot has seen an allowed numeric chat.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="rounded-lg border p-3">
           <div className="mb-2 flex items-center gap-2 font-medium">
@@ -317,7 +331,9 @@ export function TelegramConnect() {
           <p className="text-sm text-muted-foreground">
             Create a bot with <span className="font-mono">@BotFather</span>,
             paste its token below, and add allowed handles or numeric IDs so
-            Phylax can accept only approved senders.
+            {zenodSelfHosted
+              ? " Zenod accepts only approved senders."
+              : " Phylax can accept only approved senders."}
           </p>
         </div>
 
@@ -363,7 +379,8 @@ export function TelegramConnect() {
           />
           <FieldDescription>
             Your Telegram @handle (or numeric ID). One per line for more than
-            one. Only these can trigger Phylax handoff to Ring.
+            one. Only these can message{" "}
+            {zenodSelfHosted ? "Zenod" : "Phylax and Ring"}.
           </FieldDescription>
         </Field>
 

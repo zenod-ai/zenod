@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   DASHBOARD_SECTIONS,
   PUBLIC_LANDING_URL,
+  dashboardSectionsForEdition,
   dashboardSectionForTab,
   mcpClientSnippets,
   mcpUrlForToken,
@@ -10,26 +11,58 @@ import {
 } from "./dashboard-navigation"
 
 describe("Zenod dashboard navigation", () => {
-  it("uses a fixed customer-facing section list", () => {
+  it("keeps the legacy alias on the self-hosted customer-facing sections", () => {
     expect(DASHBOARD_SECTIONS.map(({ id }) => id)).toEqual([
+      "overview",
       "connect",
+      "channels",
       "vault",
       "usage",
       "settings",
     ])
   })
 
-  it("cannot expose removed product surfaces", () => {
-    const labels = DASHBOARD_SECTIONS.map(({ label }) => label.toLowerCase())
+  it("uses one capability-driven profile for both approved editions", () => {
+    expect(dashboardSectionsForEdition("hosted").map(({ id }) => id)).toEqual([
+      "overview",
+      "connect",
+      "channels",
+      "vault",
+      "usage",
+      "account",
+    ])
+    expect(
+      dashboardSectionsForEdition("self-hosted").map(({ id }) => id)
+    ).toEqual(["overview", "connect", "channels", "vault", "usage", "settings"])
+  })
+
+  it("does not expose product or transport internals as navigation", () => {
+    const labels = [
+      ...dashboardSectionsForEdition("hosted"),
+      ...dashboardSectionsForEdition("self-hosted"),
+    ].map(({ label }) => label.toLowerCase())
 
     expect(labels).not.toContain("transcription")
     expect(labels).not.toContain("whatsapp")
     expect(labels).not.toContain("telegram")
     expect(labels).not.toContain("ring")
+    expect(labels).not.toContain("phylax")
 
-    for (const tab of ["transcription", "whatsapp", "telegram", "ring"]) {
-      expect(dashboardSectionForTab(tab)).toBe("connect")
+    for (const tab of [
+      "transcription",
+      "whatsapp",
+      "telegram",
+      "ring",
+      "phylax",
+    ]) {
+      expect(dashboardSectionForTab(tab)).toBe("overview")
     }
+  })
+
+  it("cannot deep-link into a section unavailable in the active edition", () => {
+    expect(dashboardSectionForTab("settings", "hosted")).toBe("overview")
+    expect(dashboardSectionForTab("account", "self-hosted")).toBe("overview")
+    expect(dashboardSectionForTab("account", "hosted")).toBe("account")
   })
 
   it("links back to the canonical public landing", () => {
