@@ -9,6 +9,7 @@ import {
 
 import { api, errorMessage, type HostedChannelsResponse } from "@/lib/api"
 import { HostedChannelsConnections } from "@/views/settings/ConnectionsTab"
+import { reconcileHostedChannelOperations } from "@/lib/hosted-channel-operations"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -75,6 +76,10 @@ export function HostedChannelsPanel() {
   React.useEffect(() => {
     void load()
   }, [load])
+
+  React.useEffect(() => {
+    if (channels) reconcileHostedChannelOperations(channels)
+  }, [channels])
 
   return (
     <div className="flex flex-col gap-4">

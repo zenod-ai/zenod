@@ -859,6 +859,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   if (agent.name === "zenod" && hostedChannelsConfigured(env)) {
     mountHostedChannelsCustomerRoutes(app, {
       env,
+      routeVisible(c) {
+        const session = readCustomerSession(c, env);
+        return Boolean(
+          session && customer.accounts.resolveForUser(session.github_id),
+        );
+      },
       async resolveTenant(c) {
         const session = readCustomerSession(c, env);
         if (!session) return null;

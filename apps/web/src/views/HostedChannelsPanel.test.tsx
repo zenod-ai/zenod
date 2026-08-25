@@ -17,6 +17,10 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 }))
 
 import type { HostedChannelsResponse } from "@/lib/api"
+import {
+  hostedChannelOperationKey,
+  reconcileHostedChannelOperations,
+} from "@/lib/hosted-channel-operations"
 import { HostedChannelsPanel } from "./ZenodPortalPanels"
 
 const off: HostedChannelsResponse = {
@@ -27,8 +31,14 @@ const off: HostedChannelsResponse = {
     verificationExpiresAt: null,
     lastInboundAt: null,
     lastReceiptAt: null,
+    revision: "wa-off-1",
   },
-  telegram: { state: "connected", identityHint: "@jordi" },
+  telegram: {
+    state: "connected",
+    identityHint: "@jordi",
+    verificationExpiresAt: null,
+    revision: "tg-connected-1",
+  },
 }
 
 afterEach(() => {
@@ -150,6 +160,28 @@ describe("Hosted Zenod channels", () => {
     )
   })
 
+  it("requires confirmation before disconnecting Hosted Telegram", async () => {
+    mocks.api.mockImplementation(
+      (path: string, request?: { method?: string }) => {
+        if (path === "/api/channels" && !request) return Promise.resolve(off)
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      }
+    )
+    render(<HostedChannelsPanel />)
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }))
+    expect(
+      await screen.findByRole("heading", { name: "Disconnect Telegram?" })
+    ).not.toBeNull()
+    expect(
+      screen.getByRole("button", { name: "Keep connected" })
+    ).not.toBeNull()
+    expect(
+      screen.getByRole("button", { name: "Disconnect Telegram" })
+    ).not.toBeNull()
+    expect(mocks.api).toHaveBeenCalledTimes(1)
+  })
+
   it("keeps typed customer-safe errors customer-safe", async () => {
     mocks.api.mockRejectedValue(
       new Error("WhatsApp is temporarily unavailable. Try again shortly.")
@@ -241,18 +273,29 @@ describe("Hosted Zenod channels", () => {
   it("connects the Hosted Telegram tenant binding through the existing Channels card", async () => {
     const allOff: HostedChannelsResponse = {
       ...off,
-      telegram: { state: "off", identityHint: null },
+      telegram: {
+        state: "off",
+        identityHint: null,
+        verificationExpiresAt: null,
+        revision: "tg-off-1",
+      },
     }
-    const connected: HostedChannelsResponse = {
+    const awaiting: HostedChannelsResponse = {
       ...allOff,
-      telegram: { state: "connected", identityHint: "@jordi_test" },
+      telegram: {
+        state: "awaiting_code",
+        identityHint: "@jordi_test",
+        verificationExpiresAt: Date.now() + 60_000,
+        revision: "tg-awaiting-2",
+      },
     }
     mocks.api.mockImplementation(
       (path: string, request?: { method?: string }) => {
         if (path === "/api/channels" && !request) return Promise.resolve(allOff)
         if (path === "/api/channels/telegram/connect") {
           return Promise.resolve({
-            channels: connected,
+            channels: awaiting,
+            challenge: { code: "42-otter", expiresAt: Date.now() + 60_000 },
             mutation: {
               operationId: "telegram-connect-operation",
               operation: "telegram.connect",
@@ -279,8 +322,62 @@ describe("Hosted Zenod channels", () => {
         },
       })
     })
+    expect(await screen.findByText("42-otter")).not.toBeNull()
+    expect(screen.getByText("Pending identity @jordi_test.")).not.toBeNull()
     expect(
-      await screen.findByText("Linked identity @jordi_test.")
+      screen.getByRole("button", { name: "Show code again" })
     ).not.toBeNull()
+    expect(screen.getByRole("button", { name: "Cancel setup" })).not.toBeNull()
+  })
+
+  it("retires stale browser operation keys across both lifecycle directions without phone PII", () => {
+    window.localStorage.setItem(
+      "zenod.hosted-channel.operation.whatsapp.sender",
+      "+34 611 111 111"
+    )
+    const disconnect = hostedChannelOperationKey(
+      "whatsapp.disconnect",
+      "wa-connected-1"
+    )
+    reconcileHostedChannelOperations({
+      whatsapp: { state: "off", revision: "wa-off-2" },
+      telegram: { state: "connected", revision: "tg-connected-1" },
+    })
+    expect(hostedChannelOperationKey("whatsapp.disconnect", "wa-off-2")).toBe(
+      disconnect
+    )
+    reconcileHostedChannelOperations({
+      whatsapp: { state: "awaiting_code", revision: "wa-awaiting-3" },
+      telegram: { state: "connected", revision: "tg-connected-1" },
+    })
+    expect(
+      hostedChannelOperationKey("whatsapp.disconnect", "wa-awaiting-3")
+    ).not.toBe(disconnect)
+
+    const connect = hostedChannelOperationKey("telegram.connect", "tg-off-1")
+    reconcileHostedChannelOperations({
+      whatsapp: { state: "awaiting_code", revision: "wa-awaiting-3" },
+      telegram: { state: "awaiting_code", revision: "tg-awaiting-2" },
+    })
+    expect(hostedChannelOperationKey("telegram.connect", "tg-awaiting-2")).toBe(
+      connect
+    )
+    reconcileHostedChannelOperations({
+      whatsapp: { state: "awaiting_code", revision: "wa-awaiting-3" },
+      telegram: { state: "off", revision: "tg-off-3" },
+    })
+    expect(hostedChannelOperationKey("telegram.connect", "tg-off-3")).not.toBe(
+      connect
+    )
+    const storedValues = Array.from(
+      { length: window.localStorage.length },
+      (_, index) => window.localStorage.getItem(window.localStorage.key(index)!)
+    ).join("\n")
+    expect(storedValues).not.toContain("+34 611")
+    expect(
+      window.localStorage.getItem(
+        "zenod.hosted-channel.operation.whatsapp.sender"
+      )
+    ).toBeNull()
   })
 })

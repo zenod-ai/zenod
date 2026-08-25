@@ -85,6 +85,7 @@ export interface PhylaxTenantSettings {
   numberId: string;
   verificationHash: string | null;
   verificationExpiresAt: number | null;
+  whatsappBindingRevision: string;
   downstreamUrl: string | null;
   downstreamCredentialStatus: "unknown" | "healthy" | "rejected";
   downstreamCredentialCheckedAt: string | null;
@@ -97,13 +98,19 @@ export interface PhylaxTenantSettings {
   voiceDefault: PhylaxVoiceDefault;
   turnBindings: PhylaxTurnBindings;
   telegramBinding: string | null;
+  telegramPendingIdentity: string | null;
+  telegramVerificationHash: string | null;
+  telegramVerificationExpiresAt: number | null;
+  telegramBindingRevision: string;
   notificationPrefs: { whatsapp: boolean; telegram: boolean };
   updatedAt: string;
 }
 
 export interface PhylaxTenantSettingsView extends Omit<
   PhylaxTenantSettings,
-  "verificationHash" | "downstreamCredentialRevision"
+  | "verificationHash"
+  | "telegramVerificationHash"
+  | "downstreamCredentialRevision"
 > {
   downstreamTokenConfigured: boolean;
   assistantTokenConfigured: boolean;
@@ -372,6 +379,7 @@ function defaultSettings(
     numberId: "primary",
     verificationHash: null,
     verificationExpiresAt: null,
+    whatsappBindingRevision: "0",
     downstreamUrl: null,
     downstreamCredentialStatus: "unknown",
     downstreamCredentialCheckedAt: null,
@@ -384,6 +392,10 @@ function defaultSettings(
     voiceDefault: "capture",
     turnBindings: defaultPhylaxTurnBindings(),
     telegramBinding: null,
+    telegramPendingIdentity: null,
+    telegramVerificationHash: null,
+    telegramVerificationExpiresAt: null,
+    telegramBindingRevision: "0",
     notificationPrefs: { whatsapp: true, telegram: false },
     updatedAt: new Date(0).toISOString(),
   };
@@ -446,6 +458,7 @@ export class PhylaxTenantSettingsStore {
     const current = this.get(tenantId);
     const {
       verificationHash: _verificationHash,
+      telegramVerificationHash: _telegramVerificationHash,
       downstreamCredentialRevision: _downstreamCredentialRevision,
       ...settings
     } = current;
@@ -631,6 +644,7 @@ export class PhylaxTenantSettingsStore {
       numberId: numberId.trim() || "primary",
       verificationHash: verificationDigest(keyword).toString("hex"),
       verificationExpiresAt: now + VERIFY_TTL_MS,
+      whatsappBindingRevision: randomBytes(16).toString("hex"),
       updatedAt: new Date(now).toISOString(),
     });
     return { settings: this.view(tenantId), keyword };
@@ -656,6 +670,7 @@ export class PhylaxTenantSettingsStore {
       numberId: "primary",
       verificationHash: null,
       verificationExpiresAt: null,
+      whatsappBindingRevision: randomBytes(16).toString("hex"),
       updatedAt: new Date(now).toISOString(),
     });
     return this.view(tenantId);
@@ -666,7 +681,10 @@ export class PhylaxTenantSettingsStore {
     const normalized = normalizeTelegramEntry(identity);
     if (!normalized) throw new Error("invalid Telegram identity");
     const collision = Object.values(this.load()).find(
-      (entry) => entry.tenantId !== tenantId && entry.telegramBinding === normalized,
+      (entry) =>
+        entry.tenantId !== tenantId &&
+        (entry.telegramBinding === normalized ||
+          entry.telegramPendingIdentity === normalized),
     );
     if (collision) throw new Error("Telegram identity is already registered");
     return normalized;
@@ -674,20 +692,102 @@ export class PhylaxTenantSettingsStore {
 
   /** Remove only the tenant binding; the shared Telegram gateway is untouched. */
   disconnectTelegram(tenantId: string): PhylaxTenantSettingsView {
-    return this.update(tenantId, {
+    const current = this.get(tenantId);
+    this.put({
+      ...current,
       telegramBinding: null,
-      notificationPrefs: { telegram: false },
+      telegramPendingIdentity: null,
+      telegramVerificationHash: null,
+      telegramVerificationExpiresAt: null,
+      telegramBindingRevision: randomBytes(16).toString("hex"),
+      notificationPrefs: { ...current.notificationPrefs, telegram: false },
+      updatedAt: new Date().toISOString(),
     });
+    return this.view(tenantId);
   }
 
-  verifyInbound(sender: string, text: string, now = Date.now()): PhylaxTenantSettings | null {
+  registerTelegram(
+    tenantId: string,
+    identity: string,
+    now = Date.now(),
+    keyword = friendlyVerificationKeyword(),
+  ): { settings: PhylaxTenantSettingsView; keyword: string } {
+    const normalized = this.assertTelegramAvailable(tenantId, identity);
+    if (!/^\d{2}-[a-z]{2,24}$/.test(keyword)) {
+      throw new Error("invalid verification keyword");
+    }
+    const current = this.get(tenantId);
+    this.put({
+      ...current,
+      telegramBinding: null,
+      telegramPendingIdentity: normalized,
+      telegramVerificationHash: verificationDigest(keyword).toString("hex"),
+      telegramVerificationExpiresAt: now + VERIFY_TTL_MS,
+      telegramBindingRevision: randomBytes(16).toString("hex"),
+      notificationPrefs: { ...current.notificationPrefs, telegram: false },
+      updatedAt: new Date(now).toISOString(),
+    });
+    return { settings: this.view(tenantId), keyword };
+  }
+
+  verifyTelegramInbound(
+    sender: string,
+    text: string,
+    now = Date.now(),
+  ): { settings: PhylaxTenantSettings; replayed: boolean } | null {
+    const normalized = normalizeTelegramEntry(sender);
+    if (!normalized) return null;
+    const provided = verificationDigest(text);
+    const entry = Object.values(this.load()).find((candidate) => {
+      const identity =
+        candidate.telegramBinding ?? candidate.telegramPendingIdentity;
+      if (
+        identity !== normalized ||
+        !candidate.telegramVerificationHash ||
+        !candidate.telegramVerificationExpiresAt ||
+        candidate.telegramVerificationExpiresAt < now
+      )
+        return false;
+      const expected = Buffer.from(candidate.telegramVerificationHash, "hex");
+      return (
+        expected.length === provided.length &&
+        timingSafeEqual(expected, provided)
+      );
+    });
+    if (!entry) return null;
+    if (entry.telegramBinding === normalized) {
+      return { settings: entry, replayed: true };
+    }
+    const verified: PhylaxTenantSettings = {
+      ...entry,
+      telegramBinding: normalized,
+      telegramPendingIdentity: null,
+      telegramBindingRevision: randomBytes(16).toString("hex"),
+      notificationPrefs: { ...entry.notificationPrefs, telegram: true },
+      updatedAt: new Date(now).toISOString(),
+    };
+    this.put(verified);
+    return { settings: verified, replayed: false };
+  }
+
+  bindingRevision(tenantId: string, channel: PhylaxPortedChannel): string {
+    const settings = this.get(tenantId);
+    return channel === "whatsapp"
+      ? settings.whatsappBindingRevision
+      : settings.telegramBindingRevision;
+  }
+
+  verifyInboundReceipt(
+    sender: string,
+    text: string,
+    now = Date.now(),
+  ): { settings: PhylaxTenantSettings; replayed: boolean } | null {
     const normalized = normalizeWhatsAppIdentifier(sender);
     if (!normalized) return null;
     const provided = verificationDigest(text);
     const entry = Object.values(this.load()).find((candidate) => {
       if (
         candidate.phoneNumber !== normalized ||
-        candidate.verified ||
         !candidate.verificationHash ||
         !candidate.verificationExpiresAt ||
         candidate.verificationExpiresAt < now
@@ -696,15 +796,23 @@ export class PhylaxTenantSettingsStore {
       return expected.length === provided.length && timingSafeEqual(expected, provided);
     });
     if (!entry) return null;
+    if (entry.verified) return { settings: entry, replayed: true };
     const verified = {
       ...entry,
       verified: true,
-      verificationHash: null,
-      verificationExpiresAt: null,
+      whatsappBindingRevision: randomBytes(16).toString("hex"),
       updatedAt: new Date(now).toISOString(),
     };
     this.put(verified);
-    return verified;
+    return { settings: verified, replayed: false };
+  }
+
+  verifyInbound(
+    sender: string,
+    text: string,
+    now = Date.now(),
+  ): PhylaxTenantSettings | null {
+    return this.verifyInboundReceipt(sender, text, now)?.settings ?? null;
   }
 
   resolve(channel: PhylaxPortedChannel, sender: string): PhylaxTenantRoute | null {

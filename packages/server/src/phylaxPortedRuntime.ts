@@ -108,7 +108,7 @@ export class PhylaxPortedRuntime {
     adapters: {
       whatsappSocketFactory?: SocketFactory;
       telegramFetch?: typeof fetch;
-      verifyInbound?: (input: { channel: "whatsapp"; sender: string; text: string }) => Promise<string | null> | string | null;
+      verifyInbound?: (input: { channel: "whatsapp" | "telegram"; sender: string; text: string }) => Promise<string | null> | string | null;
       probeVoiceDuration?: (bytes: Buffer, fileName: string) => Promise<number | null>;
       observeCaptureJob?: (input: {
         tenantId: string;
@@ -402,6 +402,12 @@ export class PhylaxPortedRuntime {
       getEngine: unavailableEngine,
       dataDir: join(dataDir, "telegram"),
       portedInboundHandler: async ({ sender, chatId, messageId, text, media, transcription }) => {
+        const verificationReply = await adapters.verifyInbound?.({
+          channel: "telegram",
+          sender,
+          text,
+        });
+        if (verificationReply) return { replyText: verificationReply };
         try {
           const forwarded = await this.organ.receive({
             channel: "telegram",

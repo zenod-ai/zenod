@@ -27,7 +27,11 @@ export type HostedWhatsAppState =
   | "verified"
   | "degraded"
   | "paused";
-export type HostedTelegramState = "off" | "connected" | "degraded";
+export type HostedTelegramState =
+  | "off"
+  | "awaiting_code"
+  | "connected"
+  | "degraded";
 export interface HostedChannelsView {
   whatsapp: {
     state: HostedWhatsAppState;
@@ -36,8 +40,14 @@ export interface HostedChannelsView {
     verificationExpiresAt: number | null;
     lastInboundAt: number | null;
     lastReceiptAt: number | null;
+    revision: string;
   };
-  telegram: { state: HostedTelegramState; identityHint: string | null };
+  telegram: {
+    state: HostedTelegramState;
+    identityHint: string | null;
+    verificationExpiresAt: number | null;
+    revision: string;
+  };
 }
 export type HostedChannelMutationName =
   | "whatsapp.challenge"
@@ -45,6 +55,7 @@ export type HostedChannelMutationName =
   | "whatsapp.test"
   | "whatsapp.disconnect"
   | "telegram.connect"
+  | "telegram.verify"
   | "telegram.test"
   | "telegram.disconnect";
 export interface HostedChannelMutationOutcome {
@@ -69,6 +80,7 @@ export interface HostedChannelDisconnectResponse {
 }
 export interface HostedChannelConnectResponse {
   channels: HostedChannelsView;
+  challenge?: { code: string; expiresAt: number };
   mutation: HostedChannelMutationOutcome;
 }
 export interface HostedChannelErrorResponse {
@@ -100,6 +112,9 @@ interface OperationRow {
   tenant_id: string;
   operation: HostedChannelMutationName;
   request_hash: string | null;
+  target_hash: string | null;
+  claim_binding_revision: string | null;
+  terminal_binding_revision: string | null;
   state: string | null;
   outcome: HostedChannelMutationOutcome["outcome"];
   error_code: string | null;
@@ -130,6 +145,9 @@ export class HostedChannelMutationAuditStore {
         tenant_id TEXT NOT NULL,
         operation TEXT NOT NULL,
         request_hash TEXT,
+        target_hash TEXT,
+        claim_binding_revision TEXT,
+        terminal_binding_revision TEXT,
         state TEXT,
         outcome TEXT NOT NULL,
         error_code TEXT,
@@ -150,6 +168,9 @@ export class HostedChannelMutationAuditStore {
     );
     for (const [name, type] of [
       ["request_hash", "TEXT"],
+      ["target_hash", "TEXT"],
+      ["claim_binding_revision", "TEXT"],
+      ["terminal_binding_revision", "TEXT"],
       ["state", "TEXT"],
       ["http_status", "INTEGER"],
       ["result_json", "TEXT"],
@@ -170,6 +191,8 @@ export class HostedChannelMutationAuditStore {
     tenantId: string;
     operation: HostedChannelMutationName;
     requestHash: string;
+    targetHash: string;
+    bindingRevision: string;
     at: number;
   }): ClaimedOperation {
     this.db.exec("BEGIN IMMEDIATE");
@@ -186,26 +209,41 @@ export class HostedChannelMutationAuditStore {
         ) {
           return { kind: "conflict" };
         }
-        if (row.state === "terminal" && row.http_status && row.result_json) {
-          return {
-            kind: "replay",
-            status: row.http_status,
-            body: JSON.parse(row.result_json) as unknown,
-          };
+        if (row.state === "terminal") {
+          if (
+            row.http_status &&
+            row.result_json &&
+            row.terminal_binding_revision === input.bindingRevision
+          ) {
+            return {
+              kind: "replay",
+              status: row.http_status,
+              body: JSON.parse(row.result_json) as unknown,
+            };
+          }
+          return { kind: "conflict" };
         }
-        return { kind: "pending" };
+        if (row.target_hash !== input.targetHash) {
+          return { kind: "conflict" };
+        }
+        return row.claim_binding_revision === input.bindingRevision
+          ? { kind: "pending" }
+          : { kind: "conflict" };
       }
       this.db
         .prepare(
           `INSERT INTO hosted_channel_mutations
-          (operation_id, tenant_id, operation, request_hash, state, outcome, error_code, created_at)
-         VALUES (?, ?, ?, ?, 'claimed', 'failed', NULL, ?)`,
+          (operation_id, tenant_id, operation, request_hash, target_hash,
+           claim_binding_revision, state, outcome, error_code, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'claimed', 'failed', NULL, ?)`,
         )
         .run(
           input.operationId,
           input.tenantId,
           input.operation,
           input.requestHash,
+          input.targetHash,
+          input.bindingRevision,
           input.at,
         );
       this.db.exec("COMMIT");
@@ -222,12 +260,14 @@ export class HostedChannelMutationAuditStore {
     errorCode: string | null;
     status: number;
     body: unknown;
+    bindingRevision: string;
     at: number;
   }): void {
     this.db
       .prepare(
         `UPDATE hosted_channel_mutations
-       SET state='terminal', outcome=?, error_code=?, http_status=?, result_json=?, completed_at=?
+       SET state='terminal', outcome=?, error_code=?, http_status=?, result_json=?,
+           terminal_binding_revision=?, completed_at=?
        WHERE operation_id=? AND state='claimed'`,
       )
       .run(
@@ -235,6 +275,7 @@ export class HostedChannelMutationAuditStore {
         input.errorCode,
         input.status,
         JSON.stringify(input.body),
+        input.bindingRevision,
         input.at,
         input.operationId,
       );
@@ -276,15 +317,21 @@ export class HostedChannelMutationAuditStore {
       );
   }
 
-  recordVerification(tenantId: string, sender: string, at = Date.now()): void {
+  recordVerification(
+    channel: "whatsapp" | "telegram",
+    tenantId: string,
+    sender: string,
+    bindingRevision: string,
+    at = Date.now(),
+  ): void {
     const senderHash = createHash("sha256")
       .update(sender)
       .digest("hex")
       .slice(0, 20);
     this.record({
-      operationId: `verify-${tenantId}-${senderHash}-${at}`,
+      operationId: `verify-${channel}-${tenantId}-${senderHash}-${bindingRevision}`,
       tenantId,
-      operation: "whatsapp.verify",
+      operation: `${channel}.verify` as HostedChannelMutationName,
       outcome: "succeeded",
       errorCode: null,
       at,
@@ -340,6 +387,11 @@ function requestHash(
 ): string {
   return createHash("sha256")
     .update(JSON.stringify({ operation, body }))
+    .digest("hex");
+}
+function targetDigest(value: string | null): string {
+  return createHash("sha256")
+    .update(value ?? "")
     .digest("hex");
 }
 function tokenMatches(expected: string, provided: string): boolean {
@@ -435,16 +487,24 @@ function channelView(
       verificationExpiresAt: settings.verificationExpiresAt,
       lastInboundAt,
       lastReceiptAt,
+      revision: settings.whatsappBindingRevision,
     },
     telegram: {
       state: settings.telegramBinding
         ? runtime.telegram.status().state === "connected"
           ? "connected"
           : "degraded"
-        : "off",
-      identityHint: settings.telegramBinding
-        ? `@${settings.telegramBinding.replace(/^@/, "")}`
-        : null,
+        : settings.telegramPendingIdentity &&
+            settings.telegramVerificationExpiresAt &&
+            settings.telegramVerificationExpiresAt > now
+          ? "awaiting_code"
+          : "off",
+      identityHint:
+        settings.telegramBinding || settings.telegramPendingIdentity
+          ? `@${(settings.telegramBinding ?? settings.telegramPendingIdentity)!.replace(/^@/, "")}`
+          : null,
+      verificationExpiresAt: settings.telegramVerificationExpiresAt,
+      revision: settings.telegramBindingRevision,
     },
   };
 }
@@ -482,6 +542,8 @@ async function executeOnce(
     tenantId: string;
     operation: HostedChannelMutationName;
     requestBody: Record<string, unknown>;
+    target: string | null;
+    bindingRevision: () => string;
     deriveChallenge?: () => string;
   },
   effect: () =>
@@ -489,11 +551,14 @@ async function executeOnce(
     | { status: number; body: unknown },
 ): Promise<{ status: number; body: unknown }> {
   const at = Date.now();
+  const claimRevision = input.bindingRevision();
   const claim = store.claim({
     operationId: input.operationId,
     tenantId: input.tenantId,
     operation: input.operation,
     requestHash: requestHash(input.operation, input.requestBody),
+    targetHash: targetDigest(input.target),
+    bindingRevision: claimRevision,
     at,
   });
   const rehydrate = (result: { status: number; body: unknown }) => {
@@ -581,6 +646,7 @@ async function executeOnce(
     errorCode: response.error?.code ?? null,
     status: result.status,
     body: storedBody,
+    bindingRevision: input.bindingRevision(),
     at: response.mutation?.at ?? Date.now(),
   });
   return result;
@@ -661,6 +727,9 @@ export function mountPhylaxHostedChannelRoutes(
           tenantId,
           operation,
           requestBody: { sender, downstreamUrl: body.downstreamUrl },
+          target: sender,
+          bindingRevision: () =>
+            input.settings.bindingRevision(tenantId, "whatsapp"),
           deriveChallenge: () => code,
         },
         () => {
@@ -769,7 +838,18 @@ export function mountPhylaxHostedChannelRoutes(
         );
       const result = await executeOnce(
         input.audit,
-        { operationId, tenantId, operation, requestBody: {} },
+        {
+          operationId,
+          tenantId,
+          operation,
+          requestBody: {},
+          target:
+            channel === "whatsapp"
+              ? input.settings.get(tenantId).phoneNumber
+              : input.settings.get(tenantId).telegramBinding,
+          bindingRevision: () =>
+            input.settings.bindingRevision(tenantId, channel),
+        },
         async () => {
           const at = Date.now();
           const settings = input.settings.get(tenantId);
@@ -866,7 +946,19 @@ export function mountPhylaxHostedChannelRoutes(
         );
       const result = await executeOnce(
         input.audit,
-        { operationId, tenantId, operation, requestBody: {} },
+        {
+          operationId,
+          tenantId,
+          operation,
+          requestBody: {},
+          target:
+            channel === "whatsapp"
+              ? input.settings.get(tenantId).phoneNumber
+              : (input.settings.get(tenantId).telegramBinding ??
+                input.settings.get(tenantId).telegramPendingIdentity),
+          bindingRevision: () =>
+            input.settings.bindingRevision(tenantId, channel),
+        },
         () => {
           const at = Date.now();
           if (channel === "whatsapp")
@@ -908,7 +1000,9 @@ export function mountPhylaxHostedChannelRoutes(
     const tenantId = normalizedTenantId(c.req.param("tenantId") ?? "");
     const body = await parse(c);
     const operationId = safeOperationId(body.operationId);
-    const identity = normalizeHostedTelegram(body.identity);
+    const identity =
+      normalizeHostedTelegram(body.identity) ??
+      (tenantId ? input.settings.get(tenantId).telegramPendingIdentity : null);
     const operation = "telegram.connect" as const;
     if (
       !tenantId ||
@@ -929,6 +1023,12 @@ export function mountPhylaxHostedChannelRoutes(
         400,
       );
     }
+    const code = challengeCode(
+      input.env.ZENOD_CHANNELS_PRIVATE_TOKEN ?? "",
+      tenantId,
+      operationId,
+      identity,
+    );
     const result = await executeOnce(
       input.audit,
       {
@@ -936,22 +1036,41 @@ export function mountPhylaxHostedChannelRoutes(
         tenantId,
         operation,
         requestBody: { identity, downstreamUrl: body.downstreamUrl },
+        target: identity,
+        bindingRevision: () =>
+          input.settings.bindingRevision(tenantId, "telegram"),
+        deriveChallenge: () => code,
       },
       () => {
         const at = Date.now();
         try {
-          const normalized = input.settings.assertTelegramAvailable(
-            tenantId,
-            identity,
-          );
+          const current = input.settings.get(tenantId);
+          if (current.telegramBinding) {
+            return {
+              status: 409,
+              body: failure(
+                operationId,
+                operation,
+                "already_connected",
+                "Disconnect the current Telegram identity before connecting another one.",
+                "rejected",
+                at,
+              ),
+            };
+          }
+          input.settings.assertTelegramAvailable(tenantId, identity);
           input.settings.update(tenantId, {
             downstreamUrl: body.downstreamUrl as string,
             downstreamToken: body.downstreamToken as string,
-            telegramBinding: normalized,
-            notificationPrefs: { telegram: true },
             voiceDefault: "capture",
             turnBindings: defaultPhylaxTurnBindings(),
           });
+          const registration = input.settings.registerTelegram(
+            tenantId,
+            identity,
+            at,
+            code,
+          );
           const mutation: HostedChannelMutationOutcome = {
             operationId,
             operation,
@@ -967,6 +1086,11 @@ export function mountPhylaxHostedChannelRoutes(
                 input.runtime,
                 at,
               ),
+              challenge: {
+                code,
+                expiresAt:
+                  registration.settings.telegramVerificationExpiresAt ?? at,
+              },
               mutation,
             } satisfies HostedChannelConnectResponse,
           };
@@ -1060,7 +1184,9 @@ function projectChannels(value: unknown): HostedChannelsView | null {
     !["off", "awaiting_code", "verified", "degraded", "paused"].includes(
       String(whatsapp.state),
     ) ||
-    !["off", "connected", "degraded"].includes(String(telegram.state))
+    !["off", "awaiting_code", "connected", "degraded"].includes(
+      String(telegram.state),
+    )
   )
     return null;
   const senderHint = nullableString(whatsapp.senderHint);
@@ -1068,20 +1194,32 @@ function projectChannels(value: unknown): HostedChannelsView | null {
   const verificationExpiresAt = nullableNumber(whatsapp.verificationExpiresAt);
   const lastInboundAt = nullableNumber(whatsapp.lastInboundAt);
   const lastReceiptAt = nullableNumber(whatsapp.lastReceiptAt);
+  const whatsappRevision = nullableString(whatsapp.revision);
   const identityHint = nullableString(telegram.identityHint);
+  const telegramVerificationExpiresAt = nullableNumber(
+    telegram.verificationExpiresAt,
+  );
+  const telegramRevision = nullableString(telegram.revision);
   if (
     senderHint === undefined ||
     sharedNumber === undefined ||
     verificationExpiresAt === undefined ||
     lastInboundAt === undefined ||
     lastReceiptAt === undefined ||
-    identityHint === undefined
+    whatsappRevision === undefined ||
+    identityHint === undefined ||
+    telegramVerificationExpiresAt === undefined ||
+    telegramRevision === undefined
   )
     return null;
   if (
     (senderHint !== null && !/^••••\d{1,8}$/.test(senderHint)) ||
     (sharedNumber !== null && !/^\+?[\d ()-]{8,32}$/.test(sharedNumber)) ||
-    (identityHint !== null && !/^@[-a-zA-Z0-9_]{1,64}$/.test(identityHint))
+    (identityHint !== null && !/^@[-a-zA-Z0-9_]{1,64}$/.test(identityHint)) ||
+    !whatsappRevision ||
+    !/^[a-zA-Z0-9._:-]{1,160}$/.test(whatsappRevision) ||
+    !telegramRevision ||
+    !/^[a-zA-Z0-9._:-]{1,160}$/.test(telegramRevision)
   )
     return null;
   return {
@@ -1092,10 +1230,13 @@ function projectChannels(value: unknown): HostedChannelsView | null {
       verificationExpiresAt: verificationExpiresAt!,
       lastInboundAt: lastInboundAt!,
       lastReceiptAt: lastReceiptAt!,
+      revision: whatsappRevision,
     },
     telegram: {
       state: telegram.state as HostedTelegramState,
       identityHint: identityHint!,
+      verificationExpiresAt: telegramVerificationExpiresAt!,
+      revision: telegramRevision,
     },
   };
 }
@@ -1209,6 +1350,25 @@ function projectAction(
       },
       mutation,
     } satisfies HostedChannelChallengeResponse;
+  }
+  if (operation === "telegram.connect") {
+    const challenge = record(root.challenge);
+    if (
+      !challenge ||
+      typeof challenge.code !== "string" ||
+      !/^\d{2}-[a-z]{2,24}$/.test(challenge.code) ||
+      typeof challenge.expiresAt !== "number" ||
+      !Number.isFinite(challenge.expiresAt)
+    )
+      return null;
+    return {
+      channels,
+      challenge: {
+        code: challenge.code,
+        expiresAt: challenge.expiresAt,
+      },
+      mutation,
+    } satisfies HostedChannelConnectResponse;
   }
   if (operation.endsWith(".test")) {
     const receipt = record(root.receipt);
@@ -1336,6 +1496,9 @@ export function mountHostedChannelsCustomerRoutes(
   app: Hono<{ Bindings: HttpBindings }>,
   input: {
     env: NodeJS.ProcessEnv;
+    routeVisible?: (
+      c: Context<{ Bindings: HttpBindings }>,
+    ) => boolean | Promise<boolean>;
     resolveTenant: (
       c: Context<{ Bindings: HttpBindings }>,
     ) =>
@@ -1345,6 +1508,9 @@ export function mountHostedChannelsCustomerRoutes(
   },
 ): void {
   app.get("/api/channels", async (c) => {
+    if (input.routeVisible && !(await input.routeVisible(c))) {
+      return c.json({ error: "not found" }, 404);
+    }
     const tenant = await input.resolveTenant(c);
     if (!tenant) return c.json({ error: "unauthorized" }, 401);
     const response = await proxyChannels(input.env, tenant, "");
@@ -1360,6 +1526,9 @@ export function mountHostedChannelsCustomerRoutes(
   ] as const;
   for (const [channel, action, operation, includeCredentials] of actions) {
     app.post(`/api/channels/${channel}/${action}`, async (c) => {
+      if (input.routeVisible && !(await input.routeVisible(c))) {
+        return c.json({ error: "not found" }, 404);
+      }
       const tenant = await input.resolveTenant(c);
       if (!tenant) return c.json({ error: "unauthorized" }, 401);
       const raw = await c.req

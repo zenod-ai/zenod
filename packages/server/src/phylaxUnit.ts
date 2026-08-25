@@ -55,6 +55,8 @@ export const PHYLAX_DEFAULT_RING_TICKET_URL = "https://ring.zenod.dev/mcp";
 export const PHYLAX_DEFAULT_ASSISTANT_URL = "https://ring.zenod.dev/mcp";
 export const ZENOD_WHATSAPP_VERIFICATION_REPLY =
   "Your WhatsApp number is verified. Return to Zenod to finish setup.";
+export const ZENOD_TELEGRAM_VERIFICATION_REPLY =
+  "Your Telegram identity is verified. Return to Zenod to finish setup.";
 const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
@@ -116,12 +118,24 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     artifactCapabilitySecret,
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
-    verifyInbound({ sender, text }) {
-      const verified = tenantSettings.verifyInbound(sender, text);
-      if (verified) {
-        hostedChannelAudit.recordVerification(verified.tenantId, sender);
+    verifyInbound({ channel, sender, text }) {
+      const verified =
+        channel === "whatsapp"
+          ? tenantSettings.verifyInboundReceipt(sender, text)
+          : tenantSettings.verifyTelegramInbound(sender, text);
+      if (verified && !verified.replayed) {
+        hostedChannelAudit.recordVerification(
+          channel,
+          verified.settings.tenantId,
+          sender,
+          tenantSettings.bindingRevision(verified.settings.tenantId, channel),
+        );
       }
-      return verified ? ZENOD_WHATSAPP_VERIFICATION_REPLY : null;
+      return verified
+        ? channel === "whatsapp"
+          ? ZENOD_WHATSAPP_VERIFICATION_REPLY
+          : ZENOD_TELEGRAM_VERIFICATION_REPLY
+        : null;
     },
     observeCaptureJob(ticket) {
       captureTickets.observeJob(ticket, ticket.terminal);

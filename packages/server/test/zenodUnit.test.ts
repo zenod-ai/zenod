@@ -811,19 +811,26 @@ describe("Zenod chassis unit", () => {
             verificationExpiresAt: null,
             lastInboundAt: null,
             lastReceiptAt: null,
+            revision: "wa-auth-revision",
           },
-          telegram: { state: "off", identityHint: null },
+          telegram: {
+            state: "off",
+            identityHint: null,
+            verificationExpiresAt: null,
+            revision: "tg-auth-revision",
+          },
         }),
       );
       vi.stubGlobal("fetch", privateFetch);
 
+      expect((await unit.app.request("/api/channels")).status).toBe(404);
       expect(
         (
           await unit.app.request("/api/channels", {
             headers: { authorization: "Bearer customer-token" },
           })
         ).status,
-      ).toBe(401);
+      ).toBe(404);
       expect(privateFetch).not.toHaveBeenCalled();
 
       tenants.setTenantStatus("github-42", "suspended");

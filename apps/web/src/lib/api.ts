@@ -387,10 +387,13 @@ export type HostedChannelsResponse = {
     verificationExpiresAt: number | null
     lastInboundAt: number | null
     lastReceiptAt: number | null
+    revision: string
   }
   telegram: {
-    state: "off" | "connected" | "degraded"
+    state: "off" | "awaiting_code" | "connected" | "degraded"
     identityHint: string | null
+    verificationExpiresAt: number | null
+    revision: string
   }
 }
 
@@ -402,6 +405,7 @@ export type HostedChannelMutation = {
     | "whatsapp.test"
     | "whatsapp.disconnect"
     | "telegram.connect"
+    | "telegram.verify"
     | "telegram.test"
     | "telegram.disconnect"
   outcome: "succeeded" | "rejected" | "failed"
@@ -429,7 +433,11 @@ export type HostedWhatsAppDisconnectResponse = {
   mutation: HostedChannelMutation
 }
 
-export type HostedTelegramConnectResponse = HostedWhatsAppDisconnectResponse
+export type HostedTelegramConnectResponse = {
+  channels: HostedChannelsResponse
+  challenge: { code: string; expiresAt: number }
+  mutation: HostedChannelMutation
+}
 export type HostedTelegramTestResponse = HostedWhatsAppTestResponse
 export type HostedTelegramDisconnectResponse = HostedWhatsAppDisconnectResponse
 

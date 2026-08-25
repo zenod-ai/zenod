@@ -9,7 +9,13 @@ import {
   mountHostedChannelsCustomerRoutes,
   type HostedChannelsView,
 } from "../src/hostedChannels.js";
-import { createPhylaxUnit } from "../src/phylaxUnit.js";
+import {
+  createPhylaxUnit,
+  ZENOD_TELEGRAM_VERIFICATION_REPLY,
+  ZENOD_WHATSAPP_VERIFICATION_REPLY,
+} from "../src/phylaxUnit.js";
+import type { TelegramPortedInboundHandler } from "../src/telegramGateway.js";
+import type { WhatsAppPortedInboundHandler } from "../src/whatsappGateway.js";
 
 const dirs: string[] = [];
 const MASTER_KEY = "33".repeat(32);
@@ -340,12 +346,35 @@ describe("Hosted Zenod channel adapter", () => {
         },
       );
       expect(telegramConnect.status).toBe(200);
-      expect(await telegramConnect.json()).toMatchObject({
+      const telegramConnectBody = await telegramConnect.json();
+      expect(telegramConnectBody).toMatchObject({
         channels: {
-          telegram: { state: "degraded", identityHint: "@jordi_test" },
+          telegram: { state: "awaiting_code", identityHint: "@jordi_test" },
         },
+        challenge: { code: expect.stringMatching(/^\d{2}-[a-z]+$/) },
         mutation: { operation: "telegram.connect", outcome: "succeeded" },
       });
+      expect(
+        unit.phylaxTenantSettings.resolve("telegram", "@jordi_test"),
+      ).toBeNull();
+      expect(
+        unit.phylaxTenantSettings.verifyTelegramInbound(
+          "@someone_else",
+          telegramConnectBody.challenge.code,
+        ),
+      ).toBeNull();
+      expect(
+        unit.phylaxTenantSettings.verifyTelegramInbound(
+          "@jordi_test",
+          telegramConnectBody.challenge.code,
+        ),
+      ).toMatchObject({
+        settings: { tenantId: "tenant-alpha", telegramBinding: "jordi_test" },
+        replayed: false,
+      });
+      expect(
+        unit.phylaxTenantSettings.resolve("telegram", "@jordi_test"),
+      ).toMatchObject({ tenantId: "tenant-alpha" });
       const telegramTest = await unit.app.request(
         "/internal/zenod/channels/tenant-alpha/telegram/test",
         {
@@ -393,6 +422,10 @@ describe("Hosted Zenod channel adapter", () => {
           }),
           expect.objectContaining({
             operationId: "telegram-test-alpha",
+            outcome: "succeeded",
+          }),
+          expect.objectContaining({
+            operationId: "telegram-disconnect-alpha",
             outcome: "succeeded",
           }),
         ]),
@@ -443,8 +476,14 @@ describe("Hosted Zenod channel adapter", () => {
             verificationExpiresAt: null,
             lastInboundAt: null,
             lastReceiptAt: null,
+            revision: "wa-revision-1",
           },
-          telegram: { state: "off", identityHint: null },
+          telegram: {
+            state: "off",
+            identityHint: null,
+            verificationExpiresAt: null,
+            revision: "tg-revision-1",
+          },
         } as const;
         if (init?.method === "POST") {
           const request = JSON.parse(String(init.body)) as {
@@ -646,8 +685,14 @@ describe("Hosted Zenod channel adapter", () => {
           verificationExpiresAt: null,
           lastInboundAt: 1_787_000_000_000,
           lastReceiptAt: 1_787_000_001_000,
+          revision: "wa-paused-revision",
         },
-        telegram: { state: "connected", identityHint: "@jordi" },
+        telegram: {
+          state: "connected",
+          identityHint: "@jordi",
+          verificationExpiresAt: null,
+          revision: "tg-paused-revision",
+        },
         downstreamToken: "must-not-leak",
       }),
     );
@@ -664,10 +709,111 @@ describe("Hosted Zenod channel adapter", () => {
         verificationExpiresAt: null,
         lastInboundAt: 1_787_000_000_000,
         lastReceiptAt: 1_787_000_001_000,
+        revision: "wa-paused-revision",
       },
-      telegram: { state: "connected", identityHint: "@jordi" },
+      telegram: {
+        state: "connected",
+        identityHint: "@jordi",
+        verificationExpiresAt: null,
+        revision: "tg-paused-revision",
+      },
     });
     expect(JSON.stringify(body)).not.toContain("must-not-leak");
+  });
+
+  it("rejects stale terminal snapshots across disconnect and reconnect lifecycles", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "hosted-channel-lifecycles-"));
+    dirs.push(dataDir);
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
+      },
+    });
+    vi.spyOn(unit.phylaxRuntime.whatsapp, "status").mockReturnValue(
+      connectedTransportStatus(unit.phylaxRuntime.whatsapp.status()),
+    );
+    const challenge = async (operationId: string) => {
+      const response = await unit.app.request(
+        "/internal/zenod/channels/tenant-life/whatsapp/challenge",
+        {
+          method: "POST",
+          headers: authorization(),
+          body: JSON.stringify({
+            operationId,
+            sender: "+34 644 444 444",
+            downstreamUrl: "https://cloud.zenod.dev/mcp",
+            downstreamToken: "memory-token",
+          }),
+        },
+      );
+      return { response, body: await response.json() };
+    };
+    const disconnect = (operationId: string) =>
+      unit.app.request(
+        "/internal/zenod/channels/tenant-life/whatsapp/disconnect",
+        {
+          method: "POST",
+          headers: authorization(),
+          body: JSON.stringify({ operationId }),
+        },
+      );
+    try {
+      const firstConnect = await challenge("lifecycle-connect-first");
+      expect(firstConnect.response.status).toBe(200);
+      unit.phylaxTenantSettings.verifyInbound(
+        "34644444444",
+        firstConnect.body.challenge.code,
+      );
+
+      const lostDisconnect = await disconnect("lifecycle-disconnect-lost");
+      expect(lostDisconnect.status).toBe(200);
+      const disconnectReplay = await disconnect("lifecycle-disconnect-lost");
+      expect(disconnectReplay.status).toBe(200);
+      expect(await disconnectReplay.json()).toEqual(
+        await lostDisconnect.json(),
+      );
+
+      const secondConnect = await challenge("lifecycle-connect-second");
+      expect(secondConnect.response.status).toBe(200);
+      unit.phylaxTenantSettings.verifyInbound(
+        "34644444444",
+        secondConnect.body.challenge.code,
+      );
+      const staleDisconnect = await disconnect("lifecycle-disconnect-lost");
+      expect(staleDisconnect.status).toBe(409);
+      expect(await staleDisconnect.json()).toMatchObject({
+        error: { code: "operation_conflict" },
+      });
+      expect(unit.phylaxTenantSettings.get("tenant-life").verified).toBe(true);
+
+      expect((await disconnect("lifecycle-disconnect-current")).status).toBe(
+        200,
+      );
+      const lostConnect = await challenge("lifecycle-connect-lost");
+      expect(lostConnect.response.status).toBe(200);
+      const connectReplay = await challenge("lifecycle-connect-lost");
+      expect(connectReplay.response.status).toBe(200);
+      expect(connectReplay.body.challenge.code).toBe(
+        lostConnect.body.challenge.code,
+      );
+      expect((await disconnect("lifecycle-cancel-current")).status).toBe(200);
+      const currentConnect = await challenge("lifecycle-connect-current");
+      expect(currentConnect.response.status).toBe(200);
+      const staleConnect = await challenge("lifecycle-connect-lost");
+      expect(staleConnect.response.status).toBe(409);
+      expect(staleConnect.body).toMatchObject({
+        error: { code: "operation_conflict" },
+      });
+      expect(unit.phylaxTenantSettings.get("tenant-life")).toMatchObject({
+        verified: false,
+        phoneNumber: "34644444444",
+      });
+    } finally {
+      await unit.close();
+    }
   });
 
   it("replays a challenge after restart without persisting its plaintext code", async () => {
@@ -688,6 +834,12 @@ describe("Hosted Zenod channel adapter", () => {
       downstreamUrl: "https://cloud.zenod.dev/mcp",
       downstreamToken: "alpha-memory-token",
     });
+    const telegramBody = JSON.stringify({
+      operationId: "restart-safe-telegram-connect",
+      identity: "@jordi_restart",
+      downstreamUrl: "https://cloud.zenod.dev/mcp",
+      downstreamToken: "alpha-memory-token",
+    });
     const first = create();
     vi.spyOn(first.phylaxRuntime.whatsapp, "status").mockReturnValue(
       connectedTransportStatus(first.phylaxRuntime.whatsapp.status()),
@@ -698,6 +850,16 @@ describe("Hosted Zenod channel adapter", () => {
     );
     const initialBody = await initial.json();
     const code = initialBody.challenge.code as string;
+    const initialTelegram = await first.app.request(
+      "/internal/zenod/channels/tenant-telegram-restart/telegram/connect",
+      { method: "POST", headers: authorization(), body: telegramBody },
+    );
+    expect(initialTelegram.status).toBe(200);
+    const telegramCode = (await initialTelegram.json()).challenge
+      .code as string;
+    expect(
+      first.phylaxTenantSettings.resolve("telegram", "@jordi_restart"),
+    ).toBeNull();
     await first.close();
 
     expect(
@@ -708,6 +870,14 @@ describe("Hosted Zenod channel adapter", () => {
     expect(
       (await readFile(join(dataDir, "phylax-tenant-settings.json"))).toString(),
     ).not.toContain(code);
+    expect(
+      (
+        await readFile(join(dataDir, "hosted-channel-mutations.sqlite"))
+      ).toString(),
+    ).not.toContain(telegramCode);
+    expect(
+      (await readFile(join(dataDir, "phylax-tenant-settings.json"))).toString(),
+    ).not.toContain(telegramCode);
 
     const second = create();
     try {
@@ -720,6 +890,165 @@ describe("Hosted Zenod channel adapter", () => {
       );
       expect(replay.status).toBe(200);
       expect((await replay.json()).challenge.code).toBe(code);
+      const telegramReplay = await second.app.request(
+        "/internal/zenod/channels/tenant-telegram-restart/telegram/connect",
+        { method: "POST", headers: authorization(), body: telegramBody },
+      );
+      expect(telegramReplay.status).toBe(200);
+      expect((await telegramReplay.json()).challenge.code).toBe(telegramCode);
+      expect(
+        second.phylaxTenantSettings.resolve("telegram", "@jordi_restart"),
+      ).toBeNull();
+    } finally {
+      await second.close();
+    }
+  });
+
+  it("replays terminal inbound verification after concurrency and restart without Zenod dispatch", async () => {
+    const dataDir = await mkdtemp(
+      join(tmpdir(), "hosted-verification-replay-"),
+    );
+    dirs.push(dataDir);
+    const create = () =>
+      createPhylaxUnit({
+        dataDir,
+        tenantStore: createMemoryTenantStore(),
+        env: {
+          CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+          ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
+        },
+      });
+    const first = create();
+    vi.spyOn(first.phylaxRuntime.whatsapp, "status").mockReturnValue(
+      connectedTransportStatus(first.phylaxRuntime.whatsapp.status()),
+    );
+    const whatsappChallenge = await first.app.request(
+      "/internal/zenod/channels/tenant-replay/whatsapp/challenge",
+      {
+        method: "POST",
+        headers: authorization(),
+        body: JSON.stringify({
+          operationId: "whatsapp-verify-replay",
+          sender: "+34 633 333 333",
+          downstreamUrl: "https://cloud.zenod.dev/mcp",
+          downstreamToken: "memory-token",
+        }),
+      },
+    );
+    const whatsappCode = (await whatsappChallenge.json()).challenge
+      .code as string;
+    const telegramChallenge = await first.app.request(
+      "/internal/zenod/channels/tenant-replay/telegram/connect",
+      {
+        method: "POST",
+        headers: authorization(),
+        body: JSON.stringify({
+          operationId: "telegram-verify-replay",
+          identity: "@jordi_replay",
+          downstreamUrl: "https://cloud.zenod.dev/mcp",
+          downstreamToken: "memory-token",
+        }),
+      },
+    );
+    const telegramCode = (await telegramChallenge.json()).challenge
+      .code as string;
+    const receive = vi.spyOn(first.phylaxRuntime.organ, "receive");
+    const whatsappHandler = (
+      first.phylaxRuntime.whatsapp as unknown as {
+        options: { portedInboundHandler: WhatsAppPortedInboundHandler };
+      }
+    ).options.portedInboundHandler;
+    const telegramHandler = (
+      first.phylaxRuntime.telegram as unknown as {
+        options: { portedInboundHandler: TelegramPortedInboundHandler };
+      }
+    ).options.portedInboundHandler;
+    const whatsappInput = (messageId: string) => ({
+      event: {
+        messageId,
+        chatId: "34633333333@s.whatsapp.net",
+        senderId: "34633333333@s.whatsapp.net",
+        senderName: "",
+        chatName: "",
+        isGroup: false,
+        timestamp: Date.now(),
+        body: whatsappCode,
+        hasMedia: false,
+        mediaType: null,
+        mimeType: null,
+        fileName: null,
+      },
+      text: whatsappCode,
+      timing: { lifecycleStartedAt: Date.now(), mediaDownloadMs: null },
+      progress: async () => {},
+    });
+    const telegramInput = (messageId: string) => ({
+      sender: "@jordi_replay",
+      chatId: "733333333",
+      messageId,
+      text: telegramCode,
+    });
+    const [waFirst, waDuplicate, tgFirst, tgDuplicate] = await Promise.all([
+      whatsappHandler(whatsappInput("wa-verify-1")),
+      whatsappHandler(whatsappInput("wa-verify-2")),
+      telegramHandler(telegramInput("tg-verify-1")),
+      telegramHandler(telegramInput("tg-verify-2")),
+    ]);
+    expect([waFirst.replyText, waDuplicate.replyText]).toEqual([
+      ZENOD_WHATSAPP_VERIFICATION_REPLY,
+      ZENOD_WHATSAPP_VERIFICATION_REPLY,
+    ]);
+    expect([tgFirst.replyText, tgDuplicate.replyText]).toEqual([
+      ZENOD_TELEGRAM_VERIFICATION_REPLY,
+      ZENOD_TELEGRAM_VERIFICATION_REPLY,
+    ]);
+    expect(receive).not.toHaveBeenCalled();
+    expect(
+      first.hostedChannelAudit
+        .recent("tenant-replay")
+        .filter((entry) => entry.operation.endsWith(".verify")),
+    ).toHaveLength(2);
+    await first.close();
+
+    const persisted = await readFile(
+      join(dataDir, "phylax-tenant-settings.json"),
+      "utf8",
+    );
+    expect(persisted).not.toContain(whatsappCode);
+    expect(persisted).not.toContain(telegramCode);
+
+    const second = create();
+    try {
+      const receiveAfterRestart = vi.spyOn(
+        second.phylaxRuntime.organ,
+        "receive",
+      );
+      const whatsappAfterRestart = (
+        second.phylaxRuntime.whatsapp as unknown as {
+          options: { portedInboundHandler: WhatsAppPortedInboundHandler };
+        }
+      ).options.portedInboundHandler;
+      const telegramAfterRestart = (
+        second.phylaxRuntime.telegram as unknown as {
+          options: { portedInboundHandler: TelegramPortedInboundHandler };
+        }
+      ).options.portedInboundHandler;
+      await expect(
+        whatsappAfterRestart(whatsappInput("wa-verify-redelivery")),
+      ).resolves.toMatchObject({
+        replyText: ZENOD_WHATSAPP_VERIFICATION_REPLY,
+      });
+      await expect(
+        telegramAfterRestart(telegramInput("tg-verify-redelivery")),
+      ).resolves.toMatchObject({
+        replyText: ZENOD_TELEGRAM_VERIFICATION_REPLY,
+      });
+      expect(receiveAfterRestart).not.toHaveBeenCalled();
+      expect(
+        second.hostedChannelAudit
+          .recent("tenant-replay")
+          .filter((entry) => entry.operation.endsWith(".verify")),
+      ).toHaveLength(2);
     } finally {
       await second.close();
     }

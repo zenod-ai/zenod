@@ -58,8 +58,6 @@ import {
   clearHostedChannelOperation,
   clearHostedWhatsAppRecovery,
   hostedChannelOperationKey,
-  rememberedHostedWhatsAppSender,
-  rememberHostedWhatsAppSender,
 } from "@/lib/hosted-channel-operations"
 
 type NotifyReceipt = {
@@ -626,9 +624,7 @@ export function HostedWhatsAppConnect({
   initial: HostedChannelsResponse | null
   onChanged: (channels: HostedChannelsResponse) => void
 }) {
-  const [sender, setSender] = React.useState(() =>
-    rememberedHostedWhatsAppSender()
-  )
+  const [sender, setSender] = React.useState("")
   const [challenge, setChallenge] = React.useState<
     HostedWhatsAppChallengeResponse["challenge"] | null
   >(null)
@@ -665,7 +661,6 @@ export function HostedWhatsAppConnect({
     setBusy("challenge")
     setError(null)
     try {
-      if (sender.trim()) rememberHostedWhatsAppSender(sender)
       const result = await api<HostedWhatsAppChallengeResponse>(
         "/api/channels/whatsapp/challenge",
         {
@@ -673,6 +668,7 @@ export function HostedWhatsAppConnect({
           body: {
             operationId: hostedChannelOperationKey(
               "whatsapp.challenge",
+              initial?.whatsapp.revision ?? "0",
               resetOperation
             ),
             ...(sender.trim() ? { sender } : {}),
@@ -698,7 +694,10 @@ export function HostedWhatsAppConnect({
         {
           method: "POST",
           body: {
-            operationId: hostedChannelOperationKey("whatsapp.test"),
+            operationId: hostedChannelOperationKey(
+              "whatsapp.test",
+              initial?.whatsapp.revision ?? "0"
+            ),
           },
         }
       )
@@ -721,7 +720,10 @@ export function HostedWhatsAppConnect({
         {
           method: "POST",
           body: {
-            operationId: hostedChannelOperationKey("whatsapp.disconnect"),
+            operationId: hostedChannelOperationKey(
+              "whatsapp.disconnect",
+              initial?.whatsapp.revision ?? "0"
+            ),
           },
         }
       )
