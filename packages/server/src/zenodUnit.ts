@@ -340,7 +340,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const customer = createCustomerLayer(
     {
       dataDir: storage.dataDir,
-      runtimeForAccount: (account) => (account.tenant_id ? runtimes.get(account.tenant_id) : null),
+      runtimeForAccount: (account) =>
+        account.tenant_id
+          ? runtimes.get(account.tenant_id) ??
+            runtimes.forTenantStorage(account.tenant_id, storage.forTenant({ id: account.tenant_id }))
+          : null,
       sharedGithubApp,
     },
     {
@@ -428,6 +432,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         c.req.path.startsWith("/api/journeys") ||
         c.req.path.startsWith("/api/journey-steps") ||
         c.req.path.startsWith("/api/tasks") ||
+        (agent.name === "zenod" &&
+          (c.req.path === "/api/usage" || c.req.path.startsWith("/api/usage/"))) ||
         c.req.path === "/api/lane-secret" ||
         c.req.path.startsWith("/mcp") ||
         c.req.path === "/internal" ||

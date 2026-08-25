@@ -15,7 +15,14 @@ import {
   type CustomerProductConfig,
 } from "./customerBilling.js";
 import { GithubIdentityProvider, signState, verifyState, type IdentityProvider } from "./customerIdentity.js";
-import { customerMetering } from "./customerMetering.js";
+import { projectCustomerUsage } from "./customerMetering.js";
+import {
+  createOpenRouterManagedAiClient,
+  CustomerManagedAiAuditStore,
+  CustomerManagedAiLifecycle,
+  loadManagedAiConfig,
+  type ManagedAiProviderClient,
+} from "./customerManagedAi.js";
 import { clearCustomerSession, issueCustomerSession, readCustomerSession } from "./customerSession.js";
 import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
@@ -36,6 +43,7 @@ export interface CustomerLayerOptions {
   stripe?: CustomerStripeClient;
   tenantStore?: import("@zenod/mcp-chassis").TenantProvisioningStore;
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
+  managedAiProvider?: ManagedAiProviderClient;
   product?: CustomerProductConfig;
 }
 
@@ -105,7 +113,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           appInfo: { name: `${product.product}/customer-layer`, version: "0.1.0" },
         }) as CustomerStripeClient)
       : null);
-  const onCheckoutCompleted =
+  const bindCheckout =
     options.onCheckoutCompleted ??
     createLocalTenantBindingAdapter({
       dataDir: host.dataDir,
@@ -113,6 +121,39 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       tenantStore: options.tenantStore,
       tokenVault,
     });
+  const managedAiConfig = loadManagedAiConfig(env);
+  const managedAiProvider =
+    product.product === "zenod" && managedAiConfig.enabled && managedAiConfig.provisioningKey
+      ? options.managedAiProvider ?? createOpenRouterManagedAiClient(managedAiConfig.provisioningKey)
+      : null;
+  const managedAi = new CustomerManagedAiLifecycle({
+    accounts,
+    runtimeForAccount: (account) => host.runtimeForAccount?.(account) ?? null,
+    config: managedAiConfig,
+    provider: managedAiProvider,
+    audit: new CustomerManagedAiAuditStore(host.dataDir),
+  });
+  const onCheckoutCompleted = async (account: CustomerAccount, session: Stripe.Checkout.Session) => {
+    await bindCheckout(account, session);
+    const bound = accounts.get(account.session_id);
+    if (!bound) throw new Error("checkout account disappeared after tenant binding");
+    const managedOutcome = await managedAi.ensureProvisioned(bound);
+    if (managedOutcome.state === "orphaned") throw new Error("managed AI child key requires operator recovery");
+  };
+  const usageForAccount = async (account: CustomerAccount) => {
+    if (!managedAiProvider || !account.tenant_slug) {
+      return projectCustomerUsage(null, managedAiConfig.warnPercent);
+    }
+    try {
+      const keys = await managedAiProvider.listKeys();
+      return projectCustomerUsage(
+        keys.find((key) => key.slug === account.tenant_slug) ?? null,
+        managedAiConfig.warnPercent,
+      );
+    } catch {
+      return projectCustomerUsage(null, managedAiConfig.warnPercent);
+    }
+  };
   const app = new Hono<{ Bindings: HttpBindings }>();
 
   app.get("/api/public/production-readiness", (c) => {
@@ -253,18 +294,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         (account.subscription_status === "active" || account.subscription_status === "past_due"),
     );
     const runtime = hasAccess ? host.runtimeForAccount?.(account) ?? null : null;
-    const summary = runtime?.usageStore.summary(Date.now() - 7 * 24 * 60 * 60_000) ?? {
-      since: Date.now() - 7 * 24 * 60 * 60_000,
-      calls: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      cachedInputTokens: 0,
-      cacheCreationInputTokens: 0,
-      costUsd: 0,
-      byOperation: [],
-      byModel: [],
-    };
-    const metering = await customerMetering(summary, env.OPENROUTER_PROVISIONING_KEY, account.tenant_slug);
+    const usage = await usageForAccount(account);
     return c.json({
       account_id: account.account_id,
       tier: account.tier,
@@ -278,8 +308,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       token_hint: hasAccess && token ? token.slice(-4) : null,
       vault_repo: account.vault_repo ?? runtime?.settings.get("vault_repo") ?? null,
       vault_repo_url: account.vault_repo_url,
-      ...metering,
+      usage,
     });
+  });
+
+  app.get("/api/customer-usage", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.github_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    return c.json(await usageForAccount(account));
   });
 
   app.post("/api/token/regenerate", async (c) => {
@@ -411,6 +449,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           await options.tenantStore.setTenantStatus(account.tenant_id, "suspended");
         }
       }
+      if (account) {
+        await managedAi.setSubscriptionAccess(
+          account,
+          account.subscription_status === "active" || account.subscription_status === "past_due",
+        );
+      }
       return c.json({ received: true, result: account ? account.subscription_status : "unmatched" });
     }
     if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
@@ -424,10 +468,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if (account?.tenant_id && account.subscription_status === "active" && options.tenantStore) {
         await options.tenantStore.setTenantStatus(account.tenant_id, "active");
       }
+      if (account?.subscription_status === "active") await managedAi.setSubscriptionAccess(account, true);
       return c.json({ received: true, result: account ? account.subscription_status : "unmatched" });
     }
     return c.json({ received: true, result: "ignored" });
   });
 
-  return { app, accounts, tokenVault };
+  return { app, accounts, tokenVault, managedAi };
 }

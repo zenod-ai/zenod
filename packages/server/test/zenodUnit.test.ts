@@ -375,6 +375,17 @@ describe("Zenod chassis unit", () => {
       expect(unit.runtimes.get("github-99")).toBeNull();
       expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_id")).toBe("3718758");
 
+      const rawUsage = await unit.app.request("/api/usage", { headers: { cookie } });
+      expect(rawUsage.status).toBe(403);
+      expect(await rawUsage.json()).toEqual({ error: "forbidden" });
+      const customerUsage = await unit.app.request("/api/customer-usage", { headers: { cookie } });
+      expect(customerUsage.status).toBe(200);
+      expect(await customerUsage.json()).toEqual({
+        percentageUsed: null,
+        state: "unavailable",
+        resetsAt: null,
+      });
+
       const setup = await unit.app.request(
         `/github/setup?installation_id=4242&state=${encodeURIComponent(installUrl.searchParams.get("state")!)}`,
         { headers: { cookie } },

@@ -7,10 +7,22 @@ export type BalanceState = "ok" | "warn" | "blocked";
 export interface GatewayKeyUsage {
   name: string;
   slug: string | null;
+  hash: string | null;
   limit: number | null;
   usage: number | null;
   limit_remaining: number | null;
   disabled: boolean;
+  limit_reset: "monthly" | null;
+  include_byok_in_limit: boolean | null;
+  reset_at: string | null;
+}
+
+export type CustomerUsageState = "normal" | "warn" | "paused" | "unavailable";
+
+export interface CustomerUsageProjection {
+  percentageUsed: number | null;
+  state: CustomerUsageState;
+  resetsAt: string | null;
 }
 
 export function balanceState(input: { limit: number | null; limit_remaining: number | null }): BalanceState {
@@ -41,10 +53,15 @@ export async function listGatewayKeys(provisioningKey: string): Promise<GatewayK
       return {
         name,
         slug: name.slice("zenod-tenant:".length) || null,
+        hash: typeof row.hash === "string" ? row.hash : null,
         limit,
         usage,
         limit_remaining: limit !== null && usage !== null ? Math.max(0, limit - usage) : reportedRemaining,
         disabled: Boolean(row.disabled),
+        limit_reset: row.limit_reset === "monthly" ? "monthly" : null,
+        include_byok_in_limit:
+          typeof row.include_byok_in_limit === "boolean" ? row.include_byok_in_limit : null,
+        reset_at: typeof row.reset_at === "string" ? row.reset_at : null,
       };
     });
 }
@@ -89,4 +106,37 @@ export async function customerMetering(
       costUsd: summary.costUsd,
     },
   };
+}
+
+function nextMonthlyReset(now: number): string {
+  const date = new Date(now);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)).toISOString();
+}
+
+export function projectCustomerUsage(
+  gateway: GatewayKeyUsage | null,
+  warnPercent = 80,
+  now = Date.now(),
+): CustomerUsageProjection {
+  const resetsAt = gateway?.reset_at ?? (gateway?.limit_reset === "monthly" ? nextMonthlyReset(now) : null);
+  if (!gateway || gateway.limit === null || gateway.usage === null || gateway.limit <= 0) {
+    return { percentageUsed: null, state: "unavailable", resetsAt };
+  }
+  const percentageUsed = Math.min(100, Math.max(0, Math.round(gateway.usage / gateway.limit * 100)));
+  const state: CustomerUsageState =
+    gateway.disabled || percentageUsed >= 100 ? "paused" : percentageUsed >= warnPercent ? "warn" : "normal";
+  return { percentageUsed, state, resetsAt };
+}
+
+export async function customerUsageProjection(
+  provisioningKey: string | undefined,
+  tenantSlug: string | null,
+): Promise<CustomerUsageProjection> {
+  if (!provisioningKey || !tenantSlug) return projectCustomerUsage(null);
+  try {
+    return projectCustomerUsage(await gatewayKeyForSlug(provisioningKey, tenantSlug));
+  } catch {
+    // Hosted customer responses fail closed instead of projecting the local estimate as provider truth.
+    return projectCustomerUsage(null);
+  }
 }
