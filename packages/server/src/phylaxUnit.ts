@@ -135,7 +135,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     tokenEnvVar: "PHYLAX_API_TOKEN",
     defaultTenantName: "Self-hosted Phylax",
     panels: ["mcp", "transcription", "connections"],
-    additionalReadTools: ["channel_status"],
+    additionalReadTools: ["channel_status", "get_recent_conversation_transcript"],
     registerAdditionalTools(server, context, runtimeInstance) {
       registerTenantChannelTools(server, context, runtime, tenantSettings);
       options.registerAdditionalTools?.(server, context, runtimeInstance);
@@ -780,6 +780,12 @@ function registerTenantChannelTools(
         settings: settings.view(tenantId),
         providers: delivery.status(),
       };
+    },
+    readConversationTranscript(query) {
+      return runtime.whatsappStore.recentTranscript(query).filter((entry) => {
+        if (!entry.messageId) return false;
+        return runtime.whatsappStore.channelAudit(entry.messageId)?.tenantId === tenantId;
+      });
     },
   });
 }

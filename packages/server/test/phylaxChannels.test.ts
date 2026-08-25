@@ -50,6 +50,76 @@ describe("PhylaxChannelsOrgan", () => {
     expect(normalizePhylaxVoiceJobDeadlineMs(30 * 60_000)).toBe(30 * 60_000);
   });
 
+  it("routes ordinary text directly to Zenod and keeps correlation only in typed audit", async () => {
+    const calls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir: "/tmp/unused-phylax-direct-zenod",
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/alpha",
+          downstreamToken: "zenod-alpha",
+          assistantUrl: "https://ring.test/mcp/alpha",
+          assistantToken: "ring-alpha",
+          turnBindings: {
+            voice_note: { tool: "store_memory", argumentMappings: { content: { source: "transcript" } } },
+            text: {
+              tool: "chat_with_zenod",
+              argumentMappings: {
+                message: { source: "message" },
+                surface: { source: "surface" },
+                conversationKey: { source: "conversationKey" },
+              },
+            },
+            media: { tool: "ingest_memory", argumentMappings: { artifactUrl: { source: "artifactUrl" } } },
+          },
+        }),
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "chat",
+          mcp: "chat_with_zenod",
+          description: "Chat directly with Zenod",
+          inputSchema: {
+            type: "object",
+            required: ["message", "surface", "conversationKey"],
+            properties: {
+              message: { type: "string" },
+              surface: { type: "string" },
+              conversationKey: { type: "string" },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        return {
+          content: [{ type: "text", text: "Your launch note says Friday — internal test correlation ID: corr-secret-1" }],
+          structuredContent: { correlationId: "corr-secret-1", receipt: { kind: "answer", id: "answer-1" } },
+        };
+      },
+    });
+
+    const receipt = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "text-direct-1",
+      text: "When is the launch?",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      tool: "chat_with_zenod",
+      route: { downstreamUrl: "https://zenod.test/mcp/alpha", downstreamToken: "zenod-alpha" },
+    });
+    expect(receipt.replyText).toBe("Your launch note says Friday");
+    expect(receipt.downstreamCorrelationId).toBe("corr-secret-1");
+    expect(receipt.replyText).not.toContain("corr-secret-1");
+    await organ.close();
+  });
+
   it("dispatches a tenant voice binding mechanically, validates its live schema, and polls to a terminal receipt", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-dispatch-"));
     dirs.push(dataDir);
@@ -169,7 +239,8 @@ describe("PhylaxChannelsOrgan", () => {
     });
     expect(receipt.replyText).toContain("Saved ✓");
     expect(receipt.replyText).toContain("Projects/Launch.md");
-    expect(receipt.replyText).toContain("abc1234");
+    expect(receipt.replyText).not.toContain("abc1234");
+    expect(receipt.replyText).not.toContain("job-alpha-1");
     expect(receipt.replyText).toContain("saved to Inbox");
     expect(receipt.replyText).not.toContain("Which owner should be listed?");
     expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
@@ -1418,7 +1489,7 @@ describe("PhylaxChannelsOrgan", () => {
         code: "downstream_error",
         audit: { failureCode: "downstream_unauthorized" },
       });
-      expect(String(rejected)).toContain("replace the Ring MCP URL and bearer token");
+      expect(String(rejected)).toContain("Open Zenod settings and reconnect it");
       expect(String(rejected)).not.toContain("bearer-secret");
       expect(String(rejected)).not.toContain("path-secret");
     }
@@ -1690,7 +1761,7 @@ describe("PhylaxChannelsOrgan", () => {
   });
 });
 describe("Phylax MCP channel tools", () => {
-  it("registers send_message, notify and channel_status through conduct and returns receipts", async () => {
+  it("registers delivery, health, and the authoritative transcript through conduct", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-tools-"));
     dirs.push(dataDir);
     const tenantStore = createMemoryTenantStore([{ token: "alpha-token", tenant: { id: "alpha", name: "Alpha" } }]);
@@ -1698,7 +1769,7 @@ describe("Phylax MCP channel tools", () => {
       name: "phylax",
       tenantAuth: { store: tenantStore },
       storage: { dataDir },
-      conduct: { toolKinds: { read: ["channel_status"], mutate: ["send_message", "notify"] } },
+      conduct: { toolKinds: { read: ["channel_status", "get_recent_conversation_transcript"], mutate: ["send_message", "notify"] } },
       tools(server) {
         registerPhylaxChannelTools(server, {
           async send(channel, recipient) {
@@ -1709,6 +1780,18 @@ describe("Phylax MCP channel tools", () => {
           },
           status() {
             return { whatsapp: "connected", telegram: "connected" };
+          },
+          readConversationTranscript() {
+            return [{
+              direction: "inbound",
+              at: Date.parse("2026-07-11T00:00:00.000Z"),
+              messageId: "wa-alpha-1",
+              chatId: "34611111111@s.whatsapp.net",
+              contactId: "34611111111",
+              bodyText: "authoritative Phylax transcript",
+              status: "replied",
+              mediaType: null,
+            }];
           },
         });
       },
@@ -1733,6 +1816,13 @@ describe("Phylax MCP channel tools", () => {
       const status = await client.callTool({ name: "channel_status", arguments: {} });
       expect(status.isError).not.toBe(true);
       expect(status.structuredContent).toEqual({ status: { whatsapp: "connected", telegram: "connected" } });
+
+      const transcript = await client.callTool({ name: "get_recent_conversation_transcript", arguments: { messageId: "wa-alpha-1" } });
+      expect(transcript.isError).not.toBe(true);
+      expect(transcript.content).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: expect.stringContaining("authoritative Phylax transcript") }),
+      ]));
+      expect(transcript.structuredContent).toMatchObject({ count: 1, entries: [{ messageId: "wa-alpha-1" }] });
     } finally {
       await client.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -2755,7 +2845,7 @@ describe("ported gateway integration", () => {
         'This voice note is longer than 30 minutes. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.',
         "No voice transcription is waiting for confirmation in this conversation.",
         "Confirmed voice handled.",
-        "Cancelled transcription alpha-cancel. Nothing was sent to Ring.",
+        "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
       ]));
     } finally {
       runtime.close();
@@ -3081,7 +3171,7 @@ describe("ported gateway integration", () => {
       ]);
       expect(sent).toHaveLength(3);
       expect(sent[2]).toContain("Saved ✓");
-      expect(sent[2]).toContain("Log/2026-07-31.md#^credential-repair");
+      expect(sent[2]).not.toContain("Log/2026-07-31.md#^credential-repair");
       expect(runtime.whatsappStore.mediaRecovery(event.messageId)).toMatchObject({
         kind: "forwarded_reply",
         state: "recovered_replied",
@@ -3281,8 +3371,9 @@ describe("ported gateway integration", () => {
       },
     });
     expect(result.replyText).toContain("Saved ✓");
-    expect(result.replyText).toContain("https://drive.google.com/file/d/image-1/view");
-    expect(result.replyText).toContain("Log/2026-07-31.md#^e-image1");
+    expect(result.replyText).toContain("Media: archived");
+    expect(result.replyText).not.toContain("https://drive.google.com/file/d/image-1/view");
+    expect(result.replyText).not.toContain("Log/2026-07-31.md#^e-image1");
     await organ.close();
   });
 
@@ -3394,6 +3485,10 @@ describe("ported gateway integration", () => {
       expect(sent).toHaveLength(1);
       const records = Array.from({ length: 20 }, (_, index) => runtime.whatsappStore.mediaCoalescing(event(index).messageId)!);
       const owner = records.find((record) => record.role === "owner")!;
+      expect(runtime.whatsappStore.channelAudit(owner.providerMessageId)).toMatchObject({
+        lifecycleState: "failed",
+        outboundStatus: "failure_notice_sent",
+      });
       expect(records).toEqual(expect.arrayContaining(Array.from({ length: 20 }, () => expect.objectContaining({
         canonicalProviderMessageId: owner.providerMessageId,
         state: "failed",
@@ -3402,6 +3497,15 @@ describe("ported gateway integration", () => {
         expect(runtime.whatsappStore.recentTranscript({ messageId: event(index).messageId, sinceMs: 0 })[0]?.mediaCoalescing)
           .toMatchObject({ canonicalProviderMessageId: owner.providerMessageId, state: "failed" });
       }
+
+      await runtime.whatsapp.handleEvent(event(20));
+      expect(downstreamCalls).toBe(2);
+      expect(sent).toHaveLength(2);
+      expect(runtime.whatsappStore.mediaCoalescing(event(20).messageId)).toMatchObject({
+        role: "owner",
+        canonicalProviderMessageId: event(20).messageId,
+        state: "failed",
+      });
     } finally {
       runtime.close();
     }
@@ -3628,7 +3732,7 @@ describe("ported gateway integration", () => {
     restarted.close();
   });
 
-  it("marks restart-orphan followers failed without Ring and preserves their provider-ID trace", () => {
+  it("lets a resend after a restart-orphan failure become a fresh media owner", () => {
     const path = join(tmpdir(), `phylax-coalescing-orphan-${Date.now()}.sqlite`);
     dirs.push(path);
     const event = (messageId: string): WhatsAppInboundEvent => ({
@@ -3651,11 +3755,7 @@ describe("ported gateway integration", () => {
     expect(after.claimMediaCoalescing({
       providerMessageId: "orphan-follower", tenantId: "alpha", channel: "whatsapp",
       artifactSha256: "b".repeat(64), windowMs: 60_000, now: 10_100,
-    })).toMatchObject({ role: "duplicate", canonicalProviderMessageId: "orphan-owner", state: "failed" });
-    expect(after.recentTranscript({ messageId: "orphan-follower", sinceMs: 0 })[0]).toMatchObject({
-      status: "coalesced",
-      mediaCoalescing: { canonicalProviderMessageId: "orphan-owner", state: "failed" },
-    });
+    })).toMatchObject({ role: "owner", canonicalProviderMessageId: "orphan-follower", state: "processing" });
     expect(after.mediaRecovery("orphan-owner")).toMatchObject({ state: "pending", kind: "interrupted_failure" });
     after.close();
   });

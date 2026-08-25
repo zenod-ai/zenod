@@ -15,6 +15,12 @@ import {
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { normalizeTelegramEntry } from "./telegramConfig.js";
 import { appendPhylaxCaptureReceiptInvitation } from "./phylaxCaptureReceipt.js";
+import {
+  formatConversationTranscript,
+  transcriptQueryFromToolArgs,
+  type ConversationTranscriptReader,
+} from "./conversationTranscript.js";
+import { GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE } from "./mcpToolSchemas.js";
 import type {
   PhylaxBindingArgumentSource,
   PhylaxTurnBindings,
@@ -304,6 +310,20 @@ function textFromResult(result: PeerToolResult): string {
     .filter((item) => item.type === "text")
     .map((item) => item.text)
     .join("\n")
+    .trim();
+}
+
+/** Keep support correlation in typed audit fields, never in customer prose. */
+export function sanitizePhylaxCustomerReply(value: string): string {
+  return value
+    .split("\n")
+    .filter((line) => !/^\s*(?:internal\s+)?(?:correlation|job|ticket|execution)[ _-]?id\s*[:#=]/i.test(line))
+    .map((line) => line.replace(
+      /\s*(?:\(|[-–—;,])?\s*\b(?:internal\s+test\s+)?(?:correlation|job|ticket|execution)[ _-]?id\b\s*[:#=]?\s*[A-Za-z0-9._:@/-]+\)?/gi,
+      "",
+    ).trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -731,14 +751,7 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): 
   const evidenceRef = typeof evidenceValue === "string" && evidenceValue.trim()
     ? evidenceValue.trim()
     : null;
-  const evidenceUrl = typeof payload.evidenceUrl === "string"
-    ? payload.evidenceUrl
-    : typeof digest?.evidenceUrl === "string" ? digest.evidenceUrl : null;
   const pages = stringArray(payload.pagesTouched ?? digest?.pagesTouched);
-  const pageUrls = stringArray(payload.pageUrls ?? digest?.pageUrls);
-  const commitValue = payload.commitSha ?? digest?.commitSha;
-  const commitSha = typeof commitValue === "string" ? commitValue : null;
-  const githubUrls = stringArray(payload.githubUrls ?? digest?.githubUrls);
   const filingValue = payload.filing ?? digest?.filing;
   const filing = ["filed", "uncertain", "inbox", "pending"].includes(String(filingValue))
     ? String(filingValue)
@@ -750,28 +763,22 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): 
     : typeof payload.message === "string" && payload.message.trim()
       ? payload.message.trim()
     : "Your memory has been filed.";
-  const filed = pages.map((page, index) => pageUrls[index] ? `${page} (${pageUrls[index]})` : page);
-  const commitUrl = githubUrls.find((url) => commitSha ? url.includes(commitSha) : false)
-    ?? githubUrls[0]
-    ?? null;
   return {
     state: "done",
     evidenceRef,
-    text: appendPhylaxCaptureReceiptInvitation([
+    text: sanitizePhylaxCustomerReply(appendPhylaxCaptureReceiptInvitation([
       "Saved ✓",
       `Recap: ${recap}`,
       ...(typeof rawArtifact?.archiveUrl === "string" && rawArtifact.archiveUrl.trim()
-        ? [`Media: ${rawArtifact.archiveUrl.trim()}`]
+        ? ["Media: archived"]
         : []),
-      ...(filed.length > 0 ? [`Filed: ${filed.join(", ")}`] : []),
-      ...(evidenceRef ? [`Evidence: ${evidenceUrl ? `${evidenceRef} (${evidenceUrl})` : evidenceRef}`] : []),
-      ...(commitSha ? [`Commit: ${commitUrl ? `${commitSha} (${commitUrl})` : commitSha}`] : []),
+      ...(pages.length > 0 ? [`Filed: ${pages.join(", ")}`] : []),
       ...(filing === "uncertain"
         ? [`Filing: saved to ${pages[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`]
         : filing === "inbox"
           ? ["Filing: saved to Inbox; the filing question is logged in the note."]
           : []),
-    ].join("\n")),
+    ].join("\n"))),
   };
 }
 
@@ -1280,7 +1287,7 @@ export class PhylaxChannelsOrgan {
         }
       : {
           route: selectedRoute,
-          tool: "chat_with_ring",
+          tool: "chat_with_zenod",
           arguments: { message, surface, conversationKey },
           handoff,
         };
@@ -1464,11 +1471,11 @@ export class PhylaxChannelsOrgan {
       }
       throw new PhylaxChannelError(
         "downstream_error",
-        message,
+        "Zenod could not process that message. Please try again.",
         failureAudit(downstreamMs, failureCode, audit),
       );
     }
-    const replyText = textFromResult(downstream);
+    const replyText = sanitizePhylaxCustomerReply(textFromResult(downstream));
     if (!replyText) {
       throw new PhylaxChannelError(
         "downstream_error",
@@ -1568,7 +1575,7 @@ function downstreamCredentialRejectedError(
   return new PhylaxChannelError(
     "downstream_error",
     target === "memory"
-      ? "Your Zenod memory connection needs attention. Open Phylax settings and replace the memory MCP URL and bearer token."
+      ? "Your Zenod memory connection needs attention. Open Zenod settings and reconnect it."
       : "Your Ring connection needs attention. Open Phylax settings and replace the Ring MCP URL and bearer token, then retry.",
     audit,
     retryableCapture ? "idempotent_capture" : null,
@@ -1623,6 +1630,8 @@ export interface PhylaxTenantDelivery {
   send(channel: PhylaxPortedChannel, recipient: string, text: string): Promise<PhylaxDeliveryReceipt>;
   status(): Promise<Record<string, unknown>> | Record<string, unknown>;
   notify?(text: string): Promise<PhylaxDeliveryReceipt[]>;
+  /** Tenant-filtered reader backed by Phylax's authoritative transport store. */
+  readConversationTranscript?: ConversationTranscriptReader;
 }
 
 function deliveryToolResult(receipts: PhylaxDeliveryReceipt[]) {
@@ -1688,4 +1697,23 @@ export function registerPhylaxChannelTools(server: McpServer, delivery: PhylaxTe
       return { content: [{ type: "text" as const, text: JSON.stringify(status) }], structuredContent: { status } };
     },
   );
+  if (delivery.readConversationTranscript) {
+    server.registerTool(
+      "get_recent_conversation_transcript",
+      {
+        title: "Get recent channel transcript",
+        description: "Read the tenant-scoped authoritative WhatsApp transcript from Phylax transport custody.",
+        inputSchema: GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ windowMinutes, contactId, chatId, messageId, limit }) => {
+        const query = transcriptQueryFromToolArgs({ windowMinutes, contactId, chatId, messageId, limit });
+        const entries = delivery.readConversationTranscript!(query);
+        return {
+          content: [{ type: "text" as const, text: formatConversationTranscript(entries) }],
+          structuredContent: { entries, count: entries.length, sinceMs: query.sinceMs, windowMinutes: query.windowMinutes },
+        };
+      },
+    );
+  }
 }

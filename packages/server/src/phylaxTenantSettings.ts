@@ -119,7 +119,7 @@ export interface PhylaxDownstreamCredentials {
 
 type Store = Record<string, PhylaxTenantSettings>;
 
-function legacyChatBinding(): PhylaxTurnBinding {
+function legacyRingChatBinding(): PhylaxTurnBinding {
   return {
     tool: "chat_with_ring",
     argumentMappings: {
@@ -128,6 +128,29 @@ function legacyChatBinding(): PhylaxTurnBinding {
       conversationKey: { source: "conversationKey" },
     },
   };
+}
+
+function directZenodChatBinding(): PhylaxTurnBinding {
+  return {
+    tool: "chat_with_zenod",
+    argumentMappings: {
+      message: { source: "message" },
+      surface: { source: "surface" },
+      conversationKey: { source: "conversationKey" },
+    },
+  };
+}
+
+/**
+ * The first Hosted deployment persisted the old default Ring binding in every
+ * tenant row. Migrate only that exact generated value at read time. A customer
+ * who deliberately configured another Ring binding keeps it, and rollback is
+ * simply running the previous code because the settings file is never rewritten.
+ */
+function isGeneratedLegacyRingChatBinding(binding: PhylaxTurnBinding): boolean {
+  const legacy = legacyRingChatBinding();
+  return binding.tool === legacy.tool
+    && JSON.stringify(binding.argumentMappings) === JSON.stringify(legacy.argumentMappings);
 }
 
 /**
@@ -148,7 +171,7 @@ export function defaultPhylaxTurnBindings(): PhylaxTurnBindings {
         sourceId: { source: "providerMessageId" },
       },
     },
-    text: legacyChatBinding(),
+    text: directZenodChatBinding(),
     media: {
       tool: "ingest_memory",
       argumentMappings: {
@@ -307,7 +330,11 @@ function normalizedStoredTurnBindings(value: unknown): PhylaxTurnBindings {
   for (const turnType of PHYLAX_TURN_TYPES) {
     if (stored[turnType] === undefined) continue;
     try {
-      defaults[turnType] = normalizedTurnBinding(stored[turnType]);
+      const normalized = normalizedTurnBinding(stored[turnType]);
+      if (turnType === "text" && isGeneratedLegacyRingChatBinding(normalized)) {
+        continue;
+      }
+      defaults[turnType] = normalized;
     } catch {
       // A corrupt row must not strand a tenant; preserve the approved D17 default.
     }

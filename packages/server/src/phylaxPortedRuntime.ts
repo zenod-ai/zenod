@@ -168,7 +168,7 @@ export class PhylaxPortedRuntime {
             }
             this.voiceAbortControllers.get(cancelled.providerMessageId)?.abort();
             return {
-              replyText: `Cancelled transcription ${cancelled.providerMessageId}. Nothing was sent to Ring.`,
+              replyText: "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
             };
           }
           const confirmed = this.whatsappStore.confirmLatestVoiceJob(tenantId, conversationKey);
@@ -177,8 +177,8 @@ export class PhylaxPortedRuntime {
           }
           return {
             replyText:
-              `Confirmed transcription ${confirmed.providerMessageId}. It is queued and may take a while. `
-              + 'Send “cancel transcription” to cancel it before Ring handoff starts.',
+              "Confirmed the voice transcription. It is queued and may take a while. "
+              + 'Send “cancel transcription” to cancel it before Zenod starts filing it.',
             afterReply: () => this.kickVoiceWorker(),
           };
         }

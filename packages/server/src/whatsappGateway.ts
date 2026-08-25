@@ -1767,7 +1767,9 @@ export class WhatsAppGateway {
       const message = error instanceof Error ? error.message : String(error);
       this.options.store.markMessageStatus(event.messageId, "failed");
       const outboundStartedAt = Date.now();
-      await this.sendReply(event, `⚠️ ${message}`, "error").catch(() => {});
+      // The Zenod operation failed, but a provider-accepted failure notice is a
+      // successful delivery. Keep those two states independent for support.
+      await this.sendReply(event, `⚠️ ${message}`, "failure_notice_sent").catch(() => {});
       this.options.store.recordChannelTiming(event.messageId, {
         outboundSendMs: Date.now() - outboundStartedAt,
         totalLifecycleMs: Date.now() - lifecycleStartedAt,

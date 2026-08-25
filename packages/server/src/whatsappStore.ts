@@ -1371,6 +1371,7 @@ export class WhatsAppStore {
          FROM whatsapp_media_coalescing
          WHERE tenant_id = ? AND channel = ? AND artifact_sha256 = ?
            AND role = 'owner' AND created_at >= ?
+           AND outcome_state IN ('processing', 'completed')
          ORDER BY created_at ASC, provider_message_id ASC
          LIMIT 1`,
       ).get(input.tenantId, input.channel, input.artifactSha256, cutoff) as

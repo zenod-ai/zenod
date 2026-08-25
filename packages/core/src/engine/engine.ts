@@ -355,6 +355,8 @@ export interface EngineOptions {
 // worst case — costly on long, multi-page stores. On exhaustion we fall back to
 // an Inbox stub, so a hard case is parked for the user, never half-applied.
 const COMPOSE_RETRIES = 1;
+const CLASSIFY_RETRIES = 1;
+export const LONG_MEMORY_SEGMENT_CHARS = 12_000;
 const WORK_RETRIES = 2;
 const DEFAULT_READ_SYNC_TTL_MS = 60_000;
 const MAX_BRIEFING_MEANING_PAGES = 80;
@@ -363,6 +365,73 @@ const MAX_BRIEFING_ATTACHMENTS = 40;
 const MAX_BRIEFING_SUMMARY_CHARS = 240;
 const MAX_ASK_CONTEXT_REFS = 10;
 const EVIDENCE_CONTEXT_REF_RE = new RegExp(EVIDENCE_CONTEXT_REF_PATTERN);
+
+function splitOversizeMemoryPart(part: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  let remaining = part.trim();
+  while (remaining.length > maxChars) {
+    const window = remaining.slice(0, maxChars + 1);
+    const sentence = Math.max(window.lastIndexOf(". "), window.lastIndexOf("? "), window.lastIndexOf("! "));
+    const newline = window.lastIndexOf("\n");
+    const space = window.lastIndexOf(" ");
+    const boundary = Math.max(sentence >= maxChars / 2 ? sentence + 1 : -1, newline, space);
+    const cut = boundary >= maxChars / 2 ? boundary : maxChars;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
+/** Preserve one raw capture while classifying long voice notes topic-sized piece by piece. */
+export function segmentLongMemoryContent(
+  content: string,
+  maxChars = LONG_MEMORY_SEGMENT_CHARS,
+): string[] {
+  const normalized = content.trim();
+  if (!normalized || normalized.length <= maxChars) return [normalized];
+  const parts = normalized
+    .split(/\n\s*\n/g)
+    .flatMap((part) => splitOversizeMemoryPart(part, maxChars))
+    .filter(Boolean);
+  const segments: string[] = [];
+  let current = "";
+  for (const part of parts) {
+    const candidate = current ? `${current}\n\n${part}` : part;
+    if (candidate.length > maxChars && current) {
+      segments.push(current);
+      current = part;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) segments.push(current);
+  return segments;
+}
+
+function verbatimEntityCandidates(content: string): string[] {
+  return [...new Set(content.match(/\b[A-Z][A-Za-z0-9'-]{2,}(?:\s+[A-Z][A-Za-z0-9'-]{2,}){0,3}\b/g) ?? [])]
+    .slice(0, 20);
+}
+
+function mergeSegmentClassifications(classifications: Classification[]): Classification {
+  if (classifications.length === 1) return classifications[0]!;
+  const pages = new Map<string, Classification["pages"][number]>();
+  for (const classification of classifications) {
+    for (const page of classification.pages) {
+      const key = normalizeMarkdownNotePath(page.path);
+      if (!pages.has(key)) pages.set(key, { ...page, path: key });
+    }
+  }
+  const questions = [...new Set(classifications.map((item) => item.question).filter(Boolean))];
+  return {
+    confidence: Math.min(...classifications.map((item) => item.confidence)),
+    summary: classifications.map((item) => item.summary).join("; ").slice(0, 240),
+    tags: [...new Set(classifications.flatMap((item) => item.tags))],
+    pages: [...pages.values()],
+    ...(questions.length ? { question: questions.join(" ") } : {}),
+  };
+}
 
 const DEFAULT_TEMPLATE = `---
 title: "{{title}}"
@@ -1211,25 +1280,73 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const citation = `[[${evidence.date}#^${evidence.anchor}]]`;
       const evidenceRef = `${evidence.logPath}#^${evidence.anchor}`;
 
-      // 3. Classify.
+      // 3. Classify. Long voice notes keep one immutable evidence entry but
+      // are classified in bounded topic-sized segments so later subjects are
+      // not silently dropped from a large prompt.
       const snapshot = await scanVault(vaultPath);
       let classification: Classification;
       try {
-        reportTokenCost("classify", [
-          input.content,
-          ...(input.hints ?? []),
-          snapshot.pages.map((p) => `${p.path} | ${p.title} | ${p.tags.join(",")} | ${p.summary}`).join("\n"),
-          config.tags.join(", "),
-        ]);
-        classification = await llm.classify({
-          content: input.content,
-          hints: input.hints ?? [],
-          pageIndex: snapshot.pages,
-          tagVocabulary: config.tags,
-        });
+        const segments = segmentLongMemoryContent(input.content);
+        const entities = verbatimEntityCandidates(input.content);
+        const classifications: Classification[] = [];
+        for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+          const segment = segments[segmentIndex]!;
+          let classified: Classification | null = null;
+          let lastError: unknown;
+          for (let attempt = 0; attempt <= CLASSIFY_RETRIES; attempt += 1) {
+            const hints = [
+              ...(input.hints ?? []),
+              ...(segments.length > 1
+                ? [`Long capture segment ${segmentIndex + 1}/${segments.length}; identify every subject in this segment.`]
+                : []),
+              ...(entities.length > 0
+                ? [`Preserve these source spellings verbatim when uncertain: ${entities.join(", ")}`]
+                : []),
+            ];
+            reportTokenCost("classify", [
+              segment,
+              ...hints,
+              snapshot.pages.map((p) => `${p.path} | ${p.title} | ${p.tags.join(",")} | ${p.summary}`).join("\n"),
+              config.tags.join(", "),
+            ], undefined, attempt === 0 ? "store" : "retry");
+            try {
+              classified = await llm.classify({
+                content: segment,
+                hints,
+                pageIndex: snapshot.pages,
+                tagVocabulary: config.tags,
+              });
+              break;
+            } catch (error) {
+              lastError = error;
+            }
+          }
+          if (!classified) throw lastError ?? new Error("classification returned no result");
+          classifications.push(classified);
+        }
+        classification = mergeSegmentClassifications(classifications);
       } catch (err) {
+        // Preserve the raw capture even when the classifier produces empty or
+        // unparsable output twice. This is a successful save with filing
+        // pending, not data loss or a false transport failure.
         await repo.discardChanges();
-        throw new Error(`classification failed, store rolled back cleanly: ${(err as Error).message}`);
+        const retried = await appendEvidence(vaultPath, input.content, input.source, verbatim, now(), evidenceMetadata);
+        const retriedRef = `${retried.logPath}#^${retried.anchor}`;
+        const question = `Saved, but automatic filing is pending because classification failed after ${CLASSIFY_RETRIES + 1} attempts: ${(err as Error).message}`;
+        const stubPath = await writeInboxStub(input.content, question, retriedRef);
+        const sha = await repo.commitAndPush("memory: (inbox) classification pending");
+        const canonicalLocation = { ...location, branch: sha };
+        return {
+          evidenceRef: retriedRef,
+          ...(githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`)
+            ? { evidenceUrl: githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`) }
+            : {}),
+          pagesTouched: [stubPath],
+          pageUrls: [githubUrl(canonicalLocation, stubPath)].filter(Boolean),
+          commitSha: sha,
+          githubUrls: [githubUrl(location, retried.logPath), githubUrl(location, stubPath)].filter(Boolean),
+          filing: "inbox",
+        };
       }
       classification = {
         ...classification,

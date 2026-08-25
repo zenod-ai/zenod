@@ -355,7 +355,7 @@ describe("Phylax customer unit mount", () => {
     }
   });
 
-  it("uses effective tenant bindings for assistant voice, durable voice capture, and durable media ingest", async () => {
+  it("uses direct Zenod chat, durable voice capture, and durable media ingest while preserving separate Ring credentials", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-production-bindings-"));
     dirs.push(dataDir);
     const tenantStore = createMemoryTenantStore([{
@@ -402,7 +402,7 @@ describe("Phylax customer unit mount", () => {
       specs: [
         {
           as: "assistant",
-          mcp: "chat_with_ring",
+          mcp: "chat_with_zenod",
           arg: "input",
           description: "Answer an assistant turn",
           inputSchema: {
@@ -464,7 +464,7 @@ describe("Phylax customer unit mount", () => {
       tool: string,
       args: Record<string, unknown>,
     ) => {
-      if (tool === "chat_with_ring") {
+      if (tool === "chat_with_zenod") {
         return { content: [{ type: "text", text: "Assistant answer." }] };
       }
       if (tool === "store_memory") {
@@ -527,10 +527,10 @@ describe("Phylax customer unit mount", () => {
       });
       expect(assistant.replyText).toBe("Assistant answer.");
       expect(peerMocks.callPeerTool.mock.calls[0]?.[0]).toMatchObject({
-        url: "https://ring.test/mcp",
-        token: "tenant-alpha-assistant-scope",
+        url: "https://memory.test/mcp",
+        token: "tenant-alpha-memory-scope",
       });
-      expect(peerMocks.callPeerTool.mock.calls[0]?.[1]).toBe("chat_with_ring");
+      expect(peerMocks.callPeerTool.mock.calls[0]?.[1]).toBe("chat_with_zenod");
       expect(peerMocks.callPeerTool.mock.calls[0]?.[2]).toEqual({
         message: "What did I save?",
         surface: "whatsapp",
@@ -566,8 +566,8 @@ describe("Phylax customer unit mount", () => {
         { ticket_id: "voice-job" },
       ]);
       expect(voice.replyText).toContain("Saved ✓");
-      expect(voice.replyText).toContain("Log/2026-07-29.md#^voice-production");
-      expect(voice.replyText).toContain("abc1234");
+      expect(voice.replyText).not.toContain("Log/2026-07-29.md#^voice-production");
+      expect(voice.replyText).not.toContain("abc1234");
       expect(voice.replyText).toMatch(
         /\nreply to this message to discuss or act on it$/,
       );
@@ -607,8 +607,8 @@ describe("Phylax customer unit mount", () => {
       expect(media.replyText).toContain("Saved ✓");
       expect(media.replyText).toContain("Screenshot filed.");
       expect(media.replyText).toContain("Inbox/Media.md");
-      expect(media.replyText).toContain("Log/2026-07-29.md#^media-production");
-      expect(media.replyText).toContain("feed123");
+      expect(media.replyText).not.toContain("Log/2026-07-29.md#^media-production");
+      expect(media.replyText).not.toContain("feed123");
       expect(media.replyText).toMatch(
         /\nreply to this message to discuss or act on it$/,
       );
@@ -616,6 +616,10 @@ describe("Phylax customer unit mount", () => {
         "tenant-alpha",
         "whatsapp:34611111111",
       )).toBe("Log/2026-07-29.md#^media-production");
+      expect(unit.phylaxTenantSettings.assistantCredentials("tenant-alpha")).toEqual({
+        url: "https://ring.test/mcp",
+        token: "tenant-alpha-assistant-scope",
+      });
     } finally {
       await unit.close();
     }

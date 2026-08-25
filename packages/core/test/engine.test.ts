@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createEngine } from "../src/engine/engine.js";
+import { createEngine, LONG_MEMORY_SEGMENT_CHARS } from "../src/engine/engine.js";
 import { __resetApprovalTokens } from "../src/approvalTokens.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
@@ -31,6 +31,8 @@ const FIXTURE = fileURLToPath(new URL("./fixtures/vault", import.meta.url));
 /** Deterministic fake LLM: files insurance content onto Areas/Insurance.md. */
 class FakeLlm implements BrainLlm {
   classifyCalls = 0;
+  classifyInputs: ClassifyInput[] = [];
+  failClassifyAttempts = 0;
   composeCalls = 0;
   confidence = 0.95;
   failComposeAttempts = 0;
@@ -39,8 +41,10 @@ class FakeLlm implements BrainLlm {
   answerOverride: ((input: AnswerInput, tools: VaultReadTools) => Promise<AnswerResult>) | null = null;
   workInputs: WorkLoopInput[] = [];
 
-  async classify(_input: ClassifyInput): Promise<Classification> {
+  async classify(input: ClassifyInput): Promise<Classification> {
     this.classifyCalls++;
+    this.classifyInputs.push(input);
+    if (this.classifyCalls <= this.failClassifyAttempts) throw new Error("empty structured classification");
     return {
       confidence: this.confidence,
       summary: "note new insurance fact",
@@ -471,6 +475,40 @@ describe("BrainEngine", () => {
     expect(stub).toContain("status: needs-filing");
     expect(stub).toContain("Which area does this belong to?");
     expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("retries an unparsable classification, then saves the raw capture to Inbox", async () => {
+    llm.failClassifyAttempts = 99;
+    const content = "Remember the image text exactly: FyLax launch label.";
+    const result = await engine().store({ content, source: "whatsapp", contentType: "image", verbatim: true });
+
+    expect(llm.classifyCalls).toBe(2);
+    expect(result.filing).toBe("inbox");
+    const log = await readFile(join(repo.path, result.evidenceRef.split("#")[0]!), "utf8");
+    const inbox = await readFile(join(repo.path, result.pagesTouched[0]!), "utf8");
+    expect(log).toContain(content);
+    expect(inbox).toContain(content);
+    expect(inbox).toContain("Saved, but automatic filing is pending");
+    expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("classifies a long voice note in bounded segments while retaining source entity spellings", async () => {
+    const content = [
+      `Alpha topic PhylaxBridge ${"a".repeat(8_500)}`,
+      `Beta topic ZedNaught ${"b".repeat(8_500)}`,
+      `Gamma topic FilexDirect ${"c".repeat(8_500)}`,
+    ].join("\n\n");
+    const result = await engine().store({ content, source: "whatsapp", contentType: "voice_note", verbatim: true });
+
+    expect(result.filing).toBe("filed");
+    expect(llm.classifyInputs.length).toBe(3);
+    expect(llm.classifyInputs.every((input) => input.content.length <= LONG_MEMORY_SEGMENT_CHARS)).toBe(true);
+    expect(llm.classifyInputs.map((input) => input.content).join("\n\n")).toContain("Gamma topic FilexDirect");
+    expect(llm.classifyInputs[0]?.hints.join(" ")).toContain("PhylaxBridge");
+    expect(llm.composeCalls).toBe(1);
+    const log = await readFile(join(repo.path, result.evidenceRef.split("#")[0]!), "utf8");
+    expect(log).toContain("ZedNaught");
+    expect(log).toContain("FilexDirect");
   });
 
   it("retries failed validation, then succeeds (validate-with-retry)", async () => {
