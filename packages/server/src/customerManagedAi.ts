@@ -2,8 +2,8 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Runtime } from "./runtime.js";
 import { CustomerAccountStore, type CustomerAccount } from "./customerAccounts.js";
+import { CustomerManagedAiCoordinator } from "./customerManagedAiCoordinator.js";
 import {
-  gatewayKeyForSlug,
   listGatewayKeys,
   type GatewayKeyUsage,
 } from "./customerMetering.js";
@@ -60,6 +60,7 @@ export interface ManagedAiLifecycleOptions {
   config: ManagedAiConfig;
   provider: ManagedAiProviderClient | null;
   audit?: CustomerManagedAiAuditStore;
+  coordinator?: CustomerManagedAiCoordinator;
   now?: () => Date;
 }
 
@@ -174,43 +175,113 @@ export function createOpenRouterManagedAiClient(provisioningKey: string): Manage
 }
 
 export class CustomerManagedAiLifecycle {
-  private readonly inFlight = new Map<string, Promise<ManagedAiLifecycleOutcome>>();
   private readonly now: () => Date;
+  private readonly coordinator: CustomerManagedAiCoordinator;
+  private readonly ownsCoordinator: boolean;
 
   constructor(private readonly options: ManagedAiLifecycleOptions) {
     this.now = options.now ?? (() => new Date());
+    this.ownsCoordinator = options.coordinator === undefined;
+    this.coordinator = options.coordinator ?? new CustomerManagedAiCoordinator(
+      join(dirname(options.accounts.path), "customer-managed-ai-coordination.sqlite"),
+      () => this.now().getTime(),
+    );
   }
 
   ensureProvisioned(account: CustomerAccount): Promise<ManagedAiLifecycleOutcome> {
-    return this.serialized(account.account_id, () => this.ensureProvisionedOnce(account));
+    return this.reconcileDesired(account, true);
   }
 
   setSubscriptionAccess(account: CustomerAccount, enabled: boolean): Promise<ManagedAiLifecycleOutcome> {
-    return this.serialized(account.account_id, async () => {
-      if (!this.options.config.enabled || !this.options.provider) return this.outcome("disabled", account, false);
-      if (enabled && !account.managed_ai_key_hash) return this.ensureProvisionedOnce(account);
-      const current = this.options.accounts.get(account.session_id) ?? account;
-      const key = await this.resolveProviderKey(current);
-      if (!key?.hash) {
-        if (!enabled && !current.managed_ai_key_hash) {
-          return this.outcome("suspended", current, false, null);
-        }
-        this.record(current, "orphaned", { managed_ai_error_code: "managed_ai_key_missing" });
-        throw new Error("managed AI child key is missing");
-      }
-      const changed = key.disabled !== !enabled;
-      if (changed) {
-        await this.options.provider.updateKey(key.hash, { disabled: !enabled });
-      }
-      this.record(current, enabled ? "active" : "paused", {
-        managed_ai_key_hash: key.hash,
-        managed_ai_key_name: key.name,
-        managed_ai_limit_usd: key.limit ?? current.managed_ai_limit_usd,
-        managed_ai_error_code: null,
-        managed_ai_last_reconciled_at: this.timestamp(),
-      });
-      return this.outcome(enabled ? "enabled" : "suspended", current, changed, key.hash);
+    return this.reconcileDesired(account, enabled);
+  }
+
+  async setCapOverride(account: CustomerAccount, monthlyLimitUsd: number | null): Promise<ManagedAiLifecycleOutcome> {
+    if (monthlyLimitUsd !== null && (!Number.isFinite(monthlyLimitUsd) || monthlyLimitUsd <= 0)) {
+      throw new Error("managed AI cap override must be a positive number or null");
+    }
+    const updated = this.options.accounts.upsert(account.session_id, {
+      managed_ai_limit_override_usd: monthlyLimitUsd,
     });
+    const desired = this.coordinator.snapshot(account.account_id)?.desiredEnabled ??
+      (updated.subscription_status === "active" || updated.subscription_status === "past_due");
+    return this.reconcileDesired(updated, desired);
+  }
+
+  close(): void {
+    if (this.ownsCoordinator) this.coordinator.close();
+  }
+
+  private async reconcileDesired(
+    account: CustomerAccount,
+    desiredEnabled: boolean,
+  ): Promise<ManagedAiLifecycleOutcome> {
+    if (!this.options.config.enabled || !this.options.provider) return this.outcome("disabled", account, false);
+    this.coordinator.request(account.account_id, desiredEnabled);
+    const deadline = Date.now() + 15_000;
+    while (Date.now() <= deadline) {
+      const claimed = this.coordinator.claim(account.account_id);
+      if (!claimed) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        continue;
+      }
+      try {
+        let outcome: ManagedAiLifecycleOutcome = this.outcome("disabled", account, false);
+        while (true) {
+          const desired = this.coordinator.snapshot(account.account_id);
+          if (!desired) throw new Error("managed AI desired state disappeared");
+          const current = this.options.accounts.get(account.session_id) ?? account;
+          const heartbeat = setInterval(() => {
+            this.coordinator.renew(account.account_id);
+          }, 30_000);
+          heartbeat.unref?.();
+          try {
+            outcome = await this.applyDesiredOnce(current, desired.desiredEnabled);
+          } finally {
+            clearInterval(heartbeat);
+          }
+          if (!this.coordinator.owns(account.account_id)) {
+            throw new Error("managed AI reconciliation lease was lost");
+          }
+          const after = this.coordinator.snapshot(account.account_id);
+          if (!after || after.revision === desired.revision) return outcome;
+        }
+      } finally {
+        this.coordinator.release(account.account_id);
+      }
+    }
+    throw new Error("managed AI reconciliation lock timed out");
+  }
+
+  private async applyDesiredOnce(
+    account: CustomerAccount,
+    enabled: boolean,
+  ): Promise<ManagedAiLifecycleOutcome> {
+    // Re-enabling is also a full provider-policy reconciliation. A provider may
+    // disable a key at the cap or an operator may change its limit/reset policy;
+    // merely flipping disabled=false would leave the contract stale.
+    if (enabled) return this.ensureProvisionedOnce(account);
+    const current = this.options.accounts.get(account.session_id) ?? account;
+    const key = await this.resolveProviderKey(current);
+    if (!key?.hash) {
+      if (!enabled && !current.managed_ai_key_hash) {
+        return this.outcome("suspended", current, false, null);
+      }
+      this.record(current, "orphaned", { managed_ai_error_code: "managed_ai_key_missing" });
+      throw new Error("managed AI child key is missing");
+    }
+    const changed = key.disabled !== !enabled;
+    if (changed) {
+      await this.options.provider!.updateKey(key.hash, { disabled: !enabled });
+    }
+    this.record(current, enabled ? "active" : "paused", {
+      managed_ai_key_hash: key.hash,
+      managed_ai_key_name: key.name,
+      managed_ai_limit_usd: key.limit ?? current.managed_ai_limit_usd,
+      managed_ai_error_code: null,
+      managed_ai_last_reconciled_at: this.timestamp(),
+    });
+    return this.outcome(enabled ? "enabled" : "suspended", current, changed, key.hash);
   }
 
   private async ensureProvisionedOnce(account: CustomerAccount): Promise<ManagedAiLifecycleOutcome> {
@@ -220,6 +291,7 @@ export class CustomerManagedAiLifecycle {
     const runtime = this.options.runtimeForAccount(current);
     if (!runtime) throw new Error("managed AI tenant runtime is unavailable");
     const expectedName = `${KEY_PREFIX}${current.tenant_slug}`;
+    const monthlyLimitUsd = current.managed_ai_limit_override_usd ?? this.options.config.monthlyLimitUsd;
     const existingSecret = runtime.settings.get("openrouter_api_key");
     const existingProviderKey = await this.resolveProviderKey(current);
 
@@ -235,14 +307,14 @@ export class CustomerManagedAiLifecycle {
         return this.outcome("orphaned", current, false, existingProviderKey.hash);
       }
       const needsPatch =
-        existingProviderKey.limit !== this.options.config.monthlyLimitUsd ||
+        existingProviderKey.limit !== monthlyLimitUsd ||
         existingProviderKey.limit_reset !== "monthly" ||
         existingProviderKey.include_byok_in_limit !== true ||
         existingProviderKey.disabled;
       if (!existingProviderKey.hash) throw new Error("managed AI child key has no safe provider identifier");
       if (needsPatch) {
         await this.options.provider.updateKey(existingProviderKey.hash, {
-          limit: this.options.config.monthlyLimitUsd,
+          limit: monthlyLimitUsd,
           limitReset: "monthly",
           includeByokInLimit: true,
           disabled: false,
@@ -252,7 +324,7 @@ export class CustomerManagedAiLifecycle {
       this.record(current, "active", {
         managed_ai_key_hash: existingProviderKey.hash,
         managed_ai_key_name: expectedName,
-        managed_ai_limit_usd: this.options.config.monthlyLimitUsd,
+        managed_ai_limit_usd: monthlyLimitUsd,
         managed_ai_error_code: null,
         managed_ai_last_reconciled_at: this.timestamp(),
       });
@@ -269,12 +341,12 @@ export class CustomerManagedAiLifecycle {
 
     this.record(current, "provisioning", {
       managed_ai_key_name: expectedName,
-      managed_ai_limit_usd: this.options.config.monthlyLimitUsd,
+      managed_ai_limit_usd: monthlyLimitUsd,
       managed_ai_error_code: null,
     });
     const created = await this.options.provider.createKey({
       name: expectedName,
-      limit: this.options.config.monthlyLimitUsd,
+      limit: monthlyLimitUsd,
       limitReset: "monthly",
       includeByokInLimit: true,
     });
@@ -304,8 +376,7 @@ export class CustomerManagedAiLifecycle {
     if (!this.options.provider || !account.tenant_slug) return null;
     const keys = await this.options.provider.listKeys();
     if (account.managed_ai_key_hash) {
-      const exact = keys.find((key) => key.hash === account.managed_ai_key_hash);
-      if (exact) return exact;
+      return keys.find((key) => key.hash === account.managed_ai_key_hash) ?? null;
     }
     return keys.find((key) => key.slug === account.tenant_slug) ?? null;
   }
@@ -345,16 +416,6 @@ export class CustomerManagedAiLifecycle {
     return this.now().toISOString();
   }
 
-  private serialized(
-    accountId: string,
-    operation: () => Promise<ManagedAiLifecycleOutcome>,
-  ): Promise<ManagedAiLifecycleOutcome> {
-    const existing = this.inFlight.get(accountId);
-    if (existing) return existing;
-    const pending = operation().finally(() => this.inFlight.delete(accountId));
-    this.inFlight.set(accountId, pending);
-    return pending;
-  }
 }
 
 /** Read-only helper for diagnostics that need the existing OpenRouter list path. */
@@ -362,5 +423,9 @@ export async function managedAiKeyForAccount(
   provisioningKey: string,
   account: CustomerAccount,
 ): Promise<GatewayKeyUsage | null> {
-  return account.tenant_slug ? gatewayKeyForSlug(provisioningKey, account.tenant_slug) : null;
+  if (!account.tenant_slug) return null;
+  const keys = await listGatewayKeys(provisioningKey);
+  return account.managed_ai_key_hash
+    ? keys.find((key) => key.hash === account.managed_ai_key_hash) ?? null
+    : keys.find((key) => key.slug === account.tenant_slug) ?? null;
 }

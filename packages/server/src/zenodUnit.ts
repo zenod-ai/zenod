@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { HttpBindings } from "@hono/node-server";
+import { createHash, randomUUID } from "node:crypto";
 import { Hono, type MiddlewareHandler } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
@@ -27,6 +28,11 @@ import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
+import type {
+  ManagedAiAdmissionInput,
+  ManagedAiRawKind,
+  ManagedAiTerminalReceipt,
+} from "./customerManagedAiAdmission.js";
 import type { CustomerProductConfig } from "./customerBilling.js";
 import { readCustomerSession } from "./customerSession.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
@@ -240,6 +246,145 @@ export const ZENOD_LONG_TOOLS = {
   run_task: { pollTool: "get_task_result" },
 } as const;
 
+const HOSTED_MANAGED_SETTINGS_MUTATIONS = new Set([
+  "POST /api/settings/test-llm",
+  "PUT /api/executor/settings",
+  "POST /api/team/enable",
+  "PUT /api/phylax/config",
+  "PUT /api/whatsapp/settings",
+  "POST /api/whatsapp/pair",
+  "POST /api/whatsapp/disconnect",
+  "POST /api/whatsapp/reset-session",
+  "POST /api/token/regenerate",
+]);
+
+const HOSTED_MANAGED_SETTING_KEYS = new Set([
+  "provider",
+  "anthropic_api_key",
+  "openai_api_key",
+  "openrouter_api_key",
+  "groq_api_key",
+  "model_ask",
+  "model_classify",
+  "model_vision",
+  "model_max_steps",
+  "openai_long_transcription",
+  "long_transcription_provider",
+  "openrouter_transcription_model",
+  "whisper_model",
+]);
+
+export function hostedCapabilityViolation(method: string, path: string): "raw_usage" | "managed_settings" | null {
+  const normalizedMethod = method.toUpperCase();
+  if (path === "/api/usage" || path.startsWith("/api/usage/")) return "raw_usage";
+  return HOSTED_MANAGED_SETTINGS_MUTATIONS.has(`${normalizedMethod} ${path}`) ? "managed_settings" : null;
+}
+
+async function hostedSettingsBodyViolation(request: Request): Promise<boolean> {
+  if (request.method.toUpperCase() !== "PUT" || new URL(request.url).pathname !== "/api/settings") return false;
+  const body = await request.clone().json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  return Object.keys(body).some((key) => HOSTED_MANAGED_SETTING_KEYS.has(key));
+}
+
+const MANAGED_AI_HTTP_PATHS = new Set([
+  "/api/ask",
+  "/api/chat",
+  "/api/chat/stream",
+  "/api/chat/voice/transcribe",
+  "/api/store",
+  "/api/test/chat",
+  "/api/work",
+]);
+const MANAGED_AI_MCP_TOOLS = new Set([
+  "ask_brain",
+  "chat_with_zenod",
+  "ingest_memory",
+  "run_task",
+  "store_memory",
+  "task_brain",
+]);
+
+function managedAiMcpEnvelope(raw: Uint8Array): {
+  paid: boolean;
+  id: string | null;
+  kind: ManagedAiRawKind;
+  tool: string | null;
+} {
+  try {
+    const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as {
+      id?: unknown;
+      method?: unknown;
+      params?: { name?: unknown; arguments?: Record<string, unknown> };
+    };
+    const args = payload.params?.arguments;
+    const mime = typeof args?.mimeType === "string" ? args.mimeType : "";
+    return {
+      paid: payload.method === "tools/call" &&
+        typeof payload.params?.name === "string" &&
+        MANAGED_AI_MCP_TOOLS.has(payload.params.name),
+      id: typeof payload.id === "string" || typeof payload.id === "number" ? String(payload.id) : null,
+      kind: mime.startsWith("audio/") ? "audio" : mime.startsWith("image/") ? "image" : "text",
+      tool: typeof payload.params?.name === "string" ? payload.params.name : null,
+    };
+  } catch {
+    return { paid: false, id: null, kind: "text", tool: null };
+  }
+}
+
+function managedAiRawKind(
+  path: string,
+  contentType: string | null,
+  mcpKind: ManagedAiRawKind,
+  raw: Uint8Array,
+): ManagedAiRawKind {
+  if (path === "/mcp" || path.startsWith("/mcp/")) return mcpKind;
+  if (path.includes("voice") || contentType?.startsWith("audio/") || contentType?.includes("multipart/form-data")) {
+    return "audio";
+  }
+  if (contentType?.startsWith("image/")) return "image";
+  if (contentType?.includes("json")) {
+    const text = Buffer.from(raw).toString("utf8");
+    if (/"(?:mimeType|contentType|type)"\s*:\s*"image\//i.test(text)) return "image";
+    if (/"(?:mimeType|contentType|type)"\s*:\s*"audio\//i.test(text)) return "audio";
+  }
+  return "text";
+}
+
+function admissionIdempotencyKey(
+  request: Request,
+  tenantId: string,
+  mcpId: string | null,
+  raw: Uint8Array,
+): string {
+  const explicit = request.headers.get("idempotency-key") ?? request.headers.get("x-provider-message-id");
+  if (explicit?.trim()) return explicit.trim();
+  if (mcpId) {
+    return createHash("sha256")
+      .update(`${tenantId}\0mcp\0${mcpId}\0`)
+      .update(raw)
+      .digest("hex");
+  }
+  return randomUUID();
+}
+
+async function terminalReceipt(response: Response): Promise<ManagedAiTerminalReceipt> {
+  return {
+    state: response.ok ? "completed" : "failed",
+    statusCode: response.status,
+    contentType: response.headers.get("content-type"),
+    body: await response.clone().text(),
+    completedAt: new Date().toISOString(),
+  };
+}
+
+function responseFromReceipt(receipt: ManagedAiTerminalReceipt): Response {
+  return new Response(receipt.body, {
+    status: receipt.statusCode,
+    headers: receipt.contentType ? { "content-type": receipt.contentType } : undefined,
+  });
+}
+
 export function createZenodUnit(options: CreateZenodUnitOptions) {
   const env = options.env ?? process.env;
   const agent = options.agent ?? ZENOD_AGENT;
@@ -354,6 +499,62 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       product: options.customerProduct ?? options.customer?.product,
     },
   );
+  const dispatchManagedInput = async (input: ManagedAiAdmissionInput): Promise<Response> => {
+    const account = customer.accounts.resolveForTenantId(input.tenantId);
+    const token = account ? customer.tokenVault.get(account.account_id) : null;
+    const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
+    if (
+      !account ||
+      !token ||
+      !record ||
+      record.tenant.id !== input.tenantId ||
+      (record.status ?? "active") !== "active" ||
+      (account.subscription_status !== "active" && account.subscription_status !== "past_due")
+    ) {
+      return Response.json({ error: "managed Hosted tenant is unavailable" }, { status: 401 });
+    }
+    const storedUrl = new URL(input.path, "http://zenod.internal");
+    const targetPath = storedUrl.pathname === "/mcp"
+      ? `/mcp/${encodeURIComponent(token)}${storedUrl.search}`
+      : `${storedUrl.pathname}${storedUrl.search}`;
+    const headers = new Headers({
+      authorization: `Bearer ${token}`,
+      "idempotency-key": input.idempotencyKey,
+    });
+    if (input.contentType) headers.set("content-type", input.contentType);
+    if (storedUrl.pathname === "/mcp") headers.set("accept", "application/json, text/event-stream");
+    const bodyAllowed = input.method !== "GET" && input.method !== "HEAD";
+    return unit.app.fetch(new Request(`http://zenod.internal${targetPath}`, {
+      method: input.method,
+      headers,
+      ...(bodyAllowed ? { body: Buffer.from(input.raw) } : {}),
+    }));
+  };
+  const processManagedInput = async (input: ManagedAiAdmissionInput) => {
+    const response = await dispatchManagedInput(input);
+    return { value: response, receipt: await terminalReceipt(response) };
+  };
+  const resumeManagedAiAdmissions = async (): Promise<number> => customer.managedAiAdmissions.resume(
+    async (tenantId) => {
+      const account = customer.accounts.resolveForTenantId(tenantId);
+      return account
+        ? customer.usageForAccount(account)
+        : { percentageUsed: null, state: "unavailable", resetsAt: null };
+    },
+    processManagedInput,
+  );
+  const admissionResumeRaw = Number(env.ZENOD_MANAGED_AI_ADMISSION_RESUME_INTERVAL_MS);
+  const admissionResumeMs = Number.isFinite(admissionResumeRaw) && admissionResumeRaw > 0
+    ? admissionResumeRaw
+    : 30_000;
+  const admissionResumeTimer = env.ZENOD_MANAGED_AI_ENABLED === "1"
+    ? setInterval(() => {
+        void resumeManagedAiAdmissions().catch((error) => {
+          console.error("[managed-ai] admission resume failed:", error);
+        });
+      }, admissionResumeMs)
+    : null;
+  admissionResumeTimer?.unref?.();
   const app = new Hono<{ Bindings: HttpBindings }>();
   app.use("*", async (c, next) => {
     await next();
@@ -421,6 +622,52 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   });
   app.all("*", async (c) => {
     const session = readCustomerSession(c, env);
+    const authorization = c.req.header("authorization");
+    const directToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length).trim()
+      : null;
+    const pathToken = c.req.path.startsWith("/mcp/")
+      ? decodeURIComponent(c.req.path.slice("/mcp/".length).split("/")[0] ?? "")
+      : null;
+    const bearerRecord = directToken
+      ? await tenantStore.resolveTokenHash(hashToken(directToken))
+      : null;
+    const pathRecord = pathToken
+      ? await tenantStore.resolveTokenHash(hashToken(pathToken))
+      : null;
+    const credentialMismatch = Boolean(
+      bearerRecord && pathRecord && bearerRecord.tenant.id !== pathRecord.tenant.id,
+    );
+    const directRecord = bearerRecord ?? pathRecord;
+    if (c.req.method === "GET" && c.req.path.startsWith("/api/customer-managed-ai/jobs/") && directRecord) {
+      const account = customer.accounts.resolveForTenantId(directRecord.tenant.id);
+      const id = c.req.path.slice("/api/customer-managed-ai/jobs/".length);
+      const job = account?.tenant_id && (directRecord.status ?? "active") === "active"
+        ? customer.managedAiAdmissions.getForTenant(id, account.tenant_id)
+        : null;
+      return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
+    }
+    const hostedAccount = session
+      ? customer.accounts.resolveForUser(session.github_id)
+      : directRecord
+        ? customer.accounts.resolveForTenantId(directRecord.tenant.id)
+        : null;
+    const capabilityViolation = hostedAccount
+      ? hostedCapabilityViolation(c.req.method, c.req.path)
+      : null;
+    const managedSettingsBodyViolation = hostedAccount
+      ? await hostedSettingsBodyViolation(c.req.raw)
+      : false;
+    if (capabilityViolation || managedSettingsBodyViolation) {
+      return c.json({
+        error: "forbidden",
+        capability: capabilityViolation ?? "managed_settings",
+      }, 403);
+    }
+    let downstreamRequest = c.req.raw;
+    let admissionAccount = directRecord && !credentialMismatch && (directRecord.status ?? "active") === "active"
+      ? customer.accounts.resolveForTenantId(directRecord.tenant.id)
+      : null;
     if (session) {
       const forbidden =
         c.req.path === "/api/tenants" ||
@@ -432,8 +679,6 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         c.req.path.startsWith("/api/journeys") ||
         c.req.path.startsWith("/api/journey-steps") ||
         c.req.path.startsWith("/api/tasks") ||
-        (agent.name === "zenod" &&
-          (c.req.path === "/api/usage" || c.req.path.startsWith("/api/usage/"))) ||
         c.req.path === "/api/lane-secret" ||
         c.req.path.startsWith("/mcp") ||
         c.req.path === "/internal" ||
@@ -457,9 +702,55 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         }
         headers.set("authorization", `Bearer ${token}`);
       }
-      return unit.app.fetch(new Request(c.req.raw, { headers }), c.env);
+      downstreamRequest = new Request(c.req.raw, { headers });
+      admissionAccount = customer.accounts.resolveActiveTenantForUser(session.github_id);
     }
-    return unit.app.fetch(c.req.raw, c.env);
+    const isEntitledHosted = Boolean(
+      admissionAccount?.tenant_id &&
+      (admissionAccount.subscription_status === "active" || admissionAccount.subscription_status === "past_due"),
+    );
+    if (isEntitledHosted && !credentialMismatch) {
+      const raw = new Uint8Array(await downstreamRequest.clone().arrayBuffer());
+      const isMcp = c.req.path === "/mcp" || c.req.path.startsWith("/mcp/");
+      const mcp = isMcp ? managedAiMcpEnvelope(raw) : { paid: false, id: null, kind: "text" as const, tool: null };
+      const profiledMcpAllowed = !directRecord?.profile ||
+        (directRecord.profile === "memory-channel" && mcp.tool !== null &&
+          (MEMORY_CHANNEL_MCP_TOOLS as readonly string[]).includes(mcp.tool));
+      const paid = (isMcp ? mcp.paid && profiledMcpAllowed : MANAGED_AI_HTTP_PATHS.has(c.req.path));
+      if (paid) {
+        const requestUrl = new URL(c.req.url);
+        const storedPath = `${isMcp ? "/mcp" : requestUrl.pathname}${requestUrl.search}`;
+        const input: ManagedAiAdmissionInput = {
+          tenantId: admissionAccount!.tenant_id!,
+          idempotencyKey: admissionIdempotencyKey(c.req.raw, admissionAccount!.tenant_id!, mcp.id, raw),
+          kind: managedAiRawKind(storedPath, c.req.header("content-type") ?? null, mcp.kind, raw),
+          method: c.req.method,
+          path: storedPath,
+          contentType: c.req.header("content-type") ?? null,
+          raw,
+        };
+        const outcome = await customer.managedAiAdmissions.submit(
+          input,
+          await customer.usageForAccount(admissionAccount!),
+          processManagedInput,
+        );
+        if (outcome.state === "processed") return outcome.value;
+        if (outcome.state === "replayed" || outcome.state === "failed") {
+          return responseFromReceipt(outcome.receipt);
+        }
+        return c.json({
+          state: outcome.state,
+          job: {
+            id: outcome.job.id,
+            status: outcome.job.status,
+            kind: outcome.job.kind,
+            resetsAt: outcome.job.resetsAt,
+          },
+          poll: `/api/customer-managed-ai/jobs/${outcome.job.id}`,
+        }, 202);
+      }
+    }
+    return unit.app.fetch(downstreamRequest, c.env);
   });
   return {
     ...unit,
@@ -469,11 +760,16 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     tenantStore,
     customerAccounts: customer.accounts,
     customerTokenVault: customer.tokenVault,
+    resumeManagedAiAdmissions,
     async close() {
       const failures: unknown[] = [];
       for (
         const result of await Promise.allSettled([
           Promise.resolve().then(() => options.customerAdmin?.close?.()),
+          Promise.resolve().then(() => {
+            if (admissionResumeTimer) clearInterval(admissionResumeTimer);
+          }),
+          Promise.resolve().then(() => customer.close()),
           runtimes.close(),
         ])
       ) {

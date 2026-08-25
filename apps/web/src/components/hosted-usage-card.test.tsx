@@ -34,9 +34,8 @@ describe("HostedUsageCard", () => {
     )
 
     expect(screen.getByText("Usage temporarily unavailable")).not.toBeNull()
-    expect(
-      screen.getByText(/stays paused until usage is available again/i)
-    ).not.toBeNull()
+    expect(screen.getByText(/processing waits safely/i)).not.toBeNull()
+    expect(screen.queryByText(/processing paused/i)).toBeNull()
     expect(screen.queryByRole("progressbar")).toBeNull()
   })
 
@@ -53,5 +52,16 @@ describe("HostedUsageCard", () => {
 
     expect(screen.getByText("Managed processing paused")).not.toBeNull()
     expect(screen.getByText(/raw evidence remains safe/i)).not.toBeNull()
+  })
+
+  it("does not promise a reset when managed access has no provider reset timestamp", () => {
+    render(
+      <HostedUsageCard
+        usage={{ percentageUsed: 100, state: "paused", resetsAt: null }}
+      />
+    )
+
+    expect(screen.getByText(/resumes when managed access is restored/i)).not.toBeNull()
+    expect(screen.queryByText(/resumes after the reset/i)).toBeNull()
   })
 })

@@ -40,6 +40,7 @@ describe("hosted customer layer", () => {
   let createdParams: Stripe.Checkout.SessionCreateParams | null;
   let completed: string[];
   let session: Stripe.Checkout.Session;
+  let authoritativeSubscription: Stripe.Subscription;
   let stripe: CustomerStripeClient;
   let env: NodeJS.ProcessEnv;
 
@@ -50,6 +51,15 @@ describe("hosted customer layer", () => {
     createdParams = null;
     completed = [];
     session = checkoutSession();
+    authoritativeSubscription = {
+      id: "sub_test_customer",
+      object: "subscription",
+      customer: "cus_test_customer",
+      status: "active",
+      cancel_at_period_end: false,
+      current_period_end: 1_800_000_000,
+      metadata: { account_id: customerAccountId(42) },
+    } as Stripe.Subscription;
     stripe = {
       checkout: {
         sessions: {
@@ -75,6 +85,9 @@ describe("hosted customer layer", () => {
             url: "https://billing.stripe.test/session",
           }) as Stripe.BillingPortal.Session),
         },
+      },
+      subscriptions: {
+        retrieve: vi.fn(async () => authoritativeSubscription),
       },
       webhooks: {
         constructEvent: vi.fn(
@@ -358,6 +371,8 @@ describe("hosted customer layer", () => {
           hash: "managed-hash",
           limit: input.limit,
           usage: 0.33,
+          usage_monthly: 0.33,
+          byok_usage_monthly: 0,
           limit_remaining: 1.67,
           disabled: false,
           limit_reset: input.limitReset,
@@ -460,6 +475,7 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: subscription("past_due", true) },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("past_due", true);
     const pastDue = await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
@@ -479,6 +495,7 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: invoice },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("active");
     const paid = await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
@@ -491,6 +508,7 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: subscription("canceled") },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("canceled");
     const canceled = await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
@@ -504,6 +522,7 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: invoice },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("canceled");
     const terminalInvoice = await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
@@ -516,12 +535,72 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: subscription("active") },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("active");
     await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
       body: "{}",
     });
     expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("active");
+  });
+
+  it("uses authoritative Stripe state for webhook and periodic entitlement reconciliation", async () => {
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+      },
+    );
+    try {
+      const cookie = await signInCookie(layer.app);
+      await layer.app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "monthly" }),
+      });
+      await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+
+      const staleDelivered = {
+        ...authoritativeSubscription,
+        status: "active",
+      } as Stripe.Subscription;
+      authoritativeSubscription = {
+        ...authoritativeSubscription,
+        status: "past_due",
+      } as Stripe.Subscription;
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type: "customer.subscription.updated",
+        livemode: false,
+        data: { object: staleDelivered },
+      } as Stripe.Event);
+      const webhook = await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+      expect(await webhook.json()).toEqual({ received: true, result: "past_due" });
+      expect(layer.accounts.resolveForSubscription("sub_test_customer")?.subscription_status).toBe("past_due");
+
+      authoritativeSubscription = {
+        ...authoritativeSubscription,
+        status: "canceled",
+      } as Stripe.Subscription;
+      await layer.reconcileManagedAiAccounts();
+      expect(layer.accounts.resolveForSubscription("sub_test_customer")?.subscription_status).toBe("canceled");
+      expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("suspended");
+    } finally {
+      layer.close();
+    }
   });
 
   it("leaves existing pilot tenant rows untouched", async () => {

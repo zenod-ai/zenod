@@ -11,7 +11,7 @@ import {
   hashToken,
   type UnitContext,
 } from "@zenod/mcp-chassis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createZenodUnit,
   MEMORY_CHANNEL_MCP_TOOLS,
@@ -19,6 +19,7 @@ import {
   ZenodRuntimePool,
 } from "../src/zenodUnit.js";
 import { PeerSkillStore } from "../src/peerSkillStore.js";
+import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
 
 const tempDirs: string[] = [];
 const CHASSIS_VAULT_MASTER_KEY = "11".repeat(32);
@@ -309,6 +310,7 @@ describe("Zenod chassis unit", () => {
     const tenants = createMemoryTenantStore([
       { token: "customer-token", tenant: { id: "github-42" } },
       { token: "other-token", tenant: { id: "github-99" } },
+      { token: "selfhost-token", tenant: { id: "self-host" } },
     ]);
     const env = {
       NODE_ENV: "test",
@@ -355,6 +357,36 @@ describe("Zenod chassis unit", () => {
       unit.customerTokenVault.put("github-99", "other-token");
       const cookie = await signInCustomer(unit);
 
+      const bearerRawUsage = await unit.app.request("/api/usage", {
+        headers: { authorization: "Bearer customer-token" },
+      });
+      expect(bearerRawUsage.status).toBe(403);
+      expect(await bearerRawUsage.json()).toEqual({ error: "forbidden", capability: "raw_usage" });
+      const bearerManagedMutation = await unit.app.request("/api/settings", {
+        method: "PUT",
+        headers: { authorization: "Bearer customer-token", "content-type": "application/json" },
+        body: JSON.stringify({ openrouter_api_key: "must-not-change" }),
+      });
+      expect(bearerManagedMutation.status).toBe(403);
+      expect(await bearerManagedMutation.json()).toEqual({ error: "forbidden", capability: "managed_settings" });
+      expect((await unit.app.request("/api/usage", {
+        headers: { authorization: "Bearer selfhost-token" },
+      })).status).toBe(200);
+      expect((await unit.app.request("/api/settings", {
+        method: "PUT",
+        headers: { authorization: "Bearer selfhost-token", "content-type": "application/json" },
+        body: JSON.stringify({ openrouter_api_key: "self-host-managed" }),
+      })).status).toBe(200);
+      expect(unit.runtimes.get("self-host")!.settings.get("openrouter_api_key")).toBe("self-host-managed");
+      expect((await unit.app.request("/api/settings", {
+        headers: { authorization: "Bearer customer-token" },
+      })).status).toBe(200);
+      expect((await unit.app.request("/api/telegram/settings", {
+        method: "PUT",
+        headers: { authorization: "Bearer customer-token", "content-type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      })).status).toBe(200);
+
       const start = await unit.app.request("/api/github/app/start", { headers: { cookie } });
       expect(start.status).toBe(200);
       const startBody = await start.json() as { url: string };
@@ -371,13 +403,19 @@ describe("Zenod chassis unit", () => {
       });
       expect(update.status).toBe(200);
       expect(await update.json()).toMatchObject({ settings: { vault_repo: "owner/customer-vault" } });
-      expect(unit.runtimes.get("github-42")).not.toBeNull();
+      const managedUpdate = await unit.app.request("/api/settings", {
+        method: "PUT",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ openrouter_api_key: "must-not-change" }),
+      });
+      expect(managedUpdate.status).toBe(403);
+      expect(await managedUpdate.json()).toEqual({ error: "forbidden", capability: "managed_settings" });
+      expect(unit.runtimes.get("github-42")!.settings.get("openrouter_api_key")).toBeNull();
       expect(unit.runtimes.get("github-99")).toBeNull();
-      expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_id")).toBe("3718758");
 
       const rawUsage = await unit.app.request("/api/usage", { headers: { cookie } });
       expect(rawUsage.status).toBe(403);
-      expect(await rawUsage.json()).toEqual({ error: "forbidden" });
+      expect(await rawUsage.json()).toEqual({ error: "forbidden", capability: "raw_usage" });
       const customerUsage = await unit.app.request("/api/customer-usage", { headers: { cookie } });
       expect(customerUsage.status).toBe(200);
       expect(await customerUsage.json()).toEqual({
@@ -396,6 +434,7 @@ describe("Zenod chassis unit", () => {
       const finish = await unit.app.request(setupLocation, { headers: { cookie } });
       expect(finish.status).toBe(302);
       expect(finish.headers.get("location")).toBe("/app?github=connected");
+      expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_id")).toBe("3718758");
       expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_installation_id")).toBe("4242");
 
       const selectRepo = await unit.app.request("/api/vault/repository", {
@@ -488,6 +527,129 @@ describe("Zenod chassis unit", () => {
       expect((await unit.app.request("/api/settings", { headers: { cookie } })).status).toBe(401);
     } finally {
       unit.close();
+    }
+  });
+
+  it("admits Hosted text, audio, and image evidence at the cap and resumes each job idempotently", async () => {
+    const dataDir = await tempDir();
+    const tenants = createMemoryTenantStore([{ token: "hosted-token", tenant: { id: "github-42" } }]);
+    let atCap = true;
+    const provider: ManagedAiProviderClient = {
+      listKeys: vi.fn(async () => [{
+        name: "zenod-tenant:octocat-42",
+        slug: "octocat-42",
+        hash: "hosted-key-hash",
+        limit: 2,
+        usage: atCap ? 2 : 0.25,
+        usage_monthly: atCap ? 2 : 0.25,
+        byok_usage_monthly: 0,
+        limit_remaining: atCap ? 0 : 1.75,
+        disabled: false,
+        limit_reset: "monthly",
+        include_byok_in_limit: true,
+        reset_at: "2026-08-01T00:00:00.000Z",
+      }]),
+      createKey: vi.fn(async () => { throw new Error("must not provision in admission test"); }),
+      updateKey: vi.fn(async () => undefined),
+    };
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: tenants,
+      env: {
+        NODE_ENV: "test",
+        ACCOUNT_STATE_SECRET: "customer-session-secret",
+        GITHUB_OAUTH_CLIENT_ID: "client-id",
+        GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+        CHASSIS_VAULT_MASTER_KEY,
+        ZENOD_MANAGED_AI_ENABLED: "1",
+        OPENROUTER_PROVISIONING_KEY: "provider-management-key",
+        ZENOD_MANAGED_AI_ADMISSION_RESUME_INTERVAL_MS: "600000",
+      },
+      customer: {
+        managedAiProvider: provider,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: null }),
+        },
+      },
+      appOptionsForTenant: () => ({
+        chatInterceptor: async () => ({ handled: true, text: "managed reply" }),
+      }),
+    });
+    try {
+      unit.customerAccounts.upsert("active", {
+        account_id: "github-42",
+        github_id: 42,
+        github_login: "octocat",
+        tier: "monthly",
+        subscription_status: "active",
+        tenant_id: "github-42",
+        tenant_slug: "octocat-42",
+        managed_ai_key_hash: "hosted-key-hash",
+        checkout_completed_at: new Date().toISOString(),
+      });
+      unit.customerTokenVault.put("github-42", "hosted-token");
+      const cookie = await signInCustomer(unit);
+      const submit = async (path: string, idempotencyKey: string, contentType: string, body: BodyInit) => {
+        const response = await unit.app.request(path, {
+          method: "POST",
+          headers: { cookie, "idempotency-key": idempotencyKey, "content-type": contentType },
+          body,
+        });
+        expect(response.status).toBe(202);
+        return response.json() as Promise<{ state: string; job: { id: string; kind: string; status: string } }>;
+      };
+      const text = await submit(
+        "/api/chat",
+        "text-provider-message",
+        "application/json",
+        JSON.stringify({ message: "remember this" }),
+      );
+      const audio = await submit(
+        "/api/chat/voice/transcribe",
+        "audio-provider-message",
+        "audio/webm",
+        Buffer.from("raw-audio"),
+      );
+      const image = await submit(
+        "/api/chat",
+        "image-provider-message",
+        "application/json",
+        JSON.stringify({ message: "file this", attachment: { mimeType: "image/png", data: "raw-image" } }),
+      );
+      expect([text.job.kind, audio.job.kind, image.job.kind]).toEqual(["text", "audio", "image"]);
+      expect(text).toMatchObject({ state: "paused_at_cap", job: { status: "paused_at_cap" } });
+
+      const duplicate = await submit(
+        "/api/chat",
+        "text-provider-message",
+        "application/json",
+        JSON.stringify({ message: "remember this" }),
+      );
+      expect(duplicate.job.id).toBe(text.job.id);
+      const pausedJob = await unit.app.request(`/api/customer-managed-ai/jobs/${text.job.id}`, { headers: { cookie } });
+      expect(await pausedJob.json()).toMatchObject({ job: { id: text.job.id, terminalReceipt: null } });
+      const bearerPausedJob = await unit.app.request(`/api/customer-managed-ai/jobs/${text.job.id}`, {
+        headers: { authorization: "Bearer hosted-token" },
+      });
+      expect(await bearerPausedJob.json()).toMatchObject({ job: { id: text.job.id, terminalReceipt: null } });
+
+      atCap = false;
+      expect(await unit.resumeManagedAiAdmissions()).toBe(3);
+      const textJob = await unit.app.request(`/api/customer-managed-ai/jobs/${text.job.id}`, { headers: { cookie } });
+      const audioJob = await unit.app.request(`/api/customer-managed-ai/jobs/${audio.job.id}`, { headers: { cookie } });
+      expect(await textJob.json()).toMatchObject({ job: { status: "done", attempts: 1, terminalReceipt: { state: "completed" } } });
+      expect(await audioJob.json()).toMatchObject({ job: { status: "error", attempts: 1, terminalReceipt: { state: "failed" } } });
+
+      const replay = await unit.app.request("/api/chat", {
+        method: "POST",
+        headers: { cookie, "idempotency-key": "text-provider-message", "content-type": "application/json" },
+        body: JSON.stringify({ message: "remember this" }),
+      });
+      expect(replay.status).toBe(200);
+      expect(await replay.json()).toMatchObject({ text: "managed reply" });
+    } finally {
+      await unit.close();
     }
   });
 

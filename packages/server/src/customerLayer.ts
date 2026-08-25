@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import type { Runtime } from "./runtime.js";
@@ -23,6 +24,7 @@ import {
   loadManagedAiConfig,
   type ManagedAiProviderClient,
 } from "./customerManagedAi.js";
+import { CustomerManagedAiAdmissionQueue } from "./customerManagedAiAdmission.js";
 import { clearCustomerSession, issueCustomerSession, readCustomerSession } from "./customerSession.js";
 import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
@@ -133,27 +135,88 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     provider: managedAiProvider,
     audit: new CustomerManagedAiAuditStore(host.dataDir),
   });
+  const managedAiAdmissions = new CustomerManagedAiAdmissionQueue(
+    join(host.dataDir, "customer-managed-ai-admission.sqlite"),
+  );
   const onCheckoutCompleted = async (account: CustomerAccount, session: Stripe.Checkout.Session) => {
     await bindCheckout(account, session);
-    const bound = accounts.get(account.session_id);
-    if (!bound) throw new Error("checkout account disappeared after tenant binding");
-    const managedOutcome = await managedAi.ensureProvisioned(bound);
-    if (managedOutcome.state === "orphaned") throw new Error("managed AI child key requires operator recovery");
   };
+  const reconcileEntitlement = async (account: CustomerAccount | null): Promise<CustomerAccount | null> => {
+    if (!account?.tenant_id || account.subscription_status === "checkout_pending" || account.subscription_status === null) {
+      return account;
+    }
+    const entitled = account.subscription_status === "active" || account.subscription_status === "past_due";
+    if (options.tenantStore) {
+      await options.tenantStore.setTenantStatus(account.tenant_id, entitled ? "active" : "suspended");
+    }
+    const managedOutcome = await managedAi.setSubscriptionAccess(account, entitled);
+    if (managedOutcome.state === "orphaned") throw new Error("managed AI child key requires operator recovery");
+    return accounts.get(account.session_id) ?? account;
+  };
+  const refreshAuthoritativeSubscription = async (
+    account: CustomerAccount | null,
+    subscriptionId?: string | null,
+  ): Promise<CustomerAccount | null> => {
+    const id = subscriptionId ?? account?.stripe_subscription_id ?? null;
+    if (!id) return account;
+    if (!stripe?.subscriptions) {
+      if (product.product !== "zenod") return account;
+      throw new Error("authoritative Stripe subscription retrieval is unavailable");
+    }
+    return applyCustomerSubscriptionEvent(accounts, await stripe.subscriptions.retrieve(id));
+  };
+  const reconcileBillingEntitlement = async (
+    account: CustomerAccount | null,
+    subscriptionId?: string | null,
+  ): Promise<CustomerAccount | null> => reconcileEntitlement(
+    await refreshAuthoritativeSubscription(account, subscriptionId),
+  );
   const usageForAccount = async (account: CustomerAccount) => {
     if (!managedAiProvider || !account.tenant_slug) {
       return projectCustomerUsage(null, managedAiConfig.warnPercent);
     }
     try {
       const keys = await managedAiProvider.listKeys();
+      const key = account.managed_ai_key_hash
+        ? keys.find((candidate) => candidate.hash === account.managed_ai_key_hash) ?? null
+        : keys.find((candidate) => candidate.slug === account.tenant_slug) ?? null;
       return projectCustomerUsage(
-        keys.find((key) => key.slug === account.tenant_slug) ?? null,
+        key,
         managedAiConfig.warnPercent,
       );
     } catch {
       return projectCustomerUsage(null, managedAiConfig.warnPercent);
     }
   };
+  const reconcileManagedAiAccounts = async (): Promise<void> => {
+    const failures: unknown[] = [];
+    for (const account of accounts.list()) {
+      if (!account.tenant_id || account.subscription_status === null || account.subscription_status === "checkout_pending") {
+        continue;
+      }
+      try {
+        const authoritative = account.stripe_subscription_id && stripe?.subscriptions
+          ? await refreshAuthoritativeSubscription(account)
+          : account;
+        await reconcileEntitlement(authoritative);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, "managed AI periodic reconciliation failed");
+  };
+  const reconcileIntervalRaw = Number(env.ZENOD_MANAGED_AI_RECONCILE_INTERVAL_MS);
+  const reconcileIntervalMs = Number.isFinite(reconcileIntervalRaw) && reconcileIntervalRaw > 0
+    ? reconcileIntervalRaw
+    : 5 * 60_000;
+  const reconcileTimer = managedAiProvider
+    ? setInterval(() => {
+        void reconcileManagedAiAccounts().catch((error) => {
+          console.error("[managed-ai] periodic reconciliation failed:", error);
+        });
+      }, reconcileIntervalMs)
+    : null;
+  reconcileTimer?.unref?.();
   const app = new Hono<{ Bindings: HttpBindings }>();
 
   app.get("/api/public/production-readiness", (c) => {
@@ -320,6 +383,17 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     return c.json(await usageForAccount(account));
   });
 
+  app.get("/api/customer-managed-ai/jobs/:id", async (c, next) => {
+    const session = readCustomerSession(c, env);
+    // Bearer-authenticated channel/MCP callers are resolved by the Zenod unit,
+    // which owns the tenant token store. Cookie customers stay on this seam.
+    if (!session) return next();
+    const account = accounts.resolveActiveTenantForUser(session.github_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const job = managedAiAdmissions.getForTenant(c.req.param("id"), account.tenant_id);
+    return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
+  });
+
   app.post("/api/token/regenerate", async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
@@ -408,6 +482,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       return c.text("Checkout is not complete.", 409);
     }
     await completeCustomerCheckout(session, accounts, onCheckoutCompleted, product.product);
+    const subscriptionId = typeof session.subscription === "string"
+      ? session.subscription
+      : session.subscription?.id;
+    await reconcileBillingEntitlement(accounts.get(session.id), subscriptionId);
     return c.redirect(`${customerDestination(env, product.defaultDomain)}/app`, 303);
   });
 
@@ -433,28 +511,17 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const subscriptionId = typeof session.subscription === "string"
         ? session.subscription
         : session.subscription?.id;
-      if (result === "completed" && subscriptionId && stripe.subscriptions) {
-        applyCustomerSubscriptionEvent(accounts, await stripe.subscriptions.retrieve(subscriptionId));
-      }
+      await reconcileBillingEntitlement(accounts.get(session.id), subscriptionId);
       return c.json({ received: true, result });
     }
     if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
       const delivered = event.data.object as Stripe.Subscription;
-      const current = stripe.subscriptions ? await stripe.subscriptions.retrieve(delivered.id) : delivered;
-      const account = applyCustomerSubscriptionEvent(accounts, current);
-      if (account?.tenant_id && options.tenantStore) {
-        if (account.subscription_status === "active") {
-          await options.tenantStore.setTenantStatus(account.tenant_id, "active");
-        } else if (account.subscription_status === "canceled" || account.subscription_status === "paused") {
-          await options.tenantStore.setTenantStatus(account.tenant_id, "suspended");
-        }
-      }
-      if (account) {
-        await managedAi.setSubscriptionAccess(
-          account,
-          account.subscription_status === "active" || account.subscription_status === "past_due",
-        );
-      }
+      const existing = accounts.resolveForSubscription(delivered.id) ??
+        accounts.resolveForAccountId(delivered.metadata.account_id ?? "");
+      const account = !stripe.subscriptions && product.product !== "zenod"
+        ? applyCustomerSubscriptionEvent(accounts, delivered)
+        : await refreshAuthoritativeSubscription(existing, delivered.id);
+      await reconcileEntitlement(account);
       return c.json({ received: true, result: account ? account.subscription_status : "unmatched" });
     }
     if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
@@ -462,17 +529,30 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const subscriptionId = typeof invoice.subscription === "string"
         ? invoice.subscription
         : invoice.subscription?.id;
-      const account = subscriptionId && stripe.subscriptions
-        ? applyCustomerSubscriptionEvent(accounts, await stripe.subscriptions.retrieve(subscriptionId))
-        : applyCustomerInvoiceEvent(accounts, invoice, event.type === "invoice.paid");
-      if (account?.tenant_id && account.subscription_status === "active" && options.tenantStore) {
-        await options.tenantStore.setTenantStatus(account.tenant_id, "active");
-      }
-      if (account?.subscription_status === "active") await managedAi.setSubscriptionAccess(account, true);
+      const account = subscriptionId && (!stripe.subscriptions && product.product !== "zenod")
+        ? applyCustomerInvoiceEvent(accounts, invoice, event.type === "invoice.paid")
+        : subscriptionId
+          ? await refreshAuthoritativeSubscription(accounts.resolveForSubscription(subscriptionId), subscriptionId)
+          : null;
+      await reconcileEntitlement(account);
       return c.json({ received: true, result: account ? account.subscription_status : "unmatched" });
     }
     return c.json({ received: true, result: "ignored" });
   });
 
-  return { app, accounts, tokenVault, managedAi };
+  return {
+    app,
+    accounts,
+    tokenVault,
+    managedAi,
+    usageForAccount,
+    managedAiAdmissions,
+    reconcileEntitlement,
+    reconcileManagedAiAccounts,
+    close() {
+      if (reconcileTimer) clearInterval(reconcileTimer);
+      managedAiAdmissions.close();
+      managedAi.close();
+    },
+  };
 }

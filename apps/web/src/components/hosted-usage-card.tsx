@@ -27,7 +27,13 @@ function resetLabel(value: string | null): string {
     : `Resets ${date.toLocaleDateString()}`
 }
 
-export function HostedUsageCard({ usage }: { usage: HostedCustomerUsage }) {
+export function HostedUsageCard({
+  usage,
+  compact = false,
+}: {
+  usage: HostedCustomerUsage
+  compact?: boolean
+}) {
   const percentage =
     usage.percentageUsed === null
       ? null
@@ -42,8 +48,8 @@ export function HostedUsageCard({ usage }: { usage: HostedCustomerUsage }) {
       <CardContent className="space-y-3">
         {percentage === null ? (
           <p className="text-sm text-muted-foreground">
-            Zenod cannot verify your included usage right now. Managed
-            processing stays paused until usage is available again.
+            Zenod cannot verify your included usage right now. New managed
+            processing waits safely until usage can be verified.
           </p>
         ) : (
           <>
@@ -66,10 +72,11 @@ export function HostedUsageCard({ usage }: { usage: HostedCustomerUsage }) {
         <p className="text-sm text-muted-foreground">
           {resetLabel(usage.resetsAt)}
         </p>
-        {usage.state === "paused" ? (
+        {usage.state === "paused" && !compact ? (
           <p className="text-sm text-muted-foreground">
-            Your raw evidence remains safe. Paid AI processing resumes after the
-            reset.
+            {usage.resetsAt
+              ? "Your raw evidence remains safe. Paid AI processing resumes after the reset."
+              : "Your raw evidence remains safe. Processing resumes when managed access is restored."}
           </p>
         ) : null}
       </CardContent>

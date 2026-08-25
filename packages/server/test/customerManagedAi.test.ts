@@ -57,6 +57,8 @@ function providerHarness() {
         hash: "hash-42",
         limit: input.limit,
         usage: 0,
+        usage_monthly: 0,
+        byok_usage_monthly: 0,
         limit_remaining: input.limit,
         disabled: false,
         limit_reset: input.limitReset,
@@ -114,7 +116,7 @@ describe("managed Hosted AI lifecycle", () => {
     const reconciled = await lifecycle.ensureProvisioned(customer);
 
     expect(first).toMatchObject({ state: "provisioned", keyHash: "hash-42", changed: true });
-    expect(concurrent).toEqual(first);
+    expect(concurrent).toMatchObject({ state: "already_provisioned", keyHash: "hash-42", changed: false });
     expect(retry).toMatchObject({ state: "already_provisioned", keyHash: "hash-42", changed: false });
     expect(reconciled).toMatchObject({ state: "already_provisioned", keyHash: "hash-42", changed: true });
     expect(harness.creates).toEqual([{
@@ -165,7 +167,10 @@ describe("managed Hosted AI lifecycle", () => {
     expect((await lifecycle.setSubscriptionAccess(accounts.get(customer.session_id)!, false)).changed).toBe(true);
     expect((await lifecycle.setSubscriptionAccess(accounts.get(customer.session_id)!, false)).changed).toBe(false);
     expect((await lifecycle.setSubscriptionAccess(accounts.get(customer.session_id)!, true)).changed).toBe(true);
-    expect(harness.updates.map((entry) => entry.input)).toEqual([{ disabled: true }, { disabled: false }]);
+    expect(harness.updates.map((entry) => entry.input)).toEqual([
+      { disabled: true },
+      { limit: 2, limitReset: "monthly", includeByokInLimit: true, disabled: false },
+    ]);
     expect(accounts.get(customer.session_id)?.managed_ai_status).toBe("active");
   });
 
@@ -204,6 +209,8 @@ describe("managed Hosted AI lifecycle", () => {
       hash: "existing-hash",
       limit: 2,
       usage: 0,
+      usage_monthly: 0,
+      byok_usage_monthly: 0,
       limit_remaining: 2,
       disabled: false,
       limit_reset: "monthly",
@@ -225,6 +232,117 @@ describe("managed Hosted AI lifecycle", () => {
       managed_ai_key_hash: "existing-hash",
     });
   });
+
+  it("serializes provisioning across lifecycle instances that share the durable coordinator", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-managed-ai-"));
+    dirs.push(dir);
+    const runtime = new Runtime(dir);
+    runtimes.push(runtime);
+    const accounts = new CustomerAccountStore(dir);
+    const customer = account(accounts);
+    const harness = providerHarness();
+    const options = {
+      accounts,
+      runtimeForAccount: () => runtime,
+      config: { enabled: true, provisioningKey: "provisioning", monthlyLimitUsd: 2, warnPercent: 80 },
+      provider: harness.provider,
+    } as const;
+    const first = new CustomerManagedAiLifecycle(options);
+    const second = new CustomerManagedAiLifecycle(options);
+    try {
+      const outcomes = await Promise.all([
+        first.ensureProvisioned(customer),
+        second.ensureProvisioned(customer),
+      ]);
+      expect(harness.creates).toHaveLength(1);
+      expect(outcomes.map((outcome) => outcome.state).sort()).toEqual(["already_provisioned", "provisioned"]);
+    } finally {
+      first.close();
+      second.close();
+    }
+  });
+
+  it("converges opposing cross-process subscription operations to the newest desired state", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-managed-ai-"));
+    dirs.push(dir);
+    const runtime = new Runtime(dir);
+    runtimes.push(runtime);
+    const accounts = new CustomerAccountStore(dir);
+    const customer = account(accounts);
+    const harness = providerHarness();
+    let releaseDisable!: () => void;
+    const disableGate = new Promise<void>((resolve) => { releaseDisable = resolve; });
+    const originalUpdate = harness.provider.updateKey.bind(harness.provider);
+    harness.provider.updateKey = vi.fn(async (hash, input) => {
+      if (input.disabled === true) await disableGate;
+      await originalUpdate(hash, input);
+    });
+    const options = {
+      accounts,
+      runtimeForAccount: () => runtime,
+      config: { enabled: true, provisioningKey: "provisioning", monthlyLimitUsd: 2, warnPercent: 80 },
+      provider: harness.provider,
+    } as const;
+    const first = new CustomerManagedAiLifecycle(options);
+    const second = new CustomerManagedAiLifecycle(options);
+    try {
+      await first.ensureProvisioned(customer);
+      const disable = first.setSubscriptionAccess(accounts.get(customer.session_id)!, false);
+      await vi.waitFor(() => expect(harness.provider.updateKey).toHaveBeenCalledWith("hash-42", { disabled: true }));
+      const enable = second.setSubscriptionAccess(accounts.get(customer.session_id)!, true);
+      releaseDisable();
+      await Promise.all([disable, enable]);
+      expect(harness.keys[0]).toMatchObject({ disabled: false, limit: 2, limit_reset: "monthly" });
+      expect(accounts.get(customer.session_id)?.managed_ai_status).toBe("active");
+    } finally {
+      first.close();
+      second.close();
+    }
+  });
+
+  it("applies a private cap override safely and never falls back from a stored hash to a slug collision", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-managed-ai-"));
+    dirs.push(dir);
+    const runtime = new Runtime(dir);
+    runtimes.push(runtime);
+    const accounts = new CustomerAccountStore(dir);
+    const customer = account(accounts);
+    const harness = providerHarness();
+    const lifecycle = new CustomerManagedAiLifecycle({
+      accounts,
+      runtimeForAccount: () => runtime,
+      config: { enabled: true, provisioningKey: "provisioning", monthlyLimitUsd: 2, warnPercent: 80 },
+      provider: harness.provider,
+    });
+    try {
+      await lifecycle.ensureProvisioned(customer);
+      await lifecycle.setCapOverride(accounts.get(customer.session_id)!, 5);
+      expect(harness.keys[0]?.limit).toBe(5);
+      expect(accounts.get(customer.session_id)?.managed_ai_limit_override_usd).toBe(5);
+
+      harness.keys.splice(0, 1, {
+        name: "zenod-tenant:octocat-42",
+        slug: "octocat-42",
+        hash: "collision-hash",
+        limit: 5,
+        usage: 0,
+        usage_monthly: 0,
+        byok_usage_monthly: 0,
+        limit_remaining: 5,
+        disabled: false,
+        limit_reset: "monthly",
+        include_byok_in_limit: true,
+        reset_at: null,
+      });
+      expect(await lifecycle.ensureProvisioned(accounts.get(customer.session_id)!)).toMatchObject({
+        state: "orphaned",
+        changed: false,
+      });
+      expect(harness.updates.some((update) => update.hash === "collision-hash")).toBe(false);
+    } finally {
+      lifecycle.close();
+    }
+  });
 });
 
 describe("customer-safe usage projection", () => {
@@ -235,6 +353,8 @@ describe("customer-safe usage projection", () => {
       hash: "hash-42",
       limit: 2,
       usage: 1.67,
+      usage_monthly: 1.67,
+      byok_usage_monthly: 0,
       limit_remaining: 0.33,
       disabled: false,
       limit_reset: "monthly",
@@ -246,10 +366,21 @@ describe("customer-safe usage projection", () => {
       state: "warn",
       resetsAt: "2026-09-01T00:00:00.000Z",
     });
-    expect(projectCustomerUsage({ ...base, usage: 10 })).toMatchObject({ percentageUsed: 100, state: "paused" });
-    expect(projectCustomerUsage({ ...base, reset_at: null }, 80, Date.parse("2026-08-25T20:00:00.000Z"))).toMatchObject({
-      resetsAt: "2026-09-01T00:00:00.000Z",
+    expect(projectCustomerUsage({ ...base, usage: 10 })).toMatchObject({ percentageUsed: 84, state: "warn" });
+    expect(projectCustomerUsage({ ...base, usage_monthly: 2, limit_remaining: 0 })).toMatchObject({
+      percentageUsed: 100,
+      state: "paused",
     });
+    expect(projectCustomerUsage(
+      { ...base, reset_at: null },
+      80,
+      Date.parse("2026-08-31T23:59:59.999Z"),
+    )).toMatchObject({ resetsAt: "2026-09-01T00:00:00.000Z" });
+    expect(projectCustomerUsage(
+      { ...base, reset_at: null },
+      80,
+      Date.parse("2027-12-15T12:00:00.000Z"),
+    )).toMatchObject({ resetsAt: "2028-01-01T00:00:00.000Z" });
     expect(projectCustomerUsage(null)).toEqual({ percentageUsed: null, state: "unavailable", resetsAt: null });
   });
 });
