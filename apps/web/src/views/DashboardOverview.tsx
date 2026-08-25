@@ -26,7 +26,10 @@ import {
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { mcpClientSnippets, resolveMcpAccess } from "@/views/dashboard-navigation"
+import {
+  mcpClientSnippets,
+  resolveMcpAccess,
+} from "@/views/dashboard-navigation"
 
 export type DashboardOverviewData = {
   tenant: { id: string; name?: string }
@@ -115,8 +118,10 @@ function CreditSummary({
 
 export function DashboardOverview({
   overview,
+  showSupportCards = true,
 }: {
   overview: DashboardOverviewData | null
+  showSupportCards?: boolean
 }) {
   const [connections, setConnections] =
     React.useState<ConnectionsResponse | null>(null)
@@ -182,7 +187,10 @@ export function DashboardOverview({
   const isRing = overview?.unit?.name === "ring"
   const isHerald = overview?.unit?.name === "herald"
   const isCouncilUnit = isRing || isHerald
-  const snippets = mcpClientSnippets(mcpUrl, isHerald ? "herald" : isRing ? "ring" : "zenod")
+  const snippets = mcpClientSnippets(
+    mcpUrl,
+    isHerald ? "herald" : isRing ? "ring" : "zenod"
+  )
 
   return (
     <div className="flex flex-col gap-4">
@@ -197,9 +205,17 @@ export function DashboardOverview({
               {overview?.tenant.name ?? overview?.tenant.id ?? "Zenod"}
             </span>
           </div>
-          <CardTitle className="text-lg">{isHerald ? "Connect to Herald" : "Connect your agent"}</CardTitle>
+          <CardTitle className="text-lg">
+            {isHerald ? "Connect to Herald" : "Connect your agent"}
+          </CardTitle>
           <CardDescription>
-            {isHerald ? "Use Herald's" : <>Use this {isRing ? "Ring Council" : "Zenod"}</>} endpoint and bearer token from Claude Code, Codex, or any HTTP MCP client.
+            {isHerald ? (
+              "Use Herald's"
+            ) : (
+              <>Use this {isRing ? "Ring Council" : "Zenod"}</>
+            )}{" "}
+            endpoint and bearer token from Claude Code, Codex, or any HTTP MCP
+            client.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -268,23 +284,28 @@ export function DashboardOverview({
         </CardContent>
       </Card>
 
-      <div className={isCouncilUnit ? "grid gap-4" : "grid gap-4 md:grid-cols-2"}>
-        {!isCouncilUnit && (
-          <Card className="rounded-lg">
-            <CardHeader>
-              <FolderGit2Icon className="size-5 text-muted-foreground" />
-              <CardTitle>Connect your vault</CardTitle>
-              <CardDescription>
-                Authorize the GitHub App and choose any repository it can access.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <GithubConnect compact />
-            </CardContent>
-          </Card>
-        )}
-        <CreditSummary account={account} overview={overview} />
-      </div>
+      {showSupportCards && (
+        <div
+          className={isCouncilUnit ? "grid gap-4" : "grid gap-4 md:grid-cols-2"}
+        >
+          {!isCouncilUnit && (
+            <Card className="rounded-lg">
+              <CardHeader>
+                <FolderGit2Icon className="size-5 text-muted-foreground" />
+                <CardTitle>Connect your vault</CardTitle>
+                <CardDescription>
+                  Authorize the GitHub App and choose any repository it can
+                  access.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GithubConnect compact />
+              </CardContent>
+            </Card>
+          )}
+          <CreditSummary account={account} overview={overview} />
+        </div>
+      )}
     </div>
   )
 }

@@ -48,6 +48,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import type { ZenodEdition } from "@/views/zenod-edition"
 
 function StatusRow({
   label,
@@ -64,7 +65,13 @@ function StatusRow({
   )
 }
 
-export function VaultTab() {
+export function VaultTab({
+  allowReclone = true,
+  edition = "self-hosted",
+}: {
+  allowReclone?: boolean
+  edition?: ZenodEdition
+}) {
   const [status, setStatus] = React.useState<VaultStatus | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [notConfigured, setNotConfigured] = React.useState(false)
@@ -181,8 +188,9 @@ export function VaultTab() {
           <TriangleAlertIcon />
           <AlertTitle>Vault not configured</AlertTitle>
           <AlertDescription>
-            Connect GitHub below and pick a vault repository, or add a GitHub
-            token and repository in the Keys &amp; models tab.
+            {edition === "hosted"
+              ? "Connect GitHub below and choose the repository Zenod will use as your durable vault."
+              : "Connect GitHub below and pick a vault repository, or add a GitHub token and repository in Settings."}
           </AlertDescription>
         </Alert>
         <GithubConnect onRepoPicked={() => reload()} />
@@ -205,11 +213,15 @@ export function VaultTab() {
       {!status.llmReady && (
         <Alert>
           <TriangleAlertIcon />
-          <AlertTitle>Add your {providerLabel(status.provider)} API key</AlertTitle>
+          <AlertTitle>
+            {edition === "hosted"
+              ? "Managed AI needs attention"
+              : `Add your ${providerLabel(status.provider)} API key`}
+          </AlertTitle>
           <AlertDescription>
-            The vault is connected, but storing and asking need your{" "}
-            {providerLabel(status.provider)} API key. Add it in the Keys &amp;
-            models tab to finish setup.
+            {edition === "hosted"
+              ? "The vault is connected, but managed processing is not ready. No provider credentials are required from you."
+              : `The vault is connected, but storing and asking need your ${providerLabel(status.provider)} API key. Add it in Settings to finish setup.`}
           </AlertDescription>
         </Alert>
       )}
@@ -263,32 +275,35 @@ export function VaultTab() {
             )}
             Run lint
           </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" disabled={recloning}>
-                {recloning ? <Spinner /> : null}
-                Re-clone
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Re-clone the vault?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This deletes the local working copy and clones the repository
-                  again from GitHub. Any unpushed local state is lost.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  variant="destructive"
-                  onClick={handleReclone}
-                >
+          {allowReclone && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={recloning}>
+                  {recloning ? <Spinner /> : null}
                   Re-clone
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Re-clone the vault?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This deletes the local working copy and clones the
+                    repository again from GitHub. Any unpushed local state is
+                    lost.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    onClick={handleReclone}
+                  >
+                    Re-clone
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </CardFooter>
       </Card>
 

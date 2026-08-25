@@ -19,6 +19,10 @@ vi.mock("@/components/google-drive-connect", () => ({
   GoogleDriveConnect: () => <div>Google Drive connector</div>,
 }))
 
+vi.mock("@/views/settings/VaultTab", () => ({
+  VaultTab: () => <div>Vault status</div>,
+}))
+
 import type { SettingsValues } from "@/lib/api"
 import { Settings } from "./Settings"
 
@@ -27,8 +31,8 @@ afterEach(() => {
   mocks.api.mockReset()
 })
 
-describe("Zenod Connect dashboard", () => {
-  it("renders the Google Drive connector for a memory tenant", async () => {
+describe("Zenod vault and sources", () => {
+  it("renders the existing Google Drive connector under Vault and sources", async () => {
     mocks.api.mockResolvedValue({
       unit: { name: "zenod" },
       tenant: { id: "tenant-1", name: "Memory tenant" },
@@ -38,12 +42,17 @@ describe("Zenod Connect dashboard", () => {
     render(
       <Settings
         initialSettings={{ provider: "openrouter" } as SettingsValues}
+        initialTab="vault"
         onLoggedOut={() => undefined}
       />
     )
 
     await waitFor(() => {
-      expect(screen.getByText("Google Drive connector")).not.toBeNull()
+      expect(
+        screen.getByRole("tab", { name: /Vault & sources/ })
+      ).not.toBeNull()
     })
+
+    expect(screen.getByText("Google Drive connector")).not.toBeNull()
   })
 })
