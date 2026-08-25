@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { BrainEngine } from "zenod";
 import { Runtime } from "../src/runtime.js";
-import { TelegramGateway, chunkText } from "../src/telegramGateway.js";
+import { TelegramGateway, chunkText, type TelegramManagedInbound } from "../src/telegramGateway.js";
+import { CustomerManagedAiAdmissionQueue } from "../src/customerManagedAiAdmission.js";
 import {
   normalizeAllowedUsers,
   normalizeTelegramId,
@@ -59,6 +60,36 @@ function fakeBotApi(message: Record<string, unknown> | null, options: { richOk?:
     return reply({ message_id: 1 }); // sendMessage, sendChatAction
   }) as unknown as typeof fetch;
   return { fetchImpl, calls };
+}
+
+function fakeAcknowledgedBotApi(message: Record<string, unknown>) {
+  const calls: ApiCall[] = [];
+  let acknowledged = false;
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("/file/bot")) {
+      calls.push({ method: "download", body: {} });
+      return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 });
+    }
+    const method = url.split("/").pop() ?? "";
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
+    calls.push({ method, body });
+    const reply = (result: unknown) => new Response(JSON.stringify({ ok: true, result }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+    if (method === "getMe") return reply({ id: 42, is_bot: true, username: "zenod_test_bot" });
+    if (method === "getUpdates") {
+      const offset = Number(body.offset ?? 0);
+      if (offset > 100) acknowledged = true;
+      if (!acknowledged) return reply([{ update_id: 100, message }]);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return reply([]);
+    }
+    if (method === "getFile") return reply({ file_path: "voice/file_1.oga" });
+    return reply({ message_id: 1 });
+  }) as unknown as typeof fetch;
+  return { fetchImpl, calls, acknowledged: () => acknowledged };
 }
 
 function fakeEngine(seen: string[]): BrainEngine {
@@ -262,6 +293,153 @@ describe("TelegramGateway", () => {
       await gateway.close();
       runtime.close();
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["text", tgMessage(), false],
+    ["audio", tgMessage({ text: undefined, voice: { file_id: "AUDIO123", file_unique_id: "audio-1", mime_type: "audio/ogg" } }), true],
+    ["image", tgMessage({ text: undefined, photo: [{ file_id: "IMAGE123", width: 10, height: 10 }] }), true],
+  ] as const)("admits Hosted Telegram %s raw evidence before advancing the update offset", async (kind, message, hasMedia) => {
+    const dir = await mkdtemp(join(tmpdir(), `zenod-telegram-managed-${kind}-`));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(message);
+    runtime.settings.setTelegramSettings({ botToken: `MANAGED:${kind}`, allowedUsers: ["555"], enabled: true });
+    const admitted: Array<{ kind: string; updateId: string; media?: { dataBase64: string } }> = [];
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => {
+        throw new Error("paid engine must remain behind admission");
+      },
+      fetchImpl,
+      managedInboundHandler: async (input) => { admitted.push(input); },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => admitted.length === 1 && calls.some((call) => call.method === "getUpdates" && call.body.offset === 101));
+      expect(admitted[0]).toMatchObject({ kind, updateId: "100", chatId: "555", messageId: "7" });
+      expect(Boolean(admitted[0]!.media?.dataBase64)).toBe(hasMedia);
+      expect(calls.filter((call) => call.method === "getFile").length).toBe(hasMedia ? 1 : 0);
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not advance the Hosted Telegram offset when durable admission fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-managed-admission-failure-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(tgMessage());
+    runtime.settings.setTelegramSettings({ botToken: "MANAGED:FAIL", allowedUsers: ["555"], enabled: true });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => { throw new Error("paid engine must not run"); },
+      fetchImpl,
+      pollErrorDelayMs: 1,
+      managedInboundHandler: async () => { throw new Error("admission sqlite unavailable"); },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => calls.filter((call) => call.method === "getUpdates" && call.body.offset === 0).length >= 2);
+      expect(calls.some((call) => call.method === "getUpdates" && call.body.offset === 101)).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["text", tgMessage()],
+    ["audio", tgMessage({ text: undefined, voice: { file_id: "AUDIO123", file_unique_id: "audio-1", mime_type: "audio/ogg" } })],
+    ["image", tgMessage({ text: undefined, photo: [{ file_id: "IMAGE123", width: 10, height: 10 }] })],
+  ] as const)("recovers Hosted Telegram %s after admission SQLite failure and process restart", async (kind, message) => {
+    const firstDir = await mkdtemp(join(tmpdir(), `zenod-telegram-restart-first-${kind}-`));
+    const secondDir = await mkdtemp(join(tmpdir(), `zenod-telegram-restart-second-${kind}-`));
+    const admissionDir = await mkdtemp(join(tmpdir(), `zenod-telegram-restart-admission-${kind}-`));
+    const admissionPath = join(admissionDir, "admission.sqlite");
+    const firstRuntime = new Runtime(firstDir);
+    const secondRuntime = new Runtime(secondDir);
+    const provider = fakeAcknowledgedBotApi(message);
+    const token = `MANAGED:RESTART:${kind}`;
+    firstRuntime.settings.setTelegramSettings({ botToken: token, allowedUsers: ["555"], enabled: true });
+    secondRuntime.settings.setTelegramSettings({ botToken: token, allowedUsers: ["555"], enabled: true });
+    const normal = { percentageUsed: 1, state: "normal" as const, resetsAt: "2026-09-01T00:00:00.000Z" };
+    const processor = vi.fn(async () => ({
+      value: { replyText: "stored once" },
+      receipt: {
+        state: "completed" as const,
+        statusCode: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ replyText: "stored once" }),
+        completedAt: new Date().toISOString(),
+      },
+    }));
+    const failedQueue = new CustomerManagedAiAdmissionQueue(
+      admissionPath,
+      Date.now,
+      undefined,
+      () => { throw new Error("admission sqlite unavailable"); },
+    );
+    const makeHandler = (queue: CustomerManagedAiAdmissionQueue) => async (input: TelegramManagedInbound) => {
+      await queue.submit({
+        tenantId: "tenant-42",
+        idempotencyKey: `telegram:${input.chatId}:${input.messageId}`,
+        kind: input.kind,
+        method: "POST",
+        path: "/internal/telegram",
+        contentType: "application/json",
+        raw: Buffer.from(JSON.stringify(input)),
+      }, normal, processor);
+    };
+    const first = new TelegramGateway({
+      settings: firstRuntime.settings,
+      getEngine: async () => { throw new Error("paid engine must remain behind admission"); },
+      fetchImpl: provider.fetchImpl,
+      pollErrorDelayMs: 1_000,
+      managedInboundHandler: makeHandler(failedQueue),
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await first.start();
+      await waitFor(() => provider.calls.some((call) => call.method === "getUpdates" && call.body.offset === 0));
+      await first.close();
+      expect(provider.acknowledged()).toBe(false);
+      expect(provider.calls.some((call) => call.method === "getUpdates" && call.body.offset === -1)).toBe(false);
+      expect(processor).not.toHaveBeenCalled();
+      failedQueue.close();
+
+      const restartedQueue = new CustomerManagedAiAdmissionQueue(admissionPath);
+      const restarted = new TelegramGateway({
+        settings: secondRuntime.settings,
+        getEngine: async () => { throw new Error("paid engine must remain behind admission"); },
+        fetchImpl: provider.fetchImpl,
+        managedInboundHandler: makeHandler(restartedQueue),
+      });
+      try {
+        await restarted.start();
+        await waitFor(() => provider.acknowledged());
+        expect(processor).toHaveBeenCalledTimes(1);
+        const admitted = restartedQueue.getByIdempotencyKey("tenant-42", "telegram:555:7");
+        expect(admitted).toMatchObject({ kind, status: "done", attempts: 1 });
+        expect(Buffer.from(restartedQueue.raw(admitted!.id)!).toString("utf8"))
+          .toContain(kind === "text" ? "summarize the deploy" : Buffer.from([1, 2, 3, 4]).toString("base64"));
+      } finally {
+        await restarted.close();
+        restartedQueue.close();
+      }
+    } finally {
+      consoleError.mockRestore();
+      await first.close();
+      try { failedQueue.close(); } catch {}
+      firstRuntime.close();
+      secondRuntime.close();
+      await rm(firstDir, { recursive: true, force: true });
+      await rm(secondDir, { recursive: true, force: true });
+      await rm(admissionDir, { recursive: true, force: true });
     }
   });
 

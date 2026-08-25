@@ -8,6 +8,7 @@ import { customerAccountId } from "../src/customerAccounts.js";
 import { loadCustomerBillingConfig, type CustomerStripeClient } from "../src/customerBilling.js";
 import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerMetering } from "../src/customerMetering.js";
+import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
 import { Runtime } from "../src/runtime.js";
 
 const DESTINATION = "https://cloud.zenod.dev";
@@ -39,6 +40,7 @@ describe("hosted customer layer", () => {
   let createdParams: Stripe.Checkout.SessionCreateParams | null;
   let completed: string[];
   let session: Stripe.Checkout.Session;
+  let authoritativeSubscription: Stripe.Subscription;
   let stripe: CustomerStripeClient;
   let env: NodeJS.ProcessEnv;
 
@@ -49,6 +51,15 @@ describe("hosted customer layer", () => {
     createdParams = null;
     completed = [];
     session = checkoutSession();
+    authoritativeSubscription = {
+      id: "sub_test_customer",
+      object: "subscription",
+      customer: "cus_test_customer",
+      status: "active",
+      cancel_at_period_end: false,
+      current_period_end: 1_800_000_000,
+      metadata: { account_id: customerAccountId(42) },
+    } as Stripe.Subscription;
     stripe = {
       checkout: {
         sessions: {
@@ -74,6 +85,9 @@ describe("hosted customer layer", () => {
             url: "https://billing.stripe.test/session",
           }) as Stripe.BillingPortal.Session),
         },
+      },
+      subscriptions: {
+        retrieve: vi.fn(async () => authoritativeSubscription),
       },
       webhooks: {
         constructEvent: vi.fn(
@@ -290,7 +304,10 @@ describe("hosted customer layer", () => {
       subscription_status: "active",
       tenant_id: customerAccountId(42),
       slug: "octocat-42",
+      usage: { percentageUsed: null, state: "unavailable", resetsAt: null },
     });
+    expect(account).not.toHaveProperty("balance");
+    expect(account).not.toHaveProperty("ledger");
     expect(account.token).toMatch(/^zenod_[a-f0-9]{48}$/);
     expect(account.mcp_url).toBe(`${DESTINATION}/mcp/${account.token}`);
     const accountJson = await readFile(join(dir, "customer-accounts.json"), "utf8");
@@ -340,6 +357,96 @@ describe("hosted customer layer", () => {
     expect(await duplicate.json()).toEqual({ error: "an active subscription already exists" });
   });
 
+  it("provisions one managed child key after tenant binding and projects customer-safe usage", async () => {
+    env.ZENOD_MANAGED_AI_ENABLED = "1";
+    env.ZENOD_MANAGED_AI_LIMIT_USD = "2";
+    env.OPENROUTER_PROVISIONING_KEY = "provisioning-test";
+    const keys: Awaited<ReturnType<ManagedAiProviderClient["listKeys"]>> = [];
+    const provider: ManagedAiProviderClient = {
+      listKeys: vi.fn(async () => keys.map((key) => ({ ...key }))),
+      createKey: vi.fn(async (input) => {
+        keys.push({
+          name: input.name,
+          slug: "octocat-42",
+          hash: "managed-hash",
+          limit: input.limit,
+          usage: 0.33,
+          usage_monthly: 0.33,
+          byok_usage_monthly: 0,
+          limit_remaining: 1.67,
+          disabled: false,
+          limit_reset: input.limitReset,
+          include_byok_in_limit: input.includeByokInLimit,
+          reset_at: "2026-09-01T00:00:00.000Z",
+        });
+        return {
+          key: "sk-or-managed-test",
+          hash: "managed-hash",
+          name: input.name,
+          limit: input.limit,
+          limitReset: input.limitReset,
+        };
+      }),
+      updateKey: vi.fn(async () => undefined),
+    };
+    const app = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        managedAiProvider: provider,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+      },
+    ).app;
+    const cookie = await signInCookie(app);
+    await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+
+    const first = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const duplicate = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(await first.json()).toEqual({ received: true, result: "completed" });
+    expect(await duplicate.json()).toEqual({ received: true, result: "duplicate" });
+    expect(provider.createKey).toHaveBeenCalledTimes(1);
+    expect(provider.createKey).toHaveBeenCalledWith({
+      name: "zenod-tenant:octocat-42",
+      limit: 2,
+      limitReset: "monthly",
+      includeByokInLimit: true,
+    });
+    expect(runtime.settings.get("openrouter_api_key")).toBe("sk-or-managed-test");
+
+    const usage = await app.request("/api/customer-usage", { headers: { cookie } });
+    expect(await usage.json()).toEqual({
+      percentageUsed: 17,
+      state: "normal",
+      resetsAt: "2026-09-01T00:00:00.000Z",
+    });
+    const accountResponse = await app.request("/api/console/account", { headers: { cookie } });
+    const accountPayload = await accountResponse.json();
+    expect(accountPayload.usage).toEqual({
+      percentageUsed: 17,
+      state: "normal",
+      resetsAt: "2026-09-01T00:00:00.000Z",
+    });
+    expect(accountPayload).not.toHaveProperty("balance");
+    expect(accountPayload).not.toHaveProperty("ledger");
+  });
+
   it("tracks recurring billing state and suspends only terminal subscriptions", async () => {
     const app = locallyBoundCustomerApp();
     const cookie = await signInCookie(app);
@@ -368,6 +475,7 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: subscription("past_due", true) },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("past_due", true);
     const pastDue = await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
@@ -387,6 +495,7 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: invoice },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("active");
     const paid = await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
@@ -399,6 +508,7 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: subscription("canceled") },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("canceled");
     const canceled = await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
@@ -412,6 +522,7 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: invoice },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("canceled");
     const terminalInvoice = await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
@@ -424,12 +535,72 @@ describe("hosted customer layer", () => {
       livemode: false,
       data: { object: subscription("active") },
     } as Stripe.Event);
+    authoritativeSubscription = subscription("active");
     await app.request("/webhook", {
       method: "POST",
       headers: { "stripe-signature": "valid" },
       body: "{}",
     });
     expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("active");
+  });
+
+  it("uses authoritative Stripe state for webhook and periodic entitlement reconciliation", async () => {
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+      },
+    );
+    try {
+      const cookie = await signInCookie(layer.app);
+      await layer.app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "monthly" }),
+      });
+      await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+
+      const staleDelivered = {
+        ...authoritativeSubscription,
+        status: "active",
+      } as Stripe.Subscription;
+      authoritativeSubscription = {
+        ...authoritativeSubscription,
+        status: "past_due",
+      } as Stripe.Subscription;
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type: "customer.subscription.updated",
+        livemode: false,
+        data: { object: staleDelivered },
+      } as Stripe.Event);
+      const webhook = await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+      expect(await webhook.json()).toEqual({ received: true, result: "past_due" });
+      expect(layer.accounts.resolveForSubscription("sub_test_customer")?.subscription_status).toBe("past_due");
+
+      authoritativeSubscription = {
+        ...authoritativeSubscription,
+        status: "canceled",
+      } as Stripe.Subscription;
+      await layer.reconcileManagedAiAccounts();
+      expect(layer.accounts.resolveForSubscription("sub_test_customer")?.subscription_status).toBe("canceled");
+      expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("suspended");
+    } finally {
+      layer.close();
+    }
   });
 
   it("leaves existing pilot tenant rows untouched", async () => {
