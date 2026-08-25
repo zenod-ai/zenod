@@ -57,7 +57,10 @@ interface TelegramMessage {
 }
 
 export interface TelegramPortedInbound {
+  /** Immutable Telegram user ID. This is the only tenant-routing identity. */
   sender: string;
+  /** Mutable username, retained only as setup/display metadata. */
+  username?: string | null;
   chatId: string;
   messageId: string;
   text: string;
@@ -560,7 +563,8 @@ export class TelegramGateway {
 
   private async handlePortedInbound(message: TelegramMessage): Promise<void> {
     const chatId = message.chat.id;
-    const sender = message.from?.username ? `@${message.from.username}` : String(message.from?.id ?? chatId);
+    const sender = String(message.from?.id ?? chatId);
+    const username = message.from?.username ? `@${message.from.username}` : null;
     let text = (message.text ?? message.caption ?? "").trim();
     let media: TelegramPortedInbound["media"];
     let transcription: TelegramPortedInbound["transcription"];
@@ -580,6 +584,7 @@ export class TelegramGateway {
       await this.sendChatAction(chatId, "typing");
       const forwarded = await this.options.portedInboundHandler!({
         sender,
+        username,
         chatId: String(chatId),
         messageId: String(message.message_id),
         text,
@@ -666,18 +671,8 @@ export class TelegramGateway {
   /** Ported Bot API send primitive used by Phylax's tenant-scoped MCP face. */
   async sendText(recipient: string, text: string): Promise<{ sentMessageId: string }> {
     const normalized = normalizeTelegramEntry(recipient);
-    const settings = this.settings();
-    const numericAllowed = settings.allowedUsers.filter((entry) => /^-?\d+$/.test(entry));
-    // The tenant UI accepts a friendly @handle, while Telegram sendMessage
-    // requires a numeric chat_id. A one-owner bot can bootstrap that mapping
-    // unambiguously when its allowlist contains the handle and one numeric ID.
-    const target = /^-?\d+$/.test(normalized)
-      ? normalized
-      : settings.allowedUsers.includes(normalized) && numericAllowed.length === 1
-        ? numericAllowed[0]
-        : "";
-    const chatId = Number(target);
-    if (!Number.isFinite(chatId) || !text.trim()) throw new Error("Telegram recipient and text are required");
+    const chatId = /^-?\d+$/.test(normalized) ? Number(normalized) : Number.NaN;
+    if (!Number.isSafeInteger(chatId) || !text.trim()) throw new Error("Telegram recipient and text are required");
     const result = await this.callApi<{ message_id?: number }>("sendMessage", { chat_id: chatId, text });
     if (!result?.message_id) throw new Error("Telegram provider returned no delivery receipt");
     return { sentMessageId: String(result.message_id) };

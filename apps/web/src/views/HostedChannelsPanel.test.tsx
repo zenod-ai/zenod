@@ -16,7 +16,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   api: mocks.api,
 }))
 
-import type { HostedChannelsResponse } from "@/lib/api"
+import { ApiError, type HostedChannelsResponse } from "@/lib/api"
 import {
   hostedChannelOperationKey,
   reconcileHostedChannelOperations,
@@ -330,12 +330,208 @@ describe("Hosted Zenod channels", () => {
     expect(screen.getByRole("button", { name: "Cancel setup" })).not.toBeNull()
   })
 
-  it("retires stale browser operation keys across both lifecycle directions without phone PII", () => {
+  it("rotates the WhatsApp operation after a typed collision before the corrected target", async () => {
+    const operationIds: string[] = []
+    mocks.api.mockImplementation(
+      (path: string, request?: { method?: string; body?: unknown }) => {
+        if (path === "/api/channels" && !request) return Promise.resolve(off)
+        if (path === "/api/channels/whatsapp/challenge") {
+          const body = request?.body as { operationId: string }
+          operationIds.push(body.operationId)
+          if (operationIds.length === 1) {
+            return Promise.reject(
+              new ApiError(
+                409,
+                "That sender is already connected to another Zenod account.",
+                "sender_in_use"
+              )
+            )
+          }
+          return Promise.resolve({
+            channels: {
+              ...off,
+              whatsapp: {
+                ...off.whatsapp,
+                state: "awaiting_code",
+                senderHint: "••••2222",
+                verificationExpiresAt: Date.now() + 60_000,
+                revision: "wa-awaiting-corrected",
+              },
+            },
+            challenge: {
+              code: "42-otter",
+              sharedNumber: "+34 699 000 111",
+              expiresAt: Date.now() + 60_000,
+            },
+            mutation: {
+              operationId: body.operationId,
+              operation: "whatsapp.challenge",
+              outcome: "succeeded",
+              at: Date.now(),
+            },
+          })
+        }
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      }
+    )
+    render(<HostedChannelsPanel />)
+    const input = await screen.findByLabelText("Your WhatsApp sender number")
+    fireEvent.change(input, { target: { value: "+34 611 111 111" } })
+    fireEvent.click(screen.getByRole("button", { name: "Create one-time code" }))
+    expect(
+      await screen.findByText(
+        "That sender is already connected to another Zenod account."
+      )
+    ).not.toBeNull()
+    fireEvent.change(input, { target: { value: "+34 622 222 222" } })
+    fireEvent.click(screen.getByRole("button", { name: "Create one-time code" }))
+    expect(await screen.findByText("42-otter")).not.toBeNull()
+    expect(operationIds).toHaveLength(2)
+    expect(operationIds[1]).not.toBe(operationIds[0])
+  })
+
+  it("rotates the Telegram operation after a typed collision before the corrected target", async () => {
+    const allOff: HostedChannelsResponse = {
+      ...off,
+      telegram: {
+        state: "off",
+        identityHint: null,
+        verificationExpiresAt: null,
+        revision: "tg-off-correction",
+      },
+    }
+    const operationIds: string[] = []
+    mocks.api.mockImplementation(
+      (path: string, request?: { body?: unknown }) => {
+        if (path === "/api/channels" && !request)
+          return Promise.resolve(allOff)
+        if (path === "/api/channels/telegram/connect") {
+          const body = request?.body as { operationId: string }
+          operationIds.push(body.operationId)
+          if (operationIds.length === 1) {
+            return Promise.reject(
+              new ApiError(
+                409,
+                "That Telegram identity is already connected to another Zenod account.",
+                "identity_in_use"
+              )
+            )
+          }
+          return Promise.resolve({
+            channels: {
+              ...allOff,
+              telegram: {
+                state: "awaiting_code",
+                identityHint: "@corrected_owner",
+                verificationExpiresAt: Date.now() + 60_000,
+                revision: "tg-awaiting-corrected",
+              },
+            },
+            challenge: { code: "55-raven", expiresAt: Date.now() + 60_000 },
+            mutation: {
+              operationId: body.operationId,
+              operation: "telegram.connect",
+              outcome: "succeeded",
+              at: Date.now(),
+            },
+          })
+        }
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      }
+    )
+    render(<HostedChannelsPanel />)
+    const input = await screen.findByLabelText(
+      "Your Telegram username or chat ID"
+    )
+    fireEvent.change(input, { target: { value: "@occupied_owner" } })
+    fireEvent.click(screen.getByRole("button", { name: "Connect Telegram" }))
+    expect(
+      await screen.findByText(
+        "That Telegram identity is already connected to another Zenod account."
+      )
+    ).not.toBeNull()
+    fireEvent.change(input, { target: { value: "@corrected_owner" } })
+    fireEvent.click(screen.getByRole("button", { name: "Connect Telegram" }))
+    expect(await screen.findByText("55-raven")).not.toBeNull()
+    expect(operationIds).toHaveLength(2)
+    expect(operationIds[1]).not.toBe(operationIds[0])
+  })
+
+  it("rotates typed terminal failures but retains ambiguous lost-response operation keys", async () => {
+    const run = async (firstError: Error) => {
+      const operationIds: string[] = []
+      mocks.api.mockImplementation(
+        (path: string, request?: { body?: unknown }) => {
+          if (path === "/api/channels" && !request) return Promise.resolve(off)
+          if (path === "/api/channels/whatsapp/challenge") {
+            const body = request?.body as { operationId: string }
+            operationIds.push(body.operationId)
+            if (operationIds.length === 1) return Promise.reject(firstError)
+            return Promise.resolve({
+              channels: {
+                ...off,
+                whatsapp: {
+                  ...off.whatsapp,
+                  state: "awaiting_code",
+                  senderHint: "••••1111",
+                  verificationExpiresAt: Date.now() + 60_000,
+                  revision: "wa-awaiting-retry",
+                },
+              },
+              challenge: {
+                code: "66-panda",
+                sharedNumber: "+34 699 000 111",
+                expiresAt: Date.now() + 60_000,
+              },
+              mutation: {
+                operationId: body.operationId,
+                operation: "whatsapp.challenge",
+                outcome: "succeeded",
+                at: Date.now(),
+              },
+            })
+          }
+          return Promise.reject(new Error(`Unexpected API call: ${path}`))
+        }
+      )
+      render(<HostedChannelsPanel />)
+      fireEvent.change(
+        await screen.findByLabelText("Your WhatsApp sender number"),
+        { target: { value: "+34 611 111 111" } }
+      )
+      fireEvent.click(
+        screen.getByRole("button", { name: "Create one-time code" })
+      )
+      expect(await screen.findByText(firstError.message)).not.toBeNull()
+      fireEvent.click(
+        screen.getByRole("button", { name: "Create one-time code" })
+      )
+      expect(await screen.findByText("66-panda")).not.toBeNull()
+      return operationIds
+    }
+
+    const typed = await run(
+      new ApiError(
+        503,
+        "Channels are temporarily unavailable. Try again shortly.",
+        "channels_unavailable"
+      )
+    )
+    expect(typed[1]).not.toBe(typed[0])
+
+    cleanup()
+    mocks.api.mockReset()
+    window.localStorage.clear()
+    const ambiguous = await run(new Error("Network response was lost"))
+    expect(ambiguous[1]).toBe(ambiguous[0])
+  })
+
+  it("retires stale browser operation keys across both lifecycle directions without phone PII", async () => {
     window.localStorage.setItem(
       "zenod.hosted-channel.operation.whatsapp.sender",
       "+34 611 111 111"
     )
-    const disconnect = hostedChannelOperationKey(
+    const disconnect = await hostedChannelOperationKey(
       "whatsapp.disconnect",
       "wa-connected-1"
     )
@@ -343,37 +539,54 @@ describe("Hosted Zenod channels", () => {
       whatsapp: { state: "off", revision: "wa-off-2" },
       telegram: { state: "connected", revision: "tg-connected-1" },
     })
-    expect(hostedChannelOperationKey("whatsapp.disconnect", "wa-off-2")).toBe(
-      disconnect
-    )
+    expect(
+      await hostedChannelOperationKey("whatsapp.disconnect", "wa-off-2")
+    ).toBe(disconnect)
     reconcileHostedChannelOperations({
       whatsapp: { state: "awaiting_code", revision: "wa-awaiting-3" },
       telegram: { state: "connected", revision: "tg-connected-1" },
     })
     expect(
-      hostedChannelOperationKey("whatsapp.disconnect", "wa-awaiting-3")
+      await hostedChannelOperationKey("whatsapp.disconnect", "wa-awaiting-3")
     ).not.toBe(disconnect)
 
-    const connect = hostedChannelOperationKey("telegram.connect", "tg-off-1")
+    const connect = await hostedChannelOperationKey(
+      "telegram.connect",
+      "tg-off-1"
+    )
     reconcileHostedChannelOperations({
       whatsapp: { state: "awaiting_code", revision: "wa-awaiting-3" },
       telegram: { state: "awaiting_code", revision: "tg-awaiting-2" },
     })
-    expect(hostedChannelOperationKey("telegram.connect", "tg-awaiting-2")).toBe(
-      connect
-    )
+    expect(
+      await hostedChannelOperationKey("telegram.connect", "tg-awaiting-2")
+    ).toBe(connect)
     reconcileHostedChannelOperations({
       whatsapp: { state: "awaiting_code", revision: "wa-awaiting-3" },
       telegram: { state: "off", revision: "tg-off-3" },
     })
-    expect(hostedChannelOperationKey("telegram.connect", "tg-off-3")).not.toBe(
-      connect
+    expect(
+      await hostedChannelOperationKey("telegram.connect", "tg-off-3")
+    ).not.toBe(connect)
+    const firstTarget = await hostedChannelOperationKey(
+      "telegram.connect",
+      "tg-same-revision",
+      "@first_owner",
+      true
     )
+    const editedTarget = await hostedChannelOperationKey(
+      "telegram.connect",
+      "tg-same-revision",
+      "@second_owner"
+    )
+    expect(editedTarget).not.toBe(firstTarget)
     const storedValues = Array.from(
       { length: window.localStorage.length },
       (_, index) => window.localStorage.getItem(window.localStorage.key(index)!)
     ).join("\n")
     expect(storedValues).not.toContain("+34 611")
+    expect(storedValues).not.toContain("first_owner")
+    expect(storedValues).not.toContain("second_owner")
     expect(
       window.localStorage.getItem(
         "zenod.hosted-channel.operation.whatsapp.sender"

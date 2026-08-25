@@ -326,27 +326,57 @@ describe("PhylaxTenantSettingsStore", () => {
     });
     expect(store.resolve("telegram", "@jordi_test")).toBeNull();
     expect(
-      store.verifyTelegramInbound("@other_user", "42-otter", 2_000),
+      store.verifyTelegramInbound("700000001", "42-otter", "@other_user", 2_000),
     ).toBeNull();
     expect(
-      store.verifyTelegramInbound("@jordi_test", "99-wrong", 2_000),
+      store.verifyTelegramInbound("733333333", "99-wrong", "@jordi_test", 2_000),
     ).toBeNull();
     expect(
-      store.verifyTelegramInbound("@jordi_test", "42-otter", 2_000),
+      store.verifyTelegramInbound("733333333", "42-otter", "@jordi_test", 2_000),
     ).toMatchObject({
-      settings: { tenantId: "alpha", telegramBinding: "jordi_test" },
+      settings: {
+        tenantId: "alpha",
+        telegramBinding: "733333333",
+        telegramIdentityHint: "jordi_test",
+      },
       replayed: false,
     });
-    expect(store.resolve("telegram", "@jordi_test")).toMatchObject({
+    expect(store.resolve("telegram", "@jordi_test")).toBeNull();
+    expect(store.resolve("telegram", "733333333")).toMatchObject({
       tenantId: "alpha",
       downstreamToken: "alpha-memory-token",
     });
     expect(
-      store.verifyTelegramInbound("@jordi_test", "42-otter", 2_001),
+      store.verifyTelegramInbound("733333333", "42-otter", "@renamed_owner", 2_001),
     ).toMatchObject({ replayed: true });
+    expect(store.resolve("telegram", "744444444")).toBeNull();
+
+    store.update("beta", {
+      downstreamUrl: "https://memory.test/mcp",
+      downstreamToken: "beta-memory-token",
+    });
+    store.registerTelegram("beta", "766666666", 3_000, "43-raven");
+    expect(
+      store.verifyTelegramInbound(
+        "766666666",
+        "43-raven",
+        "@friendly_display",
+        3_001,
+      ),
+    ).toMatchObject({
+      settings: {
+        tenantId: "beta",
+        telegramBinding: "766666666",
+        telegramIdentityHint: "friendly_display",
+      },
+      replayed: false,
+    });
+    expect(store.resolve("telegram", "766666666")).toMatchObject({
+      tenantId: "beta",
+    });
   });
 
-  it("isolates pending Telegram identities across tenants and survives restart", async () => {
+  it("isolates pending and immutable Telegram identities across tenants and survives restart", async () => {
     const { dataDir, storage, store } = await setup();
     store.registerTelegram("alpha", "@unique_owner", 1_000, "55-raven");
     expect(() =>
@@ -360,10 +390,10 @@ describe("PhylaxTenantSettingsStore", () => {
     expect(reopened.resolve("telegram", "@unique_owner")).toBeNull();
     const results = await Promise.all([
       Promise.resolve(
-        reopened.verifyTelegramInbound("@unique_owner", "55-raven", 2_000),
+        reopened.verifyTelegramInbound("755555555", "55-raven", "@unique_owner", 2_000),
       ),
       Promise.resolve(
-        reopened.verifyTelegramInbound("@unique_owner", "55-raven", 2_001),
+        reopened.verifyTelegramInbound("755555555", "55-raven", "@unique_owner", 2_001),
       ),
     ]);
     expect(results).toEqual([
@@ -371,6 +401,55 @@ describe("PhylaxTenantSettingsStore", () => {
       expect.objectContaining({ replayed: true }),
     ]);
     expect(reopened.resolve("telegram", "@unique_owner")).toBeNull();
+    reopened.registerTelegram("beta", "@different_owner", 2_002, "66-panda");
+    expect(() =>
+      reopened.verifyTelegramInbound(
+        "755555555",
+        "66-panda",
+        "@different_owner",
+        2_003,
+      ),
+    ).toThrow("Telegram numeric identity is already registered");
+  });
+
+  it("releases expired pending WhatsApp and Telegram reservations for another tenant", async () => {
+    const { store } = await setup();
+    store.registerPhone("alpha", "+34 611 111 111", "primary", 1_000, "42-otter");
+    expect(() =>
+      store.registerPhone("beta", "+34 611 111 111", "primary", 1_001, "43-raven"),
+    ).toThrow("phone number is already registered");
+    expect(
+      store.registerPhone(
+        "beta",
+        "+34 611 111 111",
+        "primary",
+        1_801_001,
+        "44-panda",
+      ).settings,
+    ).toMatchObject({ phoneNumber: "34611111111", verified: false });
+    expect(store.get("alpha")).toMatchObject({
+      phoneNumber: null,
+      verificationHash: null,
+      verificationExpiresAt: null,
+    });
+
+    store.registerTelegram("alpha", "@expired_owner", 2_000, "55-raven");
+    expect(() =>
+      store.registerTelegram("beta", "@expired_owner", 2_001, "56-panda"),
+    ).toThrow("Telegram identity is already registered");
+    expect(
+      store.registerTelegram(
+        "beta",
+        "@expired_owner",
+        1_802_001,
+        "57-otter",
+      ).settings,
+    ).toMatchObject({ telegramPendingIdentity: "expired_owner" });
+    expect(store.get("alpha")).toMatchObject({
+      telegramPendingIdentity: null,
+      telegramVerificationHash: null,
+      telegramVerificationExpiresAt: null,
+    });
   });
 
   it("keeps two tenants' routes, downstream tokens and transcription keys isolated", async () => {

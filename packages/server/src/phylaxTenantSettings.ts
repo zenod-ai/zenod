@@ -97,7 +97,10 @@ export interface PhylaxTenantSettings {
   transcriptionModel: string | null;
   voiceDefault: PhylaxVoiceDefault;
   turnBindings: PhylaxTurnBindings;
+  /** Immutable numeric Telegram user/chat ID; the sole routing/delivery key. */
   telegramBinding: string | null;
+  /** Mutable username retained only for customer-facing display. */
+  telegramIdentityHint: string | null;
   telegramPendingIdentity: string | null;
   telegramVerificationHash: string | null;
   telegramVerificationExpiresAt: number | null;
@@ -392,6 +395,7 @@ function defaultSettings(
     voiceDefault: "capture",
     turnBindings: defaultPhylaxTurnBindings(),
     telegramBinding: null,
+    telegramIdentityHint: null,
     telegramPendingIdentity: null,
     telegramVerificationHash: null,
     telegramVerificationExpiresAt: null,
@@ -403,6 +407,14 @@ function defaultSettings(
 
 function verificationDigest(keyword: string): Buffer {
   return createHash("sha256").update(keyword.trim().toLowerCase(), "utf8").digest();
+}
+
+function normalizedTelegramNumericIdentity(value: string | null | undefined): string | null {
+  const normalized = String(value ?? "").trim();
+  const numeric = /^-?\d{1,20}$/.test(normalized)
+    ? Number(normalized)
+    : Number.NaN;
+  return Number.isSafeInteger(numeric) ? String(numeric) : null;
 }
 
 function friendlyVerificationKeyword(): string {
@@ -551,6 +563,11 @@ export class PhylaxTenantSettingsStore {
       : currentRingTicketUrl;
     const downstreamCredentialChanged = nextDownstreamUrl !== currentDownstreamUrl
       || (input.downstreamToken !== undefined && input.downstreamToken !== null);
+    const nextTelegramBinding = input.telegramBinding !== undefined
+      ? input.telegramBinding?.trim()
+        ? normalizedTelegramNumericIdentity(input.telegramBinding)
+        : null
+      : current.telegramBinding;
     const next: PhylaxTenantSettings = {
       ...current,
       downstreamUrl: null,
@@ -564,7 +581,10 @@ export class PhylaxTenantSettingsStore {
           }
         : {}),
       ...(input.telegramBinding !== undefined
-        ? { telegramBinding: input.telegramBinding?.trim() ? normalizeTelegramEntry(input.telegramBinding) : null }
+        ? {
+            telegramBinding: nextTelegramBinding,
+            telegramIdentityHint: nextTelegramBinding ? current.telegramIdentityHint : null,
+          }
         : {}),
       ...(input.transcriptionEnabled !== undefined ? { transcriptionEnabled: input.transcriptionEnabled } : {}),
       ...(input.transcriptionProvider !== undefined ? { transcriptionProvider: input.transcriptionProvider } : {}),
@@ -576,7 +596,7 @@ export class PhylaxTenantSettingsStore {
       notificationPrefs: { ...current.notificationPrefs, ...(input.notificationPrefs ?? {}) },
       updatedAt: new Date().toISOString(),
     };
-    if (input.telegramBinding?.trim() && !next.telegramBinding) throw new Error("invalid Telegram binding");
+    if (input.telegramBinding?.trim() && !nextTelegramBinding) throw new Error("invalid Telegram binding");
     if (input.transcriptionKey !== undefined && input.transcriptionKey !== null) {
       const provider = input.transcriptionProvider ?? current.transcriptionProvider;
       if (provider === "local") throw new Error("local transcription does not use a provider key");
@@ -624,6 +644,53 @@ export class PhylaxTenantSettingsStore {
     return true;
   }
 
+  /** Release expired setup reservations in the same synchronous claim boundary. */
+  private releaseExpiredReservations(store: Store, now: number): boolean {
+    let changed = false;
+    for (const [tenantId, stored] of Object.entries(store)) {
+      const entry = {
+        ...defaultSettings(tenantId, this.defaultAssistantUrl, this.defaultRingTicketUrl),
+        ...stored,
+      };
+      let next = entry;
+      if (entry.verificationExpiresAt !== null && entry.verificationExpiresAt <= now) {
+        next = {
+          ...next,
+          ...(!entry.verified
+            ? {
+                phoneNumber: null,
+                numberId: "primary",
+                whatsappBindingRevision: randomBytes(16).toString("hex"),
+              }
+            : {}),
+          verificationHash: null,
+          verificationExpiresAt: null,
+          updatedAt: new Date(now).toISOString(),
+        };
+      }
+      if (
+        entry.telegramVerificationExpiresAt !== null &&
+        entry.telegramVerificationExpiresAt <= now
+      ) {
+        next = {
+          ...next,
+          ...(entry.telegramPendingIdentity
+            ? { telegramBindingRevision: randomBytes(16).toString("hex") }
+            : {}),
+          telegramPendingIdentity: null,
+          telegramVerificationHash: null,
+          telegramVerificationExpiresAt: null,
+          updatedAt: new Date(now).toISOString(),
+        };
+      }
+      if (next !== entry) {
+        store[tenantId] = next;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   registerPhone(
     tenantId: string,
     phoneNumber: string,
@@ -633,7 +700,7 @@ export class PhylaxTenantSettingsStore {
   ): { settings: PhylaxTenantSettingsView; keyword: string } {
     const normalized = normalizeWhatsAppIdentifier(phoneNumber);
     if (!normalized) throw new Error("invalid WhatsApp phone number");
-    this.assertPhoneAvailable(tenantId, normalized);
+    this.assertPhoneAvailable(tenantId, normalized, now);
     if (!/^\d{2}-[a-z]{2,24}$/.test(keyword)) {
       throw new Error("invalid verification keyword");
     }
@@ -651,10 +718,16 @@ export class PhylaxTenantSettingsStore {
   }
 
   /** Validate one tenant's sender without mutating its existing channel configuration. */
-  assertPhoneAvailable(tenantId: string, phoneNumber: string): void {
+  assertPhoneAvailable(
+    tenantId: string,
+    phoneNumber: string,
+    now = Date.now(),
+  ): void {
     const normalized = normalizeWhatsAppIdentifier(phoneNumber);
     if (!normalized) throw new Error("invalid WhatsApp phone number");
-    const collision = Object.values(this.load()).find(
+    const store = this.load();
+    if (this.releaseExpiredReservations(store, now)) this.writeStore(store);
+    const collision = Object.values(store).find(
       (entry) => entry.tenantId !== tenantId && entry.phoneNumber === normalized,
     );
     if (collision) throw new Error("phone number is already registered");
@@ -677,13 +750,20 @@ export class PhylaxTenantSettingsStore {
   }
 
   /** Validate one tenant's Telegram identity without changing another tenant. */
-  assertTelegramAvailable(tenantId: string, identity: string): string {
+  assertTelegramAvailable(
+    tenantId: string,
+    identity: string,
+    now = Date.now(),
+  ): string {
     const normalized = normalizeTelegramEntry(identity);
     if (!normalized) throw new Error("invalid Telegram identity");
-    const collision = Object.values(this.load()).find(
+    const numeric = normalizedTelegramNumericIdentity(normalized);
+    const store = this.load();
+    if (this.releaseExpiredReservations(store, now)) this.writeStore(store);
+    const collision = Object.values(store).find(
       (entry) =>
         entry.tenantId !== tenantId &&
-        (entry.telegramBinding === normalized ||
+        ((numeric !== null && entry.telegramBinding === numeric) ||
           entry.telegramPendingIdentity === normalized),
     );
     if (collision) throw new Error("Telegram identity is already registered");
@@ -696,6 +776,7 @@ export class PhylaxTenantSettingsStore {
     this.put({
       ...current,
       telegramBinding: null,
+      telegramIdentityHint: null,
       telegramPendingIdentity: null,
       telegramVerificationHash: null,
       telegramVerificationExpiresAt: null,
@@ -712,7 +793,7 @@ export class PhylaxTenantSettingsStore {
     now = Date.now(),
     keyword = friendlyVerificationKeyword(),
   ): { settings: PhylaxTenantSettingsView; keyword: string } {
-    const normalized = this.assertTelegramAvailable(tenantId, identity);
+    const normalized = this.assertTelegramAvailable(tenantId, identity, now);
     if (!/^\d{2}-[a-z]{2,24}$/.test(keyword)) {
       throw new Error("invalid verification keyword");
     }
@@ -720,6 +801,7 @@ export class PhylaxTenantSettingsStore {
     this.put({
       ...current,
       telegramBinding: null,
+      telegramIdentityHint: null,
       telegramPendingIdentity: normalized,
       telegramVerificationHash: verificationDigest(keyword).toString("hex"),
       telegramVerificationExpiresAt: now + VERIFY_TTL_MS,
@@ -733,16 +815,23 @@ export class PhylaxTenantSettingsStore {
   verifyTelegramInbound(
     sender: string,
     text: string,
+    username: string | null = null,
     now = Date.now(),
   ): { settings: PhylaxTenantSettings; replayed: boolean } | null {
-    const normalized = normalizeTelegramEntry(sender);
-    if (!normalized) return null;
+    const observedId = normalizedTelegramNumericIdentity(sender);
+    if (!observedId) return null;
+    const observedUsername = username ? normalizeTelegramEntry(username) : null;
     const provided = verificationDigest(text);
     const entry = Object.values(this.load()).find((candidate) => {
-      const identity =
-        candidate.telegramBinding ?? candidate.telegramPendingIdentity;
+      const pendingMatches =
+        candidate.telegramPendingIdentity === observedId ||
+        (Boolean(observedUsername) &&
+          candidate.telegramPendingIdentity === observedUsername);
       if (
-        identity !== normalized ||
+        candidate.telegramBinding !== observedId &&
+        !pendingMatches
+      ) return false;
+      if (
         !candidate.telegramVerificationHash ||
         !candidate.telegramVerificationExpiresAt ||
         candidate.telegramVerificationExpiresAt < now
@@ -755,12 +844,25 @@ export class PhylaxTenantSettingsStore {
       );
     });
     if (!entry) return null;
-    if (entry.telegramBinding === normalized) {
+    if (entry.telegramBinding === observedId) {
       return { settings: entry, replayed: true };
     }
+    const numericCollision = Object.values(this.load()).find(
+      (candidate) =>
+        candidate.tenantId !== entry.tenantId &&
+        candidate.telegramBinding === observedId,
+    );
+    if (numericCollision) {
+      throw new Error("Telegram numeric identity is already registered");
+    }
+    const pendingDisplay = entry.telegramPendingIdentity &&
+      normalizedTelegramNumericIdentity(entry.telegramPendingIdentity) === null
+        ? entry.telegramPendingIdentity
+        : null;
     const verified: PhylaxTenantSettings = {
       ...entry,
-      telegramBinding: normalized,
+      telegramBinding: observedId,
+      telegramIdentityHint: observedUsername || pendingDisplay,
       telegramPendingIdentity: null,
       telegramBindingRevision: randomBytes(16).toString("hex"),
       notificationPrefs: { ...entry.notificationPrefs, telegram: true },
@@ -818,7 +920,7 @@ export class PhylaxTenantSettingsStore {
   resolve(channel: PhylaxPortedChannel, sender: string): PhylaxTenantRoute | null {
     const normalized = channel === "whatsapp"
       ? normalizeWhatsAppIdentifier(sender)
-      : normalizeTelegramEntry(sender);
+      : normalizedTelegramNumericIdentity(sender);
     if (!normalized) return null;
     const entry = Object.values(this.load()).find((candidate) =>
       channel === "whatsapp"
@@ -847,7 +949,10 @@ export class PhylaxTenantSettingsStore {
     const entry = this.get(tenantId);
     return channel === "whatsapp"
       ? entry.verified && entry.phoneNumber === normalizeWhatsAppIdentifier(recipient)
-      : Boolean(entry.telegramBinding && entry.telegramBinding === normalizeTelegramEntry(recipient));
+      : Boolean(
+          entry.telegramBinding &&
+          entry.telegramBinding === normalizedTelegramNumericIdentity(recipient)
+        );
   }
 
   transcriptionConfig(
@@ -993,6 +1098,10 @@ export class PhylaxTenantSettingsStore {
   private put(settings: PhylaxTenantSettings): void {
     const store = this.load();
     store[settings.tenantId] = settings;
+    this.writeStore(store);
+  }
+
+  private writeStore(store: Store): void {
     mkdirSync(dirname(this.path), { recursive: true });
     const pending = `${this.path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
     writeFileSync(pending, JSON.stringify(store, null, 2), { encoding: "utf8", mode: 0o600 });

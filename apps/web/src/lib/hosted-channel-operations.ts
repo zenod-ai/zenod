@@ -1,7 +1,11 @@
 const PREFIX = "zenod.hosted-channel.operation."
 const LEGACY_PHONE_KEY = `${PREFIX}whatsapp.sender`
 
-type StoredOperation = { id: string; revision: string }
+type StoredOperation = {
+  id: string
+  revision: string
+  targetFingerprint: string | null
+}
 
 function storage(): Storage | null {
   try {
@@ -17,26 +21,58 @@ function createKey(): string {
     : `op-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-export function hostedChannelOperationKey(
+export async function hostedChannelOperationKey(
   operation: string,
   revision: string,
+  target?: string,
   reset = false
-): string {
+): Promise<string> {
   const key = `${PREFIX}${operation}`
+  const targetFingerprint =
+    target === undefined
+      ? undefined
+      : Array.from(
+          new Uint8Array(
+            await crypto.subtle.digest(
+              "SHA-256",
+              new TextEncoder().encode(target.trim().toLowerCase())
+            )
+          ),
+          (byte) => byte.toString(16).padStart(2, "0")
+        ).join("")
   const raw = reset ? null : storage()?.getItem(key)
   if (raw) {
     try {
       const current = JSON.parse(raw) as StoredOperation
-      if (current.id && current.revision === revision) return current.id
+      if (
+        current.id &&
+        current.revision === revision &&
+        (targetFingerprint === undefined ||
+          current.targetFingerprint === targetFingerprint)
+      )
+        return current.id
     } catch {
-      if (/^[a-zA-Z0-9._:-]{8,160}$/.test(raw)) {
-        storage()?.setItem(key, JSON.stringify({ id: raw, revision }))
+      if (
+        targetFingerprint === undefined &&
+        /^[a-zA-Z0-9._:-]{8,160}$/.test(raw)
+      ) {
+        storage()?.setItem(
+          key,
+          JSON.stringify({ id: raw, revision, targetFingerprint: null })
+        )
         return raw
       }
     }
   }
   const next = createKey()
-  storage()?.setItem(key, JSON.stringify({ id: next, revision }))
+  storage()?.setItem(
+    key,
+    JSON.stringify({
+      id: next,
+      revision,
+      targetFingerprint: targetFingerprint ?? null,
+    })
+  )
   return next
 }
 
@@ -63,8 +99,19 @@ function reconcile(operation: string, revision: string, retain: boolean): void {
     id = raw
   }
   if (!id || storedRevision === revision) return
-  if (retain) storage()?.setItem(key, JSON.stringify({ id, revision }))
-  else storage()?.removeItem(key)
+  if (retain) {
+    let targetFingerprint: string | null = null
+    try {
+      targetFingerprint = (JSON.parse(raw) as StoredOperation)
+        .targetFingerprint
+    } catch {
+      // Legacy operation records did not include a target fingerprint.
+    }
+    storage()?.setItem(
+      key,
+      JSON.stringify({ id, revision, targetFingerprint })
+    )
+  } else storage()?.removeItem(key)
 }
 
 export function reconcileHostedChannelOperations(channels: {

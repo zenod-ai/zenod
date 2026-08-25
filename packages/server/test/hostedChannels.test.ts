@@ -359,21 +359,30 @@ describe("Hosted Zenod channel adapter", () => {
       ).toBeNull();
       expect(
         unit.phylaxTenantSettings.verifyTelegramInbound(
-          "@someone_else",
+          "700000001",
           telegramConnectBody.challenge.code,
+          "@someone_else",
         ),
       ).toBeNull();
       expect(
         unit.phylaxTenantSettings.verifyTelegramInbound(
-          "@jordi_test",
+          "733333333",
           telegramConnectBody.challenge.code,
+          "@jordi_test",
         ),
       ).toMatchObject({
-        settings: { tenantId: "tenant-alpha", telegramBinding: "jordi_test" },
+        settings: {
+          tenantId: "tenant-alpha",
+          telegramBinding: "733333333",
+          telegramIdentityHint: "jordi_test",
+        },
         replayed: false,
       });
       expect(
         unit.phylaxTenantSettings.resolve("telegram", "@jordi_test"),
+      ).toBeNull();
+      expect(
+        unit.phylaxTenantSettings.resolve("telegram", "733333333"),
       ).toMatchObject({ tenantId: "tenant-alpha" });
       const telegramTest = await unit.app.request(
         "/internal/zenod/channels/tenant-alpha/telegram/test",
@@ -384,9 +393,17 @@ describe("Hosted Zenod channel adapter", () => {
         },
       );
       expect(telegramTest.status).toBe(200);
+      expect(await telegramTest.json()).toMatchObject({
+        channels: {
+          telegram: {
+            state: "degraded",
+            identityHint: "@jordi_test",
+          },
+        },
+      });
       expect(send).toHaveBeenLastCalledWith(
         "telegram",
-        "jordi_test",
+        "733333333",
         "Zenod Telegram test: this identity is connected to your memory.",
       );
       const telegramDisconnect = await unit.app.request(
@@ -983,7 +1000,8 @@ describe("Hosted Zenod channel adapter", () => {
       progress: async () => {},
     });
     const telegramInput = (messageId: string) => ({
-      sender: "@jordi_replay",
+      sender: "733333333",
+      username: "@jordi_replay",
       chatId: "733333333",
       messageId,
       text: telegramCode,

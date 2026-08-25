@@ -416,9 +416,11 @@ function normalizeHostedPhone(value: unknown): string | null {
 function normalizeHostedTelegram(value: unknown): string | null {
   if (typeof value !== "string" || value.trim().length > 64) return null;
   const normalized = normalizeTelegramEntry(value);
+  const numeric = /^-?\d{1,20}$/.test(normalized);
   if (
     !normalized ||
-    (!/^-?\d{1,20}$/.test(normalized) && !/^[a-z0-9_]{5,32}$/.test(normalized))
+    (numeric && !Number.isSafeInteger(Number(normalized))) ||
+    (!numeric && !/^[a-z0-9_]{5,32}$/.test(normalized))
   )
     return null;
   return normalized;
@@ -501,7 +503,11 @@ function channelView(
           : "off",
       identityHint:
         settings.telegramBinding || settings.telegramPendingIdentity
-          ? `@${(settings.telegramBinding ?? settings.telegramPendingIdentity)!.replace(/^@/, "")}`
+          ? `@${(
+              settings.telegramBinding
+                ? settings.telegramIdentityHint ?? settings.telegramBinding
+                : settings.telegramPendingIdentity
+            )!.replace(/^@/, "")}`
           : null,
       verificationExpiresAt: settings.telegramVerificationExpiresAt,
       revision: settings.telegramBindingRevision,

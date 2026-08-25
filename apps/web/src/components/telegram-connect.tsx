@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner"
 
 import {
+  ApiError,
   api,
   errorMessage,
   type HostedChannelsResponse,
@@ -524,9 +525,10 @@ export function HostedTelegramConnect({
           method: "POST",
           body: {
             ...(identity.trim() ? { identity } : {}),
-            operationId: hostedChannelOperationKey(
+            operationId: await hostedChannelOperationKey(
               "telegram.connect",
               channels?.telegram.revision ?? "0",
+              identity.trim() || undefined,
               resetOperation
             ),
           },
@@ -536,6 +538,8 @@ export function HostedTelegramConnect({
       setChallenge(result.challenge)
       toast.success("Telegram verification started")
     } catch (err) {
+      if (err instanceof ApiError)
+        clearHostedChannelOperation("telegram.connect")
       setError(errorMessage(err))
     } finally {
       setBusy(null)
@@ -551,7 +555,7 @@ export function HostedTelegramConnect({
         {
           method: "POST",
           body: {
-            operationId: hostedChannelOperationKey(
+            operationId: await hostedChannelOperationKey(
               "telegram.test",
               channels?.telegram.revision ?? "0"
             ),
@@ -562,6 +566,8 @@ export function HostedTelegramConnect({
       clearHostedChannelOperation("telegram.test")
       toast.success("Telegram test delivered")
     } catch (err) {
+      if (err instanceof ApiError)
+        clearHostedChannelOperation("telegram.test")
       setError(errorMessage(err))
     } finally {
       setBusy(null)
@@ -577,7 +583,7 @@ export function HostedTelegramConnect({
         {
           method: "POST",
           body: {
-            operationId: hostedChannelOperationKey(
+            operationId: await hostedChannelOperationKey(
               "telegram.disconnect",
               channels?.telegram.revision ?? "0"
             ),
@@ -591,6 +597,8 @@ export function HostedTelegramConnect({
       setIdentity("")
       toast.success("Telegram disconnected")
     } catch (err) {
+      if (err instanceof ApiError)
+        clearHostedChannelOperation("telegram.disconnect")
       setError(errorMessage(err))
     } finally {
       setBusy(null)

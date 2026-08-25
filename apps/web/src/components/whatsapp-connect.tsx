@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner"
 
 import {
+  ApiError,
   api,
   errorMessage,
   type HostedChannelsResponse,
@@ -666,9 +667,10 @@ export function HostedWhatsAppConnect({
         {
           method: "POST",
           body: {
-            operationId: hostedChannelOperationKey(
+            operationId: await hostedChannelOperationKey(
               "whatsapp.challenge",
               initial?.whatsapp.revision ?? "0",
+              sender.trim() || undefined,
               resetOperation
             ),
             ...(sender.trim() ? { sender } : {}),
@@ -679,6 +681,8 @@ export function HostedWhatsAppConnect({
       setChallenge(result.challenge)
       toast.success("WhatsApp verification started")
     } catch (err) {
+      if (err instanceof ApiError)
+        clearHostedChannelOperation("whatsapp.challenge")
       setError(errorMessage(err))
     } finally {
       setBusy(null)
@@ -694,7 +698,7 @@ export function HostedWhatsAppConnect({
         {
           method: "POST",
           body: {
-            operationId: hostedChannelOperationKey(
+            operationId: await hostedChannelOperationKey(
               "whatsapp.test",
               initial?.whatsapp.revision ?? "0"
             ),
@@ -705,6 +709,8 @@ export function HostedWhatsAppConnect({
       clearHostedChannelOperation("whatsapp.test")
       toast.success("Zenod test delivered")
     } catch (err) {
+      if (err instanceof ApiError)
+        clearHostedChannelOperation("whatsapp.test")
       setError(errorMessage(err))
     } finally {
       setBusy(null)
@@ -720,7 +726,7 @@ export function HostedWhatsAppConnect({
         {
           method: "POST",
           body: {
-            operationId: hostedChannelOperationKey(
+            operationId: await hostedChannelOperationKey(
               "whatsapp.disconnect",
               initial?.whatsapp.revision ?? "0"
             ),
@@ -734,6 +740,8 @@ export function HostedWhatsAppConnect({
       setSender("")
       toast.success("WhatsApp disconnected")
     } catch (err) {
+      if (err instanceof ApiError)
+        clearHostedChannelOperation("whatsapp.disconnect")
       setError(errorMessage(err))
     } finally {
       setBusy(null)

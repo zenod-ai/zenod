@@ -118,11 +118,11 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     artifactCapabilitySecret,
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
-    verifyInbound({ channel, sender, text }) {
+    verifyInbound({ channel, sender, username, text }) {
       const verified =
         channel === "whatsapp"
           ? tenantSettings.verifyInboundReceipt(sender, text)
-          : tenantSettings.verifyTelegramInbound(sender, text);
+          : tenantSettings.verifyTelegramInbound(sender, text, username);
       if (verified && !verified.replayed) {
         hostedChannelAudit.recordVerification(
           channel,

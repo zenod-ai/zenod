@@ -254,18 +254,62 @@ describe("TelegramGateway", () => {
     }
   });
 
-  it("delivers to a tenant-bound handle using the sole numeric owner allowlist entry", async () => {
+  it("requires the immutable numeric recipient and never falls back through a legacy allowlist handle", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
     const runtime = new Runtime(dir);
     const { fetchImpl, calls } = fakeBotApi(null);
     runtime.settings.setTelegramSettings({ botToken: "TEST:TOKEN", allowedUsers: ["@AlfaBlok", "555"], enabled: false });
     const gateway = new TelegramGateway({ settings: runtime.settings, getEngine: async () => fakeEngine([]), fetchImpl });
     try {
-      await expect(gateway.sendText("@AlfaBlok", "Phylax Telegram receipt pass.")).resolves.toEqual({ sentMessageId: "1" });
+      await expect(
+        gateway.sendText("@AlfaBlok", "Phylax Telegram receipt pass."),
+      ).rejects.toThrow("Telegram recipient and text are required");
+      await expect(gateway.sendText("555", "Phylax Telegram receipt pass.")).resolves.toEqual({ sentMessageId: "1" });
       expect(calls.find((call) => call.method === "sendMessage")?.body).toMatchObject({
         chat_id: 555,
         text: "Phylax Telegram receipt pass.",
       });
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("projects the immutable numeric sender and keeps username as display-only ported metadata", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-immutable-id-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl } = fakeBotApi(tgMessage());
+    runtime.settings.setTelegramSettings({
+      botToken: "TEST:TOKEN",
+      allowedUsers: [],
+      acceptAll: true,
+      enabled: true,
+    });
+    const inbound: Array<{
+      sender: string;
+      username?: string | null;
+      chatId: string;
+    }> = [];
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => fakeEngine([]),
+      fetchImpl,
+      portedInboundHandler: async (input) => {
+        inbound.push({
+          sender: input.sender,
+          username: input.username,
+          chatId: input.chatId,
+        });
+        return { replyText: "verified" };
+      },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => inbound.length === 1);
+      expect(inbound).toEqual([
+        { sender: "555", username: "@tester", chatId: "555" },
+      ]);
     } finally {
       await gateway.close();
       runtime.close();
