@@ -9,9 +9,9 @@ GitHub issues: `https://github.com/zenod-ai/zenod/issues`
 Integration branch: `main`
 Active spine steward: Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
 Steward since: 2026-08-16 17:07 CEST
-Last reconciled commit: `fa41246` (reuse-first backlog normalization)
+Last reconciled commit: `03069a2` plus current first-batch dispatch working tree
 Planner: Jordi + Zenod Alpha delivery manager
-Worker: unassigned
+Worker: ZAL-7-edition-portal-worker, ZAL-8-direct-routing-worker, ZAL-10-managed-ai-worker
 Tester: unassigned
 
 ## Role Bindings
@@ -80,11 +80,11 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Current State
 
-Phase: reuse-first minimum paid-beta backlog normalized against the implementation already on `main`
+Phase: reuse-first minimum paid-beta first batch active in three isolated worktrees
 Last verified: 2026-08-25 CEST
 Integration target: `main`
 Fresh base commit: `fa41246` on `main`
-Next action: when an issue is explicitly selected, dispatch the first parallel batch: [ZAL-7 #1073](https://github.com/zenod-ai/zenod/issues/1073) to adapt the existing portal, [ZAL-8 #1074](https://github.com/zenod-ai/zenod/issues/1074) to correct and stabilize the existing Zenod route, and [ZAL-10 #1076](https://github.com/zenod-ai/zenod/issues/1076) to extend existing billing/metering. Then [ZAL-9 #1075](https://github.com/zenod-ai/zenod/issues/1075) reuses existing WhatsApp activation components, and [ZAL-17 #1083](https://github.com/zenod-ai/zenod/issues/1083) proves the minimum paid beta. All remain proposed until explicitly selected under the command contract.
+Next action: review and reconcile terminal handoffs for active [ZAL-7 #1073](https://github.com/zenod-ai/zenod/issues/1073), [ZAL-8 #1074](https://github.com/zenod-ai/zenod/issues/1074), and [ZAL-10 #1076](https://github.com/zenod-ai/zenod/issues/1076); integrate accepted work to `main`, then dispatch [ZAL-9 #1075](https://github.com/zenod-ai/zenod/issues/1075) once #1073 and #1074 pass review.
 Blockers: no blocker to local implementation. The existing multi-tenant portal, customer auth/account/billing/MCP/vault integrations, channel components, Phylax runtime, and usage stores are the starting product—not replacement targets. Full owner-admin analytics [#1077–#1082](https://github.com/zenod-ai/zenod/issues/1077) are post-core-beta enhancements. Production mutation, live billing, signup opening, WhatsApp-session/routing change, and external promotion remain separately gated.
 
 ## Role Goals
@@ -166,10 +166,10 @@ The repository's global issue list is not the alpha board. It contains many hist
 | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | Epic worker / operator | unassigned | ZAL-4 · Execute the fail-closed production-readiness gate | blocked | [#1083](https://github.com/zenod-ai/zenod/issues/1083), production approval | `codex/zal-4-production-gate` | `1a39166` | Every runbook check has current evidence; signup remains closed until exact approval, then opens and verifies or rolls back safely. | `docs/PRODUCTION-READINESS.md`; public signup disabled pending evidence. | 2026-08-25 CEST | Wait for the minimum paid-beta candidate; then prepare the read-only packet and request exact production/real-card/signup approval. |
 | [#1062](https://github.com/zenod-ai/zenod/issues/1062) | Tester | unassigned | ZAL-5 · Stranger alpha onboarding and memory acceptance | waiting | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | `codex/zal-5-stranger-acceptance` | `1a39166` | One uninterrupted public-page → onboarding → MCP memory journey passes on the named deployed SHA; approved WhatsApp promise is included if applicable. | Existing founder/live component evidence only. | 2026-08-16 17:07 CEST | Dispatch after production gate passes. |
 | [#1063](https://github.com/zenod-ai/zenod/issues/1063) | Planner / outbound drafter | unassigned | ZAL-6 · Draft the first proof-led alpha invitation | waiting | [#1060](https://github.com/zenod-ai/zenod/issues/1060), [#1069](https://github.com/zenod-ai/zenod/issues/1069); may run beside [#1061](https://github.com/zenod-ai/zenod/issues/1061) | `codex/zal-6-alpha-invitation` | `1a39166` | Exact Reddit/X options and landing target match proved capabilities; nothing is published. | Promotion requested in `^e-5c1e43`. | 2026-08-20 17:12 CEST | Draft only after the priced offer is approved; request exact-content approval before posting. |
-| [#1073](https://github.com/zenod-ai/zenod/issues/1073) | Ticket worker | unassigned | ZAL-7 · Adapt the existing multi-tenant Zenod portal to the approved editions | ready / proposed | approved UI contract | `codex/zal-7-edition-portal` | `fa41246` | Existing app/auth/account/components are reorganized in place for Hosted/self-host; no second app/router/design system; current flows regress green. | Reuse-normalized issue contract names exact existing web surfaces. | 2026-08-25 CEST | Dispatch from fresh base only when explicitly selected. |
-| [#1074](https://github.com/zenod-ai/zenod/issues/1074) | Ticket worker | unassigned | ZAL-8 · Remove Ring and repair Zenod’s existing Phylax WhatsApp route | ready / proposed | approved Zenod/Phylax boundary and 48-hour audit | `codex/zal-8-direct-routing` | `fa41246` | Existing Phylax path calls Zenod directly; eight audited receipt/timeout/classifier/media/long-note/transcript/delivery/reply defects are pinned; session/data and separate Ring functionality remain intact. | Reuse-normalized issue contract names exact routing/runtime assets and audited remediations. | 2026-08-25 CEST | Dispatch from fresh base only when explicitly selected; no live route/session mutation. |
+| [#1073](https://github.com/zenod-ai/zenod/issues/1073) | Ticket worker | ZAL-7-edition-portal-worker | ZAL-7 · Adapt the existing multi-tenant Zenod portal to the approved editions | running | approved UI contract | `codex/zal-7-edition-portal` | `fa41246` | Existing app/auth/account/components are reorganized in place for Hosted/self-host; no second app/router/design system; current flows regress green. | Isolated worktree `/Users/jordi/Documents/GitHub/wt-zal-7-edition-portal`; status `running`. | 2026-08-25 CEST | Worker implements/tests and posts terminal issue handoff; steward reviews. |
+| [#1074](https://github.com/zenod-ai/zenod/issues/1074) | Ticket worker | ZAL-8-direct-routing-worker | ZAL-8 · Remove Ring and repair Zenod’s existing Phylax WhatsApp route | running | approved Zenod/Phylax boundary and 48-hour audit | `codex/zal-8-direct-routing` | `fa41246` | Existing Phylax path calls Zenod directly; eight audited receipt/timeout/classifier/media/long-note/transcript/delivery/reply defects are pinned; session/data and separate Ring functionality remain intact. | Isolated worktree `/Users/jordi/Documents/GitHub/wt-zal-8-direct-routing`; status `running`. | 2026-08-25 CEST | Worker implements/tests and posts terminal issue handoff; steward reviews; no live mutation. |
 | [#1075](https://github.com/zenod-ai/zenod/issues/1075) | Ticket worker | unassigned | ZAL-9 · Reuse existing channel components for Hosted WhatsApp activation | waiting / proposed | #1073, #1074 | `codex/zal-9-whatsapp-activation` | `fa41246` | Existing WhatsApp verification/status/test components operate tenant-scoped inside Zenod; self-host remains Telegram-only. | Reuse-normalized issue contract names current components/APIs. | 2026-08-25 CEST | Wait for #1073 and #1074. |
-| [#1076](https://github.com/zenod-ai/zenod/issues/1076) | Ticket worker | unassigned | ZAL-10 · Extend existing billing and metering for managed Hosted usage | ready / proposed | approved economics | `codex/zal-10-managed-ai` | `fa41246` | Existing customer/billing/metering stores gain managed cap lifecycle; Hosted is percentage/state/reset only; self-host/raw operator evidence remains. | Reuse-normalized issue contract names current account/metering stores. | 2026-08-25 CEST | Dispatch from fresh base only when explicitly selected. |
+| [#1076](https://github.com/zenod-ai/zenod/issues/1076) | Ticket worker | ZAL-10-managed-ai-worker | ZAL-10 · Extend existing billing and metering for managed Hosted usage | running | approved economics | `codex/zal-10-managed-ai` | `fa41246` | Existing customer/billing/metering stores gain managed cap lifecycle; Hosted is percentage/state/reset only; self-host/raw operator evidence remains. | Isolated worktree `/Users/jordi/Documents/GitHub/wt-zal-10-managed-ai`; status `running`. | 2026-08-25 CEST | Worker implements/tests and posts terminal issue handoff; steward reviews; no live key/billing mutation. |
 | [#1077](https://github.com/zenod-ai/zenod/issues/1077) | Ticket worker | unassigned | ZAL-11 · Extend existing /admin with minimal owner health and tenant overview | deferred / proposed | post-core-beta; may follow #1073 | `codex/zal-11-owner-admin-foundation` | `fa41246` | Existing protected `/admin` is extended in place with sourced/masked setup and tenant reads. | Approved owner destination preserved; removed from core-beta critical path. | 2026-08-25 CEST | Revisit after #1083 unless operating evidence makes it necessary sooner. |
 | [#1078](https://github.com/zenod-ai/zenod/issues/1078) | Ticket worker | unassigned | ZAL-12 · Extend existing customer stores with owner tenant operations | deferred / proposed | post-core-beta; #1076, #1077 | `codex/zal-12-tenant-ops` | `fa41246` | Typed/idempotent/audited operations preserve external GitHub/Drive data. | Approved tenant destination preserved; current scripts/stores support the first capped cohort. | 2026-08-25 CEST | Revisit after core-beta proof. |
 | [#1079](https://github.com/zenod-ai/zenod/issues/1079) | Ticket worker | unassigned | ZAL-13 · Extend existing usage stores with owner AI spend analytics | deferred / proposed | post-core-beta; #1076, #1077 | `codex/zal-13-ai-analytics` | `fa41246` | Existing usage sources produce reconciled 30-day model/operation analytics. | Approved analytics destination preserved; not a launch dependency. | 2026-08-25 CEST | Revisit after core-beta proof. |
@@ -218,8 +218,8 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 
 ## Worker Queue
 
-- No ticket worker is active; the normalized issues remain proposed and were not queued by this planning pass.
-- Ready on explicit selection: #1073 existing-portal adaptation, #1074 existing-route correction plus audited reliability repairs, and #1076 existing billing/metering extension. Use one issue/branch/worktree per worker and preserve current functionality.
+- Active from common base `fa41246`: #1073 existing-portal adaptation, #1074 existing-route correction plus audited reliability repairs, and #1076 existing billing/metering extension. Each has one dedicated branch/worktree and stable assignment identity.
+- Parent delivery manager remains sole spine steward and reviews terminal issue/branch evidence before integration.
 - ZAL-4 may prepare a read-only preflight packet while blocked, but may not deploy, charge, or open signup.
 
 ## Tester Queue
@@ -242,6 +242,20 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 | 2026-08-16 | Child spine structure | working tree from `1a39166` | local | `python3 skills/epic-spine/scripts/validate_spine.py --strict docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | pending final issue links | this file |
 
 ## Handoff Journal
+
+### 2026-08-25 - Epic worker - Reuse-first implementation batch dispatched
+
+Context: Jordi replied “ok go” to the normalized minimum implementation plan. The delivery manager queued exactly #1073, #1074, and #1076, created clean isolated worktrees from common base `fa41246`, bound three stable ticket workers, and moved the tickets to `status:running`. The Zenod issue-edit integration failed before mutation, so the governed queue/running transition was completed through the authenticated GitHub fallback and recorded in each issue. No production or live-system action occurred.
+
+Next: review terminal handoffs, branch diffs, and exact test evidence from all three workers; integrate accepted work frequently to `main`; then dispatch #1075 after #1073 and #1074 satisfy acceptance.
+
+Risks: the three branches may touch shared web/server types, so integration order and focused reruns must be reconciled on `main`. #1074 remains local-only and may not alter the live WhatsApp route/session. #1076 may not create provider keys or mutate Stripe/provider accounts.
+
+Assignment identity: Zenod Alpha delivery manager (`Jordi + current bound Codex task`); ZAL-7-edition-portal-worker; ZAL-8-direct-routing-worker; ZAL-10-managed-ai-worker
+
+Branch / worktrees: `codex/zal-7-edition-portal` at `/Users/jordi/Documents/GitHub/wt-zal-7-edition-portal`; `codex/zal-8-direct-routing` at `/Users/jordi/Documents/GitHub/wt-zal-8-direct-routing`; `codex/zal-10-managed-ai` at `/Users/jordi/Documents/GitHub/wt-zal-10-managed-ai`; all from `fa41246`
+
+Last verified: 2026-08-25 CEST
 
 ### 2026-08-25 - Epic worker - Reuse-first backlog normalization
 
