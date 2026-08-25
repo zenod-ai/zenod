@@ -9,7 +9,7 @@ GitHub issues: `https://github.com/zenod-ai/zenod/issues`
 Integration branch: `main`
 Active spine steward: Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
 Steward since: 2026-08-16 17:07 CEST
-Last reconciled commit: `b8cae8c` plus current spine working tree
+Last reconciled commit: `963b7cf` plus current spine working tree
 Planner: Jordi + Zenod Alpha delivery manager
 Worker: unassigned
 Tester: unassigned
@@ -80,12 +80,12 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Current State
 
-Phase: Zenod-only product boundary approved; exact hosted price and included-usage contract at Jordi gate
+Phase: final Zenod hosted/open-source product, portal, operator console, and two-service topology at Jordi sign-off
 Last verified: 2026-08-25 CEST
 Integration target: `main`
-Fresh base commit: `b8cae8c` on `main`
-Next action: Jordi reviews the revised `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/index.html` and approves or revises the proposed €9/month plus VAT contract with a shared $2/month OpenRouter text/vision/transcription allowance, 80% warning, hard stop/no overage, and queued raw-evidence fallback; the delivery manager then creates the smallest dependency-ordered final-iteration batch.
-Blockers: the product boundary is approved—one Zenod product, hosted includes WhatsApp, Phylax is hidden infrastructure, Ring is excluded, and MCP remains a first-class ready-to-connect surface. The exact €9 price and $2 included-usage contract remain unapproved. Production mutation, live billing drill, signup opening, WhatsApp-session change, and external promotion remain separate later approvals.
+Fresh base commit: `963b7cf` on `main`
+Next action: Jordi reviews the final revision of `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/index.html` and approves or revises the complete beta product: €9/month plus VAT, managed AI usage included without a customer-visible dollar entitlement, hosted WhatsApp through the existing hidden Phylax service, open-source Telegram without the managed WhatsApp card, one capability-driven UI codebase, and a protected Zenod operator console. After sign-off, the delivery manager creates the smallest dependency-ordered implementation batch.
+Blockers: only final product sign-off remains. The artifact now states that “Zenod Channels” is the current Phylax runtime/service/volume/session—not new infrastructure; customers see usage percentage/state/reset only; provider names, raw units, costs, caps, models, and keys are operator-only; hosted and open source share UI code but expose different capabilities. Production mutation, live billing drill, signup opening, WhatsApp-session change, and external promotion remain separate later approvals.
 
 ## Role Goals
 
@@ -135,6 +135,9 @@ The repository's global issue list is not the alpha board. It contains many hist
 | 2026-08-20 | Require unit economics and an explicit usage contract before Jordi chooses the alpha offer. | A price without included workload, limit behavior, model-cost exposure, or a BYOK alternative is not a complete or safely promotable contract. | [#1069](https://github.com/zenod-ai/zenod/issues/1069) and Jordi's 2026-08-20 direction |
 | 2026-08-25 | Package WhatsApp as Zenod access, not as a separate Phylax product; exclude Ring from the Zenod phone path. | The simple product is one memory agent on every channel. Separate customer products, credentials, tool bindings, and generic multi-agent routing create onboarding complexity and false/misleading replies. The channel runtime may remain a separate internal container for operational isolation. | Jordi's 2026-08-25 direction and `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/index.html` |
 | 2026-08-25 | Approve the Zenod product boundary: hosted includes WhatsApp; Phylax is completely hidden; Ring is absent; MCP remains a customer-facing connection surface. | Customers buy one memory product and may use WhatsApp or connect the same tenant memory to their own MCP harness. Internal service boundaries must not become customer setup work. | Jordi's review of the 2026-08-25 HTML artifact |
+| 2026-08-25 | “Zenod Channels” is the existing Phylax service in a hidden operational role, not a new service or rewrite. | Preserve the current Phylax code, container/service, persistent volume, WhatsApp session, journal, retries, and owner pairing controls. Only its separate customer-product surface disappears; Zenod's Channels tab calls it privately. | Jordi's final-iteration clarification and repository/runtime audit |
+| 2026-08-25 | Hide provider economics from hosted customers; expose only included-usage percentage, state, and reset. | The €9 product includes managed usage. OpenRouter, models, raw tokens/audio minutes, dollar spend, and the adjustable internal cap belong in the protected owner console, not the customer contract or portal. | Jordi's final-iteration clarification |
+| 2026-08-25 | Hosted and open-source Zenod share one runtime and web-UI codebase with explicit capabilities. | Hosted exposes managed AI, billing, percentage-only usage, Telegram, and WhatsApp. Self-host exposes local setup, provider/model controls, raw diagnostic usage, and Telegram, while hiding the managed WhatsApp activation journey. | Current customer-auth/setup-wizard code plus Jordi's product direction |
 
 ## Issue Ledger
 
@@ -142,7 +145,7 @@ The repository's global issue list is not the alpha board. It contains many hist
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | [#1058](https://github.com/zenod-ai/zenod/issues/1058) | Ticket worker | ZAL-1-readiness-audit-worker | ZAL-1 · Reconcile alpha-launch truth and readiness matrix | done | - | [merged PR #1066](https://github.com/zenod-ai/zenod/pull/1066) / `main` | `7454715` | Evidence matrix and smallest ordered backlog are committed; no production mutation. | [Terminal handoff](https://github.com/zenod-ai/zenod/issues/1058#issuecomment-5309945858); artifact `601d3a6`; CI green; merged as `e478965`; issue closed. | 2026-08-17 00:37 CEST | None. |
 | [#1059](https://github.com/zenod-ai/zenod/issues/1059) | Ticket worker | ZAL-2-recent-recap-worker | ZAL-2 · Reproduce and repair the incorrect recent-conversation recap | testing / acceptance superseded for Zenod phone | approved direct Zenod deployment/replay | [merged PR #1067](https://github.com/zenod-ai/zenod/pull/1067) / `main` | `7454715` | Exact interaction is reproduced and fixed with regression, or current pass is proved with full trace; no production deploy. | [Manager review](https://github.com/zenod-ai/zenod/issues/1059#issuecomment-5310028378); exact evidence and Ring-side fix `8811326`; 2026-08-25 decision removes Ring from the Zenod phone acceptance path. | 2026-08-25 CEST | Preserve the merged Ring fix for Ring; close Zenod acceptance with a direct Phylax-to-Zenod replay on the version-coherent candidate. |
-| [#1060](https://github.com/zenod-ai/zenod/issues/1060) | Planner | ZAL-3-offer-decision-planner | ZAL-3 · Frame the alpha offer and WhatsApp boundary for decision | product boundary approved / economics human gate | Jordi approves or revises the €9/$2 hosted beta usage contract | [merged PR #1068](https://github.com/zenod-ai/zenod/pull/1068) plus [ZAL-3E PR #1071](https://github.com/zenod-ai/zenod/pull/1071) / `main` | `0bb5b3d` | Truthful offer, usage economics, Zenod-only WhatsApp boundary, customer journey, and exact Jordi decision are recorded. | Product boundary approved; revised artifact adds tenant usage evidence, two-token explanation, literal 3-current/2-proposed VPS service map, complete portal map/mockups, and a proposed shared $2 allowance. | 2026-08-25 CEST | Jordi approves or revises the exact €9/month plus VAT and $2/month included-usage contract. |
+| [#1060](https://github.com/zenod-ai/zenod/issues/1060) | Planner | ZAL-3-offer-decision-planner | ZAL-3 · Frame the alpha offer and WhatsApp boundary for decision | final product sign-off | Jordi approves or revises the complete €9 Zenod beta product | [merged PR #1068](https://github.com/zenod-ai/zenod/pull/1068) plus [ZAL-3E PR #1071](https://github.com/zenod-ai/zenod/pull/1071) / `main` | `0bb5b3d` | Truthful offer, usage economics, Zenod-only WhatsApp boundary, customer journey, editions, operator surface, and exact Jordi decision are recorded. | Final artifact makes Phylax identity explicit, hides dollar economics from customers, adds the owner console, and maps the hosted/self-host capability split on one UI codebase. | 2026-08-25 CEST | Jordi signs off the final artifact or names one remaining product assumption to revise. |
 | [#1069](https://github.com/zenod-ai/zenod/issues/1069) | Ticket worker / analyst | ZAL-3E-unit-economics-worker | ZAL-3E · Define alpha usage limits, BYOK pricing, and unit economics | done | current provider/payment/hosting evidence | [merged PR #1071](https://github.com/zenod-ai/zenod/pull/1071) / `main` | `130a2720` | Reproducible margin and break-even analysis defines platform-funded and BYOK prices, included usage, limit behavior, sensitivity, and one recommendation without changing live systems. | [Manager acceptance](https://github.com/zenod-ai/zenod/issues/1069#issuecomment-5358203918); artifact `d4dfc18`; CI green; merged as `131b80c`; issue closed. | 2026-08-20 17:41 CEST | None; consume through #1060 human gate. |
 | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | Epic worker / operator | unassigned | ZAL-4 · Execute the fail-closed production-readiness gate | blocked | [#1058](https://github.com/zenod-ai/zenod/issues/1058), [#1059](https://github.com/zenod-ai/zenod/issues/1059), [#1060](https://github.com/zenod-ai/zenod/issues/1060), [#1069](https://github.com/zenod-ai/zenod/issues/1069), production approval | `codex/zal-4-production-gate` | `1a39166` | Every runbook check has current evidence; signup remains closed until exact approval, then opens and verifies or rolls back safely. | `docs/PRODUCTION-READINESS.md`; public signup disabled pending evidence. | 2026-08-20 17:12 CEST | Prepare read-only packet; wait for approved priced usage contract and exact production/real-card/signup approval. |
 | [#1062](https://github.com/zenod-ai/zenod/issues/1062) | Tester | unassigned | ZAL-5 · Stranger alpha onboarding and memory acceptance | waiting | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | `codex/zal-5-stranger-acceptance` | `1a39166` | One uninterrupted public-page → onboarding → MCP memory journey passes on the named deployed SHA; approved WhatsApp promise is included if applicable. | Existing founder/live component evidence only. | 2026-08-16 17:07 CEST | Dispatch after production gate passes. |
@@ -163,7 +166,7 @@ The repository's global issue list is not the alpha board. It contains many hist
 
 | Gate | Human Owner | Trigger | Exact Approval / Input Required | What May Continue |
 |---|---|---|---|---|
-| Alpha price and included usage | Jordi | Zenod-only boundary approved; live usage/cost evidence added | Reply `APPROVE ZENOD €9 / $2 BETA CONTRACT` to approve €9/month plus VAT, a shared $2/month OpenRouter allowance for text/vision/transcription, warning at $1.60, hard stop/no overage at $2, queued raw evidence at cap, no alpha annual plan, and no customer API key for standard hosted use; or name an assumption to revise. | Read-only checks, local validation, and draft-only prep. |
+| Final Zenod beta product | Jordi | Product boundary, editions, UI, operator surface, deployment, and economics are explicit | Reply `APPROVE FINAL ZENOD BETA PRODUCT` to approve one €9/month plus VAT hosted plan with managed AI usage and WhatsApp included; customer usage shown only as percentage/state/reset; hidden adjustable operator caps with no overage and queued raw evidence at the limit; existing Phylax retained privately as Zenod's channel runtime; Ring absent; MCP first-class; free open source with self-managed provider controls and supported Telegram but no managed WhatsApp card; no alpha annual plan. Or name one assumption to revise. | Read-only checks, local validation, and draft-only prep. |
 | Production deployment and configuration | Jordi | ZAL-4 preflight ready | Approve exact immutable image, Dokploy target, redacted env-key change set, and rollback plan. | Read-only checks and local validation. |
 | Live billing drill | Jordi | Closed signup deploy is healthy | Approve one exact real-card drill at the approved hosted-beta price and intended refund/cancellation handling. | Non-financial readiness checks. |
 | Open public signup | Jordi | All production evidence is current | Approve setting `ZENOD_PUBLIC_PAID_SIGNUP=1` on the named SHA/environment. | Closed alpha testing. |
@@ -180,14 +183,14 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 
 ## Planner Queue
 
-- Present the revised 2026-08-25 product/deployment/portal/usage artifact; preserve only the exact €9/$2 economics gate because the Zenod-only product boundary is approved.
+- Present the final 2026-08-25 product/deployment/portal/operator/edition artifact; preserve the single final-product sign-off gate.
 - After approval, create the smallest dependency-ordered final-iteration batch for Zenod-integrated channel UI/onboarding, automatic private tenant binding, direct Zenod routing, the audited reliability remediations, managed credential/allowance enforcement, and version-coherent acceptance.
 - Keep ZAL-4 fail-closed until every named production approval is explicit.
 - Draft the separate voice-note-to-Codex child epic after the alpha offer is accepted; it is not part of this board.
 
 ## Worker Queue
 
-- No ticket worker is active while the exact €9/$2 hosted-beta economics contract awaits Jordi's approval or revision.
+- No ticket worker is active while the complete Zenod beta product awaits Jordi's final sign-off or revision.
 - ZAL-4 may prepare a read-only preflight packet while blocked, but may not deploy, charge, or open signup.
 
 ## Tester Queue
@@ -204,11 +207,25 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 | 2026-08-17 | ZAL-2 recap failure boundary and branch fix | `8811326` merged as `0bb5b3d` | Preserved Ring audit state, deployed replay, live Zenod reads, local/CI | Exact interaction recovery, isolated replay, vault immutability, structural refs, focused 17/17, full 904-server suite, typecheck, reviewer | pass for integration; post-deploy model behavior remains testing | `docs/evidence/zal-2-recent-recap-2026-08-17/README.md`; [PR #1067](https://github.com/zenod-ai/zenod/pull/1067) |
 | 2026-08-17 | ZAL-3 first-alpha offer decision packet | `5d7dbd4` merged as `e091eb2` | Repository and rechecked public promise/status surfaces | Three exact contracts, promise matrix, one recommendation, safe-work boundary, exact Jordi choice, link/diff checks, PR CI | decision-ready; no option approved | `docs/evidence/zenod-alpha-offer-decision-2026-08-17/README.md`; [PR #1068](https://github.com/zenod-ai/zenod/pull/1068) |
 | 2026-08-20 | ZAL-3E usage, BYOK, and unit economics | `d4dfc18` merged as `131b80c` | Repository, redacted aggregate live production state, and current primary-source provider/payment/hosting prices | Independent repo/live and market-cost audits; reproducible Node model; invariant/link/diff checks; PR CI; manager review | pass for analysis acceptance; exact economics contract awaits Jordi approval; managed inference remains implementation-blocked | `docs/evidence/zenod-alpha-unit-economics-2026-08-20/README.md`; [PR #1071](https://github.com/zenod-ai/zenod/pull/1071) |
-| 2026-08-25 | Zenod WhatsApp audit and Zenod-only public-beta product/deployment proposal | working tree from `b8cae8c` | Production Phylax/Ring/Zenod read-only stores and service metadata; repository code/customer UI; OpenRouter primary pricing; standalone HTML | Reconciled 10 interactions; live bindings; three deployed services; calendar/rolling tenant LLM ledgers; voice duration/provider; official model/STT prices; current portal source; rendered at 390/768/1440 widths | product boundary approved; exact €9/$2 economics remain at human gate; no production or session mutation | `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/index.html` |
+| 2026-08-25 | Zenod WhatsApp audit and final public-beta product/deployment proposal | working tree from `963b7cf` | Production Phylax/Ring/Zenod read-only stores and service metadata; repository customer/admin/edition code; OpenRouter primary pricing; standalone HTML | Reconciled 10 interactions; live bindings; current three/proposed two services; Phylax identity; hosted/self-host UI seam; owner-only admin boundary; tenant usage/voice cost; rendered portal/operator mockups | final product packet ready for Jordi sign-off; no production, billing, session, signup, or route mutation | `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/index.html` |
 | 2026-08-01 | Typed recent-memory retrieval | `d4eaac4` deployed at time of proof | Zenod MT MCP | newest-first structural `search_memory` plus exact evidence-ref `get_memory` | pass | `docs/evidence/generic-entry-retrieval-2026-08-01/` |
 | 2026-08-16 | Child spine structure | working tree from `1a39166` | local | `python3 skills/epic-spine/scripts/validate_spine.py --strict docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | pending final issue links | this file |
 
 ## Handoff Journal
+
+### 2026-08-25 - Epic worker - Final Phylax identity, editions, hidden usage, and owner console revision
+
+Context: Jordi clarified the remaining product seams. “Zenod Channels” must not become a new service: it is exactly the current Phylax runtime, service/container, persistent volume, WhatsApp session, journal, retries, and owner pairing boundary, with its separate customer-product UI removed and its tenant activation controls presented inside Zenod. Hosted customers paying €9 see only included-usage percentage, state, and reset; OpenRouter, model routing, raw tokens/audio minutes, dollars, and the adjustable internal cap are operator-only. Hosted and open source reuse one Zenod runtime/UI codebase with explicit capabilities: hosted has GitHub/Stripe, managed AI, percentage-only usage, Telegram, WhatsApp, and Account; self-host has local setup, customer-owned provider/model controls, raw diagnostics, Telegram, and no managed WhatsApp activation. Repository review confirms the current web app already switches between GitHub customer-auth and the local setup wizard; customer usage currently exposes provider dollars and therefore needs a hosted presentation layer; Phylax already protects its pairing screen at owner-only `/admin`; OpenRouter child-key listing/metering and a manual capped-key script exist but automatic checkout provisioning and the unified owner console remain implementation work.
+
+Next: Jordi signs off the complete artifact with `APPROVE FINAL ZENOD BETA PRODUCT` or names one remaining assumption. The delivery manager then creates the smallest implementation batch for capability-driven portal presentation, Zenod Channels UI/private Phylax API, direct Zenod routing, managed key/cap automation, protected owner console, audited reliability fixes, and version-coherent acceptance. Production and commercial action gates remain closed.
+
+Risks: the internal $2 launch default remains based on founder usage and must be adjustable/reconciled; it is not customer-facing entitlement copy. The existing Phylax full-customer unit must be reduced carefully without resetting the live session or deleting its data/diagnostics. Hosted raw-cost hiding must not reduce operator observability or self-host diagnostics. The shared WhatsApp Web transport remains capped-beta infrastructure.
+
+Assignment identity: Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
+
+Branch / latest commit: `main` at `963b7cf`; final artifact and spine revision in current working tree
+
+Last verified: 2026-08-25 CEST
 
 ### 2026-08-25 - Epic worker - Product boundary approved; usage and literal VPS/portal packet revised
 
@@ -426,7 +443,7 @@ Links:
 
 ## Open Questions
 
-- Is the revised Zenod Hosted beta economics contract approved at €9/month plus VAT with a shared $2/month OpenRouter text/vision/transcription allowance, $1.60 warning, $2 hard stop/no overage, and queued raw evidence at cap; or which exact assumption should change? Owner: Jordi. Needed by: ZAL-3 decision.
+- Is the complete Zenod beta product approved: €9/month plus VAT; managed AI usage included and shown to customers only as percentage/state/reset; hidden adjustable operator cap with queued raw evidence/no overage; hosted WhatsApp through the existing private Phylax service; Ring absent; MCP first-class; one capability-driven UI codebase; and free self-host with provider controls plus supported Telegram but no managed WhatsApp activation card? Owner: Jordi. Needed by: ZAL-3 final sign-off.
 - Is the first public promotion an alpha invitation, build-in-public proof, or product-learning post? Owner: Jordi. Needed by: ZAL-6 approval.
 
 ## Proposed Cross-Spine Updates
