@@ -148,6 +148,7 @@
     <h1>Zenod does not need another product.</h1>
     <p class="lede">It needs one final simplification: one WhatsApp number, the existing Phylax service hidden behind Zenod’s <em>Channels</em> tab, and Zenod as the only agent. “Zenod Channels” is a product label for Phylax’s existing job—not a new service, codebase, container, volume, or session. Ring is separate and does not sit in this phone path.</p>
     <div class="verdict"><strong>Verdict: not ready for public beta today.</strong> The core memory system works, but the live WhatsApp route is split and 6 of the last 10 inbound messages were affected by a failure or misleading response. This is a finite stabilization problem, not a rebuild.</div>
+    <a class="button" href="./ui-contract.html">Open the fully specified UI contract</a>
   </header>
 
   <section>
@@ -297,10 +298,10 @@
       <article class="card full">
         <span class="status gate">Zenod Open Source · free</span>
         <h3>The user operates it</h3>
-        <ul><li><strong>Entry:</strong> local setup wizard and admin password; no Zenod account or Stripe.</li><li><strong>AI:</strong> provider key, model choice, and optional local transcription remain visible because the user owns the bill and infrastructure.</li><li><strong>Usage:</strong> raw calls/tokens/provider estimates may remain visible for self-host diagnostics.</li><li><strong>Channels:</strong> Telegram setup appears. The managed WhatsApp card/activation journey does not appear.</li><li><strong>Account:</strong> no subscription page; MCP, Vault, Usage, and Settings remain.</li></ul>
+        <ul><li><strong>Entry:</strong> local setup wizard and admin password; no Zenod account or Stripe.</li><li><strong>AI:</strong> provider key, model choice, and optional local transcription remain visible because the user owns the bill and infrastructure.</li><li><strong>Usage:</strong> raw calls/tokens/provider estimates may remain visible for self-host diagnostics.</li><li><strong>Channels:</strong> the supported package starts one Zenod container and shows Telegram setup. It does not start Phylax, so the managed WhatsApp activation journey does not appear.</li><li><strong>Account:</strong> no subscription page; MCP, Vault, Usage, and Settings remain.</li></ul>
       </article>
     </div>
-    <div class="plain"><strong>Implementation seam:</strong> today the application already distinguishes GitHub customer-auth mode from the local setup wizard. The final iteration makes that distinction explicit as capabilities—<code>managedAi</code>, <code>hostedBilling</code>, <code>hostedWhatsApp</code>, and <code>selfHostedProviderControls</code>—instead of duplicating the UI or deleting underlying open-source functionality.</div>
+    <div class="plain"><strong>Exact packaging:</strong> the repository and shared UI remain one codebase. Hosted builds and deploys two existing services from it: public <code>zenod</code> plus private <code>phylax</code> for WhatsApp. The supported self-host compose starts only <code>zenod</code>; Telegram works and nothing calls a missing WhatsApp service. Phylax source remains intact and separately buildable for Hosted or advanced manual operation—it is not deleted and it is not a self-host runtime dependency.</div>
   </section>
 
   <section>
@@ -334,135 +335,34 @@
       <article class="portal-item"><h3>Connect · exists</h3><p class="muted">MCP URL, bearer token, copy buttons, Codex and Claude Code commands, and GitHub-vault connection. Remove the raw provider-spend summary in hosted mode.</p></article>
       <article class="portal-item"><h3>Vault · exists</h3><p class="muted">Inspect vault connection/state and the repository-backed memory surface.</p></article>
       <article class="portal-item"><h3>Usage · exists</h3><p class="muted">Today it exposes calls, tokens, models, and estimated dollars. Hosted mode changes this to percentage/state/reset only; self-host mode keeps the diagnostic detail.</p></article>
-      <article class="portal-item"><h3>Settings · exists</h3><p class="muted">Operating rules and skills remain for everyone. Provider keys/models remain only in self-host mode; hosted customers simply see “Managed by Zenod.”</p></article>
+      <article class="portal-item"><h3>Settings · exists</h3><p class="muted">Hosted shows language, timezone, receipt preferences, and “AI managed by Zenod.” Self-host also shows provider key/model/transcription controls. Raw SEAM, operating-rule, and skill-manifest diagnostics remain internal until they have a clear customer action.</p></article>
       <article class="portal-item"><h3>Account · exists</h3><p class="muted">Subscription, billing portal, MCP endpoint and repository remain. Replace dollar credit and raw token detail with included-usage percentage.</p></article>
       <article class="portal-item" style="border-color:#3976bd"><h3>Channels · add</h3><p class="muted">Bring WhatsApp sender verification and Telegram status into Zenod. This replaces the separate Phylax customer UI.</p></article>
     </div>
   </section>
 
   <section>
-    <h2>Complete portal mockup for approval</h2>
-    <div class="browser">
-      <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/settings/channels</span></div>
-      <div class="app-shell">
-        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item">Connect / MCP</div><div class="nav-item active">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item">Settings</div><div class="nav-item">Account</div></aside>
-        <div class="screen">
-          <div class="screen-label">Settings / Channels</div>
-          <h3>Talk to Zenod anywhere</h3>
-          <p style="color:#69717e">Every channel connects to this same memory.</p>
-          <div class="screen-card">
-            <div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div><strong>WhatsApp</strong><p style="color:#69717e;margin-top:5px">Included with Zenod Hosted · one verified sender</p></div><span style="padding:5px 9px;border-radius:99px;background:#f0e6c8;color:#795b00;font-size:.75rem;font-weight:800">OFF</span></div>
-            <div class="screen-label" style="margin-top:18px">Your WhatsApp number</div>
-            <div class="input">+34 6•• ••• •••</div>
-            <div class="button">Enable WhatsApp</div>
-          </div>
-          <div class="screen-card">
-            <strong>Telegram</strong><p style="color:#69717e">Connect a Telegram bot or use the hosted Zenod bot.</p><span class="button green">Connected</span>
-          </div>
-        </div>
-      </div>
+    <h2>Final UI and backend contract</h2>
+    <p class="lede">The decision surface is now complete: <strong>22 real screens</strong>, not placeholder navigation. Open the contract and switch between Hosted customer, Self-hosted operator, and Zenod owner admin. Every screen specifies the visible controls, the reads and mutations it needs, empty/error/permission states, and the existing versus required backend.</p>
+    <div class="grid">
+      <article class="card"><div class="metric">7</div><h3>Hosted customer screens</h3><p class="muted">Overview, Connect/MCP, Channels, Vault &amp; sources, percentage-only Usage, Settings, and Account.</p></article>
+      <article class="card"><div class="metric">7</div><h3>Self-hosted operator screens</h3><p class="muted">First-run setup, Overview, Connect/MCP, Telegram-only Channels, Vault &amp; sources, raw Usage, and provider/system Settings.</p></article>
+      <article class="card"><div class="metric">8</div><h3>Zenod owner-admin screens</h3><p class="muted">Setup &amp; health, Tenants, Tenant detail, AI &amp; usage, Channels, Jobs &amp; delivery, Billing, and System.</p></article>
+      <article class="card"><div class="metric good">22</div><h3>Fully mapped</h3><p class="muted">Credential setup, tenant creation/removal, usage credit, MCP rotation, WhatsApp verification/session controls, job retry, billing configuration, and recovery are specified as concrete dialogs and safety rules.</p></article>
     </div>
-    <div class="browser" style="margin-top:24px">
-      <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/connect</span></div>
-      <div class="app-shell">
-        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item active">Connect / MCP</div><div class="nav-item">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item">Settings</div><div class="nav-item">Account</div></aside>
-        <div class="screen">
-          <div class="screen-label">Connect / MCP</div>
-          <h3>Connect your agent to this memory</h3>
-          <p style="color:#69717e">Your hosted MCP server is ready. Copy one command or use the endpoint directly.</p>
-          <div class="screen-card"><div class="screen-label">MCP URL</div><div class="input">https://cloud.zenod.dev/mcp/••••••••</div><div class="screen-label" style="margin-top:16px">Bearer token</div><div class="input">••••••••••••••••</div><div class="button">Copy connection</div></div>
-          <div class="screen-card"><strong>Codex</strong><div class="input" style="font-family:ui-monospace,monospace">codex mcp add zenod --url https://cloud.zenod.dev/mcp/•••</div><strong style="display:block;margin-top:14px">Claude Code</strong><div class="input" style="font-family:ui-monospace,monospace">claude mcp add --transport http zenod …</div></div>
-        </div>
-      </div>
-    </div>
-    <div class="browser" style="margin-top:24px">
-      <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/settings/channels/whatsapp</span></div>
-      <div class="app-shell">
-        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item">Connect / MCP</div><div class="nav-item active">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item">Settings</div><div class="nav-item">Account</div></aside>
-        <div class="screen">
-          <div class="screen-label">Enable WhatsApp</div>
-          <h3>Send this code to Zenod</h3>
-          <p style="color:#69717e">From <strong>+34 6•• ••• •••</strong>, open WhatsApp and message the Zenod number below.</p>
-          <div class="screen-card"><div class="screen-label">Zenod on WhatsApp</div><div style="font-size:1.35rem;font-weight:850;margin-top:7px">+34 ••• ••• •••</div><div class="screen-label" style="margin-top:18px">One-time code</div><div style="font:800 2rem ui-monospace,monospace;letter-spacing:.08em;margin-top:7px">42-OTTER</div><div class="button green">Open WhatsApp</div></div>
-          <p style="color:#69717e;margin-top:14px">Waiting for your message… This verifies possession; it does not link or scan your WhatsApp account.</p>
-        </div>
-      </div>
-    </div>
-    <div class="browser" style="margin-top:24px">
-      <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/usage</span></div>
-      <div class="app-shell">
-        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item">Connect / MCP</div><div class="nav-item">Channels</div><div class="nav-item">Vault</div><div class="nav-item active">Usage</div><div class="nav-item">Settings</div><div class="nav-item">Account</div></aside>
-        <div class="screen">
-          <div class="screen-label">Included usage</div>
-          <h3>Plenty available</h3>
-          <p style="color:#69717e"><strong>16% used</strong> this month · resets 1 September</p>
-          <div class="bar" style="margin-top:18px;height:14px"><span style="width:16%"></span></div>
-          <div class="screen-card"><strong>What this covers</strong><p style="color:#69717e">Memory filing, questions and answers, images, and voice-note transcription across Zenod’s channels.</p></div>
-          <div class="screen-card"><strong>If you reach the limit</strong><p style="color:#69717e">Zenod keeps incoming material safely queued and resumes managed processing after the monthly reset. There are no automatic overage charges.</p></div>
-          <p style="color:#69717e;margin-top:16px">No provider, model, token, minute, or dollar accounting is exposed here.</p>
-        </div>
-      </div>
-    </div>
-    <div class="browser" style="margin-top:24px">
-      <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/settings</span></div>
-      <div class="app-shell">
-        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item">Connect / MCP</div><div class="nav-item">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item active">Settings</div><div class="nav-item">Account</div></aside>
-        <div class="screen">
-          <div class="screen-label">Settings</div>
-          <h3>Your Zenod</h3>
-          <p style="color:#69717e">Configure the memory product—not its internal infrastructure.</p>
-          <div class="screen-card"><strong>Memory repository</strong><p style="color:#69717e">Connected to <strong>AlfaBlok/my-memory</strong> through the Zenod GitHub App.</p><span class="button">Change repository</span></div>
-          <div class="screen-card"><strong>AI</strong><p style="color:#69717e">Managed by Zenod and included with your hosted plan. Provider credentials and model routing require no setup.</p></div>
-          <div class="screen-card"><strong>Operating rules &amp; skills</strong><p style="color:#69717e">Edit how Zenod files memories, preferred language, installed memory skills, and response style.</p><span class="button">Edit rules</span></div>
-        </div>
-      </div>
-    </div>
+    <a class="button" href="./ui-contract.html">Review every screen and action</a>
+    <div class="plain"><strong>Contract rule:</strong> no beta navigation item exists without a complete screen and backend contract. That is why raw <em>Operating rules &amp; skills</em> have been removed from the beta portal rather than shown as an undefined promise.</div>
   </section>
 
-  <section>
-    <h2>Owner console: the infrastructure Zenod manages</h2>
-    <p class="lede">This is the missing other half. Customers get a calm product portal; Jordi/Zenod operators get the real economics and infrastructure. The repository already has an owner-only <code>/admin</code> boundary for Phylax’s WhatsApp pairing. The final iteration expands that protected surface into one Zenod operator console.</p>
-    <div class="browser">
-      <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/admin/ai-capacity</span></div>
-      <div class="app-shell">
-        <aside class="sidebar"><div class="brand">zenod · admin</div><div class="nav-item">Overview</div><div class="nav-item">Customers</div><div class="nav-item active">AI capacity</div><div class="nav-item">Channels</div><div class="nav-item">Jobs &amp; delivery</div><div class="nav-item">Billing &amp; incidents</div></aside>
-        <div class="screen">
-          <div class="screen-label">Operator only / AI capacity</div>
-          <h3>Managed inference</h3>
-          <p style="color:#69717e">Provider configuration and cost controls for every hosted tenant.</p>
-          <div class="screen-card">
-            <div class="admin-row"><strong>Provider account</strong><span>OpenRouter</span><span>Key •••• 7A2F</span><span class="customer-only">Healthy</span></div>
-            <div class="admin-row"><strong>Launch defaults</strong><span>$2.00 cap</span><span>80% warn</span><span>Monthly reset</span></div>
-            <div class="admin-row"><strong>Allowed routing</strong><span>3 text/vision</span><span>1 speech model</span><span>Fail closed</span></div>
-          </div>
-          <div class="screen-card">
-            <div class="admin-row"><strong>Tenant</strong><strong>Provider spend</strong><strong>Internal cap</strong><strong>State</strong></div>
-            <div class="admin-row"><span>@jordi</span><span>$0.33</span><span>$2.00</span><span class="customer-only">Healthy</span></div>
-            <div class="admin-row"><span>@beta-02</span><span>$1.67</span><span>$2.00</span><span class="operator-only">Warn</span></div>
-            <div class="admin-row"><span>@beta-03</span><span>$2.00</span><span>$3.00 custom</span><span class="operator-only">Paused</span></div>
-          </div>
-          <span class="button">Adjust selected tenant</span>
-        </div>
-      </div>
-    </div>
-    <div class="grid" style="margin-top:16px">
-      <article class="card wide"><h3>AI capacity</h3><p>Masked provisioning secret status, tenant child-key state, real provider spend, ledger reconciliation, model allowlist, speech model, internal cap/warning/reset, suspend/resume, and margin alerts.</p></article>
-      <article class="card wide"><h3>Channels</h3><p>The existing Phylax owner pairing/session screen, shared-number health, verified senders, queue age, failed media, transcription latency, delivery receipts, and session-safe restart controls.</p></article>
-      <article class="card wide"><h3>Customers</h3><p>Tenant, subscription, repository connection, MCP credential status, usage state, WhatsApp activation, last successful memory journey, and support timeline—without exposing raw secrets.</p></article>
-      <article class="card wide"><h3>Secret rule</h3><p>The OpenRouter provisioning key remains in the deployment secret store. The admin UI shows only masked status and controlled rotation/reconciliation actions; it never prints or stores the master secret in browser state.</p></article>
-    </div>
-  </section>
-
-  <section>
     <h2>The one final code iteration</h2>
     <div class="steps">
       <article class="step"><span class="status now">Package</span><h3>Keep Phylax; stop selling it to Zenod customers</h3><p>Do not create <code>zenod-channels</code> as a new project. Keep the existing Phylax runtime, service, volume, WhatsApp session, and operator pairing controls. Remove Phylax only from public navigation, pricing, onboarding, and customer settings; move its sender-verification UI into Zenod’s <em>Channels</em> tab.</p></article>
-      <article class="step"><span class="status now">Editions</span><h3>Make hosted and self-host capabilities explicit</h3><p>Reuse the same Zenod runtime and web components. Hosted enables billing, managed AI, percentage-only usage, and WhatsApp. Self-host enables local setup, provider/model controls, raw diagnostic usage, and Telegram; it does not render managed WhatsApp activation.</p></article>
+      <article class="step"><span class="status now">Editions</span><h3>Implement the approved 22-screen contract</h3><p>Reuse the same Zenod runtime and web components. Hosted enables billing, managed AI, percentage-only usage, and the existing private Phylax service for WhatsApp. The supported self-host package runs one Zenod container with local provider controls, raw diagnostic usage, and Telegram; it never calls a missing Phylax service.</p></article>
       <article class="step"><span class="status now">Provision</span><h3>Make hosted checkout create the whole product</h3><p>After subscription, create the tenant, MCP credential, private Phylax channel binding, and capped OpenRouter child key automatically. Apply fixed, versioned Zenod bindings. The customer never sees the child key, provider/model forms, downstream URL, tool discovery, Ring ticket, or transcription settings.</p></article>
       <article class="step"><span class="status now">Route</span><h3>Make every channel reach Zenod directly</h3><p>Text calls <code>chat_with_zenod</code>; voice calls <code>store_memory</code>; images/files call <code>ingest_memory</code>. Remove <code>chat_with_ring</code> from the Zenod product default and migration. Ring code and data remain intact for the separate Ring product.</p></article>
       <article class="step"><span class="status next">Reliability</span><h3>Land the eight audited remediations</h3><p>Durable job/receipt state, no false timeout failure, bounded classifier fallback, failed-media retry, long-note segmentation, authoritative transcript audit, separate operation/delivery states, and no internal identifiers in customer replies.</p></article>
       <article class="step"><span class="status next">Commerce</span><h3>Implement one beta entitlement</h3><p>One €9 monthly hosted plan includes managed AI usage and one verified WhatsApp sender. Customers see usage percentage, state, and reset only. Zenod operators privately control the provider-cost cap, warning threshold, model allowlist, and tenant exceptions. Keep paid signup fail-closed until the offer and production gates are proved.</p></article>
-      <article class="step"><span class="status next">Operate</span><h3>Extend the protected owner console</h3><p>Keep the existing Phylax <code>/admin</code> pairing boundary and add Zenod-wide customers, AI capacity, child-key/cap state, channel health, queues, delivery, billing, and incident views. Secrets remain masked and server-side.</p></article>
+      <article class="step"><span class="status next">Operate</span><h3>Build the eight specified owner screens</h3><p>Implement exactly the protected Setup &amp; health, Tenants, Tenant detail, AI &amp; usage, Channels, Jobs &amp; delivery, Billing, and System contracts. They include credential setup, add/remove/suspend tenant, usage credit, child-key/cap state, shared Phylax health, retry truth, and recovery evidence. Secrets remain masked and server-side.</p></article>
       <article class="step"><span class="status gate">Proof</span><h3>Ship one version-coherent release candidate</h3><p>Build Zenod MT and the internal channel runtime from the same main commit, deploy immutable images, migrate the founder binding without resetting the WhatsApp session, run the full channel journey, then invite a small stranger cohort.</p></article>
     </div>
     <div class="plain"><strong>No destructive cleanup is required.</strong> Existing Phylax/Ring data, code, volumes, and histories stay in place. This iteration changes ownership, defaults, customer surfaces, and routing. Old routes can be retained as internal compatibility paths while Zenod tenants migrate.</div>

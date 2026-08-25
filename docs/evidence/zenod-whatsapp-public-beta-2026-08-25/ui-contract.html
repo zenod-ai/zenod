@@ -1,0 +1,2225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Zenod Ui Contract</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Zenod Ui Contract" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Zenod Ui Contract&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: var(--border-radius-lg, 12.5px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: 16px !important;
+  height: 16px !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div id=&quot;zenod-ui-contract&quot;&gt;
+  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Choose product surface&quot;&gt;
+    &lt;button type=&quot;button&quot; class=&quot;btn btn-primary&quot; data-role-choice=&quot;hosted&quot; aria-pressed=&quot;true&quot;&gt;Hosted customer&lt;/button&gt;
+    &lt;button type=&quot;button&quot; class=&quot;btn&quot; data-role-choice=&quot;self&quot; aria-pressed=&quot;false&quot;&gt;Self-hosted operator&lt;/button&gt;
+    &lt;button type=&quot;button&quot; class=&quot;btn&quot; data-role-choice=&quot;admin&quot; aria-pressed=&quot;false&quot;&gt;Zenod owner admin&lt;/button&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;zu-window&quot;&gt;
+    &lt;header class=&quot;zu-topbar&quot;&gt;
+      &lt;div&gt;
+        &lt;strong class=&quot;zu-product&quot;&gt;zenod&lt;/strong&gt;
+        &lt;span class=&quot;zu-edition&quot; id=&quot;zu-edition&quot;&gt;Hosted&lt;/span&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;zu-user&quot; id=&quot;zu-user&quot;&gt;@jordi&lt;/div&gt;
+    &lt;/header&gt;
+    &lt;div class=&quot;zu-shell&quot;&gt;
+      &lt;aside class=&quot;zu-sidebar&quot;&gt;
+        &lt;nav id=&quot;zu-navigation&quot; aria-label=&quot;Screen navigation&quot;&gt;&lt;/nav&gt;
+      &lt;/aside&gt;
+      &lt;main class=&quot;zu-main&quot; id=&quot;zu-screen&quot;&gt;&lt;/main&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;zu-modal-backdrop&quot; id=&quot;zu-modal&quot; hidden&gt;
+    &lt;section class=&quot;zu-modal&quot; role=&quot;dialog&quot; aria-modal=&quot;true&quot; aria-labelledby=&quot;zu-modal-title&quot;&gt;
+      &lt;div class=&quot;zu-modal-head&quot;&gt;
+        &lt;h2 id=&quot;zu-modal-title&quot;&gt;Action&lt;/h2&gt;
+        &lt;button type=&quot;button&quot; class=&quot;zu-icon-action&quot; data-close-modal aria-label=&quot;Close&quot;&gt;×&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;div id=&quot;zu-modal-content&quot;&gt;&lt;/div&gt;
+    &lt;/section&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;zu-toast&quot; id=&quot;zu-toast&quot; role=&quot;status&quot; aria-live=&quot;polite&quot; hidden&gt;&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;style&gt;
+  #zenod-ui-contract {
+    position: relative;
+    color-scheme: light dark;
+    width: 100%;
+    color: light-dark(#17202d, #eef2f7);
+  }
+  #zenod-ui-contract .viz-controls {
+    margin-bottom: 14px;
+  }
+  #zenod-ui-contract .zu-window {
+    overflow: hidden;
+    width: 100%;
+    border: 1px solid light-dark(#cdd4df, #38465a);
+    border-radius: 14px;
+    background: light-dark(#f4f6f9, #111720);
+    box-shadow: 0 20px 54px light-dark(rgba(28, 38, 52, .15), rgba(0, 0, 0, .34));
+  }
+  #zenod-ui-contract .zu-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 18px;
+    border-bottom: 1px solid light-dark(#d8dee7, #2d394b);
+    background: light-dark(#ffffff, #151d29);
+  }
+  #zenod-ui-contract .zu-product,
+  #zenod-ui-contract .zu-page h1,
+  #zenod-ui-contract .zu-page h2,
+  #zenod-ui-contract .zu-page h3,
+  #zenod-ui-contract .zu-panel-title,
+  #zenod-ui-contract .zu-nav-button[aria-current=&quot;page&quot;] {
+    font-weight: 500;
+  }
+  #zenod-ui-contract .zu-edition {
+    margin-left: 10px;
+    color: light-dark(#687386, #aab5c5);
+  }
+  #zenod-ui-contract .zu-user {
+    color: light-dark(#687386, #aab5c5);
+  }
+  #zenod-ui-contract .zu-shell {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  #zenod-ui-contract .zu-sidebar {
+    padding: 18px 12px;
+    background: light-dark(#17202d, #0c1119);
+    color: #e8edf5;
+  }
+  #zenod-ui-contract .zu-nav-button {
+    display: block;
+    width: 100%;
+    margin: 2px 0;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 8px;
+    color: #aeb9c8;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  #zenod-ui-contract .zu-nav-button:hover {
+    color: #ffffff;
+    background: #202c3d;
+  }
+  #zenod-ui-contract .zu-nav-button[aria-current=&quot;page&quot;] {
+    color: #ffffff;
+    background: #2a3a50;
+  }
+  #zenod-ui-contract .zu-main {
+    min-width: 0;
+    padding: 26px;
+    background: light-dark(#f4f6f9, #111720);
+  }
+  #zenod-ui-contract .zu-page-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 20px;
+  }
+  #zenod-ui-contract .zu-page h1,
+  #zenod-ui-contract .zu-page h2,
+  #zenod-ui-contract .zu-page h3,
+  #zenod-ui-contract .zu-page p {
+    margin-top: 0;
+  }
+  #zenod-ui-contract .zu-kicker,
+  #zenod-ui-contract .zu-label {
+    color: light-dark(#687386, #aab5c5);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  #zenod-ui-contract .zu-muted,
+  #zenod-ui-contract .zu-help {
+    color: light-dark(#687386, #aab5c5);
+  }
+  #zenod-ui-contract .zu-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  #zenod-ui-contract .zu-grid-three {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  #zenod-ui-contract .zu-panel {
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid light-dark(#d8dee7, #344154);
+    border-radius: 12px;
+    background: light-dark(#ffffff, #18212d);
+  }
+  #zenod-ui-contract .zu-panel-wide {
+    grid-column: 1 / -1;
+  }
+  #zenod-ui-contract .zu-panel-head,
+  #zenod-ui-contract .zu-row,
+  #zenod-ui-contract .zu-actions,
+  #zenod-ui-contract .zu-status-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  #zenod-ui-contract .zu-panel-head {
+    margin-bottom: 14px;
+  }
+  #zenod-ui-contract .zu-row {
+    padding: 11px 0;
+    border-top: 1px solid light-dark(#e1e6ed, #2d394a);
+  }
+  #zenod-ui-contract .zu-row:first-child {
+    border-top: 0;
+  }
+  #zenod-ui-contract .zu-action,
+  #zenod-ui-contract .zu-action-secondary,
+  #zenod-ui-contract .zu-action-danger,
+  #zenod-ui-contract .zu-icon-action {
+    border: 1px solid light-dark(#24364d, #7588a3);
+    border-radius: 8px;
+    padding: 9px 13px;
+    color: light-dark(#ffffff, #ffffff);
+    background: light-dark(#24364d, #24364d);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  #zenod-ui-contract .zu-action-secondary {
+    color: light-dark(#24364d, #e7edf6);
+    background: transparent;
+  }
+  #zenod-ui-contract .zu-action-danger {
+    border-color: light-dark(#a33e47, #d06c74);
+    background: light-dark(#a33e47, #8e3039);
+  }
+  #zenod-ui-contract .zu-icon-action {
+    padding: 5px 9px;
+  }
+  #zenod-ui-contract .zu-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    color: light-dark(#1f5f44, #a7edca);
+    background: light-dark(#e6f5ed, #17392a);
+  }
+  #zenod-ui-contract .zu-status-warn {
+    color: light-dark(#6e5200, #ffe3a0);
+    background: light-dark(#fff4cf, #3b3018);
+  }
+  #zenod-ui-contract .zu-status-off {
+    color: light-dark(#5c6675, #b8c0cc);
+    background: light-dark(#edf0f4, #2b3441);
+  }
+  #zenod-ui-contract .zu-input,
+  #zenod-ui-contract .zu-select,
+  #zenod-ui-contract .zu-textarea {
+    width: 100%;
+    margin-top: 6px;
+    border: 1px solid light-dark(#cbd3de, #4b5a6d);
+    border-radius: 8px;
+    padding: 10px 11px;
+    color: light-dark(#17202d, #eef2f7);
+    background: light-dark(#ffffff, #111923);
+    font: inherit;
+  }
+  #zenod-ui-contract .zu-textarea {
+    min-height: 90px;
+    resize: vertical;
+  }
+  #zenod-ui-contract .zu-field {
+    display: block;
+    margin-bottom: 14px;
+  }
+  #zenod-ui-contract .zu-meter {
+    height: 12px;
+    margin: 12px 0;
+    overflow: hidden;
+    border-radius: 999px;
+    background: light-dark(#e1e6ed, #2b3542);
+  }
+  #zenod-ui-contract .zu-meter &gt; span {
+    display: block;
+    height: 100%;
+    background: light-dark(#4b9e78, #62c89a);
+  }
+  #zenod-ui-contract .zu-code {
+    overflow-wrap: anywhere;
+    padding: 11px;
+    border-radius: 8px;
+    background: light-dark(#eef1f5, #0e151f);
+    color: light-dark(#26364d, #dbe7f7);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  #zenod-ui-contract .zu-table-wrap {
+    overflow-x: auto;
+  }
+  #zenod-ui-contract .zu-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #zenod-ui-contract .zu-table th,
+  #zenod-ui-contract .zu-table td {
+    padding: 11px 9px;
+    border-bottom: 1px solid light-dark(#e1e6ed, #2d394a);
+    text-align: left;
+    vertical-align: top;
+  }
+  #zenod-ui-contract .zu-contract {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 2px solid light-dark(#bfc8d5, #425168);
+  }
+  #zenod-ui-contract .zu-contract-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  #zenod-ui-contract .zu-contract-block {
+    padding: 13px;
+    border-radius: 9px;
+    background: light-dark(#e9edf3, #0e151f);
+  }
+  #zenod-ui-contract .zu-contract-block ul {
+    margin-bottom: 0;
+    padding-left: 19px;
+  }
+  #zenod-ui-contract .zu-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: start center;
+    padding: 70px 16px 20px;
+    background: rgba(5, 8, 13, .66);
+  }
+  #zenod-ui-contract .zu-modal-backdrop[hidden] {
+    display: none;
+  }
+  #zenod-ui-contract .zu-modal {
+    width: min(620px, 100%);
+    max-height: 78vh;
+    overflow: auto;
+    padding: 20px;
+    border: 1px solid light-dark(#cbd3de, #4b5a6d);
+    border-radius: 13px;
+    color: light-dark(#17202d, #eef2f7);
+    background: light-dark(#ffffff, #18212d);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .38);
+  }
+  #zenod-ui-contract .zu-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  #zenod-ui-contract .zu-note {
+    padding: 12px 14px;
+    border-left: 3px solid light-dark(#496c9c, #77a7e8);
+    background: light-dark(#eaf1fa, #162438);
+  }
+  #zenod-ui-contract .zu-danger-note {
+    border-left-color: light-dark(#a33e47, #d06c74);
+    background: light-dark(#faecee, #341c21);
+  }
+  #zenod-ui-contract .zu-checklist {
+    margin: 0;
+    padding-left: 20px;
+  }
+  #zenod-ui-contract .zu-toast {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 30;
+    max-width: min(360px, calc(100vw - 36px));
+    padding: 11px 14px;
+    border: 1px solid light-dark(#8aa9cf, #5178a8);
+    border-radius: 9px;
+    color: light-dark(#20344f, #e9f2ff);
+    background: light-dark(#edf5ff, #172b44);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, .22);
+  }
+  @media (max-width: 760px) {
+    #zenod-ui-contract .zu-shell {
+      grid-template-columns: 1fr;
+    }
+    #zenod-ui-contract .zu-sidebar {
+      padding: 10px;
+    }
+    #zenod-ui-contract #zu-navigation {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+    }
+    #zenod-ui-contract .zu-nav-button {
+      width: auto;
+      white-space: nowrap;
+    }
+    #zenod-ui-contract .zu-main {
+      padding: 18px;
+    }
+    #zenod-ui-contract .zu-grid,
+    #zenod-ui-contract .zu-grid-three,
+    #zenod-ui-contract .zu-contract-grid {
+      grid-template-columns: 1fr;
+    }
+    #zenod-ui-contract .zu-page-head {
+      flex-direction: column;
+    }
+  }
+&lt;/style&gt;
+
+&lt;template data-role=&quot;hosted&quot; data-screen=&quot;overview&quot; data-label=&quot;Overview&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;
+      &lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Hosted customer&lt;/div&gt;&lt;h1&gt;Your Zenod&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;One memory, available through MCP, Telegram, and WhatsApp.&lt;/p&gt;&lt;/div&gt;
+      &lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-route=&quot;channels&quot;&gt;Finish WhatsApp setup&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-grid-three&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Vault&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Connected&lt;/span&gt;&lt;/div&gt;&lt;p&gt;AlfaBlok/my-memory · main&lt;/p&gt;&lt;p class=&quot;zu-help&quot;&gt;Last sync 4 minutes ago.&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;vault&quot;&gt;Open vault &amp;amp; sources&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;MCP&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Ready&lt;/span&gt;&lt;/div&gt;&lt;p&gt;Hosted endpoint and bearer token are active.&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;connect&quot;&gt;Copy connection&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;WhatsApp&lt;/span&gt;&lt;span class=&quot;zu-status zu-status-warn&quot;&gt;Setup required&lt;/span&gt;&lt;/div&gt;&lt;p&gt;Included · no verified sender yet.&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;channels&quot;&gt;Enable WhatsApp&lt;/button&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot; style=&quot;margin-top:14px&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Included usage&lt;/span&gt;&lt;h2&gt;Plenty available&lt;/h2&gt;&lt;div class=&quot;zu-meter&quot; role=&quot;progressbar&quot; aria-valuenow=&quot;16&quot; aria-valuemin=&quot;0&quot; aria-valuemax=&quot;100&quot;&gt;&lt;span style=&quot;width:16%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;p&gt;16% used · resets 1 September.&lt;/p&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Recent memory receipt&lt;/span&gt;&lt;h2&gt;Saved from WhatsApp&lt;/h2&gt;&lt;p&gt;“Finalize the Zenod beta portal.”&lt;/p&gt;&lt;p class=&quot;zu-help&quot;&gt;Evidence anchored · Git commit 9c82a1e · 12:44&lt;/p&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Tenant/account state&lt;/li&gt;&lt;li&gt;Vault health and last sync&lt;/li&gt;&lt;li&gt;MCP credential state&lt;/li&gt;&lt;li&gt;Channel activation and latest receipt&lt;/li&gt;&lt;li&gt;Customer-safe usage percentage&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Deep-link to incomplete setup&lt;/li&gt;&lt;li&gt;Copy MCP connection&lt;/li&gt;&lt;li&gt;Open vault, channels, or usage&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Loading, ready, attention, suspended&lt;/li&gt;&lt;li&gt;Never show provider/model/cost details&lt;/li&gt;&lt;li&gt;Tenant GitHub session required&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing: /api/overview, /api/console/account, /api/vault&lt;/li&gt;&lt;li&gt;Needed: GET /api/customer-summary&lt;/li&gt;&lt;li&gt;Needed: customer-safe usage projection&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;hosted&quot; data-screen=&quot;connect&quot; data-label=&quot;Connect / MCP&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Connect / MCP&lt;/div&gt;&lt;h1&gt;Connect your agent&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Zenod is an MCP server. Use the same tenant memory from Codex, Claude Code, or another client.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;rotate-mcp&quot;&gt;Rotate token&lt;/button&gt;&lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot;&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;MCP URL&lt;/span&gt;&lt;input class=&quot;zu-input&quot; readonly value=&quot;https://cloud.zenod.dev/mcp/zenod_••••••&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Bearer token&lt;/span&gt;&lt;input class=&quot;zu-input&quot; readonly value=&quot;••••••••••••••••••••&quot;&gt;&lt;/label&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Copied MCP connection&quot;&gt;Copy connection&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Token revealed for this mockup&quot;&gt;Reveal token&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-grid&quot; style=&quot;margin-top:14px&quot;&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Codex&lt;/span&gt;&lt;div class=&quot;zu-code&quot;&gt;codex mcp add zenod --url https://cloud.zenod.dev/mcp/zenod_••••••&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Copied Codex command&quot;&gt;Copy&lt;/button&gt;&lt;/article&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Claude Code&lt;/span&gt;&lt;div class=&quot;zu-code&quot;&gt;claude mcp add --transport http zenod https://cloud.zenod.dev/mcp/zenod_••••••&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Copied Claude command&quot;&gt;Copy&lt;/button&gt;&lt;/article&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;MCP URL, token hint, issued/last-used dates&lt;/li&gt;&lt;li&gt;Credential status: active, revoked, suspended&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Reveal/copy after owner confirmation&lt;/li&gt;&lt;li&gt;Rotate token and invalidate old URL&lt;/li&gt;&lt;li&gt;Copy tested client commands&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Ready, never used, revoked, account suspended&lt;/li&gt;&lt;li&gt;Rotation confirmation explains client breakage&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing: /api/connections, /api/console/account&lt;/li&gt;&lt;li&gt;Existing: POST /api/token/regenerate&lt;/li&gt;&lt;li&gt;Needed: last-used audit timestamp&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;hosted&quot; data-screen=&quot;channels&quot; data-label=&quot;Channels&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Channels&lt;/div&gt;&lt;h1&gt;Talk to Zenod anywhere&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Every channel reaches this tenant memory directly. Phylax is never shown to the customer.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;WhatsApp&lt;/span&gt;&lt;span class=&quot;zu-status zu-status-warn&quot;&gt;Not connected&lt;/span&gt;&lt;/div&gt;&lt;p&gt;Included with Hosted · one verified sender.&lt;/p&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Your sender number&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;+34 6•• ••• •••&quot;&gt;&lt;/label&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-modal=&quot;enable-whatsapp&quot;&gt;Enable WhatsApp&lt;/button&gt;&lt;p class=&quot;zu-help&quot;&gt;You message the shared Zenod number with a one-time code. Zenod does not scan your WhatsApp account.&lt;/p&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Telegram&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Connected&lt;/span&gt;&lt;/div&gt;&lt;p&gt;@zenod_memory_bot · linked to this tenant.&lt;/p&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Telegram user&lt;/span&gt;&lt;strong&gt;@jordi&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Telegram test sent&quot;&gt;Send test&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;disconnect-telegram&quot;&gt;Disconnect&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Channel behavior&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Fixed for beta&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Text&lt;/span&gt;&lt;strong&gt;Save or answer from memory&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Voice&lt;/span&gt;&lt;strong&gt;Transcribe, preserve raw evidence, file memory&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Images/files&lt;/span&gt;&lt;strong&gt;Archive, classify, file; Inbox fallback on uncertainty&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Replies&lt;/span&gt;&lt;strong&gt;One truthful terminal receipt; no internal IDs&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Tenant channel bindings and verified identities&lt;/li&gt;&lt;li&gt;Customer-safe session/channel health&lt;/li&gt;&lt;li&gt;Last inbound and last successful receipt&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Create WhatsApp verification challenge&lt;/li&gt;&lt;li&gt;Verify sender, send test, disconnect&lt;/li&gt;&lt;li&gt;Connect/disconnect Telegram identity&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Off, awaiting code, verified, degraded, paused&lt;/li&gt;&lt;li&gt;One sender per hosted beta tenant&lt;/li&gt;&lt;li&gt;No QR/session/provider controls here&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Needed: tenant-scoped private Phylax API&lt;/li&gt;&lt;li&gt;Needed: /api/channels and /api/channels/whatsapp/challenge&lt;/li&gt;&lt;li&gt;Existing Phylax verification/session stores reused&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;hosted&quot; data-screen=&quot;vault&quot; data-label=&quot;Vault &amp;amp; sources&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Vault &amp;amp; sources&lt;/div&gt;&lt;h1&gt;Your memory storage&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;GitHub is the durable Markdown vault. Google Drive is an optional source and archive folder.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;GitHub vault&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Connected&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Repository&lt;/span&gt;&lt;strong&gt;AlfaBlok/my-memory&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Branch&lt;/span&gt;&lt;strong&gt;main&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;HEAD&lt;/span&gt;&lt;strong&gt;9c82a1e&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last sync&lt;/span&gt;&lt;strong&gt;4 minutes ago&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Vault sync started&quot;&gt;Sync now&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Vault lint started&quot;&gt;Run lint&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;change-repo&quot;&gt;Change repository&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Google Drive&lt;/span&gt;&lt;span class=&quot;zu-status zu-status-off&quot;&gt;Optional&lt;/span&gt;&lt;/div&gt;&lt;p&gt;Choose one folder for voice notes, documents, and archived media. Hosted OAuth uses the customer’s Drive quota.&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-modal=&quot;connect-drive&quot;&gt;Connect Google Drive&lt;/button&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Connected account&lt;/span&gt;&lt;strong&gt;—&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Folder&lt;/span&gt;&lt;strong&gt;—&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-note&quot; style=&quot;margin-top:14px&quot;&gt;&lt;strong&gt;Beta storage rule:&lt;/strong&gt; GitHub is required. Google Drive is optional. Disconnecting Drive never deletes the GitHub vault or existing Drive files.&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Repo, branch, clone/HEAD/sync/lint state&lt;/li&gt;&lt;li&gt;GitHub App installation and allowed repos&lt;/li&gt;&lt;li&gt;Drive OAuth identity, folder, archive readiness&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Choose/change repo, sync, lint&lt;/li&gt;&lt;li&gt;Connect/test/disconnect Google Drive&lt;/li&gt;&lt;li&gt;Re-clone is operator-only during hosted beta&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Unconfigured, connecting, healthy, sync conflict, auth expired&lt;/li&gt;&lt;li&gt;Drive absent does not block core memory&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing: /api/vault, /api/vault/sync, /api/vault/lint&lt;/li&gt;&lt;li&gt;Existing: GitHub App setup routes&lt;/li&gt;&lt;li&gt;Existing Drive OAuth/status/disconnect routes&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;hosted&quot; data-screen=&quot;usage&quot; data-label=&quot;Usage&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Included usage&lt;/div&gt;&lt;h1&gt;Plenty available&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;16% used this month · resets 1 September.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-meter&quot; role=&quot;progressbar&quot; aria-valuenow=&quot;16&quot; aria-valuemin=&quot;0&quot; aria-valuemax=&quot;100&quot;&gt;&lt;span style=&quot;width:16%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Current state&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Normal&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;What is included&lt;/span&gt;&lt;strong&gt;Text, answers, images, and voice transcription&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Overage billing&lt;/span&gt;&lt;strong&gt;None&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;At the limit&lt;/span&gt;&lt;strong&gt;Raw evidence queues safely; managed processing pauses&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-note&quot; style=&quot;margin-top:14px&quot;&gt;Hosted customers never see provider names, model names, token counts, audio minutes, dollar cost, or the internal allowance parameter.&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Server-calculated 0–100 percentage&lt;/li&gt;&lt;li&gt;Normal, warn, paused state and reset date&lt;/li&gt;&lt;li&gt;Customer-safe included-work description&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;No top-up or provider controls&lt;/li&gt;&lt;li&gt;Link to support only when paused&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Normal 0–79%, warn 80–99%, paused 100%&lt;/li&gt;&lt;li&gt;Provider data failure shows “temporarily unavailable,” never fabricated balance&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Needed: GET /api/customer-usage&lt;/li&gt;&lt;li&gt;Projection derives from hidden provider cap&lt;/li&gt;&lt;li&gt;Existing local ledger retained for reconciliation, not returned raw&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;hosted&quot; data-screen=&quot;settings&quot; data-label=&quot;Settings&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Settings&lt;/div&gt;&lt;h1&gt;Product preferences&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Only customer-understandable controls are included in beta.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Settings saved&quot;&gt;Save changes&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;AI&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Managed by Zenod&lt;/span&gt;&lt;/div&gt;&lt;p&gt;Included with Hosted. Provider keys, models, routing, and cost controls require no customer setup and are not exposed here.&lt;/p&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Reply preferences&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Language&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Automatic&lt;/option&gt;&lt;option&gt;English&lt;/option&gt;&lt;option&gt;Spanish&lt;/option&gt;&lt;option&gt;Catalan&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Receipt detail&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Compact&lt;/option&gt;&lt;option&gt;Full evidence links&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Timezone&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Europe/Paris&lt;/option&gt;&lt;option&gt;UTC&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-note&quot; style=&quot;margin-top:14px&quot;&gt;&lt;strong&gt;Not in the beta UI:&lt;/strong&gt; technical “Operating Rules,” SEAM directives, turn preambles, conduct receipts, and skill manifests. Those current diagnostic pages remain internal until they have a customer job and editable contract.&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Edition capabilities and managed-AI status&lt;/li&gt;&lt;li&gt;Language, receipt detail, timezone&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Update tenant-safe preferences only&lt;/li&gt;&lt;li&gt;No provider-key/model writes in hosted mode&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Saved, unsaved, validation error&lt;/li&gt;&lt;li&gt;Managed AI degraded appears as status with support link&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Needed: explicit capability profile&lt;/li&gt;&lt;li&gt;Needed: tenant preference schema&lt;/li&gt;&lt;li&gt;Remove Rules/Skills from hosted nav for beta&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;hosted&quot; data-screen=&quot;account&quot; data-label=&quot;Account&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Account&lt;/div&gt;&lt;h1&gt;Plan and access&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;@jordi · GitHub account 63050995&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Opening Stripe customer portal&quot;&gt;Manage billing&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Zenod Hosted Beta&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Active&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Price&lt;/span&gt;&lt;strong&gt;€9/month + VAT&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Renews&lt;/span&gt;&lt;strong&gt;1 September 2026&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Includes&lt;/span&gt;&lt;strong&gt;Managed AI + WhatsApp&lt;/strong&gt;&lt;/div&gt;&lt;p class=&quot;zu-help&quot;&gt;No annual beta plan and no automatic usage overage.&lt;/p&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Security and access&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;GitHub login&lt;/span&gt;&lt;strong&gt;@jordi&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;MCP token&lt;/span&gt;&lt;strong&gt;Active · •••• 8E3C&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;rotate-mcp&quot;&gt;Rotate MCP token&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Signed out all browser sessions&quot;&gt;Sign out sessions&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Close hosted account&lt;/span&gt;&lt;/div&gt;&lt;p&gt;Cancel billing first. Zenod suspends hosted access, exports account metadata, and retains runtime data for the stated deletion window. The GitHub vault and Google Drive files remain customer-owned and are never deleted automatically.&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-danger&quot; data-modal=&quot;close-account&quot;&gt;Close account&lt;/button&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;GitHub identity, plan, subscription status, renewal&lt;/li&gt;&lt;li&gt;MCP credential and browser-session state&lt;/li&gt;&lt;li&gt;Deletion/retention status&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Open Stripe portal&lt;/li&gt;&lt;li&gt;Rotate MCP token, sign out sessions&lt;/li&gt;&lt;li&gt;Request account closure with confirmation&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Checkout pending, active, past due, paused, canceled&lt;/li&gt;&lt;li&gt;Closure requested, retained, purged&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing: /api/console/account, /api/billing/portal&lt;/li&gt;&lt;li&gt;Existing: token rotation&lt;/li&gt;&lt;li&gt;Needed: session revoke and deletion-request workflow&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;self&quot; data-screen=&quot;setup&quot; data-label=&quot;First-run setup&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Self-hosted first run&lt;/div&gt;&lt;h1&gt;Set up this Zenod server&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;One Zenod container. You provide the infrastructure, vault credentials, and AI provider key.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;1 · Admin access&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Password&lt;/span&gt;&lt;input type=&quot;password&quot; class=&quot;zu-input&quot; value=&quot;••••••••••••&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Confirm password&lt;/span&gt;&lt;input type=&quot;password&quot; class=&quot;zu-input&quot; value=&quot;••••••••••••&quot;&gt;&lt;/label&gt;&lt;p class=&quot;zu-help&quot;&gt;Protects this server’s settings. Minimum 8 characters.&lt;/p&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;2 · GitHub vault&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Repository&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;owner/my-memory&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Branch&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;main&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Fine-grained token&lt;/span&gt;&lt;input type=&quot;password&quot; class=&quot;zu-input&quot; value=&quot;github_pat_••••&quot;&gt;&lt;/label&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;GitHub connection passed&quot;&gt;Test GitHub&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;3 · AI provider&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Provider&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;OpenRouter&lt;/option&gt;&lt;option&gt;OpenAI&lt;/option&gt;&lt;option&gt;Anthropic&lt;/option&gt;&lt;option&gt;Groq&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;API key&lt;/span&gt;&lt;input type=&quot;password&quot; class=&quot;zu-input&quot; value=&quot;sk-or-••••&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Default model&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;minimax/minimax-m3&lt;/option&gt;&lt;option&gt;x-ai/grok-4.3&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Provider key and model passed&quot;&gt;Test provider&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;4 · Telegram&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Bot token&lt;/span&gt;&lt;input type=&quot;password&quot; class=&quot;zu-input&quot; placeholder=&quot;Optional · 123456:ABC…&quot;&gt;&lt;/label&gt;&lt;p class=&quot;zu-help&quot;&gt;Telegram is the supported self-hosted phone channel. You can skip it and use MCP only.&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Telegram bot token passed&quot;&gt;Test Telegram&lt;/button&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-note&quot; style=&quot;margin-top:14px&quot;&gt;&lt;strong&gt;WhatsApp in self-host:&lt;/strong&gt; the default self-host package does not start Phylax and does not show WhatsApp activation. Nothing breaks—the Phylax source remains in the same repository and builds separately for Hosted. Advanced operators may deploy it manually later, but that is outside the supported beta self-host journey.&lt;/div&gt;
+    &lt;div class=&quot;zu-actions&quot; style=&quot;margin-top:14px&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-route=&quot;overview&quot;&gt;Save and finish setup&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;First-run/setup completion state&lt;/li&gt;&lt;li&gt;Available provider/model catalog&lt;/li&gt;&lt;li&gt;Optional Telegram status&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Create admin password&lt;/li&gt;&lt;li&gt;Test/save GitHub and provider credentials&lt;/li&gt;&lt;li&gt;Test/save optional Telegram token&lt;/li&gt;&lt;li&gt;Issue local MCP token&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Each step validates before completion&lt;/li&gt;&lt;li&gt;Telegram optional; GitHub and AI required&lt;/li&gt;&lt;li&gt;No Phylax/WhatsApp dependency&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing setup wizard and /api/auth/setup&lt;/li&gt;&lt;li&gt;Existing /api/settings test/save routes&lt;/li&gt;&lt;li&gt;Existing single-tenant seed and MCP token&lt;/li&gt;&lt;li&gt;Needed: explicit selfHosted capability profile&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;self&quot; data-screen=&quot;overview&quot; data-label=&quot;Overview&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Self-hosted&lt;/div&gt;&lt;h1&gt;Your Zenod server&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;One container, one tenant, your vault, your provider keys.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Health refreshed&quot;&gt;Refresh health&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid-three&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Vault&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Healthy&lt;/span&gt;&lt;/div&gt;&lt;p&gt;owner/my-memory · main&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;vault&quot;&gt;Open vault&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;AI&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;OpenRouter ready&lt;/span&gt;&lt;/div&gt;&lt;p&gt;minimax/minimax-m3 · own key.&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;settings&quot;&gt;Configure AI&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Channels&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Telegram ready&lt;/span&gt;&lt;/div&gt;&lt;p&gt;WhatsApp service not installed.&lt;/p&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;channels&quot;&gt;Open channels&lt;/button&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;MCP server&lt;/span&gt;&lt;strong&gt;http://zenod.local:8080/mcp/••••&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Version&lt;/span&gt;&lt;strong&gt;3c0d084&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Data directory&lt;/span&gt;&lt;strong&gt;/data&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last successful memory write&lt;/span&gt;&lt;strong&gt;8 minutes ago · commit 9c82a1e&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Local health/version/storage&lt;/li&gt;&lt;li&gt;Vault, provider, MCP, Telegram readiness&lt;/li&gt;&lt;li&gt;Last successful write receipt&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Refresh health&lt;/li&gt;&lt;li&gt;Deep-link to incomplete configuration&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Ready, incomplete, provider error, vault error&lt;/li&gt;&lt;li&gt;WhatsApp absent is informational, not degraded health&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing: /api/health, /api/overview, /api/vault&lt;/li&gt;&lt;li&gt;Existing settings/provider status&lt;/li&gt;&lt;li&gt;Needed: edition-aware health summary&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;self&quot; data-screen=&quot;connect&quot; data-label=&quot;Connect / MCP&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Connect / MCP&lt;/div&gt;&lt;h1&gt;Connect your local clients&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;The same Zenod MCP tools, served from infrastructure you operate.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;rotate-mcp&quot;&gt;Rotate token&lt;/button&gt;&lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot;&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Public or LAN origin&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;https://memory.example.com&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;MCP URL&lt;/span&gt;&lt;input class=&quot;zu-input&quot; readonly value=&quot;https://memory.example.com/mcp/••••••&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Bearer token&lt;/span&gt;&lt;input class=&quot;zu-input&quot; readonly value=&quot;••••••••••••••••&quot;&gt;&lt;/label&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Copied local MCP connection&quot;&gt;Copy connection&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;MCP initialize and tools/list passed&quot;&gt;Test endpoint&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-grid&quot; style=&quot;margin-top:14px&quot;&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Codex&lt;/span&gt;&lt;div class=&quot;zu-code&quot;&gt;codex mcp add zenod --url https://memory.example.com/mcp/••••••&lt;/div&gt;&lt;/article&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Reverse proxy requirement&lt;/span&gt;&lt;p&gt;Forward HTTPS to container port 8080 and preserve Authorization headers. Do not expose the admin password.&lt;/p&gt;&lt;/article&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Configured external origin, token hint, last use&lt;/li&gt;&lt;li&gt;OAuth/MCP discovery readiness&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Set origin, test initialize/tools/list&lt;/li&gt;&lt;li&gt;Reveal/copy/rotate token&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Local-only, public HTTPS ready, proxy misconfigured&lt;/li&gt;&lt;li&gt;Rotation invalidates clients&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing single-tenant token and MCP routes&lt;/li&gt;&lt;li&gt;Needed: persisted/display origin setting&lt;/li&gt;&lt;li&gt;Needed: safe self-test endpoint&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;self&quot; data-screen=&quot;channels&quot; data-label=&quot;Channels&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Self-hosted channels&lt;/div&gt;&lt;h1&gt;Telegram&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;The supported self-hosted phone journey uses a bot token you own.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Telegram bot&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Connected&lt;/span&gt;&lt;/div&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Bot token&lt;/span&gt;&lt;input type=&quot;password&quot; class=&quot;zu-input&quot; value=&quot;123456:••••••••&quot;&gt;&lt;/label&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Bot&lt;/span&gt;&lt;strong&gt;@my_zenod_bot&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Allowed Telegram user&lt;/span&gt;&lt;strong&gt;63050995&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Telegram settings saved&quot;&gt;Save&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Telegram test sent&quot;&gt;Send test&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;disconnect-telegram&quot;&gt;Disconnect&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;WhatsApp&lt;/span&gt;&lt;span class=&quot;zu-status zu-status-off&quot;&gt;Not in this edition&lt;/span&gt;&lt;/div&gt;&lt;p&gt;The default self-host compose starts only Zenod. It does not start Phylax, hold a WhatsApp session, or render sender verification. The Phylax code remains buildable in this repository for Hosted and advanced manual deployments; Zenod core does not depend on it.&lt;/p&gt;&lt;div class=&quot;zu-code&quot;&gt;self-host: zenod container only&lt;br&gt;hosted: zenod + existing phylax service&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Telegram token status, bot identity, allowed user, polling health&lt;/li&gt;&lt;li&gt;Edition capability hostedWhatsApp=false&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Test/save/disconnect Telegram&lt;/li&gt;&lt;li&gt;No WhatsApp action or Phylax API call&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Unconfigured, connected, token rejected, polling conflict&lt;/li&gt;&lt;li&gt;WhatsApp absence never blocks MCP or Telegram&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing Telegram gateway/settings&lt;/li&gt;&lt;li&gt;Needed: capability-gated channel registry&lt;/li&gt;&lt;li&gt;Self-host compose remains one Zenod service&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;self&quot; data-screen=&quot;vault&quot; data-label=&quot;Vault &amp;amp; sources&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Vault &amp;amp; sources&lt;/div&gt;&lt;h1&gt;Storage you operate&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;GitHub is required. Google Drive is optional and uses credentials you configure.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;GitHub vault&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Healthy&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Repository&lt;/span&gt;&lt;strong&gt;owner/my-memory&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Branch / HEAD&lt;/span&gt;&lt;strong&gt;main · 9c82a1e&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Vault sync started&quot;&gt;Sync&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Vault lint passed&quot;&gt;Lint&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-danger&quot; data-modal=&quot;reclone-vault&quot;&gt;Re-clone&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Google Drive&lt;/span&gt;&lt;span class=&quot;zu-status zu-status-off&quot;&gt;Not connected&lt;/span&gt;&lt;/div&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;OAuth client ID&lt;/span&gt;&lt;input class=&quot;zu-input&quot; placeholder=&quot;Optional&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;OAuth client secret&lt;/span&gt;&lt;input type=&quot;password&quot; class=&quot;zu-input&quot; placeholder=&quot;Paste once&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Zenod folder ID&lt;/span&gt;&lt;input class=&quot;zu-input&quot; placeholder=&quot;Drive folder ID&quot;&gt;&lt;/label&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Starting Google OAuth&quot;&gt;Connect with Google&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;drive-service-account&quot;&gt;Use service account&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Full local vault and Drive diagnostic state&lt;/li&gt;&lt;li&gt;Configured auth mode and transcription readiness&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Change credentials/repo/branch&lt;/li&gt;&lt;li&gt;Sync, lint, destructive re-clone confirmation&lt;/li&gt;&lt;li&gt;Configure OAuth or service account Drive&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Clone missing/conflict/auth expired&lt;/li&gt;&lt;li&gt;Drive unconfigured/connected/folder missing&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing vault routes and GitHub settings&lt;/li&gt;&lt;li&gt;Existing Drive status/OAuth/test/disconnect&lt;/li&gt;&lt;li&gt;Existing encrypted settings custody&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;self&quot; data-screen=&quot;usage&quot; data-label=&quot;Usage&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Provider diagnostics&lt;/div&gt;&lt;h1&gt;Usage&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;You own the provider bill, so self-host exposes the raw diagnostic ledger.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Usage refreshed&quot;&gt;Refresh&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid-three&quot;&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Last 7 days&lt;/span&gt;&lt;h2&gt;$0.33&lt;/h2&gt;&lt;p class=&quot;zu-help&quot;&gt;Estimated at list prices.&lt;/p&gt;&lt;/article&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Calls&lt;/span&gt;&lt;h2&gt;20&lt;/h2&gt;&lt;p class=&quot;zu-help&quot;&gt;Across 5 operations.&lt;/p&gt;&lt;/article&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Tokens&lt;/span&gt;&lt;h2&gt;215,309&lt;/h2&gt;&lt;p class=&quot;zu-help&quot;&gt;Input, output, and cached.&lt;/p&gt;&lt;/article&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot; style=&quot;margin-top:14px&quot;&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;By operation&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Compose&lt;/span&gt;&lt;strong&gt;$0.10 · 8 calls&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Classify&lt;/span&gt;&lt;strong&gt;$0.03 · 7 calls&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Answer&lt;/span&gt;&lt;strong&gt;$0.04 · 1 call&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Transcription&lt;/span&gt;&lt;strong&gt;$0.15 · 50.5 min&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;&lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;By model&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Grok 4.3&lt;/span&gt;&lt;strong&gt;$0.15&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;MiniMax M3&lt;/span&gt;&lt;strong&gt;$0.03&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Gemini Flash-Lite&lt;/span&gt;&lt;strong&gt;&amp;lt;$0.01&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Voxtral Mini&lt;/span&gt;&lt;strong&gt;$0.15&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Local LLM usage ledger and transcription usage&lt;/li&gt;&lt;li&gt;Current configured model names&lt;/li&gt;&lt;li&gt;Estimated list-price cost with timestamp&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Refresh and change 24h/7d/30d window&lt;/li&gt;&lt;li&gt;No quota enforcement unless user configures one&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;No activity, partial provider metadata, stale pricing&lt;/li&gt;&lt;li&gt;Clearly label estimates, never provider invoice&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing: /api/usage and SQLite ledger&lt;/li&gt;&lt;li&gt;Needed: transcription joined into the same response&lt;/li&gt;&lt;li&gt;Keep this raw endpoint unavailable to hosted customers&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;self&quot; data-screen=&quot;settings&quot; data-label=&quot;Settings&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Self-hosted settings&lt;/div&gt;&lt;h1&gt;AI and preferences&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;You choose the provider, keys, models, and transcription path.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Self-host settings saved&quot;&gt;Save and test&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Provider&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Provider&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;OpenRouter&lt;/option&gt;&lt;option&gt;OpenAI&lt;/option&gt;&lt;option&gt;Anthropic&lt;/option&gt;&lt;option&gt;Groq&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;OpenRouter API key&lt;/span&gt;&lt;input type=&quot;password&quot; class=&quot;zu-input&quot; value=&quot;sk-or-••••••••&quot;&gt;&lt;/label&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Provider key valid and funded&quot;&gt;Test key&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Models&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Answer / compose&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;x-ai/grok-4.3&lt;/option&gt;&lt;option&gt;minimax/minimax-m3&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Classify&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;minimax/minimax-m3&lt;/option&gt;&lt;option&gt;google/gemini-3.1-flash-lite&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Vision&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;google/gemini-3.1-flash-lite&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Transcription&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Mode&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Local whisper.cpp&lt;/option&gt;&lt;option&gt;OpenRouter&lt;/option&gt;&lt;option&gt;Groq&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Cloud speech model&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;mistralai/voxtral-mini-transcribe&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Local model&lt;/span&gt;&lt;strong&gt;Ready · small&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Reply preferences&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Language&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Automatic&lt;/option&gt;&lt;option&gt;English&lt;/option&gt;&lt;option&gt;Spanish&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Receipt detail&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Compact&lt;/option&gt;&lt;option&gt;Full evidence links&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Timezone&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Europe/Paris&lt;/option&gt;&lt;option&gt;UTC&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-note&quot; style=&quot;margin-top:14px&quot;&gt;&lt;strong&gt;Not in beta navigation:&lt;/strong&gt; raw SEAM directives, turn preambles, conduct receipts, and skill manifests. They remain diagnostic APIs until they have a clear operator action.&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Masked credential status per provider&lt;/li&gt;&lt;li&gt;Live/allowed model catalog and saved selections&lt;/li&gt;&lt;li&gt;Local transcription binary/model readiness&lt;/li&gt;&lt;li&gt;Reply preferences&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Set/remove/test provider key&lt;/li&gt;&lt;li&gt;Choose and test answer/classify/vision/speech models&lt;/li&gt;&lt;li&gt;Select local/cloud transcription&lt;/li&gt;&lt;li&gt;Update preferences&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Key missing/invalid/unfunded, model unavailable&lt;/li&gt;&lt;li&gt;Local model downloading/ready/error&lt;/li&gt;&lt;li&gt;Removing active key disables cloud AI safely&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing settings/key/model/test routes&lt;/li&gt;&lt;li&gt;Existing OpenRouter transcription catalog&lt;/li&gt;&lt;li&gt;Existing local whisper status&lt;/li&gt;&lt;li&gt;Needed: edition-aware settings schema&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;admin&quot; data-screen=&quot;overview&quot; data-label=&quot;Setup &amp;amp; health&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Owner only&lt;/div&gt;&lt;h1&gt;Hosted setup and health&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Everything required to operate the two-service Zenod product.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;All service and dependency checks refreshed&quot;&gt;Run all checks&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Zenod service&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Healthy&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Hosts&lt;/span&gt;&lt;strong&gt;zenod.dev · cloud.zenod.dev&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;SHA / replicas&lt;/span&gt;&lt;strong&gt;7365dbc · 1/1&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Volume&lt;/span&gt;&lt;strong&gt;zenod-mt-data&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last backup&lt;/span&gt;&lt;strong&gt;Today 03:00 · verified&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Phylax channel service&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Healthy&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Role&lt;/span&gt;&lt;strong&gt;Private Zenod Channels&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;SHA / replicas&lt;/span&gt;&lt;strong&gt;399b3a8 · 1/1&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Volume&lt;/span&gt;&lt;strong&gt;phylax-data&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;WhatsApp&lt;/span&gt;&lt;strong&gt;Connected · +34 •••&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Launch configuration&lt;/span&gt;&lt;div class=&quot;zu-table-wrap&quot;&gt;&lt;table class=&quot;zu-table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Dependency&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;th&gt;Configured value&lt;/th&gt;&lt;th&gt;Action&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+      &lt;tr&gt;&lt;td&gt;GitHub OAuth + App&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;zu-status&quot;&gt;Ready&lt;/span&gt;&lt;/td&gt;&lt;td&gt;zenod-memory · callback verified&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;configure-github&quot;&gt;Configure&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;Stripe&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;zu-status zu-status-warn&quot;&gt;Test mode&lt;/span&gt;&lt;/td&gt;&lt;td&gt;€9 monthly price · webhook healthy&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;configure-stripe&quot;&gt;Configure&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;OpenRouter&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;zu-status&quot;&gt;Ready&lt;/span&gt;&lt;/td&gt;&lt;td&gt;Provisioning key •••• 7A2F&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;configure-openrouter&quot;&gt;Configure&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;WhatsApp session&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;zu-status&quot;&gt;Connected&lt;/span&gt;&lt;/td&gt;&lt;td&gt;Existing Phylax session retained&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;channels&quot;&gt;Manage&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;Backups&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;zu-status&quot;&gt;Ready&lt;/span&gt;&lt;/td&gt;&lt;td&gt;2 volumes · off-host copy verified&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;system&quot;&gt;Inspect&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+    &lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Exact service SHAs, replicas, volumes, health&lt;/li&gt;&lt;li&gt;Masked dependency-secret/config status&lt;/li&gt;&lt;li&gt;Backup and restore-test status&lt;/li&gt;&lt;li&gt;Public-signup/billing mode&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Run read-only checks&lt;/li&gt;&lt;li&gt;Open controlled configuration forms&lt;/li&gt;&lt;li&gt;Deep-link to channels/system&lt;/li&gt;&lt;li&gt;No deploy or signup toggle on this screen&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Ready, incomplete, degraded, secret invalid, test/live mismatch&lt;/li&gt;&lt;li&gt;Owner GitHub allowlist required&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Needed: GET /admin/api/readiness&lt;/li&gt;&lt;li&gt;Existing health endpoints and production-readiness checks&lt;/li&gt;&lt;li&gt;Needed: encrypted admin config writes with audit log&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;admin&quot; data-screen=&quot;tenants&quot; data-label=&quot;Tenants&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Owner only&lt;/div&gt;&lt;h1&gt;Tenants&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Customer identity, plan, memory, usage, and channels in one operational list.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-modal=&quot;add-tenant&quot;&gt;Add tenant&lt;/button&gt;&lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Find tenant&lt;/span&gt;&lt;input class=&quot;zu-input&quot; placeholder=&quot;GitHub login, tenant ID, repo, or phone&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;State&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;All&lt;/option&gt;&lt;option&gt;Active&lt;/option&gt;&lt;option&gt;Attention&lt;/option&gt;&lt;option&gt;Suspended&lt;/option&gt;&lt;option&gt;Closing&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;/div&gt;&lt;div class=&quot;zu-table-wrap&quot;&gt;&lt;table class=&quot;zu-table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Tenant&lt;/th&gt;&lt;th&gt;Plan&lt;/th&gt;&lt;th&gt;Usage&lt;/th&gt;&lt;th&gt;Vault&lt;/th&gt;&lt;th&gt;WhatsApp&lt;/th&gt;&lt;th&gt;Last active&lt;/th&gt;&lt;th&gt;&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+      &lt;tr&gt;&lt;td&gt;&lt;strong&gt;@jordi&lt;/strong&gt;&lt;br&gt;&lt;span class=&quot;zu-help&quot;&gt;github-63050995&lt;/span&gt;&lt;/td&gt;&lt;td&gt;Hosted beta&lt;br&gt;&lt;span class=&quot;zu-status&quot;&gt;Active&lt;/span&gt;&lt;/td&gt;&lt;td&gt;16% · normal&lt;/td&gt;&lt;td&gt;AlfaBlok/my-memory&lt;/td&gt;&lt;td&gt;+34 ••• · verified&lt;/td&gt;&lt;td&gt;4 min ago&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;tenant&quot;&gt;Open&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;&lt;strong&gt;@beta-02&lt;/strong&gt;&lt;br&gt;&lt;span class=&quot;zu-help&quot;&gt;github-7821134&lt;/span&gt;&lt;/td&gt;&lt;td&gt;Hosted beta&lt;br&gt;&lt;span class=&quot;zu-status&quot;&gt;Active&lt;/span&gt;&lt;/td&gt;&lt;td&gt;84% · warn&lt;/td&gt;&lt;td&gt;beta-02/brain&lt;/td&gt;&lt;td&gt;Not enabled&lt;/td&gt;&lt;td&gt;2 h ago&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;tenant&quot;&gt;Open&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;&lt;strong&gt;@beta-03&lt;/strong&gt;&lt;br&gt;&lt;span class=&quot;zu-help&quot;&gt;github-9912087&lt;/span&gt;&lt;/td&gt;&lt;td&gt;Hosted beta&lt;br&gt;&lt;span class=&quot;zu-status zu-status-warn&quot;&gt;Past due&lt;/span&gt;&lt;/td&gt;&lt;td&gt;100% · paused&lt;/td&gt;&lt;td&gt;beta-03/vault&lt;/td&gt;&lt;td&gt;+44 ••• · verified&lt;/td&gt;&lt;td&gt;1 d ago&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;tenant&quot;&gt;Open&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+    &lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Account, tenant, subscription, repo, MCP, usage, channel summary&lt;/li&gt;&lt;li&gt;Last activity and current support state&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Search/filter and open tenant detail&lt;/li&gt;&lt;li&gt;Concierge add/invite tenant&lt;/li&gt;&lt;li&gt;No bulk destructive actions in beta&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Checkout pending, active, past due, suspended, closing, purged&lt;/li&gt;&lt;li&gt;Rows show truth from authoritative subsystem, not cached guess&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Needed: GET/POST /admin/api/tenants&lt;/li&gt;&lt;li&gt;Joins customer accounts, tenant store, vault, metering, Phylax binding&lt;/li&gt;&lt;li&gt;Pagination and owner-only audit&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;admin&quot; data-screen=&quot;tenant&quot; data-label=&quot;Tenant detail&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Tenant detail&lt;/div&gt;&lt;h1&gt;@jordi&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;github-63050995 · account acct_63050995 · active&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-modal=&quot;add-credit&quot;&gt;Add usage credit&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;suspend-tenant&quot;&gt;Suspend&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-danger&quot; data-modal=&quot;remove-tenant&quot;&gt;Remove tenant&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Account &amp;amp; billing&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Plan&lt;/span&gt;&lt;strong&gt;Hosted beta · €9 + VAT&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Stripe&lt;/span&gt;&lt;strong&gt;active · renews 1 Sep&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Customer&lt;/span&gt;&lt;strong&gt;cus_•••• 91AD&lt;/strong&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Opening Stripe customer&quot;&gt;Open in Stripe&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;AI allowance&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Customer view&lt;/span&gt;&lt;strong&gt;16% · normal&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Provider spend&lt;/span&gt;&lt;strong&gt;$0.33&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Internal cap&lt;/span&gt;&lt;strong&gt;$2.00 · monthly&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Child key&lt;/span&gt;&lt;strong&gt;enabled · •••• 0E91&lt;/strong&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;add-credit&quot;&gt;Adjust allowance&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Vault &amp;amp; MCP&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Repository&lt;/span&gt;&lt;strong&gt;AlfaBlok/my-memory&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;HEAD&lt;/span&gt;&lt;strong&gt;9c82a1e&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;MCP token&lt;/span&gt;&lt;strong&gt;active · used 11 min ago&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Vault health passed&quot;&gt;Test vault&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;rotate-tenant-mcp&quot;&gt;Rotate MCP&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Channels&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;WhatsApp&lt;/span&gt;&lt;strong&gt;+34 ••• · verified&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Telegram&lt;/span&gt;&lt;strong&gt;@jordi · connected&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last delivery&lt;/span&gt;&lt;strong&gt;12:44 · success&lt;/strong&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;rebind-whatsapp&quot;&gt;Rebind sender&lt;/button&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Support timeline&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;12:44&lt;/span&gt;&lt;strong&gt;WhatsApp memory committed and delivered · job job_8f2&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;12:41&lt;/span&gt;&lt;strong&gt;Voice transcription completed · 38.2 seconds&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;09:03&lt;/span&gt;&lt;strong&gt;Vault sync passed · HEAD 9c82a1e&lt;/strong&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;jobs&quot;&gt;Open complete job trace&lt;/button&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Complete tenant/account/subscription/MCP/vault/channel/provider state&lt;/li&gt;&lt;li&gt;Cross-system timeline keyed by tenant and message/job IDs&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Add temporary credit or permanent cap override&lt;/li&gt;&lt;li&gt;Suspend/resume tenant and child key&lt;/li&gt;&lt;li&gt;Rotate MCP, rebind sender, remove with retention&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Every mutation produces audit receipt and rollback/recovery state&lt;/li&gt;&lt;li&gt;Removal never deletes GitHub/Drive customer data&lt;/li&gt;&lt;li&gt;High-risk actions require typed confirmation&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Needed: /admin/api/tenants/:id aggregate&lt;/li&gt;&lt;li&gt;Needed: allowance grant, suspend, closure, credential rotation APIs&lt;/li&gt;&lt;li&gt;Needed: unified support timeline&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;admin&quot; data-screen=&quot;ai&quot; data-label=&quot;AI &amp;amp; usage&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Owner only&lt;/div&gt;&lt;h1&gt;AI provider and allowance&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Configure hosted inference, model routing, per-tenant limits, and reconciliation.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-modal=&quot;configure-openrouter&quot;&gt;Configure OpenRouter&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Provider account&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Healthy&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Provisioning key&lt;/span&gt;&lt;strong&gt;•••• 7A2F · validated today&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Provider account balance&lt;/span&gt;&lt;strong&gt;$48.20&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Tenant child keys&lt;/span&gt;&lt;strong&gt;3 enabled · 0 orphaned&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last reconciliation&lt;/span&gt;&lt;strong&gt;3 minutes ago · matched&lt;/strong&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Provider reconciliation completed&quot;&gt;Reconcile now&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Launch defaults&lt;/span&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Internal monthly cap per tenant&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;$2.00&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Customer warning threshold&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;80%&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Reset policy&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Monthly · subscription anniversary&lt;/option&gt;&lt;option&gt;Monthly · UTC calendar&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;At cap&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Queue raw evidence; pause paid processing&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-demo=&quot;Allowance defaults saved&quot;&gt;Save defaults&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel zu-panel-wide&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Allowed model routing&lt;/span&gt;&lt;div class=&quot;zu-grid-three&quot; style=&quot;margin-top:12px&quot;&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Answer / compose&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;x-ai/grok-4.3&lt;/option&gt;&lt;option&gt;minimax/minimax-m3&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Classify&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;minimax/minimax-m3&lt;/option&gt;&lt;option&gt;google/gemini-3.1-flash-lite&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Vision&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;google/gemini-3.1-flash-lite&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Speech-to-text&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;mistralai/voxtral-mini-transcribe&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Fallback policy&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Cheaper allowed model, then fail closed&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span&gt;Catalog refresh&lt;/span&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Model catalog refreshed&quot;&gt;Refresh catalog&lt;/button&gt;&lt;/label&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;div class=&quot;zu-table-wrap&quot;&gt;&lt;table class=&quot;zu-table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Tenant&lt;/th&gt;&lt;th&gt;Spend&lt;/th&gt;&lt;th&gt;Cap&lt;/th&gt;&lt;th&gt;Customer %&lt;/th&gt;&lt;th&gt;Key&lt;/th&gt;&lt;th&gt;Reset&lt;/th&gt;&lt;th&gt;&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;@jordi&lt;/td&gt;&lt;td&gt;$0.33&lt;/td&gt;&lt;td&gt;$2.00&lt;/td&gt;&lt;td&gt;16%&lt;/td&gt;&lt;td&gt;Enabled&lt;/td&gt;&lt;td&gt;1 Sep&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;add-credit&quot;&gt;Adjust&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;@beta-02&lt;/td&gt;&lt;td&gt;$1.67&lt;/td&gt;&lt;td&gt;$2.00&lt;/td&gt;&lt;td&gt;84%&lt;/td&gt;&lt;td&gt;Enabled&lt;/td&gt;&lt;td&gt;3 Sep&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;add-credit&quot;&gt;Adjust&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;@beta-03&lt;/td&gt;&lt;td&gt;$2.00&lt;/td&gt;&lt;td&gt;$3.00&lt;/td&gt;&lt;td&gt;100%&lt;/td&gt;&lt;td&gt;Disabled&lt;/td&gt;&lt;td&gt;5 Sep&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;add-credit&quot;&gt;Adjust&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Masked provisioning key metadata and provider balance&lt;/li&gt;&lt;li&gt;Child keys, limits, usage, disabled state&lt;/li&gt;&lt;li&gt;Local ledger and provider reconciliation&lt;/li&gt;&lt;li&gt;Allowed live model catalog and price snapshot&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Set/replace/test provisioning key&lt;/li&gt;&lt;li&gt;Set defaults and model allowlist&lt;/li&gt;&lt;li&gt;Mint/disable/enable/adjust tenant keys&lt;/li&gt;&lt;li&gt;Reconcile provider vs local ledger&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Key missing/invalid, provider low balance, mismatch, orphan key, cap reached&lt;/li&gt;&lt;li&gt;Master secret never returned after save&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing OpenRouter key list and manual key script&lt;/li&gt;&lt;li&gt;Needed: encrypted provisioning-key custody and automated child-key lifecycle&lt;/li&gt;&lt;li&gt;Needed: model-policy and reconciliation stores&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;admin&quot; data-screen=&quot;channels&quot; data-label=&quot;Channels&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Existing Phylax · owner only&lt;/div&gt;&lt;h1&gt;Hosted channels&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Global sessions, tenant bindings, verified senders, and channel health.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Channel health refreshed&quot;&gt;Refresh&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;WhatsApp session&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Connected&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Number&lt;/span&gt;&lt;strong&gt;+34 ••• ••• •••&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Transport&lt;/span&gt;&lt;strong&gt;Existing Phylax session&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Connected since&lt;/span&gt;&lt;strong&gt;18 Aug · 7 days&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last inbound/outbound&lt;/span&gt;&lt;strong&gt;4 min / 4 min&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;pair-whatsapp&quot;&gt;Pair/reconnect&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-danger&quot; data-modal=&quot;reset-whatsapp&quot;&gt;Reset session&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Telegram bot&lt;/span&gt;&lt;span class=&quot;zu-status&quot;&gt;Healthy&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Bot&lt;/span&gt;&lt;strong&gt;@zenod_memory_bot&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Polling owner&lt;/span&gt;&lt;strong&gt;Phylax · active&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Verified tenants&lt;/span&gt;&lt;strong&gt;2&lt;/strong&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;configure-telegram&quot;&gt;Configure bot&lt;/button&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Tenant channel bindings&lt;/span&gt;&lt;div class=&quot;zu-table-wrap&quot;&gt;&lt;table class=&quot;zu-table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Tenant&lt;/th&gt;&lt;th&gt;WhatsApp sender&lt;/th&gt;&lt;th&gt;Verification&lt;/th&gt;&lt;th&gt;Telegram&lt;/th&gt;&lt;th&gt;Route&lt;/th&gt;&lt;th&gt;Last receipt&lt;/th&gt;&lt;th&gt;&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;@jordi&lt;/td&gt;&lt;td&gt;+34 •••&lt;/td&gt;&lt;td&gt;Verified&lt;/td&gt;&lt;td&gt;@jordi&lt;/td&gt;&lt;td&gt;Direct Zenod&lt;/td&gt;&lt;td&gt;4 min · delivered&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;tenant&quot;&gt;Open&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;@beta-02&lt;/td&gt;&lt;td&gt;—&lt;/td&gt;&lt;td&gt;Not started&lt;/td&gt;&lt;td&gt;@beta02&lt;/td&gt;&lt;td&gt;Direct Zenod&lt;/td&gt;&lt;td&gt;2 h · delivered&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;tenant&quot;&gt;Open&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-note&quot; style=&quot;margin-top:14px&quot;&gt;Ring is never an available route for a Zenod tenant. Text, voice, and media bindings are fixed/versioned Zenod operations.&lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Phylax service/session/transport health&lt;/li&gt;&lt;li&gt;Verified senders and tenant channel bindings&lt;/li&gt;&lt;li&gt;Queue lag, last inbound/outbound/receipt&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Pair/reconnect/reset global WhatsApp session&lt;/li&gt;&lt;li&gt;Configure Telegram bot&lt;/li&gt;&lt;li&gt;Verify/rebind tenant identities&lt;/li&gt;&lt;li&gt;Run tenant test message&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Connected, reconnecting, logged out, session corrupt, queue degraded&lt;/li&gt;&lt;li&gt;Reset requires backup and typed confirmation&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing owner-only Phylax /admin pairing routes&lt;/li&gt;&lt;li&gt;Existing verification/binding/session stores&lt;/li&gt;&lt;li&gt;Needed: private admin aggregate and direct-Zenod binding policy&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;admin&quot; data-screen=&quot;jobs&quot; data-label=&quot;Jobs &amp;amp; delivery&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Owner only&lt;/div&gt;&lt;h1&gt;Jobs and delivery&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;One timeline from provider message to Zenod operation to customer receipt.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Job queue refreshed&quot;&gt;Refresh&lt;/button&gt;&lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;State&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Needs attention&lt;/option&gt;&lt;option&gt;Processing&lt;/option&gt;&lt;option&gt;Completed&lt;/option&gt;&lt;option&gt;All&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Message, job, tenant&lt;/span&gt;&lt;input class=&quot;zu-input&quot; placeholder=&quot;Search exact ID&quot;&gt;&lt;/label&gt;&lt;/div&gt;&lt;div class=&quot;zu-table-wrap&quot;&gt;&lt;table class=&quot;zu-table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Job&lt;/th&gt;&lt;th&gt;Tenant/channel&lt;/th&gt;&lt;th&gt;Operation&lt;/th&gt;&lt;th&gt;Operation state&lt;/th&gt;&lt;th&gt;Delivery state&lt;/th&gt;&lt;th&gt;Age&lt;/th&gt;&lt;th&gt;&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;job_8f2&lt;br&gt;&lt;span class=&quot;zu-help&quot;&gt;wamid.••91&lt;/span&gt;&lt;/td&gt;&lt;td&gt;@jordi · WhatsApp&lt;/td&gt;&lt;td&gt;store_memory · voice&lt;/td&gt;&lt;td&gt;Committed&lt;/td&gt;&lt;td&gt;Delivered&lt;/td&gt;&lt;td&gt;4 min&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;inspect-job&quot;&gt;Inspect&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;job_7c1&lt;br&gt;&lt;span class=&quot;zu-help&quot;&gt;wamid.••83&lt;/span&gt;&lt;/td&gt;&lt;td&gt;@beta-02 · WhatsApp&lt;/td&gt;&lt;td&gt;ingest_memory · image&lt;/td&gt;&lt;td&gt;Failed classification&lt;/td&gt;&lt;td&gt;Error sent&lt;/td&gt;&lt;td&gt;18 min&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-modal=&quot;retry-job&quot;&gt;Retry&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;job_2a0&lt;br&gt;&lt;span class=&quot;zu-help&quot;&gt;tg.••31&lt;/span&gt;&lt;/td&gt;&lt;td&gt;@beta-03 · Telegram&lt;/td&gt;&lt;td&gt;chat_with_zenod&lt;/td&gt;&lt;td&gt;Paused at cap&lt;/td&gt;&lt;td&gt;Paused notice sent&lt;/td&gt;&lt;td&gt;2 h&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-modal=&quot;inspect-job&quot;&gt;Inspect&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Selected trace · job_8f2&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;12:40:03&lt;/span&gt;&lt;strong&gt;Inbound WhatsApp message journaled&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;12:40:04&lt;/span&gt;&lt;strong&gt;Media downloaded and SHA recorded&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;12:41:19&lt;/span&gt;&lt;strong&gt;Transcription completed · raw evidence retained&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;12:43:58&lt;/span&gt;&lt;strong&gt;Zenod terminal result: saved · commit 9c82a1e&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;12:44:01&lt;/span&gt;&lt;strong&gt;One WhatsApp receipt delivered&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Authoritative Phylax transcript/message journal&lt;/li&gt;&lt;li&gt;Media/transcription attempts&lt;/li&gt;&lt;li&gt;Zenod job terminal state/commit&lt;/li&gt;&lt;li&gt;Outbound receipt/delivery state&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Inspect exact trace&lt;/li&gt;&lt;li&gt;Retry terminal failed media as a new owned attempt&lt;/li&gt;&lt;li&gt;Resend a missing receipt only when operation truth is known&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Operation and delivery states always separate&lt;/li&gt;&lt;li&gt;No retry of processing/completed canonical job&lt;/li&gt;&lt;li&gt;Every operator action audited and idempotent&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Needed: /admin/api/jobs and /admin/api/jobs/:id&lt;/li&gt;&lt;li&gt;Join Phylax journal, Zenod task store, delivery audit&lt;/li&gt;&lt;li&gt;Needed: typed retry/resend operations&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;admin&quot; data-screen=&quot;billing&quot; data-label=&quot;Billing&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Owner only&lt;/div&gt;&lt;h1&gt;Billing&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Stripe configuration, one beta price, subscriptions, and webhook truth.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action&quot; data-modal=&quot;configure-stripe&quot;&gt;Configure Stripe&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Stripe connection&lt;/span&gt;&lt;span class=&quot;zu-status zu-status-warn&quot;&gt;Test mode&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Secret key&lt;/span&gt;&lt;strong&gt;•••• 5K9P&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Webhook&lt;/span&gt;&lt;strong&gt;Healthy · 2 min ago&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Public signup&lt;/span&gt;&lt;strong&gt;Closed&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Real-card drill&lt;/span&gt;&lt;strong&gt;Not approved&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Zenod Hosted Beta&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Price&lt;/span&gt;&lt;strong&gt;€9/month + VAT&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Stripe price ID&lt;/span&gt;&lt;strong&gt;price_•••• R81A&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Annual plan&lt;/span&gt;&lt;strong&gt;None&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Usage overage&lt;/span&gt;&lt;strong&gt;None&lt;/strong&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Stripe product and local config match&quot;&gt;Verify product&lt;/button&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;article class=&quot;zu-panel&quot; style=&quot;margin-top:14px&quot;&gt;&lt;div class=&quot;zu-panel-head&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Subscriptions&lt;/span&gt;&lt;span&gt;3 total&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;zu-table-wrap&quot;&gt;&lt;table class=&quot;zu-table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Tenant&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;th&gt;Next invoice&lt;/th&gt;&lt;th&gt;Amount&lt;/th&gt;&lt;th&gt;Last event&lt;/th&gt;&lt;th&gt;&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;@jordi&lt;/td&gt;&lt;td&gt;Active&lt;/td&gt;&lt;td&gt;1 Sep&lt;/td&gt;&lt;td&gt;€9 + VAT&lt;/td&gt;&lt;td&gt;invoice.paid&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;tenant&quot;&gt;Open&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;@beta-02&lt;/td&gt;&lt;td&gt;Active&lt;/td&gt;&lt;td&gt;3 Sep&lt;/td&gt;&lt;td&gt;€9 + VAT&lt;/td&gt;&lt;td&gt;customer.updated&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;tenant&quot;&gt;Open&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;@beta-03&lt;/td&gt;&lt;td&gt;Past due&lt;/td&gt;&lt;td&gt;Retry 27 Aug&lt;/td&gt;&lt;td&gt;€9 + VAT&lt;/td&gt;&lt;td&gt;invoice.payment_failed&lt;/td&gt;&lt;td&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-route=&quot;tenant&quot;&gt;Open&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Masked Stripe config, mode, product/price&lt;/li&gt;&lt;li&gt;Webhook delivery, subscriptions, invoices&lt;/li&gt;&lt;li&gt;Public signup and billing-drill gates&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Set/test/rotate Stripe keys and webhook secret&lt;/li&gt;&lt;li&gt;Verify exact €9 price configuration&lt;/li&gt;&lt;li&gt;Open customer in Stripe&lt;/li&gt;&lt;li&gt;No charge/refund/signup action without separate gate&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Test/live mismatch fails closed&lt;/li&gt;&lt;li&gt;Webhook stale/failing, price mismatch, past due&lt;/li&gt;&lt;li&gt;Secrets never redisplayed&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Existing customer billing/account/webhook layer&lt;/li&gt;&lt;li&gt;Existing fail-closed production readiness&lt;/li&gt;&lt;li&gt;Needed: owner billing aggregate/config audit UI API&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-role=&quot;admin&quot; data-screen=&quot;system&quot; data-label=&quot;System&quot;&gt;
+  &lt;section class=&quot;zu-page&quot;&gt;
+    &lt;div class=&quot;zu-page-head&quot;&gt;&lt;div&gt;&lt;div class=&quot;zu-kicker&quot;&gt;Owner only&lt;/div&gt;&lt;h1&gt;System and recovery&lt;/h1&gt;&lt;p class=&quot;zu-muted&quot;&gt;Exact releases, persistence, backups, alerts, and external dependencies.&lt;/p&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;System inventory refreshed&quot;&gt;Refresh inventory&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-grid&quot;&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Release coherence&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Zenod target&lt;/span&gt;&lt;strong&gt;candidate SHA · not deployed&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Phylax target&lt;/span&gt;&lt;strong&gt;same candidate SHA · not deployed&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Current Zenod&lt;/span&gt;&lt;strong&gt;7365dbc&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Current Phylax&lt;/span&gt;&lt;strong&gt;399b3a8&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-note&quot;&gt;A deploy action does not live in this beta admin. Dokploy remains the deployment authority; this screen proves readiness and opens the approved runbook.&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Persistent data&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;zenod-mt-data&lt;/span&gt;&lt;strong&gt;Healthy · 8.4 GB&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;phylax-data&lt;/span&gt;&lt;strong&gt;Healthy · 1.9 GB&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last cold backup&lt;/span&gt;&lt;strong&gt;Today 03:00&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Off-host copy&lt;/span&gt;&lt;strong&gt;Verified&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last isolated restore test&lt;/span&gt;&lt;strong&gt;20 Aug · passed&lt;/strong&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Backup verification started&quot;&gt;Verify latest backup&lt;/button&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Alerts&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;WhatsApp session&lt;/span&gt;&lt;strong&gt;Connected&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Oldest pending job&lt;/span&gt;&lt;strong&gt;42 sec&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;False terminal mismatch&lt;/span&gt;&lt;strong&gt;0 in 24h&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Provider reconciliation&lt;/span&gt;&lt;strong&gt;Matched&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Vault commit failures&lt;/span&gt;&lt;strong&gt;0 in 24h&lt;/strong&gt;&lt;/div&gt;&lt;/article&gt;
+      &lt;article class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;External dependencies&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;GitHub&lt;/span&gt;&lt;strong&gt;Healthy&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;OpenRouter&lt;/span&gt;&lt;strong&gt;Healthy&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Stripe&lt;/span&gt;&lt;strong&gt;Test mode · healthy&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Traefik TLS&lt;/span&gt;&lt;strong&gt;Healthy&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Opening redacted deployment runbook&quot;&gt;Open runbook&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Opening Dokploy&quot;&gt;Open Dokploy&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;zu-contract&quot;&gt;&lt;h2&gt;Build contract&lt;/h2&gt;&lt;div class=&quot;zu-contract-grid&quot;&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Reads&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Immutable image/SHA/replica inventory&lt;/li&gt;&lt;li&gt;Volume size/health, backup and restore evidence&lt;/li&gt;&lt;li&gt;Alert and dependency health&lt;/li&gt;&lt;li&gt;Named deployment/rollback packet&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Actions&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Refresh inventory and verify backup&lt;/li&gt;&lt;li&gt;Open runbook/Dokploy/logs&lt;/li&gt;&lt;li&gt;No browser deploy, destructive restore, or session reset here&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;States&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Version coherent/mismatched, backup stale, restore unproved&lt;/li&gt;&lt;li&gt;Every production mutation remains separately approval-gated&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+      &lt;div class=&quot;zu-contract-block&quot;&gt;&lt;strong&gt;Backend&lt;/strong&gt;&lt;ul&gt;&lt;li&gt;Needed: read-only operator inventory adapter&lt;/li&gt;&lt;li&gt;Existing health and production-readiness reports&lt;/li&gt;&lt;li&gt;Link, do not duplicate, Dokploy/runbook authority&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;
+    &lt;/div&gt;&lt;/div&gt;
+  &lt;/section&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;configure-openrouter&quot; data-title=&quot;Configure managed AI&quot;&gt;
+  &lt;form data-complete=&quot;Managed AI configuration saved&quot;&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;Zenod stores this owner credential encrypted and uses it only to create and meter tenant child keys. The secret is never shown again.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;OpenRouter provisioning key&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;password&quot; autocomplete=&quot;new-password&quot; placeholder=&quot;Paste a new key to replace the current one&quot;&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Default chat model&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;openai/gpt-5-mini&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Transcription model&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;openai/gpt-4o-mini-transcribe&quot;&gt;&lt;/label&gt;&lt;/div&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Default internal monthly cap&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;number&quot; min=&quot;0&quot; step=&quot;0.50&quot; value=&quot;2.00&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Warn owner at&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;80%&lt;/option&gt;&lt;option&gt;90%&lt;/option&gt;&lt;option&gt;100%&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Allowed model IDs · one per line&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot;&gt;openai/gpt-5-mini
+openai/gpt-4o-mini-transcribe&lt;/textarea&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Provisioning key tested successfully&quot;&gt;Test connection&lt;/button&gt;&lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Save configuration&lt;/button&gt;&lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;configure-stripe&quot; data-title=&quot;Configure Stripe&quot;&gt;
+  &lt;form data-complete=&quot;Stripe configuration saved in test mode&quot;&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;Public signup, live cards, charges, and refunds remain off. Saving configuration does not open the product.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Mode&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Test&lt;/option&gt;&lt;option&gt;Live · requires separate production gate&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Secret key&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;password&quot; autocomplete=&quot;new-password&quot; placeholder=&quot;sk_test_…&quot;&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Webhook signing secret&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;password&quot; autocomplete=&quot;new-password&quot; placeholder=&quot;whsec_…&quot;&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Zenod Hosted Beta monthly price ID&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;price_••••R81A&quot;&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Stripe credentials and webhook verified&quot;&gt;Test configuration&lt;/button&gt;&lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Save test configuration&lt;/button&gt;&lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;configure-github&quot; data-title=&quot;Configure GitHub integration&quot;&gt;
+  &lt;form data-complete=&quot;GitHub integration saved&quot;&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;OAuth client ID&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;Iv1.••••••&quot;&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;OAuth client secret&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;password&quot; autocomplete=&quot;new-password&quot; placeholder=&quot;Replace secret&quot;&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;GitHub App ID&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;1882041&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;App slug&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;zenod-memory&quot;&gt;&lt;/label&gt;&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;GitHub App private key&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot; placeholder=&quot;Paste PEM only when rotating&quot;&gt;&lt;/textarea&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;OAuth callback URL&lt;/span&gt;&lt;input class=&quot;zu-input&quot; readonly value=&quot;https://cloud.zenod.dev/api/auth/github/callback&quot;&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;GitHub OAuth and App installation tested&quot;&gt;Test integration&lt;/button&gt;&lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Save configuration&lt;/button&gt;&lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;add-tenant&quot; data-title=&quot;Add Hosted tenant&quot;&gt;
+  &lt;form data-complete=&quot;Tenant provision request created&quot;&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;Creates one tenant, one MCP credential, one managed-AI child key, and empty channel bindings. WhatsApp stays off until the customer verifies a sender.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;GitHub login&lt;/span&gt;&lt;input class=&quot;zu-input&quot; required placeholder=&quot;customer-login&quot;&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Activation&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Send invitation&lt;/option&gt;&lt;option&gt;Concierge provision without email&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Plan&lt;/span&gt;&lt;input class=&quot;zu-input&quot; readonly value=&quot;Hosted Beta · €9/month&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Internal monthly cap&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;number&quot; min=&quot;0&quot; step=&quot;0.50&quot; value=&quot;2.00&quot;&gt;&lt;/label&gt;&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;WhatsApp sender · optional&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;tel&quot; placeholder=&quot;Customer verifies this later&quot;&gt;&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Create tenant&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;add-credit&quot; data-title=&quot;Adjust tenant usage&quot;&gt;
+  &lt;form data-complete=&quot;Usage adjustment recorded&quot;&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Adjustment&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Temporary usage grant&lt;/option&gt;&lt;option&gt;Permanent monthly-cap override&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Internal amount · USD&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;number&quot; min=&quot;0&quot; step=&quot;0.50&quot; value=&quot;1.00&quot;&gt;&lt;/label&gt;&lt;label class=&quot;zu-field&quot; style=&quot;flex:1&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Expires&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Next monthly reset&lt;/option&gt;&lt;option&gt;Never&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Reason · required for audit&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot; required placeholder=&quot;Beta support adjustment&quot;&gt;&lt;/textarea&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;The customer sees only their updated included-usage percentage, never this amount or provider cost.&lt;/div&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action&quot; style=&quot;margin-top:16px&quot;&gt;Apply adjustment&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;suspend-tenant&quot; data-title=&quot;Suspend tenant&quot;&gt;
+  &lt;form data-complete=&quot;Tenant suspension recorded&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;This blocks portal, MCP, channel delivery, and the tenant AI key. It preserves the vault, account record, billing history, and channel audit.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Reason&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot; required placeholder=&quot;Required for the operator audit&quot;&gt;&lt;/textarea&gt;&lt;/label&gt;
+    &lt;label&gt;&lt;input type=&quot;checkbox&quot; required&gt; I understand the tenant loses access immediately.&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot; style=&quot;margin-top:16px&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-close-modal&gt;Cancel&lt;/button&gt;&lt;button type=&quot;submit&quot; class=&quot;zu-action-danger&quot;&gt;Suspend tenant&lt;/button&gt;&lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;remove-tenant&quot; data-title=&quot;Remove tenant from Hosted&quot;&gt;
+  &lt;form data-complete=&quot;Tenant removal scheduled after retention&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;The safe beta operation is suspend now and schedule Zenod runtime cleanup after retention. GitHub and Google Drive content are never deleted.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Retention&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;30 days&lt;/option&gt;&lt;option&gt;90 days&lt;/option&gt;&lt;option&gt;Keep indefinitely&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Type tenant slug to confirm&lt;/span&gt;&lt;input class=&quot;zu-input&quot; required placeholder=&quot;jordi&quot;&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Reason&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot; required&gt;&lt;/textarea&gt;&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action-danger&quot;&gt;Suspend and schedule removal&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;rotate-tenant-mcp&quot; data-title=&quot;Rotate tenant MCP credential&quot;&gt;
+  &lt;form data-complete=&quot;Tenant MCP credential rotated&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;The previous URL and token stop working immediately in every connected MCP client.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Reason&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot; required&gt;&lt;/textarea&gt;&lt;/label&gt;
+    &lt;label&gt;&lt;input type=&quot;checkbox&quot; required&gt; I have a secure way to deliver the replacement.&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action-danger&quot; style=&quot;margin-top:16px&quot;&gt;Rotate credential&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;rotate-mcp&quot; data-title=&quot;Rotate your MCP token&quot;&gt;
+  &lt;form data-complete=&quot;New MCP credential issued&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;The old URL and token stop working immediately. You must update Codex, Claude Code, and every other connected client.&lt;/div&gt;
+    &lt;label&gt;&lt;input type=&quot;checkbox&quot; required&gt; I am ready to update my clients.&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot; style=&quot;margin-top:16px&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-close-modal&gt;Cancel&lt;/button&gt;&lt;button type=&quot;submit&quot; class=&quot;zu-action-danger&quot;&gt;Rotate token&lt;/button&gt;&lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;rebind-whatsapp&quot; data-title=&quot;Rebind tenant WhatsApp sender&quot;&gt;
+  &lt;form data-complete=&quot;New WhatsApp verification challenge created&quot;&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;This changes only the tenant sender binding. It does not reset the shared Phylax WhatsApp session.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;New sender number&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;tel&quot; required value=&quot;+34 &quot;&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Verification delivery&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Customer messages the Zenod number with a code&lt;/option&gt;&lt;option&gt;Owner-assisted test&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Create verification code&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;enable-whatsapp&quot; data-title=&quot;Enable WhatsApp&quot;&gt;
+  &lt;form data-complete=&quot;WhatsApp verification started&quot;&gt;
+    &lt;ol class=&quot;zu-checklist&quot;&gt;&lt;li&gt;Confirm the sender number below.&lt;/li&gt;&lt;li&gt;Zenod creates a one-time code.&lt;/li&gt;&lt;li&gt;Send that code from your number to the shared Zenod WhatsApp number.&lt;/li&gt;&lt;li&gt;Zenod verifies this tenant and sends a test receipt.&lt;/li&gt;&lt;/ol&gt;
+    &lt;label class=&quot;zu-field&quot; style=&quot;margin-top:16px&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Your sender number&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;tel&quot; required value=&quot;+34 6•• ••• •••&quot;&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;Zenod cannot see your other chats and never asks for a QR code. One verified sender is included during beta.&lt;/div&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action&quot; style=&quot;margin-top:16px&quot;&gt;Create one-time code&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;disconnect-telegram&quot; data-title=&quot;Disconnect Telegram&quot;&gt;
+  &lt;form data-complete=&quot;Telegram disconnected&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;New Telegram messages will no longer reach this tenant. Existing memories remain in the vault.&lt;/div&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-close-modal&gt;Keep connected&lt;/button&gt;&lt;button type=&quot;submit&quot; class=&quot;zu-action-danger&quot;&gt;Disconnect&lt;/button&gt;&lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;change-repo&quot; data-title=&quot;Change GitHub vault&quot;&gt;
+  &lt;form data-complete=&quot;GitHub vault change queued for verification&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;Zenod pauses writes, verifies the new repository and branch, then resumes. It never deletes or rewrites the old repository.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Installed repository&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;AlfaBlok/my-memory&lt;/option&gt;&lt;option&gt;AlfaBlok/zenod-vault-next&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Branch&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;main&quot;&gt;&lt;/label&gt;
+    &lt;label&gt;&lt;input type=&quot;checkbox&quot; required&gt; Verify structure and write permission before switching.&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action&quot; style=&quot;margin-top:16px&quot;&gt;Verify and switch&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;connect-drive&quot; data-title=&quot;Connect Google Drive&quot;&gt;
+  &lt;form data-complete=&quot;Google Drive OAuth flow prepared&quot;&gt;
+    &lt;p&gt;Choose one account and one existing or new folder. Zenod uses it for optional media/source storage; GitHub remains the memory vault.&lt;/p&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Access&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;One selected folder only&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Folder name&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;Zenod&quot;&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;Disconnecting removes Zenod access. It does not delete files already in Drive.&lt;/div&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action&quot; style=&quot;margin-top:16px&quot;&gt;Continue with Google&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;close-account&quot; data-title=&quot;Close Hosted account&quot;&gt;
+  &lt;form data-complete=&quot;Account closure scheduled&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;Access stops immediately. Zenod runtime data is retained for 30 days. Your GitHub repository and Google Drive files stay yours and are never deleted.&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Export&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Email final vault/repository instructions&lt;/option&gt;&lt;option&gt;No email&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Type CLOSE to confirm&lt;/span&gt;&lt;input class=&quot;zu-input&quot; required pattern=&quot;CLOSE&quot;&gt;&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action-danger&quot;&gt;Close account&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;reclone-vault&quot; data-title=&quot;Re-clone local vault&quot;&gt;
+  &lt;form data-complete=&quot;Vault re-clone queued&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;Zenod stops writes, archives the current local clone, clones from GitHub main, validates the structure, and resumes only after checks pass.&lt;/div&gt;
+    &lt;label&gt;&lt;input type=&quot;checkbox&quot; required&gt; GitHub is the authoritative copy and has the expected latest commits.&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action-danger&quot; style=&quot;margin-top:16px&quot;&gt;Archive local clone and re-clone&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;drive-service-account&quot; data-title=&quot;Configure Drive service account&quot;&gt;
+  &lt;form data-complete=&quot;Drive service account configuration saved&quot;&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Service-account JSON&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot; required placeholder=&quot;Paste the full JSON credential&quot;&gt;&lt;/textarea&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Shared folder ID&lt;/span&gt;&lt;input class=&quot;zu-input&quot; required&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;Share this one folder with the service-account email. The secret is encrypted locally and never displayed again.&lt;/div&gt;
+    &lt;div class=&quot;zu-actions&quot; style=&quot;margin-top:16px&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Drive access tested&quot;&gt;Test access&lt;/button&gt;&lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Save&lt;/button&gt;&lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;pair-whatsapp&quot; data-title=&quot;Pair existing Phylax WhatsApp&quot;&gt;
+  &lt;form data-complete=&quot;WhatsApp pairing request opened&quot;&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;This is the existing private Phylax service used by Zenod Hosted. It is not a third service and it is not shown to customers.&lt;/div&gt;
+    &lt;div class=&quot;zu-panel&quot;&gt;&lt;span class=&quot;zu-panel-title&quot;&gt;Pairing state&lt;/span&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Session&lt;/span&gt;&lt;strong&gt;Connected&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Credential volume&lt;/span&gt;&lt;strong&gt;phylax-data · mounted&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Last backup&lt;/span&gt;&lt;strong&gt;Today 03:00&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot; style=&quot;margin-top:16px&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Operation&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Reconnect current session&lt;/option&gt;&lt;option&gt;Show QR for a new session&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Continue pairing&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;reset-whatsapp&quot; data-title=&quot;Reset Phylax WhatsApp session&quot;&gt;
+  &lt;form data-complete=&quot;WhatsApp session reset queued after backup&quot;&gt;
+    &lt;div class=&quot;zu-note zu-danger-note&quot;&gt;All hosted WhatsApp tenants pause until the shared session is paired again. Tenant bindings and messages are preserved.&lt;/div&gt;
+    &lt;label&gt;&lt;input type=&quot;checkbox&quot; required&gt; Create and verify a credential-volume backup first.&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot; style=&quot;margin-top:14px&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Type RESET WHATSAPP&lt;/span&gt;&lt;input class=&quot;zu-input&quot; required pattern=&quot;RESET WHATSAPP&quot;&gt;&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action-danger&quot;&gt;Backup and reset session&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;configure-telegram&quot; data-title=&quot;Configure hosted Telegram bot&quot;&gt;
+  &lt;form data-complete=&quot;Telegram bot configuration saved&quot;&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Bot token&lt;/span&gt;&lt;input class=&quot;zu-input&quot; type=&quot;password&quot; autocomplete=&quot;new-password&quot; placeholder=&quot;Paste only to replace&quot;&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Expected bot username&lt;/span&gt;&lt;input class=&quot;zu-input&quot; value=&quot;@zenod_memory_bot&quot;&gt;&lt;/label&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Update ownership&lt;/span&gt;&lt;select class=&quot;zu-select&quot;&gt;&lt;option&gt;Existing Phylax polling worker&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;div class=&quot;zu-actions&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Telegram bot identity and update ownership verified&quot;&gt;Test bot&lt;/button&gt;&lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Save&lt;/button&gt;&lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;inspect-job&quot; data-title=&quot;Inspect delivery trace&quot;&gt;
+  &lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Canonical job&lt;/span&gt;&lt;strong&gt;job_8f2&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Provider message&lt;/span&gt;&lt;strong&gt;wamid.••91&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Tenant&lt;/span&gt;&lt;strong&gt;@jordi&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Zenod operation&lt;/span&gt;&lt;strong&gt;store_memory · committed&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Vault commit&lt;/span&gt;&lt;strong&gt;9c82a1e&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Delivery&lt;/span&gt;&lt;strong&gt;Receipt delivered once&lt;/strong&gt;&lt;/div&gt;
+  &lt;label class=&quot;zu-field&quot; style=&quot;margin-top:16px&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Redacted operation record&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot; readonly&gt;{ &quot;operation&quot;: &quot;store_memory&quot;, &quot;state&quot;: &quot;saved&quot;, &quot;attempt&quot;: 1 }&lt;/textarea&gt;&lt;/label&gt;
+  &lt;button type=&quot;button&quot; class=&quot;zu-action-secondary&quot; data-demo=&quot;Redacted trace copied&quot;&gt;Copy redacted trace&lt;/button&gt;
+&lt;/template&gt;
+
+&lt;template data-modal-template=&quot;retry-job&quot; data-title=&quot;Retry failed media job&quot;&gt;
+  &lt;form data-complete=&quot;A new owned retry attempt was created&quot;&gt;
+    &lt;div class=&quot;zu-note&quot;&gt;The canonical job failed before a vault mutation. Retry creates attempt 2 under the same provider message; it does not replay a completed mutation.&lt;/div&gt;
+    &lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Failure&lt;/span&gt;&lt;strong&gt;Image classification exhausted&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;zu-row&quot;&gt;&lt;span&gt;Current attempts&lt;/span&gt;&lt;strong&gt;1 terminal failure&lt;/strong&gt;&lt;/div&gt;
+    &lt;label class=&quot;zu-field&quot;&gt;&lt;span class=&quot;zu-label&quot;&gt;Operator reason&lt;/span&gt;&lt;textarea class=&quot;zu-textarea&quot; required&gt;&lt;/textarea&gt;&lt;/label&gt;
+    &lt;button type=&quot;submit&quot; class=&quot;zu-action&quot;&gt;Create retry attempt&lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+&lt;script&gt;
+(() =&gt; {
+  const root = document.getElementById(&#x27;zenod-ui-contract&#x27;);
+  if (!root) return;
+
+  const roleMeta = {
+    hosted: { edition: &#x27;Hosted&#x27;, user: &#x27;@jordi&#x27;, initial: &#x27;overview&#x27; },
+    self: { edition: &#x27;Self-hosted&#x27;, user: &#x27;Server admin&#x27;, initial: &#x27;setup&#x27; },
+    admin: { edition: &#x27;Owner admin&#x27;, user: &#x27;Jordi&#x27;, initial: &#x27;overview&#x27; }
+  };
+  let activeRole = &#x27;hosted&#x27;;
+  let activeScreen = roleMeta[activeRole].initial;
+  let toastTimer;
+  const navigation = root.querySelector(&#x27;#zu-navigation&#x27;);
+  const screen = root.querySelector(&#x27;#zu-screen&#x27;);
+  const edition = root.querySelector(&#x27;#zu-edition&#x27;);
+  const user = root.querySelector(&#x27;#zu-user&#x27;);
+  const modalBackdrop = root.querySelector(&#x27;#zu-modal&#x27;);
+  const modalTitle = root.querySelector(&#x27;#zu-modal-title&#x27;);
+  const modalContent = root.querySelector(&#x27;#zu-modal-content&#x27;);
+  const toast = root.querySelector(&#x27;#zu-toast&#x27;);
+
+  function screenTemplates(role) {
+    return Array.from(document.querySelectorAll(`template[data-role=&quot;${role}&quot;][data-screen]`));
+  }
+
+  function showToast(message) {
+    window.clearTimeout(toastTimer);
+    toast.textContent = message;
+    toast.hidden = false;
+    toastTimer = window.setTimeout(() =&gt; { toast.hidden = true; }, 2400);
+  }
+
+  function renderScreen() {
+    const template = document.querySelector(`template[data-role=&quot;${activeRole}&quot;][data-screen=&quot;${activeScreen}&quot;]`);
+    if (!template) return;
+    screen.replaceChildren(template.content.cloneNode(true));
+    navigation.querySelectorAll(&#x27;button&#x27;).forEach((button) =&gt; {
+      button.setAttribute(&#x27;aria-current&#x27;, button.dataset.screenChoice === activeScreen ? &#x27;page&#x27; : &#x27;false&#x27;);
+    });
+  }
+
+  function renderRole(role) {
+    activeRole = role;
+    activeScreen = roleMeta[role].initial;
+    edition.textContent = roleMeta[role].edition;
+    user.textContent = roleMeta[role].user;
+    root.querySelectorAll(&#x27;[data-role-choice]&#x27;).forEach((button) =&gt; {
+      const selected = button.dataset.roleChoice === role;
+      button.setAttribute(&#x27;aria-pressed&#x27;, String(selected));
+      button.classList.toggle(&#x27;btn-primary&#x27;, selected);
+    });
+    navigation.replaceChildren();
+    screenTemplates(role).forEach((template) =&gt; {
+      const button = document.createElement(&#x27;button&#x27;);
+      button.type = &#x27;button&#x27;;
+      button.className = &#x27;zu-nav-button&#x27;;
+      button.dataset.screenChoice = template.dataset.screen;
+      button.textContent = template.dataset.label;
+      navigation.append(button);
+    });
+    renderScreen();
+  }
+
+  function openModal(name) {
+    const template = document.querySelector(`template[data-modal-template=&quot;${name}&quot;]`);
+    if (!template) {
+      showToast(`Missing contract for ${name}`);
+      return;
+    }
+    modalTitle.textContent = template.dataset.title || &#x27;Action&#x27;;
+    modalContent.replaceChildren(template.content.cloneNode(true));
+    modalBackdrop.hidden = false;
+    modalContent.querySelector(&#x27;input, select, textarea, button&#x27;)?.focus();
+  }
+
+  function closeModal() {
+    modalBackdrop.hidden = true;
+    modalContent.replaceChildren();
+  }
+
+  root.addEventListener(&#x27;click&#x27;, (event) =&gt; {
+    const roleButton = event.target.closest(&#x27;[data-role-choice]&#x27;);
+    if (roleButton) return renderRole(roleButton.dataset.roleChoice);
+    const navButton = event.target.closest(&#x27;[data-screen-choice]&#x27;);
+    if (navButton) {
+      activeScreen = navButton.dataset.screenChoice;
+      return renderScreen();
+    }
+    const routeButton = event.target.closest(&#x27;[data-route]&#x27;);
+    if (routeButton) {
+      activeScreen = routeButton.dataset.route;
+      return renderScreen();
+    }
+    const modalButton = event.target.closest(&#x27;[data-modal]&#x27;);
+    if (modalButton) return openModal(modalButton.dataset.modal);
+    if (event.target.closest(&#x27;[data-close-modal]&#x27;)) return closeModal();
+    const demoButton = event.target.closest(&#x27;[data-demo]&#x27;);
+    if (demoButton) showToast(demoButton.dataset.demo);
+  });
+
+  root.addEventListener(&#x27;submit&#x27;, (event) =&gt; {
+    const form = event.target.closest(&#x27;form[data-complete]&#x27;);
+    if (!form) return;
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const message = form.dataset.complete;
+    closeModal();
+    showToast(message);
+  });
+
+  modalBackdrop.addEventListener(&#x27;click&#x27;, (event) =&gt; {
+    if (event.target === modalBackdrop) closeModal();
+  });
+  document.addEventListener(&#x27;keydown&#x27;, (event) =&gt; {
+    if (event.key === &#x27;Escape&#x27; &amp;&amp; !modalBackdrop.hidden) closeModal();
+  });
+
+  renderRole(activeRole);
+})();
+&lt;/script&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handleLeave = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+</body>
+</html>
